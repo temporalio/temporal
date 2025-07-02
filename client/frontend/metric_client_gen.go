@@ -555,6 +555,20 @@ func (c *metricClient) ListWorkerDeployments(
 	return c.client.ListWorkerDeployments(ctx, request, opts...)
 }
 
+func (c *metricClient) ListWorkers(
+	ctx context.Context,
+	request *workflowservice.ListWorkersRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.ListWorkersResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientListWorkers")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ListWorkers(ctx, request, opts...)
+}
+
 func (c *metricClient) ListWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListWorkflowExecutionsRequest,
@@ -707,6 +721,20 @@ func (c *metricClient) RecordActivityTaskHeartbeatById(
 	}()
 
 	return c.client.RecordActivityTaskHeartbeatById(ctx, request, opts...)
+}
+
+func (c *metricClient) RecordWorkerHeartbeat(
+	ctx context.Context,
+	request *workflowservice.RecordWorkerHeartbeatRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.RecordWorkerHeartbeatResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientRecordWorkerHeartbeat")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.RecordWorkerHeartbeat(ctx, request, opts...)
 }
 
 func (c *metricClient) RegisterNamespace(

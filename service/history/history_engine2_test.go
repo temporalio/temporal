@@ -365,7 +365,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
-	historyBlob, err := serializer.SerializeEvents(fakeHistory, enumspb.ENCODING_TYPE_PROTO3)
+	historyBlob, err := serializer.SerializeEvents(fakeHistory)
 	s.NoError(err)
 
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
@@ -2193,7 +2193,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
+	initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(),
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
 	request.ParentInitiatedId = initiatedEvent.GetEventId()
 	request.ParentInitiatedVersion = initiatedEvent.GetVersion()
@@ -2278,7 +2278,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_ChildFirstRunId() {
 			wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 			workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-			initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
+			initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(),
 				tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
 			request.ParentInitiatedId = initiatedEvent.GetEventId()
 			request.ParentInitiatedVersion = initiatedEvent.GetVersion()
@@ -2344,7 +2344,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
+	initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(),
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
 	request.ParentInitiatedId = initiatedEvent.GetEventId()
 	request.ParentInitiatedVersion = initiatedEvent.GetVersion()
@@ -2421,7 +2421,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 			wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 			workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-			initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
+			initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(),
 				tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
 			request.ParentInitiatedId = initiatedEvent.GetEventId()
 			request.ParentInitiatedVersion = initiatedEvent.GetVersion()
@@ -2683,7 +2683,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
-	initiatedEvent, ci := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
+	initiatedEvent, ci := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(),
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{

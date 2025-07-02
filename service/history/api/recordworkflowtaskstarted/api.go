@@ -147,7 +147,10 @@ func Invoke(
 			wfBehavior := mutableState.GetEffectiveVersioningBehavior()
 			wfDeployment := mutableState.GetEffectiveDeployment()
 			//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
-			pollerDeployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities, req.PollRequest.DeploymentOptions)
+			pollerDeployment, err := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities, req.PollRequest.DeploymentOptions)
+			if err != nil {
+				return nil, err
+			}
 			err = worker_versioning.ValidateTaskVersionDirective(req.GetVersionDirective(), wfBehavior, wfDeployment, req.ScheduledDeployment)
 			if err != nil {
 				return nil, err

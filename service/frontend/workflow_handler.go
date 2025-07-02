@@ -78,6 +78,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var _ Handler = (*WorkflowHandler)(nil)
@@ -87,9 +88,16 @@ var (
 	maxTime = time.Date(2100, 1, 1, 1, 0, 0, 0, time.UTC)
 
 	// Tail room for context deadline to bail out from retry for long poll.
-	longPollTailRoom = time.Second
-
+	longPollTailRoom  = time.Second
 	errWaitForRefresh = serviceerror.NewDeadlineExceeded("waiting for schedule to refresh status of completed workflows")
+)
+
+const (
+	errTooManySetCurrentVersionRequests = "Too many SetWorkerDeploymentCurrentVersion requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
+	errTooManySetRampingVersionRequests = "Too many SetWorkerDeploymentRampingVersion requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
+	errTooManyDeleteDeploymentRequests  = "Too many DeleteWorkerDeployment requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
+	errTooManyDeleteVersionRequests     = "Too many DeleteWorkerDeploymentVersion requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
+	errTooManyVersionMetadataRequests   = "Too many UpdateWorkerDeploymentVersionMetadata requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
 )
 
 type (
@@ -3362,17 +3370,20 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 		if request.GetDeploymentVersion() == nil {
 			return nil, serviceerror.NewInvalidArgument("deployment version cannot be empty")
 		}
-		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
+		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(request.GetDeploymentVersion())
 	}
 
-	info, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, versionStr)
+	versionInfo, vtq, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, versionStr, request.ReportTaskQueueStats)
 	if err != nil {
 		return nil, err
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	info.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(info.Version)
-	return &workflowservice.DescribeWorkerDeploymentVersionResponse{WorkerDeploymentVersionInfo: info}, nil
+	versionInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(versionInfo.Version)
+	return &workflowservice.DescribeWorkerDeploymentVersionResponse{
+		WorkerDeploymentVersionInfo: versionInfo,
+		VersionTaskQueues:           vtq,
+	}, nil
 }
 
 func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context, request *workflowservice.SetWorkerDeploymentCurrentVersionRequest) (_ *workflowservice.SetWorkerDeploymentCurrentVersionResponse, retError error) {
@@ -3409,18 +3420,21 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 				BuildId:        request.GetBuildId(),
 			}
 		}
-		versionStr = worker_versioning.WorkerDeploymentVersionToString(v)
+		versionStr = worker_versioning.WorkerDeploymentVersionToStringV31(v)
 	}
 
 	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.Identity, request.IgnoreMissingTaskQueues, request.GetConflictToken())
 	if err != nil {
+		if common.IsResourceExhausted(err) {
+			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManySetCurrentVersionRequests)
+		}
 		return nil, err
 	}
 
 	return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{
 		ConflictToken:             resp.ConflictToken,
 		PreviousVersion:           resp.PreviousVersion,
-		PreviousDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString(resp.PreviousVersion),
+		PreviousDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(resp.PreviousVersion),
 	}, nil
 }
 
@@ -3457,7 +3471,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 
 		// This is a v0.32 user trying to ramp up a version. We don't care what percentage it is.
 		if request.GetBuildId() != "" {
-			versionStr = worker_versioning.WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
+			versionStr = worker_versioning.WorkerDeploymentVersionToStringV31(&deploymentspb.WorkerDeploymentVersion{
 				DeploymentName: request.GetDeploymentName(),
 				BuildId:        request.GetBuildId(),
 			})
@@ -3470,6 +3484,9 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 
 	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.GetPercentage(), request.GetIdentity(), request.IgnoreMissingTaskQueues, request.GetConflictToken())
 	if err != nil {
+		if common.IsResourceExhausted(err) {
+			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManySetRampingVersionRequests)
+		}
 		return nil, err
 	}
 
@@ -3477,7 +3494,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		ConflictToken:             resp.ConflictToken,
 		PreviousVersion:           resp.PreviousVersion,
 		PreviousPercentage:        resp.PreviousPercentage,
-		PreviousDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromString(resp.PreviousVersion),
+		PreviousDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(resp.PreviousVersion),
 	}, nil
 }
 
@@ -3552,7 +3569,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 
 	for _, vs := range workerDeploymentInfo.VersionSummaries {
 		//nolint:staticcheck // SA1019: worker versioning v0.31
-		vs.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(vs.Version)
+		vs.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(vs.Version)
 	}
 	return &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: workerDeploymentInfo,
@@ -3574,6 +3591,9 @@ func (wh *WorkflowHandler) DeleteWorkerDeployment(ctx context.Context, request *
 
 	err = wh.workerDeploymentClient.DeleteWorkerDeployment(ctx, namespaceEntry, request.DeploymentName, request.Identity)
 	if err != nil {
+		if common.IsResourceExhausted(err) {
+			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManyDeleteDeploymentRequests)
+		}
 		return nil, err
 	}
 
@@ -3595,11 +3615,14 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	versionStr := request.GetVersion()
 	if request.GetDeploymentVersion() != nil {
-		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
+		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(request.GetDeploymentVersion())
 	}
 
 	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, versionStr, request.SkipDrainage, request.Identity)
 	if err != nil {
+		if common.IsResourceExhausted(err) {
+			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManyDeleteVersionRequests)
+		}
 		return nil, err
 	}
 
@@ -3625,13 +3648,15 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	versionStr := request.GetVersion()
 	if request.GetDeploymentVersion() != nil {
-		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(request.GetDeploymentVersion())
+		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(request.GetDeploymentVersion())
 	}
 
-	// todo (Shivam): Should we get identity from the request?
 	identity := uuid.New()
 	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, versionStr, request.UpsertEntries, request.RemoveEntries, identity)
 	if err != nil {
+		if common.IsResourceExhausted(err) {
+			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManyVersionMetadataRequests)
+		}
 		return nil, err
 	}
 
@@ -3744,7 +3769,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		// we noticed some "running workflows" aren't running anymore. poke the workflow to
 		// refresh, but don't wait for the state to change. ignore errors.
 		go func() {
-			disconnectedCtx := headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(request.Namespace))
+			disconnectedCtx := headers.SetCallerInfo(context.Background(), headers.NewBackgroundHighCallerInfo(request.Namespace))
 			_, _ = wh.historyClient.SignalWorkflowExecution(disconnectedCtx, &historyservice.SignalWorkflowExecutionRequest{
 				NamespaceId: namespaceID.String(),
 				SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
@@ -3955,6 +3980,10 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 	if len(request.Patch.Pause) > common.ScheduleNotesSizeLimit ||
 		len(request.Patch.Unpause) > common.ScheduleNotesSizeLimit {
 		return nil, errNotesTooLong
+	}
+
+	if trigger := request.Patch.GetTriggerImmediately(); trigger != nil && trigger.ScheduledTime == nil {
+		trigger.ScheduledTime = timestamppb.Now()
 	}
 
 	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(request.Patch)
@@ -4607,11 +4636,19 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			if op.ResetOperation.Options.Target == nil {
 				return nil, serviceerror.NewInvalidArgument("batch reset missing target")
 			}
-			encoded, err := op.ResetOperation.Options.Marshal()
+			encodedResetOptions, err := op.ResetOperation.Options.Marshal()
 			if err != nil {
 				return nil, err
 			}
-			resetParams.ResetOptions = encoded
+			resetParams.ResetOptions = encodedResetOptions
+			resetParams.PostResetOperations = make([][]byte, len(op.ResetOperation.PostResetOperations))
+			for i, postResetOperation := range op.ResetOperation.PostResetOperations {
+				encodedPostResetOperations, err := postResetOperation.Marshal()
+				if err != nil {
+					return nil, err
+				}
+				resetParams.PostResetOperations[i] = encodedPostResetOperations
+			}
 		} else {
 			// TODO: remove support for old fields later
 			resetType := op.ResetOperation.GetResetType()
@@ -4626,6 +4663,17 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		operationType = batcher.BatchTypeUpdateOptions
 		updateOptionsParams.WorkflowExecutionOptions = op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions()
 		updateOptionsParams.UpdateMask = op.UpdateWorkflowOptionsOperation.GetUpdateMask()
+		// TODO(carlydf): remove hacky usage of deprecated fields later, after adding support for oneof in BatchParams encoder
+		if o := updateOptionsParams.WorkflowExecutionOptions.VersioningOverride; o.GetOverride() != nil {
+			deprecatedOverride := &workflowpb.VersioningOverride{}
+			if o.GetAutoUpgrade() {
+				deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE //nolint:staticcheck // SA1019: worker versioning v0.31
+			} else if o.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED {
+				deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED                                                            //nolint:staticcheck // SA1019: worker versioning v0.31
+				deprecatedOverride.PinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(o.GetPinned().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+			}
+			updateOptionsParams.WorkflowExecutionOptions.VersioningOverride = deprecatedOverride
+		}
 	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
 		operationType = batcher.BatchTypeUnpauseActivities
 		if op.UnpauseActivitiesOperation == nil {
@@ -5799,10 +5847,6 @@ func (wh *WorkflowHandler) UpdateActivityOptions(
 ) (_ *workflowservice.UpdateActivityOptionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method UpdateActivityOptions not implemented")
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -5838,10 +5882,6 @@ func (wh *WorkflowHandler) PauseActivity(
 ) (_ *workflowservice.PauseActivityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method PauseActivity not implemented")
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -5874,10 +5914,6 @@ func (wh *WorkflowHandler) UnpauseActivity(
 ) (_ *workflowservice.UnpauseActivityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method UnpauseActivity not implemented")
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -5909,10 +5945,6 @@ func (wh *WorkflowHandler) ResetActivity(
 	ctx context.Context, request *workflowservice.ResetActivityRequest,
 ) (_ *workflowservice.ResetActivityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method ResetActivity not implemented")
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -6050,4 +6082,58 @@ func (wh *WorkflowHandler) ListWorkflowRules(
 		return nil, err
 	}
 	return &workflowservice.ListWorkflowRulesResponse{Rules: workflowRules}, nil
+}
+
+// RecordWorkerHeartbeat receive heartbeat request from the worker
+// and forwards it to the corresponding matching service.
+func (wh *WorkflowHandler) RecordWorkerHeartbeat(
+	ctx context.Context, request *workflowservice.RecordWorkerHeartbeatRequest,
+) (*workflowservice.RecordWorkerHeartbeatResponse, error) {
+	if !wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method RecordWorkerHeartbeat not supported")
+	}
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
+		NamespaceId:       namespaceID.String(),
+		HeartbeartRequest: request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.RecordWorkerHeartbeatResponse{}, nil
+}
+
+// ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
+func (wh *WorkflowHandler) ListWorkers(
+	ctx context.Context, request *workflowservice.ListWorkersRequest,
+) (*workflowservice.ListWorkersResponse, error) {
+	if !wh.config.ListWorkersEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method ListWorkers not supported")
+	}
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := wh.matchingClient.ListWorkers(ctx, &matchingservice.ListWorkersRequest{
+		NamespaceId: namespaceID.String(),
+		ListRequest: request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.ListWorkersResponse{
+		WorkersInfo:   resp.GetWorkersInfo(),
+		NextPageToken: resp.GetNextPageToken(),
+	}, nil
 }

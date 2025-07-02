@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -156,6 +157,8 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		if err := d.updateMemo(ctx); err != nil {
 			return err
 		}
+
+		d.metrics.Counter(metrics.WorkerDeploymentCreated.Name()).Inc(1)
 	}
 	if d.State.Versions == nil {
 		d.State.Versions = make(map[string]*deploymentspb.WorkerDeploymentVersionSummary)
@@ -325,6 +328,7 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 		CreateTime: args.CreateTime,
 		Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 	}
+	d.metrics.Counter(metrics.WorkerDeploymentVersionCreated.Name()).Inc(1)
 	return nil
 }
 
@@ -344,7 +348,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 
 	// Add version to local state of the workflow, if not already present.
 	err = d.addVersionToWorkerDeployment(ctx, &deploymentspb.AddVersionUpdateArgs{
-		Version:    worker_versioning.WorkerDeploymentVersionToString(args.Version),
+		Version:    worker_versioning.WorkerDeploymentVersionToStringV31(args.Version),
 		CreateTime: timestamppb.New(workflow.Now(ctx)),
 	})
 	if err != nil {
@@ -357,7 +361,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		TaskQueueName: args.TaskQueueName,
 		TaskQueueType: args.TaskQueueType,
 		MaxTaskQueues: args.MaxTaskQueues,
-		Version:       worker_versioning.WorkerDeploymentVersionToString(args.Version),
+		Version:       worker_versioning.WorkerDeploymentVersionToStringV31(args.Version),
 	}).Get(ctx, nil)
 	if err != nil {
 		var appError *temporal.ApplicationError
@@ -412,7 +416,7 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 
 	if _, ok := d.State.GetVersions()[args.Version]; !ok && args.Version != "" && args.Version != worker_versioning.UnversionedVersionId {
 		d.logger.Info("version not found in deployment")
-		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s not found in deployment", args.Version), errFailedPrecondition)
+		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s not found in deployment", args.Version), errVersionNotFound)
 	}
 
 	return nil
@@ -464,7 +468,8 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			RampPercentage:    0,   // remove ramp
 		}
 
-		if prevRampingVersion != worker_versioning.UnversionedVersionId {
+		// TODO (Shivam): remove the empty string check once canary stops flaking out
+		if prevRampingVersion != worker_versioning.UnversionedVersionId && prevRampingVersion != "" {
 			if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs, false); err != nil {
 				return nil, err
 			}
@@ -513,7 +518,8 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			RampingSinceTime:  rampingSinceTime,
 			RampPercentage:    args.Percentage,
 		}
-		if newRampingVersion != worker_versioning.UnversionedVersionId {
+		// TODO (Shivam): remove the empty string check once canary stops flaking out
+		if newRampingVersion != worker_versioning.UnversionedVersionId && newRampingVersion != "" {
 			if _, err := d.syncVersion(ctx, newRampingVersion, setRampUpdateArgs, true); err != nil {
 				return nil, err
 			}
@@ -530,7 +536,8 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 				RampingSinceTime:  nil, // remove ramp
 				RampPercentage:    0,   // remove ramp
 			}
-			if prevRampingVersion != worker_versioning.UnversionedVersionId {
+			// TODO (Shivam): remove the empty string check once canary stops flaking out
+			if prevRampingVersion != worker_versioning.UnversionedVersionId && prevRampingVersion != "" {
 				if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs, false); err != nil {
 					return nil, err
 				}
@@ -547,7 +554,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 	// update local state
 	d.State.RoutingConfig.RampingVersion = newRampingVersion
-	d.State.RoutingConfig.RampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(newRampingVersion)
+	d.State.RoutingConfig.RampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(newRampingVersion)
 	d.State.RoutingConfig.RampingVersionPercentage = args.Percentage
 	d.State.RoutingConfig.RampingVersionChangedTime = rampingVersionUpdateTime
 	d.State.ConflictToken, _ = routingUpdateTime.AsTime().MarshalBinary()
@@ -649,7 +656,7 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deployment
 	}
 	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != worker_versioning.UnversionedVersionId {
 		d.logger.Info("version not found in deployment")
-		return temporal.NewApplicationError(fmt.Sprintf("version %s not found in deployment", args.Version), errFailedPrecondition)
+		return temporal.NewApplicationError(fmt.Sprintf("version %s not found in deployment", args.Version), errVersionNotFound)
 	}
 	return nil
 }
@@ -706,7 +713,8 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		}
 	}
 
-	if newCurrentVersion != worker_versioning.UnversionedVersionId {
+	// TODO (Shivam): remove the empty string check once canary stops flaking out
+	if newCurrentVersion != worker_versioning.UnversionedVersionId && newCurrentVersion != "" {
 		// Tell new current version that it's current
 		currUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
 			RoutingUpdateTime: updateTime,
@@ -724,7 +732,8 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	// do is tell the previous current version that it is not current. Then, the task queues in the
 	// previous current version will have no current version and will become unversioned implicitly.
 
-	if prevCurrentVersion != worker_versioning.UnversionedVersionId {
+	// TODO (Shivam): remove the empty string check once canary stops flaking out
+	if prevCurrentVersion != worker_versioning.UnversionedVersionId && prevCurrentVersion != "" {
 		// Tell previous current that it's no longer current
 		prevUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
 			RoutingUpdateTime: updateTime,
@@ -762,7 +771,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 
 	// update local state
 	d.State.RoutingConfig.CurrentVersion = args.Version
-	d.State.RoutingConfig.CurrentDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromString(args.Version)
+	d.State.RoutingConfig.CurrentDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(args.Version)
 	d.State.RoutingConfig.CurrentVersionChangedTime = updateTime
 	d.State.ConflictToken, _ = updateTime.AsTime().MarshalBinary()
 	d.State.LastModifierIdentity = args.Identity
@@ -895,105 +904,79 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 }
 
 func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs) error {
-	var err error
-	v := workflow.GetVersion(ctx, "syncUnversionedRamp", workflow.DefaultVersion, 1)
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 
-	if v == workflow.DefaultVersion {
-		var res deploymentspb.SyncUnversionedRampActivityResponse
-		err := workflow.ExecuteActivity(
-			activityCtx,
-			d.a.SyncUnversionedRamp,
-			&deploymentspb.SyncUnversionedRampActivityArgs{
-				CurrentVersion: d.State.RoutingConfig.CurrentVersion,
-				UpdateArgs:     versionUpdateArgs,
-			}).Get(ctx, &res)
-		if err != nil {
-			return err
-		}
-		// check propagation
-		err = workflow.ExecuteActivity(
-			activityCtx,
-			d.a.CheckUnversionedRampUserDataPropagation,
-			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-				TaskQueueMaxVersions: res.TaskQueueMaxVersions,
-			}).Get(ctx, nil)
-		if err != nil {
-			return err
-		}
-	} else {
+	// DescribeVersion activity to get all the task queues in the current version
+	var res deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult
+	err := workflow.ExecuteActivity(
+		activityCtx,
+		d.a.DescribeVersionFromWorkerDeployment,
+		&deploymentspb.DescribeVersionFromWorkerDeploymentActivityArgs{
+			Version: d.State.RoutingConfig.CurrentVersion, //nolint:staticcheck // SA1019: worker versioning v0.31
 
-		// DescribeVersion activity to get all the task queues in the current version
-		var res deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult
-		err := workflow.ExecuteActivity(
-			activityCtx,
-			d.a.DescribeVersionFromWorkerDeployment,
-			&deploymentspb.DescribeVersionFromWorkerDeploymentActivityArgs{
-				Version: d.State.RoutingConfig.CurrentVersion,
-			}).Get(ctx, &res)
-		if err != nil {
-			return err
+		}).Get(ctx, &res)
+	if err != nil {
+		return err
+	}
+
+	// send in the task-queue families in batches of syncBatchSize
+	batches := make([][]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
+	syncReqs := make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
+
+	// Grouping by task-queue name
+	taskQueuesByName := make(map[string][]enumspb.TaskQueueType)
+	for _, tq := range res.GetTaskQueueInfos() {
+		taskQueuesByName[tq.GetName()] = append(taskQueuesByName[tq.GetName()], tq.GetType())
+	}
+
+	for _, tqName := range workflow.DeterministicKeys(taskQueuesByName) {
+		tqTypes := taskQueuesByName[tqName]
+		sync := &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+			Name:  tqName,
+			Types: tqTypes,
+			Data: &deploymentspb.DeploymentVersionData{
+				Version:           nil,
+				RoutingUpdateTime: versionUpdateArgs.RoutingUpdateTime,
+				RampingSinceTime:  versionUpdateArgs.RampingSinceTime,
+				RampPercentage:    versionUpdateArgs.RampPercentage,
+			},
 		}
+		syncReqs = append(syncReqs, sync)
 
-		// send in the task-queue families in batches of syncBatchSize
-		batches := make([][]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
-		syncReqs := make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
-
-		// Grouping by task-queue name
-		taskQueuesByName := make(map[string][]enumspb.TaskQueueType)
-		for _, tq := range res.GetTaskQueueInfos() {
-			taskQueuesByName[tq.GetName()] = append(taskQueuesByName[tq.GetName()], tq.GetType())
-		}
-
-		for _, tqName := range workflow.DeterministicKeys(taskQueuesByName) {
-			tqTypes := taskQueuesByName[tqName]
-			sync := &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-				Name:  tqName,
-				Types: tqTypes,
-				Data: &deploymentspb.DeploymentVersionData{
-					Version:           nil,
-					RoutingUpdateTime: versionUpdateArgs.RoutingUpdateTime,
-					RampingSinceTime:  versionUpdateArgs.RampingSinceTime,
-					RampPercentage:    versionUpdateArgs.RampPercentage,
-				},
-			}
-			syncReqs = append(syncReqs, sync)
-
-			if len(syncReqs) == int(d.State.SyncBatchSize) {
-				batches = append(batches, syncReqs)
-				syncReqs = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0) // reset the syncReq.Sync slice for the next batch
-			}
-		}
-		if len(syncReqs) > 0 {
+		if len(syncReqs) == int(d.State.SyncBatchSize) {
 			batches = append(batches, syncReqs)
+			syncReqs = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0) // reset the syncReq.Sync slice for the next batch
+		}
+	}
+	if len(syncReqs) > 0 {
+		batches = append(batches, syncReqs)
+	}
+
+	// calling SyncDeploymentVersionUserData for each batch
+	for _, batch := range batches {
+		var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
+
+		err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserDataFromWorkerDeployment, &deploymentspb.SyncDeploymentVersionUserDataRequest{
+			Version:       nil,
+			ForgetVersion: false,
+			Sync:          batch,
+		}).Get(ctx, &syncRes)
+		if err != nil {
+			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+			return err
 		}
 
-		// calling SyncDeploymentVersionUserData for each batch
-		for _, batch := range batches {
-			var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
-
-			err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserDataFromWorkerDeployment, &deploymentspb.SyncDeploymentVersionUserDataRequest{
-				Version:       nil,
-				ForgetVersion: false,
-				Sync:          batch,
-			}).Get(ctx, &syncRes)
+		if len(syncRes.TaskQueueMaxVersions) > 0 {
+			// wait for propagation
+			err = workflow.ExecuteActivity(
+				activityCtx,
+				d.a.CheckUnversionedRampUserDataPropagation,
+				&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
+					TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+				}).Get(ctx, nil)
 			if err != nil {
 				// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
 				return err
-			}
-
-			if len(syncRes.TaskQueueMaxVersions) > 0 {
-				// wait for propagation
-				err = workflow.ExecuteActivity(
-					activityCtx,
-					d.a.CheckUnversionedRampUserDataPropagation,
-					&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-						TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
-					}).Get(ctx, nil)
-				if err != nil {
-					// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
-					return err
-				}
 			}
 		}
 	}
@@ -1101,7 +1084,7 @@ func (d *WorkflowRunner) getRampingVersionSummary() *deploymentpb.WorkerDeployme
 func (d *WorkflowRunner) getWorkerDeploymentInfoVersionSummary(versionSummary *deploymentspb.WorkerDeploymentVersionSummary) *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
 	return &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 		Version:              versionSummary.GetVersion(),
-		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromString(versionSummary.GetVersion()),
+		DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(versionSummary.GetVersion()),
 		Status:               versionSummary.GetStatus(),
 		CreateTime:           versionSummary.GetCreateTime(),
 		DrainageInfo:         versionSummary.GetDrainageInfo(),

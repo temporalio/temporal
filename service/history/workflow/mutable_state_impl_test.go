@@ -3,8 +3,10 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -111,19 +113,19 @@ var (
 	pinnedOptions1      = &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment1)),
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment1)),
 		},
 	}
 	pinnedOptions2 = &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment2)),
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment2)),
 		},
 	}
 	pinnedOptions3 = &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment3)),
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment3)),
 		},
 	}
 	unpinnedOptions = &workflowpb.WorkflowExecutionOptions{
@@ -187,6 +189,7 @@ func (s *mutableStateSuite) SetupTest() {
 	)
 	reg := hsm.NewRegistry()
 	s.Require().NoError(RegisterStateMachine(reg))
+	s.Require().NoError(callbacks.RegisterStateMachine(reg))
 	s.mockShard.SetStateMachineRegistry(reg)
 
 	s.mockConfig.MutableStateActivityFailureSizeLimitWarn = func(namespace string) int { return 1 * 1024 }
@@ -529,9 +532,9 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 	ms.executionInfo.VersioningInfo = versioningInfo
 	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
-	dv1 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment1))
-	dv2 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment2))
-	dv3 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment3))
+	dv1 := worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment1))
+	dv2 := worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment2))
+	dv3 := worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment3))
 
 	deploymentVersion1 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment1)
 	deploymentVersion2 := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment2)
@@ -949,7 +952,7 @@ func (s *mutableStateSuite) verifyOverrides(
 	}
 	expectedVersion := ""
 	if expectedDeployment != nil {
-		expectedVersion = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(expectedDeployment))
+		expectedVersion = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(expectedDeployment))
 	}
 	s.Equal(expectedVersion, versioningInfo.GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 	var expectedPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion
@@ -1808,6 +1811,15 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 			},
 			Data: &commonpb.DataBlob{Data: []byte("test-data")},
 		},
+		"component-path/collection": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: failoverVersion, TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: failoverVersion, TransitionCount: 90},
+				Attributes: &persistencespb.ChasmNodeMetadata_CollectionAttributes{
+					CollectionAttributes: &persistencespb.ChasmCollectionAttributes{},
+				},
+			},
+		},
 	}
 
 	bufferedEvents := []*historypb.HistoryEvent{
@@ -1992,8 +2004,6 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	)
 	s.NoError(err)
 
-	err = callbacks.RegisterStateMachine(s.mockShard.StateMachineRegistry())
-	s.NoError(err)
 	coll := callbacks.MachineCollection(s.mutableState.HSM())
 	_, err = coll.Add(
 		"test-callback-carryover",
@@ -2023,6 +2033,7 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 			// All other fields will default to those in the current run.
 			WorkflowRunTimeout: s.mutableState.GetExecutionInfo().WorkflowRunTimeout,
 		},
+		nil,
 	)
 	s.NoError(err)
 
@@ -2057,7 +2068,6 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 
 	_, _, err = s.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
-		uuid.New(),
 		&commandpb.StartChildWorkflowExecutionCommandAttributes{},
 		namespace.ID(uuid.New()),
 	)
@@ -2584,7 +2594,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 				mockChasmTree := historyi.NewMockChasmTree(s.controller)
 				mockChasmTree.EXPECT().Archetype().Return("mock-archetype").AnyTimes()
 				gomock.InOrder(
-					mockChasmTree.EXPECT().IsDirty().Return(true).AnyTimes(),
+					mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes(),
 					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
 						UpdatedNodes: map[string]*persistencespb.ChasmNode{
 							"node-path": {
@@ -2775,7 +2785,6 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				completedEvent := completWorkflowTaskFn(ms)
 				initiatedEvent, _, err := ms.AddStartChildWorkflowExecutionInitiatedEvent(
 					completedEvent.GetEventId(),
-					uuid.New(),
 					&commandpb.StartChildWorkflowExecutionCommandAttributes{},
 					ms.GetNamespaceEntry().ID(),
 				)
@@ -3351,6 +3360,25 @@ func (s *mutableStateSuite) TestCollapseVisibilityTasks() {
 			},
 		)
 	}
+}
+
+func (s *mutableStateSuite) TestStartChildWorkflowRequestID() {
+	workflowTaskCompletionEventID := rand.Int63()
+	attributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{}
+	event := s.mutableState.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletionEventID,
+		attributes,
+		tests.NamespaceID,
+	)
+	createRequestID := fmt.Sprintf("%s:%d:%d", s.mutableState.executionState.RunId, event.GetEventId(), event.GetVersion())
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	ci, err := s.mutableState.ApplyStartChildWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletionEventID,
+		event,
+	)
+	s.NoError(err)
+	s.Equal(createRequestID, ci.CreateRequestId)
 }
 
 func (s *mutableStateSuite) TestGetCloseVersion() {
@@ -3991,7 +4019,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 				mockChasmTree := historyi.NewMockChasmTree(s.controller)
 				mockChasmTree.EXPECT().Archetype().Return("mock-archetype").AnyTimes()
 				gomock.InOrder(
-					mockChasmTree.EXPECT().IsDirty().Return(true).AnyTimes(),
+					mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes(),
 					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
 						DeletedNodes: map[string]struct{}{deletedNodePath: {}},
 					}, nil),
@@ -4141,7 +4169,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask() {
 	mutableState.chasmTree = mockChasmTree
 
 	// Not a workflow, should not generate retention task
-	mockChasmTree.EXPECT().IsDirty().Return(true).AnyTimes()
+	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().Archetype().Return("").Times(1)
 	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
 	mutation, _, err := mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
@@ -4752,6 +4780,13 @@ func (s *mutableStateSuite) TestApplyMutation() {
 					},
 					Data: &commonpb.DataBlob{Data: []byte("test-data")},
 				},
+				"node-path/collection-node": {
+					Metadata: &persistencespb.ChasmNodeMetadata{
+						InitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+						LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+						Attributes:                    &persistencespb.ChasmNodeMetadata_CollectionAttributes{},
+					},
+				},
 			}
 			targetMockChasmTree.EXPECT().Snapshot(nil).Return(chasm.NodesSnapshot{
 				Nodes: updateChasmNodes,
@@ -4960,4 +4995,165 @@ func (s *mutableStateSuite) TestUpdateActivityTaskStatusWithTimerHeartbeat() {
 	s.NoError(err)
 	s.Equal(status, dbState.ActivityInfos[scheduleEventId].TimerTaskStatus)
 	s.Equal(originalTime, mutableState.pendingActivityTimerHeartbeats[scheduleEventId])
+}
+
+func (s *mutableStateSuite) TestHasRequestID() {
+	testCases := []struct {
+		name          string
+		requestID     string
+		setupFunc     func(ms *MutableStateImpl) // Setup function to prepare the mutable state
+		expectedFound bool
+	}{
+		{
+			name:      "empty_request_id",
+			requestID: "",
+			setupFunc: func(ms *MutableStateImpl) {
+				// No setup needed
+			},
+			expectedFound: false,
+		},
+		{
+			name:      "request_id_not_found",
+			requestID: "non-existent-request-id",
+			setupFunc: func(ms *MutableStateImpl) {
+				// No setup needed
+			},
+			expectedFound: false,
+		},
+		{
+			name:      "request_id_found",
+			requestID: "existing-request-id",
+			setupFunc: func(ms *MutableStateImpl) {
+				// Add request ID to execution state
+				ms.AttachRequestID("existing-request-id", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 100)
+			},
+			expectedFound: true,
+		},
+		{
+			name:      "multiple_request_ids_found_target",
+			requestID: "target-request-id",
+			setupFunc: func(ms *MutableStateImpl) {
+				// Add multiple request IDs
+				ms.AttachRequestID("request-id-1", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 101)
+				ms.AttachRequestID("target-request-id", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 102)
+				ms.AttachRequestID("request-id-3", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 103)
+			},
+			expectedFound: true,
+		},
+		{
+			name:      "multiple_request_ids_not_found_target",
+			requestID: "missing-request-id",
+			setupFunc: func(ms *MutableStateImpl) {
+				// Add multiple request IDs, but not the target one
+				ms.AttachRequestID("request-id-1", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 104)
+				ms.AttachRequestID("request-id-2", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 105)
+				ms.AttachRequestID("request-id-3", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 106)
+			},
+			expectedFound: false,
+		},
+		{
+			name:      "request_id_case_sensitive",
+			requestID: "Case-Sensitive-ID",
+			setupFunc: func(ms *MutableStateImpl) {
+				// Add request ID with different case
+				ms.AttachRequestID("case-sensitive-id", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 107)
+			},
+			expectedFound: false,
+		},
+		{
+			name:      "request_id_exact_match",
+			requestID: "exact-match-id",
+			setupFunc: func(ms *MutableStateImpl) {
+				// Add exact match
+				ms.AttachRequestID("exact-match-id", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 108)
+			},
+			expectedFound: true,
+		},
+		{
+			name:      "request_id_with_special_characters",
+			requestID: "request-id-with-$pecial-ch@racters_123",
+			setupFunc: func(ms *MutableStateImpl) {
+				ms.AttachRequestID("request-id-with-$pecial-ch@racters_123", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 109)
+			},
+			expectedFound: true,
+		},
+		{
+			name:      "uuid_style_request_id",
+			requestID: "12345678-1234-1234-1234-123456789abc",
+			setupFunc: func(ms *MutableStateImpl) {
+				ms.AttachRequestID("12345678-1234-1234-1234-123456789abc", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 110)
+			},
+			expectedFound: true,
+		},
+		{
+			name:      "very_long_request_id",
+			requestID: "very-long-request-id-" + strings.Repeat("x", 100),
+			setupFunc: func(ms *MutableStateImpl) {
+				ms.AttachRequestID("very-long-request-id-"+strings.Repeat("x", 100), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 111)
+			},
+			expectedFound: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.SetupSubTest()
+
+			// Setup the mutable state
+			tc.setupFunc(s.mutableState)
+
+			// Test HasRequestID
+			found := s.mutableState.HasRequestID(tc.requestID)
+			s.Equal(tc.expectedFound, found, "HasRequestID result should match expected")
+
+			// Verify the request ID existence directly in the execution state if expected to be found
+			if tc.expectedFound && tc.requestID != "" {
+				_, exists := s.mutableState.executionState.RequestIds[tc.requestID]
+				s.True(exists, "Request ID should exist in execution state RequestIds map")
+			}
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestHasRequestID_StateConsistency() {
+	s.SetupTest()
+
+	// Test that HasRequestID is consistent with AttachRequestID
+	requestID := "consistency-test-request-id"
+
+	// Initially should not exist
+	s.False(s.mutableState.HasRequestID(requestID))
+
+	// After attaching, should exist
+	s.mutableState.AttachRequestID(requestID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 200)
+	s.True(s.mutableState.HasRequestID(requestID))
+
+	// Should still exist after multiple calls
+	s.True(s.mutableState.HasRequestID(requestID))
+	s.True(s.mutableState.HasRequestID(requestID))
+}
+
+func (s *mutableStateSuite) TestHasRequestID_EmptyExecutionState() {
+	s.SetupTest()
+
+	// Ensure execution state has no request IDs initially
+	if s.mutableState.executionState.RequestIds == nil {
+		s.mutableState.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo)
+	}
+
+	// Clear any existing request IDs
+	for k := range s.mutableState.executionState.RequestIds {
+		delete(s.mutableState.executionState.RequestIds, k)
+	}
+
+	// Test various request IDs on empty state
+	testRequestIDs := []string{
+		"",
+		"test-id",
+		"another-id",
+	}
+
+	for _, requestID := range testRequestIDs {
+		s.False(s.mutableState.HasRequestID(requestID), "Should return false for request ID: %s", requestID)
+	}
 }

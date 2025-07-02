@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -243,7 +244,6 @@ func (s *clientSuite) TestQuery() {
 }
 
 func (s *clientSuite) TestQueryWithFilter() {
-
 	ctx := context.Background()
 	mockBucketHandleClient := connector.NewMockBucketHandleWrapper(s.controller)
 	mockStorageClient := connector.NewMockGcloudStorageClient(s.controller)
@@ -302,4 +302,33 @@ func newWorkflowIDPrecondition(workflowID string) connector.Precondition {
 
 		return false
 	}
+}
+
+// Ensures that no code in this package or its parent folder accidentally uses gRPC functions
+// since they are stripped from the binary via `disable_grpc_modules`. This is crude but effective.
+func (s *clientSuite) TestNoGRPCUsage() {
+	currentPackageFiles, err := filepath.Glob("*.go")
+	s.NoError(err)
+	parentPackageFiles, err := filepath.Glob("../*.go")
+	s.NoError(err)
+	allFiles := append(currentPackageFiles, parentPackageFiles...)
+
+	var checkedClientFile bool
+	for _, file := range allFiles {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+
+		content, err := os.ReadFile(file)
+		s.NoError(err)
+
+		if strings.Contains(string(content), "NewGRPCClient") {
+			s.T().Errorf("❌ Found forbidden gRPC usage in file: %s", file)
+		}
+
+		// Check for client.go in both current and parent directories
+		checkedClientFile = checkedClientFile || strings.HasSuffix(file, "client.go")
+	}
+
+	s.True(checkedClientFile, "should have checked client.go for gRPC usage")
 }

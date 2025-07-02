@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -734,7 +735,9 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
-					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					tag.Deployment(worker_versioning.DeploymentNameFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
+					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
 				task.finish(nil, false)
@@ -955,7 +958,9 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
-					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					tag.Deployment(worker_versioning.DeploymentNameFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
+					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
 				task.finish(nil, false)
@@ -971,7 +976,9 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
-					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					tag.Deployment(worker_versioning.DeploymentNameFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
+					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
+					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 				)
 				task.finish(nil, false)
 			case *serviceerror.ResourceExhausted:
@@ -1112,12 +1119,14 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	request *matchingservice.DescribeTaskQueueRequest,
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
 	req := request.GetDescRequest()
+
+	// This has been deprecated.
 	if req.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
 		rootPartition, err := tqid.PartitionFromProto(req.GetTaskQueue(), request.GetNamespaceId(), req.GetTaskQueueType())
-		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
 		if err != nil {
 			return nil, err
 		}
+		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
 		if !rootPartition.IsRoot() || rootPartition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition of workflow task queue if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
 		}
@@ -1136,24 +1145,41 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 
 		// TODO bug fix: We cache the last response for each build ID. timeSinceLastFanOut is the last fan out time, that means some enteries in the cache can be more stale if
 		// user is calling this API back-to-back but with different version selection.
+		cacheKeyFunc := func(buildId string, taskQueueType enumspb.TaskQueueType) string {
+			return fmt.Sprintf("dtq_enhanced:%s.%s", buildId, taskQueueType.String())
+		}
 		missingItemsInCache := false
-		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+		physicalTqInfos := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+		//nolint:staticcheck // SA1019 deprecated
 		requestedBuildIds, err := e.getBuildIds(req.Versions)
 		if err != nil {
 			return nil, err
 		}
-		for b := range requestedBuildIds {
-			c := rootPM.GetCache(b) // any expired cache entry will return nil
-			if c == nil {
-				missingItemsInCache = true
-				break // once we find a missing item, we can stop checking the cache
+
+		for buildId := range requestedBuildIds {
+			physicalTqInfos[buildId] = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+			//nolint:staticcheck // SA1019 deprecated
+			for _, taskQueueType := range req.TaskQueueTypes {
+				cacheKey := cacheKeyFunc(buildId, taskQueueType)
+				cachedInfo := rootPM.GetCache(cacheKey) // any expired cache entry will return nil
+				if cachedInfo == nil {
+					missingItemsInCache = true
+					break // once we find a missing item, we can stop checking the cache
+				}
+				//revive:disable-next-line:unchecked-type-assertion
+				physicalTqInfos[buildId][taskQueueType] = cachedInfo.(*taskqueuespb.PhysicalTaskQueueInfo)
 			}
-			//revive:disable-next-line:unchecked-type-assertion
-			physicalInfoByBuildId[b] = c.(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+			if missingItemsInCache {
+				break // stop checking other build IDs if we already found missing items
+			}
 		}
+
 		if missingItemsInCache {
 			// Fan out to partitions to get the needed info
-			var foundBuildIds []string
+			var foundItems []struct {
+				buildId       string
+				taskQueueType enumspb.TaskQueueType
+			}
 			numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
 			for _, taskQueueType := range req.TaskQueueTypes {
 				for i := 0; i < numPartitions; i++ {
@@ -1172,20 +1198,22 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						return nil, err
 					}
 					for buildId, vii := range partitionResp.VersionsInfoInternal {
-						foundBuildIds = append(foundBuildIds, buildId)
-						if _, ok := physicalInfoByBuildId[buildId]; !ok {
-							physicalInfoByBuildId[buildId] = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+						foundItems = append(foundItems, struct {
+							buildId       string
+							taskQueueType enumspb.TaskQueueType
+						}{buildId, taskQueueType})
+
+						if _, ok := physicalTqInfos[buildId]; !ok {
+							physicalTqInfos[buildId] = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 						}
-						if physInfo, ok := physicalInfoByBuildId[buildId][taskQueueType]; !ok {
-							physicalInfoByBuildId[buildId][taskQueueType] = vii.PhysicalTaskQueueInfo
+						if physInfo, ok := physicalTqInfos[buildId][taskQueueType]; !ok {
+							physicalTqInfos[buildId][taskQueueType] = vii.PhysicalTaskQueueInfo
 						} else {
 							var mergedStats *taskqueuepb.TaskQueueStats
 
-							// only report Task Queue Statistics if requested.
 							if req.GetReportStats() {
-								totalStats := physicalInfoByBuildId[buildId][taskQueueType].TaskQueueStats
+								totalStats := physicalTqInfos[buildId][taskQueueType].TaskQueueStats
 								partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
-
 								mergedStats = &taskqueuepb.TaskQueueStats{
 									ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
 									ApproximateBacklogAge:   largerBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
@@ -1193,24 +1221,26 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 									TasksDispatchRate:       totalStats.TasksDispatchRate + partitionStats.TasksDispatchRate,
 								}
 							}
-							merged := &taskqueuespb.PhysicalTaskQueueInfo{
+
+							physicalTqInfos[buildId][taskQueueType] = &taskqueuespb.PhysicalTaskQueueInfo{
 								Pollers:        dedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
 								TaskQueueStats: mergedStats,
 							}
-							physicalInfoByBuildId[buildId][taskQueueType] = merged
 						}
 					}
 				}
 			}
 
-			for _, b := range foundBuildIds {
-				rootPM.PutCache(b, physicalInfoByBuildId[b])
+			// put the found items into cache
+			for _, item := range foundItems {
+				physicalTqInfo := physicalTqInfos[item.buildId][item.taskQueueType]
+				rootPM.PutCache(cacheKeyFunc(item.buildId, item.taskQueueType), physicalTqInfo)
 			}
 		}
 
 		// smush internal info into versions info
 		versionsInfo := make(map[string]*taskqueuepb.TaskQueueVersionInfo, 0)
-		for bid, typeMap := range physicalInfoByBuildId {
+		for bid, typeMap := range physicalTqInfos {
 			typesInfo := make(map[int32]*taskqueuepb.TaskQueueTypeInfo, 0)
 			for taskQueueType, physicalInfo := range typeMap {
 				typesInfo[int32(taskQueueType)] = &taskqueuepb.TaskQueueTypeInfo{
@@ -1249,7 +1279,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			},
 		}, nil
 	}
-	// Otherwise, do legacy DescribeTaskQueue
+
 	partition, err := tqid.PartitionFromProto(req.TaskQueue, request.GetNamespaceId(), req.TaskQueueType)
 	if err != nil {
 		return nil, err
@@ -1258,7 +1288,131 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	if err != nil {
 		return nil, err
 	}
-	return pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus())
+	//nolint:staticcheck // SA1019 deprecated
+	descrResp, err := pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus())
+	if err != nil {
+		return nil, err
+	}
+
+	if req.ReportStats {
+		if !pm.Partition().IsRoot() {
+			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue stats are only supported for the root partition")
+		}
+
+		var buildIds []string
+		if request.Version != nil {
+			// A particular version was requested. This is only available internally; not user-facing.
+			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV31(request.Version)}
+		}
+
+		// TODO(stephan): cache each version separately to allow re-use of cached stats
+		cacheKey := "dtq_default:" + strings.Join(buildIds, ",")
+		if ts := pm.GetCache(cacheKey); ts != nil {
+			//revive:disable-next-line:unchecked-type-assertion
+			descrResp.DescResponse.Stats = ts.(*taskqueuepb.TaskQueueStats)
+		} else {
+			taskQueueStats := &taskqueuepb.TaskQueueStats{}
+
+			// No version was requested, so we need to query all versions.
+			if len(buildIds) == 0 {
+				userData, _, err := pm.GetUserDataManager().GetUserData()
+				if err != nil {
+					return nil, err
+				}
+				typedUserData := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
+				for _, v := range typedUserData.GetDeploymentData().GetVersions() {
+					if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
+						continue
+					}
+					buildId := worker_versioning.WorkerDeploymentVersionToStringV32(v.GetVersion())
+					buildIds = append(buildIds, buildId)
+				}
+			}
+
+			// query each partition for stats
+			// TODO(stephanos): don't query root partition again
+			for i := 0; i < pm.PartitionCount(); i++ {
+				partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx,
+					&matchingservice.DescribeTaskQueuePartitionRequest{
+						NamespaceId: request.GetNamespaceId(),
+						TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+							TaskQueue:     req.TaskQueue.Name,
+							TaskQueueType: req.TaskQueueType,
+							PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
+						},
+						Versions: &taskqueuepb.TaskQueueVersionSelection{
+							BuildIds:    buildIds,
+							Unversioned: true,
+						},
+						ReportStats: true,
+					})
+				if err != nil {
+					return nil, err
+				}
+				for _, vii := range partitionResp.VersionsInfoInternal {
+					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
+					taskQueueStats.ApproximateBacklogCount += partitionStats.ApproximateBacklogCount
+					taskQueueStats.ApproximateBacklogAge = largerBacklogAge(taskQueueStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge)
+					taskQueueStats.TasksAddRate += partitionStats.TasksAddRate
+					taskQueueStats.TasksDispatchRate += partitionStats.TasksDispatchRate
+				}
+			}
+			pm.PutCache(cacheKey, taskQueueStats)
+			descrResp.DescResponse.Stats = taskQueueStats
+		}
+	}
+
+	return descrResp, nil
+}
+
+func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
+	ctx context.Context,
+	request *matchingservice.DescribeVersionedTaskQueuesRequest,
+) (*matchingservice.DescribeVersionedTaskQueuesResponse, error) {
+	partition, err := tqid.PartitionFromProto(request.TaskQueue, request.GetNamespaceId(), request.TaskQueueType)
+	if err != nil {
+		return nil, err
+	}
+
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseDescribe)
+	if err != nil {
+		return nil, err
+	}
+
+	cacheKey := fmt.Sprintf("dvtq:%s", worker_versioning.WorkerDeploymentVersionToStringV31(request.Version))
+	if cached := pm.GetCache(cacheKey); cached != nil {
+		//revive:disable-next-line:unchecked-type-assertion
+		return cached.(*matchingservice.DescribeVersionedTaskQueuesResponse), nil
+	}
+
+	resp := &matchingservice.DescribeVersionedTaskQueuesResponse{}
+	for _, tq := range request.VersionTaskQueues {
+		tqResp, err := e.matchingRawClient.DescribeTaskQueue(ctx,
+			&matchingservice.DescribeTaskQueueRequest{
+				NamespaceId: request.GetNamespaceId(),
+				DescRequest: &workflowservice.DescribeTaskQueueRequest{
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: tq.Name,
+						Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+					},
+					TaskQueueType: tq.Type,
+					ReportStats:   true,
+				},
+				Version: request.Version,
+			})
+		if err != nil {
+			return nil, err
+		}
+		resp.VersionTaskQueues = append(resp.VersionTaskQueues,
+			&matchingservice.DescribeVersionedTaskQueuesResponse_VersionTaskQueue{
+				Name:  tq.Name,
+				Type:  tq.Type,
+				Stats: tqResp.DescResponse.Stats,
+			})
+	}
+
+	pm.PutCache(cacheKey, resp)
+	return resp, nil
 }
 
 func dedupPollers(pollerInfos []*taskqueuepb.PollerInfo) []*taskqueuepb.PollerInfo {
@@ -1750,7 +1904,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 			if d := req.Deployment; d != nil {
 				// [cleanup-old-wv]
 				//nolint:staticcheck
-				if idx := findDeployment(deploymentData, req.Deployment); idx >= 0 {
+				if idx := worker_versioning.FindDeployment(deploymentData, req.Deployment); idx >= 0 {
 					deploymentData.Deployments[idx].Data = req.Data
 				} else {
 					deploymentData.Deployments = append(
@@ -1772,7 +1926,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					} else { // set or update
 						deploymentData.UnversionedRampData = vd
 					}
-				} else if idx := findDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
+				} else if idx := worker_versioning.FindDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
 					old := deploymentData.Versions[idx]
 					if old.GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
 						continue
@@ -1785,7 +1939,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					deploymentData.Versions = append(deploymentData.Versions, vd)
 				}
 			} else if v := req.GetForgetVersion(); v != nil {
-				if idx := findDeploymentVersion(deploymentData, v); idx >= 0 {
+				if idx := worker_versioning.FindDeploymentVersion(deploymentData, v); idx >= 0 {
 					changed = true
 					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
 				}
@@ -2312,7 +2466,7 @@ func (e *matchingEngineImpl) getUserDataBatcher(namespaceId namespace.ID) *strea
 func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId namespace.ID, batch []*userDataUpdate) error {
 	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
 	// TODO: should use namespace name here
-	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespaceId.String()))
+	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundHighCallerInfo(namespaceId.String()))
 	defer cancel()
 
 	// convert to map

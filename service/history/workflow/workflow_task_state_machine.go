@@ -745,6 +745,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	if err != nil {
 		return nil, err
 	}
+
+	metrics.WorkflowTasksCompleted.With(m.metricsHandler).Record(1,
+		metrics.NamespaceTag(m.ms.GetNamespaceEntry().Name().String()),
+		metrics.VersioningBehaviorTag(vb),
+		metrics.FirstAttemptTag(workflowTask.Attempt),
+	)
+
 	return event, nil
 }
 
@@ -1106,7 +1113,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 	wftDeployment := attrs.GetDeployment()
 	if v := attrs.GetWorkerDeploymentVersion(); v != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
-		dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
+		dv, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(v)
 		wftDeployment = worker_versioning.DeploymentFromDeploymentVersion(dv)
 	}
 	if v := attrs.GetDeploymentVersion(); v != nil {
@@ -1129,16 +1136,6 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		}
 	}
 
-	if transition != nil {
-		// There is still a transition going on. We need to schedule a new WFT so it goes to the
-		// transition deployment this time.
-		if _, err := m.ms.AddWorkflowTaskScheduledEvent(
-			false,
-			enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
-		); err != nil {
-			return err
-		}
-	}
 	// Deployment and behavior before applying the data came from the completed wft.
 	wfDeploymentBefore := m.ms.GetEffectiveDeployment()
 	wfBehaviorBefore := m.ms.GetEffectiveVersioningBehavior()
@@ -1164,7 +1161,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		versioningInfo.Deployment = nil
 		//nolint:staticcheck // SA1019 deprecated Version will clean up later [cleanup-wv-3.1]
-		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
+		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
 		versioningInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment)
 	}
 

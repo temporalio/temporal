@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/temporal/environment"
@@ -86,6 +88,7 @@ type (
 		DynamicConfigOverrides map[dynamicconfig.Key]any
 		EnableMTLS             bool
 		EnableMetricsCapture   bool
+		SpanExporters          map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
 		ServiceFxOptions map[primitives.ServiceName][]fx.Option
 	}
@@ -347,6 +350,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		ServiceFxOptions:                 clusterConfig.ServiceFxOptions,
 		TaskCategoryRegistry:             taskCategoryRegistry,
 		HostsByProtocolByService:         hostsByProtocolByService,
+		SpanExporters:                    clusterConfig.SpanExporters,
 	}
 
 	if clusterConfig.EnableMetricsCapture {

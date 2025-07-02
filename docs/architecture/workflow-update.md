@@ -161,30 +161,34 @@ An Update is aborted when:
 1. The Update Registry is cleared. Then, a retryable `WorkflowUpdateAbortedErr` error is returned
    (see "Update Registry Lifecycle" above).
 2. The Workflow completes itself (e.g., with `COMPLETE_WORKFLOW_EXECUTION` command) or completed externally
-   (e.g., terminated or timed out). Then, a non-retryable `ErrWorkflowCompleted` error or failure is returned
+   (e.g., terminated or timed out). Then, a non-retryable `AbortedByWorkflowClosingErr` error or failure is returned
    to the API caller depending on an Update state.
 3. The Workflow is continuing (e.g., with `CONTINUE_AS_NEW_WORKFLOW_EXECUTION` command) or is retried after
    failure or timeout. Then, a retryable `ErrWorkflowClosing` error or failure is returned to the API caller
    depending on Update state.
+4. The Workflow Task fails unexpectedly, e.g., during completion (call to `RespondWorkflowTaskCompleted` API).
+   Then Updates, which have *not* been seen by the Workflow, are aborted with a retryable error. Updates which
+   *have* been seen by the Workflow are aborted with non-retryable error. Otherwise, internal retries will
+   quickly exhaust and `Unavailable` error will be returned to the client.
 
 Full "Update state" and "Abort reason" matrix is the following:
 
-| Update State ↓ / Abort Reason →         | (1) RegistryCleared                             | (2) WorkflowCompleted                    | (3) WorkflowContinuing                   |
-|-----------------------------------------|-------------------------------------------------|------------------------------------------|------------------------------------------|
-| **Created**                             | `registryClearedErr`→`WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
-| **ProvisionallyAdmitted**               | `registryClearedErr`→`WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
-| **Admitted**                            | `registryClearedErr`→`WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
-| **Sent**                                | `registryClearedErr`→`WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
-| **ProvisionallyAccepted**               | `registryClearedErr`→`WorkflowUpdateAbortedErr` | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
-| **Accepted**                            | `registryClearedErr`→`nil`                      | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
-| **ProvisionallyCompleted**              | `registryClearedErr`→`nil`                      | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
-| **ProvisionallyCompletedAfterAccepted** | `registryClearedErr`→`nil`                      | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
-| **Completed**                           | `nil`                                           | `nil`                                    | `nil`                                    |
-| **ProvisionallyAborted**                | `nil`                                           | `nil`                                    | `nil`                                    |
-| **Aborted**                             | `nil`                                           | `nil`                                    | `nil`                                    |
+| Update State ↓ / Abort Reason →         | (1) RegistryCleared                             | (2) WorkflowCompleted                    | (3) WorkflowContinuing                   | (4) WorkflowTaskFailed                          |
+|-----------------------------------------|-------------------------------------------------|------------------------------------------|------------------------------------------|-------------------------------------------------|
+| **Created**                             | `registryClearedErr`→`WorkflowUpdateAbortedErr` | `AbortedByWorkflowClosingErr`            | `ErrWorkflowClosing`                     | `registryClearedErr`→`WorkflowUpdateAbortedErr` |
+| **ProvisionallyAdmitted**               | `registryClearedErr`→`WorkflowUpdateAbortedErr` | `AbortedByWorkflowClosingErr`            | `ErrWorkflowClosing`                     | `registryClearedErr`→`WorkflowUpdateAbortedErr` |
+| **Admitted**                            | `registryClearedErr`→`WorkflowUpdateAbortedErr` | `AbortedByWorkflowClosingErr`            | `ErrWorkflowClosing`                     | `registryClearedErr`→`WorkflowUpdateAbortedErr` |
+| **Sent**                                | `registryClearedErr`→`WorkflowUpdateAbortedErr` | `AbortedByWorkflowClosingErr`            | `ErrWorkflowClosing`                     | `workflowTaskFailErr`                           |
+| **ProvisionallyAccepted**               | `registryClearedErr`→`WorkflowUpdateAbortedErr` | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` | `nil`                                           |
+| **Accepted**                            | `registryClearedErr`→`nil`                      | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` | `nil`                                           |
+| **ProvisionallyCompleted**              | `registryClearedErr`→`nil`                      | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` | `nil`                                           |
+| **ProvisionallyCompletedAfterAccepted** | `registryClearedErr`→`nil`                      | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` | `nil`                                           |
+| **Completed**                           | `nil`                                           | `nil`                                    | `nil`                                    | `nil`                                           |
+| **ProvisionallyAborted**                | `nil`                                           | `nil`                                    | `nil`                                    | `nil`                                           |
+| **Aborted**                             | `nil`                                           | `nil`                                    | `nil`                                    | `nil`                                           |
 
 When the Workflow performs a final completion, all in-flight Updates are aborted: admitted Updates get
-`ErrWorkflowCompleted` error on both `accepted` and `completed` futures. Accepted Updates
+`AbortedByWorkflowClosingErr` error on both `accepted` and `completed` futures. Accepted Updates
 are failed with special server `acceptedUpdateCompletedWorkflowFailure` failure because if a client
 knows that Update has been accepted, it expects any following requests to return an Update result
 (or failure) but not an error. This failure is set on the `completed` future only. 
@@ -240,7 +244,7 @@ flowchart TD
     wfRunning --> |no| updateExists{Update exists?}
     wfRunning --> |yes| waitFor{Wait stage}
     updateExists --> |yes| success1(((Update result)))
-    updateExists --> |no| wfCompleted(((ErrWorkflowCompleted)))
+    updateExists --> |no| wfCompleted(((workflowCompletedErr)))
 
     waitFor --> |ACCEPTED| blockAccepted[block on 'accepted' future]
     waitFor --> |COMPLETED| blockCompleted[block on 'completed' future]

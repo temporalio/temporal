@@ -376,15 +376,12 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if _, err := b.mutableState.ApplyStartChildWorkflowExecutionInitiatedEvent(
 				firstEvent.GetEventId(),
 				event,
-				// create a new request ID which is used by transfer queue processor
-				// if namespace is failed over at this point
-				uuid.New(),
 			); err != nil {
 				return nil, err
 			}
 
 			if err := taskGenerator.GenerateChildWorkflowTasks(
-				event,
+				event.GetEventId(),
 			); err != nil {
 				return nil, err
 			}

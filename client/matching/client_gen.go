@@ -150,6 +150,26 @@ func (c *clientImpl) DescribeTaskQueuePartition(
 	return client.DescribeTaskQueuePartition(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeVersionedTaskQueues(
+	ctx context.Context,
+	request *matchingservice.DescribeVersionedTaskQueuesRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.DescribeVersionedTaskQueuesResponse, error) {
+
+	p, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.DescribeVersionedTaskQueues(ctx, request, opts...)
+}
+
 func (c *clientImpl) DispatchNexusTask(
 	ctx context.Context,
 	request *matchingservice.DispatchNexusTaskRequest,
@@ -344,6 +364,26 @@ func (c *clientImpl) ListTaskQueuePartitions(
 	return client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListWorkers(
+	ctx context.Context,
+	request *matchingservice.ListWorkersRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.ListWorkersResponse, error) {
+
+	p, err := tqid.NormalPartitionFromRpcName("not-applicable", request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListWorkers(ctx, request, opts...)
+}
+
 func (c *clientImpl) PollNexusTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollNexusTaskQueueRequest,
@@ -362,6 +402,26 @@ func (c *clientImpl) PollNexusTaskQueue(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.PollNexusTaskQueue(ctx, request, opts...)
+}
+
+func (c *clientImpl) RecordWorkerHeartbeat(
+	ctx context.Context,
+	request *matchingservice.RecordWorkerHeartbeatRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.RecordWorkerHeartbeatResponse, error) {
+
+	p, err := tqid.NormalPartitionFromRpcName("not-applicable", request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.RecordWorkerHeartbeat(ctx, request, opts...)
 }
 
 func (c *clientImpl) ReplicateTaskQueueUserData(

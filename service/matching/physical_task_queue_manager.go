@@ -110,6 +110,7 @@ var (
 	errRemoteSyncMatchFailed     = serviceerror.NewCanceled("remote sync match failed")
 	errMissingNormalQueueName    = errors.New("missing normal queue name")
 	errDeploymentVersionNotReady = serviceerror.NewUnavailable("task queue is not ready to process polls from this deployment version, try again shortly")
+	ErrBlackholedQuery           = "You are trying to query a closed Workflow that is PINNED to Worker Deployment Version %s, but %s is drained and has no pollers to answer the query. Immediately: You can re-deploy Workers in this Deployment Version to take those queries, or you can workflow update-options to change your workflow to AUTO_UPGRADE. For the future: In your infrastructure, consider waiting longer after the last queried timestamp as reported in Describe Deployment before you sunset Workers. Or mark this workflow as AUTO_UPGRADE."
 )
 
 func newPhysicalTaskQueueManager(
@@ -167,6 +168,9 @@ func newPhysicalTaskQueueManager(
 		pqMgr.partitionMgr.engine.historyClient,
 	)
 
+	isSticky := queue.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY
+	isChild := !isSticky && !queue.Partition().IsRoot()
+
 	newMatcher, cancelSub := config.NewMatcher(func(bool) {
 		// unload on change to NewMatcher so that we can reload with the new setting:
 		pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
@@ -186,7 +190,7 @@ func newPhysicalTaskQueueManager(
 		)
 		var fwdr *priForwarder
 		var err error
-		if !queue.Partition().IsRoot() && queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+		if isChild {
 			// Every DB Queue needs its own forwarder so that the throttles do not interfere
 			fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
 			if err != nil {
@@ -216,7 +220,7 @@ func newPhysicalTaskQueueManager(
 		)
 		var fwdr *Forwarder
 		var err error
-		if !queue.Partition().IsRoot() && queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+		if isChild {
 			// Every DB Queue needs its own forwarder so that the throttles do not interfere
 			fwdr, err = newForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
 			if err != nil {
@@ -427,9 +431,6 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
-	if c.queue.Version().IsVersioned() {
-		fmt.Printf("poll info updated in %v\n", c.queue.Version())
-	}
 	c.pollerHistory.updatePollerInfo(id, pollMetadata)
 }
 
@@ -510,7 +511,10 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	namespaceEntry *namespace.Namespace,
 	pollMetadata *pollMetadata,
 ) error {
-	workerDeployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
+	workerDeployment, err := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
+	if err != nil {
+		return err
+	}
 	if workerDeployment == nil {
 		return nil
 	}
@@ -546,7 +550,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	}
 
 	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-	if findDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) != -1 {
+	if worker_versioning.FindDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) != -1 {
 		// already registered in user data, we can assume the workflow is running.
 		// TODO: consider replication scenarios where user data is replicated before
 		// the deployment workflow.
@@ -566,10 +570,13 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		}
 		var errMaxTaskQueuesInVersion workerdeployment.ErrMaxTaskQueuesInVersion
 		var errMaxVersionsInDeployment workerdeployment.ErrMaxVersionsInDeployment
+		var errMaxDeploymentsInNamespace workerdeployment.ErrMaxDeploymentsInNamespace
 		if errors.As(err, &errMaxTaskQueuesInVersion) {
 			err = errMaxTaskQueuesInVersion
 		} else if errors.As(err, &errMaxVersionsInDeployment) {
 			err = errMaxVersionsInDeployment
+		} else if errors.As(err, &errMaxDeploymentsInNamespace) {
+			err = errMaxDeploymentsInNamespace
 		} else {
 			// Do not surface low level error to user
 			c.logger.Error("error while registering version", tag.Error(err))
@@ -589,7 +596,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 			return err
 		}
 		deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-		if findDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) >= 0 {
+		if worker_versioning.FindDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) >= 0 {
 			break
 		}
 		select {

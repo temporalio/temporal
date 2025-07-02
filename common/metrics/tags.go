@@ -49,7 +49,7 @@ const (
 	runInitiator            = "run_initiator"
 	fromUnversioned         = "from_unversioned"
 	toUnversioned           = "to_unversioned"
-	queryType               = "query_type"
+	queryTypeTag            = "query_type"
 	namespaceAllValue       = "all"
 	unknownValue            = "_unknown_"
 	totalMetricSuffix       = "_total"
@@ -57,6 +57,11 @@ const (
 	falseValue              = "false"
 	trueValue               = "true"
 	errorPrefix             = "*"
+
+	queryTypeStackTrace       = "__stack_trace"
+	queryTypeOpenSessions     = "__open_sessions"
+	queryTypeWorkflowMetadata = "__temporal_workflow_metadata"
+	queryTypeUserDefined      = "__user_defined"
 
 	newRun      = "new"
 	existingRun = "existing"
@@ -241,6 +246,14 @@ func FailureTag(value string) Tag {
 	return &tagImpl{key: FailureTagName, value: value}
 }
 
+func FirstAttemptTag(attempt int32) Tag {
+	value := falseValue
+	if attempt == 1 {
+		value = trueValue
+	}
+	return &tagImpl{key: isFirstAttempt, value: value}
+}
+
 func FailureSourceTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
@@ -400,6 +413,22 @@ func DestinationTag(value string) Tag {
 		key:   destination,
 		value: value,
 	}
+}
+
+func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {
+	return &tagImpl{versioningBehavior, behavior.String()}
+}
+
+func WorkflowStatusTag(status string) Tag {
+	return &tagImpl{key: workflowStatus, value: status}
+}
+
+func QueryTypeTag(queryType string) Tag {
+	if queryType == queryTypeStackTrace || queryType == queryTypeOpenSessions || queryType == queryTypeWorkflowMetadata {
+		return &tagImpl{key: queryTypeTag, value: queryType}
+	}
+	// group all user defined queries into a single tag value
+	return &tagImpl{key: queryTypeTag, value: queryTypeUserDefined}
 }
 
 func VersioningBehaviorBeforeOverrideTag(behavior enumspb.VersioningBehavior) Tag {

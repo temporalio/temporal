@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/pborman/uuid"
@@ -18,6 +19,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -66,6 +68,7 @@ func newTransferQueueActiveTaskExecutor(
 	historyRawClient resource.HistoryRawClient,
 	matchingRawClient resource.MatchingRawClient,
 	visibilityManager manager.VisibilityManager,
+	chasmEngine chasm.Engine,
 ) queues.Executor {
 	return &transferQueueActiveTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
@@ -76,6 +79,7 @@ func newTransferQueueActiveTaskExecutor(
 			historyRawClient,
 			matchingRawClient,
 			visibilityManager,
+			chasmEngine,
 		),
 		workflowResetter: ndc.NewWorkflowResetter(
 			shard,
@@ -137,6 +141,8 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 		err = t.processResetWorkflow(ctx, task)
 	case *tasks.DeleteExecutionTask:
 		err = t.processDeleteExecutionTask(ctx, task)
+	case *tasks.ChasmTask:
+		err = t.executeChasmSideEffectTransferTask(ctx, task)
 	default:
 		err = errUnknownTransferTask
 	}
@@ -146,6 +152,46 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 		ExecutedAsActive:    true,
 		ExecutionErr:        err,
 	}
+}
+
+func (t *transferQueueActiveTaskExecutor) executeChasmSideEffectTransferTask(
+	ctx context.Context,
+	task *tasks.ChasmTask,
+) error {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(err) }()
+
+	ms, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return errNoChasmMutableState
+	}
+
+	tree := ms.ChasmTree()
+	if tree == nil {
+		return errNoChasmTree
+	}
+
+	// Now that we've loaded the CHASM tree, we can release the lock before task
+	// execution. The task's executor must do its own locking as needed, and additional
+	// mutable state validations will run at access time.
+	release(nil)
+
+	return executeChasmSideEffectTask(
+		ctx,
+		t.chasmEngine,
+		t.shardContext.ChasmRegistry(),
+		tree,
+		task,
+	)
 }
 
 func (t *transferQueueActiveTaskExecutor) processDeleteExecutionTask(ctx context.Context,
@@ -501,7 +547,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		requestCancelInfo,
 		attributes,
 	); err != nil {
-		t.logger.Debug(fmt.Sprintf("Failed to cancel external workflow execution. Error: %v", err))
+		t.logger.Debug("Failed to cancel external workflow execution", tag.Error(err))
 
 		// Check to see if the error is non-transient, in which case add RequestCancelFailed
 		// event and complete transfer task by returning nil error.
@@ -834,6 +880,40 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		}
 	}
 
+	// If there is a pinned override, then the effective version will be the same as the pinned override version.
+	// If this is a cross-TQ child, we don't want to ask matching the same question twice, so we re-use the result from
+	// the first matching task-queue-in-version check.
+	newTQInPinnedVersion := false
+
+	// Child of pinned parent will inherit the parent's version if the Child's Task Queue belongs to that version.
+	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
+	if mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
+		newTQ := attributes.GetTaskQueue().GetName()
+		if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit pinned version if child is in a different namespace
+			inheritedPinnedVersion = nil
+		} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
+			newTQInPinnedVersion, err = worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient)(ctx, attributes.GetNamespaceId(), newTQ, inheritedPinnedVersion)
+			if err != nil {
+				return errors.New(fmt.Sprintf("error determining child task queue presence in inherited version: %s", err.Error()))
+			}
+			if !newTQInPinnedVersion {
+				inheritedPinnedVersion = nil
+			}
+		}
+	}
+
+	// Pinned override is inherited if Task Queue of new run is compatible with the override version.
+	var inheritedPinnedOverride *workflowpb.VersioningOverride
+	if o := mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
+		inheritedPinnedOverride = o
+		newTQ := attributes.GetTaskQueue().GetName()
+		if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() && !newTQInPinnedVersion ||
+			attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit pinned version if child is in a different namespace
+			inheritedPinnedOverride = nil
+		}
+	}
+
 	// Note: childStarted flag above is computed from the parent's history. When this is TRUE it's guaranteed that the child was succesfully started.
 	// But if it's FALSE then the child *may or maynot* be started (ex: we failed to record ChildExecutionStarted event previously.)
 	// Hence we need to check the child workflow ID and attempt to reconnect before proceeding to start a new instance of the child.
@@ -888,18 +968,6 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		},
 	}
 
-	var parentPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion
-	var parentPinnedOverride *workflowpb.VersioningOverride
-	if attributes.TaskQueue.GetName() == mutableState.GetExecutionInfo().GetTaskQueue() {
-		// TODO (shahab): also inherit when the child TQ is different, but in the same Version
-		if mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-			parentPinnedDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
-		}
-		if worker_versioning.OverrideIsPinned(mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()) {
-			parentPinnedOverride = mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()
-		}
-	}
-
 	childRunID, childClock, err := t.startWorkflow(
 		ctx,
 		task,
@@ -912,8 +980,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		inheritedBuildId,
 		initiatedEvent.GetUserMetadata(),
 		shouldTerminateAndStartChild,
-		parentPinnedDeploymentVersion,
-		parentPinnedOverride,
+		inheritedPinnedOverride,
+		inheritedPinnedVersion,
 		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
 	)
 	if err != nil {
@@ -1485,8 +1553,8 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	inheritedBuildId string,
 	userMetadata *sdkpb.UserMetadata,
 	shouldTerminateAndStartChild bool,
-	parentPinnedDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
-	parentPinnedOverride *workflowpb.VersioningOverride,
+	inheritedPinnedOverride *workflowpb.VersioningOverride,
+	inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion,
 	priority *commonpb.Priority,
 ) (string, *clockspb.VectorClock, error) {
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
@@ -1508,7 +1576,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		Memo:                  attributes.Memo,
 		SearchAttributes:      attributes.SearchAttributes,
 		UserMetadata:          userMetadata,
-		VersioningOverride:    parentPinnedOverride,
+		VersioningOverride:    inheritedPinnedOverride,
 		Priority:              priority,
 	}
 
@@ -1522,10 +1590,9 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 				WorkflowId: task.WorkflowID,
 				RunId:      task.RunID,
 			},
-			InitiatedId:             task.InitiatedEventID,
-			InitiatedVersion:        task.Version,
-			Clock:                   vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
-			PinnedDeploymentVersion: parentPinnedDeploymentVersion,
+			InitiatedId:      task.InitiatedEventID,
+			InitiatedVersion: task.Version,
+			Clock:            vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		},
 		rootExecutionInfo,
 		t.shardContext.GetTimeSource().Now(),
@@ -1533,6 +1600,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 
 	request.SourceVersionStamp = sourceVersionStamp
 	request.InheritedBuildId = inheritedBuildId
+	request.InheritedPinnedVersion = inheritedPinnedVersion
 
 	if shouldTerminateAndStartChild {
 		request.StartRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
@@ -1782,7 +1850,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return err
 
 	default:
-		return serviceerror.NewInternalf("unknown parent close policy: %v", childInfo.ParentClosePolicy)
+		return serviceerror.NewInternal(fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy))
 	}
 }
 

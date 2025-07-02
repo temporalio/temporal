@@ -150,7 +150,10 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			if err := tm.fwdr.ForwardTask(ctx, task); err == nil {
 				// task was remotely sync matched on the parent partition
 				token.release()
-				tm.emitDispatchLatency(task, true)
+				if !task.isForwarded() {
+					// if there are multiple forwarding hops, only the initial source partition emits this metric
+					tm.emitDispatchLatency(task, true)
+				}
 				return true, nil
 			}
 			token.release()

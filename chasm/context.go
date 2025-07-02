@@ -3,6 +3,8 @@ package chasm
 import (
 	"context"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
 type Context interface {
@@ -11,13 +13,15 @@ type Context interface {
 
 	// NOTE: component created in the current transaction won't have a ref
 	// this is a Ref to the component state at the start of the transition
-	Ref(Component) (ComponentRef, bool)
+	Ref(Component) ([]byte, error)
 	Now(Component) time.Time
 
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
 
 	getContext() context.Context
+	componentNodePath(Component) ([]string, error)
+	dataNodePath(proto.Message) ([]string, error)
 }
 
 type MutableContext interface {
@@ -60,8 +64,16 @@ func NewContext(
 	}
 }
 
-func (c *ContextImpl) Ref(component Component) (ComponentRef, bool) {
+func (c *ContextImpl) Ref(component Component) ([]byte, error) {
 	return c.root.Ref(component)
+}
+
+func (c *ContextImpl) componentNodePath(component Component) ([]string, error) {
+	return c.root.componentNodePath(component)
+}
+
+func (c *ContextImpl) dataNodePath(data proto.Message) ([]string, error) {
+	return c.root.dataNodePath(data)
 }
 
 func (c *ContextImpl) Now(component Component) time.Time {

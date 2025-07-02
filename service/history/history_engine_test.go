@@ -5725,7 +5725,6 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 			},
 		},
-		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
 	historyBlob2, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
@@ -5735,7 +5734,6 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
 			},
 		},
-		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
@@ -6611,7 +6609,6 @@ func addSignaledEvent(
 func addStartChildWorkflowExecutionInitiatedEvent(
 	ms historyi.MutableState,
 	workflowTaskCompletedID int64,
-	createRequestID string,
 	namespace namespace.Name,
 	namespaceID namespace.ID,
 	workflowID, workflowType, taskQueue string,
@@ -6620,7 +6617,7 @@ func addStartChildWorkflowExecutionInitiatedEvent(
 	parentClosePolicy enumspb.ParentClosePolicy,
 ) (*historypb.HistoryEvent, *persistencespb.ChildExecutionInfo) {
 
-	event, cei, _ := ms.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedID, createRequestID,
+	event, cei, _ := ms.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedID,
 		&commandpb.StartChildWorkflowExecutionCommandAttributes{
 			Namespace:                namespace.String(),
 			WorkflowId:               workflowID,

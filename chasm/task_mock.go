@@ -41,17 +41,17 @@ func (m *MockSideEffectTaskExecutor[C, T]) EXPECT() *MockSideEffectTaskExecutorM
 }
 
 // Execute mocks base method.
-func (m *MockSideEffectTaskExecutor[C, T]) Execute(arg0 context.Context, arg1 ComponentRef, arg2 T) error {
+func (m *MockSideEffectTaskExecutor[C, T]) Execute(arg0 context.Context, arg1 ComponentRef, arg2 TaskAttributes, arg3 T) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Execute", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Execute", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Execute indicates an expected call of Execute.
-func (mr *MockSideEffectTaskExecutorMockRecorder[C, T]) Execute(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockSideEffectTaskExecutorMockRecorder[C, T]) Execute(arg0, arg1, arg2, arg3 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockSideEffectTaskExecutor[C, T])(nil).Execute), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockSideEffectTaskExecutor[C, T])(nil).Execute), arg0, arg1, arg2, arg3)
 }
 
 // MockPureTaskExecutor is a mock of PureTaskExecutor interface.
@@ -79,17 +79,17 @@ func (m *MockPureTaskExecutor[C, T]) EXPECT() *MockPureTaskExecutorMockRecorder[
 }
 
 // Execute mocks base method.
-func (m *MockPureTaskExecutor[C, T]) Execute(arg0 Context, arg1 C, arg2 T) error {
+func (m *MockPureTaskExecutor[C, T]) Execute(arg0 MutableContext, arg1 C, arg2 TaskAttributes, arg3 T) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Execute", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Execute", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Execute indicates an expected call of Execute.
-func (mr *MockPureTaskExecutorMockRecorder[C, T]) Execute(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockPureTaskExecutorMockRecorder[C, T]) Execute(arg0, arg1, arg2, arg3 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockPureTaskExecutor[C, T])(nil).Execute), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockPureTaskExecutor[C, T])(nil).Execute), arg0, arg1, arg2, arg3)
 }
 
 // MockTaskValidator is a mock of TaskValidator interface.
@@ -117,16 +117,16 @@ func (m *MockTaskValidator[C, T]) EXPECT() *MockTaskValidatorMockRecorder[C, T] 
 }
 
 // Validate mocks base method.
-func (m *MockTaskValidator[C, T]) Validate(arg0 Context, arg1 C, arg2 T) (bool, error) {
+func (m *MockTaskValidator[C, T]) Validate(arg0 Context, arg1 C, arg2 TaskAttributes, arg3 T) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Validate", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Validate", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Validate indicates an expected call of Validate.
-func (mr *MockTaskValidatorMockRecorder[C, T]) Validate(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockTaskValidatorMockRecorder[C, T]) Validate(arg0, arg1, arg2, arg3 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockTaskValidator[C, T])(nil).Validate), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockTaskValidator[C, T])(nil).Validate), arg0, arg1, arg2, arg3)
 }

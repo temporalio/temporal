@@ -45,7 +45,6 @@ func NewExecutableActivityStateTask(
 	task *replicationspb.SyncActivityTaskAttributes,
 	sourceClusterName string,
 	sourceShardKey ClusterShardKey,
-	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableActivityStateTask {
 	return &ExecutableActivityStateTask{
@@ -60,7 +59,6 @@ func NewExecutableActivityStateTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			sourceShardKey,
-			priority,
 			replicationTask,
 		),
 		req: &historyservice.SyncActivityRequest{
@@ -127,9 +125,10 @@ func (e *ExecutableActivityStateTask) Execute() error {
 		return nil
 	}
 
+	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
-		headers.SystemPreemptableCallerInfo,
+		callerInfo,
 	), e.NamespaceID)
 	if nsError != nil {
 		return nsError
@@ -147,7 +146,7 @@ func (e *ExecutableActivityStateTask) Execute() error {
 		)
 		return nil
 	}
-	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
 
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
@@ -182,14 +181,15 @@ func (e *ExecutableActivityStateTask) HandleErr(err error) error {
 	case nil, *serviceerror.NotFound:
 		return nil
 	case *serviceerrors.RetryReplication:
+		callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
-			headers.SystemPreemptableCallerInfo,
+			callerInfo,
 		), e.NamespaceID)
 		if nsError != nil {
 			return err
 		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 
 		if doContinue, resendErr := e.Resend(

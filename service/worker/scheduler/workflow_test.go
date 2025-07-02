@@ -1130,6 +1130,10 @@ func (s *workflowSuite) TestCompileError() {
 }
 
 func (s *workflowSuite) TestTriggerImmediate() {
+	currentVersion := CurrentTweakablePolicies.Version
+	CurrentTweakablePolicies.Version = 12
+	defer func() { CurrentTweakablePolicies.Version = currentVersion }()
+
 	s.runAcrossContinue(
 		[]workflowRun{
 			{
@@ -1151,8 +1155,19 @@ func (s *workflowSuite) TestTriggerImmediate() {
 				f: func() {
 					// this gets skipped because a scheduled run is still running
 					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
-						TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+						TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
+							ScheduledTime: timestamppb.New(time.Date(2022, 6, 1, 0, 20, 0, 0, time.UTC)),
+						},
 					})
+				},
+			},
+			{
+				at: time.Date(2022, 6, 1, 0, 25, 0, 0, time.UTC),
+				f: func() {
+					// Validate that the first trigger was skipped
+					desc := s.describe()
+					s.Equal(int64(1), desc.Info.OverlapSkipped, "First trigger should have been skipped due to overlap policy")
+					s.Equal([]string{"myid-2022-06-01T00:15:00Z"}, s.runningWorkflows(), "Only the scheduled workflow should be running")
 				},
 			},
 			{
@@ -1161,6 +1176,7 @@ func (s *workflowSuite) TestTriggerImmediate() {
 					// this one runs with overridden overlap policy
 					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
 						TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
+							ScheduledTime: timestamppb.New(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)),
 							OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 						},
 					})

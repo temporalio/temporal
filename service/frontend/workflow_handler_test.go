@@ -22,6 +22,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
@@ -54,6 +55,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/tests"
@@ -63,6 +65,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -79,6 +82,7 @@ const (
 type (
 	WorkflowHandlerSuite struct {
 		suite.Suite
+		protorequire.ProtoAssertions
 		*require.Assertions
 
 		controller                         *gomock.Controller
@@ -2477,6 +2481,155 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
 }
+
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_WithPostResetOperations() {
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.NewString())
+	executions := []*commonpb.WorkflowExecution{
+		{
+			WorkflowId: uuid.NewString(),
+			RunId:      uuid.NewString(),
+		},
+	}
+	reason := "reason"
+	identity := "identity"
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	// Create post-reset operations to test the serialization fix
+	postResetOps := []*workflowpb.PostResetOperation{
+		{
+			Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
+				UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
+					WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
+					UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+				},
+			},
+		},
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *historyservice.StartWorkflowExecutionRequest,
+			_ ...grpc.CallOption,
+		) (*historyservice.StartWorkflowExecutionResponse, error) {
+			s.Equal(namespaceID.String(), request.NamespaceId)
+			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
+			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
+			s.Equal(identity, request.StartRequest.Identity)
+			s.Equal(payload.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.Equal(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
+			s.Equal(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+
+			// Decode the input and verify PostResetOperations are correctly set
+			var batchParams batcher.BatchParams
+			err := payloads.Decode(request.StartRequest.Input, &batchParams)
+			s.NoError(err)
+
+			// Verify that PostResetOperations slice has the correct length and no nil values
+			s.Len(batchParams.ResetParams.PostResetOperations, len(postResetOps))
+
+			// Ensure no nil values exist in the slice
+			for i, encoded := range batchParams.ResetParams.PostResetOperations {
+				s.NotNil(encoded, "PostResetOperations[%d] should not be nil", i)
+				s.Greater(len(encoded), 0, "PostResetOperations[%d] should not be empty", i)
+
+				// Verify we can unmarshal back to the original operation
+				var decodedOp workflowpb.PostResetOperation
+				err := decodedOp.Unmarshal(encoded)
+				s.NoError(err, "Should be able to unmarshal PostResetOperations[%d]", i)
+
+				// Verify the content matches the original
+				s.ProtoEqual(postResetOps[i], &decodedOp)
+			}
+
+			return &historyservice.StartWorkflowExecutionResponse{}, nil
+		},
+	)
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+
+	request := &workflowservice.StartBatchOperationRequest{
+		Namespace: testNamespace.String(),
+		JobId:     uuid.NewString(),
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				Options: &commonpb.ResetOptions{
+					Target: &commonpb.ResetOptions_WorkflowTaskId{
+						WorkflowTaskId: 10,
+					},
+				},
+				PostResetOperations: postResetOps,
+				Identity:            identity,
+			},
+		},
+		Reason:     reason,
+		Executions: executions,
+	}
+
+	_, err := wh.StartBatchOperation(context.Background(), request)
+	s.NoError(err)
+}
+
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_EmptyPostResetOperations() {
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.NewString())
+	executions := []*commonpb.WorkflowExecution{
+		{
+			WorkflowId: uuid.NewString(),
+			RunId:      uuid.NewString(),
+		},
+	}
+	reason := "reason"
+	identity := "identity"
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *historyservice.StartWorkflowExecutionRequest,
+			_ ...grpc.CallOption,
+		) (*historyservice.StartWorkflowExecutionResponse, error) {
+			// Decode the input and verify PostResetOperations slice is properly initialized
+			var batchParams batcher.BatchParams
+			err := payloads.Decode(request.StartRequest.Input, &batchParams)
+			s.NoError(err)
+
+			// When PostResetOperations is empty, the slice should be empty, not nil
+			s.NotNil(batchParams.ResetParams.PostResetOperations)
+			s.Len(batchParams.ResetParams.PostResetOperations, 0)
+
+			return &historyservice.StartWorkflowExecutionResponse{}, nil
+		},
+	)
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+
+	request := &workflowservice.StartBatchOperationRequest{
+		Namespace: testNamespace.String(),
+		JobId:     uuid.NewString(),
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				Options: &commonpb.ResetOptions{
+					Target: &commonpb.ResetOptions_WorkflowTaskId{
+						WorkflowTaskId: 10,
+					},
+				},
+				PostResetOperations: []*workflowpb.PostResetOperation{}, // Empty slice
+				Identity:            identity,
+			},
+		},
+		Reason:     reason,
+		Executions: executions,
+	}
+
+	_, err := wh.StartBatchOperation(context.Background(), request)
+	s.NoError(err)
+}
+
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_TooMany() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
@@ -3538,4 +3691,171 @@ func (s *WorkflowHandlerSuite) TestShutdownWorker() {
 	if err != nil {
 		s.Fail("ShutdownWorker failed:", err)
 	}
+}
+
+func (s *WorkflowHandlerSuite) TestPatchSchedule_TriggerImmediatelyScheduledTime() {
+	config := s.newConfig()
+	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	scheduleID := "test-schedule-id"
+	requestID := "test-request-id"
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
+
+	testCases := []struct {
+		name                    string
+		setupTrigger            func() *schedulepb.TriggerImmediatelyRequest
+		expectScheduledTimeSet  bool
+		expectHistoryClientCall bool
+	}{
+		{
+			name: "trigger with nil ScheduledTime should get timestamp set",
+			setupTrigger: func() *schedulepb.TriggerImmediatelyRequest {
+				return &schedulepb.TriggerImmediatelyRequest{
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+					ScheduledTime: nil,
+				}
+			},
+			expectScheduledTimeSet:  true,
+			expectHistoryClientCall: true,
+		},
+		{
+			name: "trigger with existing ScheduledTime should not be modified",
+			setupTrigger: func() *schedulepb.TriggerImmediatelyRequest {
+				existingTime := timestamppb.New(time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC))
+				return &schedulepb.TriggerImmediatelyRequest{
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+					ScheduledTime: existingTime,
+				}
+			},
+			expectScheduledTimeSet:  false, // Should not modify existing time
+			expectHistoryClientCall: true,
+		},
+		{
+			name: "no trigger should not call history client",
+			setupTrigger: func() *schedulepb.TriggerImmediatelyRequest {
+				return nil
+			},
+			expectScheduledTimeSet:  false,
+			expectHistoryClientCall: true, // Will still call but without trigger
+		},
+	}
+
+	for _, tt := range testCases {
+		s.Run(tt.name, func() {
+			trigger := tt.setupTrigger()
+
+			patch := &schedulepb.SchedulePatch{}
+			if trigger != nil {
+				patch.TriggerImmediately = trigger
+			}
+
+			request := &workflowservice.PatchScheduleRequest{
+				Namespace:  s.testNamespace.String(),
+				ScheduleId: scheduleID,
+				RequestId:  requestID,
+				Patch:      patch,
+				Identity:   "test-identity",
+			}
+
+			// Capture the original ScheduledTime if it exists
+			var originalScheduledTime *timestamppb.Timestamp
+			if trigger != nil {
+				originalScheduledTime = trigger.ScheduledTime
+			}
+
+			if tt.expectHistoryClientCall {
+				s.mockHistoryClient.EXPECT().SignalWorkflowExecution(
+					gomock.Any(),
+					gomock.Any(),
+				).Return(&historyservice.SignalWorkflowExecutionResponse{}, nil).Times(1)
+			}
+
+			beforeCall := time.Now()
+			resp, err := wh.PatchSchedule(ctx, request)
+			afterCall := time.Now()
+
+			s.NoError(err)
+			s.NotNil(resp)
+
+			if trigger != nil {
+				if tt.expectScheduledTimeSet {
+					// Verify that ScheduledTime was set and is recent
+					s.NotNil(trigger.ScheduledTime, "ScheduledTime should have been set")
+					s.Nil(originalScheduledTime, "Original ScheduledTime should have been nil")
+
+					scheduledTime := trigger.ScheduledTime.AsTime()
+					s.True(scheduledTime.After(beforeCall) || scheduledTime.Equal(beforeCall),
+						"ScheduledTime should be at or after the call start time")
+					s.True(scheduledTime.Before(afterCall) || scheduledTime.Equal(afterCall),
+						"ScheduledTime should be at or before the call end time")
+				} else {
+					// Verify that existing ScheduledTime was not modified
+					if originalScheduledTime != nil {
+						s.Equal(originalScheduledTime.AsTime(), trigger.ScheduledTime.AsTime(),
+							"Existing ScheduledTime should not have been modified")
+					}
+				}
+			}
+		})
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
+	config := s.newConfig()
+	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	s.Run("nil request should return error", func() {
+		resp, err := wh.PatchSchedule(ctx, nil)
+		s.Nil(resp)
+		s.Equal(errRequestNotSet, err)
+	})
+
+	s.Run("schedules disabled should return error", func() {
+		disabledConfig := s.newConfig()
+		disabledConfig.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(false)
+		disabledWh := s.getWorkflowHandler(disabledConfig)
+
+		request := &workflowservice.PatchScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			Patch:      &schedulepb.SchedulePatch{},
+		}
+
+		resp, err := disabledWh.PatchSchedule(ctx, request)
+		s.Nil(resp)
+		s.Equal(errSchedulesNotAllowed, err)
+	})
+
+	s.Run("request ID too long should return error", func() {
+		longRequestID := strings.Repeat("a", common.ScheduleNotesSizeLimit+1)
+		request := &workflowservice.PatchScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			RequestId:  longRequestID,
+			Patch:      &schedulepb.SchedulePatch{},
+		}
+
+		resp, err := wh.PatchSchedule(ctx, request)
+		s.Nil(resp)
+		s.Equal(errRequestIDTooLong, err)
+	})
+
+	s.Run("invalid namespace should return error", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(namespace.Name("invalid-namespace"))).Return(namespace.ID(""), errors.New("namespace not found")).Times(1)
+
+		request := &workflowservice.PatchScheduleRequest{
+			Namespace:  "invalid-namespace",
+			ScheduleId: "test-schedule",
+			Patch:      &schedulepb.SchedulePatch{},
+		}
+
+		resp, err := wh.PatchSchedule(ctx, request)
+		s.Nil(resp)
+		s.Error(err)
+	})
 }

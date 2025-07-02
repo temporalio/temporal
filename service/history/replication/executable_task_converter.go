@@ -88,7 +88,6 @@ func (e *executableTaskConverterImpl) convertOne(
 			replicationTask.GetSyncActivityTaskAttributes(),
 			sourceClusterName,
 			sourceShardKey,
-			replicationTask.GetPriority(),
 			replicationTask,
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
@@ -99,7 +98,6 @@ func (e *executableTaskConverterImpl) convertOne(
 			replicationTask.GetSyncWorkflowStateTaskAttributes(),
 			sourceClusterName,
 			sourceShardKey,
-			replicationTask.GetPriority(),
 			replicationTask,
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
@@ -110,7 +108,6 @@ func (e *executableTaskConverterImpl) convertOne(
 			replicationTask.GetHistoryTaskAttributes(),
 			sourceClusterName,
 			sourceShardKey,
-			replicationTask.GetPriority(),
 			replicationTask,
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK:
@@ -121,7 +118,6 @@ func (e *executableTaskConverterImpl) convertOne(
 			replicationTask.GetSyncHsmAttributes(),
 			sourceClusterName,
 			sourceShardKey,
-			replicationTask.GetPriority(),
 			replicationTask,
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK:

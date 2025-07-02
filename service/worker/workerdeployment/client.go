@@ -52,7 +52,8 @@ type Client interface {
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		version string,
-	) (*deploymentpb.WorkerDeploymentVersionInfo, error)
+		reportTaskQueueStats bool,
+	) (*deploymentpb.WorkerDeploymentVersionInfo, []*workflowservice.DescribeWorkerDeploymentVersionResponse_VersionTaskQueue, error)
 
 	DescribeWorkerDeployment(
 		ctx context.Context,
@@ -179,6 +180,7 @@ type Client interface {
 
 type ErrMaxTaskQueuesInVersion struct{ error }
 type ErrMaxVersionsInDeployment struct{ error }
+type ErrMaxDeploymentsInNamespace struct{ error }
 type ErrRegister struct{ error }
 
 // ClientImpl implements Client
@@ -253,10 +255,15 @@ func (d *ClientImpl) DescribeVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	version string,
-) (_ *deploymentpb.WorkerDeploymentVersionInfo, retErr error) {
-	v, err := worker_versioning.WorkerDeploymentVersionFromString(version)
+	reportTaskQueueStats bool,
+) (
+	_ *deploymentpb.WorkerDeploymentVersionInfo,
+	_ []*workflowservice.DescribeWorkerDeploymentVersionResponse_VersionTaskQueue,
+	retErr error,
+) {
+	v, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgumentf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version)
+		return nil, nil, serviceerror.NewInvalidArgumentf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version)
 	}
 	deploymentName := v.GetDeploymentName()
 	buildID := v.GetBuildId()
@@ -265,15 +272,13 @@ func (d *ClientImpl) DescribeVersion(
 	defer d.record("DescribeVersion", &retErr, deploymentName, buildID)()
 
 	// validate deployment name
-	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
-	if err != nil {
-		return nil, err
+	if err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit()); err != nil {
+		return nil, nil, err
 	}
 
 	// validate buildID
-	err = validateVersionWfParams(WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit())
-	if err != nil {
-		return nil, err
+	if err = validateVersionWfParams(WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit()); err != nil {
+		return nil, nil, err
 	}
 
 	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, buildID)
@@ -294,23 +299,29 @@ func (d *ClientImpl) DescribeVersion(
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
-			return nil, serviceerror.NewNotFound("Worker Deployment Version not found")
+			return nil, nil, serviceerror.NewNotFound("Worker Deployment Version not found")
 		}
-		return nil, err
+		return nil, nil, err
 	}
 
 	// on closed workflows, the response is empty.
 	if res.GetResponse().GetQueryResult() == nil {
-		return nil, serviceerror.NewNotFound("Worker Deployment Version not found")
+		return nil, nil, serviceerror.NewNotFound("Worker Deployment Version not found")
 	}
 
 	var queryResponse deploymentspb.QueryDescribeVersionResponse
 	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return versionStateToVersionInfo(queryResponse.VersionState), nil
+	tqInfos, err := d.getTaskQueueDetails(ctx, namespaceEntry.ID(), queryResponse.VersionState, reportTaskQueueStats)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	versionInfo := versionStateToVersionInfo(queryResponse.VersionState, tqInfos)
+	return versionInfo, tqInfos, nil
 }
 
 func (d *ClientImpl) UpdateVersionMetadata(
@@ -325,7 +336,7 @@ func (d *ClientImpl) UpdateVersionMetadata(
 	defer d.record("UpdateVersionMetadata", &retErr, namespaceEntry.Name(), version, upsertEntries, removeEntries, identity)()
 	requestID := uuid.New()
 
-	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(version)
+	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
 	}
@@ -422,6 +433,34 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	return dInfo, queryResponse.GetState().GetConflictToken(), nil
 }
 
+func (d *ClientImpl) workerDeploymentExists(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName string,
+) (bool, error) {
+	deploymentWorkflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
+
+	res, err := d.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: namespaceEntry.Name().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: deploymentWorkflowID,
+			},
+		},
+	})
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	// Deployment exists only if the entity wf is running
+	return res.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil
+}
+
 func (d *ClientImpl) ListWorkerDeployments(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
@@ -491,7 +530,7 @@ func (d *ClientImpl) SetCurrentVersion(
 	//revive:disable-next-line:defer
 	defer d.record("SetCurrentVersion", &retErr, namespaceEntry.Name(), version, identity)()
 
-	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(version)
+	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
 	}
@@ -541,6 +580,8 @@ func (d *ClientImpl) SetCurrentVersion(
 			res.ConflictToken = details[0].GetData()
 		}
 		return &res, nil
+	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
+		return nil, serviceerror.NewNotFound(errVersionNotFound)
 	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
@@ -575,7 +616,7 @@ func (d *ClientImpl) SetRampingVersion(
 	var err error
 	if version != "" {
 		var versionObj *deploymentspb.WorkerDeploymentVersion
-		versionObj, err = worker_versioning.WorkerDeploymentVersionFromString(version)
+		versionObj, err = worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 		if err != nil {
 			return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
 		}
@@ -630,6 +671,8 @@ func (d *ClientImpl) SetRampingVersion(
 		}
 
 		return &res, nil
+	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
+		return nil, serviceerror.NewNotFound(errVersionNotFound)
 	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
@@ -654,7 +697,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	skipDrainage bool,
 	identity string,
 ) (retErr error) {
-	v, err := worker_versioning.WorkerDeploymentVersionFromString(version)
+	v, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 	if err != nil {
 		return serviceerror.NewInvalidArgumentf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version)
 	}
@@ -671,7 +714,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteVersionArgs{
 		Identity: identity,
-		Version: worker_versioning.WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
+		Version: worker_versioning.WorkerDeploymentVersionToStringV31(&deploymentspb.WorkerDeploymentVersion{
 			DeploymentName: deploymentName,
 			BuildId:        buildId,
 		}),
@@ -704,8 +747,8 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	if failure := outcome.GetFailure(); failure != nil {
 		if failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 			return nil
-		} else if failure.Message == ErrVersionIsCurrentOrRamping {
-			return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping) // non-retryable error to stop multiple activity attempts
+		} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
+			return serviceerror.NewFailedPrecondition(failure.GetMessage()) // non-retryable error to stop multiple activity attempts
 		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 			return serviceerror.NewFailedPrecondition(failure.GetCause().GetMessage())
 		}
@@ -787,15 +830,6 @@ func (d *ClientImpl) StartWorkerDeployment(
 	//revive:disable-next-line:defer
 	defer d.record("StartWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
 
-	// TODO (Carly): either max page size or default page size is 1000, so if there are > 1000 this would not catch it
-	deps, _, err := d.ListWorkerDeployments(ctx, namespaceEntry, 0, nil)
-	if err != nil {
-		return err
-	}
-	if len(deps) >= d.maxDeployments(namespaceEntry.Name().String()) {
-		return serviceerror.NewFailedPrecondition("maximum deployments in namespace, delete manually to continue deploying.")
-	}
-
 	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
@@ -839,7 +873,7 @@ func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 	//revive:disable-next-line:defer
 	defer d.record("SyncVersionWorkflowFromWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, args, identity)()
 
-	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(version)
+	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
 	}
@@ -900,7 +934,7 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 	//revive:disable-next-line:defer
 	defer d.record("DeleteVersionFromWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, identity, skipDrainage)()
 
-	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(version)
+	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 	if err != nil {
 		return err
 	}
@@ -1016,13 +1050,20 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 
 	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
-	// TODO (Carly): either max page size or default page size is 1000, so if there are > 1000 this would not catch it
-	deps, _, err := d.ListWorkerDeployments(ctx, namespaceEntry, 0, nil)
+	exists, err := d.workerDeploymentExists(ctx, namespaceEntry, deploymentName)
 	if err != nil {
 		return nil, err
 	}
-	if len(deps) >= d.maxDeployments(namespaceEntry.Name().String()) {
-		return nil, serviceerror.NewFailedPrecondition("maximum deployments in namespace, delete manually to continue deploying.")
+	if !exists {
+		// New deployment, make sure we're not exceeding the limit
+		count, err := d.countWorkerDeployments(ctx, namespaceEntry)
+		if err != nil {
+			return nil, err
+		}
+		limit := d.maxDeployments(namespaceEntry.Name().String())
+		if count >= int64(limit) {
+			return nil, ErrMaxDeploymentsInNamespace{error: errors.New(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))}
+		}
 	}
 
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
@@ -1048,6 +1089,26 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		identity,
 		requestID,
 	)
+}
+
+func (d *ClientImpl) countWorkerDeployments(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+) (count int64, retError error) {
+	query := WorkerDeploymentVisibilityBaseListQuery
+
+	persistenceResp, err := d.visibilityManager.CountWorkflowExecutions(
+		ctx,
+		&manager.CountWorkflowExecutionsRequest{
+			NamespaceID: namespaceEntry.ID(),
+			Namespace:   namespaceEntry.Name(),
+			Query:       query,
+		},
+	)
+	if err != nil {
+		return 0, err
+	}
+	return persistenceResp.Count, nil
 }
 
 func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
@@ -1299,21 +1360,20 @@ func (d *ClientImpl) record(operation string, retErr *error, args ...any) func()
 }
 
 //nolint:staticcheck
-func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deploymentpb.WorkerDeploymentVersionInfo {
+func versionStateToVersionInfo(
+	state *deploymentspb.VersionLocalState,
+	taskQueueInfos []*workflowservice.DescribeWorkerDeploymentVersionResponse_VersionTaskQueue,
+) *deploymentpb.WorkerDeploymentVersionInfo {
 	if state == nil {
 		return nil
 	}
 
-	taskQueues := make([]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo, 0, len(state.TaskQueueFamilies)*2)
-	for taskQueueName, taskQueueFamilyInfo := range state.TaskQueueFamilies {
-		for taskQueueType := range taskQueueFamilyInfo.TaskQueues {
-			element := &deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{
-				Name: taskQueueName,
-				Type: enumspb.TaskQueueType(taskQueueType),
-				// TODO (Shivam): Add fields here as needed.
-			}
-			taskQueues = append(taskQueues, element)
-		}
+	infos := make([]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo, 0, len(taskQueueInfos))
+	for _, taskQueueInfo := range taskQueueInfos {
+		infos = append(infos, &deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{
+			Name: taskQueueInfo.Name,
+			Type: taskQueueInfo.Type,
+		})
 	}
 
 	// never return empty drainage info
@@ -1323,17 +1383,94 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 	}
 
 	return &deploymentpb.WorkerDeploymentVersionInfo{
-		Version:            worker_versioning.WorkerDeploymentVersionToString(state.Version),
+		Version:            worker_versioning.WorkerDeploymentVersionToStringV31(state.Version),
+		DeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromVersion(state.Version),
 		Status:             state.Status,
 		CreateTime:         state.CreateTime,
 		RoutingChangedTime: state.RoutingUpdateTime,
 		CurrentSinceTime:   state.CurrentSinceTime,
 		RampingSinceTime:   state.RampingSinceTime,
 		RampPercentage:     state.RampPercentage,
-		TaskQueueInfos:     taskQueues,
+		TaskQueueInfos:     infos,
 		DrainageInfo:       drainageInfo,
 		Metadata:           state.Metadata,
 	}
+}
+
+func (d *ClientImpl) getTaskQueueDetails(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	state *deploymentspb.VersionLocalState,
+	reportTaskQueueStats bool,
+) ([]*workflowservice.DescribeWorkerDeploymentVersionResponse_VersionTaskQueue, error) {
+	if state == nil {
+		return nil, nil
+	}
+
+	tqOutputs := []*workflowservice.DescribeWorkerDeploymentVersionResponse_VersionTaskQueue{}
+	for tqName, taskQueueFamilyInfo := range state.TaskQueueFamilies {
+		for tqType := range taskQueueFamilyInfo.TaskQueues {
+			tqOutputs = append(tqOutputs, &workflowservice.DescribeWorkerDeploymentVersionResponse_VersionTaskQueue{
+				Name: tqName,
+				Type: enumspb.TaskQueueType(tqType),
+			})
+		}
+	}
+	if len(tqOutputs) == 0 {
+		return nil, nil
+	}
+
+	// Only query the matching service for task queue stats if requested since it's an expensive operation.
+	if reportTaskQueueStats {
+		tqInputs := []*matchingservice.DescribeVersionedTaskQueuesRequest_VersionTaskQueue{}
+		for _, tq := range tqOutputs {
+			vtq := &matchingservice.DescribeVersionedTaskQueuesRequest_VersionTaskQueue{
+				Name: tq.Name,
+				Type: tq.Type,
+			}
+			tqInputs = append(tqInputs, vtq)
+		}
+
+		// Sort the task queues by name and type to ensure that the task queue we query is deterministic.
+		// This ensures we'll hit the cache on the same task queue partition.
+		sort.Slice(tqInputs, func(i, j int) bool {
+			if tqInputs[i].Name != tqInputs[j].Name {
+				return tqInputs[i].Name < tqInputs[j].Name
+			}
+			return tqInputs[i].Type < tqInputs[j].Type
+		})
+		routeTQ := tqInputs[0]
+
+		tqResp, err := d.matchingClient.DescribeVersionedTaskQueues(ctx,
+			&matchingservice.DescribeVersionedTaskQueuesRequest{
+				NamespaceId:       namespaceID.String(),
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: routeTQ.Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     routeTQ.Type,
+				Version:           state.Version,
+				VersionTaskQueues: tqInputs,
+			})
+		if err != nil {
+			return nil, err
+		}
+
+		tqKey := func(tqName string, tqType enumspb.TaskQueueType) string { return fmt.Sprintf("%s-%d", tqName, tqType) }
+		tqRespMap := make(map[string]*matchingservice.DescribeVersionedTaskQueuesResponse_VersionTaskQueue)
+		for _, tq := range tqResp.GetVersionTaskQueues() {
+			tqRespMap[tqKey(tq.Name, tq.Type)] = tq
+		}
+
+		// Update stats for existing entries
+		for i, tq := range tqOutputs {
+			if tqRespTQ, ok := tqRespMap[tqKey(tq.Name, tq.Type)]; ok {
+				tqOutputs[i].Stats = tqRespTQ.Stats
+				continue
+			}
+			// This *should* never happen, but in case it does, we should error instead of returning partial results.
+			return nil, serviceerror.NewNotFoundf("task queue %s of type %s not found in this version", tq.Name, tq.Type)
+		}
+	}
+
+	return tqOutputs, nil
 }
 
 func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, state *deploymentspb.WorkerDeploymentLocalState) (*deploymentpb.WorkerDeploymentInfo, error) {
@@ -1351,6 +1488,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 	for _, v := range state.Versions {
 		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 			Version:              v.GetVersion(),
+			DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(v.Version),
 			CreateTime:           v.GetCreateTime(),
 			DrainageStatus:       v.GetDrainageInfo().GetStatus(), // deprecated.
 			DrainageInfo:         v.GetDrainageInfo(),
@@ -1378,7 +1516,7 @@ func (d *ClientImpl) GetVersionDrainageStatus(
 	countRequest := manager.CountWorkflowExecutionsRequest{
 		NamespaceID: namespaceEntry.ID(),
 		Namespace:   namespaceEntry.Name(),
-		Query:       makeDeploymentQuery(version),
+		Query:       makeDeploymentQuery(worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(version))),
 	}
 	countResponse, err := d.visibilityManager.CountWorkflowExecutions(ctx, &countRequest)
 	if err != nil {
@@ -1399,12 +1537,12 @@ func makeDeploymentQuery(version string) string {
 
 func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEntry *namespace.Namespace, prevCurrentVersion, newVersion string) (bool, error) {
 	// Check if all the task-queues in the prevCurrentVersion are present in the newCurrentVersion (newVersion is either the new ramping version or the new current version)
-	prevCurrentVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, prevCurrentVersion)
+	prevCurrentVersionInfo, _, err := d.DescribeVersion(ctx, namespaceEntry, prevCurrentVersion, false)
 	if err != nil {
 		return false, serviceerror.NewFailedPreconditionf("Version %s not found in deployment with error: %v", prevCurrentVersion, err)
 	}
 
-	newVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, newVersion)
+	newVersionInfo, _, err := d.DescribeVersion(ctx, namespaceEntry, newVersion, false)
 	if err != nil {
 		return false, serviceerror.NewFailedPreconditionf("Version %s not found in deployment with error: %v", newVersion, err)
 	}
@@ -1464,6 +1602,8 @@ func (d *ClientImpl) isTaskQueueExpectedInNewVersion(
 		return false, nil
 	}
 
+	versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(prevCurrentVersionInfo.GetDeploymentVersion())
+
 	// Check if task queue has backlogged tasks or add-rate > 0
 	req := &matchingservice.DescribeTaskQueueRequest{
 		NamespaceId: namespaceEntry.ID().String(),
@@ -1475,7 +1615,7 @@ func (d *ClientImpl) isTaskQueueExpectedInNewVersion(
 			},
 			TaskQueueTypes: []enumspb.TaskQueueType{taskQueue.Type},
 			Versions: &taskqueuepb.TaskQueueVersionSelection{
-				BuildIds: []string{prevCurrentVersionInfo.GetVersion()}, // pretending the version string is a build id
+				BuildIds: []string{versionStr}, // pretending the version string is a build id
 			},
 			// Since request doesn't pass through frontend, this field is not automatically populated.
 			// Moreover, DescribeTaskQueueEnhanced requires this field to be set to WORKFLOW type.
@@ -1489,7 +1629,7 @@ func (d *ClientImpl) isTaskQueueExpectedInNewVersion(
 		return false, err
 	}
 
-	typesInfo := response.GetDescResponse().GetVersionsInfo()[prevCurrentVersionInfo.GetVersion()].GetTypesInfo()
+	typesInfo := response.GetDescResponse().GetVersionsInfo()[versionStr].GetTypesInfo()
 	if typesInfo != nil {
 		typeStats := typesInfo[int32(taskQueue.Type)]
 		if typeStats != nil && typeStats.GetStats() != nil &&
@@ -1529,7 +1669,7 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 	args *deploymentspb.RegisterWorkerInVersionArgs,
 	identity string,
 ) error {
-	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(args.Version)
+	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(args.Version)
 	if err != nil {
 		return serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
 	}
@@ -1571,11 +1711,4 @@ func (d *ClientImpl) getSyncBatchSize() int32 {
 		syncBatchSize = int32(n)
 	}
 	return syncBatchSize
-}
-
-// isFailedPrecondition checks if the error is a FailedPrecondition error. It also checks if the FailedPrecondition error is wrapped in an ApplicationError.
-func isFailedPrecondition(err error) bool {
-	var failedPreconditionError *serviceerror.FailedPrecondition
-	var applicationError *temporal.ApplicationError
-	return errors.As(err, &failedPreconditionError) || (errors.As(err, &applicationError) && applicationError.Type() == errFailedPrecondition)
 }

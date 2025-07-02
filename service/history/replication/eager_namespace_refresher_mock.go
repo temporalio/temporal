@@ -55,17 +55,3 @@ func (mr *MockEagerNamespaceRefresherMockRecorder) SyncNamespaceFromSourceCluste
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncNamespaceFromSourceCluster", reflect.TypeOf((*MockEagerNamespaceRefresher)(nil).SyncNamespaceFromSourceCluster), ctx, namespaceId, sourceCluster)
 }
-
-// UpdateNamespaceFailoverVersion mocks base method.
-func (m *MockEagerNamespaceRefresher) UpdateNamespaceFailoverVersion(namespaceId namespace.ID, targetFailoverVersion int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateNamespaceFailoverVersion", namespaceId, targetFailoverVersion)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateNamespaceFailoverVersion indicates an expected call of UpdateNamespaceFailoverVersion.
-func (mr *MockEagerNamespaceRefresherMockRecorder) UpdateNamespaceFailoverVersion(namespaceId, targetFailoverVersion any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNamespaceFailoverVersion", reflect.TypeOf((*MockEagerNamespaceRefresher)(nil).UpdateNamespaceFailoverVersion), namespaceId, targetFailoverVersion)
-}

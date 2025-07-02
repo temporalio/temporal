@@ -1607,11 +1607,11 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 
 	// the create request ID is generated inside, cannot assert equal
 	s.mockMutableState.EXPECT().ApplyStartChildWorkflowExecutionInitiatedEvent(
-		event.GetEventId(), protomock.Eq(event), gomock.Any(),
+		event.GetEventId(), protomock.Eq(event),
 	).Return(ci, nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateChildWorkflowTasks(
-		protomock.Eq(event),
+		event.GetEventId(),
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
