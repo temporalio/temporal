@@ -209,6 +209,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		f.WorkflowCache,
 		logger,
 		metricsHandler,
+		nil,
 	)
 
 	// not implemented yet
@@ -218,6 +219,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		currentClusterName,
 		logger,
 		metricsHandler,
+		nil, // TODO - replace with real chasm.Engine
 	)
 
 	executor := queues.NewActiveStandbyExecutor(
