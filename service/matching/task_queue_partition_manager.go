@@ -1012,7 +1012,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 				if versionData.GetVersion() != nil && worker_versioning.DeploymentVersionFromDeployment(deployment).Equal(versionData.GetVersion()) {
 					if versionData.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED && len(pm.GetAllPollerInfo()) == 0 {
 						versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))
-						return nil, nil, nil, serviceerror.NewFailedPreconditionf(ErrBlackHoledQuery,
+						return nil, nil, nil, serviceerror.NewFailedPreconditionf(ErrBlackholedQuery,
 							versionStr,
 							versionStr,
 						)

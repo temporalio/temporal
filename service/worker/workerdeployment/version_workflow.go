@@ -533,32 +533,28 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		return nil, err
 	}
 
-	wasAcceptingNewWorkflows := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
-
 	// apply changes to current and ramping
 	state.RoutingUpdateTime = args.RoutingUpdateTime
 	state.CurrentSinceTime = args.CurrentSinceTime
 	state.RampingSinceTime = args.RampingSinceTime
 	state.RampPercentage = args.RampPercentage
 
-	isAcceptingNewWorkflows := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
-
 	// stopped accepting new workflows --> start drainage tracking
-	if wasAcceptingNewWorkflows && !isAcceptingNewWorkflows {
+	if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING {
 		// Version deactivated from current/ramping
 		d.VersionState.LastDeactivationTime = args.RoutingUpdateTime
 		d.startDrainage(ctx, false)
 	}
 
-	// started accepting new workflows --> stop drainage child wf if it exists
-	if !wasAcceptingNewWorkflows && isAcceptingNewWorkflows {
+	// started accepting new workflows
+	if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT || newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING {
 		if d.VersionState.FirstActivationTime == nil {
 			// First time this version is activated to current/ramping
 			d.VersionState.FirstActivationTime = args.RoutingUpdateTime
 		}
 	}
 
-	// Update the status of the version after a successful sync to all its task-queues
+	// status of the version is updated after a successful sync to all its task-queues
 	state.Status = newStatus
 
 	return &deploymentspb.SyncVersionStateResponse{
@@ -702,7 +698,7 @@ func (d *VersionWorkflowRunner) updateVersionStatusAfterDrainageStatusChange(ctx
 
 	v := workflow.GetVersion(ctx, "Step1", workflow.DefaultVersion, 0)
 	if v != workflow.DefaultVersion {
-		err := d.syncVersionStatusToTaskQueues(ctx)
+		err := d.syncVersionStatusAfterDrainageStatusChange(ctx)
 		if err != nil {
 			d.logger.Error("failed to sync version status after drainage status change", "error", err)
 		}
@@ -710,11 +706,11 @@ func (d *VersionWorkflowRunner) updateVersionStatusAfterDrainageStatusChange(ctx
 
 }
 
-// syncVersionStatusToTaskQueues syncs the current version status to all task queues.
+// syncVersionStatusAfterDrainageStatusChange syncs the current version status to all task queues.
 // This function acquires the workflow lock the same way as the update handlers do so that
 // there are no race conditions during task-queue sync. It is called internally when the status
-// of the version becomes draining/drained.
-func (d *VersionWorkflowRunner) syncVersionStatusToTaskQueues(ctx workflow.Context) error {
+// of the version becomes draining or drained.
+func (d *VersionWorkflowRunner) syncVersionStatusAfterDrainageStatusChange(ctx workflow.Context) error {
 	err := d.lock.Lock(ctx)
 	if err != nil {
 		d.logger.Error("Could not acquire workflow lock")

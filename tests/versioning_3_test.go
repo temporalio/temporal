@@ -236,7 +236,7 @@ func (s *Versioning3Suite) TestQueryWithPinnedOverride_Sticky() {
 func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion_PollersAbsent() {
 	s.RunTestWithMatchingBehavior(
 		func() {
-			s.testPinnedQuery_DrainedVersion(false)
+			s.testPinnedQuery_DrainedVersion(false, false)
 		},
 	)
 }
@@ -244,12 +244,20 @@ func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion_PollersAbsent() {
 func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion_PollersPresent() {
 	s.RunTestWithMatchingBehavior(
 		func() {
-			s.testPinnedQuery_DrainedVersion(true)
+			s.testPinnedQuery_DrainedVersion(true, false)
 		},
 	)
 }
 
-func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool) {
+func (s *Versioning3Suite) TestPinnedQuery_RollbackDrainedVersion() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testPinnedQuery_DrainedVersion(true, true)
+		},
+	)
+}
+
+func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool, rollback bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -291,7 +299,7 @@ func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool) {
 	s.setCurrentDeployment(tv2)
 	s.WaitForChannel(ctx, idlePollerDone)
 
-	// wait for v2 to become drained
+	// wait for v1 to become drained
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
@@ -309,12 +317,31 @@ func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool) {
 
 		_, err := s.queryWorkflow(tv)
 		s.Error(err)
-		s.ErrorContains(err, fmt.Sprintf(matching.ErrBlackHoledQuery, versionStr, versionStr))
+		s.ErrorContains(err, fmt.Sprintf(matching.ErrBlackholedQuery, versionStr, versionStr))
 	} else {
 		// since the version still has pollers, the query should succeed
 		s.pollAndQueryWorkflow(tv, false)
 	}
 
+	if rollback {
+		// ramp traffic back to v1 to remove it from drained state
+		s.setRampingDeployment(tv, 50, false)
+
+		// wait for v1 to become ramping
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			a := require.New(t)
+			resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+				Namespace: s.Namespace().String(),
+				Version:   tv.DeploymentVersionString(),
+			})
+			a.NoError(err)
+			a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.GetWorkerDeploymentVersionInfo().GetStatus())
+		}, time.Second*10, time.Millisecond*1000)
+
+		// the version has pollers and is ramping making the query succeed
+		s.pollAndQueryWorkflow(tv, false)
+
+	}
 }
 
 func (s *Versioning3Suite) testQueryWithPinnedOverride(sticky bool) {
