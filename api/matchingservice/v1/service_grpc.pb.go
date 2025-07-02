@@ -55,6 +55,7 @@ const (
 	MatchingService_ListNexusEndpoints_FullMethodName                     = "/temporal.server.api.matchingservice.v1.MatchingService/ListNexusEndpoints"
 	MatchingService_RecordWorkerHeartbeat_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/RecordWorkerHeartbeat"
 	MatchingService_ListWorkers_FullMethodName                            = "/temporal.server.api.matchingservice.v1.MatchingService/ListWorkers"
+	MatchingService_ConfigureTaskQueue_FullMethodName                     = "/temporal.server.api.matchingservice.v1.MatchingService/ConfigureTaskQueue"
 )
 
 // MatchingServiceClient is the client API for MatchingService service.
@@ -203,6 +204,9 @@ type MatchingServiceClient interface {
 	// Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
 	// Returns an error if the namespace doesn't exist.
 	ListWorkers(ctx context.Context, in *ListWorkersRequest, opts ...grpc.CallOption) (*ListWorkersResponse, error)
+	// ConfigureTaskQueue recieves TaskQueue specific config updates via api.
+	// Persists the TaskQueue configs.
+	ConfigureTaskQueue(ctx context.Context, in *ConfigureTaskQueueRequest, opts ...grpc.CallOption) (*ConfigureTaskQueueResponse, error)
 }
 
 type matchingServiceClient struct {
@@ -528,6 +532,15 @@ func (c *matchingServiceClient) ListWorkers(ctx context.Context, in *ListWorkers
 	return out, nil
 }
 
+func (c *matchingServiceClient) ConfigureTaskQueue(ctx context.Context, in *ConfigureTaskQueueRequest, opts ...grpc.CallOption) (*ConfigureTaskQueueResponse, error) {
+	out := new(ConfigureTaskQueueResponse)
+	err := c.cc.Invoke(ctx, MatchingService_ConfigureTaskQueue_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MatchingServiceServer is the server API for MatchingService service.
 // All implementations must embed UnimplementedMatchingServiceServer
 // for forward compatibility
@@ -674,6 +687,9 @@ type MatchingServiceServer interface {
 	// Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
 	// Returns an error if the namespace doesn't exist.
 	ListWorkers(context.Context, *ListWorkersRequest) (*ListWorkersResponse, error)
+	// ConfigureTaskQueue recieves TaskQueue specific config updates via api.
+	// Persists the TaskQueue configs.
+	ConfigureTaskQueue(context.Context, *ConfigureTaskQueueRequest) (*ConfigureTaskQueueResponse, error)
 	mustEmbedUnimplementedMatchingServiceServer()
 }
 
@@ -785,6 +801,9 @@ func (UnimplementedMatchingServiceServer) RecordWorkerHeartbeat(context.Context,
 }
 func (UnimplementedMatchingServiceServer) ListWorkers(context.Context, *ListWorkersRequest) (*ListWorkersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListWorkers not implemented")
+}
+func (UnimplementedMatchingServiceServer) ConfigureTaskQueue(context.Context, *ConfigureTaskQueueRequest) (*ConfigureTaskQueueResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ConfigureTaskQueue not implemented")
 }
 func (UnimplementedMatchingServiceServer) mustEmbedUnimplementedMatchingServiceServer() {}
 
@@ -1429,6 +1448,24 @@ func _MatchingService_ListWorkers_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchingService_ConfigureTaskQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfigureTaskQueueRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).ConfigureTaskQueue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_ConfigureTaskQueue_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).ConfigureTaskQueue(ctx, req.(*ConfigureTaskQueueRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MatchingService_ServiceDesc is the grpc.ServiceDesc for MatchingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1575,6 +1612,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListWorkers",
 			Handler:    _MatchingService_ListWorkers_Handler,
+		},
+		{
+			MethodName: "ConfigureTaskQueue",
+			Handler:    _MatchingService_ConfigureTaskQueue_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

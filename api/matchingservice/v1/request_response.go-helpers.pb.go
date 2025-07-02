@@ -2594,3 +2594,77 @@ func (this *ListWorkersResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type ConfigureTaskQueueRequest to the protobuf v3 wire format
+func (val *ConfigureTaskQueueRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ConfigureTaskQueueRequest from the protobuf v3 wire format
+func (val *ConfigureTaskQueueRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ConfigureTaskQueueRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ConfigureTaskQueueRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ConfigureTaskQueueRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ConfigureTaskQueueRequest
+	switch t := that.(type) {
+	case *ConfigureTaskQueueRequest:
+		that1 = t
+	case ConfigureTaskQueueRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ConfigureTaskQueueResponse to the protobuf v3 wire format
+func (val *ConfigureTaskQueueResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ConfigureTaskQueueResponse from the protobuf v3 wire format
+func (val *ConfigureTaskQueueResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ConfigureTaskQueueResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ConfigureTaskQueueResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ConfigureTaskQueueResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ConfigureTaskQueueResponse
+	switch t := that.(type) {
+	case *ConfigureTaskQueueResponse:
+		that1 = t
+	case ConfigureTaskQueueResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

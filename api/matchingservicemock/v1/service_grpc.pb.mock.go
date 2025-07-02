@@ -142,6 +142,26 @@ func (mr *MockMatchingServiceClientMockRecorder) CheckTaskQueueUserDataPropagati
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTaskQueueUserDataPropagation", reflect.TypeOf((*MockMatchingServiceClient)(nil).CheckTaskQueueUserDataPropagation), varargs...)
 }
 
+// ConfigureTaskQueue mocks base method.
+func (m *MockMatchingServiceClient) ConfigureTaskQueue(ctx context.Context, in *matchingservice.ConfigureTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.ConfigureTaskQueueResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ConfigureTaskQueue", varargs...)
+	ret0, _ := ret[0].(*matchingservice.ConfigureTaskQueueResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ConfigureTaskQueue indicates an expected call of ConfigureTaskQueue.
+func (mr *MockMatchingServiceClientMockRecorder) ConfigureTaskQueue(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfigureTaskQueue", reflect.TypeOf((*MockMatchingServiceClient)(nil).ConfigureTaskQueue), varargs...)
+}
+
 // CreateNexusEndpoint mocks base method.
 func (m *MockMatchingServiceClient) CreateNexusEndpoint(ctx context.Context, in *matchingservice.CreateNexusEndpointRequest, opts ...grpc.CallOption) (*matchingservice.CreateNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
@@ -839,6 +859,21 @@ func (m *MockMatchingServiceServer) CheckTaskQueueUserDataPropagation(arg0 conte
 func (mr *MockMatchingServiceServerMockRecorder) CheckTaskQueueUserDataPropagation(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTaskQueueUserDataPropagation", reflect.TypeOf((*MockMatchingServiceServer)(nil).CheckTaskQueueUserDataPropagation), arg0, arg1)
+}
+
+// ConfigureTaskQueue mocks base method.
+func (m *MockMatchingServiceServer) ConfigureTaskQueue(arg0 context.Context, arg1 *matchingservice.ConfigureTaskQueueRequest) (*matchingservice.ConfigureTaskQueueResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ConfigureTaskQueue", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.ConfigureTaskQueueResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ConfigureTaskQueue indicates an expected call of ConfigureTaskQueue.
+func (mr *MockMatchingServiceServerMockRecorder) ConfigureTaskQueue(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfigureTaskQueue", reflect.TypeOf((*MockMatchingServiceServer)(nil).ConfigureTaskQueue), arg0, arg1)
 }
 
 // CreateNexusEndpoint mocks base method.

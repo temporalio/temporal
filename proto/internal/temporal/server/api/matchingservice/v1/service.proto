@@ -176,4 +176,8 @@ service MatchingService {
     // Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
     // Returns an error if the namespace doesn't exist.
     rpc ListWorkers (ListWorkersRequest) returns (ListWorkersResponse) {}
+
+    // ConfigureTaskQueue recieves TaskQueue specific config updates via api.
+    // Persists the TaskQueue configs.
+    rpc ConfigureTaskQueue (ConfigureTaskQueueRequest) returns (ConfigureTaskQueueResponse) {} 
 }

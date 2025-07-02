@@ -45,5 +45,6 @@ type (
 		UpdateWorkerVersioningRules(ctx context.Context, request *matchingservice.UpdateWorkerVersioningRulesRequest) (*matchingservice.UpdateWorkerVersioningRulesResponse, error)
 		GetWorkerVersioningRules(ctx context.Context, request *matchingservice.GetWorkerVersioningRulesRequest) (*matchingservice.GetWorkerVersioningRulesResponse, error)
 		DescribeVersionedTaskQueues(ctx context.Context, request *matchingservice.DescribeVersionedTaskQueuesRequest) (*matchingservice.DescribeVersionedTaskQueuesResponse, error)
+		ConfigureTaskQueue(ctx context.Context, request *matchingservice.ConfigureTaskQueueRequest) (*matchingservice.ConfigureTaskQueueResponse, error)
 	}
 )

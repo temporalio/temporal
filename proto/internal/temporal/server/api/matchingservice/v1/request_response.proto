@@ -591,3 +591,13 @@ message ListWorkersResponse {
     repeated temporal.api.worker.v1.WorkerInfo workers_info = 1;
     bytes next_page_token = 2;
 }
+
+message ConfigureTaskQueueRequest {
+    string namespace_id = 1;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
+    temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest update_taskqueue_config = 3;
+}
+
+message ConfigureTaskQueueResponse {
+    temporal.api.taskqueue.v1.TaskQueueConfig updated_taskqueue_config = 1;
+}

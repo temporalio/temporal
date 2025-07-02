@@ -337,3 +337,151 @@ func (this *VersionedTaskQueueUserData) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type RateLimit to the protobuf v3 wire format
+func (val *RateLimit) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RateLimit from the protobuf v3 wire format
+func (val *RateLimit) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RateLimit) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RateLimit values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RateLimit) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RateLimit
+	switch t := that.(type) {
+	case *RateLimit:
+		that1 = t
+	case RateLimit:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ConfigMetadata to the protobuf v3 wire format
+func (val *ConfigMetadata) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ConfigMetadata from the protobuf v3 wire format
+func (val *ConfigMetadata) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ConfigMetadata) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ConfigMetadata values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ConfigMetadata) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ConfigMetadata
+	switch t := that.(type) {
+	case *ConfigMetadata:
+		that1 = t
+	case ConfigMetadata:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type RateLimitConfig to the protobuf v3 wire format
+func (val *RateLimitConfig) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RateLimitConfig from the protobuf v3 wire format
+func (val *RateLimitConfig) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RateLimitConfig) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RateLimitConfig values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RateLimitConfig) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RateLimitConfig
+	switch t := that.(type) {
+	case *RateLimitConfig:
+		that1 = t
+	case RateLimitConfig:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type TaskQueueConfig to the protobuf v3 wire format
+func (val *TaskQueueConfig) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type TaskQueueConfig from the protobuf v3 wire format
+func (val *TaskQueueConfig) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *TaskQueueConfig) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two TaskQueueConfig values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *TaskQueueConfig) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *TaskQueueConfig
+	switch t := that.(type) {
+	case *TaskQueueConfig:
+		that1 = t
+	case TaskQueueConfig:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

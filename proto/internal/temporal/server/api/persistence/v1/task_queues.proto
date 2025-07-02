@@ -116,6 +116,9 @@ message DeploymentData {
 // Container for all persistent user data that varies per task queue type within a family.
 message TaskQueueTypeUserData {
     DeploymentData deployment_data = 1;
+
+    // Perist TaskQueueConfig that comes as part of the UpdateTaskQueueConfigApi..
+    TaskQueueConfig task_queue_config = 2;
 }
 
 // Container for all persistent user provided data for a task queue family.
@@ -141,4 +144,33 @@ message TaskQueueUserData {
 message VersionedTaskQueueUserData {
     TaskQueueUserData data = 1;
     int64 version = 2;
+}
+
+message RateLimit { 
+    // Zero is a valid rate limit.
+    float requests_per_second = 1;
+}
+
+message ConfigMetadata {
+    // Reason for why the config was set.
+    string reason = 1;
+
+    // Identity of the last updater.
+    // Set by the request's identity field.
+    string update_identity = 2;
+    
+    // Time of the last update.
+    temporal.server.api.clock.v1.HybridLogicalClock clock = 3;
+}
+
+message RateLimitConfig { 
+    RateLimit rate_limit = 1;    
+    ConfigMetadata metadata = 2;
+}
+
+message TaskQueueConfig {
+    // Unless modified, this is the system-defined rate limit.
+    RateLimitConfig queue_rate_limit = 1;
+    // If set, each individual fairness key will be limited to this rate, scaled by the weight of the fairness key.
+    RateLimitConfig fairness_keys_rate_limit_default = 2;
 }

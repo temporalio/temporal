@@ -73,6 +73,26 @@ func (c *clientImpl) CheckTaskQueueUserDataPropagation(
 	return client.CheckTaskQueueUserDataPropagation(ctx, request, opts...)
 }
 
+func (c *clientImpl) ConfigureTaskQueue(
+	ctx context.Context,
+	request *matchingservice.ConfigureTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.ConfigureTaskQueueResponse, error) {
+
+	p, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetUpdateTaskqueueConfig().GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ConfigureTaskQueue(ctx, request, opts...)
+}
+
 func (c *clientImpl) CreateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.CreateNexusEndpointRequest,
