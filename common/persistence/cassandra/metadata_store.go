@@ -3,8 +3,10 @@ package cassandra
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
@@ -68,6 +70,9 @@ const (
 	templateUpdateNamespaceByIdQuery = `UPDATE namespaces_by_id ` +
 		`SET name = ? ` +
 		`WHERE id = ?`
+
+	namespaceStaleRetryAttempts = 1
+	namespaceStaleRetryDelay    = 200 * time.Millisecond
 )
 
 type (
@@ -323,17 +328,24 @@ func (m *MetadataStore) GetNamespace(
 		}
 	}
 
-	query = m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, namespace).WithContext(ctx)
-	err = query.Scan(
-		nil,
-		nil,
-		&detail,
-		&detailEncoding,
-		&notificationVersion,
-		&isGlobalNamespace,
-	)
+	policy := backoff.NewConstantDelayRetryPolicy(namespaceStaleRetryDelay).WithMaximumAttempts(namespaceStaleRetryAttempts + 1)
+	err = backoff.ThrottleRetry(func() error {
+		query = m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, namespace).WithContext(ctx)
+		return query.Scan(
+			nil,
+			nil,
+			&detail,
+			&detailEncoding,
+			&notificationVersion,
+			&isGlobalNamespace,
+		)
+	}, policy, func(err error) bool { return gocql.IsNotFoundError(err) && len(request.ID) > 0 })
 
 	if err != nil {
+		if gocql.IsNotFoundError(err) && len(request.ID) > 0 {
+			// namespace name lookup failed even after retrying once; likely temporary inconsistency
+			return nil, serviceerror.NewUnavailable("namespace info temporarily unavailable")
+		}
 		return nil, handleError(request.Name, request.ID, err)
 	}
 
