@@ -31,24 +31,18 @@ type (
 
 		lock sync.Mutex
 
-		readPending   bool
-		readRequested int
-		backoffTimer  *time.Timer
-		retrier       backoff.Retrier
+		readPending  bool
+		backoffTimer *time.Timer
+		retrier      backoff.Retrier
+		addRetries   *semaphore.Weighted
 
-		backlogAge backlogAgeTracker
-
-		addRetries *semaphore.Weighted
-
-		// ack manager state
+		backlogAge       backlogAgeTracker
 		outstandingTasks treemap.Map // fairLevel -> *internalTask if unacked, or nil if acked
 		loadedTasks      int         // == number of unacked (non-nil) entries in outstandingTasks
-		readLevel        fairLevel   // == highest level in outstandingTasks, or if outstandingTasks is empty, the level we should read next
+		readLevel        fairLevel   // == highest level in outstandingTasks, or if empty, the level we should read next
 		ackLevel         fairLevel   // inclusive: task exactly at ackLevel _has_ been acked
 		ackLevelPinned   bool        // pinned while writing tasks so that we don't delete just-written tasks
-
-		// Tracks whether we believe outstandingTasks represents the entire queue right now.
-		atEnd bool
+		atEnd            bool        // whether we believe outstandingTasks represents the entire queue right now
 
 		// gc state
 		inGC       bool
@@ -94,7 +88,7 @@ func newFairTaskReader(
 func (tr *fairTaskReader) Start() {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	tr.readTasksLocked()
+	tr.maybeReadTasksLocked()
 }
 
 func (tr *fairTaskReader) getOldestBacklogTime() time.Time {
@@ -167,20 +161,15 @@ func (tr *fairTaskReader) completeTaskLocked(task *internalTask) {
 	softassert.That(tr.logger, tr.loadedTasks >= 0, "loadedTasks went negative")
 
 	tr.advanceAckLevelLocked()
-	tr.readTasksLocked()
+	tr.maybeReadTasksLocked()
 }
 
-func (tr *fairTaskReader) readTasksLocked() {
-	if !tr.shouldReadMoreLocked() {
+func (tr *fairTaskReader) maybeReadTasksLocked() {
+	// If readPending is true here, readTasksImpl is running and will check
+	// shouldReadMoreLocked before it exits.
+	if tr.readPending || !tr.shouldReadMoreLocked() {
 		return
 	}
-
-	tr.readRequested++
-
-	if tr.readPending {
-		return
-	}
-
 	tr.readPending = true
 	go tr.readTasksImpl()
 }
@@ -200,13 +189,12 @@ func (tr *fairTaskReader) readTasksImpl() {
 	var lastErr error
 	for {
 		tr.lock.Lock()
-		if lastErr != nil || !tr.shouldReadMoreLocked() && tr.readRequested == 0 {
+		if lastErr != nil || !tr.shouldReadMoreLocked() {
 			tr.readPending = false
 			tr.lock.Unlock()
 			return
 		}
 		readLevel, loadedTasks := tr.readLevel, int(tr.loadedTasks)
-		tr.readRequested--
 		tr.lock.Unlock()
 
 		lastErr = tr.readTaskBatch(readLevel, loadedTasks)
@@ -440,9 +428,9 @@ func (tr *fairTaskReader) backoffSignal(duration time.Duration) {
 	if tr.backoffTimer == nil {
 		tr.backoffTimer = time.AfterFunc(duration, func() {
 			tr.lock.Lock()
+			defer tr.lock.Unlock()
 			tr.backoffTimer = nil
-			tr.readTasksLocked()
-			tr.lock.Unlock()
+			tr.maybeReadTasksLocked()
 		})
 	}
 }
