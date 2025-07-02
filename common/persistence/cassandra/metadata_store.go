@@ -71,7 +71,7 @@ const (
 		`SET name = ? ` +
 		`WHERE id = ?`
 
-	namespaceStaleRetryAttempts = 1
+	namespaceStaleRetryAttempts = 2
 	namespaceStaleRetryDelay    = 200 * time.Millisecond
 )
 
@@ -328,7 +328,7 @@ func (m *MetadataStore) GetNamespace(
 		}
 	}
 
-	policy := backoff.NewConstantDelayRetryPolicy(namespaceStaleRetryDelay).WithMaximumAttempts(namespaceStaleRetryAttempts + 1)
+	policy := backoff.NewConstantDelayRetryPolicy(namespaceStaleRetryDelay).WithMaximumAttempts(namespaceStaleRetryAttempts)
 	err = backoff.ThrottleRetry(func() error {
 		query = m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, namespace).WithContext(ctx)
 		return query.Scan(
@@ -339,7 +339,7 @@ func (m *MetadataStore) GetNamespace(
 			&notificationVersion,
 			&isGlobalNamespace,
 		)
-	}, policy, func(err error) bool { return gocql.IsNotFoundError(err) && len(request.ID) > 0 })
+	}, policy, func(err error) bool { return gocql.IsNotFoundError(err) && request.ID != "" })
 
 	if err != nil {
 		if gocql.IsNotFoundError(err) && len(request.ID) > 0 {
