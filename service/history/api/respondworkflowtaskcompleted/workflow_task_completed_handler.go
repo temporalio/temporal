@@ -426,10 +426,10 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
 
 	// TODO(fairness): remove this again once the SDK allows setting the fairness key
-	fairnessKeyPrefix := "x-temporal-internal-fairness-key-"
-	if strings.HasPrefix(attr.GetActivityId(), fairnessKeyPrefix) {
+	const fairnessKeyPrefix = "x-temporal-internal-fairness-key-"
+	if key, ok := strings.CutPrefix(attr.GetActivityId(), fairnessKeyPrefix); ok {
 		attr.Priority = cmp.Or(attr.Priority, &commonpb.Priority{})
-		attr.Priority.FairnessKey = strings.TrimPrefix(attr.GetActivityId(), fairnessKeyPrefix)
+		attr.Priority.FairnessKey = key
 	}
 
 	if err := handler.validateCommandAttr(
