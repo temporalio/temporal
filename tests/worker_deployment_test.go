@@ -2002,49 +2002,52 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_AfterDrained() {
 	}, time.Second*10, time.Millisecond*1000)
 
 	// Verify that the drainageStatus of v1 has been updated in the VersionSummaries
-	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-		Namespace:      s.Namespace().String(),
-		DeploymentName: tv2.DeploymentSeries(),
-	})
-	s.NoError(err)
-	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
-		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
-			Name:       tv2.DeploymentSeries(),
-			CreateTime: v1CreateTime,
-			RoutingConfig: &deploymentpb.RoutingConfig{
-				RampingVersion:            "",
-				RampingVersionPercentage:  0,
-				RampingVersionChangedTime: nil,
-				CurrentVersion:            tv2.DeploymentVersionString(),
-				CurrentVersionChangedTime: setCurrentV2UpdateTime,
-			},
-			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-				{
-					Version:              tv1.DeploymentVersionString(),
-					CreateTime:           v1CreateTime,
-					DrainageInfo:         &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED},
-					RoutingUpdateTime:    setCurrentV1UpdateTime,
-					CurrentSinceTime:     nil,
-					RampingSinceTime:     nil,
-					FirstActivationTime:  setCurrentV1UpdateTime,
-					LastDeactivationTime: setCurrentV2UpdateTime,
-					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv2.DeploymentSeries(),
+		})
+		s.NoError(err)
+		s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
+			WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
+				Name:       tv2.DeploymentSeries(),
+				CreateTime: v1CreateTime,
+				RoutingConfig: &deploymentpb.RoutingConfig{
+					RampingVersion:            "",
+					RampingVersionPercentage:  0,
+					RampingVersionChangedTime: nil,
+					CurrentVersion:            tv2.DeploymentVersionString(),
+					CurrentVersionChangedTime: setCurrentV2UpdateTime,
 				},
-				{
-					Version:              tv2.DeploymentVersionString(),
-					CreateTime:           v2CreateTime,
-					DrainageInfo:         nil,
-					RoutingUpdateTime:    setCurrentV2UpdateTime,
-					CurrentSinceTime:     setCurrentV2UpdateTime,
-					RampingSinceTime:     nil,
-					FirstActivationTime:  setCurrentV2UpdateTime,
-					LastDeactivationTime: nil,
-					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+				VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
+					{
+						Version:              tv1.DeploymentVersionString(),
+						CreateTime:           v1CreateTime,
+						DrainageInfo:         &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED},
+						RoutingUpdateTime:    setCurrentV1UpdateTime,
+						CurrentSinceTime:     nil,
+						RampingSinceTime:     nil,
+						FirstActivationTime:  setCurrentV1UpdateTime,
+						LastDeactivationTime: setCurrentV2UpdateTime,
+						Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+					},
+					{
+						Version:              tv2.DeploymentVersionString(),
+						CreateTime:           v2CreateTime,
+						DrainageInfo:         nil,
+						RoutingUpdateTime:    setCurrentV2UpdateTime,
+						CurrentSinceTime:     setCurrentV2UpdateTime,
+						RampingSinceTime:     nil,
+						FirstActivationTime:  setCurrentV2UpdateTime,
+						LastDeactivationTime: nil,
+						Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+					},
 				},
+				LastModifierIdentity: tv2.ClientIdentity(),
 			},
-			LastModifierIdentity: tv2.ClientIdentity(),
-		},
-	})
+		})
+	}, time.Second*10, time.Millisecond*1000)
 
 	// start ramping traffic back to v1
 	s.setAndVerifyRampingVersion(ctx, tv1, false, 10, false, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
