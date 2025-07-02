@@ -366,7 +366,6 @@ func (s *matchingEngineSuite) TestFailAddTaskWithHistoryExhausted() {
 
 func (s *matchingEngineSuite) TestFailAddTaskWithHistoryError() {
 	s.logger.Expect(testlogger.Error, "dropping task due to non-nonretryable errors")
-	s.matchingEngine.config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true)
 	historyError := serviceerror.NewInternal("nothing to start")
 	tqName := "testFailAddTaskWithHistoryError"
 	s.testFailAddTaskWithHistoryError(tqName, true, historyError, nil) // expectedError shall be nil since history drops the task
@@ -588,7 +587,6 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_NamespaceHandover() {
 
 func (s *matchingEngineSuite) TestPollActivityTaskQueues_InternalError() {
 	s.logger.Expect(testlogger.Error, "dropping task due to non-nonretryable errors")
-	s.matchingEngine.config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true)
 	namespaceId := uuid.New()
 	tl := "queue"
 	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -622,7 +620,6 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_InternalError() {
 
 func (s *matchingEngineSuite) TestPollActivityTaskQueues_DataLossError() {
 	s.logger.Expect(testlogger.Error, "dropping task due to non-nonretryable errors")
-	s.matchingEngine.config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true)
 
 	namespaceId := uuid.New()
 	tl := "queue"
@@ -658,7 +655,6 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DataLossError() {
 
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_InternalError() {
 	s.logger.Expect(testlogger.Error, "dropping task due to non-nonretryable errors")
-	s.matchingEngine.config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true)
 
 	tqName := "queue"
 	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -685,7 +681,6 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_InternalError() {
 
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DataLossError() {
 	s.logger.Expect(testlogger.Error, "dropping task due to non-nonretryable errors")
-	s.matchingEngine.config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true)
 
 	tqName := "queue"
 	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
