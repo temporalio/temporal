@@ -5,7 +5,6 @@ import (
 	"errors"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/emirpasic/gods/maps/treemap"
@@ -32,17 +31,18 @@ type (
 
 		lock sync.Mutex
 
-		readPending  atomic.Bool
-		backoffTimer *time.Timer
-		retrier      backoff.Retrier
+		readPending   bool
+		readRequested int
+		backoffTimer  *time.Timer
+		retrier       backoff.Retrier
 
 		backlogAge backlogAgeTracker
 
 		addRetries *semaphore.Weighted
 
 		// ack manager state
-		outstandingTasks treemap.Map // fairLevel -> *internalTask, or nil if acked
-		loadedTasks      int         // == number of non-nil entries in outstandingTasks
+		outstandingTasks treemap.Map // fairLevel -> *internalTask if unacked, or nil if acked
+		loadedTasks      int         // == number of unacked (non-nil) entries in outstandingTasks
 		readLevel        fairLevel   // == highest level in outstandingTasks, or if outstandingTasks is empty, the level we should read next
 		ackLevel         fairLevel   // inclusive: task exactly at ackLevel _has_ been acked
 		ackLevelPinned   bool        // pinned while writing tasks so that we don't delete just-written tasks
@@ -92,7 +92,9 @@ func newFairTaskReader(
 }
 
 func (tr *fairTaskReader) Start() {
-	tr.readTasks()
+	tr.lock.Lock()
+	defer tr.lock.Unlock()
+	tr.readTasksLocked()
 }
 
 func (tr *fairTaskReader) getOldestBacklogTime() time.Time {
@@ -165,29 +167,53 @@ func (tr *fairTaskReader) completeTaskLocked(task *internalTask) {
 	softassert.That(tr.logger, tr.loadedTasks >= 0, "loadedTasks went negative")
 
 	tr.advanceAckLevelLocked()
-
-	// use == so we just signal once when we cross this threshold
-	// TODO(pri): is this safe? maybe we need to improve this
-	if tr.loadedTasks == tr.backlogMgr.config.GetTasksReloadAt() {
-		tr.readTasks()
-	}
+	tr.readTasksLocked()
 }
 
-func (tr *fairTaskReader) readTasks() {
-	if tr.readPending.CompareAndSwap(false, true) {
-		go tr.readTasksImpl()
-	}
-}
-
-func (tr *fairTaskReader) readTasksImpl() {
-	defer tr.readPending.Store(false)
-
-	readLevel, loadedTasks := tr.readLevelAndLoadedTasks()
-	if loadedTasks > tr.backlogMgr.config.GetTasksReloadAt() {
-		// Too many loaded already. We'll get called again when loadedTasks drops low enough.
+func (tr *fairTaskReader) readTasksLocked() {
+	if !tr.shouldReadMoreLocked() {
 		return
 	}
 
+	tr.readRequested++
+
+	if tr.readPending {
+		return
+	}
+
+	tr.readPending = true
+	go tr.readTasksImpl()
+}
+
+func (tr *fairTaskReader) shouldReadMoreLocked() bool {
+	if tr.atEnd {
+		// If we have the whole backlog in memory, we don't need to read anything.
+		return false
+	} else if tr.loadedTasks > tr.backlogMgr.config.GetTasksReloadAt() {
+		// Too many loaded already. We'll get called again when loadedTasks drops.
+		return false
+	}
+	return true
+}
+
+func (tr *fairTaskReader) readTasksImpl() {
+	var lastErr error
+	for {
+		tr.lock.Lock()
+		if lastErr != nil || !tr.shouldReadMoreLocked() && tr.readRequested == 0 {
+			tr.readPending = false
+			tr.lock.Unlock()
+			return
+		}
+		readLevel, loadedTasks := tr.readLevel, int(tr.loadedTasks)
+		tr.readRequested--
+		tr.lock.Unlock()
+
+		lastErr = tr.readTaskBatch(readLevel, loadedTasks)
+	}
+}
+
+func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) error {
 	batchSize := tr.backlogMgr.config.GetTasksBatchSize() - loadedTasks
 	readFrom := readLevel.max(fairLevel{pass: 1, id: 0}).inc()
 	res, err := tr.backlogMgr.db.GetFairTasks(tr.backlogMgr.tqCtx, tr.subqueue, readFrom, batchSize)
@@ -199,7 +225,7 @@ func (tr *fairTaskReader) readTasksImpl() {
 		} else {
 			tr.backoffSignal(tr.retrier.NextBackOff(err))
 		}
-		return
+		return err
 	}
 	tr.retrier.Reset()
 
@@ -221,14 +247,10 @@ func (tr *fairTaskReader) readTasksImpl() {
 	})
 
 	// Note: even if (especially if) len(tasks) == 0, we should go through the mergeTasks logic
-	// to update the backlog size estimate.
+	// to update atEnd and the backlog size estimate.
 	tr.mergeTasks(tasks, mode)
-}
 
-func (tr *fairTaskReader) readLevelAndLoadedTasks() (fairLevel, int) {
-	tr.lock.Lock()
-	defer tr.lock.Unlock()
-	return tr.readLevel, int(tr.loadedTasks)
+	return nil
 }
 
 // call with_out_ lock held
@@ -304,6 +326,8 @@ func (tr *fairTaskReader) retryAddAfterError(task *internalTask) {
 }
 
 func (tr *fairTaskReader) wroteNewTasks(tasks []*persistencespb.AllocatedTaskInfo) {
+	// FIXME: if min level in tasks is > readLevel then actually let's not do this since we
+	// could be skipping over a gap
 	tr.mergeTasks(tasks, mergeWrite)
 }
 
@@ -417,9 +441,8 @@ func (tr *fairTaskReader) backoffSignal(duration time.Duration) {
 		tr.backoffTimer = time.AfterFunc(duration, func() {
 			tr.lock.Lock()
 			tr.backoffTimer = nil
+			tr.readTasksLocked()
 			tr.lock.Unlock()
-
-			tr.readTasks()
 		})
 	}
 }

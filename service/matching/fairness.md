@@ -64,23 +64,25 @@ don't need to read it again. But if we write below R, that breaks that assumptio
 
 The simplest solution (plan 1) is to set R to Wmin so we'll read from there next time, so we
 won't miss the new tasks. And we should drop any tasks we have in-memory that are above the new
-R so the new ones get treated fairly relative to and older tasks that were in that range. If we
+R so the new ones get treated fairly relative to any older tasks that were in that range. If we
 have more room in memory at that point, we can do a read immediately.
 
 
 ### Bypass optimization
 
 Potentially dropping a bunch of tasks and rereading them on every write is inefficient. Also if
-we don't have too much in memory, we should not have to re-read the tasks we just wrote (even
-if we don't drop anything). Instead of dropping and re-reading, we can simulate what would
-happen with the add/drop/reread and add tasks to the buffer directly (plan 2):
+we don't have too much in memory, we shouldn't have to re-read the tasks we just wrote (even if
+we don't drop anything). Instead of dropping and re-reading, we can simulate what would happen
+with the add/drop/reread and add tasks to the buffer directly (plan 2):
 
 Take the tasks in the buffer plus the tasks that were just written and sort them by level. Take
 the first Bt of them (or all of them if < Bt). Set the buffer to that set. Set R to the maximum
 level in that set. Discard the rest from memory.
 
-Note that works whether Wmin is above or below R, and the same logic works whether we're
-merging in tasks that we just read or just wrote.
+Note that we can only do this if we've currently read to the end of the database queue,
+otherwise there might be tasks in the database that should go in between our current buffer and
+what we just wrote. If we're in the middle then we can merge in any new tasks below the current
+end of the buffer, but we should throw out anything above that.
 
 
 ### GC
