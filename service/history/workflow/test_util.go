@@ -79,6 +79,7 @@ func TestGlobalMutableState(
 
 	ms := NewMutableState(shard, eventsCache, logger, tests.GlobalNamespaceEntry, workflowID, runID, time.Now().UTC())
 	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionState().StartTime
+	ms.GetExecutionInfo().TransitionHistory = UpdatedTransitionHistory(ms.GetExecutionInfo().TransitionHistory, version)
 	_ = ms.UpdateCurrentVersion(version, false)
 	_ = ms.SetHistoryTree(nil, nil, runID)
 

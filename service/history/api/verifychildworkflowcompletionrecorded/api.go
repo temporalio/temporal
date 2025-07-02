@@ -95,15 +95,15 @@ func Invoke(
 	}
 
 	resendParent := false
-	versionedTransition, versionHistories, err := verifyChildExecution(ctx, workflowConsistencyChecker, request)
-	switch err.(type) {
+	versionedTransition, versionHistories, errVerify := verifyChildExecution(ctx, workflowConsistencyChecker, request)
+	switch errVerify.(type) {
 	case nil:
 		return &historyservice.VerifyChildExecutionCompletionRecordedResponse{}, nil
 	case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
 		resendParent = request.GetResendParent()
 	}
 	if !resendParent {
-		return nil, err
+		return nil, errVerify
 	}
 
 	// Resend parent workflow from source cluster
@@ -143,6 +143,11 @@ func Invoke(
 			// we can return empty response to indicate that verification is done
 			// TODO: add parent workflow to workflowNotFoundCache
 			return &historyservice.VerifyChildExecutionCompletionRecordedResponse{}, nil
+		}
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		if errors.As(err, &failedPreconditionErr) {
+			// Unable to perform sync state. Transition history maybe disabled in source cluster.
+			return nil, errVerify
 		}
 		return nil, err
 	}
