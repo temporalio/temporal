@@ -875,16 +875,25 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
 	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
 
-	// route heartbeat to the matching service only if the request is valid (all validation checks passed)
 	if request.WorkerHeartbeat != nil {
-		_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
-			NamespaceId: namespaceID.String(),
-			HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
-				Namespace:       request.GetNamespace(),
-				Identity:        request.GetIdentity(),
-				WorkerHeartbeat: request.WorkerHeartbeat,
-			},
-		})
+
+		// route heartbeat to the matching service only if the request is valid (all validation checks passed)
+		go func() {
+			_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
+				NamespaceId: namespaceID.String(),
+				HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+					Namespace:       request.GetNamespace(),
+					Identity:        request.GetIdentity(),
+					WorkerHeartbeat: request.WorkerHeartbeat,
+				},
+			})
+
+			if err != nil {
+				wh.logger.Error("Failed to record worker heartbeat.",
+					tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+					tag.Error(err))
+			}
+		}()
 
 		// drop the heartbeat, it is not needed to process the poll request
 		request.WorkerHeartbeat = nil
@@ -2707,6 +2716,11 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 				WorkerHeartbeat: request.WorkerHeartbeat,
 			},
 		})
+		if err != nil {
+			wh.logger.Error("Failed to record worker heartbeat during shutdown.",
+				tag.WorkflowTaskQueueName(request.WorkerHeartbeat.GetTaskQueue()),
+				tag.Error(err))
+		}
 
 		// drop the heartbeat, it is not needed to process the poll request
 		request.WorkerHeartbeat = nil
