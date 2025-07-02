@@ -338,6 +338,9 @@ func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool, r
 			a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.GetWorkerDeploymentVersionInfo().GetStatus())
 		}, time.Second*10, time.Millisecond*1000)
 
+		// ramping status is propagated to the task queues
+		s.waitForDeploymentDataPropagation(tv, versionStatusRamping, false, tqTypeWf)
+
 		// the version has pollers and is ramping making the query succeed
 		s.pollAndQueryWorkflow(tv, false)
 
