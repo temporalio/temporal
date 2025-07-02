@@ -381,7 +381,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateChildWorkflowTasks(
-				event,
+				event.GetEventId(),
 			); err != nil {
 				return nil, err
 			}

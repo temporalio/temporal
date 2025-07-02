@@ -1,4 +1,4 @@
-package otellogger
+package testtelemetry
 
 import (
 	"context"
@@ -13,16 +13,19 @@ import (
 	"google.golang.org/grpc"
 )
 
-type OTELLogger struct {
+var _ ctrace.TraceServiceServer = (*MemoryCollector)(nil)
+
+// MemoryCollector is a gRPC-based OTEL collector that collects spans in memory.
+type MemoryCollector struct {
 	ctrace.UnimplementedTraceServiceServer
 	addr      string
 	spansLock sync.RWMutex
 	spans     []*trace.ResourceSpans
 }
 
-func Start(tb testing.TB) (*OTELLogger, error) {
+func StartMemoryCollector(tb testing.TB) (*MemoryCollector, error) {
 	grpcServer := grpc.NewServer()
-	l := &OTELLogger{
+	l := &MemoryCollector{
 		addr: fmt.Sprintf("localhost:%d", freeport.MustGetFreePort()),
 	}
 	ctrace.RegisterTraceServiceServer(grpcServer, l)
@@ -46,22 +49,24 @@ func Start(tb testing.TB) (*OTELLogger, error) {
 	return l, nil
 }
 
-func (l *OTELLogger) Addr() string {
+func (l *MemoryCollector) Addr() string {
 	return "http://" + l.addr
 }
 
-func (l *OTELLogger) Spans() []*trace.ResourceSpans {
+func (l *MemoryCollector) Spans() []*trace.ResourceSpans {
 	l.spansLock.RLock()
 	defer l.spansLock.RUnlock()
+
 	return l.spans
 }
 
-func (l *OTELLogger) Export(
+func (l *MemoryCollector) Export(
 	ctx context.Context,
 	request *ctrace.ExportTraceServiceRequest,
 ) (*ctrace.ExportTraceServiceResponse, error) {
 	l.spansLock.Lock()
 	defer l.spansLock.Unlock()
+
 	l.spans = append(l.spans, request.ResourceSpans...)
 	return &ctrace.ExportTraceServiceResponse{}, nil
 }

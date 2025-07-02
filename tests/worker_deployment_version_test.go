@@ -205,16 +205,17 @@ func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {
 		a.Equal(tv.ExternalDeploymentVersion().GetDeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetDeploymentName())
 		a.Equal(tv.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion().GetBuildId())
 
+		a.Equal(1, len(resp.GetVersionTaskQueues()))
 		a.Equal(1, len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()))
 
 		// verify that the version state is intact even after a CAN
+		a.Equal(tv.TaskQueue().GetName(), resp.GetVersionTaskQueues()[0].Name)
 		a.Equal(tv.TaskQueue().GetName(), resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()[0].Name)
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetRoutingChangedTime())
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
 		a.Nil(resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo())
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, resp.GetWorkerDeploymentVersionInfo().GetStatus())
-
 	}, time.Second*10, time.Millisecond*1000)
 }
 
@@ -242,6 +243,9 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue() {
 
 		a.Equal(numberOfDeployments, len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()))
 		a.Equal(tv.TaskQueue().GetName(), resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()[0].Name)
+
+		a.Equal(numberOfDeployments, len(resp.GetVersionTaskQueues()))
+		a.Equal(tv.TaskQueue().GetName(), resp.GetVersionTaskQueues()[0].Name)
 	}, time.Second*5, time.Millisecond*200)
 }
 
@@ -275,6 +279,8 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_Concurren
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, resp.GetWorkerDeploymentVersionInfo().GetStatus())
 		a.Equal(2, len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()))
 		a.Equal(tv.TaskQueue().GetName(), resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()[0].Name)
+		a.Equal(2, len(resp.GetVersionTaskQueues()))
+		a.Equal(tv.TaskQueue().GetName(), resp.GetVersionTaskQueues()[0].Name)
 	}, time.Second*10, time.Millisecond*1000)
 }
 

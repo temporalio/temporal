@@ -177,11 +177,40 @@ message CancelOutstandingPollResponse {
 message DescribeTaskQueueRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.DescribeTaskQueueRequest desc_request = 2;
+    temporal.server.api.deployment.v1.WorkerDeploymentVersion version = 3;
 }
 
 message DescribeTaskQueueResponse {
     reserved 1 to 2;
     temporal.api.workflowservice.v1.DescribeTaskQueueResponse desc_response = 3;
+}
+
+message DescribeVersionedTaskQueuesRequest {
+    string namespace_id = 1;
+
+    // This task queue is for routing purposes.
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 3;
+
+    temporal.server.api.deployment.v1.WorkerDeploymentVersion version = 4;
+
+    // List of task queues to describe.
+    repeated VersionTaskQueue version_task_queues = 5;
+    // (-- api-linter: core::0123::resource-annotation=disabled --)
+    message VersionTaskQueue {
+        string name = 1;
+        temporal.api.enums.v1.TaskQueueType type = 2;
+    }
+}
+
+message DescribeVersionedTaskQueuesResponse {
+    repeated VersionTaskQueue version_task_queues = 1;
+    // (-- api-linter: core::0123::resource-annotation=disabled --)
+    message VersionTaskQueue {
+        string name = 1;
+        temporal.api.enums.v1.TaskQueueType type = 2;
+        temporal.api.taskqueue.v1.TaskQueueStats stats = 3;
+    }
 }
 
 message DescribeTaskQueuePartitionRequest {

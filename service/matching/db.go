@@ -227,6 +227,7 @@ func (db *taskQueueDB) OldUpdateState(
 	maxReadLevel := db.getMaxReadLevelLocked(subqueueZero)
 	if ackLevel == maxReadLevel {
 		db.subqueues[subqueueZero].ApproximateBacklogCount = 0
+		db.subqueues[subqueueZero].oldestTime = time.Time{} // zero time means no backlog
 	}
 
 	queueInfo := db.cachedQueueInfo()
@@ -322,7 +323,6 @@ func (db *taskQueueDB) getTotalApproximateBacklogCount() (total int64) {
 // CreateTasks creates a batch of given tasks for this task queue
 func (db *taskQueueDB) CreateTasks(
 	ctx context.Context,
-	taskIDs []int64,
 	reqs []*writeTaskRequest,
 ) (createTasksResponse, error) {
 	db.Lock()
@@ -337,7 +337,7 @@ func (db *taskQueueDB) CreateTasks(
 	allSubqueues := make([]int, len(reqs))
 	for i, req := range reqs {
 		task := &persistencespb.AllocatedTaskInfo{
-			TaskId: taskIDs[i],
+			TaskId: req.id,
 			Data:   req.taskInfo,
 		}
 		allTasks[i] = task

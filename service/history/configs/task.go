@@ -7,6 +7,8 @@ import (
 )
 
 var (
+	DefaultPriorityWeight = 1
+
 	DefaultActiveTaskPriorityWeight = map[tasks.Priority]int{
 		tasks.PriorityHigh:        10,
 		tasks.PriorityLow:         9,

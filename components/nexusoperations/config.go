@@ -1,6 +1,7 @@
 package nexusoperations
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -174,6 +175,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 			if len(keys) == 0 {
 				keys = defaultDisallowedOperationHeaders
 			}
+			keys = slices.Clone(keys)
 			for i, k := range keys {
 				keys[i] = strings.ToLower(k)
 			}

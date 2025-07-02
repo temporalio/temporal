@@ -21,24 +21,25 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-type PriorityFairnessSuite struct {
+type PrioritySuite struct {
 	testcore.FunctionalTestBase
 }
 
-func TestPriorityFairnessSuite(t *testing.T) {
+func TestPrioritySuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(PriorityFairnessSuite))
+	suite.Run(t, new(PrioritySuite))
 }
 
-func (s *PriorityFairnessSuite) SetupSuite() {
+func (s *PrioritySuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.MatchingUseNewMatcher.Key():     true,
 		dynamicconfig.MatchingGetTasksBatchSize.Key(): 20,
+		dynamicconfig.MatchingGetTasksReloadAt.Key():  5,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
-func (s *PriorityFairnessSuite) TestPriority_Activity_Basic() {
+func (s *PrioritySuite) TestPriority_Activity_Basic() {
 	const N = 100
 	const Levels = 5
 
@@ -121,7 +122,7 @@ func (s *PriorityFairnessSuite) TestPriority_Activity_Basic() {
 	s.Less(w, 0.15)
 }
 
-func (s *PriorityFairnessSuite) TestSubqueue_Migration() {
+func (s *PrioritySuite) TestSubqueue_Migration() {
 	tv := testvars.New(s.T())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

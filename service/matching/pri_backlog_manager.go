@@ -80,6 +80,7 @@ func newPriBacklogManager(
 		pqMgr:               pqMgr,
 		config:              config,
 		tqCtx:               tqCtx,
+		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler),
 		subqueuesByPriority: make(map[int32]int),
 		matchingClient:      matchingClient,
 		metricsHandler:      metricsHandler,
@@ -87,7 +88,6 @@ func newPriBacklogManager(
 		throttledLogger:     throttledLogger,
 		initializedError:    future.NewFuture[struct{}](),
 	}
-	bmg.db = newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler)
 	bmg.taskWriter = newPriTaskWriter(bmg)
 	return bmg
 }
@@ -181,7 +181,7 @@ func (c *priBacklogManagerImpl) getSubqueueForPriority(priority int32) int {
 		return i
 	}
 
-	// We need to allocate a new subqueue. Note this is doing io under backlogLock,
+	// We need to allocate a new subqueue. Note this is doing io under subqueueLock,
 	// but we want to serialize these updates.
 	// TODO(pri): maybe we can improve that
 	subqueues, err := c.db.AllocateSubqueue(c.tqCtx, &persistencespb.SubqueueKey{

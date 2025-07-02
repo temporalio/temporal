@@ -3,6 +3,7 @@ package log
 import (
 	"os"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -38,8 +39,10 @@ var DefaultZapEncoderConfig = zapcore.EncoderConfig{
 type (
 	// zapLogger is logger backed up by zap.Logger.
 	zapLogger struct {
-		zl   *zap.Logger
-		skip int
+		zl     *zap.Logger
+		skip   int
+		baseZl *zap.Logger // original, without tags, for cloning new tagged versions, because Zap doesn't dedupe :(
+		tags   []tag.Tag   // my tags, for passing to clones
 	}
 )
 
@@ -73,8 +76,9 @@ func NewCLILogger() *zapLogger {
 // NewZapLogger returns a new zap based logger from zap.Logger
 func NewZapLogger(zl *zap.Logger) *zapLogger {
 	return &zapLogger{
-		zl:   zl,
-		skip: skipForZapLogger,
+		zl:     zl,
+		skip:   skipForZapLogger,
+		baseZl: zl,
 	}
 }
 
@@ -172,21 +176,54 @@ func (l *zapLogger) Fatal(msg string, tags ...tag.Tag) {
 	}
 }
 
+// With() handles the provided tags as "upserts", replacing any matching keys with new values.
+// Note that we distinguish between the following two seemingly identical lines:
+//
+//	logger.With(logger, tag.NewStringTag("foo", "bar")).Info("msg")
+//	logger.Info("msg", tag.NewStringTag("foo", "bar")
+//
+// by deduping "foo" against any existing "foo" tags *only in the former*
 func (l *zapLogger) With(tags ...tag.Tag) Logger {
+	cloneTags := mergeTags(l.tags, tags)
+	if l.baseZl == nil {
+		l.baseZl = l.zl
+	}
+	return l.cloneWithTags(cloneTags)
+}
+
+func (l *zapLogger) cloneWithTags(tags []tag.Tag) Logger {
 	fields := make([]zap.Field, len(tags))
 	l.fillFields(tags, fields)
-	zl := l.zl.With(fields...)
+	zl := l.baseZl.With(fields...)
 	return &zapLogger{
-		zl:   zl,
-		skip: l.skip,
+		zl:     zl,
+		skip:   l.skip,
+		baseZl: l.baseZl,
+		tags:   tags,
 	}
 }
 
 func (l *zapLogger) Skip(extraSkip int) Logger {
 	return &zapLogger{
-		zl:   l.zl,
-		skip: l.skip + extraSkip,
+		zl:     l.zl,
+		skip:   l.skip + extraSkip,
+		baseZl: l.baseZl,
 	}
+}
+
+func mergeTags(oldTags, newTags []tag.Tag) (outTags []tag.Tag) {
+	// Even if oldTags empty, we don't just return newTags because we need to de-dupe it.
+	outTags = slices.Clone(oldTags)
+	for _, t := range newTags {
+		if i := slices.IndexFunc(outTags, func(ti tag.Tag) bool {
+			return ti.Key() == t.Key()
+		}); i >= 0 {
+			outTags[i] = t
+		} else {
+			outTags = append(outTags, t)
+		}
+	}
+	return outTags
 }
 
 func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {

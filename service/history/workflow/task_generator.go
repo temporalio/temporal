@@ -56,7 +56,7 @@ type (
 		) error
 		GenerateActivityRetryTasks(activityInfo *persistencespb.ActivityInfo) error
 		GenerateChildWorkflowTasks(
-			event *historypb.HistoryEvent,
+			childInitiatedEventId int64,
 		) error
 		GenerateRequestCancelExternalTasks(
 			event *historypb.HistoryEvent,
@@ -552,18 +552,18 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 }
 
 func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
-	event *historypb.HistoryEvent,
+	childInitiatedEventId int64,
 ) error {
 
-	attr := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
-	childWorkflowScheduledEventID := event.GetEventId()
-
-	childWorkflowInfo, ok := r.mutableState.GetChildExecutionInfo(childWorkflowScheduledEventID)
+	childWorkflowInfo, ok := r.mutableState.GetChildExecutionInfo(childInitiatedEventId)
 	if !ok {
-		return serviceerror.NewInternalf("it could be a bug, cannot get pending child workflow: %v", childWorkflowScheduledEventID)
+		return serviceerror.NewInternalf("it could be a bug, cannot get pending child workflow: %v", childInitiatedEventId)
 	}
 
-	targetNamespaceID, err := r.getTargetNamespaceID(namespace.Name(attr.GetNamespace()), namespace.ID(attr.GetNamespaceId()))
+	targetNamespaceID, err := r.getTargetNamespaceID(
+		namespace.Name(childWorkflowInfo.GetNamespace()),
+		namespace.ID(childWorkflowInfo.GetNamespaceId()),
+	)
 	if err != nil {
 		return err
 	}
@@ -816,7 +816,8 @@ func (r *TaskGeneratorImpl) getTargetNamespaceID(
 		return targetNamespaceID, nil
 	}
 
-	// TODO (alex): Remove targetNamespace after NamespaceId is back filled. Backward compatibility: old events doesn't have targetNamespaceID.
+	// TODO: Remove targetNamespace after NamespaceId is back filled.
+	// Backward compatibility: old events/mutable state doesn't have targetNamespaceID.
 	if !targetNamespace.IsEmpty() {
 		targetNamespaceEntry, err := r.namespaceRegistry.GetNamespace(targetNamespace)
 		if err != nil {
