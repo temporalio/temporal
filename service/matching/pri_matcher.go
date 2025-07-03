@@ -432,6 +432,7 @@ func (tm *priTaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask
 }
 
 func (tm *priTaskMatcher) AddTask(task *internalTask) {
+	task.removeFromMatcher = func() { tm.data.RemoveTask(task) }
 	tm.data.EnqueueTaskNoWait(task)
 }
 

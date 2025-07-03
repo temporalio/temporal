@@ -153,14 +153,14 @@ func (t *taskPQ) Less(i int, j int) bool {
 
 	// Note: sync match tasks have a fixed negative id.
 	// Query tasks will get 0 here.
-	var aid, bid int64
+	var alevel, blevel fairLevel
 	if a.event != nil && a.event.AllocatedTaskInfo != nil {
-		aid = a.event.AllocatedTaskInfo.TaskId
+		alevel = fairLevelFromAllocatedTask(a.event.AllocatedTaskInfo)
 	}
 	if b.event != nil && b.event.AllocatedTaskInfo != nil {
-		bid = b.event.AllocatedTaskInfo.TaskId
+		blevel = fairLevelFromAllocatedTask(b.event.AllocatedTaskInfo)
 	}
-	return aid < bid
+	return alevel.less(blevel)
 }
 
 // implements heap.Interface, do not call directly
@@ -262,6 +262,15 @@ func (d *matcherData) EnqueueTaskNoWait(task *internalTask) {
 	task.initMatch(d)
 	d.tasks.Add(task)
 	d.findAndWakeMatches()
+}
+
+func (d *matcherData) RemoveTask(task *internalTask) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	if task.matchHeapIndex >= 0 {
+		d.tasks.Remove(task)
+	}
 }
 
 func (d *matcherData) EnqueueTaskAndWait(ctxs []context.Context, task *internalTask) *matchResult {

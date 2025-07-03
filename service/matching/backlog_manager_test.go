@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/service/matching/counter"
 	"go.uber.org/mock/gomock"
 )
 
@@ -20,6 +21,7 @@ type BacklogManagerTestSuite struct {
 	suite.Suite
 
 	newMatcher bool
+	fairness   bool
 	logger     *testlogger.TestLogger
 	blm        backlogManager
 	controller *gomock.Controller
@@ -38,10 +40,19 @@ func TestBacklogManager_Pri_Suite(t *testing.T) {
 	suite.Run(t, &BacklogManagerTestSuite{newMatcher: true})
 }
 
+func TestBacklogManager_Fair_TestSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &BacklogManagerTestSuite{newMatcher: true, fairness: true})
+}
+
 func (s *BacklogManagerTestSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-	s.taskMgr = newTestTaskManager(s.logger)
+	if s.fairness {
+		s.taskMgr = newTestFairTaskManager(s.logger)
+	} else {
+		s.taskMgr = newTestTaskManager(s.logger)
+	}
 
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	f, _ := tqid.NewTaskQueueFamily("", "test-queue")
@@ -57,7 +68,19 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	ctx, s.cancelCtx = context.WithCancel(context.Background())
 	s.T().Cleanup(s.cancelCtx)
 
-	if s.newMatcher {
+	if s.fairness {
+		s.blm = newFairBacklogManager(
+			ctx,
+			s.ptqMgr,
+			tlCfg,
+			s.taskMgr,
+			s.logger,
+			s.logger,
+			nil,
+			metrics.NoopMetricsHandler,
+			counter.NewMapCounter(),
+		)
+	} else if s.newMatcher {
 		s.blm = newPriBacklogManager(
 			ctx,
 			s.ptqMgr,
