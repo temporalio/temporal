@@ -3106,14 +3106,5 @@ func (e *matchingEngineImpl) ConfigureTaskQueue(ctx context.Context, request *ma
 	if err != nil {
 		return nil, err
 	}
-	if (userData.GetData() != nil && userData.GetData().PerType != nil) &&
-		len(userData.GetData().PerType) > 0 &&
-		userData.GetData().PerType[int32(taskQueueType)] != nil {
-		// If the task queue type is not present in the user data, we should not return it.
-		tqud := userData.Data.PerType[int32(taskQueueType)]
-		if tqud.TaskQueueConfig != nil {
-			//tqm.GetRateLimiterManager().SelectTaskQueueRateLimiter()
-		}
-	}
 	return constructConfigureTaskQueueResponse(userData.GetData(), taskQueueType), nil
 }

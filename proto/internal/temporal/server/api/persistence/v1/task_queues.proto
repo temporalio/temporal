@@ -117,7 +117,7 @@ message DeploymentData {
 message TaskQueueTypeUserData {
     DeploymentData deployment_data = 1;
 
-    // Perist TaskQueueConfig that comes as part of the UpdateTaskQueueConfigApi..
+    // Perist TaskQueueConfig that comes as part of the UpdateTaskQueueConfigApi.
     TaskQueueConfig task_queue_config = 2;
 }
 

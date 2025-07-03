@@ -525,7 +525,7 @@ func (x *DeploymentData) GetUnversionedRampData() *v12.DeploymentVersionData {
 type TaskQueueTypeUserData struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	DeploymentData *DeploymentData        `protobuf:"bytes,1,opt,name=deployment_data,json=deploymentData,proto3" json:"deployment_data,omitempty"`
-	// Perist TaskQueueConfig that comes as part of the UpdateTaskQueueConfigApi..
+	// Perist TaskQueueConfig that comes as part of the UpdateTaskQueueConfigApi.
 	TaskQueueConfig *TaskQueueConfig `protobuf:"bytes,2,opt,name=task_queue_config,json=taskQueueConfig,proto3" json:"task_queue_config,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
