@@ -110,7 +110,7 @@ func newContextWithOperationIntent(
 func operationIntentFromContext(
 	ctx context.Context,
 ) OperationIntent {
-	intent, ok := ctx.Value(engineCtxKey).(OperationIntent)
+	intent, ok := ctx.Value(operationIntentCtxKey).(OperationIntent)
 	if !ok {
 		return OperationIntentUnspecified
 	}
