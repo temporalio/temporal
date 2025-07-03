@@ -70,8 +70,7 @@ func (s *PayloadStore) AddPayload(
 			chasm.TaskAttributes{ScheduledTime: expirationTime},
 			// You can switch between TestPayloadTTLPureTask & TestPayloadTTLSideEffectTask
 			&persistencespb.TestPayloadTTLPureTask{
-				PayloadKey:     request.PayloadKey,
-				ExpirationTime: timestamppb.New(expirationTime),
+				PayloadKey: request.PayloadKey,
 			},
 		); err != nil {
 			return nil, err
