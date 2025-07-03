@@ -36,7 +36,7 @@ var (
 )
 
 var (
-	errAccessCheckFailed    = serviceerror.NewFailedPrecondition("access check failed, CHASM tree is closed for writes")
+	errAccessCheckFailed    = serviceerror.NewNotFound("access check failed, CHASM tree is closed for writes")
 	errComponentNotFound    = serviceerror.NewNotFound("component not found")
 	errTaskValidationFailed = errors.New("task validation failed")
 )
