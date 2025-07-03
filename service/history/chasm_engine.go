@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
 )
 
 type (
@@ -54,18 +55,32 @@ var defaultTransitionOptions = chasm.TransitionOptions{
 	Speculative:    false,
 }
 
-func NewChasmEngine(
+var chasmEngineModule = fx.Options(
+	fx.Provide(newChasmEngine),
+	fx.Provide(func(impl *ChasmEngine) chasm.Engine { return impl }),
+	fx.Invoke(func(impl *ChasmEngine, shardController shard.Controller) {
+		impl.SetShardController(shardController)
+	}),
+)
+
+func newChasmEngine(
 	entityCache cache.Cache,
-	shardController shard.Controller,
 	registry *chasm.Registry,
 	config *configs.Config,
 ) *ChasmEngine {
 	return &ChasmEngine{
-		entityCache:     entityCache,
-		shardController: shardController,
-		registry:        registry,
-		config:          config,
+		entityCache: entityCache,
+		registry:    registry,
+		config:      config,
 	}
+}
+
+// This is for breaking fx cycle dependency.
+// ChasmEngine -> ShardController -> ShardContextFactory -> HistoryEngineFactory -> QueueFactory -> ChasmEngine
+func (e *ChasmEngine) SetShardController(
+	shardController shard.Controller,
+) {
+	e.shardController = shardController
 }
 
 func (e *ChasmEngine) NewEntity(
@@ -128,6 +143,16 @@ func (e *ChasmEngine) NewEntity(
 		currentRunInfo,
 		options,
 	)
+}
+
+func (e *ChasmEngine) UpdateWithNewEntity(
+	ctx context.Context,
+	entityRef chasm.ComponentRef,
+	newFn func(chasm.MutableContext) (chasm.Component, error),
+	updateFn func(chasm.MutableContext, chasm.Component) error,
+	opts ...chasm.TransitionOption,
+) (newEntityKey chasm.EntityKey, newEntityRef []byte, retError error) {
+	return chasm.EntityKey{}, nil, serviceerror.NewUnimplemented("UpdateWithNewEntity is not yet supported")
 }
 
 func (e *ChasmEngine) UpdateComponent(
@@ -214,6 +239,16 @@ func (e *ChasmEngine) ReadComponent(
 	}
 
 	return readFn(chasmContext, component)
+}
+
+func (e *ChasmEngine) PollComponent(
+	ctx context.Context,
+	entityRef chasm.ComponentRef,
+	predicateFn func(chasm.Context, chasm.Component) (any, bool, error),
+	operationFn func(chasm.MutableContext, chasm.Component, any) error,
+	opts ...chasm.TransitionOption,
+) (newEntityRef []byte, retError error) {
+	return nil, serviceerror.NewUnimplemented("PollComponent is not yet supported")
 }
 
 func (e *ChasmEngine) constructTransitionOptions(

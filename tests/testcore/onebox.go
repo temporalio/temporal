@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
@@ -110,6 +111,7 @@ type (
 		callbackLock          sync.RWMutex // Must be used for above callbacks
 		serviceFxOptions      map[primitives.ServiceName][]fx.Option
 		taskCategoryRegistry  tasks.TaskCategoryRegistry
+		chasmRegistry         *chasm.Registry
 		grpcClientInterceptor *grpcinject.Interceptor
 		spanExporters         map[telemetry.SpanExporterType]sdktrace.SpanExporter
 	}
@@ -166,6 +168,7 @@ type (
 		// ServiceFxOptions is populated by WithFxOptionsForService.
 		ServiceFxOptions         map[primitives.ServiceName][]fx.Option
 		TaskCategoryRegistry     tasks.TaskCategoryRegistry
+		ChasmRegistry            *chasm.Registry
 		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
 	}
@@ -207,6 +210,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		testHooks:                testhooks.NewTestHooksImpl(),
 		serviceFxOptions:         params.ServiceFxOptions,
 		taskCategoryRegistry:     params.TaskCategoryRegistry,
+		chasmRegistry:            params.ChasmRegistry,
 		hostsByProtocolByService: params.HostsByProtocolByService,
 		grpcClientInterceptor:    grpcinject.NewInterceptor(),
 		spanExporters:            params.SpanExporters,
@@ -363,6 +367,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Provide(c.GetCHASMRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
@@ -437,6 +442,7 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Provide(c.GetCHASMRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			history.QueueModule,
@@ -495,6 +501,7 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Provide(c.GetCHASMRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			matching.Module,
@@ -561,6 +568,7 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Provide(c.GetCHASMRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			worker.Module,
@@ -612,6 +620,10 @@ func (c *TemporalImpl) GetGrpcClientInterceptor() *grpcinject.Interceptor {
 
 func (c *TemporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {
 	return c.taskCategoryRegistry
+}
+
+func (c *TemporalImpl) GetCHASMRegistry() *chasm.Registry {
+	return c.chasmRegistry
 }
 
 func (c *TemporalImpl) TlsConfigProvider() *encryption.FixedTLSConfigProvider {

@@ -127,6 +127,18 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew() {
 	s.AssertHEEqualWithDB(branchToken, newEvents)
 }
 
+func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CHASM() {
+	// CHASM snapshot has no events and empty current version history.
+	newSnapshot := s.CreateCHASMSnapshot(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+
+	s.AssertMSEqualWithDB(newSnapshot)
+}
+
 func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 	lastWriteVersion := rand.Int63()
 	branchToken, newSnapshot, newEvents := s.CreateWorkflow(
@@ -447,6 +459,42 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 
 	s.AssertMSEqualWithDB(newSnapshot, currentMutation)
 	s.AssertHEEqualWithDB(branchToken, newEvents, currentEvents)
+}
+
+func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CHASM() {
+	newSnapshot := s.CreateCHASMSnapshot(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+
+	currentMutation, currentEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		newSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		newSnapshot.DBRecordVersion+1,
+		nil, // No branch token for CHASM
+	)
+	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		UpdateWorkflowMutation: *currentMutation,
+		UpdateWorkflowEvents:   currentEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.NoError(err)
+
+	s.AssertMSEqualWithDB(newSnapshot, currentMutation)
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
@@ -2059,6 +2107,39 @@ func (s *ExecutionMutableStateSuite) CreateWorkflow(
 	})
 	s.NoError(err)
 	return branchToken, snapshot, events
+}
+
+func (s *ExecutionMutableStateSuite) CreateCHASMSnapshot(
+	lastWriteVersion int64,
+	state enumsspb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
+	dbRecordVersion int64,
+) *p.WorkflowSnapshot {
+	snapshot, events := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		common.FirstEventID,
+		lastWriteVersion,
+		state,
+		status,
+		dbRecordVersion,
+		nil,
+	)
+	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeBrandNew,
+
+		PreviousRunID:            "",
+		PreviousLastWriteVersion: 0,
+
+		NewWorkflowSnapshot: *snapshot,
+		NewWorkflowEvents:   events,
+	})
+	s.NoError(err)
+	return snapshot
 }
 
 func (s *ExecutionMutableStateSuite) AssertMissingFromDB(
