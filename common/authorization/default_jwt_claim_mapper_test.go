@@ -186,11 +186,11 @@ func (s *defaultClaimMapperSuite) testTokenWithReaderWriterWorkerPermissions(alg
 	s.Equal(RoleReader|RoleWriter|RoleWorker, defaultRole)
 }
 
-func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissionsPattern() {
+func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissionsRegex() {
 	permissions := []string{"read:default", "write:default", "worker:default"}
 	tokenString, err := s.tokenGenerator.generateToken(RSA, testSubject, permissions, errorTestOptionNoError)
 	s.NoError(err)
-	authConfig := &config.Authorization{PermissionsPattern: `(?P<role>\w+):(?P<namespace>\w+)`}
+	authConfig := &config.Authorization{PermissionsRegex: `(?P<role>\w+):(?P<namespace>\w+)`}
 	claimMapper := NewDefaultJWTClaimMapper(s.tokenGenerator, authConfig, log.NewNoopLogger())
 	s.NotNil(claimMapper)
 	authInfo := &AuthInfo{AuthToken: AddBearer(tokenString), Audience: "test-audience"}
@@ -214,45 +214,45 @@ func (s *defaultClaimMapperSuite) TestGetClaimMapperFromConfigUnknown() {
 	s.testGetClaimMapperFromConfig("foo", false, nil)
 }
 
-func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsPatternInvalidRegex() {
+func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsRegexInvalidRegex() {
 	pattern := `(?P<namespace\w+):(?P<role>\w+)`
-	mapper := NewDefaultJWTClaimMapper(nil, &config.Authorization{PermissionsPattern: pattern}, nil).(*defaultJWTClaimMapper)
-	s.Nil(mapper)
+	mapper := NewDefaultJWTClaimMapper(nil, &config.Authorization{PermissionsRegex: pattern}, log.NewNoopLogger()).(*defaultJWTClaimMapper)
+	s.Nil(mapper.permissionsRegex)
 	s.Zero(mapper.matchNamespaceIndex)
 	s.Zero(mapper.matchRoleIndex)
 }
 
-func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsPatternMissingNamespaceGroup() {
+func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsRegexMissingNamespaceGroup() {
 	pattern := `(?P<role>\w+):(\w+)`
 	mapper := NewDefaultJWTClaimMapper(
-		nil, &config.Authorization{PermissionsPattern: pattern}, log.NewNoopLogger(),
+		nil, &config.Authorization{PermissionsRegex: pattern}, log.NewNoopLogger(),
 	).(*defaultJWTClaimMapper)
-	s.Nil(mapper.permissionsPattern)
+	s.Nil(mapper.permissionsRegex)
 }
 
-func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsPatternMissingRoleGroup() {
+func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsRegexMissingRoleGroup() {
 	pattern := `(?P<namespace>\w+):(\w+)`
 	mapper := NewDefaultJWTClaimMapper(
-		nil, &config.Authorization{PermissionsPattern: pattern}, log.NewNoopLogger(),
+		nil, &config.Authorization{PermissionsRegex: pattern}, log.NewNoopLogger(),
 	).(*defaultJWTClaimMapper)
-	s.Nil(mapper.permissionsPattern)
+	s.Nil(mapper.permissionsRegex)
 }
 
-func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsPattern() {
-	authConfig := &config.Authorization{PermissionsPattern: `(?P<role>\w+):(?P<namespace>\w+)`}
+func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsRegex() {
+	authConfig := &config.Authorization{PermissionsRegex: `(?P<role>\w+):(?P<namespace>\w+)`}
 	mapper := NewDefaultJWTClaimMapper(nil, authConfig, nil).(*defaultJWTClaimMapper)
-	s.NotNil(mapper.permissionsPattern)
+	s.NotNil(mapper.permissionsRegex)
 	s.NotZero(mapper.matchNamespaceIndex)
 	s.NotZero(mapper.matchRoleIndex)
 }
 
-func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissionsPattern() {
+func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissionsRegex() {
 	permissions := []string{"admin:" + primitives.SystemLocalNamespace, "read:default"}
-	pattern := `(?P<role>\w+):(?P<namespace>\w+)`
+	pattern := `(?P<role>[\w-]+):(?P<namespace>[\w-]+)`
 	tokenString, err := s.tokenGenerator.generateToken(RSA, testSubject, permissions, errorTestOptionNoError)
 	s.NoError(err)
 	authInfo := &AuthInfo{AuthToken: AddBearer(tokenString)}
-	authConfig := &config.Authorization{PermissionsPattern: pattern}
+	authConfig := &config.Authorization{PermissionsRegex: pattern}
 	claimMapper := NewDefaultJWTClaimMapper(s.tokenGenerator, authConfig, nil)
 	claims, err := claimMapper.GetClaims(authInfo)
 	s.NoError(err)

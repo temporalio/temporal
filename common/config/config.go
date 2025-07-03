@@ -577,7 +577,9 @@ type (
 		// Signing key provider for validating JWT tokens
 		JWTKeyProvider       JWTKeyProvider `yaml:"jwtKeyProvider"`
 		PermissionsClaimName string         `yaml:"permissionsClaimName"`
-		PermissionsPattern   string         `yaml:"permissionsPattern"`
+		// Regular expression to parse permissions claim value. The regex should contain named groups "namespace" and "role", for example
+		// `^(?P<role>\w+):(?P<namespace>\w+)$` will match `admin:default` and extract `default` as namespace and `admin` as role.
+		PermissionsRegex string `yaml:"permissionsRegex"`
 		// Empty string for noopAuthorizer or "default" for defaultAuthorizer
 		Authorizer string `yaml:"authorizer"`
 		// Empty string for noopClaimMapper or "default" for defaultJWTClaimMapper

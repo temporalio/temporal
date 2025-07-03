@@ -29,7 +29,7 @@ type defaultJWTClaimMapper struct {
 	keyProvider          TokenKeyProvider
 	logger               log.Logger
 	permissionsClaimName string
-	permissionsPattern   *regexp.Regexp
+	permissionsRegex     *regexp.Regexp
 	matchNamespaceIndex  int
 	matchRoleIndex       int
 }
@@ -39,10 +39,10 @@ func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Authorizati
 	if claimName == "" {
 		claimName = defaultPermissionsClaimName
 	}
-	var permissionsPattern *regexp.Regexp
+	var permissionsRegex *regexp.Regexp
 	var namespaceIndex, roleIndex int
-	if cfg.PermissionsPattern != "" {
-		r, err := regexp.Compile(cfg.PermissionsPattern)
+	if cfg.PermissionsRegex != "" {
+		r, err := regexp.Compile(cfg.PermissionsRegex)
 		if err == nil {
 			for i, name := range r.SubexpNames() {
 				switch name {
@@ -53,19 +53,19 @@ func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Authorizati
 				}
 			}
 			if namespaceIndex != 0 && roleIndex != 0 {
-				permissionsPattern = r
+				permissionsRegex = r
 			} else {
-				logger.Warn("permissions pattern does not have namespace or role named group")
+				logger.Warn("permissions regex does not have namespace or role named group")
 			}
 		} else {
-			logger.Warn(fmt.Sprintf("failed to compile permissions pattern '%s': %v", cfg.PermissionsPattern, err))
+			logger.Warn(fmt.Sprintf("failed to compile permissions regex '%s': %v", cfg.PermissionsRegex, err))
 		}
 	}
 	return &defaultJWTClaimMapper{
 		keyProvider:          provider,
 		logger:               logger,
 		permissionsClaimName: claimName,
-		permissionsPattern:   permissionsPattern,
+		permissionsRegex:     permissionsRegex,
 		matchNamespaceIndex:  namespaceIndex,
 		matchRoleIndex:       roleIndex,
 	}
@@ -115,8 +115,8 @@ func (a *defaultJWTClaimMapper) extractPermissions(permissions []interface{}, cl
 			continue
 		}
 		var parts []string
-		if a.permissionsPattern != nil {
-			match := a.permissionsPattern.FindStringSubmatch(p)
+		if a.permissionsRegex != nil {
+			match := a.permissionsRegex.FindStringSubmatch(p)
 			if len(match) == 0 {
 				a.logger.Warn(fmt.Sprintf("ignoring permission not matching pattern: %v", permission))
 				continue
