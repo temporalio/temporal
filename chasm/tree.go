@@ -298,9 +298,13 @@ func (n *Node) Component(
 		)
 	}
 
-	err := node.validateAccess(chasmContext)
-	if err != nil {
-		return nil, err
+	// Access check always begins on the target node's parent, and ignored for nodes
+	// without ancestors.
+	if node.parent != nil {
+		err := node.parent.validateAccess(chasmContext)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if ref.validationFn != nil {
@@ -2169,7 +2173,10 @@ func (n *Node) ExecutePureTask(
 		return fmt.Errorf("ExecutePureTask called on a SideEffect task '%s'", registrableTask.fqType())
 	}
 
-	ctx := NewMutableContext(baseCtx, n)
+	ctx := NewMutableContext(
+		newContextWithOperationIntent(baseCtx, OperationIntentProgress),
+		n,
+	)
 
 	// Ensure this node's component value is hydrated before execution. Component
 	// will also check access rules.
@@ -2331,6 +2338,8 @@ func (n *Node) ExecuteSideEffectTask(
 		// Validate the Ref only once it is accessed by the task's executor.
 		validationFn: makeValidationFn(registrableTask, validate, taskAttributes, taskValue),
 	}
+
+	ctx = newContextWithOperationIntent(ctx, OperationIntentProgress)
 
 	fn := reflect.ValueOf(executor).MethodByName("Execute")
 	result := fn.Call([]reflect.Value{

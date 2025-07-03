@@ -1201,77 +1201,58 @@ func (s *nodeSuite) TestCarryOverTaskStatus() {
 }
 
 func (s *nodeSuite) TestValidateAccess() {
-	closeRootComponent := func(root *Node, ctx Context) error {
-		err := root.prepareComponentValue(ctx)
-		if err != nil {
-			return err
-		}
+	nodePath := []string{"SubComponent1", "SubComponent11"}
 
-		component, _ := root.value.(*TestComponent)
-		component.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-
-		return nil
-	}
-
+	// Because access checks are performed on ancestor nodes and not the target node,
+	// test case properties are applied to the root node.
 	testCases := []struct {
 		name            string
 		valid           bool
-		chasmContext    OperationIntent
+		intent          OperationIntent
 		lifecycleStatus enumspb.WorkflowExecutionStatus // TestComponent borrows the WorkflowExecutionStatus struct
 		terminated      bool
-		nodePath        []string
 
 		setup func(*Node, Context) error
 	}{
 		{
+			name:            "access check applies only to ancestors",
+			valid:           true,
+			intent:          OperationIntentProgress,
+			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			terminated:      false,
+			setup: func(target *Node, _ Context) error {
+				// Set the terminated flag on the target node instead of an ancestor
+				target.terminated = true
+				return nil
+			},
+		},
+		{
 			name:            "read-only always succeeds",
-			chasmContext:    OperationIntentObserve,
+			intent:          OperationIntentObserve,
 			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 			terminated:      true,
-			nodePath:        []string{},
 			valid:           true,
 		},
 		{
 			name:            "valid write access",
-			chasmContext:    OperationIntentProgress,
+			intent:          OperationIntentProgress,
 			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			terminated:      false,
-			nodePath:        []string{},
 			valid:           true,
 		},
 		{
-			name:            "invalid write access (closed)",
-			chasmContext:    OperationIntentProgress,
+			name:            "invalid write access (parent closed)",
+			intent:          OperationIntentProgress,
 			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			terminated:      false,
-			nodePath:        []string{},
 			valid:           false,
 		},
 		{
 			name:            "invalid write access (component terminated)",
-			chasmContext:    OperationIntentProgress,
+			intent:          OperationIntentProgress,
 			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			terminated:      true,
-			nodePath:        []string{},
 			valid:           false,
-		},
-		{
-			name:            "invalid write access (parent closed)",
-			chasmContext:    OperationIntentProgress,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			terminated:      false,
-			nodePath:        []string{"SubComponent1"},
-			valid:           false,
-			setup:           closeRootComponent,
-		},
-		{
-			name:            "valid read access (parent closed)",
-			chasmContext:    OperationIntentObserve,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			terminated:      false,
-			nodePath:        []string{"SubComponent1"},
-			valid:           true,
-			setup:           closeRootComponent,
 		},
 	}
 
@@ -1281,28 +1262,33 @@ func (s *nodeSuite) TestValidateAccess() {
 			s.NoError(err)
 
 			ctx := NewContext(
-				newContextWithOperationIntent(context.Background(), tc.chasmContext),
+				newContextWithOperationIntent(context.Background(), tc.intent),
 				root,
 			)
 
-			if tc.setup != nil {
-				s.NoError(tc.setup(root, ctx))
-			}
-
-			node, ok := root.findNode(tc.nodePath)
-			s.True(ok)
-			err = node.prepareComponentValue(ctx)
+			// Set fields on root node
+			err = root.prepareComponentValue(ctx)
 			s.NoError(err)
-
-			// Set fields on target node component, if we can
-			node.terminated = tc.terminated
-			component, ok := node.value.(*TestComponent)
+			root.terminated = tc.terminated
+			component, ok := root.value.(*TestComponent)
 			if ok {
 				component.ComponentData.Status = tc.lifecycleStatus
 			}
 
-			// Validate
-			err = node.validateAccess(ctx)
+			// Find target node
+			node, ok := root.findNode(nodePath)
+			s.True(ok)
+			err = node.prepareComponentValue(ctx)
+			s.NoError(err)
+
+			if tc.setup != nil {
+				s.NoError(tc.setup(node, ctx))
+			}
+
+			// Validation always begins on the target node's parent.
+			parent := node.parent
+			s.NotNil(parent)
+			err = parent.validateAccess(ctx)
 			if tc.valid {
 				s.NoError(err)
 			} else {
