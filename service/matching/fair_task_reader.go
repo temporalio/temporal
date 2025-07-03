@@ -314,8 +314,6 @@ func (tr *fairTaskReader) retryAddAfterError(task *internalTask) {
 }
 
 func (tr *fairTaskReader) wroteNewTasks(tasks []*persistencespb.AllocatedTaskInfo) {
-	// FIXME: if min level in tasks is > readLevel then actually let's not do this since we
-	// could be skipping over a gap
 	tr.mergeTasks(tasks, mergeWrite)
 }
 
@@ -332,11 +330,16 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 	// Add the tasks we just read/wrote. Note these values are *AllocatedTaskInfo.
 	for _, t := range tasks {
 		level := fairLevelFromAllocatedTask(t)
-		// If write/read race in certain ways, we may read something we had already added to
-		// the matcher. Ignore tasks we already have.
-		if _, have := merged.Get(level); !have {
-			merged.Put(level, t)
+		if mode == mergeWrite && !tr.atEnd && tr.readLevel.less(level) {
+			// If we're writing and we're not at the end, then we have to ignore tasks
+			// above readLevel since we don't know what's in between readLevel and there.
+			continue
+		} else if _, have := merged.Get(level); have {
+			// If write/read race in certain ways, we may read something we had already
+			// added to the matcher. Ignore tasks we already have.
+			continue
 		}
+		merged.Put(level, t)
 	}
 
 	// Take as many of those as we want to keep in memory. The ones that are not already in the
