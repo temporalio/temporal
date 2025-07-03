@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -154,4 +155,5 @@ type unusedDependencies struct {
 	workflow.RelocatableAttributesFetcher
 	persistence.HistoryTaskQueueManager
 	cache.Cache
+	chasm.Engine
 }

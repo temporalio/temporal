@@ -2,7 +2,6 @@ package history
 
 import (
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
@@ -45,12 +44,12 @@ import (
 var Module = fx.Options(
 	resource.Module,
 	fx.Provide(hsm.NewRegistry),
-	fx.Provide(chasm.NewRegistry),
 	workflow.Module,
 	shard.Module,
 	events.Module,
 	cache.Module,
 	archival.Module,
+	chasmEngineModule,
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(RetryableInterceptorProvider),
@@ -116,6 +115,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		taskQueueManager:             args.TaskQueueManager,
 		taskCategoryRegistry:         args.TaskCategoryRegistry,
 		dlqMetricsEmitter:            args.DLQMetricsEmitter,
+		chasmEngine:                  args.ChasmEngine,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
