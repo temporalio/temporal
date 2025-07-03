@@ -1360,7 +1360,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		if userData == nil || userData.GetData() == nil {
 			return descrResp, nil
 		}
-		taskQueueConfig := constructConfigureTaskQueueResponse(userData.GetData(), req.GetTaskQueueType())
+		taskQueueConfig := constructUpdateTaskQueueConfigResponse(userData.GetData(), req.GetTaskQueueType())
 		descrResp.DescResponse.Config = taskQueueConfig.GetUpdatedTaskqueueConfig()
 	}
 
@@ -2941,25 +2941,25 @@ func largerBacklogAge(rootBacklogAge *durationpb.Duration, currentPartitionAge *
 	return currentPartitionAge
 }
 
-func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, now *hlc.Clock) *persistencespb.RateLimitConfig {
+func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, updateTime *timestamppb.Timestamp) *taskqueuepb.RateLimitConfig {
 	if update == nil {
 		return nil
 	}
 	if update.GetRateLimit() == nil {
-		return &persistencespb.RateLimitConfig{
-			Metadata: &persistencespb.ConfigMetadata{
-				Reason: update.GetReason(),
-				Clock:  now,
+		return &taskqueuepb.RateLimitConfig{
+			Metadata: &taskqueuepb.ConfigMetadata{
+				Reason:     update.GetReason(),
+				UpdateTime: updateTime,
 			},
 		}
 	}
-	return &persistencespb.RateLimitConfig{
-		RateLimit: &persistencespb.RateLimit{
+	return &taskqueuepb.RateLimitConfig{
+		RateLimit: &taskqueuepb.RateLimit{
 			RequestsPerSecond: update.GetRateLimit().GetRequestsPerSecond(),
 		},
-		Metadata: &persistencespb.ConfigMetadata{
-			Reason: update.GetReason(),
-			Clock:  now,
+		Metadata: &taskqueuepb.ConfigMetadata{
+			Reason:     update.GetReason(),
+			UpdateTime: updateTime,
 		},
 	}
 }
@@ -2979,27 +2979,27 @@ func prepareTaskQueueUserData(
 	if data.PerType[tqType] == nil {
 		data.PerType[tqType] = &persistencespb.TaskQueueTypeUserData{}
 	}
-	if data.PerType[tqType].TaskQueueConfig == nil {
-		data.PerType[tqType].TaskQueueConfig = &persistencespb.TaskQueueConfig{}
+	if data.PerType[tqType].Config == nil {
+		data.PerType[tqType].Config = &taskqueuepb.TaskQueueConfig{}
 	}
 	return data, tqType
 }
 
-func constructConfigureTaskQueueResponse(
+func constructUpdateTaskQueueConfigResponse(
 	taskQueueUserData *persistencespb.TaskQueueUserData,
 	taskQueueType enumspb.TaskQueueType,
-) *matchingservice.ConfigureTaskQueueResponse {
+) *matchingservice.UpdateTaskQueueConfigResponse {
 	if taskQueueUserData == nil || taskQueueUserData.GetPerType() == nil {
-		return &matchingservice.ConfigureTaskQueueResponse{}
+		return &matchingservice.UpdateTaskQueueConfigResponse{}
 	}
 	tqType := int32(taskQueueType)
 	typeUserData, ok := taskQueueUserData.GetPerType()[tqType]
 	if !ok || typeUserData == nil {
-		return &matchingservice.ConfigureTaskQueueResponse{}
+		return &matchingservice.UpdateTaskQueueConfigResponse{}
 	}
-	updateTaskQueueConfig := typeUserData.GetTaskQueueConfig()
+	updateTaskQueueConfig := typeUserData.GetConfig()
 	if updateTaskQueueConfig == nil {
-		return &matchingservice.ConfigureTaskQueueResponse{}
+		return &matchingservice.UpdateTaskQueueConfigResponse{}
 	}
 
 	var queueRateLimit *taskqueuepb.RateLimitConfig
@@ -3007,14 +3007,15 @@ func constructConfigureTaskQueueResponse(
 		var metadata *taskqueuepb.ConfigMetadata
 		if qrl.GetMetadata() != nil {
 			metadata = &taskqueuepb.ConfigMetadata{
-				Reason:     qrl.GetMetadata().GetReason(),
-				UpdateTime: hlc.ProtoTimestamp(qrl.GetMetadata().GetClock()),
+				Reason:         qrl.Metadata.GetReason(),
+				UpdateTime:     qrl.Metadata.GetUpdateTime(),
+				UpdateIdentity: qrl.Metadata.GetUpdateIdentity(),
 			}
 		}
 		var rateLimit *taskqueuepb.RateLimit
 		if qrl.GetRateLimit() != nil {
 			rateLimit = &taskqueuepb.RateLimit{
-				RequestsPerSecond: qrl.GetRateLimit().GetRequestsPerSecond(),
+				RequestsPerSecond: qrl.RateLimit.GetRequestsPerSecond(),
 			}
 		}
 		queueRateLimit = &taskqueuepb.RateLimitConfig{
@@ -3028,14 +3029,15 @@ func constructConfigureTaskQueueResponse(
 		var metadata *taskqueuepb.ConfigMetadata
 		if fkrl.GetMetadata() != nil {
 			metadata = &taskqueuepb.ConfigMetadata{
-				Reason:     fkrl.GetMetadata().GetReason(),
-				UpdateTime: hlc.ProtoTimestamp(fkrl.GetMetadata().GetClock()),
+				Reason:         fkrl.Metadata.GetReason(),
+				UpdateTime:     fkrl.Metadata.GetUpdateTime(),
+				UpdateIdentity: fkrl.Metadata.GetUpdateIdentity(),
 			}
 		}
 		var rateLimit *taskqueuepb.RateLimit
 		if fkrl.GetRateLimit() != nil {
 			rateLimit = &taskqueuepb.RateLimit{
-				RequestsPerSecond: fkrl.GetRateLimit().GetRequestsPerSecond(),
+				RequestsPerSecond: fkrl.RateLimit.GetRequestsPerSecond(),
 			}
 		}
 		fairnessKeysRateLimitDefault = &taskqueuepb.RateLimitConfig{
@@ -3044,7 +3046,7 @@ func constructConfigureTaskQueueResponse(
 		}
 	}
 
-	return &matchingservice.ConfigureTaskQueueResponse{
+	return &matchingservice.UpdateTaskQueueConfigResponse{
 		UpdatedTaskqueueConfig: &taskqueuepb.TaskQueueConfig{
 			QueueRateLimit:               queueRateLimit,
 			FairnessKeysRateLimitDefault: fairnessKeysRateLimitDefault,
@@ -3052,13 +3054,13 @@ func constructConfigureTaskQueueResponse(
 	}
 }
 
-func (e *matchingEngineImpl) ConfigureTaskQueue(ctx context.Context, request *matchingservice.ConfigureTaskQueueRequest) (*matchingservice.ConfigureTaskQueueResponse, error) {
+func (e *matchingEngineImpl) UpdateTaskqueueConfig(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
 	taskQueueFamily, err := tqid.NewTaskQueueFamily(request.NamespaceId, request.UpdateTaskqueueConfig.GetTaskQueueName())
 	if err != nil {
 		return nil, err
 	}
 	if request.GetUpdateTaskqueueConfig() == nil {
-		return &matchingservice.ConfigureTaskQueueResponse{}, err
+		return &matchingservice.UpdateTaskQueueConfigResponse{}, err
 	}
 	taskQueueType := request.UpdateTaskqueueConfig.TaskQueueType
 	tqm, _, err := e.getTaskQueuePartitionManager(ctx,
@@ -3077,20 +3079,21 @@ func (e *matchingEngineImpl) ConfigureTaskQueue(ctx context.Context, request *ma
 				existingClock = hlc.Zero(e.clusterMeta.GetClusterID())
 			}
 			now := hlc.Next(existingClock, e.timeSource)
+			protoTs := hlc.ProtoTimestamp(now)
 			// Update relevant config fields
-			cfg := data.PerType[tqType].TaskQueueConfig
+			cfg := data.PerType[tqType].Config
 			// Queue Rate Limit
 			updateTaskQueueConfig := request.GetUpdateTaskqueueConfig()
 			queueRateLimit := updateTaskQueueConfig.GetUpdateQueueRateLimit()
 			if queueRateLimit != nil {
-				cfg.QueueRateLimit = buildRateLimitConfig(queueRateLimit, now)
+				cfg.QueueRateLimit = buildRateLimitConfig(queueRateLimit, protoTs)
 			} else {
 				cfg.QueueRateLimit = nil
 			}
 			// Fairness Queue Rate Limit
 			fairnessQueueRateLimit := updateTaskQueueConfig.GetUpdateFairnessKeyRateLimitDefault()
 			if fairnessQueueRateLimit != nil {
-				cfg.FairnessKeysRateLimitDefault = buildRateLimitConfig(fairnessQueueRateLimit, now)
+				cfg.FairnessKeysRateLimitDefault = buildRateLimitConfig(fairnessQueueRateLimit, protoTs)
 			} else {
 				cfg.FairnessKeysRateLimitDefault = nil
 			}
@@ -3106,5 +3109,5 @@ func (e *matchingEngineImpl) ConfigureTaskQueue(ctx context.Context, request *ma
 	if err != nil {
 		return nil, err
 	}
-	return constructConfigureTaskQueueResponse(userData.GetData(), taskQueueType), nil
+	return constructUpdateTaskQueueConfigResponse(userData.GetData(), taskQueueType), nil
 }

@@ -86,21 +86,6 @@ func (c *retryableClient) CheckTaskQueueUserDataPropagation(
 	return resp, err
 }
 
-func (c *retryableClient) ConfigureTaskQueue(
-	ctx context.Context,
-	request *matchingservice.ConfigureTaskQueueRequest,
-	opts ...grpc.CallOption,
-) (*matchingservice.ConfigureTaskQueueResponse, error) {
-	var resp *matchingservice.ConfigureTaskQueueResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.ConfigureTaskQueue(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) CreateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.CreateNexusEndpointRequest,
@@ -500,6 +485,21 @@ func (c *retryableClient) UpdateNexusEndpoint(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.UpdateNexusEndpoint(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateTaskQueueConfig(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueConfigRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+	var resp *matchingservice.UpdateTaskQueueConfigResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateTaskQueueConfig(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

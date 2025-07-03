@@ -25,7 +25,7 @@ var File_temporal_server_api_matchingservice_v1_service_proto protoreflect.FileD
 
 const file_temporal_server_api_matchingservice_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"4temporal/server/api/matchingservice/v1/service.proto\x12&temporal.server.api.matchingservice.v1\x1a=temporal/server/api/matchingservice/v1/request_response.proto2\xee0\n" +
+	"4temporal/server/api/matchingservice/v1/service.proto\x12&temporal.server.api.matchingservice.v1\x1a=temporal/server/api/matchingservice/v1/request_response.proto2\xf70\n" +
 	"\x0fMatchingService\x12\xa6\x01\n" +
 	"\x15PollWorkflowTaskQueue\x12D.temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest\x1aE.temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse\"\x00\x12\xa6\x01\n" +
 	"\x15PollActivityTaskQueue\x12D.temporal.server.api.matchingservice.v1.PollActivityTaskQueueRequest\x1aE.temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse\"\x00\x12\x94\x01\n" +
@@ -61,8 +61,8 @@ const file_temporal_server_api_matchingservice_v1_service_proto_rawDesc = "" +
 	"\x13DeleteNexusEndpoint\x12B.temporal.server.api.matchingservice.v1.DeleteNexusEndpointRequest\x1aC.temporal.server.api.matchingservice.v1.DeleteNexusEndpointResponse\"\x00\x12\x9d\x01\n" +
 	"\x12ListNexusEndpoints\x12A.temporal.server.api.matchingservice.v1.ListNexusEndpointsRequest\x1aB.temporal.server.api.matchingservice.v1.ListNexusEndpointsResponse\"\x00\x12\xa6\x01\n" +
 	"\x15RecordWorkerHeartbeat\x12D.temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatRequest\x1aE.temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatResponse\"\x00\x12\x88\x01\n" +
-	"\vListWorkers\x12:.temporal.server.api.matchingservice.v1.ListWorkersRequest\x1a;.temporal.server.api.matchingservice.v1.ListWorkersResponse\"\x00\x12\x9d\x01\n" +
-	"\x12ConfigureTaskQueue\x12A.temporal.server.api.matchingservice.v1.ConfigureTaskQueueRequest\x1aB.temporal.server.api.matchingservice.v1.ConfigureTaskQueueResponse\"\x00B>Z<go.temporal.io/server/api/matchingservice/v1;matchingserviceb\x06proto3"
+	"\vListWorkers\x12:.temporal.server.api.matchingservice.v1.ListWorkersRequest\x1a;.temporal.server.api.matchingservice.v1.ListWorkersResponse\"\x00\x12\xa6\x01\n" +
+	"\x15UpdateTaskQueueConfig\x12D.temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest\x1aE.temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse\"\x00B>Z<go.temporal.io/server/api/matchingservice/v1;matchingserviceb\x06proto3"
 
 var file_temporal_server_api_matchingservice_v1_service_proto_goTypes = []any{
 	(*PollWorkflowTaskQueueRequest)(nil),                   // 0: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest
@@ -100,7 +100,7 @@ var file_temporal_server_api_matchingservice_v1_service_proto_goTypes = []any{
 	(*ListNexusEndpointsRequest)(nil),                      // 32: temporal.server.api.matchingservice.v1.ListNexusEndpointsRequest
 	(*RecordWorkerHeartbeatRequest)(nil),                   // 33: temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatRequest
 	(*ListWorkersRequest)(nil),                             // 34: temporal.server.api.matchingservice.v1.ListWorkersRequest
-	(*ConfigureTaskQueueRequest)(nil),                      // 35: temporal.server.api.matchingservice.v1.ConfigureTaskQueueRequest
+	(*UpdateTaskQueueConfigRequest)(nil),                   // 35: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest
 	(*PollWorkflowTaskQueueResponse)(nil),                  // 36: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse
 	(*PollActivityTaskQueueResponse)(nil),                  // 37: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse
 	(*AddWorkflowTaskResponse)(nil),                        // 38: temporal.server.api.matchingservice.v1.AddWorkflowTaskResponse
@@ -136,7 +136,7 @@ var file_temporal_server_api_matchingservice_v1_service_proto_goTypes = []any{
 	(*ListNexusEndpointsResponse)(nil),                     // 68: temporal.server.api.matchingservice.v1.ListNexusEndpointsResponse
 	(*RecordWorkerHeartbeatResponse)(nil),                  // 69: temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatResponse
 	(*ListWorkersResponse)(nil),                            // 70: temporal.server.api.matchingservice.v1.ListWorkersResponse
-	(*ConfigureTaskQueueResponse)(nil),                     // 71: temporal.server.api.matchingservice.v1.ConfigureTaskQueueResponse
+	(*UpdateTaskQueueConfigResponse)(nil),                  // 71: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse
 }
 var file_temporal_server_api_matchingservice_v1_service_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.api.matchingservice.v1.MatchingService.PollWorkflowTaskQueue:input_type -> temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest
@@ -174,7 +174,7 @@ var file_temporal_server_api_matchingservice_v1_service_proto_depIdxs = []int32{
 	32, // 32: temporal.server.api.matchingservice.v1.MatchingService.ListNexusEndpoints:input_type -> temporal.server.api.matchingservice.v1.ListNexusEndpointsRequest
 	33, // 33: temporal.server.api.matchingservice.v1.MatchingService.RecordWorkerHeartbeat:input_type -> temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatRequest
 	34, // 34: temporal.server.api.matchingservice.v1.MatchingService.ListWorkers:input_type -> temporal.server.api.matchingservice.v1.ListWorkersRequest
-	35, // 35: temporal.server.api.matchingservice.v1.MatchingService.ConfigureTaskQueue:input_type -> temporal.server.api.matchingservice.v1.ConfigureTaskQueueRequest
+	35, // 35: temporal.server.api.matchingservice.v1.MatchingService.UpdateTaskQueueConfig:input_type -> temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest
 	36, // 36: temporal.server.api.matchingservice.v1.MatchingService.PollWorkflowTaskQueue:output_type -> temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse
 	37, // 37: temporal.server.api.matchingservice.v1.MatchingService.PollActivityTaskQueue:output_type -> temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse
 	38, // 38: temporal.server.api.matchingservice.v1.MatchingService.AddWorkflowTask:output_type -> temporal.server.api.matchingservice.v1.AddWorkflowTaskResponse
@@ -210,7 +210,7 @@ var file_temporal_server_api_matchingservice_v1_service_proto_depIdxs = []int32{
 	68, // 68: temporal.server.api.matchingservice.v1.MatchingService.ListNexusEndpoints:output_type -> temporal.server.api.matchingservice.v1.ListNexusEndpointsResponse
 	69, // 69: temporal.server.api.matchingservice.v1.MatchingService.RecordWorkerHeartbeat:output_type -> temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatResponse
 	70, // 70: temporal.server.api.matchingservice.v1.MatchingService.ListWorkers:output_type -> temporal.server.api.matchingservice.v1.ListWorkersResponse
-	71, // 71: temporal.server.api.matchingservice.v1.MatchingService.ConfigureTaskQueue:output_type -> temporal.server.api.matchingservice.v1.ConfigureTaskQueueResponse
+	71, // 71: temporal.server.api.matchingservice.v1.MatchingService.UpdateTaskQueueConfig:output_type -> temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse
 	36, // [36:72] is the sub-list for method output_type
 	0,  // [0:36] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name

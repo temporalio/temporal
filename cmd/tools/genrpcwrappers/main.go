@@ -305,7 +305,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"ApplyTaskQueueUserDataReplicationEventRequest",
 		"GetWorkerVersioningRulesRequest",
 		"UpdateWorkerVersioningRulesRequest",
-		"ConfigureTaskQueueRequest":
+		"UpdateTaskQueueConfigRequest":
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_WORKFLOW"}
 		nsID = findOneNestedField(t, "NamespaceId", "request", 1)

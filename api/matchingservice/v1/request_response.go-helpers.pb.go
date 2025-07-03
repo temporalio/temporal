@@ -2595,35 +2595,35 @@ func (this *ListWorkersResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type ConfigureTaskQueueRequest to the protobuf v3 wire format
-func (val *ConfigureTaskQueueRequest) Marshal() ([]byte, error) {
+// Marshal an object of type UpdateTaskQueueConfigRequest to the protobuf v3 wire format
+func (val *UpdateTaskQueueConfigRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type ConfigureTaskQueueRequest from the protobuf v3 wire format
-func (val *ConfigureTaskQueueRequest) Unmarshal(buf []byte) error {
+// Unmarshal an object of type UpdateTaskQueueConfigRequest from the protobuf v3 wire format
+func (val *UpdateTaskQueueConfigRequest) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *ConfigureTaskQueueRequest) Size() int {
+func (val *UpdateTaskQueueConfigRequest) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two ConfigureTaskQueueRequest values are equivalent by recursively
+// Equal returns whether two UpdateTaskQueueConfigRequest values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *ConfigureTaskQueueRequest) Equal(that interface{}) bool {
+func (this *UpdateTaskQueueConfigRequest) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *ConfigureTaskQueueRequest
+	var that1 *UpdateTaskQueueConfigRequest
 	switch t := that.(type) {
-	case *ConfigureTaskQueueRequest:
+	case *UpdateTaskQueueConfigRequest:
 		that1 = t
-	case ConfigureTaskQueueRequest:
+	case UpdateTaskQueueConfigRequest:
 		that1 = &t
 	default:
 		return false
@@ -2632,35 +2632,35 @@ func (this *ConfigureTaskQueueRequest) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type ConfigureTaskQueueResponse to the protobuf v3 wire format
-func (val *ConfigureTaskQueueResponse) Marshal() ([]byte, error) {
+// Marshal an object of type UpdateTaskQueueConfigResponse to the protobuf v3 wire format
+func (val *UpdateTaskQueueConfigResponse) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type ConfigureTaskQueueResponse from the protobuf v3 wire format
-func (val *ConfigureTaskQueueResponse) Unmarshal(buf []byte) error {
+// Unmarshal an object of type UpdateTaskQueueConfigResponse from the protobuf v3 wire format
+func (val *UpdateTaskQueueConfigResponse) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *ConfigureTaskQueueResponse) Size() int {
+func (val *UpdateTaskQueueConfigResponse) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two ConfigureTaskQueueResponse values are equivalent by recursively
+// Equal returns whether two UpdateTaskQueueConfigResponse values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *ConfigureTaskQueueResponse) Equal(that interface{}) bool {
+func (this *UpdateTaskQueueConfigResponse) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *ConfigureTaskQueueResponse
+	var that1 *UpdateTaskQueueConfigResponse
 	switch t := that.(type) {
-	case *ConfigureTaskQueueResponse:
+	case *UpdateTaskQueueConfigResponse:
 		that1 = t
-	case ConfigureTaskQueueResponse:
+	case UpdateTaskQueueConfigResponse:
 		that1 = &t
 	default:
 		return false

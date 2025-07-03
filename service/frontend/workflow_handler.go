@@ -6148,7 +6148,7 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 		return nil, err
 	}
 
-	resp, err := wh.matchingClient.ConfigureTaskQueue(ctx, &matchingservice.ConfigureTaskQueueRequest{
+	resp, err := wh.matchingClient.UpdateTaskQueueConfig(ctx, &matchingservice.UpdateTaskQueueConfigRequest{
 		NamespaceId:           namespaceID.String(),
 		UpdateTaskqueueConfig: request,
 	})

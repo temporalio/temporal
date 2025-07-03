@@ -181,5 +181,11 @@ service MatchingService {
     // This API is used to persist TaskQueue configurations in the persistence layer.
     // The TaskQueue configuration in the persistence layer supersedes the in-memory TaskQueue configuration,
     // as well as the system dynamic configuration.
-    rpc ConfigureTaskQueue (ConfigureTaskQueueRequest) returns (ConfigureTaskQueueResponse) {} 
+    // (-- api-linter: core::0134::method-signature=disabled
+    //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::response-message-name=disabled
+    //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::request-resource-required=disabled
+    //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+    rpc UpdateTaskQueueConfig (UpdateTaskQueueConfigRequest) returns (UpdateTaskQueueConfigResponse) {}  
 }

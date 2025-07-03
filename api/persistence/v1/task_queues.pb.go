@@ -526,9 +526,9 @@ type TaskQueueTypeUserData struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	DeploymentData *DeploymentData        `protobuf:"bytes,1,opt,name=deployment_data,json=deploymentData,proto3" json:"deployment_data,omitempty"`
 	// Perist TaskQueueConfig that comes as part of the UpdateTaskQueueConfigApi.
-	TaskQueueConfig *TaskQueueConfig `protobuf:"bytes,2,opt,name=task_queue_config,json=taskQueueConfig,proto3" json:"task_queue_config,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	Config        *v11.TaskQueueConfig `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TaskQueueTypeUserData) Reset() {
@@ -568,9 +568,9 @@ func (x *TaskQueueTypeUserData) GetDeploymentData() *DeploymentData {
 	return nil
 }
 
-func (x *TaskQueueTypeUserData) GetTaskQueueConfig() *TaskQueueConfig {
+func (x *TaskQueueTypeUserData) GetConfig() *v11.TaskQueueConfig {
 	if x != nil {
-		return x.TaskQueueConfig
+		return x.Config
 	}
 	return nil
 }
@@ -698,221 +698,6 @@ func (x *VersionedTaskQueueUserData) GetVersion() int64 {
 	return 0
 }
 
-type RateLimit struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Zero is a valid rate limit.
-	RequestsPerSecond float32 `protobuf:"fixed32,1,opt,name=requests_per_second,json=requestsPerSecond,proto3" json:"requests_per_second,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
-}
-
-func (x *RateLimit) Reset() {
-	*x = RateLimit{}
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RateLimit) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RateLimit) ProtoMessage() {}
-
-func (x *RateLimit) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RateLimit.ProtoReflect.Descriptor instead.
-func (*RateLimit) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *RateLimit) GetRequestsPerSecond() float32 {
-	if x != nil {
-		return x.RequestsPerSecond
-	}
-	return 0
-}
-
-type ConfigMetadata struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Reason for why the config was set.
-	Reason string `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
-	// Identity of the last updater.
-	// Set by the request's identity field.
-	UpdateIdentity string `protobuf:"bytes,2,opt,name=update_identity,json=updateIdentity,proto3" json:"update_identity,omitempty"`
-	// Time of the last update.
-	Clock         *v1.HybridLogicalClock `protobuf:"bytes,3,opt,name=clock,proto3" json:"clock,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ConfigMetadata) Reset() {
-	*x = ConfigMetadata{}
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ConfigMetadata) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ConfigMetadata) ProtoMessage() {}
-
-func (x *ConfigMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ConfigMetadata.ProtoReflect.Descriptor instead.
-func (*ConfigMetadata) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *ConfigMetadata) GetReason() string {
-	if x != nil {
-		return x.Reason
-	}
-	return ""
-}
-
-func (x *ConfigMetadata) GetUpdateIdentity() string {
-	if x != nil {
-		return x.UpdateIdentity
-	}
-	return ""
-}
-
-func (x *ConfigMetadata) GetClock() *v1.HybridLogicalClock {
-	if x != nil {
-		return x.Clock
-	}
-	return nil
-}
-
-type RateLimitConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RateLimit     *RateLimit             `protobuf:"bytes,1,opt,name=rate_limit,json=rateLimit,proto3" json:"rate_limit,omitempty"`
-	Metadata      *ConfigMetadata        `protobuf:"bytes,2,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RateLimitConfig) Reset() {
-	*x = RateLimitConfig{}
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RateLimitConfig) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RateLimitConfig) ProtoMessage() {}
-
-func (x *RateLimitConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RateLimitConfig.ProtoReflect.Descriptor instead.
-func (*RateLimitConfig) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *RateLimitConfig) GetRateLimit() *RateLimit {
-	if x != nil {
-		return x.RateLimit
-	}
-	return nil
-}
-
-func (x *RateLimitConfig) GetMetadata() *ConfigMetadata {
-	if x != nil {
-		return x.Metadata
-	}
-	return nil
-}
-
-type TaskQueueConfig struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Unless modified, this is the system-defined rate limit.
-	QueueRateLimit *RateLimitConfig `protobuf:"bytes,1,opt,name=queue_rate_limit,json=queueRateLimit,proto3" json:"queue_rate_limit,omitempty"`
-	// If set, each individual fairness key will be limited to this rate, scaled by the weight of the fairness key.
-	FairnessKeysRateLimitDefault *RateLimitConfig `protobuf:"bytes,2,opt,name=fairness_keys_rate_limit_default,json=fairnessKeysRateLimitDefault,proto3" json:"fairness_keys_rate_limit_default,omitempty"`
-	unknownFields                protoimpl.UnknownFields
-	sizeCache                    protoimpl.SizeCache
-}
-
-func (x *TaskQueueConfig) Reset() {
-	*x = TaskQueueConfig{}
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TaskQueueConfig) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TaskQueueConfig) ProtoMessage() {}
-
-func (x *TaskQueueConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TaskQueueConfig.ProtoReflect.Descriptor instead.
-func (*TaskQueueConfig) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *TaskQueueConfig) GetQueueRateLimit() *RateLimitConfig {
-	if x != nil {
-		return x.QueueRateLimit
-	}
-	return nil
-}
-
-func (x *TaskQueueConfig) GetFairnessKeysRateLimitDefault() *RateLimitConfig {
-	if x != nil {
-		return x.FairnessKeysRateLimitDefault
-	}
-	return nil
-}
-
 // Deprecated.
 type DeploymentData_DeploymentDataItem struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -924,7 +709,7 @@ type DeploymentData_DeploymentDataItem struct {
 
 func (x *DeploymentData_DeploymentDataItem) Reset() {
 	*x = DeploymentData_DeploymentDataItem{}
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[13]
+	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -936,7 +721,7 @@ func (x *DeploymentData_DeploymentDataItem) String() string {
 func (*DeploymentData_DeploymentDataItem) ProtoMessage() {}
 
 func (x *DeploymentData_DeploymentDataItem) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[13]
+	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1004,10 +789,10 @@ const file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc = "" +
 	"\n" +
 	"deployment\x18\x01 \x01(\v2&.temporal.api.deployment.v1.DeploymentR\n" +
 	"deployment\x12D\n" +
-	"\x04data\x18\x02 \x01(\v20.temporal.server.api.deployment.v1.TaskQueueDataR\x04data\"\xd5\x01\n" +
+	"\x04data\x18\x02 \x01(\v20.temporal.server.api.deployment.v1.TaskQueueDataR\x04data\"\xb8\x01\n" +
 	"\x15TaskQueueTypeUserData\x12[\n" +
-	"\x0fdeployment_data\x18\x01 \x01(\v22.temporal.server.api.persistence.v1.DeploymentDataR\x0edeploymentData\x12_\n" +
-	"\x11task_queue_config\x18\x02 \x01(\v23.temporal.server.api.persistence.v1.TaskQueueConfigR\x0ftaskQueueConfig\"\x8e\x03\n" +
+	"\x0fdeployment_data\x18\x01 \x01(\v22.temporal.server.api.persistence.v1.DeploymentDataR\x0edeploymentData\x12B\n" +
+	"\x06config\x18\x02 \x01(\v2*.temporal.api.taskqueue.v1.TaskQueueConfigR\x06config\"\x8e\x03\n" +
 	"\x11TaskQueueUserData\x12F\n" +
 	"\x05clock\x18\x01 \x01(\v20.temporal.server.api.clock.v1.HybridLogicalClockR\x05clock\x12[\n" +
 	"\x0fversioning_data\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.VersioningDataR\x0eversioningData\x12]\n" +
@@ -1017,20 +802,7 @@ const file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v29.temporal.server.api.persistence.v1.TaskQueueTypeUserDataR\x05value:\x028\x01\"\x81\x01\n" +
 	"\x1aVersionedTaskQueueUserData\x12I\n" +
 	"\x04data\x18\x01 \x01(\v25.temporal.server.api.persistence.v1.TaskQueueUserDataR\x04data\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversion\";\n" +
-	"\tRateLimit\x12.\n" +
-	"\x13requests_per_second\x18\x01 \x01(\x02R\x11requestsPerSecond\"\x99\x01\n" +
-	"\x0eConfigMetadata\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\x12'\n" +
-	"\x0fupdate_identity\x18\x02 \x01(\tR\x0eupdateIdentity\x12F\n" +
-	"\x05clock\x18\x03 \x01(\v20.temporal.server.api.clock.v1.HybridLogicalClockR\x05clock\"\xaf\x01\n" +
-	"\x0fRateLimitConfig\x12L\n" +
-	"\n" +
-	"rate_limit\x18\x01 \x01(\v2-.temporal.server.api.persistence.v1.RateLimitR\trateLimit\x12N\n" +
-	"\bmetadata\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.ConfigMetadataR\bmetadata\"\xed\x01\n" +
-	"\x0fTaskQueueConfig\x12]\n" +
-	"\x10queue_rate_limit\x18\x01 \x01(\v23.temporal.server.api.persistence.v1.RateLimitConfigR\x0equeueRateLimit\x12{\n" +
-	" fairness_keys_rate_limit_default\x18\x02 \x01(\v23.temporal.server.api.persistence.v1.RateLimitConfigR\x1cfairnessKeysRateLimitDefaultB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
+	"\aversion\x18\x02 \x01(\x03R\aversionB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 
 var (
 	file_temporal_server_api_persistence_v1_task_queues_proto_rawDescOnce sync.Once
@@ -1045,7 +817,7 @@ func file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP() []b
 }
 
 var file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_temporal_server_api_persistence_v1_task_queues_proto_goTypes = []any{
 	(BuildId_State)(0),                        // 0: temporal.server.api.persistence.v1.BuildId.State
 	(*BuildId)(nil),                           // 1: temporal.server.api.persistence.v1.BuildId
@@ -1057,56 +829,48 @@ var file_temporal_server_api_persistence_v1_task_queues_proto_goTypes = []any{
 	(*TaskQueueTypeUserData)(nil),             // 7: temporal.server.api.persistence.v1.TaskQueueTypeUserData
 	(*TaskQueueUserData)(nil),                 // 8: temporal.server.api.persistence.v1.TaskQueueUserData
 	(*VersionedTaskQueueUserData)(nil),        // 9: temporal.server.api.persistence.v1.VersionedTaskQueueUserData
-	(*RateLimit)(nil),                         // 10: temporal.server.api.persistence.v1.RateLimit
-	(*ConfigMetadata)(nil),                    // 11: temporal.server.api.persistence.v1.ConfigMetadata
-	(*RateLimitConfig)(nil),                   // 12: temporal.server.api.persistence.v1.RateLimitConfig
-	(*TaskQueueConfig)(nil),                   // 13: temporal.server.api.persistence.v1.TaskQueueConfig
-	(*DeploymentData_DeploymentDataItem)(nil), // 14: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem
-	nil,                               // 15: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
-	(*v1.HybridLogicalClock)(nil),     // 16: temporal.server.api.clock.v1.HybridLogicalClock
-	(*v11.BuildIdAssignmentRule)(nil), // 17: temporal.api.taskqueue.v1.BuildIdAssignmentRule
-	(*v11.CompatibleBuildIdRedirectRule)(nil), // 18: temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule
-	(*v12.DeploymentVersionData)(nil),         // 19: temporal.server.api.deployment.v1.DeploymentVersionData
-	(*v13.Deployment)(nil),                    // 20: temporal.api.deployment.v1.Deployment
-	(*v12.TaskQueueData)(nil),                 // 21: temporal.server.api.deployment.v1.TaskQueueData
+	(*DeploymentData_DeploymentDataItem)(nil), // 10: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem
+	nil,                               // 11: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
+	(*v1.HybridLogicalClock)(nil),     // 12: temporal.server.api.clock.v1.HybridLogicalClock
+	(*v11.BuildIdAssignmentRule)(nil), // 13: temporal.api.taskqueue.v1.BuildIdAssignmentRule
+	(*v11.CompatibleBuildIdRedirectRule)(nil), // 14: temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule
+	(*v12.DeploymentVersionData)(nil),         // 15: temporal.server.api.deployment.v1.DeploymentVersionData
+	(*v11.TaskQueueConfig)(nil),               // 16: temporal.api.taskqueue.v1.TaskQueueConfig
+	(*v13.Deployment)(nil),                    // 17: temporal.api.deployment.v1.Deployment
+	(*v12.TaskQueueData)(nil),                 // 18: temporal.server.api.deployment.v1.TaskQueueData
 }
 var file_temporal_server_api_persistence_v1_task_queues_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.api.persistence.v1.BuildId.state:type_name -> temporal.server.api.persistence.v1.BuildId.State
-	16, // 1: temporal.server.api.persistence.v1.BuildId.state_update_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	16, // 2: temporal.server.api.persistence.v1.BuildId.became_default_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	12, // 1: temporal.server.api.persistence.v1.BuildId.state_update_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	12, // 2: temporal.server.api.persistence.v1.BuildId.became_default_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
 	1,  // 3: temporal.server.api.persistence.v1.CompatibleVersionSet.build_ids:type_name -> temporal.server.api.persistence.v1.BuildId
-	16, // 4: temporal.server.api.persistence.v1.CompatibleVersionSet.became_default_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	17, // 5: temporal.server.api.persistence.v1.AssignmentRule.rule:type_name -> temporal.api.taskqueue.v1.BuildIdAssignmentRule
-	16, // 6: temporal.server.api.persistence.v1.AssignmentRule.create_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	16, // 7: temporal.server.api.persistence.v1.AssignmentRule.delete_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	18, // 8: temporal.server.api.persistence.v1.RedirectRule.rule:type_name -> temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule
-	16, // 9: temporal.server.api.persistence.v1.RedirectRule.create_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	16, // 10: temporal.server.api.persistence.v1.RedirectRule.delete_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	12, // 4: temporal.server.api.persistence.v1.CompatibleVersionSet.became_default_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	13, // 5: temporal.server.api.persistence.v1.AssignmentRule.rule:type_name -> temporal.api.taskqueue.v1.BuildIdAssignmentRule
+	12, // 6: temporal.server.api.persistence.v1.AssignmentRule.create_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	12, // 7: temporal.server.api.persistence.v1.AssignmentRule.delete_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	14, // 8: temporal.server.api.persistence.v1.RedirectRule.rule:type_name -> temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule
+	12, // 9: temporal.server.api.persistence.v1.RedirectRule.create_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	12, // 10: temporal.server.api.persistence.v1.RedirectRule.delete_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
 	2,  // 11: temporal.server.api.persistence.v1.VersioningData.version_sets:type_name -> temporal.server.api.persistence.v1.CompatibleVersionSet
 	3,  // 12: temporal.server.api.persistence.v1.VersioningData.assignment_rules:type_name -> temporal.server.api.persistence.v1.AssignmentRule
 	4,  // 13: temporal.server.api.persistence.v1.VersioningData.redirect_rules:type_name -> temporal.server.api.persistence.v1.RedirectRule
-	14, // 14: temporal.server.api.persistence.v1.DeploymentData.deployments:type_name -> temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem
-	19, // 15: temporal.server.api.persistence.v1.DeploymentData.versions:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
-	19, // 16: temporal.server.api.persistence.v1.DeploymentData.unversioned_ramp_data:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
+	10, // 14: temporal.server.api.persistence.v1.DeploymentData.deployments:type_name -> temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem
+	15, // 15: temporal.server.api.persistence.v1.DeploymentData.versions:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
+	15, // 16: temporal.server.api.persistence.v1.DeploymentData.unversioned_ramp_data:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
 	6,  // 17: temporal.server.api.persistence.v1.TaskQueueTypeUserData.deployment_data:type_name -> temporal.server.api.persistence.v1.DeploymentData
-	13, // 18: temporal.server.api.persistence.v1.TaskQueueTypeUserData.task_queue_config:type_name -> temporal.server.api.persistence.v1.TaskQueueConfig
-	16, // 19: temporal.server.api.persistence.v1.TaskQueueUserData.clock:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	16, // 18: temporal.server.api.persistence.v1.TaskQueueTypeUserData.config:type_name -> temporal.api.taskqueue.v1.TaskQueueConfig
+	12, // 19: temporal.server.api.persistence.v1.TaskQueueUserData.clock:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
 	5,  // 20: temporal.server.api.persistence.v1.TaskQueueUserData.versioning_data:type_name -> temporal.server.api.persistence.v1.VersioningData
-	15, // 21: temporal.server.api.persistence.v1.TaskQueueUserData.per_type:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
+	11, // 21: temporal.server.api.persistence.v1.TaskQueueUserData.per_type:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
 	8,  // 22: temporal.server.api.persistence.v1.VersionedTaskQueueUserData.data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
-	16, // 23: temporal.server.api.persistence.v1.ConfigMetadata.clock:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	10, // 24: temporal.server.api.persistence.v1.RateLimitConfig.rate_limit:type_name -> temporal.server.api.persistence.v1.RateLimit
-	11, // 25: temporal.server.api.persistence.v1.RateLimitConfig.metadata:type_name -> temporal.server.api.persistence.v1.ConfigMetadata
-	12, // 26: temporal.server.api.persistence.v1.TaskQueueConfig.queue_rate_limit:type_name -> temporal.server.api.persistence.v1.RateLimitConfig
-	12, // 27: temporal.server.api.persistence.v1.TaskQueueConfig.fairness_keys_rate_limit_default:type_name -> temporal.server.api.persistence.v1.RateLimitConfig
-	20, // 28: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.deployment:type_name -> temporal.api.deployment.v1.Deployment
-	21, // 29: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.data:type_name -> temporal.server.api.deployment.v1.TaskQueueData
-	7,  // 30: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry.value:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
-	31, // [31:31] is the sub-list for method output_type
-	31, // [31:31] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	17, // 23: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.deployment:type_name -> temporal.api.deployment.v1.Deployment
+	18, // 24: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.data:type_name -> temporal.server.api.deployment.v1.TaskQueueData
+	7,  // 25: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry.value:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
+	26, // [26:26] is the sub-list for method output_type
+	26, // [26:26] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_task_queues_proto_init() }
@@ -1120,7 +884,7 @@ func file_temporal_server_api_persistence_v1_task_queues_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc), len(file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   15,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

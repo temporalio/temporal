@@ -73,26 +73,6 @@ func (c *clientImpl) CheckTaskQueueUserDataPropagation(
 	return client.CheckTaskQueueUserDataPropagation(ctx, request, opts...)
 }
 
-func (c *clientImpl) ConfigureTaskQueue(
-	ctx context.Context,
-	request *matchingservice.ConfigureTaskQueueRequest,
-	opts ...grpc.CallOption,
-) (*matchingservice.ConfigureTaskQueueResponse, error) {
-
-	p, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := c.getClientForTaskQueuePartition(p)
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.ConfigureTaskQueue(ctx, request, opts...)
-}
-
 func (c *clientImpl) CreateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.CreateNexusEndpointRequest,
@@ -562,6 +542,26 @@ func (c *clientImpl) UpdateNexusEndpoint(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.UpdateNexusEndpoint(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateTaskQueueConfig(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueConfigRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+
+	p, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.UpdateTaskQueueConfig(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateTaskQueueUserData(
