@@ -8,9 +8,14 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
+)
+
+const (
+	chasmTestTimeout = 10 * time.Second * debug.TimeoutMultiplier
 )
 
 type ChasmTestSuite struct {
@@ -40,7 +45,7 @@ func (s *ChasmTestSuite) SetupSuite() {
 func (s *ChasmTestSuite) TestNewPayloadStore() {
 	tv := testvars.New(s.T())
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), chasmTestTimeout)
 	defer cancel()
 
 	_, err := tests.NewPayloadStoreHandler(

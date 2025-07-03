@@ -23,17 +23,12 @@ func (e *PayloadTTLPureTaskExecutor) Execute(
 }
 
 func (v *PayloadTTLPureTaskValidator) Validate(
-	chasmContext chasm.Context,
+	_ chasm.Context,
 	store *PayloadStore,
 	attributes chasm.TaskAttributes,
 	task *persistencespb.TestPayloadTTLPureTask,
 ) (bool, error) {
-	expirationTime, ok := store.State.ExpirationTimes[task.PayloadKey]
-	if !ok {
-		return false, nil
-	}
-
-	return !expirationTime.AsTime().After(attributes.ScheduledTime), nil
+	return validateTask(store, attributes, task.PayloadKey)
 }
 
 type (
@@ -57,12 +52,20 @@ func (e *PayloadTTLSideEffectTaskExecutor) Execute(
 }
 
 func (v *PayloadTTLSideEffectTaskValidator) Validate(
-	chasmContext chasm.Context,
+	_ chasm.Context,
 	store *PayloadStore,
 	attributes chasm.TaskAttributes,
 	task *persistencespb.TestPayloadTTLSideEffectTask,
 ) (bool, error) {
-	expirationTime, ok := store.State.ExpirationTimes[task.PayloadKey]
+	return validateTask(store, attributes, task.PayloadKey)
+}
+
+func validateTask(
+	store *PayloadStore,
+	attributes chasm.TaskAttributes,
+	payloadKey string,
+) (bool, error) {
+	expirationTime, ok := store.State.ExpirationTimes[payloadKey]
 	if !ok {
 		return false, nil
 	}
