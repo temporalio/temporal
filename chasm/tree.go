@@ -320,7 +320,7 @@ func (n *Node) Component(
 //
 // When the context's intent is OperationIntentProgress, This check validates that
 // all of a node's ancestors are still in a running state, and can accept writes. In
-// the case of a newly-created node, a detached node, or an OperationIntentProgress
+// the case of a newly-created node, a detached node, or an OperationIntentObserve
 // intent, the check is skipped.
 func (n *Node) validateAccess(ctx Context) error {
 	intent := operationIntentFromContext(ctx.getContext())
@@ -329,7 +329,7 @@ func (n *Node) validateAccess(ctx Context) error {
 		return nil
 	}
 
-	// TODO - check if this is a detached/new node, operations are always allowed.
+	// TODO - check if this is a detached node, operations are always allowed.
 
 	if n.parent != nil {
 		err := n.parent.validateAccess(ctx)
