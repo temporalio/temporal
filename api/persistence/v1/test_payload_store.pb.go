@@ -93,11 +93,10 @@ func (x *TestPayloadStore) GetClosed() bool {
 }
 
 type TestPayloadTTLPureTask struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	PayloadKey     string                 `protobuf:"bytes,1,opt,name=payload_key,json=payloadKey,proto3" json:"payload_key,omitempty"`
-	ExpirationTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expiration_time,json=expirationTime,proto3" json:"expiration_time,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PayloadKey    string                 `protobuf:"bytes,1,opt,name=payload_key,json=payloadKey,proto3" json:"payload_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TestPayloadTTLPureTask) Reset() {
@@ -137,19 +136,11 @@ func (x *TestPayloadTTLPureTask) GetPayloadKey() string {
 	return ""
 }
 
-func (x *TestPayloadTTLPureTask) GetExpirationTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ExpirationTime
-	}
-	return nil
-}
-
 type TestPayloadTTLSideEffectTask struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	PayloadKey     string                 `protobuf:"bytes,1,opt,name=payload_key,json=payloadKey,proto3" json:"payload_key,omitempty"`
-	ExpirationTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expiration_time,json=expirationTime,proto3" json:"expiration_time,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PayloadKey    string                 `protobuf:"bytes,1,opt,name=payload_key,json=payloadKey,proto3" json:"payload_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TestPayloadTTLSideEffectTask) Reset() {
@@ -189,13 +180,6 @@ func (x *TestPayloadTTLSideEffectTask) GetPayloadKey() string {
 	return ""
 }
 
-func (x *TestPayloadTTLSideEffectTask) GetExpirationTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ExpirationTime
-	}
-	return nil
-}
-
 var File_temporal_server_api_persistence_v1_test_payload_store_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDesc = "" +
@@ -210,15 +194,13 @@ const file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDesc =
 	"\x06closed\x18\x04 \x01(\bR\x06closed\x1a^\n" +
 	"\x14ExpirationTimesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05value:\x028\x01\"~\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05value:\x028\x01\"9\n" +
 	"\x16TestPayloadTTLPureTask\x12\x1f\n" +
 	"\vpayload_key\x18\x01 \x01(\tR\n" +
-	"payloadKey\x12C\n" +
-	"\x0fexpiration_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x0eexpirationTime\"\x84\x01\n" +
+	"payloadKey\"?\n" +
 	"\x1cTestPayloadTTLSideEffectTask\x12\x1f\n" +
 	"\vpayload_key\x18\x01 \x01(\tR\n" +
-	"payloadKey\x12C\n" +
-	"\x0fexpiration_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x0eexpirationTimeB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
+	"payloadKeyB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 
 var (
 	file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDescOnce sync.Once
@@ -242,14 +224,12 @@ var file_temporal_server_api_persistence_v1_test_payload_store_proto_goTypes = [
 }
 var file_temporal_server_api_persistence_v1_test_payload_store_proto_depIdxs = []int32{
 	3, // 0: temporal.server.api.persistence.v1.TestPayloadStore.expiration_times:type_name -> temporal.server.api.persistence.v1.TestPayloadStore.ExpirationTimesEntry
-	4, // 1: temporal.server.api.persistence.v1.TestPayloadTTLPureTask.expiration_time:type_name -> google.protobuf.Timestamp
-	4, // 2: temporal.server.api.persistence.v1.TestPayloadTTLSideEffectTask.expiration_time:type_name -> google.protobuf.Timestamp
-	4, // 3: temporal.server.api.persistence.v1.TestPayloadStore.ExpirationTimesEntry.value:type_name -> google.protobuf.Timestamp
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	4, // 1: temporal.server.api.persistence.v1.TestPayloadStore.ExpirationTimesEntry.value:type_name -> google.protobuf.Timestamp
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_test_payload_store_proto_init() }
