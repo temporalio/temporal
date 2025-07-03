@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -633,7 +634,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		}
 	}
 
-	result.LastWriteVersion, err = getCurrentBranchLastWriteVersion(input.ExecutionInfo.VersionHistories)
+	result.LastWriteVersion, err = getCurrentBranchLastWriteVersion(input.ExecutionInfo.VersionHistories, input.ExecutionInfo.TransitionHistory)
 	if err != nil {
 		return nil, err
 	}
@@ -685,7 +686,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 	if err != nil {
 		return nil, err
 	}
-	result.LastWriteVersion, err = getCurrentBranchLastWriteVersion(input.ExecutionInfo.VersionHistories)
+	result.LastWriteVersion, err = getCurrentBranchLastWriteVersion(input.ExecutionInfo.VersionHistories, input.ExecutionInfo.TransitionHistory)
 	if err != nil {
 		return nil, err
 	}
@@ -1098,6 +1099,7 @@ func getCurrentBranchToken(
 
 func getCurrentBranchLastWriteVersion(
 	versionHistories *historyspb.VersionHistories,
+	transitions []*persistencespb.VersionedTransition,
 ) (int64, error) {
 	// TODO remove this if check once legacy execution tests are removed
 	if versionHistories == nil {
@@ -1107,11 +1109,33 @@ func getCurrentBranchLastWriteVersion(
 	if err != nil {
 		return 0, err
 	}
-	versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
-	if err != nil {
-		return 0, err
+
+	if !versionhistory.IsEmptyVersionHistory(versionHistory) {
+		versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
+		if err != nil {
+			return 0, err
+		}
+		return versionHistoryItem.GetVersion(), nil
 	}
-	return versionHistoryItem.GetVersion(), nil
+
+	// No version history for the run, this only happens for CHASM run and we need to check the transition history.
+	//
+	// TODO: The logic should ignore version history and always use transition history, even for Workflows.
+	// We are still checking version history first here since it's the old logic and we want to minimize the risk for now
+	// and to account for the fact that transition history is not fully enabled.
+	//
+	// Theoritically, using version history here is wrong because there can be transitions (even on Workflows) that have no
+	// events (e.g. Activity Heartbeat).
+	//
+	// Although using version history has the benefit of ensuring the returned version don't change after the run is closed, using
+	// transition history is also correct here because the returned version is only used for updating mutable state current record
+	// and that record won't be updated after the run is closed.
+	//
+	// Using transition history also suits the function name LastWriteVersion better.
+	if len(transitions) != 0 {
+		return transitionhistory.LastVersionedTransition(transitions).NamespaceFailoverVersion, nil
+	}
+	return common.EmptyVersion, serviceerror.NewInternal("both version history and transition history are empty")
 }
 
 func serializeTasks(
