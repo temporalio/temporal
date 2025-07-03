@@ -209,9 +209,9 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) er
 		tr.backlogMgr.signalIfFatal(err)
 		// TODO: Should we ever stop retrying on db errors?
 		if common.IsResourceExhausted(err) {
-			tr.backoffSignal(taskReaderThrottleRetryDelay)
+			tr.retryReadAfter(taskReaderThrottleRetryDelay)
 		} else {
-			tr.backoffSignal(tr.retrier.NextBackOff(err))
+			tr.retryReadAfter(tr.retrier.NextBackOff(err))
 		}
 		return err
 	}
@@ -424,7 +424,7 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 	// maybe do this as a wide event? we can also throw in loadedTasks then.
 }
 
-func (tr *fairTaskReader) backoffSignal(duration time.Duration) {
+func (tr *fairTaskReader) retryReadAfter(duration time.Duration) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 
