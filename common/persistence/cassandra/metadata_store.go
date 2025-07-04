@@ -70,9 +70,6 @@ const (
 	templateUpdateNamespaceByIdQuery = `UPDATE namespaces_by_id ` +
 		`SET name = ? ` +
 		`WHERE id = ?`
-
-	namespaceStaleRetryAttempts = 2
-	namespaceStaleRetryDelay    = 200 * time.Millisecond
 )
 
 type (
@@ -328,18 +325,15 @@ func (m *MetadataStore) GetNamespace(
 		}
 	}
 
-	policy := backoff.NewConstantDelayRetryPolicy(namespaceStaleRetryDelay).WithMaximumAttempts(namespaceStaleRetryAttempts)
-	err = backoff.ThrottleRetry(func() error {
-		query = m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, namespace).WithContext(ctx)
-		return query.Scan(
-			nil,
-			nil,
-			&detail,
-			&detailEncoding,
-			&notificationVersion,
-			&isGlobalNamespace,
-		)
-	}, policy, func(err error) bool { return gocql.IsNotFoundError(err) && request.ID != "" })
+	query = m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, namespace).WithContext(ctx)
+	err = query.Scan(
+		nil,
+		nil,
+		&detail,
+		&detailEncoding,
+		&notificationVersion,
+		&isGlobalNamespace,
+	)
 
 	if err != nil {
 		if gocql.IsNotFoundError(err) && len(request.ID) > 0 {
