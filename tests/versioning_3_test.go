@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -1626,13 +1627,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	s.WaitForChannel(ctx, wfStarted)
 	close(wfStarted)
 
-	// wait for pollers to register their task queues in build id 2
-	if crossTq {
-		s.waitForTaskQueueInVersion(tv2Child)
-	} else {
-		s.waitForTaskQueueInVersion(tv2)
-	}
-
 	// make v2 current for both parent and child and unblock the wf to start the child
 	s.setCurrentDeployment(tv2)
 	currentChanged <- struct{}{}
@@ -1935,30 +1929,6 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 	}, data)
 }
 
-func (s *Versioning3Suite) waitForTaskQueueInVersion(
-	tv *testvars.TestVars,
-) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		res, _ := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx,
-			&workflowservice.DescribeWorkerDeploymentVersionRequest{
-				Namespace:         s.Namespace().String(),
-				DeploymentVersion: tv.ExternalDeploymentVersion(),
-			})
-		if res != nil {
-			found := false
-			for _, tq := range res.GetVersionTaskQueues() {
-				if tq.GetName() == tv.TaskQueue().GetName() {
-					found = true
-				}
-			}
-			a.True(found)
-		}
-	}, 5*time.Second, 100*time.Millisecond)
-}
-
 func (s *Versioning3Suite) waitForDeploymentVersionCreation(
 	tv *testvars.TestVars,
 ) {
@@ -1999,7 +1969,7 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
 		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if errors.As(err, &notFound) || err.Error() == workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues {
 			return false
 		}
 		s.NoError(err)
@@ -2052,7 +2022,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, req)
 		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if errors.As(err, &notFound) || err.Error() == workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues {
 			return false
 		}
 		s.NoError(err)
