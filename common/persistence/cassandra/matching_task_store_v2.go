@@ -3,7 +3,6 @@ package cassandra
 import (
 	"context"
 	"fmt"
-	"math"
 	"strings"
 
 	"go.temporal.io/api/serviceerror"
@@ -288,7 +287,7 @@ func (d *matchingTaskStoreV2) GetTasks(
 	request *p.GetTasksRequest,
 ) (*p.InternalGetTasksResponse, error) {
 	// Require starting from pass 1.
-	if request.InclusiveMinPass < 1 || request.ExclusiveMaxTaskID != math.MaxInt64 {
+	if request.InclusiveMinPass < 1 {
 		return nil, serviceerror.NewInternal("invalid GetTasks request on fair queue")
 	}
 

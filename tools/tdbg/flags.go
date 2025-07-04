@@ -68,4 +68,5 @@ var (
 	FlagBuildIDs                   = "select-build-id"
 	FlagUnversioned                = "select-unversioned"
 	FlagAllActive                  = "select-all-active"
+	FlagMinPass                    = "min-pass"
 )

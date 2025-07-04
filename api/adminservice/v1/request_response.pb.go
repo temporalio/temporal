@@ -3290,6 +3290,7 @@ type GetTaskQueueTasksRequest struct {
 	BatchSize     int32                  `protobuf:"varint,6,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
 	NextPageToken []byte                 `protobuf:"bytes,7,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	Subqueue      int32                  `protobuf:"varint,8,opt,name=subqueue,proto3" json:"subqueue,omitempty"`
+	MinPass       int64                  `protobuf:"varint,9,opt,name=min_pass,json=minPass,proto3" json:"min_pass,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3376,6 +3377,13 @@ func (x *GetTaskQueueTasksRequest) GetNextPageToken() []byte {
 func (x *GetTaskQueueTasksRequest) GetSubqueue() int32 {
 	if x != nil {
 		return x.Subqueue
+	}
+	return 0
+}
+
+func (x *GetTaskQueueTasksRequest) GetMinPass() int64 {
+	if x != nil {
+		return x.MinPass
 	}
 	return 0
 }
@@ -5593,7 +5601,7 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"endEventId\x12\x1f\n" +
 	"\vend_version\x18\b \x01(\x03R\n" +
 	"endVersion\" \n" +
-	"\x1eResendReplicationTasksResponse\"\xc8\x02\n" +
+	"\x1eResendReplicationTasksResponse\"\xe3\x02\n" +
 	"\x18GetTaskQueueTasksRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1d\n" +
 	"\n" +
@@ -5604,7 +5612,8 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\n" +
 	"batch_size\x18\x06 \x01(\x05R\tbatchSize\x12&\n" +
 	"\x0fnext_page_token\x18\a \x01(\fR\rnextPageToken\x12\x1a\n" +
-	"\bsubqueue\x18\b \x01(\x05R\bsubqueue\"\x90\x01\n" +
+	"\bsubqueue\x18\b \x01(\x05R\bsubqueue\x12\x19\n" +
+	"\bmin_pass\x18\t \x01(\x03R\aminPass\"\x90\x01\n" +
 	"\x19GetTaskQueueTasksResponse\x12K\n" +
 	"\x05tasks\x18\x01 \x03(\v25.temporal.server.api.persistence.v1.AllocatedTaskInfoR\x05tasks\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\"\x87\x01\n" +

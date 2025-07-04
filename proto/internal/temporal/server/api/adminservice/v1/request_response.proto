@@ -382,6 +382,7 @@ message GetTaskQueueTasksRequest {
   int32 batch_size = 6;
   bytes next_page_token = 7;
   int32 subqueue = 8;
+  int64 min_pass = 9;
 }
 
 message GetTaskQueueTasksResponse {
