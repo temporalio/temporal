@@ -552,6 +552,7 @@ func (db *taskQueueDB) ensureDefaultSubqueuesLocked(
 func (db *taskQueueDB) newSubqueueLocked(key *persistencespb.SubqueueKey) *dbSubqueue {
 	// start ack level + max read level just before the current block
 	initAckLevel := rangeIDToTaskIDBlock(db.rangeID, db.config.RangeSize).start - 1
+	softassert.That(db.logger, initAckLevel >= 0, "initAckLevel should not be negative")
 
 	s := &dbSubqueue{maxReadLevel: initAckLevel}
 	s.Key = key
