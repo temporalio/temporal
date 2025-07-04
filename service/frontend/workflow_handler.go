@@ -3160,65 +3160,14 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	return wh.validateSearchAttributes(unaliasedStartWorkflowSas, namespaceName)
 }
 
-// TODO: move these to the proper order
+// [cleanup-wv-pre-release]
 func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *workflowservice.DescribeDeploymentRequest) (_ *workflowservice.DescribeDeploymentResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if len(request.Namespace) == 0 {
-		return nil, errNamespaceNotSet
-	}
-
-	if !wh.config.EnableDeployments(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
-	}
-
-	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-	deploymentInfo, err := wh.deploymentStoreClient.DescribeDeployment(ctx, namespaceEntry, request.Deployment.GetSeriesName(), request.Deployment.GetBuildId())
-	if err != nil {
-		return nil, err
-	}
-
-	return &workflowservice.DescribeDeploymentResponse{
-		DeploymentInfo: deploymentInfo,
-	}, nil
+	return nil, serviceerror.NewUnimplemented("Deployments are deprecated and no longer supported, use Worker Deployments instead")
 }
 
 // [cleanup-wv-pre-release]
 func (wh *WorkflowHandler) GetCurrentDeployment(ctx context.Context, request *workflowservice.GetCurrentDeploymentRequest) (_ *workflowservice.GetCurrentDeploymentResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if len(request.Namespace) == 0 {
-		return nil, errNamespaceNotSet
-	}
-
-	if !wh.config.EnableDeployments(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
-	}
-
-	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
-	describeDeploymentResponse, err := wh.deploymentStoreClient.GetCurrentDeployment(ctx, namespaceEntry, request.SeriesName)
-	if err != nil {
-		return nil, err
-	}
-
-	return &workflowservice.GetCurrentDeploymentResponse{
-		CurrentDeploymentInfo: describeDeploymentResponse,
-	}, nil
+	return nil, serviceerror.NewUnimplemented("Deployments are deprecated and no longer supported, use Worker Deployments instead")
 }
 
 // [cleanup-wv-pre-release]
@@ -3226,43 +3175,7 @@ func (wh *WorkflowHandler) ListDeployments(
 	ctx context.Context,
 	request *workflowservice.ListDeploymentsRequest,
 ) (_ *workflowservice.ListDeploymentsResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if len(request.Namespace) == 0 {
-		return nil, errNamespaceNotSet
-	}
-
-	if !wh.config.EnableDeployments(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
-	}
-
-	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
-	if wh.config.DisableListVisibilityByFilter(namespaceEntry.Name().String()) {
-		return nil, errListNotAllowed
-	}
-
-	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
-	if request.GetPageSize() <= 0 || request.GetPageSize() > maxPageSize {
-		request.PageSize = maxPageSize
-	}
-
-	deployments, nextPageToken, err := wh.deploymentStoreClient.ListDeployments(ctx, namespaceEntry, request.SeriesName, int(request.PageSize), request.NextPageToken)
-	if err != nil {
-		return nil, err
-	}
-
-	return &workflowservice.ListDeploymentsResponse{
-		Deployments:   deployments,
-		NextPageToken: nextPageToken,
-	}, nil
+	return nil, serviceerror.NewUnimplemented("Deployments are deprecated and no longer supported, use Worker Deployments instead")
 }
 
 // [cleanup-wv-pre-release]
@@ -3270,80 +3183,15 @@ func (wh *WorkflowHandler) GetDeploymentReachability(
 	ctx context.Context,
 	request *workflowservice.GetDeploymentReachabilityRequest,
 ) (_ *workflowservice.GetDeploymentReachabilityResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if len(request.Namespace) == 0 {
-		return nil, errNamespaceNotSet
-	}
-
-	if !wh.config.EnableDeployments(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
-	}
-
-	if request.GetDeployment() == nil {
-		return nil, serviceerror.NewInvalidArgument("deployment is required")
-	}
-
-	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-	resp, err := wh.deploymentStoreClient.GetDeploymentReachability(ctx, namespaceEntry, request.Deployment.SeriesName, request.Deployment.BuildId)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	return nil, serviceerror.NewUnimplemented("Deployments are deprecated and no longer supported, use Worker Deployments instead")
 }
 
 // [cleanup-wv-pre-release]
 func (wh *WorkflowHandler) SetCurrentDeployment(ctx context.Context, request *workflowservice.SetCurrentDeploymentRequest) (_ *workflowservice.SetCurrentDeploymentResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if len(request.Namespace) == 0 {
-		return nil, errNamespaceNotSet
-	}
-
-	if !wh.config.EnableDeployments(request.Namespace) {
-		return nil, errDeploymentsNotAllowed
-	}
-
-	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO: should we get this from the request?
-	requestID := uuid.New()
-
-	current, previous, err := wh.deploymentStoreClient.SetCurrentDeployment(
-		ctx,
-		namespaceEntry,
-		request.Deployment,
-		request.UpdateMetadata,
-		request.Identity,
-		requestID,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &workflowservice.SetCurrentDeploymentResponse{
-		CurrentDeploymentInfo:  current,
-		PreviousDeploymentInfo: previous,
-	}, nil
+	return nil, serviceerror.NewUnimplemented("Deployments are deprecated and no longer supported, use Worker Deployments instead")
 }
 
 // Versioning-3 Public-Preview API's
-
 func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, request *workflowservice.DescribeWorkerDeploymentVersionRequest) (_ *workflowservice.DescribeWorkerDeploymentVersionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
