@@ -1969,7 +1969,7 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
 		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) || err.Error() == workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues {
+		if errors.As(err, &notFound) || (err != nil && err.Error() == workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues) {
 			return false
 		}
 		s.NoError(err)
@@ -2022,7 +2022,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, req)
 		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) || err.Error() == workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues {
+		if errors.As(err, &notFound) || (err != nil && err.Error() == workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues) {
 			return false
 		}
 		s.NoError(err)
