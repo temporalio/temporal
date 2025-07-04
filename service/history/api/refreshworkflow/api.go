@@ -21,16 +21,17 @@ func Invoke(
 		return err
 	}
 
-	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
+	chasmLease, err := workflowConsistencyChecker.GetChasmLease(
 		ctx,
 		nil,
 		workflowKey,
+		"", // RefreshWorkflow works for all Archetypes.
 		locks.PriorityLow,
 	)
 	if err != nil {
 		return err
 	}
-	defer func() { workflowLease.GetReleaseFn()(retError) }()
+	defer func() { chasmLease.GetReleaseFn()(retError) }()
 
-	return workflowLease.GetContext().RefreshTasks(ctx, shardContext)
+	return chasmLease.GetContext().RefreshTasks(ctx, shardContext)
 }

@@ -120,6 +120,7 @@ type (
 			namespaceID namespace.ID,
 			workflowID string,
 			runID string,
+			archetype string,
 		) (Workflow, error)
 	}
 
@@ -416,9 +417,10 @@ func (r *transactionMgrImpl) LoadWorkflow(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
+	archetype string,
 ) (Workflow, error) {
 
-	weContext, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
+	weContext, release, err := r.workflowCache.GetOrCreateChasmEntity(
 		ctx,
 		r.shardContext,
 		namespaceID,
@@ -426,6 +428,7 @@ func (r *transactionMgrImpl) LoadWorkflow(
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
+		archetype,
 		locks.PriorityHigh,
 	)
 	if err != nil {

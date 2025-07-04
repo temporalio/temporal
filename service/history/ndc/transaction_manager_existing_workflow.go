@@ -105,6 +105,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 		namespaceID,
 		workflowID,
 		currentRunID,
+		"",
 	)
 	if err != nil {
 		return err

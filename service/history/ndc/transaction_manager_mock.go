@@ -106,18 +106,18 @@ func (mr *MockTransactionManagerMockRecorder) GetCurrentWorkflowRunID(ctx, names
 }
 
 // LoadWorkflow mocks base method.
-func (m *MockTransactionManager) LoadWorkflow(ctx context.Context, namespaceID namespace.ID, workflowID, runID string) (Workflow, error) {
+func (m *MockTransactionManager) LoadWorkflow(ctx context.Context, namespaceID namespace.ID, workflowID, runID, archetype string) (Workflow, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LoadWorkflow", ctx, namespaceID, workflowID, runID)
+	ret := m.ctrl.Call(m, "LoadWorkflow", ctx, namespaceID, workflowID, runID, archetype)
 	ret0, _ := ret[0].(Workflow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // LoadWorkflow indicates an expected call of LoadWorkflow.
-func (mr *MockTransactionManagerMockRecorder) LoadWorkflow(ctx, namespaceID, workflowID, runID any) *gomock.Call {
+func (mr *MockTransactionManagerMockRecorder) LoadWorkflow(ctx, namespaceID, workflowID, runID, archetype any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadWorkflow", reflect.TypeOf((*MockTransactionManager)(nil).LoadWorkflow), ctx, namespaceID, workflowID, runID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadWorkflow", reflect.TypeOf((*MockTransactionManager)(nil).LoadWorkflow), ctx, namespaceID, workflowID, runID, archetype)
 }
 
 // UpdateWorkflow mocks base method.

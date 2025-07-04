@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
@@ -47,7 +48,7 @@ func (*noopChasmTree) Terminate(chasm.TerminateComponentRequest) error {
 }
 
 func (*noopChasmTree) Archetype() string {
-	return ""
+	return chasmworkflow.Archetype
 }
 
 func (*noopChasmTree) EachPureTask(

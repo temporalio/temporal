@@ -104,6 +104,9 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		return serviceerror.NewInternal("Replicate non completed workflow state is not supported.")
 	}
 
+	// SyncWorkflowState is not used by new state-based replication stack,
+	// but CHASM only uses state-based replication, so we can continue to use
+	// GetOrCreateWorkflowExecution here.
 	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		r.shardContext,
@@ -227,7 +230,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	wid := executionInfo.GetWorkflowId()
 	rid := executionState.GetRunId()
 
-	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
+	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateChasmEntity(
 		ctx,
 		r.shardContext,
 		namespaceID,
@@ -235,6 +238,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			WorkflowId: wid,
 			RunId:      rid,
 		},
+		"",
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -346,7 +350,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 		return mutation.StateMutation.ExecutionState, mutation.StateMutation.ExecutionInfo
 	}()
 
-	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
+	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateChasmEntity(
 		ctx,
 		r.shardContext,
 		namespace.ID(executionInfo.NamespaceId),
@@ -354,6 +358,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 			WorkflowId: executionInfo.WorkflowId,
 			RunId:      executionState.RunId,
 		},
+		"",
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -1238,6 +1243,7 @@ func (r *WorkflowStateReplicatorImpl) createNewRunWorkflow(
 	originalMutableState historyi.MutableState,
 	isStateBased bool,
 ) error {
+	// CHASM runs don't have new run, so we can continue using GetOrCreateWorkflowExecution here.
 	newRunWfContext, newRunReleaseFn, newRunErr := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		r.shardContext,
@@ -1343,6 +1349,8 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	if runID != originalRunID {
 		// At this point, it already acquired the workflow lock on the run ID.
 		// Get the lock of root run id to make sure no concurrent backfill history across multiple runs.
+		//
+		// CHASM runs have no history, so we can continue to use GetOrCreateWorkflowExecution here.
 		_, rootRunReleaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
 			ctx,
 			r.shardContext,

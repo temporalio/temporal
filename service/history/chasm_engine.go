@@ -567,8 +567,13 @@ func (e *ChasmEngine) getExecutionLease(
 		lockPriority = locks.PriorityLow
 	}
 
+	archetype, err := ref.Archetype(e.registry)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	var staleReferenceErr error
-	entityLease, err := consistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
+	entityLease, err := consistencyChecker.GetChasmLeaseWithConsistencyCheck(
 		ctx,
 		nil,
 		func(mutableState historyi.MutableState) bool {
@@ -587,6 +592,7 @@ func (e *ChasmEngine) getExecutionLease(
 			ref.EntityKey.BusinessID,
 			ref.EntityKey.EntityID,
 		),
+		archetype,
 		lockPriority,
 	)
 	if err == nil && staleReferenceErr != nil {
