@@ -258,32 +258,20 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 		versionedTransitionArtifact.NewRunInfo = newRunInfo
 	}
 
-	wfKey := definition.WorkflowKey{
-		NamespaceID: namespaceID,
-		WorkflowID:  execution.WorkflowId,
-		RunID:       execution.RunId,
+	events, err := s.getSyncStateEvents(
+		ctx, definition.WorkflowKey{
+			NamespaceID: namespaceID,
+			WorkflowID:  execution.WorkflowId,
+			RunID:       execution.RunId,
+		},
+		targetVersionHistories,
+		sourceVersionHistories,
+		isNewWorkflow,
+	)
+	if err != nil {
+		return nil, err
 	}
-	var events []*commonpb.DataBlob
-	var err error
-	if isNewWorkflow {
-		sourceHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
-		if err != nil {
-			return nil, err
-		}
-		sourceLastItem, err := versionhistory.GetLastVersionHistoryItem(sourceHistory)
-		if err != nil {
-			return nil, err
-		}
-		events, err = s.getEventsBlob(ctx, wfKey, sourceHistory, 1, sourceLastItem.GetEventId()+1, false)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		events, err = s.getSyncStateEvents(ctx, wfKey, targetVersionHistories, sourceVersionHistories)
-		if err != nil {
-			return nil, err
-		}
-	}
+
 	versionedTransitionArtifact.EventBatches = events
 	result := &SyncStateResult{
 		VersionedTransitionArtifact: versionedTransitionArtifact,
@@ -491,9 +479,15 @@ func (s *SyncStateRetrieverImpl) getEventsBlob(
 	return eventBlobs, nil
 }
 
-func (s *SyncStateRetrieverImpl) getSyncStateEvents(ctx context.Context, workflowKey definition.WorkflowKey, targetVersionHistories [][]*historyspb.VersionHistoryItem, sourceVersionHistories *historyspb.VersionHistories) ([]*commonpb.DataBlob, error) {
-	if targetVersionHistories == nil || sourceVersionHistories == nil {
-		// return nil, so target will retrieve the missing events from source
+func (s *SyncStateRetrieverImpl) getSyncStateEvents(
+	ctx context.Context,
+	workflowKey definition.WorkflowKey,
+	targetVersionHistories [][]*historyspb.VersionHistoryItem,
+	sourceVersionHistories *historyspb.VersionHistories,
+	isNewWorkflow bool,
+) ([]*commonpb.DataBlob, error) {
+	if sourceVersionHistories == nil {
+		// This should never happen for new workflows.
 		return nil, nil
 	}
 	sourceHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
@@ -502,6 +496,19 @@ func (s *SyncStateRetrieverImpl) getSyncStateEvents(ctx context.Context, workflo
 	}
 
 	if versionhistory.IsEmptyVersionHistory(sourceHistory) {
+		return nil, nil
+	}
+
+	if isNewWorkflow {
+		sourceLastItem, err := versionhistory.GetLastVersionHistoryItem(sourceHistory)
+		if err != nil {
+			return nil, err
+		}
+		return s.getEventsBlob(ctx, workflowKey, sourceHistory, 1, sourceLastItem.GetEventId()+1, false)
+	}
+
+	if targetVersionHistories == nil {
+		// return nil, so target will retrieve the missing events from source
 		return nil, nil
 	}
 

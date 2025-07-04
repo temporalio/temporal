@@ -207,7 +207,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	directive := params.taskInfo.GetVersionDirective()
 	// spoolQueue will be nil iff task is forwarded.
 reredirectTask:
-	spoolQueue, syncMatchQueue, _, err = pm.getPhysicalQueuesForAdd(ctx, directive, params.forwardInfo, params.taskInfo.GetRunId(), params.taskInfo.GetWorkflowId())
+	spoolQueue, syncMatchQueue, _, err = pm.getPhysicalQueuesForAdd(ctx, directive, params.forwardInfo, params.taskInfo.GetRunId(), params.taskInfo.GetWorkflowId(), false)
 	if err != nil {
 		return "", false, err
 	}
@@ -419,7 +419,8 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 			directive,
 			nil,
 			taskInfo.GetRunId(),
-			taskInfo.GetWorkflowId())
+			taskInfo.GetWorkflowId(),
+			false)
 		if err != nil {
 			return err
 		}
@@ -474,6 +475,7 @@ func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
 		nil,
 		taskInfo.GetRunId(),
 		taskInfo.GetWorkflowId(),
+		false,
 	)
 	if err != nil {
 		return err
@@ -522,7 +524,9 @@ reredirectTask:
 		// did not have up-to-date User Data when selected a dispatch build ID.
 		nil,
 		request.GetQueryRequest().GetExecution().GetRunId(),
-		request.GetQueryRequest().GetExecution().GetWorkflowId())
+		request.GetQueryRequest().GetExecution().GetWorkflowId(),
+		true,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -555,7 +559,8 @@ reredirectTask:
 		// did not have up-to-date User Data when selected a dispatch build ID.
 		nil,
 		"",
-		"")
+		"",
+		false)
 	if err != nil {
 		return nil, err
 	}
@@ -980,6 +985,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	forwardInfo *taskqueuespb.TaskForwardInfo,
 	runId string,
 	workflowId string,
+	isQuery bool,
 ) (spoolQueue physicalTaskQueueManager, syncMatchQueue physicalTaskQueueManager, userDataChanged <-chan struct{}, err error) {
 	wfBehavior := directive.GetBehavior()
 	deployment := worker_versioning.DirectiveDeployment(directive)
@@ -999,6 +1005,21 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		err = worker_versioning.ValidateDeployment(deployment)
 		if err != nil {
 			return nil, nil, nil, err
+		}
+
+		// Preventing Query tasks from being dispatched to a drained version with no workers
+		if isQuery {
+			for _, versionData := range deploymentData.GetVersions() {
+				if versionData.GetVersion() != nil && worker_versioning.DeploymentVersionFromDeployment(deployment).Equal(versionData.GetVersion()) {
+					if versionData.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED && len(pm.GetAllPollerInfo()) == 0 {
+						versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))
+						return nil, nil, nil, serviceerror.NewFailedPreconditionf(ErrBlackholedQuery,
+							versionStr,
+							versionStr,
+						)
+					}
+				}
+			}
 		}
 
 		// We ignore the pinned directive if this is an activity task but the activity task queue is
