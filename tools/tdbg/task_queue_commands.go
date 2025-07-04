@@ -35,6 +35,7 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 	workflowID := c.String(FlagWorkflowID)
 	runID := c.String(FlagRunID)
 	subqueue := c.Int(FlagSubqueue)
+	minPass := c.Int64(FlagMinPass)
 
 	client := clientFactory.AdminClient(c)
 
@@ -46,6 +47,7 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 		MaxTaskId:     maxTaskID,
 		BatchSize:     int32(pageSize),
 		Subqueue:      int32(subqueue),
+		MinPass:       minPass,
 	}
 
 	ctx, cancel := newContext(c)

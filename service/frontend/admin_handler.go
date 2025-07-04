@@ -88,6 +88,7 @@ type (
 		persistenceExecutionName   string
 		namespaceReplicationQueue  persistence.NamespaceReplicationQueue
 		taskManager                persistence.TaskManager
+		fairTaskManager            persistence.FairTaskManager
 		clusterMetadataManager     persistence.ClusterMetadataManager
 		persistenceMetadataManager persistence.MetadataManager
 		clientFactory              serverClient.Factory
@@ -120,6 +121,7 @@ type (
 		visibilityMgr                       manager.VisibilityManager
 		Logger                              log.Logger
 		TaskManager                         persistence.TaskManager
+		FairTaskManager                     persistence.FairTaskManager
 		PersistenceExecutionManager         persistence.ExecutionManager
 		ClusterMetadataManager              persistence.ClusterMetadataManager
 		PersistenceMetadataManager          persistence.MetadataManager
@@ -192,6 +194,7 @@ func NewAdminHandler(
 		persistenceExecutionName:   args.PersistenceExecutionManager.GetName(),
 		namespaceReplicationQueue:  args.NamespaceReplicationQueue,
 		taskManager:                args.TaskManager,
+		fairTaskManager:            args.FairTaskManager,
 		clusterMetadataManager:     args.ClusterMetadataManager,
 		persistenceMetadataManager: args.PersistenceMetadataManager,
 		clientFactory:              args.ClientFactory,
@@ -1622,12 +1625,23 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 		return nil, err
 	}
 
-	resp, err := adh.taskManager.GetTasks(ctx, &persistence.GetTasksRequest{
+	var taskManager persistence.TaskManager
+	if request.GetMinPass() != 0 {
+		if adh.fairTaskManager == nil {
+			return nil, serviceerror.NewInvalidArgument("Fairness table is not available on this cluster")
+		}
+		taskManager = adh.fairTaskManager
+	} else {
+		taskManager = adh.taskManager
+	}
+
+	resp, err := taskManager.GetTasks(ctx, &persistence.GetTasksRequest{
 		NamespaceID:        namespaceID.String(),
 		TaskQueue:          request.GetTaskQueue(),
 		TaskType:           request.GetTaskQueueType(),
 		InclusiveMinTaskID: request.GetMinTaskId(),
 		ExclusiveMaxTaskID: request.GetMaxTaskId(),
+		InclusiveMinPass:   request.GetMinPass(),
 		Subqueue:           int(request.GetSubqueue()),
 		PageSize:           int(request.GetBatchSize()),
 		NextPageToken:      request.NextPageToken,
