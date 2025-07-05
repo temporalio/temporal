@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 )
 
 // A Cache is a generalized interface to a cache.  See cache.LRU for a specific
@@ -32,6 +33,11 @@ type Cache interface {
 	// Size returns current size of the Cache, the size definition is implementation of SizeGetter interface
 	// for the entry size, if the entry does not implement SizeGetter interface, the size is 1
 	Size() int
+
+	// Stop signals active expiration goroutine to exit. The goroutine
+	// will only be running if the cache was configured to use
+	// active expiration.
+	Stop()
 }
 
 // Options control the behavior of the cache.
@@ -49,6 +55,10 @@ type Options struct {
 	OnPut func(val any)
 
 	OnEvict func(val any)
+
+	// ActiveExpiry if and how the cache will expire and remove entries
+	// in the background.
+	ActiveExpiry func() dynamicconfig.CacheActiveExpirySettings
 }
 
 // SimpleOptions provides options that can be used to configure SimpleCache.
@@ -81,6 +91,6 @@ type Entry interface {
 	Key() interface{}
 	// Value represents the value
 	Value() interface{}
-	// CreateTime represents the time when the entry is created
-	CreateTime() time.Time
+	// LastAccessTime is the time of creation or last access
+	LastAccessTime() time.Time
 }
