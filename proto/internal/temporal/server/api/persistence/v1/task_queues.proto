@@ -116,6 +116,9 @@ message DeploymentData {
 // Container for all persistent user data that varies per task queue type within a family.
 message TaskQueueTypeUserData {
     DeploymentData deployment_data = 1;
+
+    // Perist TaskQueueConfig that comes as part of the UpdateTaskQueueConfigApi.
+    temporal.api.taskqueue.v1.TaskQueueConfig config = 2;
 }
 
 // Container for all persistent user provided data for a task queue family.

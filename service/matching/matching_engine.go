@@ -1352,6 +1352,18 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}
 	}
 
+	if req.GetReportConfig() {
+		userData, _, err := pm.GetUserDataManager().GetUserData()
+		if err != nil {
+			return nil, err
+		}
+		if userData == nil || userData.GetData() == nil {
+			return descrResp, nil
+		}
+		taskQueueConfig := constructUpdateTaskQueueConfigResponse(userData.GetData(), req.GetTaskQueueType())
+		descrResp.DescResponse.Config = taskQueueConfig.GetUpdatedTaskqueueConfig()
+	}
+
 	return descrResp, nil
 }
 
@@ -2927,4 +2939,175 @@ func largerBacklogAge(rootBacklogAge *durationpb.Duration, currentPartitionAge *
 		return rootBacklogAge
 	}
 	return currentPartitionAge
+}
+
+func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, updateTime *timestamppb.Timestamp) *taskqueuepb.RateLimitConfig {
+	if update == nil {
+		return nil
+	}
+	if update.GetRateLimit() == nil {
+		return &taskqueuepb.RateLimitConfig{
+			Metadata: &taskqueuepb.ConfigMetadata{
+				Reason:     update.GetReason(),
+				UpdateTime: updateTime,
+			},
+		}
+	}
+	return &taskqueuepb.RateLimitConfig{
+		RateLimit: &taskqueuepb.RateLimit{
+			RequestsPerSecond: update.GetRateLimit().GetRequestsPerSecond(),
+		},
+		Metadata: &taskqueuepb.ConfigMetadata{
+			Reason:     update.GetReason(),
+			UpdateTime: updateTime,
+		},
+	}
+}
+
+func prepareTaskQueueUserData(
+	tqud *persistencespb.TaskQueueUserData,
+	taskQueueType enumspb.TaskQueueType,
+) (*persistencespb.TaskQueueUserData, int32) {
+	data := common.CloneProto(tqud)
+	if data == nil {
+		data = &persistencespb.TaskQueueUserData{}
+	}
+	if data.PerType == nil {
+		data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
+	}
+	tqType := int32(taskQueueType)
+	if data.PerType[tqType] == nil {
+		data.PerType[tqType] = &persistencespb.TaskQueueTypeUserData{}
+	}
+	if data.PerType[tqType].Config == nil {
+		data.PerType[tqType].Config = &taskqueuepb.TaskQueueConfig{}
+	}
+	return data, tqType
+}
+
+func constructUpdateTaskQueueConfigResponse(
+	taskQueueUserData *persistencespb.TaskQueueUserData,
+	taskQueueType enumspb.TaskQueueType,
+) *matchingservice.UpdateTaskQueueConfigResponse {
+	if taskQueueUserData == nil || taskQueueUserData.GetPerType() == nil {
+		return &matchingservice.UpdateTaskQueueConfigResponse{}
+	}
+	tqType := int32(taskQueueType)
+	typeUserData, ok := taskQueueUserData.GetPerType()[tqType]
+	if !ok || typeUserData == nil {
+		return &matchingservice.UpdateTaskQueueConfigResponse{}
+	}
+	updateTaskQueueConfig := typeUserData.GetConfig()
+	if updateTaskQueueConfig == nil {
+		return &matchingservice.UpdateTaskQueueConfigResponse{}
+	}
+
+	var queueRateLimit *taskqueuepb.RateLimitConfig
+	if qrl := updateTaskQueueConfig.GetQueueRateLimit(); qrl != nil {
+		var metadata *taskqueuepb.ConfigMetadata
+		if qrl.GetMetadata() != nil {
+			metadata = &taskqueuepb.ConfigMetadata{
+				Reason:         qrl.Metadata.GetReason(),
+				UpdateTime:     qrl.Metadata.GetUpdateTime(),
+				UpdateIdentity: qrl.Metadata.GetUpdateIdentity(),
+			}
+		}
+		var rateLimit *taskqueuepb.RateLimit
+		if qrl.GetRateLimit() != nil {
+			rateLimit = &taskqueuepb.RateLimit{
+				RequestsPerSecond: qrl.RateLimit.GetRequestsPerSecond(),
+			}
+		}
+		queueRateLimit = &taskqueuepb.RateLimitConfig{
+			Metadata:  metadata,
+			RateLimit: rateLimit,
+		}
+	}
+
+	var fairnessKeysRateLimitDefault *taskqueuepb.RateLimitConfig
+	if fkrl := updateTaskQueueConfig.GetFairnessKeysRateLimitDefault(); fkrl != nil {
+		var metadata *taskqueuepb.ConfigMetadata
+		if fkrl.GetMetadata() != nil {
+			metadata = &taskqueuepb.ConfigMetadata{
+				Reason:         fkrl.Metadata.GetReason(),
+				UpdateTime:     fkrl.Metadata.GetUpdateTime(),
+				UpdateIdentity: fkrl.Metadata.GetUpdateIdentity(),
+			}
+		}
+		var rateLimit *taskqueuepb.RateLimit
+		if fkrl.GetRateLimit() != nil {
+			rateLimit = &taskqueuepb.RateLimit{
+				RequestsPerSecond: fkrl.RateLimit.GetRequestsPerSecond(),
+			}
+		}
+		fairnessKeysRateLimitDefault = &taskqueuepb.RateLimitConfig{
+			Metadata:  metadata,
+			RateLimit: rateLimit,
+		}
+	}
+
+	return &matchingservice.UpdateTaskQueueConfigResponse{
+		UpdatedTaskqueueConfig: &taskqueuepb.TaskQueueConfig{
+			QueueRateLimit:               queueRateLimit,
+			FairnessKeysRateLimitDefault: fairnessKeysRateLimitDefault,
+		},
+	}
+}
+
+func (e *matchingEngineImpl) UpdateTaskqueueConfig(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+	taskQueueFamily, err := tqid.NewTaskQueueFamily(request.NamespaceId, request.UpdateTaskqueueConfig.GetTaskQueueName())
+	if err != nil {
+		return nil, err
+	}
+	if request.GetUpdateTaskqueueConfig() == nil {
+		return &matchingservice.UpdateTaskQueueConfigResponse{}, err
+	}
+	taskQueueType := request.UpdateTaskqueueConfig.TaskQueueType
+	tqm, _, err := e.getTaskQueuePartitionManager(ctx,
+		taskQueueFamily.TaskQueue(taskQueueType).RootPartition(),
+		true, loadCauseOtherWrite)
+	if err != nil {
+		return nil, err
+	}
+	updateOptions := UserDataUpdateOptions{Source: "UpdateTaskQueueConfig"}
+	_, err = tqm.GetUserDataManager().UpdateUserData(ctx, updateOptions,
+		func(tqud *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+			data, tqType := prepareTaskQueueUserData(tqud, taskQueueType)
+			// Update timestamp from hlc clock
+			existingClock := data.Clock
+			if existingClock == nil {
+				existingClock = hlc.Zero(e.clusterMeta.GetClusterID())
+			}
+			now := hlc.Next(existingClock, e.timeSource)
+			protoTs := hlc.ProtoTimestamp(now)
+			// Update relevant config fields
+			cfg := data.PerType[tqType].Config
+			// Queue Rate Limit
+			updateTaskQueueConfig := request.GetUpdateTaskqueueConfig()
+			queueRateLimit := updateTaskQueueConfig.GetUpdateQueueRateLimit()
+			if queueRateLimit != nil {
+				cfg.QueueRateLimit = buildRateLimitConfig(queueRateLimit, protoTs)
+			} else {
+				cfg.QueueRateLimit = nil
+			}
+			// Fairness Queue Rate Limit
+			fairnessQueueRateLimit := updateTaskQueueConfig.GetUpdateFairnessKeyRateLimitDefault()
+			if fairnessQueueRateLimit != nil {
+				cfg.FairnessKeysRateLimitDefault = buildRateLimitConfig(fairnessQueueRateLimit, protoTs)
+			} else {
+				cfg.FairnessKeysRateLimitDefault = nil
+			}
+			data.Clock = now
+			return data, true, nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	userData, _, err := tqm.GetUserDataManager().GetUserData()
+	if err != nil {
+		return nil, err
+	}
+	return constructUpdateTaskQueueConfigResponse(userData.GetData(), taskQueueType), nil
 }
