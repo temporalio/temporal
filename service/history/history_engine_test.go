@@ -6548,14 +6548,22 @@ func addTimerFiredEvent(ms historyi.MutableState, timerID string) *historypb.His
 	return event
 }
 
-func addRequestCancelInitiatedEvent(ms historyi.MutableState, workflowTaskCompletedEventID int64,
-	cancelRequestID string, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID string) (*historypb.HistoryEvent, *persistencespb.RequestCancelInfo) {
+func addRequestCancelInitiatedEvent(
+	ms historyi.MutableState,
+	workflowTaskCompletedEventID int64,
+	cancelRequestID string,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	workflowID, runID string,
+	childWorkflowOnly bool,
+) (*historypb.HistoryEvent, *persistencespb.RequestCancelInfo) {
 	event, rci, _ := ms.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID,
 		cancelRequestID, &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
-			Namespace:  namespace.String(),
-			WorkflowId: workflowID,
-			RunId:      runID,
-			Reason:     "cancellation reason",
+			Namespace:         namespaceName.String(),
+			WorkflowId:        workflowID,
+			RunId:             runID,
+			ChildWorkflowOnly: childWorkflowOnly,
+			Reason:            "cancellation reason",
 		},
 		namespaceID)
 
@@ -6574,20 +6582,31 @@ func addCancelRequestedEvent(
 	return event
 }
 
-func addRequestSignalInitiatedEvent(ms historyi.MutableState, workflowTaskCompletedEventID int64,
-	signalRequestID string, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID, signalName string, input *commonpb.Payloads,
-	control string, header *commonpb.Header) (*historypb.HistoryEvent, *persistencespb.SignalInfo) {
+func addRequestSignalInitiatedEvent(
+	ms historyi.MutableState,
+	workflowTaskCompletedEventID int64,
+	signalRequestID string,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	workflowID, runID string,
+	childWorkflowOnly bool,
+	signalName string,
+	input *commonpb.Payloads,
+	control string,
+	header *commonpb.Header,
+) (*historypb.HistoryEvent, *persistencespb.SignalInfo) {
 	event, si, _ := ms.AddSignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, signalRequestID,
 		&commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-			Namespace: namespace.String(),
+			Namespace: namespaceName.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
-			SignalName: signalName,
-			Input:      input,
-			Control:    control,
-			Header:     header,
+			ChildWorkflowOnly: childWorkflowOnly,
+			SignalName:        signalName,
+			Input:             input,
+			Control:           control,
+			Header:            header,
 		}, namespaceID)
 
 	return event, si
