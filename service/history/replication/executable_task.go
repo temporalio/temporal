@@ -289,9 +289,11 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 	now time.Time,
 ) {
 	if e.isDuplicated {
-		metrics.ReplicationDuplicatedTaskCount.With(e.MetricsHandler).Record(1,
-			metrics.OperationTag(e.metricsTag),
-			metrics.NamespaceTag(e.replicationTask.RawTaskInfo.NamespaceId))
+		if e.replicationTask.RawTaskInfo != nil {
+			metrics.ReplicationDuplicatedTaskCount.With(e.MetricsHandler).Record(1,
+				metrics.OperationTag(e.metricsTag),
+				metrics.NamespaceTag(e.replicationTask.RawTaskInfo.NamespaceId))
+		}
 		return
 	}
 	nsTag := metrics.NamespaceUnknownTag()
