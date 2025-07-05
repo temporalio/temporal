@@ -178,6 +178,7 @@ func (d *errorLogDetector) Error(msg string, tags ...tag.Tag) {
 		"Unable to process new range",
 		"Unable to call",
 		"service failures",
+		"Queue reader unable to retrieve tasks",
 	} {
 		if strings.Contains(msg, s) {
 			return

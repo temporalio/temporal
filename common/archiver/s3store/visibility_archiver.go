@@ -5,15 +5,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/config"
+	temporalconfig "go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -25,7 +24,7 @@ type (
 	visibilityArchiver struct {
 		logger         log.Logger
 		metricsHandler metrics.Handler
-		s3cli          s3iface.S3API
+		s3cli          S3API
 		queryParser    QueryParser
 	}
 
@@ -56,29 +55,38 @@ const (
 func NewVisibilityArchiver(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-	config *config.S3Archiver,
+	archiveConfig *temporalconfig.S3Archiver,
 ) (archiver.VisibilityArchiver, error) {
-	return newVisibilityArchiver(logger, metricsHandler, config)
+	return newVisibilityArchiver(logger, metricsHandler, archiveConfig)
 }
 
 func newVisibilityArchiver(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-	config *config.S3Archiver) (*visibilityArchiver, error) {
-	s3Config := &aws.Config{
-		Endpoint:         config.Endpoint,
-		Region:           aws.String(config.Region),
-		S3ForcePathStyle: aws.Bool(config.S3ForcePathStyle),
-		LogLevel:         (*aws.LogLevelType)(&config.LogLevel),
-	}
-	sess, err := session.NewSession(s3Config)
+	archiveConfig *temporalconfig.S3Archiver) (*visibilityArchiver, error) {
+
+	ctx := context.Background()
+
+	// Load AWS config with region
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(archiveConfig.Region))
 	if err != nil {
 		return nil, err
 	}
+
+	// Create S3 client with custom endpoint if specified
+	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		if archiveConfig.Endpoint != nil {
+			o.BaseEndpoint = archiveConfig.Endpoint
+		}
+		if archiveConfig.S3ForcePathStyle {
+			o.UsePathStyle = true
+		}
+	})
+
 	return &visibilityArchiver{
 		logger:         logger,
 		metricsHandler: metricsHandler,
-		s3cli:          s3.New(sess),
+		s3cli:          s3Client,
 		queryParser:    NewQueryParser(),
 	}, nil
 }
@@ -310,10 +318,10 @@ func (v *visibilityArchiver) queryPrefix(
 	if request.nextPageToken != nil {
 		token = deserializeQueryVisibilityToken(request.nextPageToken)
 	}
-	results, err := v.s3cli.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{
+	results, err := v.s3cli.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket:            aws.String(uri.Hostname()),
 		Prefix:            aws.String(prefix),
-		MaxKeys:           aws.Int64(int64(request.pageSize)),
+		MaxKeys:           aws.Int32(int32(request.pageSize)),
 		ContinuationToken: token,
 	})
 	if err != nil {
