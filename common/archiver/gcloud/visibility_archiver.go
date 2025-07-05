@@ -12,7 +12,6 @@ import (
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -57,12 +56,6 @@ func newVisibilityArchiver(logger log.Logger, metricsHandler metrics.Handler, st
 		gcloudStorage:  storage,
 		queryParser:    NewQueryParser(),
 	}
-}
-
-// NewVisibilityArchiver creates a new archiver.VisibilityArchiver based on filestore
-func NewVisibilityArchiver(logger log.Logger, metricsHandler metrics.Handler, cfg *config.GstorageArchiver) (archiver.VisibilityArchiver, error) {
-	storage, err := connector.NewClient(context.Background(), cfg)
-	return newVisibilityArchiver(logger, metricsHandler, storage), err
 }
 
 // Archive is used to archive one workflow visibility record.
