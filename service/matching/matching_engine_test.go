@@ -2839,7 +2839,6 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 
 	config := s.newConfig()
 	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
-	// TODO(fairness): why is this calling s.newMatchingEngine instead of using s.matchingEngine?
 	e := s.newMatchingEngine(config, s.classicTaskManager, s.fairTaskManager)
 	e.Start()
 	defer e.Stop()
