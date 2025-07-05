@@ -5,7 +5,9 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -137,17 +139,7 @@ func (a *defaultTokenKeyProvider) updateKeysFromURI(
 	rsaKeys map[string]*rsa.PublicKey,
 	ecKeys map[string]*ecdsa.PublicKey,
 ) (err error) {
-
-	resp, err := http.Get(uri)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		err = multierr.Combine(err, resp.Body.Close())
-	}()
-
-	jwks := jose.JSONWebKeySet{}
-	err = json.NewDecoder(resp.Body).Decode(&jwks)
+	jwks, err := a.getJWKSFromURI(uri)
 	if err != nil {
 		return err
 	}
@@ -163,6 +155,54 @@ func (a *defaultTokenKeyProvider) updateKeysFromURI(
 		}
 	}
 	return nil
+}
+
+func (a *defaultTokenKeyProvider) getJWKSFromURI(
+	uri string,
+) (*jose.JSONWebKeySet, error) {
+	rawJWKS, err := a.readJWKSFromURI(uri)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if closer, ok := rawJWKS.(io.Closer); ok {
+			err = multierr.Combine(err, closer.Close())
+		}
+	}()
+
+	jwks := jose.JSONWebKeySet{}
+	err = json.NewDecoder(rawJWKS).Decode(&jwks)
+	if err != nil {
+		return nil, err
+	}
+
+	return &jwks, nil
+}
+
+func (a *defaultTokenKeyProvider) readJWKSFromURI(uri string) (io.Reader, error) {
+	if strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
+		return a.readJWKSFromHttpURI(uri)
+	}
+	if strings.HasPrefix(uri, "file://") {
+		return a.readJWKSFromFileURI(uri)
+	}
+
+	return nil, fmt.Errorf("unsupported URI scheme for JWKS: %s", uri)
+}
+
+func (a *defaultTokenKeyProvider) readJWKSFromHttpURI(uri string) (io.Reader, error) {
+	resp, err := http.Get(uri)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Body, nil
+}
+
+func (a *defaultTokenKeyProvider) readJWKSFromFileURI(uri string) (io.Reader, error) {
+	filePath := strings.TrimPrefix(uri, "file://")
+	return os.Open(filePath)
 }
 
 func (a *defaultTokenKeyProvider) HmacKey(alg string, kid string) ([]byte, error) {
