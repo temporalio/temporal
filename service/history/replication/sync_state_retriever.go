@@ -102,7 +102,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	targetCurrentVersionedTransition *persistencespb.VersionedTransition,
 	targetVersionHistories *historyspb.VersionHistories,
 ) (_ *SyncStateResult, retError error) {
-	wfLease, err := s.workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
+	wfLease, err := s.workflowConsistencyChecker.GetChasmLeaseWithConsistencyCheck(
 		ctx,
 		nil,
 		func(mutableState historyi.MutableState) bool {
@@ -116,6 +116,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 			WorkflowID:  execution.WorkflowId,
 			RunID:       execution.RunId,
 		},
+		"", // SyncWorkflowState API works on all archetypes
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -291,6 +292,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 }
 
 func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId namespace.ID, execution *commonpb.WorkflowExecution, newRunId string) (_ *replicationspb.NewRunInfo, retError error) {
+	// CHASM runs don't have new run, so can continue to use GetOrCreateWorkflowExecution here.
 	wfCtx, releaseFunc, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		s.shardContext,
