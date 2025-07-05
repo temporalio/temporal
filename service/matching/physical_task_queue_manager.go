@@ -111,6 +111,9 @@ var (
 	errMissingNormalQueueName    = errors.New("missing normal queue name")
 	errDeploymentVersionNotReady = serviceerror.NewUnavailable("task queue is not ready to process polls from this deployment version, try again shortly")
 	ErrBlackholedQuery           = "You are trying to query a closed Workflow that is PINNED to Worker Deployment Version %s, but %s is drained and has no pollers to answer the query. Immediately: You can re-deploy Workers in this Deployment Version to take those queries, or you can workflow update-options to change your workflow to AUTO_UPGRADE. For the future: In your infrastructure, consider waiting longer after the last queried timestamp as reported in Describe Deployment before you sunset Workers. Or mark this workflow as AUTO_UPGRADE."
+
+	backlogTagClassic  = tag.NewStringTag("backlog", "classic")
+	backlogTagPriority = tag.NewStringTag("backlog", "priority")
 )
 
 func newPhysicalTaskQueueManager(
@@ -120,8 +123,6 @@ func newPhysicalTaskQueueManager(
 	e := partitionMgr.engine
 	config := partitionMgr.config
 	buildIdTagValue := queue.Version().MetricsTagValue()
-	logger := log.With(partitionMgr.logger, tag.WorkerBuildId(buildIdTagValue))
-	throttledLogger := log.With(partitionMgr.throttledLogger, tag.WorkerBuildId(buildIdTagValue))
 	taggedMetricsHandler := partitionMgr.metricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
 		metrics.WorkerBuildIdTag(buildIdTagValue, config.BreakdownMetricsByBuildID()))
@@ -143,8 +144,6 @@ func newPhysicalTaskQueueManager(
 		namespaceRegistry:          e.namespaceRegistry,
 		matchingClient:             e.matchingRawClient,
 		clusterMeta:                e.clusterMeta,
-		logger:                     logger,
-		throttledLogger:            throttledLogger,
 		metricsHandler:             taggedMetricsHandler,
 		tasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource()),
 		tasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource()),
@@ -177,14 +176,22 @@ func newPhysicalTaskQueueManager(
 	})
 	pqMgr.cancelSub = cancelSub
 
+	buildIdTag := tag.WorkerBuildId(buildIdTagValue)
+	backlogTag := backlogTagClassic
+	if newMatcher {
+		backlogTag = backlogTagPriority
+	}
+	pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTag)
+	pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTag)
+
 	if newMatcher {
 		pqMgr.backlogMgr = newPriBacklogManager(
 			tqCtx,
 			pqMgr,
 			config,
 			e.taskManager,
-			logger,
-			throttledLogger,
+			pqMgr.logger,
+			pqMgr.throttledLogger,
 			e.matchingRawClient,
 			newPriMetricsHandler(taggedMetricsHandler),
 		)
@@ -203,7 +210,7 @@ func newPhysicalTaskQueueManager(
 			queue.partition,
 			fwdr,
 			pqMgr.taskValidator,
-			logger,
+			pqMgr.logger,
 			newPriMetricsHandler(taggedMetricsHandler),
 		)
 		pqMgr.matcher = pqMgr.priMatcher
@@ -213,8 +220,8 @@ func newPhysicalTaskQueueManager(
 			pqMgr,
 			config,
 			e.taskManager,
-			logger,
-			throttledLogger,
+			pqMgr.logger,
+			pqMgr.throttledLogger,
 			e.matchingRawClient,
 			taggedMetricsHandler,
 		)
