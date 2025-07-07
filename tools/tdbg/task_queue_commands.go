@@ -38,8 +38,9 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 	var minPass int64
 	if c.Bool(FlagFair) {
 		minPass = c.Int64(FlagMinPass)
+	} else if c.IsSet(FlagMinPass) {
+		return fmt.Errorf("flag --%s is only valid with --%s", FlagMinPass, FlagFair)
 	}
-
 	client := clientFactory.AdminClient(c)
 
 	req := &adminservice.GetTaskQueueTasksRequest{
