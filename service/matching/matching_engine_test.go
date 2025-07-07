@@ -3805,12 +3805,9 @@ func (m *testTaskManager) CreateTasks(
 	rangeID := request.TaskQueueInfo.RangeID
 
 	if m.fault("CreateTasks", "ConditionFailed") {
-		return nil, &persistence.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to create task. TaskQueue: %v, taskQueueType: %v, rangeID: %v, db rangeID: %v",
-				taskQueue, taskType, rangeID, rangeID),
-		}
+		return nil, &persistence.ConditionFailedError{Msg: "Fake ConditionFailedError"}
 	} else if m.fault("CreateTasks", "Unavailable") {
-		return nil, serviceerror.NewUnavailablef("CreateTasks operation failed during serialization. Error : %v", errors.New("failure"))
+		return nil, serviceerror.NewUnavailable("Fake Unavailable")
 	}
 
 	tlm := m.getQueueData(taskQueue, namespaceId, taskType)
@@ -3818,8 +3815,10 @@ func (m *testTaskManager) CreateTasks(
 	defer tlm.Unlock()
 
 	if tlm.rangeID != rangeID {
+		m.logger.Debug("testTaskManager.CreateTask ConditionFailedError",
+			tag.TaskID(task.GetTaskId()), tag.ShardRangeID(rangeID), tag.ShardRangeID(tlm.rangeID))
 		return nil, &persistence.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to create task. TaskQueue: %v, taskQueueType: %v, rangeID: %v, db rangeID: %v",
+			Msg: fmt.Sprintf("CreateTask failed, range id mismatch. TaskQueue: %v, taskQueueType: %v, rangeID: %v, db rangeID: %v",
 				taskQueue, taskType, rangeID, tlm.rangeID),
 		}
 	}
@@ -3829,16 +3828,6 @@ func (m *testTaskManager) CreateTasks(
 		m.logger.Debug("testTaskManager.CreateTask", tag.TaskID(task.GetTaskId()), tag.ShardRangeID(rangeID))
 		if task.GetTaskId() <= 0 {
 			panic(fmt.Errorf("invalid taskID=%v", task.GetTaskId()))
-		}
-
-		if tlm.rangeID != rangeID {
-			m.logger.Debug("testTaskManager.CreateTask ConditionFailedError",
-				tag.TaskID(task.GetTaskId()), tag.ShardRangeID(rangeID), tag.ShardRangeID(tlm.rangeID))
-
-			return nil, &persistence.ConditionFailedError{
-				Msg: fmt.Sprintf("testTaskManager.CreateTask failed. TaskQueue: %v, taskQueueType: %v, rangeID: %v, db rangeID: %v",
-					taskQueue, taskType, rangeID, tlm.rangeID),
-			}
 		}
 		_, ok := tlm.tasks.Get(task.GetTaskId())
 		if ok {
