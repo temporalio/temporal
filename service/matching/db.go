@@ -213,7 +213,7 @@ func (db *taskQueueDB) updateTaskQueueLocked(ctx context.Context, incrementRange
 
 // OldUpdateState updates the queue state with the given value. This is used by old backlog
 // manager (not subqueue-enabled).
-// TODO(pro): old matcher cleanup
+// TODO(pri): old matcher cleanup
 func (db *taskQueueDB) OldUpdateState(
 	ctx context.Context,
 	ackLevel int64,
@@ -229,15 +229,12 @@ func (db *taskQueueDB) OldUpdateState(
 		db.subqueues[subqueueZero].ApproximateBacklogCount = 0
 	}
 
-	queueInfo := db.cachedQueueInfo()
-	queueInfo.AckLevel = ackLevel
-	_, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
-		RangeID:       db.rangeID,
-		TaskQueueInfo: queueInfo,
-		PrevRangeID:   db.rangeID,
-	})
-	if err == nil {
-		db.subqueues[subqueueZero].AckLevel = ackLevel
+	prevAckLevel := db.subqueues[subqueueZero].AckLevel
+	db.subqueues[subqueueZero].AckLevel = ackLevel
+
+	err := db.updateTaskQueueLocked(ctx, false)
+	if err != nil {
+		db.subqueues[subqueueZero].AckLevel = prevAckLevel
 	}
 	db.emitBacklogGaugesLocked()
 	return err
