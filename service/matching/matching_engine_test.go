@@ -1134,7 +1134,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.Equal(defaultTaskDispatchRPS, descResp.DescResponse.Pollers[0].GetRatePerSecond())
 	s.NotNil(descResp.DescResponse.GetTaskQueueStatus())
 	numPartitions := float64(s.matchingEngine.config.NumTaskqueueWritePartitions("", "", tlType))
-	s.GreaterOrEqual(descResp.DescResponse.GetTaskQueueStatus().GetRatePerSecond()*numPartitions, (defaultTaskDispatchRPS - 1))
+	//nolint:staticcheck // checking deprecated field
+	s.GreaterOrEqual(descResp.DescResponse.GetTaskQueueStatus().GetRatePerSecond()*numPartitions,
+		(defaultTaskDispatchRPS - 1))
 }
 
 func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
