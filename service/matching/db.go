@@ -260,20 +260,26 @@ func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue int, newAckLevel i
 	db.Lock()
 	defer db.Unlock()
 
-	db.lastChange = time.Now()
 	dbQueue := db.subqueues[subqueue]
 	if newAckLevel < dbQueue.AckLevel {
 		softassert.Fail(db.logger,
 			fmt.Sprintf("ack level in subqueue %d should not move backwards (from %v to %v)",
 				subqueue, dbQueue.AckLevel, newAckLevel))
 	}
-	dbQueue.AckLevel = newAckLevel
+	if dbQueue.AckLevel != newAckLevel {
+		db.lastChange = time.Now()
+		dbQueue.AckLevel = newAckLevel
+	}
 
 	if newAckLevel == db.getMaxReadLevelLocked(subqueue) {
 		// Reset approximateBacklogCount to fix the count divergence issue
-		dbQueue.ApproximateBacklogCount = 0
-		dbQueue.oldestTime = oldestTime
+		if dbQueue.ApproximateBacklogCount != 0 || !dbQueue.oldestTime.Equal(oldestTime) {
+			db.lastChange = time.Now()
+			dbQueue.ApproximateBacklogCount = 0
+			dbQueue.oldestTime = oldestTime
+		}
 	} else if countDelta != 0 {
+		db.lastChange = time.Now()
 		db.updateBacklogStatsLocked(subqueue, countDelta, oldestTime)
 	}
 }
