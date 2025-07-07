@@ -15,6 +15,7 @@ type Context interface {
 	// this is a Ref to the component state at the start of the transition
 	Ref(Component) ([]byte, error)
 	Now(Component) time.Time
+	ParentRef(Component) ([]byte, error)
 
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
@@ -66,6 +67,26 @@ func NewContext(
 
 func (c *ContextImpl) Ref(component Component) ([]byte, error) {
 	return c.root.Ref(component)
+}
+
+func (c *ContextImpl) ParentRef(component Component) ([]byte, error) {
+	path, err := c.componentNodePath(component)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(path) < 1 {
+		// We're already at the root.
+		return nil, errComponentNotFound
+	}
+
+	parentPath := path[:len(path)-1]
+	parent, ok := c.root.findNode(parentPath)
+	if !ok {
+		return nil, errComponentNotFound
+	}
+
+	return parent.ref()
 }
 
 func (c *ContextImpl) componentNodePath(component Component) ([]string, error) {

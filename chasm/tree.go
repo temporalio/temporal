@@ -1017,26 +1017,31 @@ func (n *Node) Ref(
 	// syncSubComponents() is called, it means the component is created in the
 	// current transition and don't have a reference yet.
 
-	for path, node := range n.andAllChildren() {
+	for _, node := range n.andAllChildren() {
 		if node.value == component {
-			workflowKey := node.backend.GetWorkflowKey()
-			ref := ComponentRef{
-				EntityKey: EntityKey{
-					NamespaceID: workflowKey.NamespaceID,
-					BusinessID:  workflowKey.WorkflowID,
-					EntityID:    workflowKey.RunID,
-				},
-				archetype: n.root().serializedNode.GetMetadata().GetComponentAttributes().Type,
-				// TODO: Consider using node's LastUpdateVersionedTransition for checking staleness here.
-				// Using VersionedTransition of the entire tree might be too strict.
-				entityLastUpdateVT: transitionhistory.CopyVersionedTransition(node.backend.CurrentVersionedTransition()),
-				componentPath:      path,
-				componentInitialVT: node.serializedNode.GetMetadata().GetInitialVersionedTransition(),
-			}
-			return ref.Serialize(n.registry)
+			return node.ref()
 		}
 	}
 	return nil, errComponentNotFound
+}
+
+// ref returns a serialized ComponentRef to the node.
+func (n *Node) ref() ([]byte, error) {
+	workflowKey := n.backend.GetWorkflowKey()
+	ref := ComponentRef{
+		EntityKey: EntityKey{
+			NamespaceID: workflowKey.NamespaceID,
+			BusinessID:  workflowKey.WorkflowID,
+			EntityID:    workflowKey.RunID,
+		},
+		archetype: n.root().serializedNode.GetMetadata().GetComponentAttributes().Type,
+		// TODO: Consider using node's LastUpdateVersionedTransition for checking staleness here.
+		// Using VersionedTransition of the entire tree might be too strict.
+		entityLastUpdateVT: transitionhistory.CopyVersionedTransition(n.backend.CurrentVersionedTransition()),
+		componentPath:      n.path(),
+		componentInitialVT: n.serializedNode.GetMetadata().GetInitialVersionedTransition(),
+	}
+	return ref.Serialize(n.registry)
 }
 
 // componentNodePath implements the CHASM Context interface
