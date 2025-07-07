@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -1631,6 +1632,7 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 			return nil, serviceerror.NewInvalidArgument("Fairness table is not available on this cluster")
 		}
 		taskManager = adh.fairTaskManager
+		request.MaxTaskId = math.MaxInt64 // required for fairness GetTasks call
 	} else {
 		taskManager = adh.taskManager
 	}
