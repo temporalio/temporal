@@ -83,7 +83,7 @@ func (w *fairTaskWriter) appendTask(
 			return err
 		case <-w.backlogMgr.tqCtx.Done():
 			// if we are shutting down, this request will never make
-			// it to cassandra, just bail out and fail this request
+			// it to persistence, just bail out and fail this request
 			return errShutdown
 		}
 	default: // channel is full, throttle
@@ -123,6 +123,7 @@ func (w *fairTaskWriter) pickPasses(tasks []*writeTaskRequest, bases []fairLevel
 		if !ok {
 			weight = task.taskInfo.Priority.GetFairnessWeight()
 		}
+		// zero means default weight (1.0). negative doesn't make sense, map it to 1.0 also
 		if weight <= 0.0 {
 			weight = 1.0
 		} else {
@@ -137,10 +138,7 @@ func (w *fairTaskWriter) pickPasses(tasks []*writeTaskRequest, bases []fairLevel
 }
 
 func (w *fairTaskWriter) initState() error {
-	retryForever := backoff.NewExponentialRetryPolicy(1 * time.Second).
-		WithMaximumInterval(10 * time.Second).
-		WithExpirationInterval(backoff.NoInterval)
-	state, err := w.renewLeaseWithRetry(retryForever, common.IsPersistenceTransientError)
+	state, err := w.renewLeaseWithRetry(foreverRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		w.backlogMgr.initState(taskQueueState{}, err)
 		return err
