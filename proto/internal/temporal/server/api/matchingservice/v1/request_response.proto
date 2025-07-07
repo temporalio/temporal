@@ -600,7 +600,6 @@ message ListWorkersResponse {
 //     aip.dev/not-precedent: UpdateTaskQueueConfigRequest RPC doesn't follow Google API format. --)
 message UpdateTaskQueueConfigRequest {
     string namespace_id = 1;
-    temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
     temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest update_taskqueue_config = 3;
 }
 

@@ -342,7 +342,6 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	client, err := c.getClientForTaskQueuePartition(p)`,
 			tqp.path, nsID.path)
 	}
-
 	if tq.found() && tqt.found() {
 		partitionMaker := fmt.Sprintf("tqid.PartitionFromProto(%s, %s, %s)", tq.path, nsID.path, tqt.path)
 		// Some task queue fields are full messages, some are just strings

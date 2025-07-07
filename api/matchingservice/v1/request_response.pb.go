@@ -4478,7 +4478,6 @@ func (x *ListWorkersResponse) GetNextPageToken() []byte {
 type UpdateTaskQueueConfigRequest struct {
 	state                 protoimpl.MessageState           `protogen:"open.v1"`
 	NamespaceId           string                           `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueue             *v14.TaskQueue                   `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	UpdateTaskqueueConfig *v1.UpdateTaskQueueConfigRequest `protobuf:"bytes,3,opt,name=update_taskqueue_config,json=updateTaskqueueConfig,proto3" json:"update_taskqueue_config,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
@@ -4519,13 +4518,6 @@ func (x *UpdateTaskQueueConfigRequest) GetNamespaceId() string {
 		return x.NamespaceId
 	}
 	return ""
-}
-
-func (x *UpdateTaskQueueConfigRequest) GetTaskQueue() *v14.TaskQueue {
-	if x != nil {
-		return x.TaskQueue
-	}
-	return nil
 }
 
 func (x *UpdateTaskQueueConfigRequest) GetUpdateTaskqueueConfig() *v1.UpdateTaskQueueConfigRequest {
@@ -5127,11 +5119,9 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\flist_request\x18\x02 \x01(\v23.temporal.api.workflowservice.v1.ListWorkersRequestR\vlistRequest\"\x84\x01\n" +
 	"\x13ListWorkersResponse\x12E\n" +
 	"\fworkers_info\x18\x01 \x03(\v2\".temporal.api.worker.v1.WorkerInfoR\vworkersInfo\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\"\xfd\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\"\xb8\x01\n" +
 	"\x1cUpdateTaskQueueConfigRequest\x12!\n" +
-	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12C\n" +
-	"\n" +
-	"task_queue\x18\x02 \x01(\v2$.temporal.api.taskqueue.v1.TaskQueueR\ttaskQueue\x12u\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12u\n" +
 	"\x17update_taskqueue_config\x18\x03 \x01(\v2=.temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequestR\x15updateTaskqueueConfig\"\x85\x01\n" +
 	"\x1dUpdateTaskQueueConfigResponse\x12d\n" +
 	"\x18updated_taskqueue_config\x18\x01 \x01(\v2*.temporal.api.taskqueue.v1.TaskQueueConfigR\x16updatedTaskqueueConfigB>Z<go.temporal.io/server/api/matchingservice/v1;matchingserviceb\x06proto3"
@@ -5396,20 +5386,19 @@ var file_temporal_server_api_matchingservice_v1_request_response_proto_depIdxs =
 	128, // 105: temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatRequest.heartbeart_request:type_name -> temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequest
 	129, // 106: temporal.server.api.matchingservice.v1.ListWorkersRequest.list_request:type_name -> temporal.api.workflowservice.v1.ListWorkersRequest
 	130, // 107: temporal.server.api.matchingservice.v1.ListWorkersResponse.workers_info:type_name -> temporal.api.worker.v1.WorkerInfo
-	83,  // 108: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	131, // 109: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest.update_taskqueue_config:type_name -> temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest
-	132, // 110: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse.updated_taskqueue_config:type_name -> temporal.api.taskqueue.v1.TaskQueueConfig
-	81,  // 111: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
-	101, // 112: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.VersionTaskQueue.type:type_name -> temporal.api.enums.v1.TaskQueueType
-	101, // 113: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.type:type_name -> temporal.api.enums.v1.TaskQueueType
-	133, // 114: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.stats:type_name -> temporal.api.taskqueue.v1.TaskQueueStats
-	134, // 115: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry.value:type_name -> temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
-	135, // 116: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest.request:type_name -> temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest
-	117, // [117:117] is the sub-list for method output_type
-	117, // [117:117] is the sub-list for method input_type
-	117, // [117:117] is the sub-list for extension type_name
-	117, // [117:117] is the sub-list for extension extendee
-	0,   // [0:117] is the sub-list for field type_name
+	131, // 108: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest.update_taskqueue_config:type_name -> temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest
+	132, // 109: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse.updated_taskqueue_config:type_name -> temporal.api.taskqueue.v1.TaskQueueConfig
+	81,  // 110: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
+	101, // 111: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.VersionTaskQueue.type:type_name -> temporal.api.enums.v1.TaskQueueType
+	101, // 112: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.type:type_name -> temporal.api.enums.v1.TaskQueueType
+	133, // 113: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.stats:type_name -> temporal.api.taskqueue.v1.TaskQueueStats
+	134, // 114: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry.value:type_name -> temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
+	135, // 115: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest.request:type_name -> temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest
+	116, // [116:116] is the sub-list for method output_type
+	116, // [116:116] is the sub-list for method input_type
+	116, // [116:116] is the sub-list for extension type_name
+	116, // [116:116] is the sub-list for extension extendee
+	0,   // [0:116] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_matchingservice_v1_request_response_proto_init() }

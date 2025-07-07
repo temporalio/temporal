@@ -550,7 +550,7 @@ func (c *clientImpl) UpdateTaskQueueConfig(
 	opts ...grpc.CallOption,
 ) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
 
-	p, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	p, err := tqid.NormalPartitionFromRpcName(request.GetUpdateTaskqueueConfig().GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
