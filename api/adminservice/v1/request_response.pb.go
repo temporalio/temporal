@@ -3285,12 +3285,12 @@ type GetTaskQueueTasksRequest struct {
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	TaskQueueType v16.TaskQueueType      `protobuf:"varint,3,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
+	MinPass       int64                  `protobuf:"varint,9,opt,name=min_pass,json=minPass,proto3" json:"min_pass,omitempty"`
 	MinTaskId     int64                  `protobuf:"varint,4,opt,name=min_task_id,json=minTaskId,proto3" json:"min_task_id,omitempty"`
 	MaxTaskId     int64                  `protobuf:"varint,5,opt,name=max_task_id,json=maxTaskId,proto3" json:"max_task_id,omitempty"`
 	BatchSize     int32                  `protobuf:"varint,6,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
 	NextPageToken []byte                 `protobuf:"bytes,7,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	Subqueue      int32                  `protobuf:"varint,8,opt,name=subqueue,proto3" json:"subqueue,omitempty"`
-	MinPass       int64                  `protobuf:"varint,9,opt,name=min_pass,json=minPass,proto3" json:"min_pass,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3346,6 +3346,13 @@ func (x *GetTaskQueueTasksRequest) GetTaskQueueType() v16.TaskQueueType {
 	return v16.TaskQueueType(0)
 }
 
+func (x *GetTaskQueueTasksRequest) GetMinPass() int64 {
+	if x != nil {
+		return x.MinPass
+	}
+	return 0
+}
+
 func (x *GetTaskQueueTasksRequest) GetMinTaskId() int64 {
 	if x != nil {
 		return x.MinTaskId
@@ -3377,13 +3384,6 @@ func (x *GetTaskQueueTasksRequest) GetNextPageToken() []byte {
 func (x *GetTaskQueueTasksRequest) GetSubqueue() int32 {
 	if x != nil {
 		return x.Subqueue
-	}
-	return 0
-}
-
-func (x *GetTaskQueueTasksRequest) GetMinPass() int64 {
-	if x != nil {
-		return x.MinPass
 	}
 	return 0
 }
@@ -5606,14 +5606,14 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1d\n" +
 	"\n" +
 	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12L\n" +
-	"\x0ftask_queue_type\x18\x03 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12\x1e\n" +
+	"\x0ftask_queue_type\x18\x03 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12\x19\n" +
+	"\bmin_pass\x18\t \x01(\x03R\aminPass\x12\x1e\n" +
 	"\vmin_task_id\x18\x04 \x01(\x03R\tminTaskId\x12\x1e\n" +
 	"\vmax_task_id\x18\x05 \x01(\x03R\tmaxTaskId\x12\x1d\n" +
 	"\n" +
 	"batch_size\x18\x06 \x01(\x05R\tbatchSize\x12&\n" +
 	"\x0fnext_page_token\x18\a \x01(\fR\rnextPageToken\x12\x1a\n" +
-	"\bsubqueue\x18\b \x01(\x05R\bsubqueue\x12\x19\n" +
-	"\bmin_pass\x18\t \x01(\x03R\aminPass\"\x90\x01\n" +
+	"\bsubqueue\x18\b \x01(\x05R\bsubqueue\"\x90\x01\n" +
 	"\x19GetTaskQueueTasksResponse\x12K\n" +
 	"\x05tasks\x18\x01 \x03(\v25.temporal.server.api.persistence.v1.AllocatedTaskInfoR\x05tasks\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\"\x87\x01\n" +

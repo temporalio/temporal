@@ -377,12 +377,12 @@ message GetTaskQueueTasksRequest {
   string namespace = 1;
   string task_queue = 2;
   temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+  int64 min_pass = 9;
   int64 min_task_id = 4;
   int64 max_task_id = 5;
   int32 batch_size = 6;
   bytes next_page_token = 7;
   int32 subqueue = 8;
-  int64 min_pass = 9;
 }
 
 message GetTaskQueueTasksResponse {
