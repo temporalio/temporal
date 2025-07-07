@@ -2189,10 +2189,6 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 }
 
 func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
-
 	config := s.newConfig()
 	dbq := newUnversionedRootQueueKey(uuid.New(), "makeToast", enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
