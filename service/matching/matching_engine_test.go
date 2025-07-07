@@ -3816,7 +3816,7 @@ func (m *testTaskManager) CreateTasks(
 
 	if tlm.rangeID != rangeID {
 		m.logger.Debug("testTaskManager.CreateTask ConditionFailedError",
-			tag.TaskID(task.GetTaskId()), tag.ShardRangeID(rangeID), tag.ShardRangeID(tlm.rangeID))
+			tag.ShardRangeID(rangeID), tag.ShardRangeID(tlm.rangeID))
 		return nil, &persistence.ConditionFailedError{
 			Msg: fmt.Sprintf("CreateTask failed, range id mismatch. TaskQueue: %v, taskQueueType: %v, rangeID: %v, db rangeID: %v",
 				taskQueue, taskType, rangeID, tlm.rangeID),
