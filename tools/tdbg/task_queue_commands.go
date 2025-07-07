@@ -35,7 +35,10 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 	workflowID := c.String(FlagWorkflowID)
 	runID := c.String(FlagRunID)
 	subqueue := c.Int(FlagSubqueue)
-	minPass := c.Int64(FlagMinPass)
+	var minPass int64
+	if c.Bool(FlagFair) {
+		minPass = c.Int64(FlagMinPass)
+	}
 
 	client := clientFactory.AdminClient(c)
 

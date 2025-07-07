@@ -462,7 +462,7 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "list-tasks",
-			Usage: "List (regular or fairness) tasks of a task queue",
+			Usage: "List tasks of a task queue. Use --fair to list fairness tasks.",
 			Flags: []cli.Flag{
 				&cli.BoolFlag{
 					Name:  FlagMore,
@@ -500,9 +500,14 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 					Name:  FlagPrintJSON,
 					Usage: "Print in raw json format",
 				},
+				&cli.BoolFlag{
+					Name:  FlagFair,
+					Usage: "Query fairness tasks",
+				},
 				&cli.Int64Flag{
 					Name:  FlagMinPass,
 					Usage: "Minimum pass (fairness task only)",
+					Value: 1,
 				},
 			},
 			Action: func(c *cli.Context) error {
