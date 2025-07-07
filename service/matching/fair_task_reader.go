@@ -321,7 +321,7 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 	tr.lock.Lock()
 
 	// Collect (1) currently loaded tasks in the matcher plus (2) the tasks we just read/wrote; sorted by level.
-	
+
 	// (1) Note these values are *internalTask.
 	merged := tr.outstandingTasks.Select(func(k, v any) bool {
 		_, ok := v.(*internalTask)
@@ -364,9 +364,9 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 
 	// If there are remaining tasks in the merged set, they can't fit in memory. If they came
 	// from the tasks we just wrote, ignore them. If they came from matcher, remove them.
-	droppedAnyTasks := false
+	evictedAnyTasks := false
 	for it.Next() {
-		droppedAnyTasks = true
+		evictedAnyTasks = true
 		if task, ok := it.Value().(*internalTask); ok {
 			// task that was in the matcher that we have to remove
 			tr.backlogAge.record(task.event.Data.CreateTime, -1)
@@ -394,10 +394,10 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 
 	// Update atEnd:
 	// If we did a read and didn't get to the end, we can't possibly be at the end.
-	// Also if we dropped anything from memory, we can't either.
-	// If we read to the end and didn't drop anything, then we know we're at the end.
+	// Also if we evicted anything from memory, we can't either.
+	// If we read to the end and didn't evict anything, then we know we're at the end.
 	// Otherwise (i.e. on write) leave atEnd unchanged.
-	if mode == mergeReadMiddle || droppedAnyTasks {
+	if mode == mergeReadMiddle || evictedAnyTasks {
 		tr.atEnd = false
 	} else if mode == mergeReadToEnd {
 		tr.atEnd = true
@@ -417,8 +417,8 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 
 	// TODO: fine-grained metrics for mergeTasks behavior:
 	// we have two sources: currently loaded, and newly read/written.
-	// we have two destinations: loaded and dropped. we could count these four values:
-	// loaded->loaded, loaded->dropped, new->loaded, new->dropped
+	// we have two destinations: loaded and evicted. we could count these four values:
+	// loaded->loaded, loaded->evicted, new->loaded, new->evicted
 	// let's say that's one metric with two labels of two values each.
 	// add another label for whether we're doing this on read or write.
 	// maybe do this as a wide event? we can also throw in loadedTasks then.
