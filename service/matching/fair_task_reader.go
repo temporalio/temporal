@@ -320,14 +320,14 @@ func (tr *fairTaskReader) wroteNewTasks(tasks []*persistencespb.AllocatedTaskInf
 func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, mode mergeMode) {
 	tr.lock.Lock()
 
-	// Take the tasks in the matcher plus the tasks that were just written and sort them by level:
-
-	// Get currently loaded tasks. Note these values are *internalTask.
+	// Collect (1) currently loaded tasks in the matcher plus (2) the tasks we just read/wrote; sorted by level.
+	
+	// (1) Note these values are *internalTask.
 	merged := tr.outstandingTasks.Select(func(k, v any) bool {
 		_, ok := v.(*internalTask)
 		return ok
 	})
-	// Add the tasks we just read/wrote. Note these values are *AllocatedTaskInfo.
+	// (2) Note these values are *AllocatedTaskInfo.
 	for _, t := range tasks {
 		level := fairLevelFromAllocatedTask(t)
 		if mode == mergeWrite && !tr.atEnd && tr.readLevel.less(level) {
