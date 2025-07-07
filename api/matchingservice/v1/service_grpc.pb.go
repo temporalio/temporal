@@ -204,7 +204,7 @@ type MatchingServiceClient interface {
 	// Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
 	// Returns an error if the namespace doesn't exist.
 	ListWorkers(ctx context.Context, in *ListWorkersRequest, opts ...grpc.CallOption) (*ListWorkersResponse, error)
-	// ConfigureTaskQueue recieves TaskQueue configurations from the frontend call to UpdateTaskQueueConfigApi.
+	// UpdateTaskQueueConfig recieves TaskQueue configurations from the frontend call to UpdateTaskQueueConfigApi.
 	// This API is used to persist TaskQueue configurations in the persistence layer.
 	// The TaskQueue configuration in the persistence layer supersedes the in-memory TaskQueue configuration,
 	// as well as the system dynamic configuration.
@@ -700,7 +700,7 @@ type MatchingServiceServer interface {
 	// Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
 	// Returns an error if the namespace doesn't exist.
 	ListWorkers(context.Context, *ListWorkersRequest) (*ListWorkersResponse, error)
-	// ConfigureTaskQueue recieves TaskQueue configurations from the frontend call to UpdateTaskQueueConfigApi.
+	// UpdateTaskQueueConfig recieves TaskQueue configurations from the frontend call to UpdateTaskQueueConfigApi.
 	// This API is used to persist TaskQueue configurations in the persistence layer.
 	// The TaskQueue configuration in the persistence layer supersedes the in-memory TaskQueue configuration,
 	// as well as the system dynamic configuration.
