@@ -5,13 +5,13 @@ import (
 	"sync"
 
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/version/check"
+	"go.temporal.io/server/common/versioninfo"
 	"google.golang.org/grpc"
 )
 
 type SDKVersionInterceptor struct {
 	sync.RWMutex
-	sdkInfoSet     map[check.SDKInfo]struct{}
+	sdkInfoSet     map[versioninfo.SDKInfo]struct{}
 	versionChecker headers.VersionChecker
 	maxSetSize     int
 }
@@ -21,7 +21,7 @@ const defaultMaxSetSize = 100
 // NewSDKVersionInterceptor creates a new SDKVersionInterceptor with default max set size
 func NewSDKVersionInterceptor() *SDKVersionInterceptor {
 	return &SDKVersionInterceptor{
-		sdkInfoSet:     make(map[check.SDKInfo]struct{}),
+		sdkInfoSet:     make(map[versioninfo.SDKInfo]struct{}),
 		versionChecker: headers.NewDefaultVersionChecker(),
 		maxSetSize:     defaultMaxSetSize,
 	}
@@ -46,7 +46,7 @@ func (vi *SDKVersionInterceptor) Intercept(
 
 // RecordSDKInfo records name and version tuple in memory
 func (vi *SDKVersionInterceptor) RecordSDKInfo(name, version string) {
-	info := check.SDKInfo{Name: name, Version: version}
+	info := versioninfo.SDKInfo{Name: name, Version: version}
 
 	vi.RLock()
 	overCap := len(vi.sdkInfoSet) >= vi.maxSetSize
@@ -61,13 +61,13 @@ func (vi *SDKVersionInterceptor) RecordSDKInfo(name, version string) {
 }
 
 // GetAndResetSDKInfo gets all recorded name, version tuples and resets internal records
-func (vi *SDKVersionInterceptor) GetAndResetSDKInfo() []check.SDKInfo {
+func (vi *SDKVersionInterceptor) GetAndResetSDKInfo() []versioninfo.SDKInfo {
 	vi.Lock()
 	currSet := vi.sdkInfoSet
-	vi.sdkInfoSet = make(map[check.SDKInfo]struct{})
+	vi.sdkInfoSet = make(map[versioninfo.SDKInfo]struct{})
 	vi.Unlock()
 
-	sdkInfo := make([]check.SDKInfo, 0, len(currSet))
+	sdkInfo := make([]versioninfo.SDKInfo, 0, len(currSet))
 	for k := range currSet {
 		sdkInfo = append(sdkInfo, k)
 	}
