@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -879,12 +880,13 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 
 		// route heartbeat to the matching service only if the request is valid (all validation checks passed)
 		go func() {
+			heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
 			_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
 				NamespaceId: namespaceID.String(),
 				HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
-					Namespace:       request.GetNamespace(),
-					Identity:        request.GetIdentity(),
-					WorkerHeartbeat: request.WorkerHeartbeat,
+					Namespace:       request.Namespace,
+					Identity:        request.Identity,
+					WorkerHeartbeat: heartbeats,
 				},
 			})
 
@@ -894,9 +896,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 					tag.Error(err))
 			}
 		}()
-
-		// drop the heartbeat, it is not needed to process the poll request
-		request.WorkerHeartbeat = nil
 	}
 
 	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(childCtx, &matchingservice.PollWorkflowTaskQueueRequest{
@@ -2708,12 +2707,13 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 
 	// route heartbeat to the matching service
 	if request.WorkerHeartbeat != nil {
+		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
 		_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
 			NamespaceId: namespaceId.String(),
 			HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
-				Namespace:       request.GetNamespace(),
-				Identity:        request.GetIdentity(),
-				WorkerHeartbeat: request.WorkerHeartbeat,
+				Namespace:       request.Namespace,
+				Identity:        request.Identity,
+				WorkerHeartbeat: heartbeats,
 			},
 		})
 		if err != nil {
@@ -2721,9 +2721,6 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 				tag.WorkflowTaskQueueName(request.WorkerHeartbeat.GetTaskQueue()),
 				tag.Error(err))
 		}
-
-		// drop the heartbeat, it is not needed to process the poll request
-		request.WorkerHeartbeat = nil
 	}
 
 	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
@@ -4901,16 +4898,34 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
 	}
 
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
-		return nil, err
+	// route heartbeat to the matching service
+	if len(request.WorkerHeartbeat) > 0 {
+		_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
+			NamespaceId: namespaceID.String(),
+			HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+				Namespace:       request.Namespace,
+				Identity:        request.Identity,
+				WorkerHeartbeat: request.WorkerHeartbeat,
+			},
+		})
+		if err != nil {
+			wh.logger.Error("Failed to record worker heartbeat from nexus poll request.",
+				tag.NexusTaskQueueName(request.GetTaskQueue().GetName()),
+				tag.Error(err))
+		}
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
-	if err != nil {
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
 		return nil, err
 	}
 

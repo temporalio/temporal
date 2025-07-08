@@ -990,6 +990,11 @@ func NexusOperation(operation string) ZapTag {
 	return NewStringTag("nexus-operation", operation)
 }
 
+// NexusTaskQueueName returns tag for NexusTaskQueueName
+func NexusTaskQueueName(taskQueueName string) ZapTag {
+	return NewStringTag("nexus-task-queue-name", taskQueueName)
+}
+
 // WorkflowRuleID returns tag for WorkflowRuleID
 func WorkflowRuleID(ruleID string) ZapTag {
 	return NewStringTag("wf-rule-id", ruleID)
