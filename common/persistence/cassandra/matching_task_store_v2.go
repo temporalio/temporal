@@ -287,9 +287,12 @@ func (d *matchingTaskStoreV2) GetTasks(
 	ctx context.Context,
 	request *p.GetTasksRequest,
 ) (*p.InternalGetTasksResponse, error) {
-	// Require starting from pass 1.
-	if request.InclusiveMinPass < 1 || request.ExclusiveMaxTaskID != math.MaxInt64 {
-		return nil, serviceerror.NewInternal("invalid GetTasks request on fair queue")
+	if request.InclusiveMinPass < 1 {
+		return nil, serviceerror.NewInternal("invalid GetTasks request on fair queue: InclusiveMinPass must be >= 1")
+	}
+	if request.ExclusiveMaxTaskID != math.MaxInt64 {
+		// ExclusiveMaxTaskID is not supported in fair queue.
+		return nil, serviceerror.NewInternal("invalid GetTasks request on fair queue: ExclusiveMaxTaskID is not supported")
 	}
 
 	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could lose tasks
