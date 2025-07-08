@@ -310,6 +310,10 @@ func (c *fairBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	}
 }
 
+func (c *fairBacklogManagerImpl) TotalApproximateBacklogCount() int64 {
+	return c.db.getTotalApproximateBacklogCount()
+}
+
 func (c *fairBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
 	currentTaskIDBlock := c.taskWriter.getCurrentTaskIDBlock()
 
