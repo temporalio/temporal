@@ -346,7 +346,7 @@ func (d *matchingTaskStoreV1) GetTasks(
 	request *p.GetTasksRequest,
 ) (*p.InternalGetTasksResponse, error) {
 	if request.InclusiveMinPass != 0 {
-		return nil, serviceerror.NewInternal("invalid GetTasks request on queue")
+		return nil, serviceerror.NewInternal("invalid GetTasks request on queue: InclusiveMinPass is not supported")
 	}
 
 	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could lose tasks
