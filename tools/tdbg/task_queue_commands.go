@@ -28,10 +28,7 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 	}
 	minTaskID := c.Int64(FlagMinTaskID)
 	maxTaskID := c.Int64(FlagMaxTaskID)
-	pageSize := defaultPageSize
-	if c.IsSet(FlagPageSize) {
-		pageSize = c.Int(FlagPageSize)
-	}
+	pageSize := c.Int(FlagPageSize)
 	workflowID := c.String(FlagWorkflowID)
 	runID := c.String(FlagRunID)
 	subqueue := c.Int(FlagSubqueue)
@@ -54,9 +51,10 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 		MinPass:       minPass,
 	}
 
-	ctx, cancel := newContext(c)
-	defer cancel()
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+		ctx, cancel := newContext(c)
+		defer cancel()
+
 		req.NextPageToken = paginationToken
 		response, err := client.GetTaskQueueTasks(ctx, req)
 		if err != nil {
@@ -84,7 +82,7 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 		for _, task := range tasks {
 			items = append(items, task)
 		}
-		return items, nil, nil
+		return items, response.NextPageToken, nil
 	}
 
 	if err := paginate(c, paginationFunc, pageSize); err != nil {
