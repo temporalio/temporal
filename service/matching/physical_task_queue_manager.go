@@ -23,10 +23,10 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/matching/counter"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -174,40 +174,69 @@ func newPhysicalTaskQueueManager(
 	isSticky := queue.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY
 	isChild := !isSticky && !queue.Partition().IsRoot()
 
-	newMatcher, cancelMatcherSub := config.NewMatcher(func(bool) {
+	var fairness, newMatcher bool
+	// Fairness is disabled for sticky queues for now so that we can still use TTLs.
+	if !isSticky {
+		fairness, pqMgr.cancelFairnessSub = config.EnableFairness(func(bool) {
+			// unload on change so that we can reload with the new setting:
+			pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
+		})
+	}
+
+	if fairness {
+		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagFairness)
+		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagFairness)
+
+		cntr := counter.NewMapCounter() // TODO(fairness): make this configurable
+
+		pqMgr.backlogMgr = newFairBacklogManager(
+			tqCtx,
+			pqMgr,
+			config,
+			e.fairTaskManager,
+			pqMgr.logger,
+			pqMgr.throttledLogger,
+			e.matchingRawClient,
+			// TODO(fairness): use "fair_" prefix for metrics
+			newPriMetricsHandler(taggedMetricsHandler),
+			cntr,
+		)
+		var fwdr *priForwarder
+		var err error
+		if isChild {
+			// Every DB Queue needs its own forwarder so that the throttles do not interfere
+			fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
+			if err != nil {
+				return nil, err
+			}
+		}
+		pqMgr.priMatcher = newPriTaskMatcher(
+			tqCtx,
+			config,
+			queue.partition,
+			fwdr,
+			pqMgr.taskValidator,
+			pqMgr.logger,
+			newPriMetricsHandler(taggedMetricsHandler),
+		)
+		pqMgr.matcher = pqMgr.priMatcher
+		return pqMgr, nil
+	}
+
+	newMatcher, pqMgr.cancelMatcherSub = config.NewMatcher(func(bool) {
 		// unload on change to NewMatcher so that we can reload with the new setting:
 		pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
 	})
-	pqMgr.cancelMatcherSub = cancelMatcherSub
-
-	newFairness, cancelFairnessSub := config.EnableFairness(func(bool) {
-		// unload on change so that we can reload with the new setting:
-		pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
-	})
-	pqMgr.cancelFairnessSub = cancelFairnessSub
-
-	var taskManager persistence.TaskManager
-	if newFairness {
-		taskManager = e.fairTaskManager
-	} else {
-		taskManager = e.taskManager
-	}
-
-	backlogTag := backlogTagClassic
-	if newFairness {
-		backlogTag = backlogTagFairness
-	} else if newMatcher {
-		backlogTag = backlogTagPriority
-	}
-	pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTag)
-	pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTag)
 
 	if newMatcher {
+		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagPriority)
+		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagPriority)
+
 		pqMgr.backlogMgr = newPriBacklogManager(
 			tqCtx,
 			pqMgr,
 			config,
-			taskManager,
+			e.taskManager,
 			pqMgr.logger,
 			pqMgr.throttledLogger,
 			e.matchingRawClient,
@@ -232,29 +261,33 @@ func newPhysicalTaskQueueManager(
 			newPriMetricsHandler(taggedMetricsHandler),
 		)
 		pqMgr.matcher = pqMgr.priMatcher
-	} else {
-		pqMgr.backlogMgr = newBacklogManager(
-			tqCtx,
-			pqMgr,
-			config,
-			taskManager,
-			pqMgr.logger,
-			pqMgr.throttledLogger,
-			e.matchingRawClient,
-			taggedMetricsHandler,
-		)
-		var fwdr *Forwarder
-		var err error
-		if isChild {
-			// Every DB Queue needs its own forwarder so that the throttles do not interfere
-			fwdr, err = newForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
-			if err != nil {
-				return nil, err
-			}
-		}
-		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.rateLimiter)
-		pqMgr.matcher = pqMgr.oldMatcher
+		return pqMgr, nil
 	}
+
+	pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagClassic)
+	pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagClassic)
+
+	pqMgr.backlogMgr = newBacklogManager(
+		tqCtx,
+		pqMgr,
+		config,
+		e.taskManager,
+		pqMgr.logger,
+		pqMgr.throttledLogger,
+		e.matchingRawClient,
+		taggedMetricsHandler,
+	)
+	var fwdr *Forwarder
+	var err error
+	if isChild {
+		// Every DB Queue needs its own forwarder so that the throttles do not interfere
+		fwdr, err = newForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
+		if err != nil {
+			return nil, err
+		}
+	}
+	pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.rateLimiter)
+	pqMgr.matcher = pqMgr.oldMatcher
 	return pqMgr, nil
 }
 
@@ -284,8 +317,12 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	) {
 		return
 	}
-	c.cancelMatcherSub()
-	c.cancelFairnessSub()
+	if c.cancelMatcherSub != nil {
+		c.cancelMatcherSub()
+	}
+	if c.cancelFairnessSub != nil {
+		c.cancelFairnessSub()
+	}
 	// this may attempt to write one final ack update, do this before canceling tqCtx
 	c.backlogMgr.Stop()
 	c.matcher.Stop()

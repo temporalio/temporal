@@ -20,11 +20,16 @@ import (
 )
 
 var (
-	// this retry policy is currently only used for matching persistence operations
-	// that, if failed, the entire task queue needs to be reloaded
+	// This retry policy is currently only used for matching persistence operations
+	// that, if failed, the entire task queue needs to be reloaded.
 	persistenceOperationRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
-		WithMaximumInterval(1 * time.Second).
-		WithExpirationInterval(30 * time.Second)
+					WithMaximumInterval(1 * time.Second).
+					WithExpirationInterval(30 * time.Second)
+
+	// This retry policy is used for the initial metadata load and range id takeover.
+	foreverRetryPolicy = backoff.NewExponentialRetryPolicy(1 * time.Second).
+				WithMaximumInterval(10 * time.Second).
+				WithExpirationInterval(backoff.NoInterval)
 )
 
 type (
