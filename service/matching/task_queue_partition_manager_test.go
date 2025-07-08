@@ -41,6 +41,7 @@ type PartitionManagerTestSuite struct {
 	protorequire.ProtoAssertions
 
 	newMatcher   bool
+	fairness     bool
 	controller   *gomock.Controller
 	userDataMgr  *mockUserDataManager
 	partitionMgr *taskQueuePartitionManagerImpl
@@ -57,6 +58,11 @@ func TestTaskQueuePartitionManager_Pri_Suite(t *testing.T) {
 	suite.Run(t, &PartitionManagerTestSuite{newMatcher: true})
 }
 
+func TestTaskQueuePartitionManager_Fair_Suite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &PartitionManagerTestSuite{newMatcher: true, fairness: true})
+}
+
 func (s *PartitionManagerTestSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.controller = gomock.NewController(s.T())
@@ -64,7 +70,9 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 
 	ns, registry := createMockNamespaceCache(s.controller, namespace.Name(namespaceName))
 	config := NewConfig(dynamicconfig.NewNoopCollection())
-	if s.newMatcher {
+	if s.fairness {
+		useFairness(config)
+	} else if s.newMatcher {
 		useNewMatcher(config)
 	}
 
@@ -164,26 +172,33 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	s.NoError(err)
 
 	// validate TQ internal statistics (not exposed via public API)
-	expectedInternalStatsInfo := []*taskqueuespb.InternalTaskQueueStatus{
-		&taskqueuespb.InternalTaskQueueStatus{
-			ReadLevel: 1,
-			AckLevel:  0,
-			TaskIdBlock: &taskqueuepb.TaskIdBlock{
-				StartId: 2,
-				EndId:   100000,
-			},
+	var status0 *taskqueuespb.InternalTaskQueueStatus
+	if s.fairness {
+		status0 = &taskqueuespb.InternalTaskQueueStatus{
+			FairReadLevel:           fairLevel{pass: 1000, id: 1}.toProto(),
+			FairAckLevel:            fairLevel{}.toProto(),
+			TaskIdBlock:             &taskqueuepb.TaskIdBlock{StartId: 2, EndId: 100000},
+			LoadedTasks:             1,
+			FairMaxReadLevel:        fairLevel{pass: 1000, id: 1}.toProto(),
+			ApproximateBacklogCount: 1,
+		}
+	} else {
+		status0 = &taskqueuespb.InternalTaskQueueStatus{
+			ReadLevel:               1,
+			AckLevel:                0,
+			TaskIdBlock:             &taskqueuepb.TaskIdBlock{StartId: 2, EndId: 100000},
 			LoadedTasks:             1,
 			MaxReadLevel:            1,
 			ApproximateBacklogCount: 1,
-		},
+		}
 	}
 
 	status1 := resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
 	s.Equal(1, len(status1))
-	s.ProtoEqual(expectedInternalStatsInfo[0], status1[0])
+	s.ProtoEqual(status0, status1[0])
 	status2 := resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
 	s.Equal(1, len(status2))
-	s.ProtoEqual(expectedInternalStatsInfo[0], status2[0])
+	s.ProtoEqual(status0, status2[0])
 }
 
 func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersionedQueues() {
