@@ -367,7 +367,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 	s.Equal(0, tm.getUpdateCount(s.physicalTaskQueueKey))
 
 	// simulate stolen lock
-	ptm := tm.getQueueManagerByKey(s.physicalTaskQueueKey)
+	ptm := tm.getQueueDataByKey(s.physicalTaskQueueKey)
 	ptm.Lock()
 	ptm.rangeID++
 	ptm.Unlock()

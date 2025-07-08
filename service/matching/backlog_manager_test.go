@@ -246,6 +246,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_DecrementedByCompl
 func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpoolTask() {
 	s.blm.Start()
 	defer s.blm.Stop()
+	s.NoError(s.blm.WaitUntilInitialized(context.Background()))
 
 	taskCount := 10
 	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
@@ -261,10 +262,11 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpool
 
 func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpoolTask_ServiceError() {
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
-	s.taskMgr.dbServiceError = true
+	s.taskMgr.addFault("CreateTasks", "Unavailable", 1.0)
 
 	s.blm.Start()
 	defer s.blm.Stop()
+	s.NoError(s.blm.WaitUntilInitialized(context.Background()))
 
 	taskCount := 10
 	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
@@ -280,10 +282,11 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpool
 
 func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySpoolTask_CondFailedError() {
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
-	s.taskMgr.dbCondFailedErr = true
+	s.taskMgr.addFault("CreateTasks", "ConditionFailed", 1.0)
 
 	s.blm.Start()
 	defer s.blm.Stop()
+	s.NoError(s.blm.WaitUntilInitialized(context.Background()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
