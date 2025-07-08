@@ -334,6 +334,10 @@ func (m *MetadataStore) GetNamespace(
 	)
 
 	if err != nil {
+		if gocql.IsNotFoundError(err) && len(request.ID) > 0 {
+			// namespace name lookup failed even after retrying once; likely temporary inconsistency
+			return nil, serviceerror.NewUnavailable("namespace info temporarily unavailable")
+		}
 		return nil, handleError(request.Name, request.ID, err)
 	}
 

@@ -550,7 +550,8 @@ func (h *Handler) RecordWorkerHeartbeat(
 	_ context.Context, request *matchingservice.RecordWorkerHeartbeatRequest,
 ) (*matchingservice.RecordWorkerHeartbeatResponse, error) {
 	nsID := namespace.ID(request.GetNamespaceId())
-	h.workersRegistry.RecordWorkerHeartbeat(nsID, request.GetHeartbeartRequest().GetWorkerHeartbeat())
+
+	h.workersRegistry.RecordWorkerHeartbeats(nsID, request.GetHeartbeartRequest().GetWorkerHeartbeat())
 	return &matchingservice.RecordWorkerHeartbeatResponse{}, nil
 }
 
