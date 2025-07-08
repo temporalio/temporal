@@ -892,7 +892,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 
 			if err != nil {
 				wh.logger.Error("Failed to record worker heartbeat.",
-					tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+					tag.WorkflowTaskQueueName(request.TaskQueue.GetName()),
 					tag.Error(err))
 			}
 		}()
