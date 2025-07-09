@@ -9,95 +9,98 @@ import (
 )
 
 const (
-	taskQueueCreatePart = `INTO task_queues(range_hash, task_queue_id, range_id, data, data_encoding) ` +
+	taskQueueCreatePartV2 = `INTO task_queues_v2(range_hash, task_queue_id, range_id, data, data_encoding) ` +
 		`VALUES (:range_hash, :task_queue_id, :range_id, :data, :data_encoding)`
 
 	// (default range ID: initialRangeID == 1)
-	createTaskQueueQry = `INSERT ` + taskQueueCreatePart
+	createTaskQueueQryV2 = `INSERT ` + taskQueueCreatePartV2
 
-	updateTaskQueueQry = `UPDATE task_queues SET
-	range_id = :range_id,
-	data = :data,
-	data_encoding = :data_encoding
-	WHERE
-	range_hash = :range_hash AND
-	task_queue_id = :task_queue_id
+	updateTaskQueueQryV2 = `UPDATE task_queues_v2 SET
+		range_id = :range_id,
+		data = :data,
+		data_encoding = :data_encoding
+		WHERE
+		range_hash = :range_hash AND
+		task_queue_id = :task_queue_id
 	`
 
-	listTaskQueueRowSelect = `SELECT range_hash, task_queue_id, range_id, data, data_encoding from task_queues `
+	listTaskQueueRowSelectV2 = `SELECT range_hash, task_queue_id, range_id, data, data_encoding from task_queues_v2 `
 
-	listTaskQueueWithHashRangeQry = listTaskQueueRowSelect +
-		`WHERE range_hash >= ? AND range_hash <= ? AND task_queue_id > ? ORDER BY task_queue_id ASC LIMIT ?`
+	listTaskQueueWithHashRangeQryV2 = listTaskQueueRowSelectV2 +
+		`WHERE range_hash >= ? AND range_hash <= ? AND task_queue_id > ? AND pass > ? ORDER BY task_queue_id ASC LIMIT ?`
 
-	listTaskQueueQry = listTaskQueueRowSelect +
+	listTaskQueueQryV2 = listTaskQueueRowSelect +
 		`WHERE range_hash = ? AND task_queue_id > ? ORDER BY task_queue_id ASC LIMIT ?`
 
-	getTaskQueueQry = listTaskQueueRowSelect +
+	getTaskQueueQryV2 = listTaskQueueRowSelect +
 		`WHERE range_hash = ? AND task_queue_id = ?`
 
-	deleteTaskQueueQry = `DELETE FROM task_queues WHERE range_hash=? AND task_queue_id=? AND range_id=?`
+	deleteTaskQueueQryV2 = `DELETE FROM task_queues_v2 WHERE range_hash=? AND task_queue_id=? AND range_id=?`
 
-	lockTaskQueueQry = `SELECT range_id FROM task_queues ` +
+	lockTaskQueueQryV2 = `SELECT range_id FROM task_queues_v2 ` +
 		`WHERE range_hash = ? AND task_queue_id = ? FOR UPDATE`
 	// *** Task_Queues Table Above ***
 
 	// *** Tasks Below ***
-	getTaskMinMaxQry = `SELECT task_id, data, data_encoding ` +
-		`FROM tasks ` +
-		`WHERE range_hash = ? AND task_queue_id = ? AND task_id >= ? AND task_id < ? ` +
-		` ORDER BY task_id LIMIT ?`
+	getFairnessTaskQry = `SELECT task_id, data, data_encoding ` +
+		`FROM tasks_v2 ` +
+		`WHERE range_hash = ? ` +
+		`AND task_queue_id = ? ` +
+		`AND (pass, task_id) >= (?, ?) ` +
+		`ORDER BY pass, task_id `
 
-	getTaskMinQry = `SELECT task_id, data, data_encoding ` +
-		`FROM tasks ` +
-		`WHERE range_hash = ? AND task_queue_id = ? AND task_id >= ? ORDER BY task_id LIMIT ?`
+	getFairnessTaskQryWithLimit = `SELECT task_id, data, data_encoding ` +
+		`FROM tasks_v2 ` +
+		`WHERE range_hash = ? ` +
+		`AND task_queue_id = ? ` +
+		`AND (pass, task_id) >= (?, ?) ` +
+		`ORDER BY pass, task_id ` +
+		`LIMIT ?`
 
-	createTaskQry = `INSERT INTO ` +
-		`tasks(range_hash, task_queue_id, task_id, data, data_encoding) ` +
-		`VALUES(:range_hash, :task_queue_id, :task_id, :data, :data_encoding)`
+	createTaskQryV2 = `INSERT INTO ` +
+		`tasks_v2(range_hash, task_queue_id, task_id, pass, data, data_encoding) ` +
+		`VALUES(:range_hash, :task_queue_id, :task_id, :pass, :data, :data_encoding)`
 
-	// deleteTaskQry = `DELETE FROM tasks ` +
-	// 	`WHERE range_hash = ? AND task_queue_id = ? AND task_id = ?`
-
-	rangeDeleteTaskQry = `DELETE FROM tasks ` +
-		`WHERE range_hash = ? AND task_queue_id = ? AND task_id < ? ` +
-		`ORDER BY task_queue_id,task_id LIMIT ?`
+	rangeDeleteFairnessTaskQry = `DELETE FROM tasks_v2 ` +
+		`WHERE range_hash = ? ` +
+		`AND task_queue_id = ? ` +
+		`AND (pass, task_id) < (?, ?) `
 )
 
-// InsertIntoTasks inserts one or more rows into tasks table
-func (mdb *db) InsertIntoTasks(
+func (mdb *db) InsertIntoTasksV2(
 	ctx context.Context,
-	rows []sqlplugin.TasksRow,
+	rows []sqlplugin.TasksRowV2,
 ) (sql.Result, error) {
 	return mdb.NamedExecContext(ctx,
-		createTaskQry,
+		createTaskQryV2,
 		rows,
 	)
 }
 
 // SelectFromTasks reads one or more rows from tasks table
-func (mdb *db) SelectFromTasks(
+func (mdb *db) SelectFromTasksV2(
 	ctx context.Context,
-	filter sqlplugin.TasksFilter,
-) ([]sqlplugin.TasksRow, error) {
+	filter sqlplugin.TasksFilterV2,
+) ([]sqlplugin.TasksRowV2, error) {
 	var err error
-	var rows []sqlplugin.TasksRow
+	var rows []sqlplugin.TasksRowV2
 	switch {
-	case filter.ExclusiveMaxTaskID != nil:
+	case filter.PageSize != nil:
 		err = mdb.SelectContext(ctx,
-			&rows, getTaskMinMaxQry,
+			&rows, getFairnessTaskQryWithLimit,
 			filter.RangeHash,
 			filter.TaskQueueID,
+			filter.Pass,
 			*filter.InclusiveMinTaskID,
-			*filter.ExclusiveMaxTaskID,
 			*filter.PageSize,
 		)
 	default:
 		err = mdb.SelectContext(ctx,
-			&rows, getTaskMinQry,
+			&rows, getFairnessTaskQry,
 			filter.RangeHash,
 			filter.TaskQueueID,
+			filter.Pass,
 			*filter.InclusiveMinTaskID,
-			*filter.PageSize,
 		)
 	}
 	if err != nil {
@@ -107,99 +110,96 @@ func (mdb *db) SelectFromTasks(
 }
 
 // DeleteFromTasks deletes one or more rows from tasks table
-func (mdb *db) DeleteFromTasks(
+func (mdb *db) DeleteFromTasksV2(
 	ctx context.Context,
-	filter sqlplugin.TasksFilter,
+	filter sqlplugin.TasksFilterV2,
 ) (sql.Result, error) {
 	if filter.ExclusiveMaxTaskID == nil {
 		return nil, serviceerror.NewInternal("missing ExclusiveMaxTaskID parameter")
 	}
-	if filter.Limit == nil || *filter.Limit == 0 {
-		return nil, serviceerror.NewInternal("missing limit parameter")
-	}
 	return mdb.ExecContext(ctx,
-		rangeDeleteTaskQry,
+		rangeDeleteFairnessTaskQry,
 		filter.RangeHash,
 		filter.TaskQueueID,
-		*filter.ExclusiveMaxTaskID,
-		*filter.Limit,
+		filter.Pass,
+		filter.ExclusiveMaxTaskID,
 	)
 }
 
 // InsertIntoTaskQueues inserts one or more rows into task_queues table
-func (mdb *db) InsertIntoTaskQueues(
+func (mdb *db) InsertIntoTaskQueuesV2(
 	ctx context.Context,
-	row *sqlplugin.TaskQueuesRow,
+	row *sqlplugin.TaskQueuesRowV2,
 ) (sql.Result, error) {
 	return mdb.NamedExecContext(ctx,
-		createTaskQueueQry,
+		createTaskQueueQryV2,
 		row,
 	)
 }
 
 // UpdateTaskQueues updates a row in task_queues table
-func (mdb *db) UpdateTaskQueues(
+func (mdb *db) UpdateTaskQueuesV2(
 	ctx context.Context,
-	row *sqlplugin.TaskQueuesRow,
+	row *sqlplugin.TaskQueuesRowV2,
 ) (sql.Result, error) {
 	return mdb.NamedExecContext(ctx,
-		updateTaskQueueQry,
+		updateTaskQueueQryV2,
 		row,
 	)
 }
 
 // SelectFromTaskQueues reads one or more rows from task_queues table
-func (mdb *db) SelectFromTaskQueues(
+func (mdb *db) SelectFromTaskQueuesV2(
 	ctx context.Context,
-	filter sqlplugin.TaskQueuesFilter,
-) ([]sqlplugin.TaskQueuesRow, error) {
+	filter sqlplugin.TaskQueuesFilterV2,
+) ([]sqlplugin.TaskQueuesRowV2, error) {
 	switch {
 	case filter.TaskQueueID != nil:
 		if filter.RangeHashLessThanEqualTo != 0 || filter.RangeHashGreaterThanEqualTo != 0 {
 			return nil, serviceerror.NewInternal("range of hashes not supported for specific selection")
 		}
-		return mdb.selectFromTaskQueues(ctx, filter)
+		return mdb.selectFromTaskQueuesV2(ctx, filter)
 	case filter.RangeHashLessThanEqualTo != 0 && filter.PageSize != nil:
 		if filter.RangeHashLessThanEqualTo < filter.RangeHashGreaterThanEqualTo {
 			return nil, serviceerror.NewInternal("range of hashes bound is invalid")
 		}
-		return mdb.rangeSelectFromTaskQueues(ctx, filter)
+		return mdb.rangeSelectFromTaskQueuesV2(ctx, filter)
 	case filter.TaskQueueIDGreaterThan != nil && filter.PageSize != nil:
-		return mdb.rangeSelectFromTaskQueues(ctx, filter)
+		return mdb.rangeSelectFromTaskQueuesV2(ctx, filter)
 	default:
 		return nil, serviceerror.NewInternal("invalid set of query filter params")
 	}
 }
 
-func (mdb *db) selectFromTaskQueues(
+func (mdb *db) selectFromTaskQueuesV2(
 	ctx context.Context,
-	filter sqlplugin.TaskQueuesFilter,
-) ([]sqlplugin.TaskQueuesRow, error) {
+	filter sqlplugin.TaskQueuesFilterV2,
+) ([]sqlplugin.TaskQueuesRowV2, error) {
 	var err error
-	var row sqlplugin.TaskQueuesRow
+	var row sqlplugin.TaskQueuesRowV2
 	err = mdb.GetContext(ctx,
 		&row,
-		getTaskQueueQry,
+		getTaskQueueQryV2,
 		filter.RangeHash,
 		filter.TaskQueueID,
 	)
 	if err != nil {
 		return nil, err
 	}
-	return []sqlplugin.TaskQueuesRow{row}, nil
+	return []sqlplugin.TaskQueuesRowV2{row}, nil
 }
 
-func (mdb *db) rangeSelectFromTaskQueues(
+func (mdb *db) rangeSelectFromTaskQueuesV2(
 	ctx context.Context,
-	filter sqlplugin.TaskQueuesFilter,
-) ([]sqlplugin.TaskQueuesRow, error) {
+	filter sqlplugin.TaskQueuesFilterV2,
+) ([]sqlplugin.TaskQueuesRowV2, error) {
 	var err error
-	var rows []sqlplugin.TaskQueuesRow
+	var rows []sqlplugin.TaskQueuesRowV2
 
 	if filter.RangeHashLessThanEqualTo != 0 {
 		err = mdb.SelectContext(ctx,
 			&rows,
-			listTaskQueueWithHashRangeQry,
+			listTaskQueueWithHashRangeQryV2,
 			filter.RangeHashGreaterThanEqualTo,
 			filter.RangeHashLessThanEqualTo,
 			filter.TaskQueueIDGreaterThan,
@@ -208,7 +208,7 @@ func (mdb *db) rangeSelectFromTaskQueues(
 	} else {
 		err = mdb.SelectContext(ctx,
 			&rows,
-			listTaskQueueQry,
+			listTaskQueueQryV2,
 			filter.RangeHash,
 			filter.TaskQueueIDGreaterThan,
 			*filter.PageSize,
@@ -221,12 +221,12 @@ func (mdb *db) rangeSelectFromTaskQueues(
 }
 
 // DeleteFromTaskQueues deletes a row from task_queues table
-func (mdb *db) DeleteFromTaskQueues(
+func (mdb *db) DeleteFromTaskQueuesV2(
 	ctx context.Context,
-	filter sqlplugin.TaskQueuesFilter,
+	filter sqlplugin.TaskQueuesFilterV2,
 ) (sql.Result, error) {
 	return mdb.ExecContext(ctx,
-		deleteTaskQueueQry,
+		deleteTaskQueueQryV2,
 		filter.RangeHash,
 		filter.TaskQueueID,
 		*filter.RangeID,
@@ -234,14 +234,14 @@ func (mdb *db) DeleteFromTaskQueues(
 }
 
 // LockTaskQueues locks a row in task_queues table
-func (mdb *db) LockTaskQueues(
+func (mdb *db) LockTaskQueuesV2(
 	ctx context.Context,
-	filter sqlplugin.TaskQueuesFilter,
+	filter sqlplugin.TaskQueuesFilterV2,
 ) (int64, error) {
 	var rangeID int64
 	err := mdb.GetContext(ctx,
 		&rangeID,
-		lockTaskQueueQry,
+		lockTaskQueueQryV2,
 		filter.RangeHash,
 		filter.TaskQueueID,
 	)
