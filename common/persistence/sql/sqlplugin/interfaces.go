@@ -44,7 +44,10 @@ type (
 		QueueV2Metadata
 
 		MatchingTask
+		MatchingTaskV2
 		MatchingTaskQueue
+		MatchingTaskQueueV2
+		MatchingTaskQueueUserData
 
 		NexusEndpoints
 
