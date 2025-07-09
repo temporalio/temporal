@@ -877,10 +877,11 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
 
 	if request.WorkerHeartbeat != nil {
+		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
+		request.WorkerHeartbeat = nil // clear the heartbeat from the request to avoid sending it to matching service
 
 		// route heartbeat to the matching service only if the request is valid (all validation checks passed)
 		go func() {
-			heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
 			_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
 				NamespaceId: namespaceID.String(),
 				HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
@@ -4910,19 +4911,24 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 
 	// route heartbeat to the matching service
 	if len(request.WorkerHeartbeat) > 0 {
-		_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
-			NamespaceId: namespaceID.String(),
-			HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
-				Namespace:       request.Namespace,
-				Identity:        request.Identity,
-				WorkerHeartbeat: request.WorkerHeartbeat,
-			},
-		})
-		if err != nil {
-			wh.logger.Error("Failed to record worker heartbeat from nexus poll request.",
-				tag.NexusTaskQueueName(request.GetTaskQueue().GetName()),
-				tag.Error(err))
-		}
+		workerHeartbeat := request.WorkerHeartbeat
+		request.WorkerHeartbeat = nil // Clear the field to avoid sending it to matching service.
+
+		go func() {
+			_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
+				NamespaceId: namespaceID.String(),
+				HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+					Namespace:       request.Namespace,
+					Identity:        request.Identity,
+					WorkerHeartbeat: workerHeartbeat,
+				},
+			})
+			if err != nil {
+				wh.logger.Error("Failed to record worker heartbeat from nexus poll request.",
+					tag.NexusTaskQueueName(request.GetTaskQueue().GetName()),
+					tag.Error(err))
+			}
+		}()
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
