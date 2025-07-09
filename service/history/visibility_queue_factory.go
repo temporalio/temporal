@@ -90,6 +90,8 @@ func (f *visibilityQueueFactory) CreateQueue(
 		shard.GetTimeSource(),
 		logger,
 		metricsHandler,
+		f.Config.TaskChanFullBackoff,
+		f.Config.TaskChanFullBackoffJitterCoefficient,
 	)
 
 	executor := newVisibilityQueueTaskExecutor(
