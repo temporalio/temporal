@@ -1357,8 +1357,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		if err != nil {
 			return nil, err
 		}
-		taskQueueConfig := constructUpdateTaskQueueConfigResponse(userData.GetData(), req.GetTaskQueueType())
-		descrResp.DescResponse.Config = taskQueueConfig.GetUpdatedTaskqueueConfig()
+		perTypeUserData := userData.GetData().GetPerType()[int32(req.GetTaskQueueType())]
+		descrResp.DescResponse.Config = perTypeUserData.GetConfig()
 	}
 
 	return descrResp, nil
@@ -2977,25 +2977,9 @@ func constructUpdateTaskQueueConfigResponse(
 	taskQueueUserData *persistencespb.TaskQueueUserData,
 	taskQueueType enumspb.TaskQueueType,
 ) *matchingservice.UpdateTaskQueueConfigResponse {
-	if taskQueueUserData.GetPerType() == nil {
-		return &matchingservice.UpdateTaskQueueConfigResponse{}
-	}
-	tqType := int32(taskQueueType)
-	typeUserData, ok := taskQueueUserData.GetPerType()[tqType]
-	if !ok || typeUserData == nil {
-		return &matchingservice.UpdateTaskQueueConfigResponse{}
-	}
-	updateTaskQueueConfig := typeUserData.GetConfig()
-	if updateTaskQueueConfig == nil {
-		return &matchingservice.UpdateTaskQueueConfigResponse{}
-	}
-	queueRateLimit := updateTaskQueueConfig.GetQueueRateLimit()
-	fairnessKeysRateLimitDefault := updateTaskQueueConfig.GetFairnessKeysRateLimitDefault()
+	perTypeUserData := taskQueueUserData.GetPerType()[int32(taskQueueType)]
 	return &matchingservice.UpdateTaskQueueConfigResponse{
-		UpdatedTaskqueueConfig: &taskqueuepb.TaskQueueConfig{
-			QueueRateLimit:               queueRateLimit,
-			FairnessKeysRateLimitDefault: fairnessKeysRateLimitDefault,
-		},
+		UpdatedTaskqueueConfig: perTypeUserData.GetConfig(),
 	}
 }
 
@@ -3004,9 +2988,10 @@ func (e *matchingEngineImpl) UpdateTaskqueueConfig(ctx context.Context, request 
 	if err != nil {
 		return nil, err
 	}
+
 	taskQueueType := request.UpdateTaskqueueConfig.GetTaskQueueType()
 	tqm, _, err := e.getTaskQueuePartitionManager(ctx,
-		taskQueueFamily.TaskQueue(taskQueueType).RootPartition(),
+		taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(),
 		true, loadCauseOtherWrite)
 	if err != nil {
 		return nil, err

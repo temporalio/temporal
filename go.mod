@@ -183,3 +183,6 @@ require (
 	modernc.org/strutil v1.2.1 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
+
+// TODO : Will remove this once the api branch is merged. This is just to ensure tests do not fail.
+replace go.temporal.io/api => github.com/sivagirish81/api-go v0.0.0-20250709233831-234d1c01ab7b

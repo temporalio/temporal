@@ -20,10 +20,12 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
+	"go.temporal.io/api/enums/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueue "go.temporal.io/api/taskqueue/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -3531,6 +3533,50 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueueWithRateLimiterError() {
 		},
 	}, metrics.NoopMetricsHandler)
 	s.ErrorIs(err, rateLimiterErr)
+}
+
+// TestUpdateTaskqueueConfig tests the UpdateTaskQueueConfig Api.
+// It checks if the rate limit and fairness keys rate limit are persisted correctly.
+func (s *matchingEngineSuite) TestUpdateTaskqueueConfig() {
+	namespaceId := uuid.New()
+	taskQueueName := "test-task-queue"
+	taskQueueType := enums.TASK_QUEUE_TYPE_ACTIVITY
+
+	updateRPS := float32(99)
+	updateReason := "test-update"
+
+	// Prepare the update request.
+	updateReq := &matchingservice.UpdateTaskQueueConfigRequest{
+		NamespaceId: namespaceId,
+		UpdateTaskqueueConfig: &workflowservice.UpdateTaskQueueConfigRequest{
+			Namespace:     "default",
+			TaskQueue:     taskQueueName,
+			TaskQueueType: taskQueueType,
+			UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+				RateLimit: &taskqueue.RateLimit{
+					RequestsPerSecond: updateRPS,
+				},
+				Reason: updateReason,
+			},
+			UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+				RateLimit: &taskqueue.RateLimit{
+					RequestsPerSecond: updateRPS,
+				},
+				Reason: updateReason,
+			},
+		},
+	}
+
+	// Call UpdateTaskQueueConfig and validate response.
+	updateResp, err := s.matchingEngine.UpdateTaskqueueConfig(context.Background(), updateReq)
+	require.NoError(s.T(), err, "UpdateTaskQueueConfig failed")
+	require.NotNil(s.T(), updateResp)
+	require.NotNil(s.T(), updateResp.UpdatedTaskqueueConfig)
+
+	require.Equal(s.T(), updateRPS, updateResp.UpdatedTaskqueueConfig.QueueRateLimit.RateLimit.RequestsPerSecond)
+	require.Equal(s.T(), updateReason, updateResp.UpdatedTaskqueueConfig.QueueRateLimit.Metadata.Reason)
+	require.Equal(s.T(), updateRPS, updateResp.UpdatedTaskqueueConfig.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
+	require.Equal(s.T(), updateReason, updateResp.UpdatedTaskqueueConfig.FairnessKeysRateLimitDefault.Metadata.Reason)
 }
 
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
