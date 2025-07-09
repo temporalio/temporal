@@ -56,13 +56,15 @@ func TestPostInfo(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to marshal response %s", err)
 		}
-		w.Write(res)
+		if _, err := w.Write(res); err != nil {
+			t.Fatalf("Failed to write response %s", err)
+		}
 	}))
-	url, err := url.Parse(ts.URL)
+	u, err := url.Parse(ts.URL)
 	if err != nil {
 		t.Fatalf("Request failed: %s", err)
 	}
-	caller := &versioninfo.Caller{Scheme: url.Scheme, Host: url.Host}
+	caller := &versioninfo.Caller{Scheme: u.Scheme, Host: u.Host}
 	sdkInfo := []versioninfo.SDKInfo{{
 		Name:    "sdk-java",
 		Version: "3.11",

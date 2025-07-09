@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 )
@@ -51,14 +51,15 @@ func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
 		return nil, errors.New(fmt.Sprintf("bad response code %v", resp.StatusCode))
 	}
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	versionCheckResponse := &VersionCheckResponse{}
-	err = json.Unmarshal(body, versionCheckResponse)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
-	err = validateResponse(versionCheckResponse)
-	if err != nil {
+	versionCheckResponse := &VersionCheckResponse{}
+	if err := json.Unmarshal(body, versionCheckResponse); err != nil {
+		return nil, err
+	}
+	if err := validateResponse(versionCheckResponse); err != nil {
 		return nil, err
 	}
 	return versionCheckResponse, nil
