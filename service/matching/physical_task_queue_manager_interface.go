@@ -47,7 +47,9 @@ type (
 		HasPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		GetStats() *taskqueuepb.TaskQueueStats
+		GetStats() map[int32]*taskqueuepb.TaskQueueStats
+		// GetTotalStats returns the total stats for all subqueues aggregated together.
+		GetTotalStats() *taskqueuepb.TaskQueueStats
 		GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus
 		UnloadFromPartitionManager(unloadCause)
 		QueueKey() *PhysicalTaskQueueKey

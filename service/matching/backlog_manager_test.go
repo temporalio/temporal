@@ -199,13 +199,13 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedByAppen
 		responseCh: make(chan<- error),
 	}
 
-	s.Equal(int64(0), blm.TotalApproximateBacklogCount())
+	s.Equal(int64(0), totalApproximateBacklogCount(blm))
 
 	blm.taskWriter.Start()
 	// Adding tasks to the buffer will increase the in-memory counter by 1
 	// and this will be written to persistence
 	s.Eventually(func() bool {
-		return blm.TotalApproximateBacklogCount() == int64(1)
+		return totalApproximateBacklogCount(blm) == int64(1)
 	}, time.Second*30, time.Millisecond)
 }
 
@@ -225,7 +225,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_DecrementedByCompl
 	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
 	blm.getDB().updateBacklogStats(3, time.Time{})
 
-	s.Equal(int64(3), blm.TotalApproximateBacklogCount(), "1 task in the backlog")
+	s.Equal(int64(3), totalApproximateBacklogCount(blm), "1 task in the backlog")
 	s.Equal(int64(-1), blm.taskAckManager.getAckLevel(), "should only move ack level on completion")
 	s.Equal(int64(3), blm.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
 
@@ -256,7 +256,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpool
 			CreateTime: timestamp.TimeNowPtrUtc(),
 		}))
 	}
-	s.Equal(int64(taskCount), s.blm.TotalApproximateBacklogCount(),
+	s.Equal(int64(taskCount), totalApproximateBacklogCount(s.blm),
 		"backlog count should match the number of tasks")
 }
 
@@ -276,7 +276,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpool
 			CreateTime: timestamp.TimeNowPtrUtc(),
 		}))
 	}
-	s.Equal(int64(taskCount), s.blm.TotalApproximateBacklogCount(),
+	s.Equal(int64(taskCount), totalApproximateBacklogCount(s.blm),
 		"backlog count should match the number of tasks despite the errors")
 }
 
@@ -303,6 +303,13 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySp
 
 	<-ctx.Done()
 
-	s.Equal(int64(0), s.blm.TotalApproximateBacklogCount(),
+	s.Equal(int64(0), totalApproximateBacklogCount(s.blm),
 		"backlog count should not be incremented")
+}
+
+func totalApproximateBacklogCount(c backlogManager) (total int64) {
+	for _, count := range c.ApproxBacklogCountsByPriority() {
+		total += count
+	}
+	return total
 }

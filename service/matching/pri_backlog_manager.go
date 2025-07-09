@@ -260,20 +260,20 @@ func (c *priBacklogManagerImpl) BacklogCountHint() (total int64) {
 	return
 }
 
-func (c *priBacklogManagerImpl) BacklogHeadAge() time.Duration {
+func (c *priBacklogManagerImpl) BacklogHeadAgeByPriority() map[int32]time.Duration {
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()
 
-	var oldestTime time.Time
-	for _, r := range c.subqueues {
-		oldestTime = minNonZeroTime(oldestTime, r.getOldestBacklogTime())
+	ages := make(map[int32]time.Duration)
+	for priority, idx := range c.subqueuesByPriority {
+		oldestBacklogTime := c.subqueues[idx].getOldestBacklogTime()
+		if oldestBacklogTime.IsZero() {
+			ages[priority] = 0
+		} else {
+			ages[priority] = time.Since(oldestBacklogTime)
+		}
 	}
-	if oldestTime.IsZero() {
-		// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
-		// be more appropriate in the future.
-		return time.Duration(0)
-	}
-	return time.Since(oldestTime)
+	return ages
 }
 
 func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
@@ -290,8 +290,8 @@ func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	return &taskqueuepb.TaskQueueStatus{
 		ReadLevel: readLevel,
 		AckLevel:  ackLevel,
-		// use getApproximateBacklogCount instead of BacklogCountHint since it's more accurate
-		BacklogCountHint: c.db.getTotalApproximateBacklogCount(),
+		// use getApproximateBacklogCounts instead of BacklogCountHint since it's more accurate
+		BacklogCountHint: c.db.getApproximateBacklogCounts()[subqueueZero],
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
@@ -299,8 +299,8 @@ func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	}
 }
 
-func (c *priBacklogManagerImpl) TotalApproximateBacklogCount() int64 {
-	return c.db.getTotalApproximateBacklogCount()
+func (c *priBacklogManagerImpl) ApproxBacklogCountsByPriority() map[int32]int64 {
+	return c.db.getApproximateBacklogCounts()
 }
 
 func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
@@ -310,9 +310,10 @@ func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQue
 	defer c.subqueueLock.Unlock()
 
 	status := make([]*taskqueuespb.InternalTaskQueueStatus, len(c.subqueues))
-	for i, r := range c.subqueues {
+	for priority, idx := range c.subqueuesByPriority {
+		r := c.subqueues[idx]
 		readLevel, ackLevel := r.getLevels()
-		status[i] = &taskqueuespb.InternalTaskQueueStatus{
+		status[priority] = &taskqueuespb.InternalTaskQueueStatus{
 			ReadLevel: readLevel,
 			AckLevel:  ackLevel,
 			TaskIdBlock: &taskqueuepb.TaskIdBlock{
@@ -320,8 +321,8 @@ func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQue
 				EndId:   currentTaskIDBlock.end,
 			},
 			LoadedTasks:             int64(r.getLoadedTasks()),
-			MaxReadLevel:            c.db.GetMaxReadLevel(i),
-			ApproximateBacklogCount: c.db.getApproximateBacklogCount(i),
+			MaxReadLevel:            c.db.GetMaxReadLevel(idx),
+			ApproximateBacklogCount: c.db.getApproximateBacklogCounts()[priority],
 		}
 	}
 	return status

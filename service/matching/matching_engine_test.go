@@ -3175,7 +3175,7 @@ func (s *matchingEngineSuite) pollWorkflowTasks(
 
 			// PartitionManager could have been unloaded; fetch the latest copy
 			pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
-			s.LessOrEqual(int64(taskCount-tasksPolled), pgMgr.backlogMgr.TotalApproximateBacklogCount())
+			s.LessOrEqual(int64(taskCount-tasksPolled), totalApproximateBacklogCount(pgMgr.backlogMgr))
 		}
 	}
 }
@@ -3197,11 +3197,11 @@ func (s *matchingEngineSuite) addConsumeAllWorkflowTasksNonConcurrently(taskCoun
 
 	// Extract the pgMgr for validating approximateBacklogCounter
 	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
-	s.EqualValues(taskCount*numWorkers, pgMgr.backlogMgr.TotalApproximateBacklogCount())
+	s.EqualValues(taskCount*numWorkers, totalApproximateBacklogCount(pgMgr.backlogMgr))
 
 	s.pollWorkflowTasks(false, workflowType, numPollers, taskCount, ptq, taskQueue, nil)
 
-	s.LessOrEqual(int64(0), pgMgr.backlogMgr.TotalApproximateBacklogCount())
+	s.LessOrEqual(int64(0), totalApproximateBacklogCount(pgMgr.backlogMgr))
 }
 
 func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksNoDBErrors() {
@@ -3256,7 +3256,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	s.EqualValues(maxTaskId, pqMgr.backlogMgr.getDB().GetMaxReadLevel(0))
 
 	// validate the approximateBacklogCounter
-	s.EqualValues(taskCount*numWorkers, pqMgr.backlogMgr.TotalApproximateBacklogCount())
+	s.EqualValues(taskCount*numWorkers, totalApproximateBacklogCount(pqMgr.backlogMgr))
 
 	// Unload the PQM
 	s.matchingEngine.unloadTaskQueuePartition(partitionManager, unloadCauseForce)
@@ -3288,7 +3288,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 	s.EqualValues(0, s.taskManager.getTaskCount(ptq))
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.Equal(collect, int64(0), pqMgr.backlogMgr.TotalApproximateBacklogCount())
+		require.Equal(collect, int64(0), totalApproximateBacklogCount(pqMgr.backlogMgr))
 	}, 4*time.Second, 10*time.Millisecond, "backlog counter should have been reset")
 }
 
@@ -3349,7 +3349,7 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	wg.Wait()
 
 	ptqMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
-	s.LessOrEqual(int64(s.taskManager.getTaskCount(ptq)), ptqMgr.backlogMgr.TotalApproximateBacklogCount())
+	s.LessOrEqual(int64(s.taskManager.getTaskCount(ptq)), totalApproximateBacklogCount(ptqMgr.backlogMgr))
 }
 
 func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksNoDBErrors() {

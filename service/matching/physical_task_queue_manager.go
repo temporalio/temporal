@@ -346,7 +346,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 
 		if pollMetadata.forwardedFrom == "" && // only track the original polls, not forwarded ones.
 			(!task.isStarted() || !task.started.hasEmptyResponse()) { // Need to filter out the empty "started" ones
-			c.tasksDispatchedInIntervals.incrementTaskCount()
+			c.tasksDispatchedInIntervals.incrementTaskCount(task.getPriority().GetPriorityKey())
 		}
 		return task, nil
 	}
@@ -407,7 +407,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchQueryTask(
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	task := newInternalQueryTask(taskId, request)
 	if !task.isForwarded() {
-		c.tasksAddedInIntervals.incrementTaskCount()
+		c.tasksAddedInIntervals.incrementTaskCount(request.GetPriority().GetPriorityKey())
 	}
 	return c.matcher.OfferQuery(ctx, task)
 }
@@ -432,7 +432,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 	}
 	task := newInternalNexusTask(taskId, deadline, opDeadline, request)
 	if !task.isForwarded() {
-		c.tasksAddedInIntervals.incrementTaskCount()
+		c.tasksAddedInIntervals.incrementTaskCount(subqueueZero) // Nexus has no priority yet
 	}
 	return c.matcher.OfferNexusTask(ctx, task)
 }
@@ -477,16 +477,47 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	return response
 }
 
-func (c *physicalTaskQueueManagerImpl) GetStats() *taskqueuepb.TaskQueueStats {
-	return &taskqueuepb.TaskQueueStats{
-		ApproximateBacklogCount: c.backlogMgr.TotalApproximateBacklogCount(),
-		// using this and not matcher's because it reports only the age of the current physical
-		// queue backlog (not including the redirected backlogs) which is consistent with the
-		// ApproximateBacklogCount metric.
-		ApproximateBacklogAge: durationpb.New(c.backlogMgr.BacklogHeadAge()),
-		TasksAddRate:          c.tasksAddedInIntervals.rate(),
-		TasksDispatchRate:     c.tasksDispatchedInIntervals.rate(),
+func (c *physicalTaskQueueManagerImpl) GetStats() map[int32]*taskqueuepb.TaskQueueStats {
+	addRates := c.tasksAddedInIntervals.rate()
+	dispatchRates := c.tasksDispatchedInIntervals.rate()
+	backlogCounts := c.backlogMgr.ApproxBacklogCountsByPriority()
+	backlogAges := c.backlogMgr.BacklogHeadAgeByPriority()
+
+	result := make(map[int32]*taskqueuepb.TaskQueueStats)
+	for pri := int32(0); pri <= c.partitionMgr.config.PriorityLevels(); pri += 1 {
+		stats := &taskqueuepb.TaskQueueStats{}
+		if count, ok := backlogCounts[pri]; ok {
+			stats.ApproximateBacklogCount = count
+		}
+		if age, ok := backlogAges[pri]; ok {
+			stats.ApproximateBacklogAge = durationpb.New(age)
+		}
+		if rate, ok := addRates[pri]; ok {
+			stats.TasksAddRate = rate
+		}
+		if rate, ok := dispatchRates[pri]; ok {
+			stats.TasksDispatchRate = rate
+		}
+		result[pri] = stats
 	}
+	return result
+}
+
+func (c *physicalTaskQueueManagerImpl) GetTotalStats() *taskqueuepb.TaskQueueStats {
+	// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
+	// be more appropriate in the future.
+	result := &taskqueuepb.TaskQueueStats{ApproximateBacklogAge: durationpb.New(time.Duration(0))}
+	for _, stats := range c.GetStats() {
+		result.ApproximateBacklogCount += stats.ApproximateBacklogCount
+		if backlogAge := stats.ApproximateBacklogAge; backlogAge != nil {
+			if result.ApproximateBacklogAge.AsDuration() == 0 || backlogAge.AsDuration() < result.ApproximateBacklogAge.AsDuration() {
+				result.ApproximateBacklogAge = backlogAge
+			}
+		}
+		result.TasksAddRate += stats.TasksAddRate
+		result.TasksDispatchRate += stats.TasksDispatchRate
+	}
+	return result
 }
 
 func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus {
@@ -497,7 +528,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
-		c.tasksAddedInIntervals.incrementTaskCount()
+		c.tasksAddedInIntervals.incrementTaskCount(task.getPriority().GetPriorityKey())
 		if disable, _ := testhooks.Get[bool](c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch); disable {
 			return false, nil
 		}
@@ -653,7 +684,7 @@ func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause un
 
 func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
 	pollStartTime time.Time) *taskqueuepb.PollerScalingDecision {
-	return c.makePollerScalingDecisionImpl(pollStartTime, c.GetStats)
+	return c.makePollerScalingDecisionImpl(pollStartTime, c.GetTotalStats)
 }
 
 func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(

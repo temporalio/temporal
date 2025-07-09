@@ -144,10 +144,10 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) GetInternalTaskQueueStatus()
 }
 
 // GetStats mocks base method.
-func (m *MockphysicalTaskQueueManager) GetStats() *taskqueue.TaskQueueStats {
+func (m *MockphysicalTaskQueueManager) GetStats() map[int32]*taskqueue.TaskQueueStats {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetStats")
-	ret0, _ := ret[0].(*taskqueue.TaskQueueStats)
+	ret0, _ := ret[0].(map[int32]*taskqueue.TaskQueueStats)
 	return ret0
 }
 
@@ -155,6 +155,20 @@ func (m *MockphysicalTaskQueueManager) GetStats() *taskqueue.TaskQueueStats {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) GetStats() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStats", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetStats))
+}
+
+// GetTotalStats mocks base method.
+func (m *MockphysicalTaskQueueManager) GetTotalStats() *taskqueue.TaskQueueStats {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTotalStats")
+	ret0, _ := ret[0].(*taskqueue.TaskQueueStats)
+	return ret0
+}
+
+// GetTotalStats indicates an expected call of GetTotalStats.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) GetTotalStats() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTotalStats", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetTotalStats))
 }
 
 // HasPollerAfter mocks base method.

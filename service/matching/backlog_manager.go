@@ -38,10 +38,11 @@ type (
 		// It's returned as a hint to the SDK to influence polling behavior (sticky vs normal).
 		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
-		// TotalApproximateBacklogCount returns an estimate of the total size of the backlog in
-		// persistence. It may be off in either direction.
-		TotalApproximateBacklogCount() int64
-		BacklogHeadAge() time.Duration
+		// ApproxBacklogCountsByPriority returns an estimate of the size of the backlog in persistence, per priority.
+		// It may be off in either direction.
+		ApproxBacklogCountsByPriority() map[int32]int64
+		// BacklogHeadAgeByPriority returns the age of the oldest task in the backlog, per priority.
+		BacklogHeadAgeByPriority() map[int32]time.Duration
 		InternalStatus() []*taskqueuespb.InternalTaskQueueStatus
 
 		// TODO(pri): remove
@@ -175,17 +176,13 @@ func (c *backlogManagerImpl) BacklogCountHint() int64 {
 	return c.taskAckManager.getBacklogCountHint()
 }
 
-func (c *backlogManagerImpl) BacklogHeadAge() time.Duration {
-	return c.taskReader.getBacklogHeadAge()
-}
-
 func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
 	return &taskqueuepb.TaskQueueStatus{
 		ReadLevel: c.taskAckManager.getReadLevel(),
 		AckLevel:  c.taskAckManager.getAckLevel(),
-		// use getApproximateBacklogCount instead of BacklogCountHint since it's more accurate
-		BacklogCountHint: c.db.getApproximateBacklogCount(subqueueZero),
+		// use getApproximateBacklogCounts instead of BacklogCountHint since it's more accurate
+		BacklogCountHint: c.db.getApproximateBacklogCounts()[subqueueZero],
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
@@ -193,8 +190,13 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	}
 }
 
-func (c *backlogManagerImpl) TotalApproximateBacklogCount() int64 {
-	return c.db.getTotalApproximateBacklogCount()
+func (c *backlogManagerImpl) ApproxBacklogCountsByPriority() map[int32]int64 {
+	return c.db.getApproximateBacklogCounts()
+}
+
+func (c *backlogManagerImpl) BacklogHeadAgeByPriority() map[int32]time.Duration {
+	// This is not per-priority in the classic backlog manager, so return a map with only priority 0.
+	return map[int32]time.Duration{0: c.taskReader.getBacklogHeadAge()}
 }
 
 func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
@@ -209,7 +211,7 @@ func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueS
 			},
 			LoadedTasks:             c.taskAckManager.getBacklogCountHint(),
 			MaxReadLevel:            c.db.GetMaxReadLevel(subqueueZero),
-			ApproximateBacklogCount: c.db.getApproximateBacklogCount(subqueueZero),
+			ApproximateBacklogCount: c.db.getApproximateBacklogCounts()[subqueueZero],
 		},
 	}
 }
