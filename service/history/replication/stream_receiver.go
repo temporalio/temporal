@@ -336,7 +336,7 @@ func (r *StreamReceiverImpl) processMessages(
 		)
 		exclusiveHighWatermark := streamResp.Resp.GetMessages().ExclusiveHighWatermark
 		exclusiveHighWatermarkTime := timestamp.TimeValue(streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime)
-		taskTracker, taskScheduler, err := r.getTrackerAndSchedulerByPriority(streamResp.Resp.GetMessages().Priority)
+		taskTracker, err := r.getTaskTracker(streamResp.Resp.GetMessages().Priority)
 		if err != nil {
 			// Todo: Change to write Tasks to DLQ. As resend task will not help here
 			return NewStreamError("ReplicationTask wrong priority", err)
@@ -345,20 +345,44 @@ func (r *StreamReceiverImpl) processMessages(
 			Watermark: exclusiveHighWatermark,
 			Timestamp: exclusiveHighWatermarkTime,
 		}, convertedTasks...) {
-			taskScheduler.Submit(task)
+			scheduler, err := r.getTaskScheduler(streamResp.Resp.GetMessages().Priority, task)
+			if err != nil {
+				return err
+			}
+			scheduler.Submit(task)
 		}
 	}
 	return nil
 }
 
-func (r *StreamReceiverImpl) getTrackerAndSchedulerByPriority(priority enumsspb.TaskPriority) (ExecutableTaskTracker, ctasks.Scheduler[TrackableExecutableTask], error) {
+func (r *StreamReceiverImpl) getTaskTracker(priority enumsspb.TaskPriority) (ExecutableTaskTracker, error) {
 	switch priority {
 	case enumsspb.TASK_PRIORITY_UNSPECIFIED, enumsspb.TASK_PRIORITY_HIGH:
-		return r.highPriorityTaskTracker, r.ProcessToolBox.HighPriorityTaskScheduler, nil
+		return r.highPriorityTaskTracker, nil
 	case enumsspb.TASK_PRIORITY_LOW:
-		return r.lowPriorityTaskTracker, r.ProcessToolBox.LowPriorityTaskScheduler, nil
+		return r.lowPriorityTaskTracker, nil
 	default:
-		return nil, nil, serviceerror.NewInvalidArgumentf("Unknown task priority: %v", priority)
+		return nil, serviceerror.NewInvalidArgumentf("Unknown task priority: %v", priority)
+	}
+}
+
+func (r *StreamReceiverImpl) getTaskScheduler(priority enumsspb.TaskPriority, task TrackableExecutableTask) (ctasks.Scheduler[TrackableExecutableTask], error) {
+	switch priority {
+	case enumsspb.TASK_PRIORITY_UNSPECIFIED:
+		switch task.(type) {
+		case *ExecutableWorkflowStateTask:
+			// this is an optimization for workflow state task. The low priority task scheduler is grouping task by workflow ID.
+			// When multiple runs of task come in, we can serialize them in the low priority task scheduler. As long as we use a single tracker,
+			// the task ACK is guaranteed to be in order.(i.e. no task will be lost)
+			return r.ProcessToolBox.LowPriorityTaskScheduler, nil
+		}
+		return r.ProcessToolBox.HighPriorityTaskScheduler, nil
+	case enumsspb.TASK_PRIORITY_HIGH:
+		return r.ProcessToolBox.HighPriorityTaskScheduler, nil
+	case enumsspb.TASK_PRIORITY_LOW:
+		return r.ProcessToolBox.LowPriorityTaskScheduler, nil
+	default:
+		return nil, serviceerror.NewInvalidArgumentf("Unknown task priority: %v", priority)
 	}
 }
 
