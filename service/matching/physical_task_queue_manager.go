@@ -87,7 +87,7 @@ type (
 		deploymentVersionRegistered bool
 		pollerScalingRateLimiter    quotas.RateLimiter
 
-		taskTrackerMu              sync.RWMutex
+		taskTrackerLock            sync.RWMutex
 		tasksAddedInIntervals      map[int32]*taskTracker
 		tasksDispatchedInIntervals map[int32]*taskTracker
 	}
@@ -481,8 +481,8 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 func (c *physicalTaskQueueManagerImpl) GetStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats {
 	stats := c.backlogMgr.BacklogStatsByPriority()
 
-	c.taskTrackerMu.RLock()
-	defer c.taskTrackerMu.RUnlock()
+	c.taskTrackerLock.RLock()
+	defer c.taskTrackerLock.RUnlock()
 
 	for pri, tt := range c.tasksAddedInIntervals {
 		if _, ok := stats[pri]; !ok {
@@ -724,16 +724,16 @@ func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
 	}
 
 	// First try with read lock for the common case where tracker already exists.
-	c.taskTrackerMu.RLock()
+	c.taskTrackerLock.RLock()
 	if tracker, ok := intervals[priorityKey]; ok {
-		c.taskTrackerMu.RUnlock()
+		c.taskTrackerLock.RUnlock()
 		return tracker
 	}
-	c.taskTrackerMu.RUnlock()
+	c.taskTrackerLock.RUnlock()
 
 	// Otherwise, we need to maybe create a new tracker with the write lock.
-	c.taskTrackerMu.Lock()
-	defer c.taskTrackerMu.Unlock()
+	c.taskTrackerLock.Lock()
+	defer c.taskTrackerLock.Unlock()
 	if tracker, ok := intervals[priorityKey]; ok {
 		return tracker // tracker was created while we were waiting for the lock
 	}
