@@ -25,7 +25,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -44,7 +43,6 @@ type (
 		clientBean              *client.MockBean
 		shardController         *shard.MockController
 		namespaceCache          *namespace.MockRegistry
-		ndcHistoryResender      *xdc.MockNDCHistoryResender
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		executableTask          *MockExecutableTask
@@ -80,7 +78,6 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 	s.clientBean = client.NewMockBean(s.controller)
 	s.shardController = shard.NewMockController(s.controller)
 	s.namespaceCache = namespace.NewMockRegistry(s.controller)
-	s.ndcHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
 	s.executableTask = NewMockExecutableTask(s.controller)
@@ -112,15 +109,14 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.task = NewExecutableActivityStateTask(
 		ProcessToolBox{
-			ClusterMetadata:    s.clusterMetadata,
-			ClientBean:         s.clientBean,
-			ShardController:    s.shardController,
-			NamespaceCache:     s.namespaceCache,
-			NDCHistoryResender: s.ndcHistoryResender,
-			MetricsHandler:     s.metricsHandler,
-			Logger:             s.logger,
-			DLQWriter:          NewExecutionManagerDLQWriter(s.mockExecutionManager),
-			Config:             s.config,
+			ClusterMetadata: s.clusterMetadata,
+			ClientBean:      s.clientBean,
+			ShardController: s.shardController,
+			NamespaceCache:  s.namespaceCache,
+			MetricsHandler:  s.metricsHandler,
+			Logger:          s.logger,
+			DLQWriter:       NewExecutionManagerDLQWriter(s.mockExecutionManager),
+			Config:          s.config,
 		},
 		s.taskID,
 		time.Unix(0, rand.Int63()),
@@ -315,15 +311,14 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 	}
 	task1 := NewExecutableActivityStateTask(
 		ProcessToolBox{
-			ClusterMetadata:    s.clusterMetadata,
-			ClientBean:         s.clientBean,
-			ShardController:    s.shardController,
-			NamespaceCache:     s.namespaceCache,
-			NDCHistoryResender: s.ndcHistoryResender,
-			MetricsHandler:     s.metricsHandler,
-			Logger:             s.logger,
-			DLQWriter:          NewExecutionManagerDLQWriter(s.mockExecutionManager),
-			Config:             config,
+			ClusterMetadata: s.clusterMetadata,
+			ClientBean:      s.clientBean,
+			ShardController: s.shardController,
+			NamespaceCache:  s.namespaceCache,
+			MetricsHandler:  s.metricsHandler,
+			Logger:          s.logger,
+			DLQWriter:       NewExecutionManagerDLQWriter(s.mockExecutionManager),
+			Config:          config,
 		},
 		1,
 		time.Unix(0, rand.Int63()),
@@ -339,15 +334,14 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 	replicationAttribute2 := s.generateReplicationAttribute(namespaceId, workflowId, runId)
 	task2 := NewExecutableActivityStateTask(
 		ProcessToolBox{
-			ClusterMetadata:    s.clusterMetadata,
-			ClientBean:         s.clientBean,
-			ShardController:    s.shardController,
-			NamespaceCache:     s.namespaceCache,
-			NDCHistoryResender: s.ndcHistoryResender,
-			MetricsHandler:     s.metricsHandler,
-			Logger:             s.logger,
-			DLQWriter:          NewExecutionManagerDLQWriter(s.mockExecutionManager),
-			Config:             s.config,
+			ClusterMetadata: s.clusterMetadata,
+			ClientBean:      s.clientBean,
+			ShardController: s.shardController,
+			NamespaceCache:  s.namespaceCache,
+			MetricsHandler:  s.metricsHandler,
+			Logger:          s.logger,
+			DLQWriter:       NewExecutionManagerDLQWriter(s.mockExecutionManager),
+			Config:          s.config,
 		},
 		2,
 		time.Unix(0, rand.Int63()),
@@ -395,15 +389,14 @@ func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_Should
 	replicationAttribute1 := s.generateReplicationAttribute(namespaceId, "wf_1", runId)
 	task1 := NewExecutableActivityStateTask(
 		ProcessToolBox{
-			ClusterMetadata:    s.clusterMetadata,
-			ClientBean:         s.clientBean,
-			ShardController:    s.shardController,
-			NamespaceCache:     s.namespaceCache,
-			NDCHistoryResender: s.ndcHistoryResender,
-			MetricsHandler:     s.metricsHandler,
-			Logger:             s.logger,
-			DLQWriter:          NewExecutionManagerDLQWriter(s.mockExecutionManager),
-			Config:             s.config,
+			ClusterMetadata: s.clusterMetadata,
+			ClientBean:      s.clientBean,
+			ShardController: s.shardController,
+			NamespaceCache:  s.namespaceCache,
+			MetricsHandler:  s.metricsHandler,
+			Logger:          s.logger,
+			DLQWriter:       NewExecutionManagerDLQWriter(s.mockExecutionManager),
+			Config:          s.config,
 		},
 		1,
 		time.Unix(0, rand.Int63()),
@@ -418,15 +411,14 @@ func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_Should
 	replicationAttribute2 := s.generateReplicationAttribute(namespaceId, "wf_2", runId) //
 	task2 := NewExecutableActivityStateTask(
 		ProcessToolBox{
-			ClusterMetadata:    s.clusterMetadata,
-			ClientBean:         s.clientBean,
-			ShardController:    s.shardController,
-			NamespaceCache:     s.namespaceCache,
-			NDCHistoryResender: s.ndcHistoryResender,
-			MetricsHandler:     s.metricsHandler,
-			Logger:             s.logger,
-			DLQWriter:          NewExecutionManagerDLQWriter(s.mockExecutionManager),
-			Config:             s.config,
+			ClusterMetadata: s.clusterMetadata,
+			ClientBean:      s.clientBean,
+			ShardController: s.shardController,
+			NamespaceCache:  s.namespaceCache,
+			MetricsHandler:  s.metricsHandler,
+			Logger:          s.logger,
+			DLQWriter:       NewExecutionManagerDLQWriter(s.mockExecutionManager),
+			Config:          s.config,
 		},
 		2,
 		time.Unix(0, rand.Int63()),
