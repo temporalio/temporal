@@ -728,7 +728,10 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
 		}
 		if reportStats {
-			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = aggregateStats(physicalQueue.GetStatsByPriority())
+			vInfo.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey = physicalQueue.GetStatsByPriority()
+			// Deprecated: AggregateStats is deprecated and will be removed in the future.
+			// TODO(stephanos)
+			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = aggregateStats(vInfo.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey)
 		}
 		if internalTaskQueueStatus {
 			vInfo.PhysicalTaskQueueInfo.InternalTaskQueueStatus = physicalQueue.GetInternalTaskQueueStatus()
