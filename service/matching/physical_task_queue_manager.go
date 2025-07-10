@@ -87,9 +87,9 @@ type (
 		deploymentVersionRegistered bool
 		pollerScalingRateLimiter    quotas.RateLimiter
 
-		taskTrackerLock            sync.RWMutex
-		tasksAddedInIntervals      map[int32]*taskTracker
-		tasksDispatchedInIntervals map[int32]*taskTracker
+		taskTrackerLock sync.RWMutex
+		tasksAdded      map[int32]*taskTracker
+		tasksDispatched map[int32]*taskTracker
 	}
 
 	// TODO(pri): old matcher cleanup
@@ -136,20 +136,20 @@ func newPhysicalTaskQueueManager(
 		return config.PollerScalingDecisionsPerSecond() * 1e6
 	}
 	pqMgr := &physicalTaskQueueManagerImpl{
-		status:                     common.DaemonStatusInitialized,
-		partitionMgr:               partitionMgr,
-		queue:                      queue,
-		config:                     config,
-		tqCtx:                      tqCtx,
-		tqCtxCancel:                tqCancel,
-		namespaceRegistry:          e.namespaceRegistry,
-		matchingClient:             e.matchingRawClient,
-		clusterMeta:                e.clusterMeta,
-		metricsHandler:             taggedMetricsHandler,
-		tasksAddedInIntervals:      make(map[int32]*taskTracker),
-		tasksDispatchedInIntervals: make(map[int32]*taskTracker),
-		pollerScalingRateLimiter:   quotas.NewDefaultOutgoingRateLimiter(pollerScalingRateLimitFn),
-		deploymentRegistrationCh:   make(chan struct{}, 1),
+		status:                   common.DaemonStatusInitialized,
+		partitionMgr:             partitionMgr,
+		queue:                    queue,
+		config:                   config,
+		tqCtx:                    tqCtx,
+		tqCtxCancel:              tqCancel,
+		namespaceRegistry:        e.namespaceRegistry,
+		matchingClient:           e.matchingRawClient,
+		clusterMeta:              e.clusterMeta,
+		metricsHandler:           taggedMetricsHandler,
+		tasksAdded:               make(map[int32]*taskTracker),
+		tasksDispatched:          make(map[int32]*taskTracker),
+		pollerScalingRateLimiter: quotas.NewDefaultOutgoingRateLimiter(pollerScalingRateLimitFn),
+		deploymentRegistrationCh: make(chan struct{}, 1),
 	}
 	pqMgr.deploymentRegistrationCh <- struct{}{} // seed
 
@@ -347,7 +347,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 
 		if pollMetadata.forwardedFrom == "" && // only track the original polls, not forwarded ones.
 			(!task.isStarted() || !task.started.hasEmptyResponse()) { // Need to filter out the empty "started" ones
-			c.getOrCreateTaskTracker(c.tasksDispatchedInIntervals, task.getPriority().GetPriorityKey()).incrementTaskCount()
+			c.getOrCreateTaskTracker(c.tasksDispatched, task.getPriority().GetPriorityKey()).incrementTaskCount()
 		}
 		return task, nil
 	}
@@ -408,7 +408,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchQueryTask(
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	task := newInternalQueryTask(taskId, request)
 	if !task.isForwarded() {
-		c.getOrCreateTaskTracker(c.tasksAddedInIntervals, request.GetPriority().GetPriorityKey()).incrementTaskCount()
+		c.getOrCreateTaskTracker(c.tasksAdded, request.GetPriority().GetPriorityKey()).incrementTaskCount()
 	}
 	return c.matcher.OfferQuery(ctx, task)
 }
@@ -433,7 +433,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 	}
 	task := newInternalNexusTask(taskId, deadline, opDeadline, request)
 	if !task.isForwarded() {
-		c.getOrCreateTaskTracker(c.tasksAddedInIntervals, 0).incrementTaskCount() // Nexus has no priorities
+		c.getOrCreateTaskTracker(c.tasksAdded, 0).incrementTaskCount() // Nexus has no priorities
 	}
 	return c.matcher.OfferNexusTask(ctx, task)
 }
@@ -484,13 +484,13 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority() map[int32]*taskqueue
 	c.taskTrackerLock.RLock()
 	defer c.taskTrackerLock.RUnlock()
 
-	for pri, tt := range c.tasksAddedInIntervals {
+	for pri, tt := range c.tasksAdded {
 		if _, ok := stats[pri]; !ok {
 			stats[pri] = &taskqueuepb.TaskQueueStats{}
 		}
 		stats[pri].TasksAddRate = tt.rate()
 	}
-	for pri, tt := range c.tasksDispatchedInIntervals {
+	for pri, tt := range c.tasksDispatched {
 		if _, ok := stats[pri]; !ok {
 			stats[pri] = &taskqueuepb.TaskQueueStats{}
 		}
@@ -507,7 +507,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
-		c.getOrCreateTaskTracker(c.tasksAddedInIntervals, task.getPriority().GetPriorityKey()).incrementTaskCount()
+		c.getOrCreateTaskTracker(c.tasksAdded, task.getPriority().GetPriorityKey()).incrementTaskCount()
 		if disable, _ := testhooks.Get[bool](c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch); disable {
 			return false, nil
 		}
@@ -739,8 +739,8 @@ func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
 	}
 
 	// Initalize all task trackers together; or the timeframes won't line up.
-	c.tasksAddedInIntervals[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
-	c.tasksDispatchedInIntervals[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
+	c.tasksAdded[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
+	c.tasksDispatched[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
 
 	return intervals[priorityKey]
 }
