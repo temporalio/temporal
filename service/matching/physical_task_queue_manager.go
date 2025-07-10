@@ -197,8 +197,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.logger,
 			pqMgr.throttledLogger,
 			e.matchingRawClient,
-			// TODO(fairness): use "fair_" prefix for metrics
-			newPriMetricsHandler(taggedMetricsHandler),
+			newFairMetricsHandler(taggedMetricsHandler),
 			cntr,
 		)
 		var fwdr *priForwarder
@@ -217,7 +216,7 @@ func newPhysicalTaskQueueManager(
 			fwdr,
 			pqMgr.taskValidator,
 			pqMgr.logger,
-			newPriMetricsHandler(taggedMetricsHandler),
+			newFairMetricsHandler(taggedMetricsHandler),
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
