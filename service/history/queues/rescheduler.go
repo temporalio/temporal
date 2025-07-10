@@ -3,6 +3,7 @@
 package queues
 
 import (
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -217,7 +218,20 @@ func (r *reschedulerImpl) reschedule() {
 
 	metrics.TaskReschedulerPendingTasks.With(r.metricsHandler).Record(int64(r.numExecutables))
 	now := r.timeSource.Now()
-	for _, pq := range r.pqMap {
+
+	// ---- sort keys by priority (ascending) ---------------------------------
+	keys := make([]TaskChannelKey, 0, len(r.pqMap))
+	for key := range r.pqMap {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].Priority < keys[j].Priority
+	})
+	// ------------------------------------------------------------------------
+
+	for _, key := range keys {
+		pq := r.pqMap[key]
+
 		for !pq.IsEmpty() {
 			rescheduled := pq.Peek()
 
