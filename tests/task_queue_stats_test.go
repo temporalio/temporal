@@ -594,7 +594,7 @@ func validateTaskQueueStatsByPriority(
 				return
 			}
 		}
-		a.Fail("should have found at least one non-zero backlog count with any non-zero rate across all priorities")
+		a.Failf("%s: should have found at least one non-zero backlog count with any non-zero rate across priorities", label)
 	}
 
 	var accBacklogCount int
