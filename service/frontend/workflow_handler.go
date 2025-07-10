@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -874,6 +875,30 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	pollerID := uuid.New()
 	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
 	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
+
+	if request.WorkerHeartbeat != nil {
+		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
+		request.WorkerHeartbeat = nil // clear the heartbeat from the request to avoid sending it to matching service
+
+		// route heartbeat to the matching service only if the request is valid (all validation checks passed)
+		go func() {
+			_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
+				NamespaceId: namespaceID.String(),
+				HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+					Namespace:       request.Namespace,
+					Identity:        request.Identity,
+					WorkerHeartbeat: heartbeats,
+				},
+			})
+
+			if err != nil {
+				wh.logger.Error("Failed to record worker heartbeat.",
+					tag.WorkflowTaskQueueName(request.TaskQueue.GetName()),
+					tag.Error(err))
+			}
+		}()
+	}
+
 	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(childCtx, &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
 		PollerId:    pollerID,
@@ -2679,6 +2704,24 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
+	}
+
+	// route heartbeat to the matching service
+	if request.WorkerHeartbeat != nil {
+		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
+		_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
+			NamespaceId: namespaceId.String(),
+			HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+				Namespace:       request.Namespace,
+				Identity:        request.Identity,
+				WorkerHeartbeat: heartbeats,
+			},
+		})
+		if err != nil {
+			wh.logger.Error("Failed to record worker heartbeat during shutdown.",
+				tag.WorkflowTaskQueueName(request.WorkerHeartbeat.GetTaskQueue()),
+				tag.Error(err))
+		}
 	}
 
 	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
@@ -4856,16 +4899,40 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
 	}
 
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
-		return nil, err
+	// route heartbeat to the matching service
+	if len(request.WorkerHeartbeat) > 0 {
+		workerHeartbeat := request.WorkerHeartbeat
+		request.WorkerHeartbeat = nil // Clear the field to avoid sending it to matching service.
+
+		go func() {
+			_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
+				NamespaceId: namespaceID.String(),
+				HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+					Namespace:       request.Namespace,
+					Identity:        request.Identity,
+					WorkerHeartbeat: workerHeartbeat,
+				},
+			})
+			if err != nil {
+				wh.logger.Error("Failed to record worker heartbeat from nexus poll request.",
+					tag.NexusTaskQueueName(request.GetTaskQueue().GetName()),
+					tag.Error(err))
+			}
+		}()
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
-	if err != nil {
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
 		return nil, err
 	}
 
