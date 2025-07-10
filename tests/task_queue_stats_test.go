@@ -445,14 +445,13 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
 		TaskQueueType: tqType,
 	}
 
-	if !expectation.CachedEnabled { // skip if testing caching; as this would pin the result to the cache
-		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
-		s.NoError(err)
-		s.NotNil(resp)
-		s.Nil(resp.Stats, "stats should not be reported by default")
-		//nolint:staticcheck // SA1019 deprecated
-		s.Nil(resp.TaskQueueStatus, "status should not be reported by default")
-	}
+	// test stats are not reported by default (and therefore also not cached)
+	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Nil(resp.Stats, "stats should not be reported by default")
+	//nolint:staticcheck // SA1019 deprecated
+	s.Nil(resp.TaskQueueStatus, "status should not be reported by default")
 
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		a := require.New(c)
@@ -549,13 +548,12 @@ func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 		},
 	}
 
-	if !expectation.CachedEnabled { // skip if testing caching; as this would pin the result to the cache
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, req)
-		s.NoError(err)
-		s.NotNil(resp)
-		for _, info := range resp.VersionTaskQueues {
-			s.Nil(info.Stats, "stats should not be reported by default")
-		}
+	// test stats are not reported by default (and therefore also not cached)
+	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, req)
+	s.NoError(err)
+	s.NotNil(resp)
+	for _, info := range resp.VersionTaskQueues {
+		s.Nil(info.Stats, "stats should not be reported by default")
 	}
 
 	s.EventuallyWithT(func(c *assert.CollectT) {
