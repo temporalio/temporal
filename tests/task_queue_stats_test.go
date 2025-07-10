@@ -589,7 +589,7 @@ func validateTaskQueueStatsByPriority(
 
 	// use an abgridged version when caching since the exact stats are difficult to predict
 	if taskQueueExpectation.CachedEnabled {
-		for i := int32(minPriority); i < maxPriority; i++ {
+		for i := int32(minPriority); i <= maxPriority; i++ {
 			if stats[i].ApproximateBacklogCount != 0 && stats[i].TasksDispatchRate > 0 || stats[i].TasksAddRate > 0 {
 				return
 			}
@@ -597,7 +597,8 @@ func validateTaskQueueStatsByPriority(
 		a.Fail("should have found at least one non-zero backlog count with any non-zero rate across all priorities")
 	}
 
-	for i := int32(minPriority); i < maxPriority; i++ {
+	var accBacklogCount int
+	for i := int32(minPriority); i <= maxPriority; i++ {
 		priExpectation := taskQueueExpectation
 		priExpectation.BacklogCount = taskQueueExpectation.BacklogCount / (maxPriority + 1)
 		if i == defaultPriority {
@@ -606,7 +607,11 @@ func validateTaskQueueStatsByPriority(
 
 		a.Containsf(stats, i, "%s: stats should contain priority %d", label, i)
 		validateTaskQueueStats(fmt.Sprintf("%s_Pri[%d]", label, i+1), a, stats[i], priExpectation)
+		accBacklogCount += int(stats[i].ApproximateBacklogCount)
 	}
+	a.GreaterOrEqualf(taskQueueExpectation.BacklogCount, accBacklogCount,
+		"%s: accumulated backlog count from all priorities should be at least %d, got %d",
+		label, taskQueueExpectation.BacklogCount, accBacklogCount)
 }
 
 func validateTaskQueueStats(
