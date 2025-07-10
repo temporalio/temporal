@@ -467,8 +467,8 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
 		a.NotNil(resp)
 
 		if singlePartition {
-			//nolint:staticcheck // SA1019 deprecated field
 			expected := expectation.BacklogCount / 2 // only reports unversioned
+			//nolint:staticcheck // SA1019 deprecated field
 			actual := resp.TaskQueueStatus.GetBacklogCountHint()
 			a.EqualValuesf(expected, actual, "%s: backlog hint should be %d, got %d", label, expected, actual)
 		}
