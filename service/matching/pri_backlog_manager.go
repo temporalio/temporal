@@ -314,6 +314,7 @@ func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQue
 	defer c.subqueueLock.Unlock()
 
 	status := make([]*taskqueuespb.InternalTaskQueueStatus, len(c.subqueues))
+	backlogCountsByPriority := c.db.getApproximateBacklogCounts()
 	for priorityKey, subqueueKey := range c.subqueuesByPriority {
 		r := c.subqueues[subqueueKey]
 		readLevel, ackLevel := r.getLevels()
@@ -326,7 +327,7 @@ func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQue
 			},
 			LoadedTasks:             int64(r.getLoadedTasks()),
 			MaxReadLevel:            c.db.GetMaxReadLevel(subqueueKey),
-			ApproximateBacklogCount: c.db.getApproximateBacklogCounts()[priorityKey],
+			ApproximateBacklogCount: backlogCountsByPriority[priorityKey],
 		}
 	}
 	return status
