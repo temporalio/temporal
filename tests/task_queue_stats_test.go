@@ -230,7 +230,7 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(sets int,
 	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
 
 	// poll all activity tasks
-	s.pollActivities(sets, tqName)
+	s.pollActivities(total, tqName)
 
 	// verify both workflow and activity backlogs are empty
 	expectations[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = TaskQueueExpectations{
