@@ -203,7 +203,7 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		Version:                           ActionResultIncludesStatus,
+		Version:                           TriggerImmediatelyTimestamp,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
