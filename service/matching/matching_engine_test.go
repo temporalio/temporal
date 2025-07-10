@@ -3407,14 +3407,14 @@ func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksD
 	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
 }
 
-func (s *matchingEngineSuite) TestLargerBacklogAge() {
+func (s *matchingEngineSuite) TestOldestBacklogAge() {
 	firstAge := durationpb.New(100 * time.Second)
 	secondAge := durationpb.New(1 * time.Millisecond)
-	s.Same(firstAge, largerBacklogAge(firstAge, secondAge))
+	s.Same(firstAge, oldestBacklogAge(firstAge, secondAge))
 
 	thirdAge := durationpb.New(5 * time.Minute)
-	s.Same(thirdAge, largerBacklogAge(firstAge, thirdAge))
-	s.Same(thirdAge, largerBacklogAge(secondAge, thirdAge))
+	s.Same(thirdAge, oldestBacklogAge(firstAge, thirdAge))
+	s.Same(thirdAge, oldestBacklogAge(secondAge, thirdAge))
 }
 
 func (s *matchingEngineSuite) TestCheckNexusEndpointsOwnership() {

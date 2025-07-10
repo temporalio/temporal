@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 var (
@@ -38,11 +39,7 @@ type (
 		// It's returned as a hint to the SDK to influence polling behavior (sticky vs normal).
 		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
-		// ApproxBacklogCountsByPriority returns an estimate of the size of the backlog in persistence, per priority.
-		// It may be off in either direction.
-		ApproxBacklogCountsByPriority() map[int32]int64
-		// BacklogHeadAgeByPriority returns the age of the oldest task in the backlog, per priority.
-		BacklogHeadAgeByPriority() map[int32]time.Duration
+		BacklogStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats
 		InternalStatus() []*taskqueuespb.InternalTaskQueueStatus
 
 		// TODO(pri): remove
@@ -182,7 +179,7 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 		ReadLevel: c.taskAckManager.getReadLevel(),
 		AckLevel:  c.taskAckManager.getAckLevel(),
 		// use getApproximateBacklogCounts instead of BacklogCountHint since it's more accurate
-		BacklogCountHint: c.db.getApproximateBacklogCounts()[subqueueZero],
+		BacklogCountHint: c.db.getApproximateBacklogCounts()[defaultPriorityLevel(c.config.PriorityLevels())],
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
@@ -190,13 +187,14 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	}
 }
 
-func (c *backlogManagerImpl) ApproxBacklogCountsByPriority() map[int32]int64 {
-	return c.db.getApproximateBacklogCounts()
-}
-
-func (c *backlogManagerImpl) BacklogHeadAgeByPriority() map[int32]time.Duration {
-	// This is not per-priority in the classic backlog manager, so return a map with only priority 0.
-	return map[int32]time.Duration{0: c.taskReader.getBacklogHeadAge()}
+func (c *backlogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats {
+	defaultPriority := defaultPriorityLevel(c.config.PriorityLevels())
+	return map[int32]*taskqueuepb.TaskQueueStats{
+		defaultPriority: &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogCount: c.db.getApproximateBacklogCounts()[defaultPriority],
+			ApproximateBacklogAge:   durationpb.New(c.taskReader.getBacklogHeadAge()),
+		},
+	}
 }
 
 func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
@@ -211,7 +209,7 @@ func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueS
 			},
 			LoadedTasks:             c.taskAckManager.getBacklogCountHint(),
 			MaxReadLevel:            c.db.GetMaxReadLevel(subqueueZero),
-			ApproximateBacklogCount: c.db.getApproximateBacklogCounts()[subqueueZero],
+			ApproximateBacklogCount: c.db.getApproximateBacklogCounts()[defaultPriorityLevel(c.config.PriorityLevels())],
 		},
 	}
 }

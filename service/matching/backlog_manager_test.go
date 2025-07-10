@@ -308,8 +308,8 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySp
 }
 
 func totalApproximateBacklogCount(c backlogManager) (total int64) {
-	for _, count := range c.ApproxBacklogCountsByPriority() {
-		total += count
+	for _, stats := range c.BacklogStatsByPriority() {
+		total += stats.ApproximateBacklogCount
 	}
 	return total
 }

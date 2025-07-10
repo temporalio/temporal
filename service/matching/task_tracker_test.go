@@ -8,10 +8,11 @@ import (
 	"go.temporal.io/server/common/clock"
 )
 
-// trackTasks is a helper which adds numberOfTasks to a taskTracker for a specific priority
-func trackTasks(tr *taskTracker, numberOfTasks int, priority int32) {
+// addTasks is a helper which adds numberOfTasks to a taskTracker
+func trackTasksHelper(tr *taskTracker, numberOfTasks int) {
 	for i := 0; i < numberOfTasks; i++ {
-		tr.incrementTaskCount(priority)
+		// adding a bunch of tasks
+		tr.incrementTaskCount()
 	}
 }
 
@@ -21,71 +22,40 @@ func TestAddTasksRate(t *testing.T) {
 	currentTime := time.Now()
 	timeSource.Update(currentTime)
 
-	const pri0 = 0
-	const pri1 = 1
 	tr := newTaskTracker(timeSource)
 
 	// mini windows will have the following format : (start time, end time)
 	// (0 - 4), (5 - 9), (10 - 14), (15 - 19), (20 - 24), (25 - 29), (30 - 34), ...
 
 	// rate should be zero when no time is passed
-	rates := tr.rate()
-	require.Equal(t, map[int32]float32{}, rates) // no priorities tracked yet
-
-	trackTasks(tr, 60, pri0)
-	rates = tr.rate()
-	require.Equal(t, map[int32]float32{}, rates) // no time passed, so no rates calculated
+	require.Equal(t, float32(0), tr.rate()) // time: 0
+	trackTasksHelper(tr, 100)
+	require.Equal(t, float32(0), tr.rate()) // still zero because no time is passed
 
 	// tasks should be placed in the first mini-window
-	timeSource.Advance(1 * time.Second) // time: 1 second
-	rates = tr.rate()
-	require.Equal(t, map[int32]float32{pri0: 60}, rates) // 60 tasks added in 1 second = 60 / 1 = 60
+	timeSource.Advance(1 * time.Second)                  // time: 1 second
+	require.InEpsilon(t, float32(100), tr.rate(), 0.001) // 100 tasks added in 1 second = 100 / 1 = 100
 
 	// tasks should be placed in the second mini-window with 6 total seconds elapsed
-	timeSource.Advance(5 * time.Second) // time: 6 seconds
-	trackTasks(tr, 60, pri0)
-	trackTasks(tr, 60, pri1)
-	rates = tr.rate()
-	require.Equal(t, map[int32]float32{
-		pri0: 20, // 60 tasks added in 6 seconds = 120/6 = 20
-		pri1: 10, // 60 tasks added in 6 seconds = 60/6 = 10
-	}, rates)
+	timeSource.Advance(5 * time.Second)
+	trackTasksHelper(tr, 200)                           // time: 6 second
+	require.InEpsilon(t, float32(50), tr.rate(), 0.001) // (100 + 200) tasks added in 6 seconds = 300/6 = 50
 
-	// tasks should be placed in the third mini-window with 20 total seconds elapsed
-	timeSource.Advance(14 * time.Second) // time: 20 seconds
-	trackTasks(tr, 100, pri0)
-	trackTasks(tr, 100, pri1)
-	rates = tr.rate()
-	require.Equal(t, map[int32]float32{
-		pri0: 11, // (100 + 60 + 60) tasks added in 20 seconds = 220/20 = 11
-		pri1: 8,  // (100 + 60) tasks added in 20 seconds = 160/20 = 8
-	}, rates)
+	timeSource.Advance(24 * time.Second) // time: 30 second
+	trackTasksHelper(tr, 300)
+	require.InEpsilon(t, float32(20), tr.rate(), 0.001) // (100 + 200 + 300) tasks added in (30 + 0 (current window)) seconds = 600/30 = 20
 
-	// TODO: fix up
-	// this should clear out the first mini-window
-	//timeSource.Advance(10 * time.Second) // time: 30 seconds
-	//rates = tr.rate()
-	//trackTasks(tr, 15, pri0)
-	//trackTasks(tr, 15, pri1)
-	//require.Equal(t, map[int32]float32{
-	//	pri0: 8.8, // (10 + 100 + 60) tasks added in 30 seconds = 170/30 = 5.67
-	//	pri1: 6.4, // (100 + 60) tasks added in 30 seconds = 160/30 = 6.4
-	//}, rates)
+	// this should clear out the first mini-window of 100 tasks
+	timeSource.Advance(5 * time.Second) // time: 35 second
+	trackTasksHelper(tr, 10)
+	require.InEpsilon(t, float32(17), tr.rate(), 0.001) // (10 + 200 + 300) tasks added in (30 + 0 (current window)) seconds = 510/30 = 17
 
-	//// this should clear out the second and third mini-windows
-	//timeSource.Advance(15 * time.Second) // time: 50 seconds
-	//trackTasks(tr, 200, pri0)
-	//rates = tr.rate()
-	//require.Equal(t, map[int32]float32{
-	//	pri0: 20, // (200 + 400) tasks added in 30 seconds = 600/30 = 20
-	//	pri1: 7,  // 200 tasks added in 30 seconds = 210/30 = 7
-	//}, rates)
-	//
-	//// a minute passes and no tasks are added
-	//timeSource.Advance(60 * time.Second)
-	//rates = tr.rate()
-	//require.Equal(t, map[int32]float32{
-	//	pri0: 0, // 0 tasks have been added in the last 30 seconds
-	//	pri1: 0, // 0 tasks have been added in the last 30 seconds
-	//}, rates)
+	// this should clear out the second and third mini-windows
+	timeSource.Advance(15 * time.Second) // time: 50 second
+	trackTasksHelper(tr, 10)
+	require.InEpsilon(t, float32(10.666667), tr.rate(), 0.001) // (10 + 10 + 300) tasks added in (30 + 0 (current window)) seconds = 320/30 = 10.66
+
+	// a minute passes and no tasks are added
+	timeSource.Advance(60 * time.Second)
+	require.Equal(t, float32(0), tr.rate()) // 0 tasks have been added in the last 30 seconds
 }
