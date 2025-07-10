@@ -606,7 +606,7 @@ func validateTaskQueueStatsByPriority(
 		}
 
 		a.Containsf(stats, i, "%s: stats should contain priority %d", label, i)
-		validateTaskQueueStats(fmt.Sprintf("%s_Pri[%d]", label, i+1), a, stats[i], priExpectation)
+		validateTaskQueueStats(fmt.Sprintf("%s_Pri[%d]", label, i), a, stats[i], priExpectation)
 		accBacklogCount += int(stats[i].ApproximateBacklogCount)
 	}
 	a.GreaterOrEqualf(taskQueueExpectation.BacklogCount, accBacklogCount,
