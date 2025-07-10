@@ -151,9 +151,9 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	s.Greater(info2.TaskQueueStats.TasksAddRate, float32(0))
 	// reset so we can compare the rest exactly
 	info1.TaskQueueStats.TasksAddRate = 0
-	info1.TaskQueueStatsByPriority[3].TasksAddRate = 0
+	info1.TaskQueueStatsByPriorityKey[3].TasksAddRate = 0
 	info2.TaskQueueStats.TasksAddRate = 0
-	info2.TaskQueueStatsByPriority[3].TasksAddRate = 0
+	info2.TaskQueueStatsByPriorityKey[3].TasksAddRate = 0
 
 	expectedPhysicalTQInfo := &taskqueuespb.PhysicalTaskQueueInfo{
 		Pollers: nil, // no pollers polling
@@ -161,7 +161,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 			ApproximateBacklogAge:   durationpb.New(0),
 			ApproximateBacklogCount: 1,
 		},
-		TaskQueueStatsByPriority: map[int32]*taskqueuepb.TaskQueueStats{
+		TaskQueueStatsByPriorityKey: map[int32]*taskqueuepb.TaskQueueStats{
 			3: &taskqueuepb.TaskQueueStats{
 				ApproximateBacklogAge:   durationpb.New(0),
 				ApproximateBacklogCount: 1,
