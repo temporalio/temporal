@@ -1301,9 +1301,12 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		cacheKey := "dtq_default:" + strings.Join(buildIds, ",")
 		if ts := pm.GetCache(cacheKey); ts != nil {
 			//revive:disable-next-line:unchecked-type-assertion
-			descrResp.DescResponse.Stats = ts.(*taskqueuepb.TaskQueueStats)
+			cachedResp := ts.(*workflowservice.DescribeTaskQueueResponse)
+			descrResp.DescResponse.Stats = cachedResp.Stats
+			descrResp.DescResponse.StatsByPriority = cachedResp.StatsByPriority
 		} else {
 			taskQueueStats := &taskqueuepb.TaskQueueStats{}
+			taskQueueStatsByPriority := make(map[int32]*taskqueuepb.TaskQueueStats)
 
 			// No version was requested, so we need to query all versions.
 			if len(buildIds) == 0 {
@@ -1342,12 +1345,22 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					return nil, err
 				}
 				for _, vii := range partitionResp.VersionsInfoInternal {
-					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
-					mergeStats(taskQueueStats, partitionStats)
+					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey
+					for pri, priorityStats := range partitionStats {
+						if _, ok := taskQueueStatsByPriority[pri]; !ok {
+							taskQueueStatsByPriority[pri] = &taskqueuepb.TaskQueueStats{}
+						}
+						mergeStats(taskQueueStats, priorityStats)
+						mergeStats(taskQueueStatsByPriority[pri], priorityStats)
+					}
 				}
 			}
-			pm.PutCache(cacheKey, taskQueueStats)
+			pm.PutCache(cacheKey, &workflowservice.DescribeTaskQueueResponse{
+				Stats:           taskQueueStats,
+				StatsByPriority: taskQueueStatsByPriority,
+			})
 			descrResp.DescResponse.Stats = taskQueueStats
+			descrResp.DescResponse.StatsByPriority = taskQueueStatsByPriority
 		}
 	}
 
@@ -1402,9 +1415,10 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 		}
 		resp.VersionTaskQueues = append(resp.VersionTaskQueues,
 			&matchingservice.DescribeVersionedTaskQueuesResponse_VersionTaskQueue{
-				Name:  tq.Name,
-				Type:  tq.Type,
-				Stats: tqResp.DescResponse.Stats,
+				Name:               tq.Name,
+				Type:               tq.Type,
+				Stats:              tqResp.DescResponse.Stats,
+				StatsByPriorityKey: tqResp.DescResponse.StatsByPriority,
 			})
 	}
 
