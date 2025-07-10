@@ -21,12 +21,10 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
-	"go.temporal.io/api/enums/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueue "go.temporal.io/api/taskqueue/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -3517,7 +3515,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueueWithRateLimiterError() {
 func (s *matchingEngineSuite) TestUpdateTaskqueueConfig() {
 	namespaceId := uuid.New()
 	taskQueueName := "test-task-queue"
-	taskQueueType := enums.TASK_QUEUE_TYPE_ACTIVITY
+	taskQueueType := enumspb.TASK_QUEUE_TYPE_ACTIVITY
 
 	updateRPS := float32(99)
 	updateReason := "test-update"
@@ -3530,13 +3528,13 @@ func (s *matchingEngineSuite) TestUpdateTaskqueueConfig() {
 			TaskQueue:     taskQueueName,
 			TaskQueueType: taskQueueType,
 			UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-				RateLimit: &taskqueue.RateLimit{
+				RateLimit: &taskqueuepb.RateLimit{
 					RequestsPerSecond: updateRPS,
 				},
 				Reason: updateReason,
 			},
 			UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-				RateLimit: &taskqueue.RateLimit{
+				RateLimit: &taskqueuepb.RateLimit{
 					RequestsPerSecond: updateRPS,
 				},
 				Reason: updateReason,
