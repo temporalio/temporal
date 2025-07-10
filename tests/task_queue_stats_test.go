@@ -211,7 +211,8 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(sets int,
 	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
 
 	// poll all workflow tasks and enqueue one activity task for each workflow
-	s.enqueueActivitiesForEachWorkflow(sets, tqName)
+	totalAct := s.enqueueActivitiesForEachWorkflow(sets, tqName)
+	s.EqualValues(total, totalAct, "should have enqueued the same number of activities as workflows")
 
 	// verify workflow backlog is empty, activity backlog is not
 	expectations[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = TaskQueueExpectations{
@@ -319,7 +320,7 @@ func (s *TaskQueueStatsSuite) createDeploymentInTaskQueue(tqName string) {
 	wg.Wait()
 }
 
-func (s *TaskQueueStatsSuite) enqueueActivitiesForEachWorkflow(sets int, tqName string) {
+func (s *TaskQueueStatsSuite) enqueueActivitiesForEachWorkflow(sets int, tqName string) int {
 	deploymentOpts := s.deploymentOptions(tqName)
 
 	var total int
@@ -352,8 +353,8 @@ func (s *TaskQueueStatsSuite) enqueueActivitiesForEachWorkflow(sets int, tqName 
 									ActivityType:          &commonpb.ActivityType{Name: "activity_type1"},
 									TaskQueue:             &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 									StartToCloseTimeout:   durationpb.New(time.Minute),
-									Priority:              &commonpb.Priority{PriorityKey: int32(priority)},
 									RequestEagerExecution: false,
+									// Priority is inherted from the workflow
 								},
 							},
 						},
@@ -374,6 +375,7 @@ func (s *TaskQueueStatsSuite) enqueueActivitiesForEachWorkflow(sets int, tqName 
 		}
 	}
 	s.T().Logf("Enqueued %d activities", total)
+	return total
 }
 
 func (s *TaskQueueStatsSuite) pollActivities(count int, tqName string) {
@@ -575,7 +577,7 @@ func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 				return
 			}
 		}
-		s.T().Errorf("Task queue %s of type %s not found in response", tqName, tqType)
+		a.Failf("Task queue %s of type %s not found in response", tqName, tqType)
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
