@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -50,6 +51,7 @@ type (
 		eagerNamespaceRefresher *MockEagerNamespaceRefresher
 		eventSerializer         serialization.Serializer
 		mockExecutionManager    *persistence.MockExecutionManager
+		mockEventHandler        *eventhandler.MockHistoryEventsHandler
 
 		replicationTask   *replicationspb.HistoryTaskAttributes
 		sourceClusterName string
@@ -111,7 +113,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 	s.eventSerializer = serialization.NewSerializer()
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
-
+	s.mockEventHandler = eventhandler.NewMockHistoryEventsHandler(s.controller)
 	s.taskID = rand.Int63()
 	s.processToolBox = ProcessToolBox{
 		ClusterMetadata:         s.clusterMetadata,
@@ -124,6 +126,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		EventSerializer:         s.eventSerializer,
 		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
 		Config:                  tests.NewDynamicConfig(),
+		HistoryEventsHandler:    s.mockEventHandler,
 	}
 	s.processToolBox.Config.ReplicationMultipleBatches = dynamicconfig.GetBoolPropertyFn(s.replicationMultipleBatches)
 
@@ -203,8 +206,9 @@ func (s *executableHistoryTaskSuite) TestExecute_Process() {
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().ReplicateHistoryEvents(
+	s.mockEventHandler.EXPECT().HandleHistoryEvents(
 		gomock.Any(),
+		s.sourceClusterName,
 		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
 		s.task.baseExecutionInfo,
 		s.task.versionHistoryItems,
@@ -256,8 +260,9 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().ReplicateHistoryEvents(
+	s.mockEventHandler.EXPECT().HandleHistoryEvents(
 		gomock.Any(),
+		s.sourceClusterName,
 		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
 		s.task.baseExecutionInfo,
 		s.task.versionHistoryItems,
