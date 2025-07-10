@@ -313,7 +313,7 @@ func (db *taskQueueDB) getApproximateBacklogCounts() map[int32]int64 {
 	defer db.Unlock()
 	counts := make(map[int32]int64)
 	for _, s := range db.subqueues {
-		counts[s.Key.Priority] = s.ApproximateBacklogCount
+		counts[s.Key.Priority] += s.ApproximateBacklogCount
 	}
 	return counts
 }
