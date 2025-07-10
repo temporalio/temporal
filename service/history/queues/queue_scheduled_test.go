@@ -105,6 +105,8 @@ func (s *scheduledQueueSuite) SetupTest() {
 		s.mockShard.GetTimeSource(),
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
+		func() time.Duration { return time.Second },
+		func() float64 { return 0.5 },
 	)
 
 	factory := NewExecutableFactory(nil,
