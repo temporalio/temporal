@@ -294,12 +294,17 @@ func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 		readLevel, ackLevel = c.subqueues[subqueueZero].getLevels()
 	}
 
+	// using getApproximateBacklogCounts instead of BacklogCountHint since it's more accurate
+	var backlogCountHint int64
+	for _, count := range c.db.getApproximateBacklogCounts() {
+		backlogCountHint += count
+	}
+
 	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
 	return &taskqueuepb.TaskQueueStatus{
-		ReadLevel: readLevel,
-		AckLevel:  ackLevel,
-		// use getApproximateBacklogCounts instead of BacklogCountHint since it's more accurate
-		BacklogCountHint: c.db.getApproximateBacklogCounts()[defaultPriorityLevel(c.config.PriorityLevels())],
+		ReadLevel:        readLevel,
+		AckLevel:         ackLevel,
+		BacklogCountHint: backlogCountHint,
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
