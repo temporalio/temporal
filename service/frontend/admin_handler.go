@@ -14,7 +14,6 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
@@ -25,7 +24,6 @@ import (
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -57,7 +55,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/dlq"
@@ -1547,63 +1544,7 @@ func (adh *AdminHandler) ResendReplicationTasks(
 	ctx context.Context,
 	request *adminservice.ResendReplicationTasksRequest,
 ) (_ *adminservice.ResendReplicationTasksResponse, err error) {
-	defer log.CapturePanic(adh.logger, &err)
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-	resender := xdc.NewNDCHistoryResender(
-		adh.namespaceRegistry,
-		adh.clientBean,
-		func(
-			ctx context.Context,
-			sourceClusterName string,
-			namespaceId namespace.ID,
-			workflowId string,
-			runId string,
-			events [][]*historypb.HistoryEvent,
-			versionHistory []*historyspb.VersionHistoryItem,
-		) error {
-			for _, event := range events {
-				historyBlob, err1 := adh.eventSerializer.SerializeEvents(event)
-				if err1 != nil {
-					return err1
-				}
-				replicateRequest := &historyservice.ReplicateEventsV2Request{
-					NamespaceId: namespaceId.String(),
-					WorkflowExecution: &commonpb.WorkflowExecution{
-						WorkflowId: workflowId,
-						RunId:      runId,
-					},
-					Events:              historyBlob,
-					VersionHistoryItems: versionHistory,
-				}
-				_, err1 = adh.historyClient.ReplicateEventsV2(ctx, replicateRequest)
-				if err1 != nil {
-					return err1
-				}
-			}
-			return nil
-		},
-		adh.eventSerializer,
-		nil,
-		adh.logger,
-		nil,
-	)
-	if err := resender.SendSingleWorkflowHistory(
-		ctx,
-		request.GetRemoteCluster(),
-		namespace.ID(request.GetNamespaceId()),
-		request.GetWorkflowId(),
-		request.GetRunId(),
-		resendStartEventID,
-		request.StartVersion,
-		common.EmptyEventID,
-		common.EmptyVersion,
-	); err != nil {
-		return nil, err
-	}
-	return &adminservice.ResendReplicationTasksResponse{}, nil
+	return nil, serviceerror.NewUnimplemented("ResendReplicationTasks is not implemented in AdminHandler")
 }
 
 // GetTaskQueueTasks returns tasks from task queue
