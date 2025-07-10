@@ -308,14 +308,30 @@ func (db *taskQueueDB) updateBacklogStatsLocked(subqueue int, countDelta int64, 
 	db.subqueues[subqueue].oldestTime = oldestTime
 }
 
-func (db *taskQueueDB) getApproximateBacklogCounts() map[int32]int64 {
+func (db *taskQueueDB) getApproximateBacklogCountsBySubqueue() map[int][]int64 {
 	db.Lock()
 	defer db.Unlock()
-	counts := make(map[int32]int64)
-	for _, s := range db.subqueues {
-		counts[s.Key.Priority] += s.ApproximateBacklogCount
+
+	levels := db.config.PriorityLevels()
+	result := make(map[int][]int64)
+	for id, s := range db.subqueues {
+		counts := make([]int64, levels)
+		for p := range levels {
+			counts[p] = s.ApproximateBacklogCount
+		}
+		result[id] = counts
 	}
-	return counts
+	return result
+}
+
+func (db *taskQueueDB) getTotalApproximateBacklogCount() int64 {
+	var total int64
+	for _, priorityCounts := range db.getApproximateBacklogCountsBySubqueue() {
+		for _, count := range priorityCounts {
+			total += count
+		}
+	}
+	return total
 }
 
 // CreateTasks creates a batch of given tasks for this task queue

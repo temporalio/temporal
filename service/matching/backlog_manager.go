@@ -178,8 +178,8 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	return &taskqueuepb.TaskQueueStatus{
 		ReadLevel: c.taskAckManager.getReadLevel(),
 		AckLevel:  c.taskAckManager.getAckLevel(),
-		// use getApproximateBacklogCounts instead of BacklogCountHint since it's more accurate
-		BacklogCountHint: c.db.getApproximateBacklogCounts()[defaultPriorityLevel(c.config.PriorityLevels())],
+		// use getApproximateBacklogCountsBySubqueue instead of BacklogCountHint since it's more accurate
+		BacklogCountHint: c.db.getTotalApproximateBacklogCount(),
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
@@ -191,7 +191,7 @@ func (c *backlogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.Tas
 	defaultPriority := defaultPriorityLevel(c.config.PriorityLevels())
 	return map[int32]*taskqueuepb.TaskQueueStats{
 		defaultPriority: &taskqueuepb.TaskQueueStats{
-			ApproximateBacklogCount: c.db.getApproximateBacklogCounts()[defaultPriority],
+			ApproximateBacklogCount: c.db.getTotalApproximateBacklogCount(),
 			ApproximateBacklogAge:   durationpb.New(c.taskReader.getBacklogHeadAge()),
 		},
 	}
@@ -209,7 +209,7 @@ func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueS
 			},
 			LoadedTasks:             c.taskAckManager.getBacklogCountHint(),
 			MaxReadLevel:            c.db.GetMaxReadLevel(subqueueZero),
-			ApproximateBacklogCount: c.db.getApproximateBacklogCounts()[defaultPriorityLevel(c.config.PriorityLevels())],
+			ApproximateBacklogCount: c.db.getTotalApproximateBacklogCount(),
 		},
 	}
 }
