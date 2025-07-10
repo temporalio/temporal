@@ -55,7 +55,7 @@ var defaultTransitionOptions = chasm.TransitionOptions{
 	Speculative:    false,
 }
 
-var chasmEngineModule = fx.Options(
+var ChasmEngineModule = fx.Options(
 	fx.Provide(newChasmEngine),
 	fx.Provide(func(impl *ChasmEngine) chasm.Engine { return impl }),
 	fx.Invoke(func(impl *ChasmEngine, shardController shard.Controller) {
