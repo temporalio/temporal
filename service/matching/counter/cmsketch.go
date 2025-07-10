@@ -47,7 +47,7 @@ var processStartTime = time.Now()
 func NewCMSketchCounter(params CMSketchParams, src rand.Source) *cmSketch {
 	params.D = max(2, params.D)
 	params.W = max(2, params.W)
-	params.Grow.SkipRateDecay = max(10_000, params.Grow.SkipRateDecay)
+	params.Grow.SkipRateDecay = max(1_000, params.Grow.SkipRateDecay)
 	return &cmSketch{
 		params:   params,
 		seed0:    maphash.MakeSeed(),
@@ -58,7 +58,7 @@ func NewCMSketchCounter(params CMSketchParams, src rand.Source) *cmSketch {
 }
 
 func (s *cmSketch) GetPass(key string, base, inc int64) int64 {
-	if inc <= 0 {
+	if inc < 0 {
 		return base // we don't handle negatives here
 	}
 
