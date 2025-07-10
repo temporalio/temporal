@@ -1357,8 +1357,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		if err != nil {
 			return nil, err
 		}
-		perTypeUserData := userData.GetData().GetPerType()[int32(req.GetTaskQueueType())]
-		descrResp.DescResponse.Config = perTypeUserData.GetConfig()
+		descrResp.DescResponse.Config = getTaskQueueConfig(userData.GetData(), req.GetTaskQueueType())
 	}
 
 	return descrResp, nil
@@ -2973,14 +2972,11 @@ func prepareTaskQueueUserData(
 	return data
 }
 
-func constructUpdateTaskQueueConfigResponse(
+func getTaskQueueConfig(
 	taskQueueUserData *persistencespb.TaskQueueUserData,
 	taskQueueType enumspb.TaskQueueType,
-) *matchingservice.UpdateTaskQueueConfigResponse {
-	perTypeUserData := taskQueueUserData.GetPerType()[int32(taskQueueType)]
-	return &matchingservice.UpdateTaskQueueConfigResponse{
-		UpdatedTaskqueueConfig: perTypeUserData.GetConfig(),
-	}
+) *taskqueuepb.TaskQueueConfig {
+	return taskQueueUserData.GetPerType()[int32(taskQueueType)].GetConfig()
 }
 
 func (e *matchingEngineImpl) UpdateTaskqueueConfig(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
@@ -2988,8 +2984,10 @@ func (e *matchingEngineImpl) UpdateTaskqueueConfig(ctx context.Context, request 
 	if err != nil {
 		return nil, err
 	}
-
 	taskQueueType := request.UpdateTaskqueueConfig.GetTaskQueueType()
+	// Get the partition manager for the root workflow partition of the task queue family.
+	// Configuration updates are applied here and eventually propagate,
+	// to all partitions and associated activity task queues of the same task queue family.
 	tqm, _, err := e.getTaskQueuePartitionManager(ctx,
 		taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(),
 		true, loadCauseOtherWrite)
@@ -3002,8 +3000,9 @@ func (e *matchingEngineImpl) UpdateTaskqueueConfig(ctx context.Context, request 
 			return nil, err
 		}
 		// If no update is requested, return the current config.
-		res := constructUpdateTaskQueueConfigResponse(tqud.GetData(), taskQueueType)
-		return res, nil
+		return &matchingservice.UpdateTaskQueueConfigResponse{
+			UpdatedTaskqueueConfig: getTaskQueueConfig(tqud.GetData(), taskQueueType),
+		}, nil
 	}
 	updateOptions := UserDataUpdateOptions{Source: "UpdateTaskQueueConfig"}
 	_, err = tqm.GetUserDataManager().UpdateUserData(ctx, updateOptions,
@@ -3042,5 +3041,7 @@ func (e *matchingEngineImpl) UpdateTaskqueueConfig(ctx context.Context, request 
 	if err != nil {
 		return nil, err
 	}
-	return constructUpdateTaskQueueConfigResponse(userData.GetData(), taskQueueType), nil
+	return &matchingservice.UpdateTaskQueueConfigResponse{
+		UpdatedTaskqueueConfig: getTaskQueueConfig(userData.GetData(), taskQueueType),
+	}, nil
 }
