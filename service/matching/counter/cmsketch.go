@@ -63,7 +63,7 @@ func (s *cmSketch) GetPass(key string, base, inc int64) int64 {
 	}
 
 	indexes := make([]int, s.params.D)
-	s.getIndexes(key, indexes)
+	s.fillIndexes(key, indexes)
 
 	current := s.getByIndexes(indexes)
 	pass := max(base, current+inc)
@@ -98,7 +98,7 @@ func (s *cmSketch) Reseed(now time.Time) {
 	s.reseeder.iter(relTime, s.seeds)
 }
 
-func (s *cmSketch) getIndexes(k string, indexes []int) {
+func (s *cmSketch) fillIndexes(k string, indexes []int) {
 	w := s.params.W
 	// get 64 bits of hash
 	h0 := maphash.String(s.seed0, k)

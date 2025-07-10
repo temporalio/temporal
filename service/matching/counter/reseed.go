@@ -32,8 +32,9 @@ func (r *reseeder) iter(now time.Duration, seeds []uint64) {
 	elapsed := now - r.lastTime
 	num := int(elapsed / r.params.Interval)
 	r.lastTime += time.Duration(num) * r.params.Interval
+	num = min(num, len(seeds))
 
-	for range min(num, len(seeds)) {
+	for range num {
 		r.lastIndex = (r.lastIndex + 1) % len(seeds)
 		seeds[r.lastIndex] = r.src.Uint64()
 	}
