@@ -15,6 +15,7 @@ import (
 )
 
 const invalidHeapIndex = -13 // use unusual value to stand out in panics
+const maxTokens = 1          // we only use 1 token at a time, used to clip ready times after rate change
 
 type pollerPQ struct {
 	heap []*waitingPoller
@@ -279,6 +280,9 @@ func (d *matcherData) UpdateRateLimit(rate float64, burstDuration time.Duration)
 	defer d.lock.Unlock()
 
 	d.tasks.wholeQueueLimit = makeSimpleLimiterParams(rate, burstDuration)
+
+	now := d.timeSource.Now().UnixNano()
+	d.tasks.wholeQueueReady = d.tasks.wholeQueueReady.clip(d.tasks.wholeQueueLimit, now, maxTokens)
 }
 
 func (d *matcherData) UpdatePerKeyRateLimit(rate float64, burstDuration time.Duration) {
@@ -286,6 +290,11 @@ func (d *matcherData) UpdatePerKeyRateLimit(rate float64, burstDuration time.Dur
 	defer d.lock.Unlock()
 
 	d.tasks.perKeyLimit = makeSimpleLimiterParams(rate, burstDuration)
+
+	now := d.timeSource.Now().UnixNano()
+	for key, ready := range d.tasks.perKeyReady {
+		d.tasks.perKeyReady[key] = ready.clip(d.tasks.perKeyLimit, now, maxTokens)
+	}
 }
 
 func (d *matcherData) EnqueueTaskNoWait(task *internalTask) {
@@ -686,4 +695,14 @@ func (ready simpleLimiter) consume(p simpleLimiterParams, now int64, tokens int6
 	}
 	clippedReady := max(now, int64(ready)+p.burst.Nanoseconds()) - p.burst.Nanoseconds()
 	return simpleLimiter(clippedReady + tokens*p.interval.Nanoseconds())
+}
+
+// clip sets ready to an allowable range based on the given parameters.
+func (ready simpleLimiter) clip(p simpleLimiterParams, now int64, maxTokens int64) simpleLimiter {
+	if p.interval < 0 {
+		return simpleLimiterNever
+	}
+	// if ready was set very far in the future (e.g. because the rate was zero), then we can
+	// clip it back to now + maxTokens*interval + burst.
+	return min(ready, simpleLimiter(now+maxTokens*p.interval.Nanoseconds()+p.burst.Nanoseconds()))
 }
