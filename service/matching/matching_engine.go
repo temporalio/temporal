@@ -58,7 +58,6 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1206,7 +1205,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 								partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
 								mergedStats = &taskqueuepb.TaskQueueStats{
 									ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
-									ApproximateBacklogAge:   largerBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
+									ApproximateBacklogAge:   oldestBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
 									TasksAddRate:            totalStats.TasksAddRate + partitionStats.TasksAddRate,
 									TasksDispatchRate:       totalStats.TasksDispatchRate + partitionStats.TasksDispatchRate,
 								}
@@ -1299,9 +1298,12 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		cacheKey := "dtq_default:" + strings.Join(buildIds, ",")
 		if ts := pm.GetCache(cacheKey); ts != nil {
 			//revive:disable-next-line:unchecked-type-assertion
-			descrResp.DescResponse.Stats = ts.(*taskqueuepb.TaskQueueStats)
+			cachedResp := ts.(*workflowservice.DescribeTaskQueueResponse)
+			descrResp.DescResponse.Stats = cachedResp.Stats
+			descrResp.DescResponse.StatsByPriority = cachedResp.StatsByPriority
 		} else {
 			taskQueueStats := &taskqueuepb.TaskQueueStats{}
+			taskQueueStatsByPriority := make(map[int32]*taskqueuepb.TaskQueueStats)
 
 			// No version was requested, so we need to query all versions.
 			if len(buildIds) == 0 {
@@ -1340,15 +1342,22 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					return nil, err
 				}
 				for _, vii := range partitionResp.VersionsInfoInternal {
-					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
-					taskQueueStats.ApproximateBacklogCount += partitionStats.ApproximateBacklogCount
-					taskQueueStats.ApproximateBacklogAge = largerBacklogAge(taskQueueStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge)
-					taskQueueStats.TasksAddRate += partitionStats.TasksAddRate
-					taskQueueStats.TasksDispatchRate += partitionStats.TasksDispatchRate
+					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey
+					for pri, priorityStats := range partitionStats {
+						if _, ok := taskQueueStatsByPriority[pri]; !ok {
+							taskQueueStatsByPriority[pri] = &taskqueuepb.TaskQueueStats{}
+						}
+						mergeStats(taskQueueStats, priorityStats)
+						mergeStats(taskQueueStatsByPriority[pri], priorityStats)
+					}
 				}
 			}
-			pm.PutCache(cacheKey, taskQueueStats)
+			pm.PutCache(cacheKey, &workflowservice.DescribeTaskQueueResponse{
+				Stats:           taskQueueStats,
+				StatsByPriority: taskQueueStatsByPriority,
+			})
 			descrResp.DescResponse.Stats = taskQueueStats
+			descrResp.DescResponse.StatsByPriority = taskQueueStatsByPriority
 		}
 	}
 
@@ -1395,9 +1404,10 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 		}
 		resp.VersionTaskQueues = append(resp.VersionTaskQueues,
 			&matchingservice.DescribeVersionedTaskQueuesResponse_VersionTaskQueue{
-				Name:  tq.Name,
-				Type:  tq.Type,
-				Stats: tqResp.DescResponse.Stats,
+				Name:               tq.Name,
+				Type:               tq.Type,
+				Stats:              tqResp.DescResponse.Stats,
+				StatsByPriorityKey: tqResp.DescResponse.StatsByPriority,
 			})
 	}
 
@@ -2919,12 +2929,4 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 // be processed on the normal queue.
 func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
 	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
-}
-
-// largerBacklogAge returns the larger BacklogAge
-func largerBacklogAge(rootBacklogAge *durationpb.Duration, currentPartitionAge *durationpb.Duration) *durationpb.Duration {
-	if rootBacklogAge.AsDuration() > currentPartitionAge.AsDuration() {
-		return rootBacklogAge
-	}
-	return currentPartitionAge
 }

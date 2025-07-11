@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -82,13 +83,13 @@ type (
 		pollerHistory               *pollerHistory
 		currentPolls                atomic.Int64
 		taskValidator               taskValidator
-		tasksAddedInIntervals       *taskTracker
-		tasksDispatchedInIntervals  *taskTracker
 		deploymentRegistrationCh    chan struct{}
 		deploymentVersionRegistered bool
 		pollerScalingRateLimiter    quotas.RateLimiter
 
-		firstPoll time.Time
+		taskTrackerMu              sync.RWMutex
+		tasksAddedInIntervals      map[int32]*taskTracker
+		tasksDispatchedInIntervals map[int32]*taskTracker
 	}
 
 	// TODO(pri): old matcher cleanup
@@ -145,8 +146,8 @@ func newPhysicalTaskQueueManager(
 		matchingClient:             e.matchingRawClient,
 		clusterMeta:                e.clusterMeta,
 		metricsHandler:             taggedMetricsHandler,
-		tasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource()),
-		tasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource()),
+		tasksAddedInIntervals:      make(map[int32]*taskTracker),
+		tasksDispatchedInIntervals: make(map[int32]*taskTracker),
 		pollerScalingRateLimiter:   quotas.NewDefaultOutgoingRateLimiter(pollerScalingRateLimitFn),
 		deploymentRegistrationCh:   make(chan struct{}, 1),
 	}
@@ -346,7 +347,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 
 		if pollMetadata.forwardedFrom == "" && // only track the original polls, not forwarded ones.
 			(!task.isStarted() || !task.started.hasEmptyResponse()) { // Need to filter out the empty "started" ones
-			c.tasksDispatchedInIntervals.incrementTaskCount()
+			c.getOrCreateTaskTracker(c.tasksDispatchedInIntervals, task.getPriority().GetPriorityKey()).incrementTaskCount()
 		}
 		return task, nil
 	}
@@ -407,7 +408,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchQueryTask(
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	task := newInternalQueryTask(taskId, request)
 	if !task.isForwarded() {
-		c.tasksAddedInIntervals.incrementTaskCount()
+		c.getOrCreateTaskTracker(c.tasksAddedInIntervals, request.GetPriority().GetPriorityKey()).incrementTaskCount()
 	}
 	return c.matcher.OfferQuery(ctx, task)
 }
@@ -432,7 +433,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 	}
 	task := newInternalNexusTask(taskId, deadline, opDeadline, request)
 	if !task.isForwarded() {
-		c.tasksAddedInIntervals.incrementTaskCount()
+		c.getOrCreateTaskTracker(c.tasksAddedInIntervals, 0).incrementTaskCount() // Nexus has no priorities
 	}
 	return c.matcher.OfferNexusTask(ctx, task)
 }
@@ -477,16 +478,25 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	return response
 }
 
-func (c *physicalTaskQueueManagerImpl) GetStats() *taskqueuepb.TaskQueueStats {
-	return &taskqueuepb.TaskQueueStats{
-		ApproximateBacklogCount: c.backlogMgr.TotalApproximateBacklogCount(),
-		// using this and not matcher's because it reports only the age of the current physical
-		// queue backlog (not including the redirected backlogs) which is consistent with the
-		// ApproximateBacklogCount metric.
-		ApproximateBacklogAge: durationpb.New(c.backlogMgr.BacklogHeadAge()),
-		TasksAddRate:          c.tasksAddedInIntervals.rate(),
-		TasksDispatchRate:     c.tasksDispatchedInIntervals.rate(),
+func (c *physicalTaskQueueManagerImpl) GetStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats {
+	stats := c.backlogMgr.BacklogStatsByPriority()
+
+	c.taskTrackerMu.RLock()
+	defer c.taskTrackerMu.RUnlock()
+
+	for pri, tt := range c.tasksAddedInIntervals {
+		if _, ok := stats[pri]; !ok {
+			stats[pri] = &taskqueuepb.TaskQueueStats{}
+		}
+		stats[pri].TasksAddRate = tt.rate()
 	}
+	for pri, tt := range c.tasksDispatchedInIntervals {
+		if _, ok := stats[pri]; !ok {
+			stats[pri] = &taskqueuepb.TaskQueueStats{}
+		}
+		stats[pri].TasksDispatchRate = tt.rate()
+	}
+	return stats
 }
 
 func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus {
@@ -497,7 +507,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
-		c.tasksAddedInIntervals.incrementTaskCount()
+		c.getOrCreateTaskTracker(c.tasksAddedInIntervals, task.getPriority().GetPriorityKey()).incrementTaskCount()
 		if disable, _ := testhooks.Get[bool](c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch); disable {
 			return false, nil
 		}
@@ -653,11 +663,15 @@ func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause un
 
 func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
 	pollStartTime time.Time) *taskqueuepb.PollerScalingDecision {
-	return c.makePollerScalingDecisionImpl(pollStartTime, c.GetStats)
+	return c.makePollerScalingDecisionImpl(pollStartTime, func() *taskqueuepb.TaskQueueStats {
+		return aggregateStats(c.GetStatsByPriority())
+	})
 }
 
 func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
-	pollStartTime time.Time, statsFn func() *taskqueuepb.TaskQueueStats) *taskqueuepb.PollerScalingDecision {
+	pollStartTime time.Time,
+	statsFn func() *taskqueuepb.TaskQueueStats,
+) *taskqueuepb.PollerScalingDecision {
 	pollWaitTime := c.partitionMgr.engine.timeSource.Since(pollStartTime)
 	// If a poller has waited around a while, we can always suggest a decrease.
 	if pollWaitTime >= c.partitionMgr.config.PollerScalingWaitTime() {
@@ -699,4 +713,56 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	return &taskqueuepb.PollerScalingDecision{
 		PollRequestDeltaSuggestion: delta,
 	}
+}
+
+func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
+	intervals map[int32]*taskTracker,
+	priorityKey int32,
+) *taskTracker {
+	if priorityKey == 0 {
+		priorityKey = defaultPriorityLevel(c.config.PriorityLevels()) // assign default priority key
+	}
+
+	// First try with read lock for the common case where tracker already exists.
+	c.taskTrackerMu.RLock()
+	if tracker, ok := intervals[priorityKey]; ok {
+		c.taskTrackerMu.RUnlock()
+		return tracker
+	}
+	c.taskTrackerMu.RUnlock()
+
+	// Otherwise, we need to maybe create a new tracker with the write lock.
+	c.taskTrackerMu.Lock()
+	defer c.taskTrackerMu.Unlock()
+	if tracker, ok := intervals[priorityKey]; ok {
+		return tracker // tracker was created while we were waiting for the lock
+	}
+
+	// Initalize all task trackers together; or the timeframes won't line up.
+	c.tasksAddedInIntervals[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
+	c.tasksDispatchedInIntervals[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
+
+	return intervals[priorityKey]
+}
+
+func aggregateStats(stats map[int32]*taskqueuepb.TaskQueueStats) *taskqueuepb.TaskQueueStats {
+	result := &taskqueuepb.TaskQueueStats{ApproximateBacklogAge: durationpb.New(0)}
+	for _, s := range stats {
+		mergeStats(result, s)
+	}
+	return result
+}
+
+func mergeStats(into, from *taskqueuepb.TaskQueueStats) {
+	into.ApproximateBacklogCount += from.ApproximateBacklogCount
+	into.ApproximateBacklogAge = oldestBacklogAge(into.ApproximateBacklogAge, from.ApproximateBacklogAge)
+	into.TasksAddRate += from.TasksAddRate
+	into.TasksDispatchRate += from.TasksDispatchRate
+}
+
+func oldestBacklogAge(left, right *durationpb.Duration) *durationpb.Duration {
+	if left.AsDuration() > right.AsDuration() {
+		return left
+	}
+	return right
 }
