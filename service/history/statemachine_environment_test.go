@@ -16,6 +16,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -545,6 +546,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 				mockWorkflowCache,
 				namespaceID.String(),
 				workflowID,
+				chasmworkflow.Archetype,
 				locks.PriorityLow,
 			)
 			if tc.currentRunChanged {

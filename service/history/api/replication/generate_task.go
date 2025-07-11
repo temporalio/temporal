@@ -25,7 +25,7 @@ func GenerateTask(
 	}
 	namespaceID := namespaceEntry.ID()
 
-	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
+	chasmLease, err := workflowConsistencyChecker.GetChasmLease(
 		ctx,
 		nil,
 		definition.NewWorkflowKey(
@@ -33,14 +33,15 @@ func GenerateTask(
 			request.Execution.WorkflowId,
 			request.Execution.RunId,
 		),
+		"", // GenerateMigrationTasks works for all Archetypes.
 		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { workflowLease.GetReleaseFn()(retError) }()
+	defer func() { chasmLease.GetReleaseFn()(retError) }()
 
-	mutableState := workflowLease.GetMutableState()
+	mutableState := chasmLease.GetMutableState()
 	replicationTasks, stateTransitionCount, err := mutableState.GenerateMigrationTasks(request.GetTargetClusters())
 	if err != nil {
 		return nil, err

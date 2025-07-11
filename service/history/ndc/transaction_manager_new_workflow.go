@@ -86,6 +86,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 		namespaceID,
 		workflowID,
 		currentRunID,
+		"",
 	)
 	if err != nil {
 		return err
