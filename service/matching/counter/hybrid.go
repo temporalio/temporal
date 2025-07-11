@@ -1,8 +1,6 @@
 package counter
 
 import (
-	"time"
-
 	"math/rand/v2"
 )
 
@@ -28,9 +26,6 @@ var DefaultCounterParams = CounterParams{
 	CMS: CMSketchParams{
 		W: 100,
 		D: 5,
-		Reseed: ReseedParams{
-			Interval: time.Minute,
-		},
 		Grow: CMSGrowParams{
 			SkipRateDecay: 10_000,
 			Threshold:     0.35,

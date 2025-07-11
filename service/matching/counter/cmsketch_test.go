@@ -5,7 +5,6 @@ import (
 	"math"
 	"math/rand/v2"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -58,23 +57,4 @@ func TestCMSketch_Grow(t *testing.T) {
 	assert.Equal(t, 10, cms.params.W)
 	cms.GetPass("onemore", 0, 1)
 	assert.Greater(t, cms.params.W, 10)
-}
-
-func TestCMSketch_Reseed(t *testing.T) {
-	src := rand.NewPCG(rand.Uint64(), rand.Uint64())
-	cms := NewCMSketchCounter(CMSketchParams{
-		W:      10,
-		D:      5,
-		Reseed: ReseedParams{Interval: time.Second},
-	}, src)
-
-	// if we only reseed one at a time, then we never go backwards
-	expected := int64(0)
-	now := processStartTime
-	for range 100 {
-		expected += 1
-		assert.Equal(t, expected, cms.GetPass("one", 0, 1))
-		now = now.Add(time.Second)
-		cms.Reseed(now)
-	}
 }

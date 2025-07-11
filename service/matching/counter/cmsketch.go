@@ -10,10 +10,9 @@ import (
 
 type (
 	CMSketchParams struct {
-		W      int // width of sketch
-		D      int // depth of sketch
-		Reseed ReseedParams
-		Grow   CMSGrowParams
+		W    int // width of sketch
+		D    int // depth of sketch
+		Grow CMSGrowParams
 	}
 
 	CMSGrowParams struct {
@@ -32,8 +31,6 @@ type (
 		// TODO: use uint32 with a sliding window
 		cells []int64
 
-		reseeder reseeder
-
 		skips, incs int // used to calculate skip rate
 	}
 )
@@ -49,11 +46,10 @@ func NewCMSketchCounter(params CMSketchParams, src rand.Source) *cmSketch {
 	params.W = max(2, params.W)
 	params.Grow.SkipRateDecay = max(1_000, params.Grow.SkipRateDecay)
 	return &cmSketch{
-		params:   params,
-		seed0:    maphash.MakeSeed(),
-		seeds:    makeSeeds(params.D, src),
-		cells:    make([]int64, params.W*params.D),
-		reseeder: newReseeder(params.Reseed, src),
+		params: params,
+		seed0:  maphash.MakeSeed(),
+		seeds:  makeSeeds(params.D, src),
+		cells:  make([]int64, params.W*params.D),
 	}
 }
 
@@ -91,11 +87,6 @@ func (s *cmSketch) EstimateDistinctKeys() int {
 		}
 	}
 	return count / s.params.D
-}
-
-func (s *cmSketch) Reseed(now time.Time) {
-	relTime := now.Sub(processStartTime)
-	s.reseeder.iter(relTime, s.seeds)
 }
 
 func (s *cmSketch) fillIndexes(k string, indexes []int) {

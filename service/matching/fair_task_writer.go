@@ -172,8 +172,6 @@ func (w *fairTaskWriter) taskWriterLoop() {
 			reqs = w.getWriteBatch(reqs)
 		}
 
-		w.counter.Reseed(time.Now())
-
 		err := w.allocTaskIDs(reqs)
 		if err == nil {
 			err = w.writeBatch(reqs)
