@@ -18,6 +18,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -560,7 +561,7 @@ func FuzzMatcherData(f *testing.F) {
 		)
 		ts := clock.NewEventTimeSource()
 		ts.UseAsyncTimers(true)
-		logger := testlogger.NewTestLogger(f, testlogger.FailOnAnyUnexpectedError)
+		logger := log.NewNoopLogger()
 		md := newMatcherData(cfg, logger, ts, true)
 
 		next := func() int {

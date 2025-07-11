@@ -78,6 +78,18 @@ type taskPQ struct {
 	// Rate limiter for overall queue
 	wholeQueueLimit simpleLimiterParams
 	wholeQueueReady simpleLimiter
+
+	// Rate limiter for individual fairness keys.
+	//
+	// Note that we currently have only one limit for all keys, which is scaled by the key's
+	// weight. If we do this, we can assume that all keys are either at or below their rate
+	// limit at the same time, so that if the head of the queue is at its limit, then the rest
+	// must also be, and so we don't have to "skip over" the head of the queue due to rate
+	// limits. This isn't true in situations where weights have changed in between writing and
+	// reading. We'll handle that situation better in the future.
+	perKeyLimit     simpleLimiterParams
+	perKeyOverrides fairnessWeightOverrides // TODO(fairness): get this from config
+	perKeyReady     map[string]simpleLimiter
 }
 
 func (t *taskPQ) Add(task *internalTask) {
@@ -94,10 +106,14 @@ func (t *taskPQ) readyTimeForTask(task *internalTask) simpleLimiter {
 	// 	// don't count any rate limit for forwarded tasks, it was counted on the child
 	// 	return 0
 	// }
-	return max(
-		t.wholeQueueReady,
-		// TODO(pri): add more times here, e.g. fairness key limit, per-task backoff
-	)
+	ready := t.wholeQueueReady
+
+	if t.perKeyLimit.limited() {
+		key := task.getPriority().GetFairnessKey()
+		ready = max(ready, t.perKeyReady[key])
+	}
+
+	return ready
 }
 
 func (t *taskPQ) consumeTokens(now int64, task *internalTask, tokens int64) {
@@ -107,6 +123,15 @@ func (t *taskPQ) consumeTokens(now int64, task *internalTask, tokens int64) {
 	}
 
 	t.wholeQueueReady = t.wholeQueueReady.consume(t.wholeQueueLimit, now, tokens)
+
+	if t.perKeyLimit.limited() {
+		pri := task.getPriority()
+		key := pri.GetFairnessKey()
+		weight := getEffectiveWeight(t.perKeyOverrides, pri)
+		p := t.perKeyLimit
+		p.interval = time.Duration(float32(p.interval) / weight) // scale by weight
+		t.perKeyReady[key] = t.perKeyReady[key].consume(p, now, tokens)
+	}
 }
 
 // implements heap.Interface
@@ -254,6 +279,13 @@ func (d *matcherData) UpdateRateLimit(rate float64, burstDuration time.Duration)
 	defer d.lock.Unlock()
 
 	d.tasks.wholeQueueLimit = makeSimpleLimiterParams(rate, burstDuration)
+}
+
+func (d *matcherData) UpdatePerKeyRateLimit(rate float64, burstDuration time.Duration) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	d.tasks.perKeyLimit = makeSimpleLimiterParams(rate, burstDuration)
 }
 
 func (d *matcherData) EnqueueTaskNoWait(task *internalTask) {
@@ -474,8 +506,8 @@ func (d *matcherData) findAndWakeMatches() {
 		}
 
 		// check ready time
-		delay := int64(d.tasks.readyTimeForTask(task)) - now
-		d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, time.Duration(delay))
+		delay := d.tasks.readyTimeForTask(task).delay(now)
+		d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, delay)
 		if delay > 0 {
 			return // not ready yet, timer will call match later
 		}
@@ -603,15 +635,33 @@ func (rt *resettableTimer) unset() {
 type simpleLimiter int64 // ready time as unix nanos
 
 type simpleLimiterParams struct {
-	interval time.Duration // ideal task spacing interval
+	interval time.Duration // ideal task spacing interval, or 0 for no limit (infinite), or -1 for zero limit
 	burst    time.Duration // burst duration
 }
 
+const maxBurst = time.Minute
+const simpleLimiterNever = simpleLimiter(7 << 60) // this is in the year 2225
+
 func makeSimpleLimiterParams(rate float64, burstDuration time.Duration) simpleLimiterParams {
+	// 1e-9 would make interval overflow int64
+	if rate <= 1e-9 {
+		return simpleLimiterParams{
+			interval: time.Duration(-1),
+		}
+	}
 	return simpleLimiterParams{
 		interval: time.Duration(float64(time.Second) / rate),
-		burst:    burstDuration,
+		burst:    min(burstDuration, maxBurst),
 	}
+}
+
+func (p simpleLimiterParams) never() bool   { return p.interval < 0 }
+func (p simpleLimiterParams) limited() bool { return p.interval > 0 }
+
+// delay returns the time until the limiter is ready.
+// If the return value is <= 0 then the limiter can go now.
+func (ready simpleLimiter) delay(now int64) time.Duration {
+	return time.Duration(int64(ready) - now)
 }
 
 // consume updates ready based on the current time and number of new tokens consumed.
@@ -631,6 +681,9 @@ func (ready simpleLimiter) consume(p simpleLimiterParams, now int64, tokens int6
 	//
 	// Alternatively, if now is > ready by more than burst, then we end up subtracting the full
 	// burst from now and adding one interval.
+	if p.never() {
+		return simpleLimiterNever
+	}
 	clippedReady := max(now, int64(ready)+p.burst.Nanoseconds()) - p.burst.Nanoseconds()
 	return simpleLimiter(clippedReady + tokens*p.interval.Nanoseconds())
 }

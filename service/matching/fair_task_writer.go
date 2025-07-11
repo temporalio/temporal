@@ -17,12 +17,6 @@ import (
 	"go.temporal.io/server/service/matching/counter"
 )
 
-const (
-	// minWeight * strideFactor must be >= 1
-	strideFactor = 1000
-	minWeight    = 0.001
-)
-
 type (
 	// fairTaskWriter writes tasks with stride scheduling
 	fairTaskWriter struct {
@@ -120,24 +114,13 @@ func (w *fairTaskWriter) allocTaskIDs(reqs []*writeTaskRequest) error {
 
 func (w *fairTaskWriter) pickPasses(tasks []*writeTaskRequest, bases []fairLevel) {
 	// TODO(fairness): get this from config
-	var overrideWeights map[string]float32
+	var overrides fairnessWeightOverrides
 
 	for i, task := range tasks {
-		key := task.taskInfo.Priority.GetFairnessKey()
-
-		weight, ok := overrideWeights[key]
-		if !ok {
-			weight = task.taskInfo.Priority.GetFairnessWeight()
-		}
-		// zero means default weight (1.0). negative doesn't make sense, map it to 1.0 also
-		if weight <= 0.0 {
-			weight = 1.0
-		} else {
-			weight = max(weight, minWeight)
-		}
-
+		pri := task.taskInfo.Priority
+		key := pri.GetFairnessKey()
+		weight := getEffectiveWeight(overrides, pri)
 		inc := max(1, int64(strideFactor/weight))
-
 		base := bases[task.subqueue].pass
 		counter := w.counters[task.subqueue]
 		if counter == nil {
