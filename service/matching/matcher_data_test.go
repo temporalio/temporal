@@ -552,6 +552,56 @@ func TestSimpleLimiterRecycle(t *testing.T) {
 	require.InEpsilon(t, 10, effectiveRate, 0.01)
 }
 
+func TestSimpleLimiterUnlimited(t *testing.T) {
+	now := time.Now().UnixNano()
+	var ready simpleLimiter
+
+	pInf := makeSimpleLimiterParams(1e12, 0)
+	require.False(t, pInf.never())
+	require.False(t, pInf.limited())
+
+	for range 1000 {
+		ready = ready.consume(pInf, now, 1)
+		require.LessOrEqual(t, ready.delay(now), time.Duration(0))
+	}
+}
+
+func TestSimpleLimiterLowToHigh(t *testing.T) {
+	for _, lowRate := range []float64{
+		0,
+		1e-8, // 1 per 1000+ days
+	} {
+		pLow := makeSimpleLimiterParams(lowRate, time.Second)
+		require.True(t, pLow.never() == (lowRate == 0))
+
+		now := time.Now().UnixNano()
+		var ready simpleLimiter
+		ready = ready.consume(pLow, now, 1)
+		// not ready yet
+		require.Greater(t, ready.delay(now), time.Duration(0))
+		// not ready even after 1 day
+		require.Greater(t, ready.delay(now+(24*time.Hour).Nanoseconds()), time.Duration(0))
+
+		// try clipping using the low limit
+		ready = ready.clip(pLow, now, 1)
+		// still not ready now or in 1 day
+		require.Greater(t, ready.delay(now), time.Duration(0))
+		require.Greater(t, ready.delay(now+(24*time.Hour).Nanoseconds()), time.Duration(0))
+
+		// switch to higher rate limit
+		pHigh := makeSimpleLimiterParams(10, time.Second)
+		require.False(t, pHigh.never())
+		require.True(t, pHigh.limited())
+
+		// clip to high limit
+		ready = ready.clip(pHigh, now, 1)
+		// not ready yet
+		require.Greater(t, ready.delay(now), time.Duration(0))
+		// ready within one minute
+		require.Less(t, ready.delay(now+time.Minute.Nanoseconds()), time.Duration(0))
+	}
+}
+
 func FuzzMatcherData(f *testing.F) {
 	f.Fuzz(func(t *testing.T, tape []byte) {
 		cfg := newTaskQueueConfig(
