@@ -157,6 +157,7 @@ var (
 		"TriggerWorkflowRule":                   {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"RecordWorkerHeartbeat":                 {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"ListWorkers":                           {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
+		"UpdateTaskQueueConfig":                 {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
 		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},
