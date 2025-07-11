@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/matching/counter"
 )
 
@@ -28,7 +29,7 @@ type (
 		backlogMgr         *fairBacklogManagerImpl
 		config             *taskQueueConfig
 		db                 *taskQueueDB
-		counter            counter.Counter
+		counter            counter.Counter // only used in taskWriterLoop
 		logger             log.Logger
 		appendCh           chan *writeTaskRequest
 		taskIDBlock        taskIDBlock
@@ -133,7 +134,9 @@ func (w *fairTaskWriter) pickPasses(tasks []*writeTaskRequest, bases []fairLevel
 		inc := max(1, int64(strideFactor/weight))
 
 		base := bases[task.subqueue].pass
-		tasks[i].pass = w.counter.GetPass(key, base, inc)
+		pass := w.counter.GetPass(key, base, inc)
+		softassert.That(w.logger, pass >= base, "counter returned pass below base")
+		tasks[i].pass = pass
 	}
 }
 
