@@ -268,7 +268,7 @@ func (c *priBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.
 	result := make(map[int32]*taskqueuepb.TaskQueueStats)
 	priorityLevels := c.config.PriorityLevels()
 	backlogCounts := c.db.getApproximateBacklogCountsBySubqueue()
-	for idx, _ := range c.subqueues {
+	for idx := range c.subqueues {
 		for priorityIdx := range priorityLevels {
 			priority := priorityIdx + 1 // priority levels start at 1
 			result[priority] = &taskqueuepb.TaskQueueStats{
