@@ -57,10 +57,11 @@ type (
 	// queue, corresponding to a single versioned queue of a task queue partition.
 	// TODO(pri): rename this
 	physicalTaskQueueManagerImpl struct {
-		status       int32
-		partitionMgr *taskQueuePartitionManagerImpl
-		queue        *PhysicalTaskQueueKey
-		config       *taskQueueConfig
+		status             int32
+		partitionMgr       *taskQueuePartitionManagerImpl
+		queue              *PhysicalTaskQueueKey
+		config             *taskQueueConfig
+		defaultPriorityKey int32
 
 		// This context is valid for lifetime of this physicalTaskQueueManagerImpl.
 		// It can be used to notify when the task queue is closing.
@@ -136,6 +137,7 @@ func newPhysicalTaskQueueManager(
 		return config.PollerScalingDecisionsPerSecond() * 1e6
 	}
 	pqMgr := &physicalTaskQueueManagerImpl{
+		defaultPriorityKey:       defaultPriorityLevel(config.PriorityLevels()),
 		status:                   common.DaemonStatusInitialized,
 		partitionMgr:             partitionMgr,
 		queue:                    queue,
@@ -720,7 +722,7 @@ func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
 	priorityKey int32,
 ) *taskTracker {
 	if priorityKey == 0 {
-		priorityKey = defaultPriorityLevel(c.config.PriorityLevels()) // assign default priority key
+		priorityKey = c.defaultPriorityKey
 	}
 
 	// First try with read lock for the common case where tracker already exists.
