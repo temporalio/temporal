@@ -349,6 +349,49 @@ func (s *MatcherDataSuite) TestRateLimitedBacklog() {
 	s.Less(elapsed, 20*time.Second)
 }
 
+func (s *MatcherDataSuite) TestPerKeyRateLimit() {
+	// 10 tasks/key/sec with burst of 3
+	s.md.UpdatePerKeyRateLimit(10, 300*time.Millisecond)
+
+	// register some backlog with three keys
+	keys := []string{"key1", "key2", "key3"}
+	for i := range 300 {
+		t := s.newBacklogTaskWithPriority(123+int64(i), 0, nil, &commonpb.Priority{
+			FairnessKey: keys[i%3],
+		})
+		s.md.EnqueueTaskNoWait(t)
+	}
+
+	start := s.ts.Now()
+
+	// start 10 poll loops to poll them
+	var running atomic.Int64
+	var lastTask atomic.Int64
+	for range 10 {
+		running.Add(1)
+		go func() {
+			defer running.Add(-1)
+			for {
+				if pres := s.pollFakeTime(time.Second); pres.ctxErr != nil {
+					return
+				}
+				lastTask.Store(s.now().UnixNano())
+			}
+		}()
+	}
+
+	// advance fake time until done
+	for running.Load() > 0 {
+		s.ts.Advance(time.Duration(rand.Int63n(int64(10 * time.Millisecond))))
+		gosched(3)
+	}
+
+	elapsed := time.Unix(0, lastTask.Load()).Sub(start)
+	s.Greater(elapsed, 9*time.Second)
+	// with very unlucky scheduling, we might end up taking longer to poll the tasks
+	s.Less(elapsed, 20*time.Second)
+}
+
 func (s *MatcherDataSuite) TestOrder() {
 	t1 := s.newBacklogTaskWithPriority(1, 0, nil, &commonpb.Priority{PriorityKey: 1})
 	t2 := s.newBacklogTaskWithPriority(2, 0, nil, &commonpb.Priority{PriorityKey: 2})

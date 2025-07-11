@@ -270,7 +270,8 @@ func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock
 		timeSource: timeSource,
 		canForward: canForward,
 		tasks: taskPQ{
-			ages: newBacklogAgeTracker(),
+			ages:        newBacklogAgeTracker(),
+			perKeyReady: make(map[string]simpleLimiter),
 		},
 	}
 }
