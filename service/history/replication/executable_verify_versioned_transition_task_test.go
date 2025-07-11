@@ -24,7 +24,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -43,7 +42,6 @@ type (
 		clientBean              *client.MockBean
 		shardController         *shard.MockController
 		namespaceCache          *namespace.MockRegistry
-		ndcHistoryResender      *xdc.MockNDCHistoryResender
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		executableTask          *MockExecutableTask
@@ -84,7 +82,6 @@ func (s *executableVerifyVersionedTransitionTaskSuite) SetupTest() {
 	s.clientBean = client.NewMockBean(s.controller)
 	s.shardController = shard.NewMockController(s.controller)
 	s.namespaceCache = namespace.NewMockRegistry(s.controller)
-	s.ndcHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
 	s.executableTask = NewMockExecutableTask(s.controller)
@@ -112,7 +109,6 @@ func (s *executableVerifyVersionedTransitionTaskSuite) SetupTest() {
 		ClientBean:              s.clientBean,
 		ShardController:         s.shardController,
 		NamespaceCache:          s.namespaceCache,
-		NDCHistoryResender:      s.ndcHistoryResender,
 		MetricsHandler:          s.metricsHandler,
 		Logger:                  s.logger,
 		EventSerializer:         s.eventSerializer,

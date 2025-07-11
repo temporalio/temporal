@@ -23,9 +23,9 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resourcetest"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	deletemanager "go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -47,7 +47,7 @@ type (
 		mockNamespaceCache *namespace.MockRegistry
 		clusterMetadata    *cluster.MockMetadata
 		workflowCache      *wcache.MockCache
-		nDCHistoryResender *xdc.MockNDCHistoryResender
+		nDCHistoryResender *eventhandler.MockResendHandler
 
 		replicationTaskExecutor *taskExecutorImpl
 	}
@@ -86,7 +86,7 @@ func (s *taskExecutorSuite) SetupTest() {
 	s.mockResource = s.mockShard.Resource
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.clusterMetadata = s.mockResource.ClusterMetadata
-	s.nDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
+	s.nDCHistoryResender = eventhandler.NewMockResendHandler(s.controller)
 	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.workflowCache = wcache.NewMockCache(s.controller)
 
@@ -263,7 +263,7 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Rese
 		456,
 	)
 	s.historyClient.EXPECT().SyncActivity(gomock.Any(), request).Return(nil, resendErr)
-	s.nDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+	s.nDCHistoryResender.EXPECT().ResendHistoryEvents(
 		gomock.Any(),
 		s.remoteCluster,
 		namespaceID,
@@ -351,7 +351,7 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 		456,
 	)
 	s.historyClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil, resendErr)
-	s.nDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+	s.nDCHistoryResender.EXPECT().ResendHistoryEvents(
 		gomock.Any(),
 		s.remoteCluster,
 		namespaceID,
