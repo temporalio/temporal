@@ -308,6 +308,9 @@ func (db *taskQueueDB) updateBacklogStatsLocked(subqueue int, countDelta int64, 
 	db.subqueues[subqueue].oldestTime = oldestTime
 }
 
+// getApproximateBacklogCountsBySubqueue returns a map where the key is the subqueue ID and the value is a slice of
+// approximate backlog counts for each priority level in that subqueue. The index of the slice corresponds to the
+// priority level, ie the first element is the count for priority level 1.
 func (db *taskQueueDB) getApproximateBacklogCountsBySubqueue() map[int][]int64 {
 	db.Lock()
 	defer db.Unlock()
