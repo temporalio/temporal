@@ -239,7 +239,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		esHttpClient := so.elasticsearchHttpClient
 		if esHttpClient == nil {
 			var err error
-			esHttpClient, err = esclient.NewAwsHttpClient(esConfig.AWSRequestSigning)
+			esHttpClient, err = esclient.NewAwsHttpClientV8(esConfig.AWSRequestSigning)
 			if err != nil {
 				return serverOptionsProvider{}, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
 			}
