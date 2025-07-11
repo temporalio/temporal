@@ -325,11 +325,12 @@ func (db *taskQueueDB) getApproximateBacklogCountsBySubqueue() map[int][]int64 {
 }
 
 func (db *taskQueueDB) getTotalApproximateBacklogCount() int64 {
+	db.Lock()
+	defer db.Unlock()
+
 	var total int64
-	for _, priorityCounts := range db.getApproximateBacklogCountsBySubqueue() {
-		for _, count := range priorityCounts {
-			total += count
-		}
+	for _, s := range db.subqueues {
+		total += s.ApproximateBacklogCount
 	}
 	return total
 }
