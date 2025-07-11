@@ -320,7 +320,9 @@ func (db *taskQueueDB) getApproximateBacklogCountsBySubqueue() map[int][]int64 {
 	for id, s := range db.subqueues {
 		counts := make([]int64, levels)
 		for p := range levels {
-			counts[p] = s.ApproximateBacklogCount
+			if s.Key.Priority == int32(p+1) {
+				counts[p] = s.ApproximateBacklogCount
+			}
 		}
 		result[id] = counts
 	}
