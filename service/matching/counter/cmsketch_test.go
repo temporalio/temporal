@@ -29,13 +29,17 @@ func TestCMSketch_CrossMaxInt32(t *testing.T) {
 	src := rand.NewPCG(rand.Uint64(), rand.Uint64())
 	cms := NewCMSketchCounter(CMSketchParams{W: 10, D: 3}, src)
 
-	base := int64(math.MaxInt32 - 123)
-	cms.GetPass("one", base, 0)
-	cms.GetPass("one", 0, 50)
-	cms.GetPass("one", 0, 50)
-	cms.GetPass("one", 0, 50)
-	cms.GetPass("one", 0, 50)
-	assert.Equal(t, base+200, cms.GetPass("one", base, 0))
+	for _, base := range []int64{
+		math.MaxInt32 - 123,
+		math.MaxUint32 - 123,
+	} {
+		cms.GetPass("one", base, 0)
+		cms.GetPass("one", 0, 50)
+		cms.GetPass("one", 0, 50)
+		cms.GetPass("one", 0, 50)
+		cms.GetPass("one", 0, 50)
+		assert.Equal(t, base+200, cms.GetPass("one", base, 0))
+	}
 }
 
 func TestCMSketch_Grow(t *testing.T) {
