@@ -5,7 +5,6 @@ import (
 	"math"
 	"math/bits"
 	"math/rand/v2"
-	"time"
 )
 
 type (
@@ -36,10 +35,6 @@ type (
 )
 
 var _ Counter = (*cmSketch)(nil)
-
-// For simplicity, some code works in terms of Durations as a monotonic clock instead of full
-// Time values. This is the time that those Durations are relative to.
-var processStartTime = time.Now()
 
 func NewCMSketchCounter(params CMSketchParams, src rand.Source) *cmSketch {
 	params.D = max(2, params.D)
