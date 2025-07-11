@@ -242,13 +242,16 @@ func (s *TaskQueueStatsSuite) enqueueWorkflows(count int, tqName string) {
 		workflowType := &commonpb.WorkflowType{Name: wt}
 
 		request := &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:           s.Namespace().String(),
-			WorkflowId:          uuid.New(),
-			WorkflowType:        workflowType,
-			TaskQueue:           tq,
-			Input:               nil,
-			WorkflowRunTimeout:  durationpb.New(10 * time.Minute),
-			WorkflowTaskTimeout: durationpb.New(10 * time.Minute),
+			Namespace:             s.Namespace().String(),
+			WorkflowId:            uuid.New(),
+			WorkflowType:          workflowType,
+			TaskQueue:             tq,
+			Input:                 nil,
+			WorkflowRunTimeout:    durationpb.New(10 * time.Minute),
+			WorkflowTaskTimeout:   durationpb.New(10 * time.Minute),
+			RequestId:             uuid.New(),
+			WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			Priority:              &commonpb.Priority{PriorityKey: int32(i % 6)}, // zero (default) + 5 explicit keys
 		}
 
 		// half of them are versioned
@@ -329,6 +332,7 @@ func (s *TaskQueueStatsSuite) enqueueActivitiesForEachWorkflow(count int, tqName
 							ActivityType:          &commonpb.ActivityType{Name: "activity_type1"},
 							TaskQueue:             &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 							StartToCloseTimeout:   durationpb.New(time.Minute),
+							Priority:              &commonpb.Priority{PriorityKey: int32(i % 6)}, // zero (default) + 5 explicit keys
 							RequestEagerExecution: false,
 						},
 					},

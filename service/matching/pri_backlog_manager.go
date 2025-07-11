@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // this retry policy is currently only used for matching persistence operations
@@ -260,20 +261,31 @@ func (c *priBacklogManagerImpl) BacklogCountHint() (total int64) {
 	return
 }
 
-func (c *priBacklogManagerImpl) BacklogHeadAge() time.Duration {
+func (c *priBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats {
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()
 
-	var oldestTime time.Time
-	for _, r := range c.subqueues {
-		oldestTime = minNonZeroTime(oldestTime, r.getOldestBacklogTime())
+	result := make(map[int32]*taskqueuepb.TaskQueueStats)
+	priorityLevels := c.config.PriorityLevels()
+	backlogCounts := c.db.getApproximateBacklogCountsBySubqueue()
+	for idx := range c.subqueues {
+		for priorityIdx := range priorityLevels {
+			priority := priorityIdx + 1 // priority levels start at 1
+			result[priority] = &taskqueuepb.TaskQueueStats{
+				ApproximateBacklogCount: backlogCounts[idx][priorityIdx],
+			}
+
+			oldestBacklogTime := c.subqueues[idx].getOldestBacklogTime()
+			if oldestBacklogTime.IsZero() {
+				// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
+				// be more appropriate in the future.
+				result[priority].ApproximateBacklogAge = durationpb.New(0)
+			} else {
+				result[priority].ApproximateBacklogAge = durationpb.New(time.Since(oldestBacklogTime))
+			}
+		}
 	}
-	if oldestTime.IsZero() {
-		// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
-		// be more appropriate in the future.
-		return time.Duration(0)
-	}
-	return time.Since(oldestTime)
+	return result
 }
 
 func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
@@ -290,17 +302,13 @@ func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	return &taskqueuepb.TaskQueueStatus{
 		ReadLevel: readLevel,
 		AckLevel:  ackLevel,
-		// use getApproximateBacklogCount instead of BacklogCountHint since it's more accurate
+		// use getApproximateBacklogCountsBySubqueue instead of BacklogCountHint since it's more accurate
 		BacklogCountHint: c.db.getTotalApproximateBacklogCount(),
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
 		},
 	}
-}
-
-func (c *priBacklogManagerImpl) TotalApproximateBacklogCount() int64 {
-	return c.db.getTotalApproximateBacklogCount()
 }
 
 func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
@@ -310,7 +318,13 @@ func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQue
 	defer c.subqueueLock.Unlock()
 
 	status := make([]*taskqueuespb.InternalTaskQueueStatus, len(c.subqueues))
+	backlogCountsBySubqueue := c.db.getApproximateBacklogCountsBySubqueue()
 	for i, r := range c.subqueues {
+		var subqueueBacklogCount int64
+		for _, count := range backlogCountsBySubqueue[i] {
+			subqueueBacklogCount += count
+		}
+
 		readLevel, ackLevel := r.getLevels()
 		status[i] = &taskqueuespb.InternalTaskQueueStatus{
 			ReadLevel: readLevel,
@@ -321,7 +335,7 @@ func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQue
 			},
 			LoadedTasks:             int64(r.getLoadedTasks()),
 			MaxReadLevel:            c.db.GetMaxReadLevel(i),
-			ApproximateBacklogCount: c.db.getApproximateBacklogCount(i),
+			ApproximateBacklogCount: subqueueBacklogCount,
 		}
 	}
 	return status
