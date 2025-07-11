@@ -75,8 +75,9 @@ type taskPQ struct {
 	// versioning redirection.
 	ages backlogAgeTracker
 
-	// rate limiter for overall queue
-	wholeQueueLimiter simpleLimiter
+	// Rate limiter for overall queue
+	wholeQueueLimit simpleLimiterParams
+	wholeQueueReady simpleLimiter
 }
 
 func (t *taskPQ) Add(task *internalTask) {
@@ -87,14 +88,14 @@ func (t *taskPQ) Remove(task *internalTask) {
 	heap.Remove(t, task.matchHeapIndex)
 }
 
-func (t *taskPQ) readyTimeForTask(task *internalTask) int64 {
+func (t *taskPQ) readyTimeForTask(task *internalTask) simpleLimiter {
 	// TODO(pri): after we have task-specific ready time, we can re-enable this
 	// if task.isForwarded() {
 	// 	// don't count any rate limit for forwarded tasks, it was counted on the child
 	// 	return 0
 	// }
 	return max(
-		t.wholeQueueLimiter.ready,
+		t.wholeQueueReady,
 		// TODO(pri): add more times here, e.g. fairness key limit, per-task backoff
 	)
 }
@@ -105,7 +106,7 @@ func (t *taskPQ) consumeTokens(now int64, task *internalTask, tokens int64) {
 		return
 	}
 
-	t.wholeQueueLimiter.consume(now, tokens)
+	t.wholeQueueReady = t.wholeQueueReady.consume(t.wholeQueueLimit, now, tokens)
 }
 
 // implements heap.Interface
@@ -252,7 +253,7 @@ func (d *matcherData) UpdateRateLimit(rate float64, burstDuration time.Duration)
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	d.tasks.wholeQueueLimiter.set(rate, burstDuration)
+	d.tasks.wholeQueueLimit = makeSimpleLimiterParams(rate, burstDuration)
 }
 
 func (d *matcherData) EnqueueTaskNoWait(task *internalTask) {
@@ -473,7 +474,7 @@ func (d *matcherData) findAndWakeMatches() {
 		}
 
 		// check ready time
-		delay := d.tasks.readyTimeForTask(task) - now
+		delay := int64(d.tasks.readyTimeForTask(task)) - now
 		d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, time.Duration(delay))
 		if delay > 0 {
 			return // not ready yet, timer will call match later
@@ -597,23 +598,24 @@ func (rt *resettableTimer) unset() {
 
 // simple limiter
 
-// simpleLimiter implements a "GCRA" limiter. The owner should read the `ready` field directly
-// and compare to the current time to decide if a task is allowed.
-type simpleLimiter struct {
-	// parameters:
+// simpleLimiter and simpleLimiterParams implement a "GCRA" limiter.
+// A simpleLimiter is "ready" if its value is <= now (as unix nanos).
+type simpleLimiter int64 // ready time as unix nanos
+
+type simpleLimiterParams struct {
 	interval time.Duration // ideal task spacing interval
 	burst    time.Duration // burst duration
-
-	// state:
-	ready int64 // unix nanos
 }
 
-func (s *simpleLimiter) set(rate float64, burstDuration time.Duration) {
-	s.interval = time.Duration(float64(time.Second) / rate)
-	s.burst = burstDuration
+func makeSimpleLimiterParams(rate float64, burstDuration time.Duration) simpleLimiterParams {
+	return simpleLimiterParams{
+		interval: time.Duration(float64(time.Second) / rate),
+		burst:    burstDuration,
+	}
 }
 
-func (s *simpleLimiter) consume(now int64, tokens int64) {
+// consume updates ready based on the current time and number of new tokens consumed.
+func (ready simpleLimiter) consume(p simpleLimiterParams, now int64, tokens int64) simpleLimiter {
 	// This is a slight variation of the normal GCRA: instead of tracking the end of the
 	// allowed interval (the theoretical arrival time), ready tracks the beginning of it, and
 	// the end is ready + burst. To find the next ready time:
@@ -629,5 +631,6 @@ func (s *simpleLimiter) consume(now int64, tokens int64) {
 	//
 	// Alternatively, if now is > ready by more than burst, then we end up subtracting the full
 	// burst from now and adding one interval.
-	s.ready = max(now, s.ready+s.burst.Nanoseconds()) - s.burst.Nanoseconds() + tokens*s.interval.Nanoseconds()
+	clippedReady := max(now, int64(ready)+p.burst.Nanoseconds()) - p.burst.Nanoseconds()
+	return simpleLimiter(clippedReady + tokens*p.interval.Nanoseconds())
 }

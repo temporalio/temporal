@@ -477,34 +477,34 @@ func (s *MatcherDataSuite) TestReprocessTasks() {
 // simple limiter tests
 
 func TestSimpleLimiter(t *testing.T) {
-	var sl simpleLimiter
-	sl.set(10, time.Second)
+	p := makeSimpleLimiterParams(10, time.Second)
 
 	base := time.Now().UnixNano()
 	now := base
+	var ready simpleLimiter
 
 	// can consume 11 tokens immediately (1 since we're starting from 0 and 10 burst)
 	for range 11 {
-		require.GreaterOrEqual(t, now, sl.ready)
-		sl.consume(now, 1)
+		require.GreaterOrEqual(t, now, ready)
+		ready = ready.consume(p, now, 1)
 	}
 	// now not ready anymore
-	require.Less(t, now, sl.ready)
+	require.Less(t, now, ready)
 
 	// after 100 ms, we can consume one more
 	now += int64(99 * time.Millisecond)
-	require.Less(t, now, sl.ready)
+	require.Less(t, now, ready)
 	now += int64(1 * time.Millisecond)
-	require.GreaterOrEqual(t, now, sl.ready)
-	sl.consume(now, 1)
+	require.GreaterOrEqual(t, now, ready)
+	ready = ready.consume(p, now, 1)
 }
 
 func TestSimpleLimiterOverTime(t *testing.T) {
-	var sl simpleLimiter
-	sl.set(10, time.Second)
+	p := makeSimpleLimiterParams(10, time.Second)
 
 	base := time.Now().UnixNano()
 	now := base
+	var ready simpleLimiter
 
 	consumed := int64(0)
 	for range 10000 {
@@ -512,8 +512,8 @@ func TestSimpleLimiterOverTime(t *testing.T) {
 		// but have some gaps too.
 		now += (70 + rand.Int63n(50)) * int64(time.Millisecond)
 
-		if now >= sl.ready {
-			sl.consume(now, 1)
+		if now >= int64(ready) {
+			ready = ready.consume(p, now, 1)
 			consumed++
 		}
 	}
@@ -523,25 +523,25 @@ func TestSimpleLimiterOverTime(t *testing.T) {
 }
 
 func TestSimpleLimiterRecycle(t *testing.T) {
-	var sl simpleLimiter
-	sl.set(10, time.Second)
+	p := makeSimpleLimiterParams(10, time.Second)
 
 	base := time.Now().UnixNano()
 	now := base
+	var ready simpleLimiter
 
 	consumed := int64(0)
 	for range 10000 {
 		// sleep for some random time, always < 100ms, so we are always limited
 		now += (30 + rand.Int63n(30)) * int64(time.Millisecond)
 
-		if now >= sl.ready {
-			sl.consume(now, 1)
+		if now >= int64(ready) {
+			ready = ready.consume(p, now, 1)
 			consumed++
 
 			// 20% of the time, recycle the token we took
 			if rand.Intn(100) < 20 {
 				now += int64(5 * time.Millisecond)
-				sl.consume(now, -1)
+				ready = ready.consume(p, now, -1)
 				consumed--
 			}
 		}
