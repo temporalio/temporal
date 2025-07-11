@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/service/matching/counter"
 )
 
 type (
@@ -106,6 +107,8 @@ type (
 		PollerScalingWaitTime           dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PollerScalingDecisionsPerSecond dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 
+		FairnessCounter dynamicconfig.TypedPropertyFnWithTaskQueueFilter[counter.CounterParams]
+
 		LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 
@@ -175,6 +178,8 @@ type (
 		PollerScalingBacklogAgeScaleUp  func() time.Duration
 		PollerScalingWaitTime           func() time.Duration
 		PollerScalingDecisionsPerSecond func() float64
+
+		FairnessCounter func() counter.CounterParams
 
 		loadCause loadCause
 	}
@@ -295,6 +300,8 @@ func NewConfig(
 		PollerScalingBacklogAgeScaleUp:  dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp.Get(dc),
 		PollerScalingWaitTime:           dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),
 		PollerScalingDecisionsPerSecond: dynamicconfig.MatchingPollerScalingDecisionsPerSecond.Get(dc),
+
+		FairnessCounter: dynamicconfig.MatchingFairnessCounter.Get(dc),
 
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 	}
@@ -420,6 +427,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		PollerScalingDecisionsPerSecond: func() float64 {
 			return config.PollerScalingDecisionsPerSecond(ns.String(), taskQueueName, taskType)
+		},
+		FairnessCounter: func() counter.CounterParams {
+			return config.FairnessCounter(ns.String(), taskQueueName, taskType)
 		},
 	}
 }

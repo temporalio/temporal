@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/service/matching/counter"
 )
 
 var (
@@ -1301,6 +1302,11 @@ second per poller by one physical queue manager`,
 		"matching.backlogTaskForwardTimeout",
 		60*time.Second,
 		`Timeout for forwarded backlog task (requires new matcher)`,
+	)
+	MatchingFairnessCounter = NewTaskQueueTypedSetting(
+		"matching.fairnessCounter",
+		counter.DefaultCounterParams,
+		`Configuration for counter used in matching fairness.`,
 	)
 
 	// keys for history
