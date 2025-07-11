@@ -321,8 +321,8 @@ func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQue
 	backlogCountsBySubqueue := c.db.getApproximateBacklogCountsBySubqueue()
 	for i, r := range c.subqueues {
 		var subqueueBacklogCount int64
-		for _, counts := range backlogCountsBySubqueue {
-			subqueueBacklogCount += counts[i]
+		for _, count := range backlogCountsBySubqueue[i] {
+			subqueueBacklogCount += count
 		}
 
 		readLevel, ackLevel := r.getLevels()
