@@ -1308,6 +1308,11 @@ second per poller by one physical queue manager`,
 		counter.DefaultCounterParams,
 		`Configuration for counter used in matching fairness.`,
 	)
+	MatchingFairnessKeyRateLimitCacheSize = NewTaskQueueIntSetting(
+		"matching.fairnessKeyRateLimitCacheSize",
+		2000,
+		"Cache size for fairness key rate limits.",
+	)
 
 	// keys for history
 

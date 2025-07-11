@@ -8,6 +8,7 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/softassert"
@@ -90,7 +91,7 @@ type taskPQ struct {
 	// reading. We'll handle that situation better in the future.
 	perKeyLimit     simpleLimiterParams
 	perKeyOverrides fairnessWeightOverrides // TODO(fairness): get this from config
-	perKeyReady     map[string]simpleLimiter
+	perKeyReady     cache.Cache
 }
 
 func (t *taskPQ) Add(task *internalTask) {
@@ -111,7 +112,9 @@ func (t *taskPQ) readyTimeForTask(task *internalTask) simpleLimiter {
 
 	if t.perKeyLimit.limited() {
 		key := task.getPriority().GetFairnessKey()
-		ready = max(ready, t.perKeyReady[key])
+		if v := t.perKeyReady.Get(key); v != nil {
+			ready = max(ready, v.(simpleLimiter))
+		}
 	}
 
 	return ready
@@ -131,7 +134,11 @@ func (t *taskPQ) consumeTokens(now int64, task *internalTask, tokens int64) {
 		weight := getEffectiveWeight(t.perKeyOverrides, pri)
 		p := t.perKeyLimit
 		p.interval = time.Duration(float32(p.interval) / weight) // scale by weight
-		t.perKeyReady[key] = t.perKeyReady[key].consume(p, now, tokens)
+		var sl simpleLimiter
+		if v := t.perKeyReady.Get(key); v != nil {
+			sl = v.(simpleLimiter)
+		}
+		t.perKeyReady.Put(key, sl.consume(p, now, tokens))
 	}
 }
 
@@ -271,7 +278,7 @@ func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock
 		canForward: canForward,
 		tasks: taskPQ{
 			ages:        newBacklogAgeTracker(),
-			perKeyReady: make(map[string]simpleLimiter),
+			perKeyReady: cache.New(config.FairnessKeyRateLimitCacheSize(), nil),
 		},
 	}
 }
@@ -282,6 +289,8 @@ func (d *matcherData) UpdateRateLimit(rate float64, burstDuration time.Duration)
 
 	d.tasks.wholeQueueLimit = makeSimpleLimiterParams(rate, burstDuration)
 
+	// Clip to handle the case where we have increased from a zero or very low limit and had
+	// ready times in the far future.
 	now := d.timeSource.Now().UnixNano()
 	d.tasks.wholeQueueReady = d.tasks.wholeQueueReady.clip(d.tasks.wholeQueueLimit, now, maxTokens)
 }
@@ -292,9 +301,27 @@ func (d *matcherData) UpdatePerKeyRateLimit(rate float64, burstDuration time.Dur
 
 	d.tasks.perKeyLimit = makeSimpleLimiterParams(rate, burstDuration)
 
+	// Clip to handle the case where we have increased from a zero or very low limit and had
+	// ready times in the far future.
+	var updates map[string]simpleLimiter
 	now := d.timeSource.Now().UnixNano()
-	for key, ready := range d.tasks.perKeyReady {
-		d.tasks.perKeyReady[key] = ready.clip(d.tasks.perKeyLimit, now, maxTokens)
+	it := d.tasks.perKeyReady.Iterator()
+	for it.HasNext() {
+		e := it.Next()
+		sl := e.Value().(simpleLimiter)
+		if clipped := sl.clip(d.tasks.perKeyLimit, now, maxTokens); clipped != sl {
+			if updates == nil {
+				updates = make(map[string]simpleLimiter)
+			}
+			updates[e.Key().(string)] = clipped
+		}
+	}
+	it.Close()
+
+	// This messes up the LRU order, but we can't avoid that here without adding new
+	// functionality to Cache.
+	for key, clipped := range updates {
+		d.tasks.perKeyReady.Put(key, clipped)
 	}
 }
 
