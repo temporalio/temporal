@@ -2214,10 +2214,11 @@ func (e *testNodePathEncoder) Decode(
 
 func (s *nodeSuite) nodeBase() *nodeBase {
 	return &nodeBase{
-		registry:    s.registry,
-		timeSource:  s.timeSource,
-		backend:     s.nodeBackend,
-		pathEncoder: s.nodePathEncoder,
+		registry:             s.registry,
+		timeSource:           s.timeSource,
+		backend:              s.nodeBackend,
+		pathEncoder:          s.nodePathEncoder,
+		internalKeyConverter: DefaultInternalKeyConverter,
 	}
 }
 
@@ -2429,13 +2430,14 @@ func (s *nodeSuite) TestExecutePureTask() {
 }
 
 func (s *nodeSuite) TestExecuteSideEffectTask() {
+	archetype := "TestLibrary.test_component"
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						Type: "TestLibrary.test_component",
+						Type: archetype,
 					},
 				},
 			},
@@ -2486,13 +2488,13 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 
 	// Succeed task execution.
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskAttributes, taskInfo, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, archetype, taskAttributes, taskInfo, dummyValidationFn)
 	s.NoError(err)
 
 	// Fail task execution.
 	expectedErr := errors.New("dummy error")
 	expectExecute(expectedErr)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskAttributes, taskInfo, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, archetype, taskAttributes, taskInfo, dummyValidationFn)
 	s.ErrorIs(expectedErr, err)
 }
 
@@ -2570,5 +2572,13 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 func (s *nodeSuite) newTestTree(
 	serializedNodes map[string]*persistencespb.ChasmNode,
 ) (*Node, error) {
-	return NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	return NewTree(
+		serializedNodes,
+		s.registry,
+		s.timeSource,
+		s.nodeBackend,
+		s.nodePathEncoder,
+		DefaultInternalKeyConverter,
+		s.logger,
+	)
 }

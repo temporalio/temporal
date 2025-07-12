@@ -469,7 +469,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{
+			State: s.buildPersistenceMutableState(ref, &persistencespb.ActivityInfo{
 				ActivityId: "",
 			}),
 		}, nil).Times(1)
@@ -522,7 +522,7 @@ func (s *chasmEngineSuite) TestReadComponent_Success() {
 
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{
+			State: s.buildPersistenceMutableState(ref, &persistencespb.ActivityInfo{
 				ActivityId: expectedActivityID,
 			}),
 		}, nil).Times(1)
@@ -544,13 +544,19 @@ func (s *chasmEngineSuite) TestReadComponent_Success() {
 }
 
 func (s *chasmEngineSuite) buildPersistenceMutableState(
-	key chasm.EntityKey,
+	ref chasm.ComponentRef,
 	componentState proto.Message,
 ) *persistencespb.WorkflowMutableState {
+	archetype, err := ref.Archetype(s.registry)
+	s.NoError(err)
+
+	internalKey, err := s.engine.ToInternalKey(ref.EntityKey, archetype)
+	s.NoError(err)
+
 	return &persistencespb.WorkflowMutableState{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-			NamespaceId: key.NamespaceID,
-			WorkflowId:  key.BusinessID,
+			NamespaceId: internalKey.NamespaceID,
+			WorkflowId:  internalKey.WorkflowID,
 			VersionHistories: &historyspb.VersionHistories{
 				CurrentVersionHistoryIndex: 0,
 				Histories: []*historyspb.VersionHistory{
@@ -566,7 +572,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 			ExecutionStats: &persistencespb.ExecutionStats{},
 		},
 		ExecutionState: &persistencespb.WorkflowExecutionState{
-			RunId:     key.EntityID,
+			RunId:     internalKey.RunID,
 			State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			StartTime: timestamppb.New(s.mockShard.GetTimeSource().Now().Add(-1 * time.Minute)),

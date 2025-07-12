@@ -96,11 +96,12 @@ type (
 
 	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
 	nodeBase struct {
-		registry    *Registry
-		timeSource  clock.TimeSource
-		backend     NodeBackend
-		pathEncoder NodePathEncoder
-		logger      log.Logger
+		registry             *Registry
+		timeSource           clock.TimeSource
+		backend              NodeBackend
+		pathEncoder          NodePathEncoder
+		internalKeyConverter InternalKeyConverter
+		logger               log.Logger
 
 		// Following fields are changes accumulated in this transaction,
 		// and will get cleaned up after CloseTransaction().
@@ -179,13 +180,14 @@ func NewTree(
 	timeSource clock.TimeSource,
 	backend NodeBackend,
 	pathEncoder NodePathEncoder,
+	internalKeyConverter InternalKeyConverter,
 	logger log.Logger,
 ) (*Node, error) {
 	if len(serializedNodes) == 0 {
-		return NewEmptyTree(registry, timeSource, backend, pathEncoder, logger), nil
+		return NewEmptyTree(registry, timeSource, backend, pathEncoder, internalKeyConverter, logger), nil
 	}
 
-	root := newTreeHelper(registry, timeSource, backend, pathEncoder, logger)
+	root := newTreeHelper(registry, timeSource, backend, pathEncoder, internalKeyConverter, logger)
 	for encodedPath, serializedNode := range serializedNodes {
 		nodePath, err := pathEncoder.Decode(encodedPath)
 		if err != nil {
@@ -203,9 +205,10 @@ func NewEmptyTree(
 	timeSource clock.TimeSource,
 	backend NodeBackend,
 	pathEncoder NodePathEncoder,
+	internalKeyConverter InternalKeyConverter,
 	logger log.Logger,
 ) *Node {
-	root := newTreeHelper(registry, timeSource, backend, pathEncoder, logger)
+	root := newTreeHelper(registry, timeSource, backend, pathEncoder, internalKeyConverter, logger)
 
 	// If serializedNodes is empty, it means that this new tree.
 	// Initialize empty serializedNode.
@@ -222,14 +225,16 @@ func newTreeHelper(
 	timeSource clock.TimeSource,
 	backend NodeBackend,
 	pathEncoder NodePathEncoder,
+	internalKeyConverter InternalKeyConverter,
 	logger log.Logger,
 ) *Node {
 	base := &nodeBase{
-		registry:    registry,
-		timeSource:  timeSource,
-		backend:     backend,
-		pathEncoder: pathEncoder,
-		logger:      logger,
+		registry:             registry,
+		timeSource:           timeSource,
+		backend:              backend,
+		pathEncoder:          pathEncoder,
+		internalKeyConverter: internalKeyConverter,
+		logger:               logger,
 
 		mutation: NodesMutation{
 			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
@@ -1068,13 +1073,14 @@ func (n *Node) Ref(
 	for path, node := range n.andAllChildren() {
 		if node.value == component {
 			workflowKey := node.backend.GetWorkflowKey()
+			archetype := n.Archetype()
+			entityKey, err := n.internalKeyConverter.FromInternalKey(workflowKey, archetype)
+			if err != nil {
+				return nil, err
+			}
 			ref := ComponentRef{
-				EntityKey: EntityKey{
-					NamespaceID: workflowKey.NamespaceID,
-					BusinessID:  workflowKey.WorkflowID,
-					EntityID:    workflowKey.RunID,
-				},
-				archetype: n.root().serializedNode.GetMetadata().GetComponentAttributes().Type,
+				EntityKey: entityKey,
+				archetype: archetype,
 				// TODO: Consider using node's LastUpdateVersionedTransition for checking staleness here.
 				// Using VersionedTransition of the entire tree might be too strict.
 				entityLastUpdateVT: transitionhistory.CopyVersionedTransition(node.backend.CurrentVersionedTransition()),
@@ -2302,6 +2308,7 @@ func (n *Node) ExecuteSideEffectTask(
 	ctx context.Context,
 	registry *Registry,
 	entityKey EntityKey,
+	archetype string,
 	taskAttributes TaskAttributes,
 	taskInfo *persistencespb.ChasmTaskInfo,
 	validate func(NodeBackend, Context, Component) error,
@@ -2337,9 +2344,11 @@ func (n *Node) ExecuteSideEffectTask(
 		return err
 	}
 
+	// NOTE: Do not get archetype by access the node itself.
+	// This method is called without holding the entity lock.
 	ref := ComponentRef{
 		EntityKey:          entityKey,
-		archetype:          n.Archetype(),
+		archetype:          archetype,
 		entityLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
 		componentPath:      path,
 		componentInitialVT: taskInfo.ComponentInitialVersionedTransition,

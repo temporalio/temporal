@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	definition "go.temporal.io/server/common/definition"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -38,6 +39,21 @@ func NewMockEngine(ctrl *gomock.Controller) *MockEngine {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 	return m.recorder
+}
+
+// FromInternalKey mocks base method.
+func (m *MockEngine) FromInternalKey(internalKey definition.WorkflowKey, archetype string) (EntityKey, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FromInternalKey", internalKey, archetype)
+	ret0, _ := ret[0].(EntityKey)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FromInternalKey indicates an expected call of FromInternalKey.
+func (mr *MockEngineMockRecorder) FromInternalKey(internalKey, archetype any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FromInternalKey", reflect.TypeOf((*MockEngine)(nil).FromInternalKey), internalKey, archetype)
 }
 
 // NewEntity mocks base method.
@@ -98,6 +114,21 @@ func (mr *MockEngineMockRecorder) ReadComponent(arg0, arg1, arg2 any, arg3 ...an
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{arg0, arg1, arg2}, arg3...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadComponent", reflect.TypeOf((*MockEngine)(nil).ReadComponent), varargs...)
+}
+
+// ToInternalKey mocks base method.
+func (m *MockEngine) ToInternalKey(key EntityKey, archetype string) (definition.WorkflowKey, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ToInternalKey", key, archetype)
+	ret0, _ := ret[0].(definition.WorkflowKey)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ToInternalKey indicates an expected call of ToInternalKey.
+func (mr *MockEngineMockRecorder) ToInternalKey(key, archetype any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToInternalKey", reflect.TypeOf((*MockEngine)(nil).ToInternalKey), key, archetype)
 }
 
 // UpdateComponent mocks base method.

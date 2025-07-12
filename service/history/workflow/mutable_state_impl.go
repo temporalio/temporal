@@ -370,6 +370,7 @@ func NewMutableState(
 			shard.GetTimeSource(),
 			s,
 			chasm.DefaultPathEncoder,
+			chasm.DefaultInternalKeyConverter,
 			shard.GetLogger(),
 		)
 	}
@@ -507,6 +508,7 @@ func NewMutableStateFromDB(
 			shard.GetTimeSource(),
 			mutableState,
 			chasm.DefaultPathEncoder,
+			chasm.DefaultInternalKeyConverter,
 			shard.GetLogger(),
 		)
 		if err != nil {

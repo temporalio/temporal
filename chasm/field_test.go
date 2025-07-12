@@ -145,6 +145,7 @@ func (s *fieldSuite) newTestTree(
 		s.timeSource,
 		s.nodeBackend,
 		s.nodePathEncoder,
+		DefaultInternalKeyConverter,
 		s.logger,
 	)
 }
