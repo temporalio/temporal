@@ -56,11 +56,11 @@ func executeChasmSideEffectTask(
 	registry *chasm.Registry,
 	tree historyi.ChasmTree,
 	task *tasks.ChasmTask,
+	archetype string,
 ) error {
-	entityKey := chasm.EntityKey{
-		NamespaceID: task.NamespaceID,
-		BusinessID:  task.WorkflowID,
-		EntityID:    task.RunID,
+	entityKey, err := engine.FromInternalKey(task.WorkflowKey, archetype)
+	if err != nil {
+		return err
 	}
 
 	validate := func(backend chasm.NodeBackend, _ chasm.Context, _ chasm.Component) error {
@@ -92,6 +92,7 @@ func executeChasmSideEffectTask(
 		engineCtx,
 		registry,
 		entityKey,
+		archetype,
 		taskAttributes,
 		task.Info,
 		validate,

@@ -28,6 +28,8 @@ import (
 
 type (
 	ChasmEngine struct {
+		chasm.InternalKeyConverter
+
 		entityCache     cache.Cache
 		shardController shard.Controller
 		registry        *chasm.Registry
@@ -69,6 +71,8 @@ func newChasmEngine(
 	config *configs.Config,
 ) *ChasmEngine {
 	return &ChasmEngine{
+		InternalKeyConverter: chasm.DefaultInternalKeyConverter,
+
 		entityCache: entityCache,
 		registry:    registry,
 		config:      config,
@@ -81,6 +85,17 @@ func (e *ChasmEngine) SetShardController(
 	shardController shard.Controller,
 ) {
 	e.shardController = shardController
+}
+
+func (e *ChasmEngine) getInternalKey(
+	componentRef chasm.ComponentRef,
+) (definition.WorkflowKey, error) {
+	archetype, err := componentRef.Archetype(e.registry)
+	if err != nil {
+		return definition.WorkflowKey{}, err
+	}
+
+	return e.ToInternalKey(componentRef.EntityKey, archetype)
 }
 
 func (e *ChasmEngine) NewEntity(
@@ -96,11 +111,16 @@ func (e *ChasmEngine) NewEntity(
 		return chasm.EntityKey{}, nil, err
 	}
 
+	internalKey, err := e.getInternalKey(entityRef)
+	if err != nil {
+		return chasm.EntityKey{}, nil, err
+	}
+
 	currentEntityReleaseFn, err := e.lockCurrentEntity(
 		ctx,
 		shardContext,
-		namespace.ID(entityRef.NamespaceID),
-		entityRef.BusinessID,
+		namespace.ID(internalKey.NamespaceID),
+		internalKey.WorkflowID,
 	)
 	if err != nil {
 		return chasm.EntityKey{}, nil, err
@@ -113,6 +133,7 @@ func (e *ChasmEngine) NewEntity(
 		ctx,
 		shardContext,
 		entityRef,
+		internalKey,
 		newFn,
 		options,
 	)
@@ -268,13 +289,13 @@ func (e *ChasmEngine) lockCurrentEntity(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
-	businessID string,
+	workflowID string,
 ) (historyi.ReleaseWorkflowContextFunc, error) {
 	currentEntityReleaseFn, err := e.entityCache.GetOrCreateCurrentWorkflowExecution(
 		ctx,
 		shardContext,
 		namespaceID,
-		businessID,
+		workflowID,
 		locks.PriorityHigh,
 	)
 	if err != nil {
@@ -288,14 +309,15 @@ func (e *ChasmEngine) createNewEntity(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	entityRef chasm.ComponentRef,
+	internalKey definition.WorkflowKey,
 	newFn func(chasm.MutableContext) (chasm.Component, error),
 	options chasm.TransitionOptions,
 ) (newEntityParams, error) {
 	entityRef.EntityID = primitives.NewUUID().String()
+	internalKey.RunID = entityRef.EntityID
 
-	entityKey := entityRef.EntityKey
 	nsRegistry := shardContext.GetNamespaceRegistry()
-	nsEntry, err := nsRegistry.GetNamespaceByID(namespace.ID(entityKey.NamespaceID))
+	nsEntry, err := nsRegistry.GetNamespaceByID(namespace.ID(internalKey.NamespaceID))
 	if err != nil {
 		return newEntityParams{}, err
 	}
@@ -305,8 +327,8 @@ func (e *ChasmEngine) createNewEntity(
 		shardContext.GetEventsCache(),
 		shardContext.GetLogger(),
 		nsEntry,
-		entityKey.BusinessID,
-		entityKey.EntityID,
+		internalKey.WorkflowID,
+		internalKey.RunID,
 		shardContext.GetTimeSource().Now(),
 	)
 	mutableState.AttachRequestID(options.RequestID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, 0)
@@ -341,11 +363,7 @@ func (e *ChasmEngine) createNewEntity(
 		entityRef: entityRef,
 		entityContext: workflow.NewContext(
 			e.config,
-			definition.NewWorkflowKey(
-				entityKey.NamespaceID,
-				entityKey.BusinessID,
-				entityKey.EntityID,
-			),
+			internalKey,
 			shardContext.GetLogger(),
 			shardContext.GetThrottledLogger(),
 			shardContext.GetMetricsHandler(),
@@ -563,8 +581,15 @@ func (e *ChasmEngine) getExecutionLease(
 
 	lockPriority := locks.PriorityHigh
 	callerType := headers.GetCallerInfo(ctx).CallerType
-	if callerType == headers.CallerTypeBackgroundHigh || callerType == headers.CallerTypeBackgroundLow || callerType == headers.CallerTypePreemptable {
+	if callerType == headers.CallerTypeBackgroundHigh ||
+		callerType == headers.CallerTypeBackgroundLow ||
+		callerType == headers.CallerTypePreemptable {
 		lockPriority = locks.PriorityLow
+	}
+
+	internalKey, err := e.getInternalKey(ref)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	var staleReferenceErr error
@@ -582,11 +607,7 @@ func (e *ChasmEngine) getExecutionLease(
 			staleReferenceErr = err
 			return true
 		},
-		definition.NewWorkflowKey(
-			ref.EntityKey.NamespaceID,
-			ref.EntityKey.BusinessID,
-			ref.EntityKey.EntityID,
-		),
+		internalKey,
 		lockPriority,
 	)
 	if err == nil && staleReferenceErr != nil {

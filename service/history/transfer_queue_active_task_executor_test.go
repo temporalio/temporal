@@ -310,6 +310,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTransfe
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
+		gomock.Any(),
 	).Times(1).Return(nil)
 
 	// Mock mutable state.
