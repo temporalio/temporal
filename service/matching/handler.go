@@ -597,5 +597,5 @@ func (h *Handler) reportForwardedPerTaskQueueCounter(opMetrics metrics.Handler, 
 func (h *Handler) UpdateTaskQueueConfig(
 	ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest,
 ) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
-	return h.engine.UpdateTaskqueueConfig(ctx, request)
+	return h.engine.UpdateTaskQueueConfig(ctx, request)
 }

@@ -6053,7 +6053,6 @@ func (wh *WorkflowHandler) ListWorkers(
 	}, nil
 }
 
-// UpdateTaskQueueConfig : updates the indivudal task queue rate limit or fairnessKey Rate limit
 func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	ctx context.Context, request *workflowservice.UpdateTaskQueueConfigRequest,
 ) (*workflowservice.UpdateTaskQueueConfigResponse, error) {

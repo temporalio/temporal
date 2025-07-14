@@ -18,6 +18,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -1619,6 +1620,59 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 		s.NoError(err)
 	})
 
+}
+
+// TestUpdateAndDescribeTaskQueueConfig tests the update and describe task queue config functionality.
+// It updates the task queue config via the frontend API and then describes the task queue to verify,
+// that the updated configuration is reflected correctly.
+func (s *WorkflowTestSuite) TestUpdateAndDescribeTaskQueueConfig() {
+	tv := testvars.New(s.T())
+	taskQueueName := tv.TaskQueue().Name
+	namespace := s.Namespace().String()
+	taskQueueType := enumspb.TASK_QUEUE_TYPE_ACTIVITY
+	updateRPS := float32(42)
+	updateReason := "frontend-update-test"
+	updateReq := &workflowservice.UpdateTaskQueueConfigRequest{
+		Namespace:     namespace,
+		TaskQueue:     taskQueueName,
+		TaskQueueType: taskQueueType,
+		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			RateLimit: &taskqueuepb.RateLimit{
+				RequestsPerSecond: updateRPS,
+			},
+			Reason: updateReason,
+		},
+		UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			RateLimit: &taskqueuepb.RateLimit{
+				RequestsPerSecond: updateRPS,
+			},
+			Reason: updateReason,
+		},
+	}
+	updateResp, err := s.FrontendClient().UpdateTaskQueueConfig(testcore.NewContext(), updateReq)
+	s.NoError(err)
+	s.NotNil(updateResp)
+	s.NotNil(updateResp.Config)
+	s.Equal(updateRPS, updateResp.Config.QueueRateLimit.RateLimit.RequestsPerSecond)
+	s.Equal(updateReason, updateResp.Config.QueueRateLimit.Metadata.Reason)
+	s.Equal(updateRPS, updateResp.Config.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
+	s.Equal(updateReason, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
+
+	describeReq := &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     namespace,
+		TaskQueue:     &taskqueuepb.TaskQueue{Name: taskQueueName},
+		TaskQueueType: taskQueueType,
+		ReportConfig:  true,
+	}
+	describeResp, err := s.FrontendClient().DescribeTaskQueue(testcore.NewContext(), describeReq)
+	s.NoError(err)
+	s.NotNil(describeResp)
+	s.NotNil(describeResp.Config)
+	s.NotNil(describeResp.Config.QueueRateLimit)
+	s.Equal(updateRPS, describeResp.Config.QueueRateLimit.RateLimit.RequestsPerSecond)
+	s.Equal(updateReason, describeResp.Config.QueueRateLimit.Metadata.Reason)
+	s.Equal(updateRPS, describeResp.Config.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
+	s.Equal(updateReason, describeResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
 }
 
 func requireNotStartedButRunning(t *testing.T, resp *workflowservice.StartWorkflowExecutionResponse) {

@@ -3510,50 +3510,6 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueueWithRateLimiterError() {
 	s.ErrorIs(err, rateLimiterErr)
 }
 
-// TestUpdateTaskqueueConfig tests the UpdateTaskQueueConfig Api.
-// It checks if the rate limit and fairness keys rate limit are persisted correctly.
-func (s *matchingEngineSuite) TestUpdateTaskqueueConfig() {
-	namespaceId := uuid.New()
-	taskQueueName := "test-task-queue"
-	taskQueueType := enumspb.TASK_QUEUE_TYPE_ACTIVITY
-
-	updateRPS := float32(99)
-	updateReason := "test-update"
-
-	// Prepare the update request.
-	updateReq := &matchingservice.UpdateTaskQueueConfigRequest{
-		NamespaceId: namespaceId,
-		UpdateTaskqueueConfig: &workflowservice.UpdateTaskQueueConfigRequest{
-			Namespace:     "default",
-			TaskQueue:     taskQueueName,
-			TaskQueueType: taskQueueType,
-			UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-				RateLimit: &taskqueuepb.RateLimit{
-					RequestsPerSecond: updateRPS,
-				},
-				Reason: updateReason,
-			},
-			UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-				RateLimit: &taskqueuepb.RateLimit{
-					RequestsPerSecond: updateRPS,
-				},
-				Reason: updateReason,
-			},
-		},
-	}
-
-	// Call UpdateTaskQueueConfig and validate response.
-	updateResp, err := s.matchingEngine.UpdateTaskqueueConfig(context.Background(), updateReq)
-	require.NoError(s.T(), err, "UpdateTaskQueueConfig failed")
-	require.NotNil(s.T(), updateResp)
-	require.NotNil(s.T(), updateResp.UpdatedTaskqueueConfig)
-
-	require.Equal(s.T(), updateRPS, updateResp.UpdatedTaskqueueConfig.QueueRateLimit.RateLimit.RequestsPerSecond)
-	require.Equal(s.T(), updateReason, updateResp.UpdatedTaskqueueConfig.QueueRateLimit.Metadata.Reason)
-	require.Equal(s.T(), updateRPS, updateResp.UpdatedTaskqueueConfig.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
-	require.Equal(s.T(), updateReason, updateResp.UpdatedTaskqueueConfig.FairnessKeysRateLimitDefault.Metadata.Reason)
-}
-
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
 	activityTypeName := "activity1"
 	activityID := "activityId1"

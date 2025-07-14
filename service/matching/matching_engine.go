@@ -1357,7 +1357,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		if err != nil {
 			return nil, err
 		}
-		descrResp.DescResponse.Config = getTaskQueueConfig(userData.GetData(), req.GetTaskQueueType())
+		descrResp.DescResponse.Config = userData.GetData().GetPerType()[int32(req.GetTaskQueueType())].GetConfig()
 	}
 
 	return descrResp, nil
@@ -2972,14 +2972,7 @@ func prepareTaskQueueUserData(
 	return data
 }
 
-func getTaskQueueConfig(
-	taskQueueUserData *persistencespb.TaskQueueUserData,
-	taskQueueType enumspb.TaskQueueType,
-) *taskqueuepb.TaskQueueConfig {
-	return taskQueueUserData.GetPerType()[int32(taskQueueType)].GetConfig()
-}
-
-func (e *matchingEngineImpl) UpdateTaskqueueConfig(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
 	taskQueueFamily, err := tqid.NewTaskQueueFamily(request.NamespaceId, request.UpdateTaskqueueConfig.GetTaskQueue())
 	if err != nil {
 		return nil, err
@@ -3001,7 +2994,7 @@ func (e *matchingEngineImpl) UpdateTaskqueueConfig(ctx context.Context, request 
 		}
 		// If no update is requested, return the current config.
 		return &matchingservice.UpdateTaskQueueConfigResponse{
-			UpdatedTaskqueueConfig: getTaskQueueConfig(tqud.GetData(), taskQueueType),
+			UpdatedTaskqueueConfig: tqud.GetData().GetPerType()[int32(taskQueueType)].GetConfig(),
 		}, nil
 	}
 	updateOptions := UserDataUpdateOptions{Source: "UpdateTaskQueueConfig"}
@@ -3019,14 +3012,12 @@ func (e *matchingEngineImpl) UpdateTaskqueueConfig(ctx context.Context, request 
 			cfg := data.PerType[int32(taskQueueType)].Config
 			updateTaskQueueConfig := request.GetUpdateTaskqueueConfig()
 			// Queue Rate Limit
-			queueRateLimit := updateTaskQueueConfig.GetUpdateQueueRateLimit()
-			if queueRateLimit != nil {
-				cfg.QueueRateLimit = buildRateLimitConfig(queueRateLimit, protoTs)
+			if qrl := updateTaskQueueConfig.GetUpdateQueueRateLimit(); qrl != nil {
+				cfg.QueueRateLimit = buildRateLimitConfig(qrl, protoTs)
 			}
 			// Fairness Queue Rate Limit
-			fairnessQueueRateLimit := updateTaskQueueConfig.GetUpdateFairnessKeyRateLimitDefault()
-			if fairnessQueueRateLimit != nil {
-				cfg.FairnessKeysRateLimitDefault = buildRateLimitConfig(fairnessQueueRateLimit, protoTs)
+			if fkrl := updateTaskQueueConfig.GetUpdateFairnessKeyRateLimitDefault(); fkrl != nil {
+				cfg.FairnessKeysRateLimitDefault = buildRateLimitConfig(fkrl, protoTs)
 			}
 			// Update the clock on TaskQueueUserData to enforce LWW on config updates
 			data.Clock = now
@@ -3036,12 +3027,11 @@ func (e *matchingEngineImpl) UpdateTaskqueueConfig(ctx context.Context, request 
 	if err != nil {
 		return nil, err
 	}
-
 	userData, _, err := tqm.GetUserDataManager().GetUserData()
 	if err != nil {
 		return nil, err
 	}
 	return &matchingservice.UpdateTaskQueueConfigResponse{
-		UpdatedTaskqueueConfig: getTaskQueueConfig(userData.GetData(), taskQueueType),
+		UpdatedTaskqueueConfig: userData.GetData().GetPerType()[int32(taskQueueType)].GetConfig(),
 	}, nil
 }
