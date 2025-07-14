@@ -302,7 +302,7 @@ func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	return &taskqueuepb.TaskQueueStatus{
 		ReadLevel: readLevel,
 		AckLevel:  ackLevel,
-		// use getApproximateBacklogCountsBySubqueue instead of BacklogCountHint since it's more accurate
+		// use getTotalApproximateBacklogCount instead of BacklogCountHint since it's more accurate
 		BacklogCountHint: c.db.getTotalApproximateBacklogCount(),
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
