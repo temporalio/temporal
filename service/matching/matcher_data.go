@@ -136,7 +136,7 @@ func (t *taskPQ) consumeTokens(now int64, task *internalTask, tokens int64) {
 		p.interval = time.Duration(float32(p.interval) / weight) // scale by weight
 		var sl simpleLimiter
 		if v := t.perKeyReady.Get(key); v != nil {
-			sl = v.(simpleLimiter)
+			sl = v.(simpleLimiter) // nolint:revive
 		}
 		t.perKeyReady.Put(key, sl.consume(p, now, tokens))
 	}
@@ -308,7 +308,7 @@ func (d *matcherData) UpdatePerKeyRateLimit(rate float64, burstDuration time.Dur
 	it := d.tasks.perKeyReady.Iterator()
 	for it.HasNext() {
 		e := it.Next()
-		sl := e.Value().(simpleLimiter)
+		sl := e.Value().(simpleLimiter) //nolint:revive
 		if clipped := sl.clip(d.tasks.perKeyLimit, now, maxTokens); clipped != sl {
 			if updates == nil {
 				updates = make(map[string]simpleLimiter)

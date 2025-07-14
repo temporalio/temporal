@@ -541,6 +541,7 @@ func TestSimpleLimiter(t *testing.T) {
 	now += int64(1 * time.Millisecond)
 	require.GreaterOrEqual(t, now, ready)
 	ready = ready.consume(p, now, 1)
+	require.Less(t, now, ready)
 }
 
 func TestSimpleLimiterOverTime(t *testing.T) {
