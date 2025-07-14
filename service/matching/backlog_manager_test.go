@@ -429,7 +429,7 @@ func (s *BacklogManagerTestSuite) TestStandingBacklogs() {
 	finished := func() bool { return ctx.Err() != nil || target.Load() == 0 && inflight.Load() == 0 }
 	sleepUntil := func(cond func() bool) bool {
 		for !finished() && !cond() {
-			sleep() // nolint:forbidigo
+			_ = sleep()
 		}
 		return !finished()
 	}
