@@ -245,6 +245,23 @@ func TestMySQLMatchingTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestMySQLMatchingTaskV2Suite(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownMySQLDatabase(t, cfg)
+	}()
+
+	s := sqltests.NewMatchingTaskSuiteV2(t, store)
+	suite.Run(t, s)
+}
+
 func TestMySQLMatchingTaskQueueSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(t, cfg)
@@ -259,6 +276,23 @@ func TestMySQLMatchingTaskQueueSuite(t *testing.T) {
 	}()
 
 	s := sqltests.NewMatchingTaskQueueSuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestMySQLMatchingTaskQueueSuiteV2(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownMySQLDatabase(t, cfg)
+	}()
+
+	s := sqltests.NewMatchingTaskQueueSuiteV2(t, store)
 	suite.Run(t, s)
 }
 

@@ -263,3 +263,17 @@ func (s *matchingTaskSuite) newRandomTasksRow(
 		DataEncoding: testMatchingTaskEncoding,
 	}
 }
+
+func (s *matchingTaskSuite) newRandomTasksRowV2(
+	queueID []byte,
+	taskID int64,
+) sqlplugin.TasksRowV2 {
+	return sqlplugin.TasksRowV2{
+		RangeHash:    testMatchingTaskRangeHash,
+		TaskQueueID:  queueID,
+		TaskID:       taskID,
+		Pass:         0,
+		Data:         shuffle.Bytes(testMatchingTaskTaskData),
+		DataEncoding: testMatchingTaskEncoding,
+	}
+}

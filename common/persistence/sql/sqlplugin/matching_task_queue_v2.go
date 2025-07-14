@@ -7,7 +7,7 @@ import (
 
 type (
 	// TaskQueuesRow represents a row in task_queues table
-	TaskQueuesRow struct {
+	TaskQueuesRowV2 struct {
 		RangeHash    uint32
 		TaskQueueID  []byte
 		RangeID      int64
@@ -17,7 +17,7 @@ type (
 
 	// TaskQueuesFilter contains the column names within task_queues table that
 	// can be used to filter results through a WHERE clause
-	TaskQueuesFilter struct {
+	TaskQueuesFilterV2 struct {
 		RangeHash                   uint32
 		RangeHashGreaterThanEqualTo uint32
 		RangeHashLessThanEqualTo    uint32
@@ -27,7 +27,7 @@ type (
 		PageSize                    *int
 	}
 
-	UpdateTaskQueueDataRequest struct {
+	UpdateTaskQueueDataRequestV2 struct {
 		NamespaceID   []byte
 		TaskQueueName string
 		Version       int64
@@ -36,15 +36,15 @@ type (
 	}
 
 	// MatchingTaskQueue is the SQL persistence interface for matching task queues
-	MatchingTaskQueue interface {
-		InsertIntoTaskQueues(ctx context.Context, row *TaskQueuesRow) (sql.Result, error)
-		UpdateTaskQueues(ctx context.Context, row *TaskQueuesRow) (sql.Result, error)
+	MatchingTaskQueueV2 interface {
+		InsertIntoTaskQueuesV2(ctx context.Context, row *TaskQueuesRowV2) (sql.Result, error)
+		UpdateTaskQueuesV2(ctx context.Context, row *TaskQueuesRowV2) (sql.Result, error)
 		// SelectFromTaskQueues returns one or more rows from task_queues table
 		// Required Filter params:
 		//  to read a single row: {shardID, namespaceID, name, taskType}
 		//  to range read multiple rows: {shardID, namespaceIDGreaterThan, nameGreaterThan, taskTypeGreaterThan, pageSize}
-		SelectFromTaskQueues(ctx context.Context, filter TaskQueuesFilter) ([]TaskQueuesRow, error)
-		DeleteFromTaskQueues(ctx context.Context, filter TaskQueuesFilter) (sql.Result, error)
-		LockTaskQueues(ctx context.Context, filter TaskQueuesFilter) (int64, error)
+		SelectFromTaskQueuesV2(ctx context.Context, filter TaskQueuesFilterV2) ([]TaskQueuesRowV2, error)
+		DeleteFromTaskQueuesV2(ctx context.Context, filter TaskQueuesFilterV2) (sql.Result, error)
+		LockTaskQueuesV2(ctx context.Context, filter TaskQueuesFilterV2) (int64, error)
 	}
 )
