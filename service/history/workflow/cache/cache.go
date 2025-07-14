@@ -435,15 +435,6 @@ func (c *cacheImpl) validateWorkflowExecutionInfo(
 			c,
 			namespaceID.String(),
 			execution.GetWorkflowId(),
-			// func(lockCtx context.Context) (historyi.ReleaseWorkflowContextFunc, error) {
-			// 	return c.GetOrCreateCurrentEntity(
-			// 		lockCtx,
-			// 		shardContext,
-			// 		namespace.ID(namespaceID),
-			// 		execution.GetWorkflowId(),
-			// 		lockPriority,
-			// 	)
-			// },
 			lockPriority,
 		)
 		if err != nil {
@@ -472,7 +463,6 @@ func GetCurrentRunID(
 	workflowCache Cache,
 	namespaceID string,
 	workflowID string,
-	// lockCurrentFn func(context.Context) (historyi.ReleaseWorkflowContextFunc, error),
 	lockPriority locks.Priority,
 ) (runID string, retErr error) {
 	currentRelease, err := workflowCache.GetOrCreateCurrentWorkflowExecution(
@@ -486,11 +476,6 @@ func GetCurrentRunID(
 		return "", err
 	}
 	defer func() { currentRelease(retErr) }()
-	// currentRelease, err := lockCurrentFn(ctx)
-	// if err != nil {
-	// 	return "", err
-	// }
-	// defer func() { currentRelease(retErr) }()
 
 	resp, err := shardContext.GetCurrentExecution(
 		ctx,
