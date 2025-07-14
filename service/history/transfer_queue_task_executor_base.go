@@ -224,7 +224,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),
 		&workflowExecution,
-		"", // deletion logic works for all Archetypes.
+		chasm.ArchetypeAny, // deletion logic works for all Archetypes.
 		locks.PriorityLow,
 	)
 	if err != nil {

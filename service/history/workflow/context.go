@@ -61,7 +61,7 @@ func NewContext(
 	}
 	return &ContextImpl{
 		workflowKey:     workflowKey,
-		archetype:       "",
+		archetype:       chasm.ArchetypeAny,
 		logger:          log.NewLazyLogger(logger, tags),
 		throttledLogger: log.NewLazyLogger(throttledLogger, tags),
 		metricsHandler:  metricsHandler.WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
@@ -166,7 +166,7 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 		c.MutableState = mutableState
 	}
 
-	if actualArchetype := c.MutableState.ChasmTree().Archetype(); c.archetype != "" && c.archetype != actualArchetype {
+	if actualArchetype := c.MutableState.ChasmTree().Archetype(); c.archetype != chasm.ArchetypeAny && c.archetype != actualArchetype {
 		c.logger.Warn("Potential ID conflict across different archetypes",
 			tag.Archetype(c.archetype),
 			tag.NewStringTag("actual-archetype", actualArchetype),

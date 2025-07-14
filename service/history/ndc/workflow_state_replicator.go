@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -238,7 +239,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			WorkflowId: wid,
 			RunId:      rid,
 		},
-		"",
+		chasm.ArchetypeAny,
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -358,7 +359,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 			WorkflowId: executionInfo.WorkflowId,
 			RunId:      executionState.RunId,
 		},
-		"",
+		chasm.ArchetypeAny,
 		locks.PriorityLow,
 	)
 	if err != nil {

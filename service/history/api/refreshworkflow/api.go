@@ -3,6 +3,7 @@ package refreshworkflow
 import (
 	"context"
 
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -25,7 +26,7 @@ func Invoke(
 		ctx,
 		nil,
 		workflowKey,
-		"", // RefreshWorkflow works for all Archetypes.
+		chasm.ArchetypeAny, // RefreshWorkflow works for all Archetypes.
 		locks.PriorityLow,
 	)
 	if err != nil {

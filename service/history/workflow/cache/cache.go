@@ -10,6 +10,7 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
@@ -45,14 +46,6 @@ type (
 			execution *commonpb.WorkflowExecution,
 			lockPriority locks.Priority,
 		) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error)
-
-		// GetOrCreateCurrentEntity(
-		// 	ctx context.Context,
-		// 	shardContext historyi.ShardContext,
-		// 	namespaceID namespace.ID,
-		// 	workflowID string,
-		// 	lockPriority locks.Priority,
-		// ) (historyi.ReleaseWorkflowContextFunc, error)
 
 		GetOrCreateChasmEntity(
 			ctx context.Context,
@@ -236,7 +229,7 @@ func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 		&execution,
 		// we don't care about the archetype for current entity.
 		// It's only for limiting the concurrency of loading the current runID.
-		"",
+		chasm.ArchetypeAny,
 		handler,
 		true,
 		lockPriority,

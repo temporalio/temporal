@@ -506,7 +506,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 				workflowID,
 				locks.PriorityLow,
 			).Return(cache.NoopReleaseFn, nil).AnyTimes()
-			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
+			mockWorkflowCache.EXPECT().GetOrCreateChasmEntity(
 				gomock.Any(),
 				mockShard,
 				namespaceID,
@@ -514,6 +514,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 					WorkflowId: workflowID,
 					RunId:      currentRunID,
 				},
+				chasmworkflow.Archetype,
 				locks.PriorityLow,
 			).Return(mockWorkflowContext, cache.NoopReleaseFn, nil).Times(1)
 

@@ -10,6 +10,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	common2 "go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -217,7 +218,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 			WorkflowId: e.WorkflowID,
 			RunId:      runId,
 		},
-		"",
+		chasm.ArchetypeAny,
 		locks.PriorityLow,
 	)
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -33,7 +34,7 @@ func GenerateTask(
 			request.Execution.WorkflowId,
 			request.Execution.RunId,
 		),
-		"", // GenerateMigrationTasks works for all Archetypes.
+		chasm.ArchetypeAny, // GenerateMigrationTasks works for all Archetypes.
 		locks.PriorityHigh,
 	)
 	if err != nil {

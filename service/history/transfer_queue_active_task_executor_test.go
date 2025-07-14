@@ -346,8 +346,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTransfe
 	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
 
 	mockCache := wcache.NewMockCache(s.controller)
-	mockCache.EXPECT().GetOrCreateWorkflowExecution(
-		gomock.Any(), s.mockShard, gomock.Any(), execution, gomock.Any(),
+	mockCache.EXPECT().GetOrCreateChasmEntity(
+		gomock.Any(), s.mockShard, gomock.Any(), execution, chasm.ArchetypeAny, gomock.Any(),
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
 	//nolint:revive // unchecked-type-assertion
@@ -2754,8 +2754,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 
 			mockWorkflowCache := wcache.NewMockCache(ctrl)
 
-			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), mockShard, gomock.Any(), gomock.Any(),
-				gomock.Any(),
+			mockWorkflowCache.EXPECT().GetOrCreateChasmEntity(gomock.Any(), mockShard, gomock.Any(), gomock.Any(),
+				chasm.ArchetypeAny, gomock.Any(),
 			).Return(mockWorkflowContext, historyi.ReleaseWorkflowContextFunc(func(err error) {
 			}), nil)
 

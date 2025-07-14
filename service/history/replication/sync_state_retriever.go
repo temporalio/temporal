@@ -12,6 +12,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -116,7 +117,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 			WorkflowID:  execution.WorkflowId,
 			RunID:       execution.RunId,
 		},
-		"", // SyncWorkflowState API works on all archetypes
+		chasm.ArchetypeAny, // SyncWorkflowState API works on all archetypes
 		locks.PriorityLow,
 	)
 	if err != nil {

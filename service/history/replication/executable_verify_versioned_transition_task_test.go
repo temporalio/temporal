@@ -15,6 +15,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/locks"
@@ -281,7 +282,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
 	if err == nil {
 		wfCtx.EXPECT().LoadMutableState(gomock.Any(), shardContext).Return(mutableState, err)
 	}
-	s.wfcache.EXPECT().GetOrCreateWorkflowExecution(
+	s.wfcache.EXPECT().GetOrCreateChasmEntity(
 		gomock.Any(),
 		shardContext,
 		namespace.ID(namespaceId),
@@ -289,6 +290,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
 			WorkflowId: workflowId,
 			RunId:      runId,
 		},
+		chasm.ArchetypeAny,
 		locks.PriorityLow,
 	).Return(wfCtx, func(err error) {}, err)
 }

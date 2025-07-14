@@ -9,6 +9,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -40,12 +41,12 @@ func getWorkflowExecutionContextForTask(
 		enumsspb.TASK_TYPE_CHASM_PURE,
 		enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT, // retention timer
 		enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION:
-		// Those tasks works for all archetypes.
-		archetype = ""
+		// Those tasks work for all archetypes.
+		archetype = chasm.ArchetypeAny
 	default:
 		if task.GetCategory().ID() == tasks.CategoryIDVisibility {
-			// Visibility tasks works for all archetypes as well.
-			archetype = ""
+			// Visibility tasks work for all archetypes as well.
+			archetype = chasm.ArchetypeAny
 		}
 	}
 

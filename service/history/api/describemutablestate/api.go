@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -32,7 +33,7 @@ func Invoke(
 			req.Execution.WorkflowId,
 			req.Execution.RunId,
 		),
-		"", // DescribeMutableState works for all Archetypes.
+		chasm.ArchetypeAny, // DescribeMutableState works for all Archetypes.
 		locks.PriorityHigh,
 	)
 	if err != nil {
