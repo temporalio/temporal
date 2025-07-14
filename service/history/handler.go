@@ -2440,6 +2440,8 @@ func (h *Handler) convertError(err error) error {
 		return serviceerror.NewUnavailable(err.Msg)
 	case *persistence.TransactionSizeLimitError:
 		return serviceerror.NewInvalidArgument(err.Msg)
+	case *persistence.TimeoutError:
+		return serviceerror.NewDeadlineExceeded(err.Msg)
 	}
 
 	return err
