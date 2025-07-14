@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -126,6 +127,18 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_ChasmTask() {
 	tv := testvars.New(s.T())
 	ctx := context.Background()
 
+	archetype := "Testlib.archetype"
+	internalKey := definition.NewWorkflowKey(
+		s.namespaceID.String(),
+		archetype+":"+tests.WorkflowKey.WorkflowID,
+		tests.WorkflowKey.RunID,
+	)
+	entityKey := chasm.EntityKey{
+		NamespaceID: s.namespaceID.String(),
+		BusinessID:  tests.WorkflowKey.WorkflowID,
+		EntityID:    tests.WorkflowKey.RunID,
+	}
+
 	testCases := []struct {
 		name                string
 		setupMocks          func(*tasks.ChasmTask)
@@ -148,7 +161,9 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_ChasmTask() {
 				s.mockMutableState.EXPECT().
 					ChasmTree().
 					Return(s.mockChasmTree)
+				s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 
+				s.mockChasmTree.EXPECT().Archetype().Return(archetype).AnyTimes()
 				s.mockChasmTree.EXPECT().
 					ExecuteSideEffectTask(
 						gomock.Any(),
@@ -159,6 +174,8 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_ChasmTask() {
 						gomock.Any(),
 						gomock.Any(),
 					)
+
+				s.mockChasmEngine.EXPECT().FromInternalKey(gomock.Any(), archetype).Return(entityKey, nil).AnyTimes()
 			},
 			expectHandlerCalled: true,
 		},
@@ -183,7 +200,7 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_ChasmTask() {
 		s.Run(tc.name, func() {
 			// Create a CHASM task
 			task := &tasks.ChasmTask{
-				WorkflowKey: tv.Any().WorkflowKey(),
+				WorkflowKey: internalKey,
 				TaskID:      s.mustGenerateTaskID(),
 				Category:    tasks.CategoryOutbound,
 				Destination: tv.Any().String(),

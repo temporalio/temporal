@@ -1908,18 +1908,26 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Zom
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_ExecutesTask() {
-	execution := &commonpb.WorkflowExecution{
-		WorkflowId: tests.WorkflowKey.WorkflowID,
-		RunId:      tests.WorkflowKey.RunID,
+	archetype := "Testlib.archetype"
+	internalKey := definition.NewWorkflowKey(
+		s.namespaceID.String(),
+		archetype+":"+tests.WorkflowKey.WorkflowID,
+		tests.WorkflowKey.RunID,
+	)
+	entityKey := chasm.EntityKey{
+		NamespaceID: s.namespaceID.String(),
+		BusinessID:  tests.WorkflowKey.WorkflowID,
+		EntityID:    tests.WorkflowKey.RunID,
 	}
 
 	// Mock the CHASM tree.
 	chasmTree := historyi.NewMockChasmTree(s.controller)
+	chasmTree.EXPECT().Archetype().Return(archetype).AnyTimes()
 	chasmTree.EXPECT().ExecuteSideEffectTask(
 		gomock.Any(),
 		gomock.Any(),
-		gomock.Any(),
-		gomock.Any(),
+		entityKey,
+		archetype,
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -1932,7 +1940,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_
 	ms.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes() // emulate transition history disabled.
 	ms.EXPECT().GetNextEventID().Return(int64(2)).AnyTimes()
 	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
-	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	ms.EXPECT().GetWorkflowKey().Return(internalKey).AnyTimes()
 	ms.EXPECT().GetExecutionState().Return(
 		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
 	).AnyTimes()
@@ -1940,11 +1948,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_
 
 	// Add a valid timer task.
 	timerTask := &tasks.ChasmTask{
-		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID.String(),
-			execution.GetWorkflowId(),
-			execution.GetRunId(),
-		),
+		WorkflowKey:         internalKey,
 		VisibilityTimestamp: s.now,
 		TaskID:              s.mustGenerateTaskID(),
 		Info: &persistencespb.ChasmTaskInfo{
@@ -1963,8 +1967,14 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_
 
 	mockCache := wcache.NewMockCache(s.controller)
 	mockCache.EXPECT().GetOrCreateWorkflowExecution(
-		gomock.Any(), s.mockShard, gomock.Any(), execution, locks.PriorityLow,
+		gomock.Any(), s.mockShard, gomock.Any(), &commonpb.WorkflowExecution{
+			WorkflowId: internalKey.WorkflowID,
+			RunId:      internalKey.RunID,
+		},
+		locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
+
+	s.mockChasmEngine.EXPECT().FromInternalKey(internalKey, archetype).Return(entityKey, nil).AnyTimes()
 
 	//nolint:revive // unchecked-type-assertion
 	timerQueueActiveTaskExecutor := newTimerQueueActiveTaskExecutor(
