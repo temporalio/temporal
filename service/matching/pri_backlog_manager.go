@@ -53,6 +53,7 @@ type (
 		subqueueLock        sync.Mutex
 		subqueues           []*priTaskReader
 		subqueuesByPriority map[int32]int
+		priorityBySubqueue  map[int]int32
 
 		logger           log.Logger
 		throttledLogger  log.ThrottledLogger
@@ -83,6 +84,7 @@ func newPriBacklogManager(
 		tqCtx:               tqCtx,
 		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler),
 		subqueuesByPriority: make(map[int32]int),
+		priorityBySubqueue:  make(map[int]int32),
 		matchingClient:      matchingClient,
 		metricsHandler:      metricsHandler,
 		logger:              logger,
@@ -170,6 +172,7 @@ func (c *priBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.S
 			c.subqueues = append(c.subqueues, r)
 		}
 		c.subqueuesByPriority[subqueues[i].Key.Priority] = i
+		c.priorityBySubqueue[i] = subqueues[i].Key.Priority
 	}
 }
 
@@ -266,23 +269,18 @@ func (c *priBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.
 	defer c.subqueueLock.Unlock()
 
 	result := make(map[int32]*taskqueuepb.TaskQueueStats)
-	priorityLevels := c.config.PriorityLevels()
 	backlogCounts := c.db.getApproximateBacklogCountsBySubqueue()
-	for idx := range c.subqueues {
-		for priorityIdx := range priorityLevels {
-			priority := priorityIdx + 1 // priority levels start at 1
-			result[priority] = &taskqueuepb.TaskQueueStats{
-				ApproximateBacklogCount: backlogCounts[idx][priorityIdx],
-			}
-
-			oldestBacklogTime := c.subqueues[idx].getOldestBacklogTime()
-			if oldestBacklogTime.IsZero() {
-				// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
-				// be more appropriate in the future.
-				result[priority].ApproximateBacklogAge = durationpb.New(0)
-			} else {
-				result[priority].ApproximateBacklogAge = durationpb.New(time.Since(oldestBacklogTime))
-			}
+	for subqueueKey, priorityKey := range c.priorityBySubqueue {
+		result[priorityKey] = &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogCount: backlogCounts[subqueueKey],
+		}
+		oldestBacklogTime := c.subqueues[subqueueKey].getOldestBacklogTime()
+		if oldestBacklogTime.IsZero() {
+			// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
+			// be more appropriate in the future.
+			result[priorityKey].ApproximateBacklogAge = durationpb.New(0)
+		} else {
+			result[priorityKey].ApproximateBacklogAge = durationpb.New(time.Since(oldestBacklogTime))
 		}
 	}
 	return result
@@ -320,11 +318,6 @@ func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQue
 	status := make([]*taskqueuespb.InternalTaskQueueStatus, len(c.subqueues))
 	backlogCountsBySubqueue := c.db.getApproximateBacklogCountsBySubqueue()
 	for i, r := range c.subqueues {
-		var subqueueBacklogCount int64
-		for _, count := range backlogCountsBySubqueue[i] {
-			subqueueBacklogCount += count
-		}
-
 		readLevel, ackLevel := r.getLevels()
 		status[i] = &taskqueuespb.InternalTaskQueueStatus{
 			ReadLevel: readLevel,
@@ -335,7 +328,7 @@ func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQue
 			},
 			LoadedTasks:             int64(r.getLoadedTasks()),
 			MaxReadLevel:            c.db.GetMaxReadLevel(i),
-			ApproximateBacklogCount: subqueueBacklogCount,
+			ApproximateBacklogCount: backlogCountsBySubqueue[i],
 		}
 	}
 	return status
