@@ -56,7 +56,7 @@ func newFairBacklogManager(
 	throttledLogger log.ThrottledLogger,
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
-	cntr counter.Counter,
+	counterFactory func() counter.Counter,
 ) *fairBacklogManagerImpl {
 	// For the purposes of taskQueueDB, call this just a TaskManager. It'll return errors if we
 	// use it incorectly. TODO(fairness): consider a cleaner way of doing this.
@@ -74,7 +74,7 @@ func newFairBacklogManager(
 		throttledLogger:     throttledLogger,
 		initializedError:    future.NewFuture[struct{}](),
 	}
-	bmg.taskWriter = newFairTaskWriter(bmg, cntr)
+	bmg.taskWriter = newFairTaskWriter(bmg, counterFactory)
 	return bmg
 }
 

@@ -188,8 +188,10 @@ func newPhysicalTaskQueueManager(
 		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagFairness)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagFairness)
 
-		src := rand.NewPCG(rand.Uint64(), rand.Uint64())
-		cntr := counter.NewHybridCounter(config.FairnessCounter(), src)
+		counterFactory := func() counter.Counter {
+			src := rand.NewPCG(rand.Uint64(), rand.Uint64())
+			return counter.NewHybridCounter(config.FairnessCounter(), src)
+		}
 
 		pqMgr.backlogMgr = newFairBacklogManager(
 			tqCtx,
@@ -200,7 +202,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.throttledLogger,
 			e.matchingRawClient,
 			newFairMetricsHandler(taggedMetricsHandler),
-			cntr,
+			counterFactory,
 		)
 		var fwdr *priForwarder
 		var err error

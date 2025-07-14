@@ -26,29 +26,34 @@ const (
 type (
 	// fairTaskWriter writes tasks with stride scheduling
 	fairTaskWriter struct {
-		backlogMgr         *fairBacklogManagerImpl
-		config             *taskQueueConfig
-		db                 *taskQueueDB
-		counter            counter.Counter // only used in taskWriterLoop
-		logger             log.Logger
-		appendCh           chan *writeTaskRequest
+		backlogMgr     *fairBacklogManagerImpl
+		config         *taskQueueConfig
+		db             *taskQueueDB
+		logger         log.Logger
+		counterFactory func() counter.Counter
+		appendCh       chan *writeTaskRequest
+
+		// state:
 		taskIDBlock        taskIDBlock
-		currentTaskIDBlock taskIDBlock // copy of taskIDBlock for safe concurrent access via getCurrentTaskIDBlock()
+		currentTaskIDBlock taskIDBlock             // copy of taskIDBlock for safe concurrent access via getCurrentTaskIDBlock()
+		counters           map[int]counter.Counter // subqueue -> Counter. only used in taskWriterLoop.
 	}
 )
 
 func newFairTaskWriter(
 	backlogMgr *fairBacklogManagerImpl,
-	cntr counter.Counter,
+	counterFactory func() counter.Counter,
 ) *fairTaskWriter {
 	return &fairTaskWriter{
-		backlogMgr:  backlogMgr,
-		config:      backlogMgr.config,
-		db:          backlogMgr.db,
-		counter:     cntr,
-		logger:      backlogMgr.logger,
-		appendCh:    make(chan *writeTaskRequest, backlogMgr.config.OutstandingTaskAppendsThreshold()),
+		backlogMgr:     backlogMgr,
+		config:         backlogMgr.config,
+		db:             backlogMgr.db,
+		logger:         backlogMgr.logger,
+		counterFactory: counterFactory,
+		appendCh:       make(chan *writeTaskRequest, backlogMgr.config.OutstandingTaskAppendsThreshold()),
+
 		taskIDBlock: noTaskIDs,
+		counters:    make(map[int]counter.Counter),
 	}
 }
 
@@ -134,7 +139,12 @@ func (w *fairTaskWriter) pickPasses(tasks []*writeTaskRequest, bases []fairLevel
 		inc := max(1, int64(strideFactor/weight))
 
 		base := bases[task.subqueue].pass
-		pass := w.counter.GetPass(key, base, inc)
+		counter := w.counters[task.subqueue]
+		if counter == nil {
+			counter = w.counterFactory()
+			w.counters[task.subqueue] = counter
+		}
+		pass := counter.GetPass(key, base, inc)
 		softassert.That(w.logger, pass >= base, "counter returned pass below base")
 		tasks[i].pass = pass
 	}
