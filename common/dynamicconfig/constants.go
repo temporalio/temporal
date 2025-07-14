@@ -2356,11 +2356,6 @@ that task will be sent to DLQ.`,
 		false,
 		`EnableReplicationTaskBatching is a feature flag for batching replicate history event task`,
 	)
-	EnableReplicateLocalGeneratedEvents = NewGlobalBoolSetting(
-		"history.EnableReplicateLocalGeneratedEvents",
-		false,
-		`EnableReplicateLocalGeneratedEvents is a feature flag for replicating locally generated events`,
-	)
 	EnableReplicationTaskTieredProcessing = NewGlobalBoolSetting(
 		"history.EnableReplicationTaskTieredProcessing",
 		false,

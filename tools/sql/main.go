@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/urfave/cli"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	dbschemas "go.temporal.io/server/schema"
@@ -33,7 +34,7 @@ func BuildCLIOptions() *cli.App {
 	app := cli.NewApp()
 	app.Name = "temporal-sql-tool"
 	app.Usage = "Command line tool for temporal sql operations"
-	app.Version = "0.0.1"
+	app.Version = headers.ServerVersion
 
 	logger := log.NewCLILogger()
 

@@ -2,13 +2,10 @@ package replication
 
 import (
 	"context"
-	"errors"
 	"math/rand"
 	"strconv"
 
 	"github.com/dgryski/go-farm"
-	historypb "go.temporal.io/api/history/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -22,9 +19,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
 	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication/eventhandler"
@@ -58,7 +53,6 @@ var Module = fx.Provide(
 	},
 	executableTaskConverterProvider,
 	streamReceiverMonitorProvider,
-	ndcHistoryResenderProvider,
 	eagerNamespaceRefresherProvider,
 	sequentialTaskQueueFactoryProvider,
 	dlqWriterAdapterProvider,
@@ -280,80 +274,6 @@ func streamReceiverMonitorProvider(
 		processToolBox,
 		taskConverter,
 		processToolBox.Config.EnableReplicationStream(),
-	)
-}
-
-func ndcHistoryResenderProvider(
-	config *configs.Config,
-	namespaceRegistry namespace.Registry,
-	clientBean client.Bean,
-	serializer serialization.Serializer,
-	logger log.Logger,
-	shardController shard.Controller,
-	historyReplicationEventHandler eventhandler.HistoryEventsHandler,
-) xdc.NDCHistoryResender {
-	return xdc.NewNDCHistoryResender(
-		namespaceRegistry,
-		clientBean,
-		func(
-			ctx context.Context,
-			sourceClusterName string,
-			namespaceId namespace.ID,
-			workflowId string,
-			runId string,
-			events [][]*historypb.HistoryEvent,
-			versionHistory []*historyspb.VersionHistoryItem,
-		) error {
-			if config.EnableReplicateLocalGeneratedEvent() {
-				return historyReplicationEventHandler.HandleHistoryEvents(
-					ctx,
-					sourceClusterName,
-					definition.WorkflowKey{
-						NamespaceID: namespaceId.String(),
-						WorkflowID:  workflowId,
-						RunID:       runId,
-					},
-					nil,
-					versionHistory,
-					events,
-					nil,
-					"",
-				)
-			}
-
-			shardContext, err := shardController.GetShardByNamespaceWorkflow(
-				namespaceId,
-				workflowId,
-			)
-			if err != nil {
-				return err
-			}
-			engine, err := shardContext.GetEngine(ctx)
-			if err != nil {
-				return err
-			}
-			err = engine.ReplicateHistoryEvents(
-				ctx,
-				definition.WorkflowKey{
-					NamespaceID: namespaceId.String(),
-					WorkflowID:  workflowId,
-					RunID:       runId,
-				},
-				nil,
-				versionHistory,
-				events,
-				nil,
-				"",
-			)
-			if errors.Is(err, consts.ErrDuplicate) {
-				return nil
-			}
-			return err
-		},
-		serializer,
-		config.StandbyTaskReReplicationContextTimeout,
-		logger,
-		config,
 	)
 }
 

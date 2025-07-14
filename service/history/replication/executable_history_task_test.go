@@ -27,9 +27,9 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -45,13 +45,13 @@ type (
 		clientBean              *client.MockBean
 		shardController         *shard.MockController
 		namespaceCache          *namespace.MockRegistry
-		ndcHistoryResender      *xdc.MockNDCHistoryResender
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		executableTask          *MockExecutableTask
 		eagerNamespaceRefresher *MockEagerNamespaceRefresher
 		eventSerializer         serialization.Serializer
 		mockExecutionManager    *persistence.MockExecutionManager
+		mockEventHandler        *eventhandler.MockHistoryEventsHandler
 
 		replicationTask   *replicationspb.HistoryTaskAttributes
 		sourceClusterName string
@@ -107,27 +107,26 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 	s.clientBean = client.NewMockBean(s.controller)
 	s.shardController = shard.NewMockController(s.controller)
 	s.namespaceCache = namespace.NewMockRegistry(s.controller)
-	s.ndcHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
 	s.executableTask = NewMockExecutableTask(s.controller)
 	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 	s.eventSerializer = serialization.NewSerializer()
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
-
+	s.mockEventHandler = eventhandler.NewMockHistoryEventsHandler(s.controller)
 	s.taskID = rand.Int63()
 	s.processToolBox = ProcessToolBox{
 		ClusterMetadata:         s.clusterMetadata,
 		ClientBean:              s.clientBean,
 		ShardController:         s.shardController,
 		NamespaceCache:          s.namespaceCache,
-		NDCHistoryResender:      s.ndcHistoryResender,
 		MetricsHandler:          s.metricsHandler,
 		Logger:                  s.logger,
 		EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 		EventSerializer:         s.eventSerializer,
 		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
 		Config:                  tests.NewDynamicConfig(),
+		HistoryEventsHandler:    s.mockEventHandler,
 	}
 	s.processToolBox.Config.ReplicationMultipleBatches = dynamicconfig.GetBoolPropertyFn(s.replicationMultipleBatches)
 
@@ -207,8 +206,9 @@ func (s *executableHistoryTaskSuite) TestExecute_Process() {
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().ReplicateHistoryEvents(
+	s.mockEventHandler.EXPECT().HandleHistoryEvents(
 		gomock.Any(),
+		s.sourceClusterName,
 		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
 		s.task.baseExecutionInfo,
 		s.task.versionHistoryItems,
@@ -260,8 +260,9 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().ReplicateHistoryEvents(
+	s.mockEventHandler.EXPECT().HandleHistoryEvents(
 		gomock.Any(),
+		s.sourceClusterName,
 		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
 		s.task.baseExecutionInfo,
 		s.task.versionHistoryItems,
