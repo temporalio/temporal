@@ -729,8 +729,6 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		}
 		if reportStats {
 			vInfo.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey = physicalQueue.GetStatsByPriority()
-			// Deprecated: AggregateStats is deprecated and will be removed in the future.
-			// TODO(stephanos)
 			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = aggregateStats(vInfo.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey)
 		}
 		if internalTaskQueueStatus {
