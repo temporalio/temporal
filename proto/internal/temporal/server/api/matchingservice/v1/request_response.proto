@@ -591,3 +591,18 @@ message ListWorkersResponse {
     repeated temporal.api.worker.v1.WorkerInfo workers_info = 1;
     bytes next_page_token = 2;
 }
+
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateTaskQueueConfigRequest RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateTaskQueueConfigRequest RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0134::method-signature=disabled
+//     aip.dev/not-precedent: UpdateTaskQueueConfigRequest RPC doesn't follow Google API format. --)
+message UpdateTaskQueueConfigRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest update_taskqueue_config = 3;
+}
+
+message UpdateTaskQueueConfigResponse {
+    temporal.api.taskqueue.v1.TaskQueueConfig updated_taskqueue_config = 1;
+}

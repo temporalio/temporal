@@ -491,6 +491,21 @@ func (c *retryableClient) UpdateNexusEndpoint(
 	return resp, err
 }
 
+func (c *retryableClient) UpdateTaskQueueConfig(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueConfigRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+	var resp *matchingservice.UpdateTaskQueueConfigResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateTaskQueueConfig(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) UpdateTaskQueueUserData(
 	ctx context.Context,
 	request *matchingservice.UpdateTaskQueueUserDataRequest,

@@ -1348,6 +1348,14 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}
 	}
 
+	if req.GetReportConfig() {
+		userData, _, err := pm.GetUserDataManager().GetUserData()
+		if err != nil {
+			return nil, err
+		}
+		descrResp.DescResponse.Config = userData.GetData().GetPerType()[int32(req.GetTaskQueueType())].GetConfig()
+	}
+
 	return descrResp, nil
 }
 
@@ -2915,4 +2923,103 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 // be processed on the normal queue.
 func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
 	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
+}
+
+func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, updateTime *timestamppb.Timestamp) *taskqueuepb.RateLimitConfig {
+	var rateLimit *taskqueuepb.RateLimit
+	if r := update.GetRateLimit(); r != nil {
+		rateLimit = &taskqueuepb.RateLimit{RequestsPerSecond: r.RequestsPerSecond}
+	}
+	return &taskqueuepb.RateLimitConfig{
+		RateLimit: rateLimit,
+		Metadata: &taskqueuepb.ConfigMetadata{
+			Reason:     update.GetReason(),
+			UpdateTime: updateTime,
+		},
+	}
+}
+
+func prepareTaskQueueUserData(
+	tqud *persistencespb.TaskQueueUserData,
+	taskQueueType enumspb.TaskQueueType,
+) *persistencespb.TaskQueueUserData {
+	data := common.CloneProto(tqud)
+	if data == nil {
+		data = &persistencespb.TaskQueueUserData{}
+	}
+	if data.PerType == nil {
+		data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
+	}
+	tqType := int32(taskQueueType)
+	if data.PerType[tqType] == nil {
+		data.PerType[tqType] = &persistencespb.TaskQueueTypeUserData{}
+	}
+	if data.PerType[tqType].Config == nil {
+		data.PerType[tqType].Config = &taskqueuepb.TaskQueueConfig{}
+	}
+	return data
+}
+
+func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+	taskQueueFamily, err := tqid.NewTaskQueueFamily(request.NamespaceId, request.UpdateTaskqueueConfig.GetTaskQueue())
+	if err != nil {
+		return nil, err
+	}
+	taskQueueType := request.UpdateTaskqueueConfig.GetTaskQueueType()
+	// Get the partition manager for the root workflow partition of the task queue family.
+	// Configuration updates are applied here and eventually propagate,
+	// to all partitions and associated activity task queues of the same task queue family.
+	tqm, _, err := e.getTaskQueuePartitionManager(ctx,
+		taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(),
+		true, loadCauseOtherWrite)
+	if err != nil {
+		return nil, err
+	}
+	if request.GetUpdateTaskqueueConfig() == nil {
+		tqud, _, err := tqm.GetUserDataManager().GetUserData()
+		if err != nil {
+			return nil, err
+		}
+		// If no update is requested, return the current config.
+		return &matchingservice.UpdateTaskQueueConfigResponse{
+			UpdatedTaskqueueConfig: tqud.GetData().GetPerType()[int32(taskQueueType)].GetConfig(),
+		}, nil
+	}
+	updateOptions := UserDataUpdateOptions{Source: "UpdateTaskQueueConfig"}
+	_, err = tqm.GetUserDataManager().UpdateUserData(ctx, updateOptions,
+		func(tqud *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+			data := prepareTaskQueueUserData(tqud, taskQueueType)
+			// Update timestamp from hlc clock
+			existingClock := data.Clock
+			if existingClock == nil {
+				existingClock = hlc.Zero(e.clusterMeta.GetClusterID())
+			}
+			now := hlc.Next(existingClock, e.timeSource)
+			protoTs := hlc.ProtoTimestamp(now)
+			// Update relevant config fields
+			cfg := data.PerType[int32(taskQueueType)].Config
+			updateTaskQueueConfig := request.GetUpdateTaskqueueConfig()
+			// Queue Rate Limit
+			if qrl := updateTaskQueueConfig.GetUpdateQueueRateLimit(); qrl != nil {
+				cfg.QueueRateLimit = buildRateLimitConfig(qrl, protoTs)
+			}
+			// Fairness Queue Rate Limit
+			if fkrl := updateTaskQueueConfig.GetUpdateFairnessKeyRateLimitDefault(); fkrl != nil {
+				cfg.FairnessKeysRateLimitDefault = buildRateLimitConfig(fkrl, protoTs)
+			}
+			// Update the clock on TaskQueueUserData to enforce LWW on config updates
+			data.Clock = now
+			return data, true, nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	userData, _, err := tqm.GetUserDataManager().GetUserData()
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.UpdateTaskQueueConfigResponse{
+		UpdatedTaskqueueConfig: userData.GetData().GetPerType()[int32(taskQueueType)].GetConfig(),
+	}, nil
 }

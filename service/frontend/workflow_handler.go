@@ -6052,3 +6052,26 @@ func (wh *WorkflowHandler) ListWorkers(
 		NextPageToken: resp.GetNextPageToken(),
 	}, nil
 }
+
+func (wh *WorkflowHandler) UpdateTaskQueueConfig(
+	ctx context.Context, request *workflowservice.UpdateTaskQueueConfigRequest,
+) (*workflowservice.UpdateTaskQueueConfigResponse, error) {
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := wh.matchingClient.UpdateTaskQueueConfig(ctx, &matchingservice.UpdateTaskQueueConfigRequest{
+		NamespaceId:           namespaceID.String(),
+		UpdateTaskqueueConfig: request,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.UpdateTaskQueueConfigResponse{
+		Config: resp.UpdatedTaskqueueConfig,
+	}, nil
+}

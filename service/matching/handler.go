@@ -593,3 +593,9 @@ func (h *Handler) reportForwardedPerTaskQueueCounter(opMetrics metrics.Handler, 
 			metrics.NamespaceTag(h.namespaceName(namespaceId).String()),
 			metrics.ServiceRoleTag(metrics.MatchingRoleTagValue))
 }
+
+func (h *Handler) UpdateTaskQueueConfig(
+	ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest,
+) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+	return h.engine.UpdateTaskQueueConfig(ctx, request)
+}
