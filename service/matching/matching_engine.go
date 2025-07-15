@@ -1303,7 +1303,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			//revive:disable-next-line:unchecked-type-assertion
 			cachedResp := ts.(*workflowservice.DescribeTaskQueueResponse)
 			descrResp.DescResponse.Stats = cachedResp.Stats
-			descrResp.DescResponse.StatsByPriority = cachedResp.StatsByPriority
+			descrResp.DescResponse.StatsByPriorityKey = cachedResp.StatsByPriorityKey
 		} else {
 			taskQueueStats := &taskqueuepb.TaskQueueStats{}
 			taskQueueStatsByPriority := make(map[int32]*taskqueuepb.TaskQueueStats)
@@ -1356,11 +1356,11 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				}
 			}
 			pm.PutCache(cacheKey, &workflowservice.DescribeTaskQueueResponse{
-				Stats:           taskQueueStats,
-				StatsByPriority: taskQueueStatsByPriority,
+				Stats:              taskQueueStats,
+				StatsByPriorityKey: taskQueueStatsByPriority,
 			})
 			descrResp.DescResponse.Stats = taskQueueStats
-			descrResp.DescResponse.StatsByPriority = taskQueueStatsByPriority
+			descrResp.DescResponse.StatsByPriorityKey = taskQueueStatsByPriority
 		}
 	}
 
@@ -1418,7 +1418,7 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 				Name:               tq.Name,
 				Type:               tq.Type,
 				Stats:              tqResp.DescResponse.Stats,
-				StatsByPriorityKey: tqResp.DescResponse.StatsByPriority,
+				StatsByPriorityKey: tqResp.DescResponse.StatsByPriorityKey,
 			})
 	}
 
