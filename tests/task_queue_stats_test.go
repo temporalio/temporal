@@ -476,7 +476,7 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
 		validateTaskQueueStats(label, a, resp.Stats, expectation)
 		if s.usePriMatcher && expectation.BacklogCount > 0 {
 			// Per priority stats are only available with the priority matcher and when they've been actively used.
-			validateTaskQueueStatsByPriority(label, a, resp.StatsByPriority, expectation)
+			validateTaskQueueStatsByPriority(label, a, resp.StatsByPriorityKey, expectation)
 		}
 	}, 5*time.Second, 100*time.Millisecond)
 }
@@ -572,7 +572,7 @@ func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 				validateTaskQueueStats(label, a, info.Stats, expectation)
 				if s.usePriMatcher && expectation.BacklogCount > 0 {
 					// Per priority stats are only available with the priority matcher and when they've been actively used.
-					validateTaskQueueStatsByPriority(label, a, info.StatsByPriority, expectation)
+					validateTaskQueueStatsByPriority(label, a, info.StatsByPriorityKey, expectation)
 				}
 				return
 			}
