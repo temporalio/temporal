@@ -271,16 +271,25 @@ func (c *priBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.
 	result := make(map[int32]*taskqueuepb.TaskQueueStats)
 	backlogCounts := c.db.getApproximateBacklogCountsBySubqueue()
 	for subqueueKey, priorityKey := range c.priorityBySubqueue {
-		result[priorityKey] = &taskqueuepb.TaskQueueStats{
-			ApproximateBacklogCount: backlogCounts[subqueueKey],
+		// Note that there could be more than one subqueue for the same priority.
+		if _, ok := result[priorityKey]; !ok {
+			result[priorityKey] = &taskqueuepb.TaskQueueStats{
+				// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
+				// be more appropriate in the future.
+				ApproximateBacklogAge: durationpb.New(0),
+			}
 		}
+
+		// Add backlog counts together across all subqueues for the same priority.
+		result[priorityKey].ApproximateBacklogCount += backlogCounts[subqueueKey]
+
+		// Find greatest backlog age for across all subqueues for the same priority.
 		oldestBacklogTime := c.subqueues[subqueueKey].getOldestBacklogTime()
-		if oldestBacklogTime.IsZero() {
-			// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
-			// be more appropriate in the future.
-			result[priorityKey].ApproximateBacklogAge = durationpb.New(0)
-		} else {
-			result[priorityKey].ApproximateBacklogAge = durationpb.New(time.Since(oldestBacklogTime))
+		if !oldestBacklogTime.IsZero() {
+			oldestBacklogAge := time.Since(oldestBacklogTime)
+			if oldestBacklogAge > result[priorityKey].ApproximateBacklogAge.AsDuration() {
+				result[priorityKey].ApproximateBacklogAge = durationpb.New(oldestBacklogAge)
+			}
 		}
 	}
 	return result
