@@ -58,7 +58,6 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1206,7 +1205,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 								partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
 								mergedStats = &taskqueuepb.TaskQueueStats{
 									ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
-									ApproximateBacklogAge:   largerBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
+									ApproximateBacklogAge:   oldestBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
 									TasksAddRate:            totalStats.TasksAddRate + partitionStats.TasksAddRate,
 									TasksDispatchRate:       totalStats.TasksDispatchRate + partitionStats.TasksDispatchRate,
 								}
@@ -1341,10 +1340,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				}
 				for _, vii := range partitionResp.VersionsInfoInternal {
 					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
-					taskQueueStats.ApproximateBacklogCount += partitionStats.ApproximateBacklogCount
-					taskQueueStats.ApproximateBacklogAge = largerBacklogAge(taskQueueStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge)
-					taskQueueStats.TasksAddRate += partitionStats.TasksAddRate
-					taskQueueStats.TasksDispatchRate += partitionStats.TasksDispatchRate
+					mergeStats(taskQueueStats, partitionStats)
 				}
 			}
 			pm.PutCache(cacheKey, taskQueueStats)
@@ -2927,14 +2923,6 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 // be processed on the normal queue.
 func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
 	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
-}
-
-// largerBacklogAge returns the larger BacklogAge
-func largerBacklogAge(rootBacklogAge *durationpb.Duration, currentPartitionAge *durationpb.Duration) *durationpb.Duration {
-	if rootBacklogAge.AsDuration() > currentPartitionAge.AsDuration() {
-		return rootBacklogAge
-	}
-	return currentPartitionAge
 }
 
 func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, updateTime *timestamppb.Timestamp) *taskqueuepb.RateLimitConfig {
