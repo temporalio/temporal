@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"math"
 	"sync"
 	"time"
 
@@ -22,7 +21,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -64,14 +62,8 @@ type (
 		// TODO(stephanos): move cache out of partition manager
 		cache cache.Cache // non-nil for root-partition
 
-		// dynamicRate is the dynamic rate & burst for rate limiter
-		dynamicRateBurst quotas.MutableRateBurst
-		// dynamicRateLimiter is the dynamic rate limiter that can be used to force refresh on new rates.
-		dynamicRateLimiter *quotas.DynamicRateLimiterImpl
-		// forceRefreshRateOnce is used to force refresh rate limit for first time
-		forceRefreshRateOnce sync.Once
-		// rateLimiter that limits the rate at which tasks can be dispatched to consumers
-		rateLimiter quotas.RateLimiter
+		// rateLimitManager is used to manage the rate limit for task queues.
+		rateLimitManager rateLimitManager
 	}
 )
 
@@ -95,17 +87,23 @@ func newTaskQueuePartitionManager(
 	metricsHandler metrics.Handler,
 	userDataManager userDataManager,
 ) (*taskQueuePartitionManagerImpl, error) {
+	rateLimitManager := newRateLimitManager(
+		userDataManager,
+		nil, // no poll metadata at this point
+		nil, // no API configured RPS at this point
+		tqConfig)
 	pm := &taskQueuePartitionManagerImpl{
-		engine:          e,
-		partition:       partition,
-		ns:              ns,
-		config:          tqConfig,
-		logger:          logger,
-		throttledLogger: throttledLogger,
-		matchingClient:  e.matchingRawClient,
-		metricsHandler:  metricsHandler,
-		versionedQueues: make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
-		userDataManager: userDataManager,
+		engine:           e,
+		partition:        partition,
+		ns:               ns,
+		config:           tqConfig,
+		logger:           logger,
+		throttledLogger:  throttledLogger,
+		matchingClient:   e.matchingRawClient,
+		metricsHandler:   metricsHandler,
+		versionedQueues:  make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
+		userDataManager:  userDataManager,
+		rateLimitManager: rateLimitManager,
 	}
 
 	if pm.partition.IsRoot() {
@@ -113,24 +111,6 @@ func newTaskQueuePartitionManager(
 			TTL: max(1, tqConfig.TaskQueueInfoByBuildIdTTL())}, // ensure TTL is never zero (which would disable TTL)
 		)
 	}
-
-	pm.dynamicRateBurst = quotas.NewMutableRateBurst(
-		defaultTaskDispatchRPS,
-		int(defaultTaskDispatchRPS),
-	)
-	pm.dynamicRateLimiter = quotas.NewDynamicRateLimiter(
-		pm.dynamicRateBurst,
-		tqConfig.RateLimiterRefreshInterval,
-	)
-	pm.rateLimiter = quotas.NewMultiRateLimiter([]quotas.RateLimiter{
-		pm.dynamicRateLimiter,
-		quotas.NewDefaultOutgoingRateLimiter(
-			tqConfig.AdminNamespaceTaskQueueToPartitionDispatchRate,
-		),
-		quotas.NewDefaultOutgoingRateLimiter(
-			tqConfig.AdminNamespaceToPartitionDispatchRate,
-		),
-	})
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
 	if err != nil {
@@ -140,34 +120,16 @@ func newTaskQueuePartitionManager(
 	return pm, nil
 }
 
-// UpdateRatelimit updates the task dispatch rate
-func (pm *taskQueuePartitionManagerImpl) UpdateRatelimit(rps float64) {
-	nPartitions := float64(pm.config.NumReadPartitions())
-	if nPartitions > 0 {
-		// divide the rate equally across all partitions
-		rps = rps / nPartitions
-	}
-	burst := int(math.Ceil(rps))
-
-	minTaskThrottlingBurstSize := pm.config.MinTaskThrottlingBurstSize()
-	if burst < minTaskThrottlingBurstSize {
-		burst = minTaskThrottlingBurstSize
-	}
-
-	pm.dynamicRateBurst.SetRPS(rps)
-	pm.dynamicRateBurst.SetBurst(burst)
-	pm.forceRefreshRateOnce.Do(func() {
-		// Dynamic rate limiter only refresh its rate every 1m. Before that initial 1m interval, it uses default rate
-		// which is 10K and is too large in most cases. We need to force refresh for the first time this rate is set
-		// by poller. Only need to do that once. If the rate change later, it will be refresh in 1m.
-		pm.dynamicRateLimiter.Refresh()
-	})
-}
-
 func (pm *taskQueuePartitionManagerImpl) Start() {
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
 	pm.userDataManager.Start()
 	pm.defaultQueue.Start()
+}
+
+func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() rateLimitManager {
+	// Return the rate limit manager for the task queue partition.
+	// This is used to manage the rate limit for task queues.
+	return pm.rateLimitManager
 }
 
 // Stop does not unload the partition from matching engine. It is intended to be called by matching engine when
@@ -381,13 +343,20 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		defer dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
-	// The desired global rate limit for the task queue comes from the
-	// poller, which lives inside the client side worker. There is
-	// one rateLimiter for this entire task queue and as we get polls,
-	// we update the ratelimiter rps if it has changed from the last
-	// value. Last poller wins if different pollers provide different values
-	if rps := pollMetadata.taskQueueMetadata.GetMaxTasksPerSecond(); rps != nil {
-		pm.UpdateRatelimit(rps.Value)
+	// The desired global rate limit for the task queue can come from multiple sources:
+	// UpdateTaskQueueConfig API call, poller metadata, or system default.
+	// In the case of worker set rate limits at the time of poll task :
+	// we update the ratelimiter rps if it has changed from the previous poll.
+	// Last poller wins if different pollers provide different values
+	// SelectTaskQueueRateLimiter decides whether the RPS needs to be updated.
+	// Highest priority is given to the rate limit set by the UpdateTaskQueueConfig api call.
+	// Followed by the rate limit set by the poller.
+	// If no rate limit is set, updateRequired will be false and we will continue to use the default rate limit.
+	pm.rateLimitManager.SetWorkerRPS(pollMetadata)
+	taskQueueType := pm.partition.TaskType()
+	effectiveRPSToBeSet, updateRequired := pm.rateLimitManager.SelectTaskQueueRateLimiter(taskQueueType)
+	if updateRequired {
+		pm.rateLimitManager.UpdateRatelimit(effectiveRPSToBeSet.Value)
 	}
 
 	task, err := dbq.PollTask(ctx, pollMetadata)

@@ -1356,6 +1356,11 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		descrResp.DescResponse.Config = userData.GetData().GetPerType()[int32(req.GetTaskQueueType())].GetConfig()
 	}
 
+	descrResp.DescResponse.EffectiveRateLimit = &workflowservice.DescribeTaskQueueResponse_EffectiveRateLimit{
+		RequestsPerSecond: float32(pm.GetRateLimitManager().GetEffectiveRPS(req.GetTaskQueueType())),
+		RateLimitSource:   pm.GetRateLimitManager().GetSourceForEffectiveRPS(),
+	}
+
 	return descrResp, nil
 }
 
