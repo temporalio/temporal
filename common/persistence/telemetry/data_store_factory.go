@@ -13,6 +13,7 @@ type (
 		tracer      trace.Tracer
 
 		taskStore          persistence.TaskStore
+		fairTaskStore      persistence.TaskStore
 		shardStore         persistence.ShardStore
 		metadataStore      persistence.MetadataStore
 		executionStore     persistence.ExecutionStore
@@ -51,14 +52,14 @@ func (d *TelemetryDataStoreFactory) NewTaskStore() (persistence.TaskStore, error
 }
 
 func (d *TelemetryDataStoreFactory) NewFairTaskStore() (persistence.TaskStore, error) {
-	if d.taskStore == nil {
+	if d.fairTaskStore == nil {
 		baseStore, err := d.baseFactory.NewFairTaskStore()
 		if err != nil {
 			return nil, err
 		}
-		d.taskStore = newTelemetryTaskStore(baseStore, d.logger, d.tracer)
+		d.fairTaskStore = newTelemetryTaskStore(baseStore, d.logger, d.tracer)
 	}
-	return d.taskStore, nil
+	return d.fairTaskStore, nil
 }
 
 func (d *TelemetryDataStoreFactory) NewShardStore() (persistence.ShardStore, error) {
