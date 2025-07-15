@@ -399,13 +399,14 @@ func (s *BacklogManagerTestSuite) TestStandingBacklogs() {
 	s.addSpooledTask = func(t *internalTask) error {
 		lock.Lock()
 		defer lock.Unlock()
-		e := tasks.PushBack(t)
+		var e *list.Element
 		t.removeFromMatcher = func() {
 			lock.Lock()
 			defer lock.Unlock()
 			tasks.Remove(e)
 			// fmt.Printf("buf evict -> %d\n", tasks.Len())
 		}
+		e = tasks.PushBack(t)
 		// fmt.Printf("buf add -> %d\n", tasks.Len())
 		return nil
 	}
