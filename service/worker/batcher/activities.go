@@ -567,15 +567,15 @@ func getResetPoint(
 	for _, point := range resetPoints {
 		if point.BuildId == buildId {
 			if !point.Resettable {
-				return 0, fmt.Errorf("Reset point for %v is not resettable", buildId)
+				return 0, fmt.Errorf("reset point for %v is not resettable", buildId)
 			} else if point.ExpireTime != nil && point.ExpireTime.AsTime().Before(time.Now()) {
-				return 0, fmt.Errorf("Reset point for %v is expired", buildId)
+				return 0, fmt.Errorf("reset point for %v is expired", buildId)
 			} else if execution.RunId != point.RunId && currentRunOnly {
-				return 0, fmt.Errorf("Reset point for %v points to previous run and CurrentRunOnly is set", buildId)
+				return 0, fmt.Errorf("reset point for %v points to previous run and CurrentRunOnly is set", buildId)
 			}
 			execution.RunId = point.RunId
 			return point.FirstWorkflowTaskCompletedId, nil
 		}
 	}
-	return 0, fmt.Errorf("Can't find reset point for %v", buildId)
+	return 0, fmt.Errorf("can't find reset point for %v", buildId)
 }

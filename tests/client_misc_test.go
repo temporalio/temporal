@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -32,6 +33,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/workflow/update"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/multierr"
 )
@@ -1196,12 +1198,24 @@ func (s *ClientMiscTestSuite) TestBatchReset() {
 	}, 5*time.Second, 200*time.Millisecond)
 }
 
-func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
+func (s *ClientMiscTestSuite) TestBatchResetByBuildId_UseVersioningTrue() {
+	s.testBatchResetByBuildId(true, false)
+}
+
+func (s *ClientMiscTestSuite) TestBatchResetByBuildId_UseVersioningFalse() {
+	s.testBatchResetByBuildId(false, false)
+}
+
+func (s *ClientMiscTestSuite) TestBatchResetByBuildId_UseDeprecatedBuildId() {
+	s.testBatchResetByBuildId(false, true)
+}
+
+func (s *ClientMiscTestSuite) testBatchResetByBuildId(useVersioning bool, useDeprecatedBuildId bool) {
+	tv := testvars.New(s.T())
 	tq := testcore.RandomizeStr(s.T().Name())
-	buildPrefix := uuid.New()[:6] + "-"
-	buildIdv1 := buildPrefix + "v1"
-	buildIdv2 := buildPrefix + "v2"
-	buildIdv3 := buildPrefix + "v3"
+	tv1 := tv.WithBuildIDNumber(1)
+	tv2 := tv.WithBuildIDNumber(2)
+	tv3 := tv.WithBuildIDNumber(3)
 
 	var act1count, act2count, act3count, badcount atomic.Int32
 	act1 := func() error { act1count.Add(1); return nil }
@@ -1266,10 +1280,22 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	w1 := worker.New(s.SdkClient(), tq, worker.Options{BuildID: buildIdv1})
+	w1Opts := worker.Options{DeploymentOptions: worker.DeploymentOptions{Version: tv1.DeploymentVersionString()}}
+	if useVersioning {
+		w1Opts.DeploymentOptions.UseVersioning = true
+		w1Opts.DeploymentOptions.DefaultVersioningBehavior = workflow.VersioningBehaviorAutoUpgrade
+	}
+	if useDeprecatedBuildId {
+		w1Opts = worker.Options{BuildID: tv1.BuildID()} //nolint:staticcheck // SA1019: deprecated build id
+	}
+	w1 := worker.New(s.SdkClient(), tq, w1Opts)
 	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
 	w1.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act1"})
 	s.NoError(w1.Start())
+
+	if useVersioning {
+		s.setCurrentDeployment(tv1)
+	}
 
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
@@ -1282,7 +1308,15 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	// should see one run of act1
 	s.Equal(int32(1), act1count.Load())
 
-	w2 := worker.New(s.SdkClient(), tq, worker.Options{BuildID: buildIdv2})
+	w2Opts := worker.Options{DeploymentOptions: worker.DeploymentOptions{Version: tv2.DeploymentVersionString()}}
+	if useVersioning {
+		w2Opts.DeploymentOptions.UseVersioning = true
+		w2Opts.DeploymentOptions.DefaultVersioningBehavior = workflow.VersioningBehaviorAutoUpgrade
+	}
+	if useDeprecatedBuildId {
+		w2Opts = worker.Options{BuildID: tv2.BuildID()} //nolint:staticcheck // SA1019: deprecated build id
+	}
+	w2 := worker.New(s.SdkClient(), tq, w2Opts)
 	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
 	w2.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act1"})
 	w2.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act2"})
@@ -1290,18 +1324,30 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
+	if useVersioning {
+		s.setCurrentDeployment(tv2)
+	}
+
 	// unblock the workflow
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
 
 	// wait until we see three calls to badact
 	s.Eventually(func() bool { return badcount.Load() >= 3 }, 10*time.Second, 200*time.Millisecond)
 
-	// at this point act2 should have been invokved once also
+	// at this point act2 should have been invoked once also
 	s.Equal(int32(1), act2count.Load())
 
 	w2.Stop()
 
-	w3 := worker.New(s.SdkClient(), tq, worker.Options{BuildID: buildIdv3})
+	w3Opts := worker.Options{DeploymentOptions: worker.DeploymentOptions{Version: tv3.DeploymentVersionString()}}
+	if useVersioning {
+		w3Opts.DeploymentOptions.UseVersioning = true
+		w3Opts.DeploymentOptions.DefaultVersioningBehavior = workflow.VersioningBehaviorAutoUpgrade
+	}
+	if useDeprecatedBuildId {
+		w3Opts = worker.Options{BuildID: tv3.BuildID()} //nolint:staticcheck // SA1019: deprecated build id
+	}
+	w3 := worker.New(s.SdkClient(), tq, w3Opts)
 	w3.RegisterWorkflowWithOptions(wf3, workflow.RegisterOptions{Name: "wf"})
 	w3.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act1"})
 	w3.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act2"})
@@ -1309,6 +1355,9 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	w3.RegisterActivityWithOptions(badact, activity.RegisterOptions{Name: "badact"})
 	s.NoError(w3.Start())
 	defer w3.Stop()
+	if useVersioning {
+		s.setCurrentDeployment(tv3)
+	}
 
 	// but v3 is not quite compatible, the workflow should be blocked on non-determinism errors for now.
 	waitCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -1318,7 +1367,12 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	// wait for it to appear in visibility
 	query := fmt.Sprintf(`%s = "%s" and %s = "%s"`,
 		searchattribute.ExecutionStatus, "Running",
-		searchattribute.BuildIds, worker_versioning.UnversionedBuildIdSearchAttribute(buildIdv2))
+		searchattribute.BuildIds, worker_versioning.UnversionedBuildIdSearchAttribute(tv2.BuildID()))
+	if useVersioning {
+		query = fmt.Sprintf(`%s = "%s" and %s = "%s"`,
+			searchattribute.ExecutionStatus, "Running",
+			searchattribute.BuildIds, worker_versioning.VersionedBuildIdSearchAttribute(tv2.BuildID()))
+	}
 	s.Eventually(func() bool {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
@@ -1337,7 +1391,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 			ResetOperation: &batchpb.BatchOperationReset{
 				Options: &commonpb.ResetOptions{
 					Target: &commonpb.ResetOptions_BuildId{
-						BuildId: buildIdv2,
+						BuildId: tv2.BuildID(),
 					},
 				},
 			},
@@ -1355,4 +1409,23 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	s.Equal(int32(1), act1count.Load()) // we should not see an addition run of act1
 	s.Equal(int32(2), act2count.Load()) // we should see an addition run of act2 (reset point was before it)
 	s.Equal(int32(1), act3count.Load()) // we should see one run of act3
+}
+
+func (s *ClientMiscTestSuite) setCurrentDeployment(tv *testvars.TestVars) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	s.Eventually(func() bool {
+		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		}
+		req.BuildId = tv.BuildID()
+		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) || errors.Is(err, serviceerror.NewFailedPrecondition(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues)) {
+			return false
+		}
+		s.NoError(err)
+		return err == nil
+	}, 60*time.Second, 500*time.Millisecond)
 }
