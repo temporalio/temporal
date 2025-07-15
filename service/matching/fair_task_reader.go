@@ -348,7 +348,7 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 	it := merged.Iterator()
 	var highestLevel fairLevel
 	tasks = tasks[:0] // reuse incoming slice to avoid an allocation
-	for b := 0; it.Next() && b < batchSize; b++ {
+	for b := 0; b < batchSize && it.Next(); b++ {
 		if t, ok := it.Value().(*persistencespb.AllocatedTaskInfo); ok {
 			// new task we need to add to the matcher
 			tasks = append(tasks, t)
