@@ -72,7 +72,9 @@ type (
 		MembershipUnloadDelay                    dynamicconfig.DurationPropertyFn
 		TaskQueueInfoByBuildIdTTL                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PriorityLevels                           dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		RateLimiterRefreshInterval               time.Duration
+
+		RateLimiterRefreshInterval    time.Duration
+		FairnessKeyRateLimitCacheSize dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -165,8 +167,9 @@ type (
 		// TTL for cache holding TaskQueueInfoByBuildID
 		TaskQueueInfoByBuildIdTTL func() time.Duration
 
-		// Rate limiter refresh interval
-		RateLimiterRefreshInterval time.Duration
+		// Rate limiting
+		RateLimiterRefreshInterval    time.Duration
+		FairnessKeyRateLimitCacheSize func() int
 
 		BreakdownMetricsByTaskQueue func() bool
 		BreakdownMetricsByPartition func() bool
@@ -279,6 +282,7 @@ func NewConfig(
 		TaskQueueInfoByBuildIdTTL:                dynamicconfig.TaskQueueInfoByBuildIdTTL.Get(dc),
 		PriorityLevels:                           dynamicconfig.MatchingPriorityLevels.Get(dc),
 		RateLimiterRefreshInterval:               time.Minute,
+		FairnessKeyRateLimitCacheSize:            dynamicconfig.MatchingFairnessKeyRateLimitCacheSize.Get(dc),
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
 
 		AdminNamespaceToPartitionDispatchRate:          dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Get(dc),
@@ -416,6 +420,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 			return config.TaskQueueInfoByBuildIdTTL(ns.String(), taskQueueName, taskType)
 		},
 		RateLimiterRefreshInterval: config.RateLimiterRefreshInterval,
+		FairnessKeyRateLimitCacheSize: func() int {
+			return config.FairnessKeyRateLimitCacheSize(ns.String(), taskQueueName, taskType)
+		},
 		PollerHistoryTTL: func() time.Duration {
 			return config.PollerHistoryTTL(ns.String())
 		},
