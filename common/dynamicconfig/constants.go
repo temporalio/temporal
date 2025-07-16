@@ -2728,4 +2728,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`ListWorkersEnabled is a "feature enable" flag. It allows clients to get workers heartbeat information.`,
 	)
+
+	WorkerCommandsEnabled = NewNamespaceBoolSetting(
+		"frontend.WorkerCommandsEnabled",
+		false,
+		`WorkerCommandsEnabled is a "feature enable" flag. It allows clients to send commands to the workers.`,
+	)
 )
