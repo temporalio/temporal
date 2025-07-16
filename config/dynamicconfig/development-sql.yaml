@@ -32,8 +32,6 @@
 #  - value: true
 # matching.PollerHistoryTTL:
 #   - value: 1s
-system.enableEagerWorkflowStart:
-  - value: true
 limit.maxIDLength:
   - value: 255
     constraints: {}
