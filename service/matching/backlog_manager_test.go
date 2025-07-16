@@ -284,6 +284,13 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpool
 }
 
 func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpoolTask_Unavailable() {
+	if s.fairness {
+		// fairBacklogManager is smarter about backlog count: it can sometimes reset
+		// ApproximateBacklogCount to zero or small values after read operations. That defeats
+		// the assumption in this test.
+		s.T().Skip("this test isn't valid with fairBacklogManager")
+	}
+
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.taskMgr.addFault("CreateTasks", "Unavailable", 1.0)
 
