@@ -247,7 +247,9 @@ func (tr *priTaskReader) processTaskBatch(tasks []*persistencespb.AllocatedTaskI
 		tr.readLevel = max(tr.readLevel, t.TaskId)
 
 		if IsTaskExpired(t) {
-			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1)
+			// task expired when we read it
+			taskExpireStateTag := metrics.TaskExpireStateTag("read")
+			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, taskExpireStateTag)
 			return true
 		}
 
