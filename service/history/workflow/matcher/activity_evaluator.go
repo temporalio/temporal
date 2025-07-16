@@ -21,6 +21,7 @@ const (
 	activityLastFailureColName     = "LastFailure"
 	activityTaskQueueColName       = "TaskQueue"
 	activityStartedTime            = "StartedTime"
+	activityErrorTypeColName       = "ErrorType"
 )
 
 type activityMatchEvaluator struct {
@@ -162,6 +163,12 @@ func (m *activityMatchEvaluator) evaluateComparison(expr *sqlparser.ComparisonEx
 		return m.compareActivityTaskQueue(val, expr.Operator)
 	case activityStartedTime:
 		return m.compareStartTime(valStr, expr.Operator)
+	case activityErrorTypeColName:
+		val, err := sqlquery.ExtractStringValue(valStr)
+		if err != nil {
+			return false, err
+		}
+		return m.compareErrorType(val, expr.Operator)
 	default:
 		return false, NewMatcherError("unknown or unsupported activity search field: %s", colNameStr)
 	}
@@ -284,6 +291,13 @@ func (m *activityMatchEvaluator) compareStartTime(val string, operation string) 
 	default:
 		return false, NewMatcherError("%s: operation %s is not supported for activity StartTime", invalidExpressionErrMessage, operation)
 	}
+}
+
+func (m *activityMatchEvaluator) compareErrorType(val string, operator string) (bool, error) {
+	if m.ai.RetryLastFailure == nil || m.ai.RetryLastFailure.Message == "" {
+		return false, nil
+	}
+	return compareQueryString(val, m.ai.RetryLastFailure.Message, operator, activityErrorTypeColName)
 }
 
 func (m *activityMatchEvaluator) compareStartTimeBetween(fromTime time.Time, toTime time.Time) (bool, error) {

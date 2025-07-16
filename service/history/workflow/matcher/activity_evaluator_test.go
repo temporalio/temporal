@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	commonpb "go.temporal.io/api/common/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/sqlquery"
 	"go.uber.org/mock/gomock"
@@ -82,7 +83,6 @@ func TestActivityInfoMatchEvaluator_LogicalOperations(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestActivityInfoMatchEvaluator_Basic(t *testing.T) {
@@ -566,6 +566,59 @@ func TestActivityInfoMatchEvaluator_BackoffInterval(t *testing.T) {
 		Attempt:                 2,
 		LastAttemptCompleteTime: timestamppb.New(startTime),
 		ScheduledTime:           timestamppb.New(startTime.Add(10 * time.Second)),
+	}
+
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			match, err := MatchActivity(ai, tt.query)
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedMatch, match)
+			}
+		})
+	}
+}
+
+func TestActivityInfoMatchEvaluator_ErrorType(t *testing.T) {
+	startTimeStr := "2023-10-26T14:30:00Z"
+
+	tests := []struct {
+		name          string
+		query         string
+		expectedMatch bool
+		expectedError bool
+	}{
+		{
+			name:          "activity error type, = clause, match",
+			query:         fmt.Sprintf("%s = 'error_type'", activityErrorTypeColName),
+			expectedMatch: true,
+			expectedError: false,
+		},
+	}
+
+	startTime, err := sqlquery.ConvertToTime(fmt.Sprintf("'%s'", startTimeStr))
+	assert.NoError(t, err)
+
+	ai := &persistencespb.ActivityInfo{
+		ActivityId: "activity_id",
+		ActivityType: &commonpb.ActivityType{
+			Name: "activity_type",
+		},
+		StartedTime:             timestamppb.New(startTime),
+		CancelRequested:         false,
+		StartedEventId:          1,
+		ScheduledEventId:        1,
+		Attempt:                 2,
+		LastAttemptCompleteTime: timestamppb.New(startTime),
+		ScheduledTime:           timestamppb.New(startTime.Add(10 * time.Second)),
+		RetryLastFailure: &failurepb.Failure{
+			Message: "error_type",
+		},
 	}
 
 	controller := gomock.NewController(t)
