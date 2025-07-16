@@ -16,7 +16,14 @@ import (
 )
 
 const invalidHeapIndex = -13 // use unusual value to stand out in panics
-const maxTokens = 1          // we only use 1 token at a time, used to clip ready times after rate change
+
+// maxTokens is the maximum number of tokens we might consume at a time for simpleLimiter. This
+// is used to update ready times after a rate is changed from very low (or zero) to higher: we
+// may have set a ready time far in the future and need to clip it to something reasonable so
+// we can dispatch again.
+//
+// Currently we only use 1 token at a time.
+const maxTokens = 1
 
 type pollerPQ struct {
 	heap []*waitingPoller
@@ -725,12 +732,13 @@ func (ready simpleLimiter) consume(p simpleLimiterParams, now int64, tokens int6
 	return simpleLimiter(clippedReady + tokens*p.interval.Nanoseconds())
 }
 
-// clip sets ready to an allowable range based on the given parameters.
+// clip updates ready to an allowable range based on the given parameters.
 func (ready simpleLimiter) clip(p simpleLimiterParams, now int64, maxTokens int64) simpleLimiter {
-	if p.interval < 0 {
+	if p.never() {
 		return simpleLimiterNever
 	}
-	// if ready was set very far in the future (e.g. because the rate was zero), then we can
+	// If ready was set very far in the future (e.g. because the rate was zero), then we can
 	// clip it back to now + maxTokens*interval + burst.
-	return min(ready, simpleLimiter(now+maxTokens*p.interval.Nanoseconds()+p.burst.Nanoseconds()))
+	maxDelay := maxTokens*p.interval.Nanoseconds() + p.burst.Nanoseconds()
+	return min(ready, simpleLimiter(now+maxDelay))
 }
