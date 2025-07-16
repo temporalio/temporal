@@ -379,11 +379,11 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 	})
 	s.NoError(err)
 
-	s.False(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
+	s.True(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
 	s.True(resp.NamespaceInfo.Capabilities.SyncUpdate)
 	s.True(resp.NamespaceInfo.Capabilities.AsyncUpdate)
 
-	s.config.EnableEagerWorkflowStart = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.EnableEagerWorkflowStart = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.EnableUpdateWorkflowExecution = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.EnableUpdateWorkflowExecutionAsyncAccepted = dc.GetBoolPropertyFnFilteredByNamespace(false)
 
@@ -392,7 +392,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 		Namespace: "ns",
 	})
 	s.NoError(err)
-	s.True(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
+	s.False(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
 	s.False(resp.NamespaceInfo.Capabilities.SyncUpdate)
 	s.False(resp.NamespaceInfo.Capabilities.AsyncUpdate)
 }
