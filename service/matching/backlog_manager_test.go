@@ -283,7 +283,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpool
 		"backlog count should match the number of tasks")
 }
 
-func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpoolTask_ServiceError() {
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpoolTask_Unavailable() {
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.taskMgr.addFault("CreateTasks", "Unavailable", 1.0)
 
