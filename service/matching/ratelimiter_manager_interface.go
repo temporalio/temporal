@@ -33,8 +33,6 @@ type (
 
 		GetRateLimiter() quotas.RateLimiter
 
-		SetSourceForEffectiveRPS(source enumspb.RateLimitSource)
-
 		UpdateRatelimit(rps float64)
 	}
 )

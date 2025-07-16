@@ -127,8 +127,6 @@ func (pm *taskQueuePartitionManagerImpl) Start() {
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() rateLimitManager {
-	// Return the rate limit manager for the task queue partition.
-	// This is used to manage the rate limit for task queues.
 	return pm.rateLimitManager
 }
 

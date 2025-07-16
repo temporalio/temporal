@@ -11,7 +11,7 @@ import (
 
 type (
 	rateLimitManagerImpl struct {
-		effectiveRPS    float64                 // Current RPS for task queues, can be set via dynamic config or defaults.
+		effectiveRPS    float64                 // Min of api/worker set RPS and system defaults.
 		rateLimitSource int32                   // Source of the rate limit, can be set via API, worker or system default.
 		userDataManager userDataManager         // User data manager to fetch user data for task queue configurations.
 		workerRPS       *wrapperspb.DoubleValue // RPS set by worker at the time of polling, if available.
@@ -32,8 +32,8 @@ type (
 var _ rateLimitManager = (*rateLimitManagerImpl)(nil)
 
 // Create a new rate limit manager for the task queue partition.
-// workerRPS is expected to be nil and will be set lazily via SetWorkerRPS at the time of worker poll.
-// tqConfig is the dynamic configuration for task queues, which includes rate limits and other settings.
+// `workerRPS` is expected to be nil and will be set lazily via SetWorkerRPS at the time of worker poll.
+// `apiConfigRPS` will be set to nil initially and will get populated once a poll / describeTaskQueue request is called.
 func newRateLimitManager(userDataManager userDataManager,
 	workerRPS *wrapperspb.DoubleValue, apiConfigRPS *wrapperspb.DoubleValue, tqConfig *taskQueueConfig) *rateLimitManagerImpl {
 	r := &rateLimitManagerImpl{
@@ -65,8 +65,8 @@ func newRateLimitManager(userDataManager userDataManager,
 }
 
 // Compute the effective RPS and source based on the task dispatch rate.
-// This method sets the effectiveRPS and rateLimitSource based on the provided taskDispatchRate
-// TaskDispatchRate can be the rate from API, worker or system defaults.
+// This method sets the `effectiveRPS` and `rateLimitSource` based on the provided `taskDispatchRate`
+// `taskDispatchRate` can be the rate from API, worker or system defaults.
 func (r *rateLimitManagerImpl) computeEffectiveRPSAndSource(taskDispatchRate float64) {
 	systemRPS := min(
 		r.config.AdminNamespaceTaskQueueToPartitionDispatchRate(),
@@ -83,7 +83,7 @@ func (r *rateLimitManagerImpl) computeEffectiveRPSAndSource(taskDispatchRate flo
 		workerRPS = r.workerRPS.GetValue()
 	}
 
-	// Compute effective RPS from all candidates
+	// Compute effective RPS from all sources
 	r.effectiveRPS = min(taskDispatchRate, systemRPS)
 
 	// Determine the source
@@ -134,15 +134,9 @@ func (r *rateLimitManagerImpl) GetRateLimiter() quotas.RateLimiter {
 	return r.rateLimiter
 }
 
-// Set the source of the effective RPS.
-// This can be set as API, worker or system default.
-func (r *rateLimitManagerImpl) SetSourceForEffectiveRPS(source enumspb.RateLimitSource) {
-	r.rateLimitSource = int32(source)
-}
-
-// SelectTaskQueueRateLimiter returns the user defined RPS (configure RPS) if exists/system default along with an update flag.
+// SelectTaskQueueRateLimiter returns the user defined RPS (configured RPS) if exists/system default along with an update flag.
 // Configured RPS may or may not be equal to the effective RPS.
-// If RPS set via API or workerOptions is lesser than the system defaults,
+// If the RPS set via API or workerOptions is lesser than the system defaults,
 // only then configured RPS will be equal to effective RPS.
 func (r *rateLimitManagerImpl) SelectTaskQueueRateLimiter(tqType enumspb.TaskQueueType) (*wrapperspb.DoubleValue, bool) {
 	var configuredRPS *wrapperspb.DoubleValue
@@ -180,7 +174,7 @@ func (r *rateLimitManagerImpl) TrySetRPSFromUserData(tqType enumspb.TaskQueueTyp
 		return false
 	}
 	// If rate limit is an empty message, it means rate limit could have been unset via API.
-	// In that case, the apiConfigRPS will default to nil.
+	// In this case, the apiConfigRPS will need to be unset.
 	rateLimit := taskQueueTypeData.Config.GetQueueRateLimit()
 	if rateLimit == nil || rateLimit.GetRateLimit() == nil {
 		r.apiConfigRPS = nil
