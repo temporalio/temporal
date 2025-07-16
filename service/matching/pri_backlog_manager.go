@@ -51,9 +51,9 @@ type (
 		taskWriter *priTaskWriter
 
 		subqueueLock        sync.Mutex
-		subqueues           []*priTaskReader
-		subqueuesByPriority map[int32]int
-		priorityBySubqueue  map[int]int32
+		subqueues           []*priTaskReader // subqueue index -> fairTaskReader
+		subqueuesByPriority map[int32]int    // priority key -> subqueue index
+		priorityBySubqueue  map[int]int32    // subqueue index -> priority key
 
 		logger           log.Logger
 		throttledLogger  log.ThrottledLogger
