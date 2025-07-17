@@ -3231,14 +3231,14 @@ func (s *matchingEngineSuite) addConsumeAllWorkflowTasksNonConcurrently(taskCoun
 	s.Equal(taskCount, s.taskManager.getTaskCount(ptq))
 
 	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
-	// backlogCount := totalApproximateBacklogCount(pgMgr.backlogMgr)
-	// if s.fairness {
-	// 	// Relax this condition for fairBacklogManager: it can sometimes reset backlog count on
-	// 	// read, making it more accurate in theory, but breaking this test's assumptions.
-	// 	s.InDelta(expected, backlogCount, 2)
-	// } else {
-	// s.EqualValues(taskCount, backlogCount)
-	// }
+	backlogCount := totalApproximateBacklogCount(pgMgr.backlogMgr)
+	if s.fairness {
+		// Relax this condition for fairBacklogManager: it can sometimes reset backlog count on
+		// read, making it more accurate in theory, but breaking this test's assumptions.
+		s.InDelta(taskCount, backlogCount, 2)
+	} else {
+		s.EqualValues(taskCount, backlogCount)
+	}
 
 	s.pollWorkflowTasks(workflowType, taskCount, ptq, taskQueue)
 
