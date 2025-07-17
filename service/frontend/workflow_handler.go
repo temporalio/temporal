@@ -4625,16 +4625,16 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		resetActivitiesParams.KeepPaused = op.ResetActivitiesOperation.KeepPaused
 		resetActivitiesParams.RestoreOriginalOptions = op.ResetActivitiesOperation.RestoreOriginalOptions
 
-	case *workflowservice.StartBatchOperationRequest_UpdateOptionsActivitiesOperation:
+	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
 		operationType = batcher.BatchTypeUpdateOptionsActivities
-		if op.UpdateOptionsActivitiesOperation == nil {
+		if op.UpdateActivityOptionsOperation == nil {
 			return nil, serviceerror.NewInvalidArgument("update activity options operation is not set")
 		}
-		if op.UpdateOptionsActivitiesOperation.GetActivity() == nil {
+		if op.UpdateActivityOptionsOperation.GetActivity() == nil {
 			return nil, serviceerror.NewInvalidArgument("activity filter must be set")
 		}
 
-		switch a := op.UpdateOptionsActivitiesOperation.GetActivity().(type) {
+		switch a := op.UpdateActivityOptionsOperation.GetActivity().(type) {
 		case *batchpb.BatchOperationUpdateActivityOptions_Type:
 			if len(a.Type) == 0 {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
@@ -4646,10 +4646,10 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			}
 			updateOptionsActivitiesParams.MatchAll = true
 		}
-		updateOptionsActivitiesParams.ActivityOptions = op.UpdateOptionsActivitiesOperation.GetActivityOptions()
-		updateOptionsActivitiesParams.UpdateMask = op.UpdateOptionsActivitiesOperation.GetUpdateMask()
-		updateOptionsActivitiesParams.RestoreOriginal = op.UpdateOptionsActivitiesOperation.GetRestoreOriginal()
-		updateOptionsActivitiesParams.Identity = op.UpdateOptionsActivitiesOperation.GetIdentity()
+		updateOptionsActivitiesParams.ActivityOptions = op.UpdateActivityOptionsOperation.GetActivityOptions()
+		updateOptionsActivitiesParams.UpdateMask = op.UpdateActivityOptionsOperation.GetUpdateMask()
+		updateOptionsActivitiesParams.RestoreOriginal = op.UpdateActivityOptionsOperation.GetRestoreOriginal()
+		updateOptionsActivitiesParams.Identity = op.UpdateActivityOptionsOperation.GetIdentity()
 
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)

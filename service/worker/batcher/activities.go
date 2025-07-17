@@ -390,7 +390,7 @@ func startTaskProcessor(
 						}
 
 						if batchParams.ResetActivitiesParams.MatchAll {
-							resetRequest.Activity = &workflowservice.ResetActivityRequest_ResetAll{ResetAll: true}
+							resetRequest.Activity = &workflowservice.ResetActivityRequest_MatchAll{MatchAll: true}
 						} else {
 							resetRequest.Activity = &workflowservice.ResetActivityRequest_Type{Type: batchParams.ResetActivitiesParams.ActivityType}
 						}
@@ -415,7 +415,7 @@ func startTaskProcessor(
 						}
 
 						if batchParams.UpdateOptionsActivitiesParams.MatchAll {
-							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_UpdateAll{UpdateAll: true}
+							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_MatchAll{MatchAll: true}
 						} else {
 							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Type{Type: batchParams.UpdateOptionsActivitiesParams.ActivityType}
 						}

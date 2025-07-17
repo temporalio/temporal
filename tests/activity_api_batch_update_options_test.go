@@ -114,8 +114,8 @@ func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOp
 	// unpause the activities in both workflows with batch unpause
 	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace: s.Namespace().String(),
-		Operation: &workflowservice.StartBatchOperationRequest_UpdateOptionsActivitiesOperation{
-			UpdateOptionsActivitiesOperation: &batchpb.BatchOperationUpdateActivityOptions{
+		Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
+			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
 				Activity: &batchpb.BatchOperationUpdateActivityOptions_Type{Type: activityTypeName},
 				ActivityOptions: &activitypb.ActivityOptions{
 					ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
@@ -190,8 +190,8 @@ func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOp
 	// neither activity type nor "match all" is provided
 	_, err := s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace: s.Namespace().String(),
-		Operation: &workflowservice.StartBatchOperationRequest_UpdateOptionsActivitiesOperation{
-			UpdateOptionsActivitiesOperation: &batchpb.BatchOperationUpdateActivityOptions{},
+		Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
+			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", "WorkflowFunc"),
 		JobId:           uuid.New(),
@@ -204,8 +204,8 @@ func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOp
 	// neither activity type nor "match all" is provided
 	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace: s.Namespace().String(),
-		Operation: &workflowservice.StartBatchOperationRequest_UpdateOptionsActivitiesOperation{
-			UpdateOptionsActivitiesOperation: &batchpb.BatchOperationUpdateActivityOptions{
+		Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
+			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
 				Activity: &batchpb.BatchOperationUpdateActivityOptions_Type{Type: ""},
 			},
 		},
