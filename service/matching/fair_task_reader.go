@@ -44,6 +44,8 @@ type (
 		ackLevelPinned   bool        // pinned while writing tasks so that we don't delete just-written tasks
 		atEnd            bool        // whether we believe outstandingTasks represents the entire queue right now
 
+		// buffer tasks written while a read is pending so we make sure to account for them in
+		// our read level.
 		bufferedTasks []*persistencespb.AllocatedTaskInfo
 
 		// gc state
@@ -194,22 +196,29 @@ func (tr *fairTaskReader) readTasksImpl() {
 	for {
 		tr.lock.Lock()
 		if lastErr != nil || !tr.shouldReadMoreLocked() {
-			tr.readPending = false
-			var newTasks []*internalTask
-			if len(tr.bufferedTasks) != 0 {
-				newTasks = tr.mergeTasksLocked(tr.bufferedTasks, mergeWrite)
-				tr.bufferedTasks = tr.bufferedTasks[:0]
-			}
-			tr.lock.Unlock()
-			for _, task := range newTasks {
-				tr.addTaskToMatcher(task)
-			}
-			return
+			break // with lock still held
 		}
 		readLevel, loadedTasks := tr.readLevel, tr.loadedTasks
 		tr.lock.Unlock()
 
 		lastErr = tr.readTaskBatch(readLevel, loadedTasks)
+	}
+
+	// note tr.lock is still held here!
+	tr.readPending = false
+
+	// process any tasks that were written while readPending was true
+	var newTasks []*internalTask
+	if len(tr.bufferedTasks) != 0 {
+		newTasks = tr.mergeTasksLocked(tr.bufferedTasks, mergeWrite)
+		tr.bufferedTasks = tr.bufferedTasks[:0]
+	}
+
+	// unlock before calling addTaskToMatcher
+	tr.lock.Unlock()
+
+	for _, task := range newTasks {
+		tr.addTaskToMatcher(task)
 	}
 }
 
@@ -224,15 +233,15 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) er
 		} else if common.IsResourceExhausted(err) {
 			tr.retryReadAfter(taskReaderThrottleRetryDelay)
 		} else {
-			d := tr.retrier.NextBackOff(err)
-			tr.retryReadAfter(d)
+			tr.retryReadAfter(tr.retrier.NextBackOff(err))
 		}
 		return err
 	}
 	tr.retrier.Reset()
 
-	// If we got less than we asked for, we know we hit the end (but we'll also check for
-	// concurrent writes in mergeTasks).
+	// If we got less than we asked for, we know we hit the end.
+	// If there was a concurrent write such that we incorrectly think we hit the end here,
+	// it will be buffered and processed after we're done reading, and maybe reset atEnd then.
 	mode := mergeReadMiddle
 	if len(res.Tasks) < batchSize {
 		mode = mergeReadToEnd
