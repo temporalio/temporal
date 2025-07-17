@@ -373,7 +373,7 @@ func generateStateReplicationTask(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	workflowKey definition.WorkflowKey,
-	archetype string,
+	archetype chasm.Archetype,
 	workflowCache wcache.Cache,
 	action func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error),
 ) (retReplicationTask *replicationspb.ReplicationTask, retError error) {

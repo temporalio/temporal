@@ -266,11 +266,11 @@ func (n *Node) Component(
 		if !ok {
 			return nil, errComponentNotFound
 		}
-		ref.archetype = rootRC.fqType()
+		ref.archetype = Archetype(rootRC.fqType())
 
 	}
 	if ref.archetype != "" &&
-		n.root().serializedNode.GetMetadata().GetComponentAttributes().Type != ref.archetype {
+		n.root().serializedNode.GetMetadata().GetComponentAttributes().Type != ref.archetype.String() {
 		return nil, errComponentNotFound
 	}
 
@@ -1074,7 +1074,7 @@ func (n *Node) Ref(
 					BusinessID:  workflowKey.WorkflowID,
 					EntityID:    workflowKey.RunID,
 				},
-				archetype: n.root().serializedNode.GetMetadata().GetComponentAttributes().Type,
+				archetype: n.Archetype(),
 				// TODO: Consider using node's LastUpdateVersionedTransition for checking staleness here.
 				// Using VersionedTransition of the entire tree might be too strict.
 				entityLastUpdateVT: transitionhistory.CopyVersionedTransition(node.backend.CurrentVersionedTransition()),
@@ -1882,7 +1882,7 @@ func (n *Node) Terminate(
 	return nil
 }
 
-func (n *Node) Archetype() string {
+func (n *Node) Archetype() Archetype {
 	root := n.root()
 	if root.serializedNode == nil {
 		// Empty tree
@@ -1890,7 +1890,7 @@ func (n *Node) Archetype() string {
 	}
 
 	// Root must have be a component.
-	return root.serializedNode.Metadata.GetComponentAttributes().Type
+	return Archetype(root.serializedNode.Metadata.GetComponentAttributes().Type)
 }
 
 func (n *Node) root() *Node {

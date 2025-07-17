@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	common "go.temporal.io/api/common/v1"
+	chasm "go.temporal.io/server/chasm"
 	locks "go.temporal.io/server/common/locks"
 	namespace "go.temporal.io/server/common/namespace"
 	interfaces "go.temporal.io/server/service/history/interfaces"
@@ -45,7 +46,7 @@ func (m *MockCache) EXPECT() *MockCacheMockRecorder {
 }
 
 // GetOrCreateChasmEntity mocks base method.
-func (m *MockCache) GetOrCreateChasmEntity(ctx context.Context, shardContext interfaces.ShardContext, namespaceID namespace.ID, execution *common.WorkflowExecution, archetype string, lockPriority locks.Priority) (interfaces.WorkflowContext, interfaces.ReleaseWorkflowContextFunc, error) {
+func (m *MockCache) GetOrCreateChasmEntity(ctx context.Context, shardContext interfaces.ShardContext, namespaceID namespace.ID, execution *common.WorkflowExecution, archetype chasm.Archetype, lockPriority locks.Priority) (interfaces.WorkflowContext, interfaces.ReleaseWorkflowContextFunc, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrCreateChasmEntity", ctx, shardContext, namespaceID, execution, archetype, lockPriority)
 	ret0, _ := ret[0].(interfaces.WorkflowContext)

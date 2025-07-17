@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	persistence "go.temporal.io/server/api/persistence/v1"
+	chasm "go.temporal.io/server/chasm"
 	definition "go.temporal.io/server/common/definition"
 	locks "go.temporal.io/server/common/locks"
 	persistence0 "go.temporal.io/server/common/persistence"
@@ -206,7 +207,7 @@ func (mr *MockWorkflowContextMockRecorder) RefreshTasks(ctx, shardContext any) *
 }
 
 // SetArchetype mocks base method.
-func (m *MockWorkflowContext) SetArchetype(archetype string) {
+func (m *MockWorkflowContext) SetArchetype(archetype chasm.Archetype) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetArchetype", archetype)
 }

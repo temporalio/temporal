@@ -31,7 +31,7 @@ import (
 type (
 	ContextImpl struct {
 		workflowKey     definition.WorkflowKey
-		archetype       string
+		archetype       chasm.Archetype
 		logger          log.Logger
 		throttledLogger log.ThrottledLogger
 		metricsHandler  metrics.Handler
@@ -115,7 +115,7 @@ func (c *ContextImpl) GetNamespace(shardContext historyi.ShardContext) namespace
 	return namespaceEntry.Name()
 }
 
-func (c *ContextImpl) SetArchetype(archetype string) {
+func (c *ContextImpl) SetArchetype(archetype chasm.Archetype) {
 	c.archetype = archetype
 }
 
@@ -168,8 +168,8 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 
 	if actualArchetype := c.MutableState.ChasmTree().Archetype(); c.archetype != chasm.ArchetypeAny && c.archetype != actualArchetype {
 		c.logger.Warn("Potential ID conflict across different archetypes",
-			tag.Archetype(c.archetype),
-			tag.NewStringTag("actual-archetype", actualArchetype),
+			tag.Archetype(c.archetype.String()),
+			tag.NewStringTag("actual-archetype", actualArchetype.String()),
 		)
 		return nil, serviceerror.NewNotFoundf(
 			"CHASM Archetype missmatch for %v, expected: %s, actual: %s",
