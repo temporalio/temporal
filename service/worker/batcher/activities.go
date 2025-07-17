@@ -56,6 +56,8 @@ func (a *activities) checkNamespace(namespace string) error {
 // BatchActivity is an activity for processing batch operation.
 func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
+	logger.Info("Starting BatchActivity")
+	logger.Info(fmt.Sprintf("BatchParams: %+v", batchParams))
 	hbd := HeartBeatDetails{}
 	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceTag(batchParams.Namespace))
 
@@ -114,6 +116,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 				return HeartBeatDetails{}, err
 			}
 			estimateCount = resp.GetCount()
+			logger.Info(fmt.Sprintf("Estimate count: %d", estimateCount))
 		}
 		hbd.TotalEstimate = estimateCount
 	}
@@ -246,6 +249,7 @@ func startTaskProcessor(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) {
+	logger.Info("Starting task processor")
 	for {
 		select {
 		case <-ctx.Done():
@@ -373,6 +377,7 @@ func startTaskProcessor(
 					})
 
 			case BatchTypeResetActivities:
+				logger.Info("Starting BatchTypeResetActivities")
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						resetRequest := &workflowservice.ResetActivityRequest{
@@ -423,7 +428,7 @@ func startTaskProcessor(
 						_, err = frontendClient.UpdateActivityOptions(ctx, updateRequest)
 						return err
 					})
-			// QUESTION: why do we not have a default case and return an error? @yuri/@chetan
+				// QUESTION: why do we not have a default case and return an error? @yuri/@chetan
 			}
 
 			if err != nil {

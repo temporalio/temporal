@@ -214,9 +214,15 @@ var (
 
 // BatchWorkflow is the workflow that runs a batch job of resetting workflows.
 func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDetails, error) {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("Starting BatchWorkflow")
+	logger.Info(fmt.Sprintf("BatchParams: %+v", batchParams))
+
 	batchParams = setDefaultParams(batchParams)
 	err := validateParams(batchParams)
 	if err != nil {
+		// TODO seankane: why does this not get logged out somewhere
+		logger.Error("Error validating params", "error", err)
 		return HeartBeatDetails{}, err
 	}
 
@@ -283,6 +289,16 @@ func validateParams(params BatchParams) error {
 		return nil
 	case BatchTypeUnpauseActivities:
 		if params.UnpauseActivitiesParams.ActivityType == "" && !params.UnpauseActivitiesParams.MatchAll {
+			return fmt.Errorf("must provide ActivityType or MatchAll")
+		}
+		return nil
+	case BatchTypeResetActivities:
+		if params.ResetActivitiesParams.ActivityType == "" && !params.ResetActivitiesParams.MatchAll {
+			return fmt.Errorf("must provide ActivityType or MatchAll")
+		}
+		return nil
+	case BatchTypeUpdateOptionsActivities:
+		if params.UpdateOptionsActivitiesParams.ActivityType == "" && !params.UpdateOptionsActivitiesParams.MatchAll {
 			return fmt.Errorf("must provide ActivityType or MatchAll")
 		}
 		return nil
