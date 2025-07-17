@@ -4836,12 +4836,12 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		operationType = enumspb.BATCH_OPERATION_TYPE_RESET
 	case batcher.BatchTypeUpdateOptions:
 		operationType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
-	// case batcher.BatchTypeUpdateOptionsActivities:
-	// 	operationType = enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS
-	// case batcher.BatchTypeResetActivities:
-	// 	operationType = enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITIES
-	// case batcher.BatchTypeUnpauseActivities:
-	// 	operationType = enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITIES
+	case batcher.BatchTypeUpdateOptionsActivities:
+		operationType = enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS
+	case batcher.BatchTypeResetActivities:
+		operationType = enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY
+	case batcher.BatchTypeUnpauseActivities:
+		operationType = enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY
 	default:
 		operationType = enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED
 		wh.throttledLogger.Warn("Unknown batch operation type", tag.NewStringTag("batch-operation-type", operationTypeString))
