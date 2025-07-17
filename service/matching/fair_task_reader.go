@@ -41,7 +41,7 @@ type (
 		loadedTasks      int         // == number of unacked (non-nil) entries in outstandingTasks
 		readLevel        fairLevel   // == highest level in outstandingTasks, or if empty, the level we should read next
 		ackLevel         fairLevel   // inclusive: task exactly at ackLevel _has_ been acked
-		ackLevelPins     int64       // pinned when odd. track when writing tasks so that we don't delete just-written tasks
+		ackLevelPinned   bool        // pinned while writing tasks so that we don't delete just-written tasks
 		atEnd            bool        // whether we believe outstandingTasks represents the entire queue right now
 
 		bufferedTasks []*persistencespb.AllocatedTaskInfo
@@ -475,12 +475,8 @@ func (tr *fairTaskReader) getLoadedTasks() int {
 	return tr.loadedTasks
 }
 
-func (tr *fairTaskReader) ackLevelPinned() bool {
-	return tr.ackLevelPins&1 != 0
-}
-
 func (tr *fairTaskReader) advanceAckLevelLocked() {
-	if tr.ackLevelPinned() {
+	if tr.ackLevelPinned {
 		return
 	}
 
@@ -511,8 +507,8 @@ func (tr *fairTaskReader) getAndPinAckLevel() fairLevel {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 
-	softassert.That(tr.logger, !tr.ackLevelPinned(), "ack level already pinned")
-	tr.ackLevelPins++
+	softassert.That(tr.logger, !tr.ackLevelPinned, "ack level already pinned")
+	tr.ackLevelPinned = true
 	return tr.ackLevel
 }
 
@@ -526,8 +522,8 @@ func (tr *fairTaskReader) unpinAckLevel(writeErr error) {
 		tr.atEnd = false
 	}
 
-	softassert.That(tr.logger, tr.ackLevelPinned(), "ack level wasn't pinned")
-	tr.ackLevelPins++
+	softassert.That(tr.logger, tr.ackLevelPinned, "ack level wasn't pinned")
+	tr.ackLevelPinned = false
 	tr.advanceAckLevelLocked()
 }
 
