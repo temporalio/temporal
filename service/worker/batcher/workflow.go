@@ -214,15 +214,9 @@ var (
 
 // BatchWorkflow is the workflow that runs a batch job of resetting workflows.
 func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDetails, error) {
-	logger := workflow.GetLogger(ctx)
-	logger.Info("Starting BatchWorkflow")
-	logger.Info(fmt.Sprintf("BatchParams: %+v", batchParams))
-
 	batchParams = setDefaultParams(batchParams)
 	err := validateParams(batchParams)
 	if err != nil {
-		// TODO seankane: why does this not get logged out somewhere
-		logger.Error("Error validating params", "error", err)
 		return HeartBeatDetails{}, err
 	}
 
@@ -232,7 +226,6 @@ func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDeta
 	var ac *activities
 	err = workflow.ExecuteActivity(opt, ac.BatchActivity, batchParams).Get(ctx, &result)
 	if err != nil {
-		logger.Error("Error executing activity", "error", err)
 		return HeartBeatDetails{}, err
 	}
 
