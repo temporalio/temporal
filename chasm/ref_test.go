@@ -53,7 +53,7 @@ func (s *componentRefSuite) TestArchetype() {
 	rc, ok := s.registry.ComponentOf(reflect.TypeFor[*TestComponent]())
 	s.True(ok)
 
-	s.Equal(rc.FqType(), archetype)
+	s.Equal(rc.FqType(), archetype.String())
 }
 
 func (s *componentRefSuite) TestShardingKey() {
@@ -106,7 +106,7 @@ func (s *componentRefSuite) TestSerializeDeserialize() {
 
 	rootRc, ok := s.registry.ComponentFor(&TestComponent{})
 	s.True(ok)
-	s.Equal(rootRc.FqType(), deserializedRef.archetype)
+	s.Equal(rootRc.FqType(), deserializedRef.archetype.String())
 
 	s.Equal(ref.EntityKey, deserializedRef.EntityKey)
 	s.Equal(ref.componentPath, deserializedRef.componentPath)
