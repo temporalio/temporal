@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -644,7 +645,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 	}
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
-	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
+	s.mockWorkflowCache.EXPECT().GetOrCreateChasmEntity(
 		gomock.Any(),
 		s.mockShard,
 		namespace.ID(namespaceID),
@@ -652,6 +653,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
+		chasm.ArchetypeAny,
 		locks.PriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
@@ -734,7 +736,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 	}
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
-	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
+	s.mockWorkflowCache.EXPECT().GetOrCreateChasmEntity(
 		gomock.Any(),
 		s.mockShard,
 		namespace.ID(namespaceID),
@@ -742,6 +744,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
+		chasm.ArchetypeAny,
 		locks.PriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
@@ -821,7 +824,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 	}
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
-	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
+	s.mockWorkflowCache.EXPECT().GetOrCreateChasmEntity(
 		gomock.Any(),
 		s.mockShard,
 		namespace.ID(namespaceID),
@@ -829,6 +832,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
+		chasm.ArchetypeAny,
 		locks.PriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
@@ -899,7 +903,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 		IsFirstSync: true,
 	}
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
-	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
+	s.mockWorkflowCache.EXPECT().GetOrCreateChasmEntity(
 		gomock.Any(),
 		s.mockShard,
 		namespace.ID(namespaceID),
@@ -907,6 +911,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
+		chasm.ArchetypeAny,
 		locks.PriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
@@ -992,7 +997,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 	}
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
-	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
+	s.mockWorkflowCache.EXPECT().GetOrCreateChasmEntity(
 		gomock.Any(),
 		s.mockShard,
 		namespace.ID(namespaceID),
@@ -1000,6 +1005,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
+		chasm.ArchetypeAny,
 		locks.PriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)

@@ -20,6 +20,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -1113,6 +1114,7 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 		t.shardContext,
 		t.cache,
 		wfKey,
+		chasmworkflow.Archetype,
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -1228,6 +1230,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			t.shardContext,
 			t.cache,
 			definition.NewWorkflowKey(task.NamespaceID, task.WorkflowID, resetPoint.GetRunId()),
+			chasmworkflow.Archetype,
 			locks.PriorityLow,
 		)
 		if err != nil {

@@ -22,6 +22,7 @@ type (
 	WorkflowContext interface {
 		GetWorkflowKey() definition.WorkflowKey
 
+		SetArchetype(archetype string)
 		LoadMutableState(ctx context.Context, shardContext ShardContext) (MutableState, error)
 		LoadExecutionStats(ctx context.Context, shardContext ShardContext) (*persistencespb.ExecutionStats, error)
 		Clear()

@@ -16,6 +16,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -505,7 +506,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 				workflowID,
 				locks.PriorityLow,
 			).Return(cache.NoopReleaseFn, nil).AnyTimes()
-			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
+			mockWorkflowCache.EXPECT().GetOrCreateChasmEntity(
 				gomock.Any(),
 				mockShard,
 				namespaceID,
@@ -513,6 +514,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 					WorkflowId: workflowID,
 					RunId:      currentRunID,
 				},
+				chasmworkflow.Archetype,
 				locks.PriorityLow,
 			).Return(mockWorkflowContext, cache.NoopReleaseFn, nil).Times(1)
 
@@ -545,6 +547,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 				mockWorkflowCache,
 				namespaceID.String(),
 				workflowID,
+				chasmworkflow.Archetype,
 				locks.PriorityLow,
 			)
 			if tc.currentRunChanged {

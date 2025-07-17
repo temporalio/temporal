@@ -10,6 +10,8 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/finalizer"
@@ -28,6 +30,7 @@ import (
 
 type (
 	Cache interface {
+		// TODO: rename this to GetOrCreateCurrentRun
 		GetOrCreateCurrentWorkflowExecution(
 			ctx context.Context,
 			shardContext historyi.ShardContext,
@@ -41,6 +44,15 @@ type (
 			shardContext historyi.ShardContext,
 			namespaceID namespace.ID,
 			execution *commonpb.WorkflowExecution,
+			lockPriority locks.Priority,
+		) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error)
+
+		GetOrCreateChasmEntity(
+			ctx context.Context,
+			shardContext historyi.ShardContext,
+			namespaceID namespace.ID,
+			execution *commonpb.WorkflowExecution,
+			archetype string,
 			lockPriority locks.Priority,
 		) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error)
 	}
@@ -150,6 +162,23 @@ func newCache(
 	}
 }
 
+func (c *cacheImpl) GetOrCreateWorkflowExecution(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+	lockPriority locks.Priority,
+) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
+	return c.GetOrCreateChasmEntity(
+		ctx,
+		shardContext,
+		namespaceID,
+		execution,
+		chasmworkflow.Archetype,
+		lockPriority,
+	)
+}
+
 func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -157,6 +186,22 @@ func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 	workflowID string,
 	lockPriority locks.Priority,
 ) (historyi.ReleaseWorkflowContextFunc, error) {
+	// 	return c.GetOrCreateCurrentEntity(
+	// 		ctx,
+	// 		shardContext,
+	// 		namespaceID,
+	// 		workflowID,
+	// 		lockPriority,
+	// 	)
+	// }
+
+	// func (c *cacheImpl) GetOrCreateCurrentEntity(
+	// 	ctx context.Context,
+	// 	shardContext historyi.ShardContext,
+	// 	namespaceID namespace.ID,
+	// 	workflowID string,
+	// 	lockPriority locks.Priority,
+	// ) (historyi.ReleaseWorkflowContextFunc, error) {
 
 	if err := c.validateWorkflowID(workflowID); err != nil {
 		return nil, err
@@ -182,6 +227,9 @@ func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 		shardContext,
 		namespaceID,
 		&execution,
+		// we don't care about the archetype for current entity.
+		// It's only for limiting the concurrency of loading the current runID.
+		chasm.ArchetypeAny,
 		handler,
 		true,
 		lockPriority,
@@ -193,11 +241,12 @@ func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 	return weReleaseFn, err
 }
 
-func (c *cacheImpl) GetOrCreateWorkflowExecution(
+func (c *cacheImpl) GetOrCreateChasmEntity(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
+	archetype string,
 	lockPriority locks.Priority,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
 
@@ -219,6 +268,7 @@ func (c *cacheImpl) GetOrCreateWorkflowExecution(
 		shardContext,
 		namespaceID,
 		execution,
+		archetype,
 		handler,
 		false,
 		lockPriority,
@@ -235,6 +285,7 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
+	archetype string,
 	handler metrics.Handler,
 	forceClearContext bool,
 	lockPriority locks.Priority,
@@ -273,6 +324,9 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 		metrics.AcquireLockFailedCounter.With(handler).Record(1)
 		return nil, nil, err
 	}
+
+	// Set the expected Archetype only AFTER the lock is acquired.
+	workflowCtx.SetArchetype(archetype)
 
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity

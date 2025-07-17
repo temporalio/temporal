@@ -31,6 +31,7 @@ import (
 type (
 	ContextImpl struct {
 		workflowKey     definition.WorkflowKey
+		archetype       string
 		logger          log.Logger
 		throttledLogger log.ThrottledLogger
 		metricsHandler  metrics.Handler
@@ -60,6 +61,7 @@ func NewContext(
 	}
 	return &ContextImpl{
 		workflowKey:     workflowKey,
+		archetype:       chasm.ArchetypeAny,
 		logger:          log.NewLazyLogger(logger, tags),
 		throttledLogger: log.NewLazyLogger(throttledLogger, tags),
 		metricsHandler:  metricsHandler.WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
@@ -113,6 +115,10 @@ func (c *ContextImpl) GetNamespace(shardContext historyi.ShardContext) namespace
 	return namespaceEntry.Name()
 }
 
+func (c *ContextImpl) SetArchetype(archetype string) {
+	c.archetype = archetype
+}
+
 func (c *ContextImpl) LoadExecutionStats(ctx context.Context, shardContext historyi.ShardContext) (*persistencespb.ExecutionStats, error) {
 	_, err := c.LoadMutableState(ctx, shardContext)
 	if err != nil {
@@ -158,6 +164,19 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 		// returned by NewMutableStateFromDB().
 		// Thus causing NPE (e.g. when calling c.Clear()) or other unexpected behavior.
 		c.MutableState = mutableState
+	}
+
+	if actualArchetype := c.MutableState.ChasmTree().Archetype(); c.archetype != chasm.ArchetypeAny && c.archetype != actualArchetype {
+		c.logger.Warn("Potential ID conflict across different archetypes",
+			tag.Archetype(c.archetype),
+			tag.NewStringTag("actual-archetype", actualArchetype),
+		)
+		return nil, serviceerror.NewNotFoundf(
+			"CHASM Archetype missmatch for %v, expected: %s, actual: %s",
+			c.workflowKey,
+			c.archetype,
+			actualArchetype,
+		)
 	}
 
 	flushBeforeReady, err := c.MutableState.StartTransaction(namespaceEntry)
