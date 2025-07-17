@@ -1,10 +1,11 @@
 package batcher
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
-	activity "go.temporal.io/api/activity/v1"
+	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -112,7 +113,7 @@ type (
 		Identity        string
 		ActivityType    string
 		MatchAll        bool
-		ActivityOptions *activity.ActivityOptions
+		ActivityOptions *activitypb.ActivityOptions
 		UpdateMask      *fieldmaskpb.FieldMask
 		RestoreOriginal bool
 	}
@@ -288,12 +289,12 @@ func validateParams(params BatchParams) error {
 		return nil
 	case BatchTypeResetActivities:
 		if params.ResetActivitiesParams.ActivityType == "" && !params.ResetActivitiesParams.MatchAll {
-			return fmt.Errorf("must provide ActivityType or MatchAll")
+			return errors.New("must provide ActivityType or MatchAll")
 		}
 		return nil
 	case BatchTypeUpdateOptionsActivities:
 		if params.UpdateOptionsActivitiesParams.ActivityType == "" && !params.UpdateOptionsActivitiesParams.MatchAll {
-			return fmt.Errorf("must provide ActivityType or MatchAll")
+			return errors.New("must provide ActivityType or MatchAll")
 		}
 		return nil
 	default:
