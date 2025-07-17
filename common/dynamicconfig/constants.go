@@ -189,8 +189,8 @@ config as the other services.`,
 	)
 	EnableEagerWorkflowStart = NewNamespaceBoolSetting(
 		"system.enableEagerWorkflowStart",
-		false,
-		`EnableEagerWorkflowStart toggles "eager workflow start" - returning the first workflow task inline in the
+		true,
+		`Toggles "eager workflow start" - returning the first workflow task inline in the
 response to a StartWorkflowExecution request and skipping the trip through matching.`,
 	)
 	NamespaceCacheRefreshInterval = NewGlobalDurationSetting(
