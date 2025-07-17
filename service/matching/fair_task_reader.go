@@ -206,9 +206,10 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) er
 	readFrom := readLevel.max(fairLevel{pass: 1, id: 0}).inc()
 	res, err := tr.backlogMgr.db.GetFairTasks(tr.backlogMgr.tqCtx, tr.subqueue, readFrom, batchSize)
 	if err != nil {
-		tr.backlogMgr.signalIfFatal(err)
 		// TODO: Should we ever stop retrying on db errors?
-		if common.IsResourceExhausted(err) {
+		if tr.backlogMgr.signalIfFatal(err) || common.IsContextCanceledErr(err) {
+			// don't retry
+		} else if common.IsResourceExhausted(err) {
 			tr.retryReadAfter(taskReaderThrottleRetryDelay)
 		} else {
 			tr.retryReadAfter(tr.retrier.NextBackOff(err))
