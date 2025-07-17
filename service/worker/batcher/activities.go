@@ -425,7 +425,6 @@ func startTaskProcessor(
 					})
 				// QUESTION: why do we not have a default case and return an error? @yuri/@chetan
 			}
-
 			if err != nil {
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
