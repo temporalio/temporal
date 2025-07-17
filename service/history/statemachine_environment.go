@@ -65,7 +65,7 @@ func getWorkflowExecutionContext(
 	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	key definition.WorkflowKey,
-	archetype string,
+	archetype chasm.Archetype,
 	lockPriority locks.Priority,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
 	if key.GetRunID() == "" {
@@ -108,7 +108,7 @@ func getCurrentWorkflowExecutionContext(
 	workflowCache wcache.Cache,
 	namespaceID string,
 	workflowID string,
-	archetype string,
+	archetype chasm.Archetype,
 	lockPriority locks.Priority,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
 	currentRunID, err := wcache.GetCurrentRunID(

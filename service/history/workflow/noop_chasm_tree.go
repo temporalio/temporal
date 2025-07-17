@@ -47,7 +47,7 @@ func (*noopChasmTree) Terminate(chasm.TerminateComponentRequest) error {
 	return nil
 }
 
-func (*noopChasmTree) Archetype() string {
+func (*noopChasmTree) Archetype() chasm.Archetype {
 	return chasmworkflow.Archetype
 }
 

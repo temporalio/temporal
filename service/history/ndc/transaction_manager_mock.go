@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	chasm "go.temporal.io/server/chasm"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
 	gomock "go.uber.org/mock/gomock"
@@ -106,7 +107,7 @@ func (mr *MockTransactionManagerMockRecorder) GetCurrentWorkflowRunID(ctx, names
 }
 
 // LoadWorkflow mocks base method.
-func (m *MockTransactionManager) LoadWorkflow(ctx context.Context, namespaceID namespace.ID, workflowID, runID, archetype string) (Workflow, error) {
+func (m *MockTransactionManager) LoadWorkflow(ctx context.Context, namespaceID namespace.ID, workflowID, runID string, archetype chasm.Archetype) (Workflow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LoadWorkflow", ctx, namespaceID, workflowID, runID, archetype)
 	ret0, _ := ret[0].(Workflow)

@@ -52,7 +52,7 @@ type (
 			shardContext historyi.ShardContext,
 			namespaceID namespace.ID,
 			execution *commonpb.WorkflowExecution,
-			archetype string,
+			archetype chasm.Archetype,
 			lockPriority locks.Priority,
 		) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error)
 	}
@@ -186,23 +186,6 @@ func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 	workflowID string,
 	lockPriority locks.Priority,
 ) (historyi.ReleaseWorkflowContextFunc, error) {
-	// 	return c.GetOrCreateCurrentEntity(
-	// 		ctx,
-	// 		shardContext,
-	// 		namespaceID,
-	// 		workflowID,
-	// 		lockPriority,
-	// 	)
-	// }
-
-	// func (c *cacheImpl) GetOrCreateCurrentEntity(
-	// 	ctx context.Context,
-	// 	shardContext historyi.ShardContext,
-	// 	namespaceID namespace.ID,
-	// 	workflowID string,
-	// 	lockPriority locks.Priority,
-	// ) (historyi.ReleaseWorkflowContextFunc, error) {
-
 	if err := c.validateWorkflowID(workflowID); err != nil {
 		return nil, err
 	}
@@ -246,7 +229,7 @@ func (c *cacheImpl) GetOrCreateChasmEntity(
 	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
-	archetype string,
+	archetype chasm.Archetype,
 	lockPriority locks.Priority,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
 
@@ -285,7 +268,7 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
-	archetype string,
+	archetype chasm.Archetype,
 	handler metrics.Handler,
 	forceClearContext bool,
 	lockPriority locks.Priority,
