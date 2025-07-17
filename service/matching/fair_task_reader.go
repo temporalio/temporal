@@ -45,6 +45,8 @@ type (
 		ackLevelPins     int64       // pinned when odd. track when writing tasks so that we don't delete just-written tasks
 		atEnd            bool        // whether we believe outstandingTasks represents the entire queue right now
 
+		bufferedTasks []*persistencespb.AllocatedTaskInfo
+
 		// gc state
 		inGC       bool
 		numToGC    int       // counts approximately how many tasks we can delete with a GC
@@ -195,17 +197,25 @@ func (tr *fairTaskReader) readTasksImpl() {
 		tr.lock.Lock()
 		if lastErr != nil || !tr.shouldReadMoreLocked() {
 			tr.readPending = false
+			var newTasks []*internalTask
+			if len(tr.bufferedTasks) != 0 {
+				newTasks = tr.mergeTasksLocked(tr.bufferedTasks, mergeWrite)
+				tr.bufferedTasks = tr.bufferedTasks[:0]
+			}
 			tr.lock.Unlock()
+			for _, task := range newTasks {
+				tr.addTaskToMatcher(task)
+			}
 			return
 		}
-		readLevel, loadedTasks, prevPins := tr.readLevel, tr.loadedTasks, tr.ackLevelPins
+		readLevel, loadedTasks := tr.readLevel, tr.loadedTasks
 		tr.lock.Unlock()
 
-		lastErr = tr.readTaskBatch(readLevel, loadedTasks, prevPins)
+		lastErr = tr.readTaskBatch(readLevel, loadedTasks)
 	}
 }
 
-func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int, prevPins int64) error {
+func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) error {
 	batchSize := tr.backlogMgr.config.GetTasksBatchSize() - loadedTasks
 	readFrom := readLevel.max(fairLevel{pass: 1, id: 0}).inc()
 	res, err := tr.backlogMgr.db.GetFairTasks(tr.backlogMgr.tqCtx, tr.subqueue, readFrom, batchSize)
@@ -244,7 +254,7 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int, pr
 
 	// Note: even if (especially if) len(tasks) == 0, we should go through the mergeTasks logic
 	// to update atEnd and the backlog size estimate.
-	tr.mergeTasks(tasks, mode, prevPins)
+	tr.mergeTasks(tasks, mode)
 
 	return nil
 }
@@ -322,23 +332,30 @@ func (tr *fairTaskReader) retryAddAfterError(task *internalTask) {
 }
 
 func (tr *fairTaskReader) wroteNewTasks(tasks []*persistencespb.AllocatedTaskInfo) {
-	tr.mergeTasks(tasks, mergeWrite, 0)
+	tr.mergeTasks(tasks, mergeWrite)
 }
 
-func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, mode mergeMode, prevPins int64) {
+func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, mode mergeMode) {
 	fmt.Printf("@@@ mergeTasks mode %d\n", mode)
 	tr.lock.Lock()
 
-	concurrentWrite := tr.ackLevelPinned() || tr.ackLevelPins != prevPins
-	if mode == mergeReadToEnd && concurrentWrite {
-		// Between when we started the read and now, we may have done a write. In that case we
-		// can't trust that we're at the end. Note this will not detect writes that we gave up
-		// on (considered time out) but took effect at a later time. We can ignore those since
-		// we returned an error and didn't agree to persist those tasks.
-		mode = mergeReadMiddle
-		fmt.Printf("@@@ mergeTasks setting end to middle due to write: %d %d\n", tr.ackLevelPins, prevPins)
+	if mode == mergeWrite && tr.readPending {
+		// concurrent write + read: hold the just-written tasks and merge them after we process
+		// the read.
+		tr.bufferedTasks = append(tr.bufferedTasks, tasks...)
+		tr.lock.Unlock()
+		return
 	}
 
+	newTasks := tr.mergeTasksLocked(tasks, mode)
+	tr.lock.Unlock()
+
+	for _, task := range newTasks {
+		tr.addTaskToMatcher(task)
+	}
+}
+
+func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTaskInfo, mode mergeMode) []*internalTask {
 	// Collect (1) currently loaded tasks in the matcher plus (2) the tasks we just read/wrote; sorted by level.
 
 	// (1) Note these values are *internalTask.
@@ -437,11 +454,7 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 
 	// unlock before calling addTaskToMatcher
 	fmt.Printf("@@@ mergeTasks FINAL LOADED %d\n", tr.loadedTasks)
-	tr.lock.Unlock()
-
-	for _, task := range internalTasks {
-		tr.addTaskToMatcher(task)
-	}
+	return internalTasks
 
 	// TODO: fine-grained metrics for mergeTasks behavior:
 	// we have two sources: currently loaded, and newly read/written.
