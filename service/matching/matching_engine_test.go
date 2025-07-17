@@ -3150,58 +3150,66 @@ func (s *matchingEngineSuite) createPollWorkflowTaskRequestAndPoll(taskQueue *ta
 		require.NoError(c, err) // DB could have failed while fetching tasks; try again
 		require.NotEmpty(c, result.TaskToken)
 		require.NotZero(c, result.Attempt)
-	}, 10*time.Second, time.Millisecond, "failed to poll workflow task")
+	}, 3*time.Second, time.Millisecond, "failed to poll workflow task")
 }
 
-// addWorkflowTasks adds taskCount number of tasks for each numWorker
+// addWorkflowTasks adds taskCount number of tasks sequentially
 func (s *matchingEngineSuite) addWorkflowTasks(
-	concurrently bool, numWorkers int, taskCount int,
-	taskQueue *taskqueuepb.TaskQueue, workflowExecution *commonpb.WorkflowExecution, wg *sync.WaitGroup,
+	taskCount int, taskQueue *taskqueuepb.TaskQueue, workflowExecution *commonpb.WorkflowExecution,
 ) {
-	if concurrently {
-		for p := 0; p < numWorkers; p++ {
-			go func() {
-				for i := 0; i < taskCount; i++ {
-					s.addWorkflowTask(workflowExecution, taskQueue)
-				}
-				wg.Done()
-			}()
-		}
-	} else {
-		// Add tasks sequentially
-		for p := 0; p < numWorkers; p++ {
-			for i := 0; i < taskCount; i++ {
-				s.addWorkflowTask(workflowExecution, taskQueue)
-			}
-		}
+	for range taskCount {
+		s.addWorkflowTask(workflowExecution, taskQueue)
 	}
 }
 
-// pollWorkflowTasks polls tasks using numWorkers
+// addWorkflowTasksConcurrent adds taskCount number of tasks for each numWorker concurrently
+func (s *matchingEngineSuite) addWorkflowTasksConcurrently(
+	wg *sync.WaitGroup, numWorkers int, taskCount int,
+	taskQueue *taskqueuepb.TaskQueue, workflowExecution *commonpb.WorkflowExecution,
+) {
+	for range numWorkers {
+		wg.Add(1)
+		go func() {
+			for range taskCount {
+				s.addWorkflowTask(workflowExecution, taskQueue)
+			}
+			wg.Done()
+		}()
+	}
+}
+
+// pollWorkflowTasks polls tasks sequentially
 func (s *matchingEngineSuite) pollWorkflowTasks(
-	concurrently bool, workflowType *commonpb.WorkflowType, numPollers int, taskCount int,
-	ptq *PhysicalTaskQueueKey, taskQueue *taskqueuepb.TaskQueue, wg *sync.WaitGroup,
+	workflowType *commonpb.WorkflowType, taskCount int,
+	ptq *PhysicalTaskQueueKey, taskQueue *taskqueuepb.TaskQueue,
 ) {
 	s.mockHistoryWhilePolling(workflowType)
-	if concurrently {
-		for p := 0; p < numPollers; p++ {
-			go func() {
-				for i := 0; i < taskCount; i++ {
-					s.createPollWorkflowTaskRequestAndPoll(taskQueue)
-				}
-				wg.Done()
-			}()
-		}
-	} else {
-		tasksPolled := 0
-		for i := 0; i < numPollers*taskCount; i++ {
-			s.createPollWorkflowTaskRequestAndPoll(taskQueue)
-			tasksPolled += 1
+	tasksPolled := 0
+	for range taskCount {
+		s.createPollWorkflowTaskRequestAndPoll(taskQueue)
+		tasksPolled += 1
 
 			// PartitionManager could have been unloaded; fetch the latest copy
 			pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
 			s.LessOrEqual(int64(taskCount-tasksPolled), totalApproximateBacklogCount(pgMgr.backlogMgr))
 		}
+	}
+}
+
+// pollWorkflowTasksConcurrently polls tasks using numWorkers concurrently
+func (s *matchingEngineSuite) pollWorkflowTasksConcurrently(
+	wg *sync.WaitGroup, workflowType *commonpb.WorkflowType, numPollers int, taskCount int,
+	ptq *PhysicalTaskQueueKey, taskQueue *taskqueuepb.TaskQueue,
+) {
+	s.mockHistoryWhilePolling(workflowType)
+	for range numPollers {
+		wg.Add(1)
+		go func() {
+			for range taskCount {
+				s.createPollWorkflowTaskRequestAndPoll(taskQueue)
+			}
+			wg.Done()
+		}()
 	}
 }
 
@@ -3212,25 +3220,24 @@ func (s *matchingEngineSuite) getPhysicalTaskQueueManagerImpl(ptq *PhysicalTaskQ
 	return pgMgr
 }
 
-func (s *matchingEngineSuite) addConsumeAllWorkflowTasksNonConcurrently(taskCount int, numWorkers int, numPollers int) {
+func (s *matchingEngineSuite) addConsumeAllWorkflowTasksNonConcurrently(taskCount int) {
 	workflowType, workflowExecution := s.generateWorkflowExecution()
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
 
-	s.addWorkflowTasks(false, numWorkers, taskCount, taskQueue, workflowExecution, nil)
-	s.EqualValues(taskCount*numWorkers, s.taskManager.getCreateTaskCount(ptq))
-	s.EqualValues(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
+	s.addWorkflowTasks(taskCount, taskQueue, workflowExecution)
+	s.Equal(taskCount, s.taskManager.getCreateTaskCount(ptq))
+	s.Equal(taskCount, s.taskManager.getTaskCount(ptq))
 
-	// Extract the pgMgr for validating approximateBacklogCounter
 	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
-	s.EqualValues(taskCount*numWorkers, totalApproximateBacklogCount(pgMgr.backlogMgr))
+	s.EqualValues(taskCount, totalApproximateBacklogCount(pgMgr.backlogMgr))
 
-	s.pollWorkflowTasks(false, workflowType, numPollers, taskCount, ptq, taskQueue, nil)
+	s.pollWorkflowTasks(workflowType, taskCount, ptq, taskQueue)
 
 	s.LessOrEqual(int64(0), totalApproximateBacklogCount(pgMgr.backlogMgr))
 }
 
 func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksNoDBErrors() {
-	s.addConsumeAllWorkflowTasksNonConcurrently(100, 1, 1)
+	s.addConsumeAllWorkflowTasksNonConcurrently(200)
 }
 
 func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksDBErrors() {
@@ -3239,20 +3246,7 @@ func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksDBErrors() {
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
 	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
 
-	s.addConsumeAllWorkflowTasksNonConcurrently(100, 1, 1)
-}
-
-func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksNoDBErrors() {
-	s.addConsumeAllWorkflowTasksNonConcurrently(100, 5, 5)
-}
-
-func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksDBErrors() {
-	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
-	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
-	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
-	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
-
-	s.addConsumeAllWorkflowTasksNonConcurrently(100, 5, 5)
+	s.addConsumeAllWorkflowTasksNonConcurrently(200)
 }
 
 func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int, rangeSize int) {
@@ -3263,7 +3257,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
 	s.matchingEngine.config.RangeSize = int64(rangeSize)
 
-	s.addWorkflowTasks(false, numWorkers, taskCount, taskQueue, workflowExecution, nil)
+	s.addWorkflowTasks(taskCount*numWorkers, taskQueue, workflowExecution)
 
 	// TaskID of the first task to be added
 	minTaskID, done := s.taskManager.minTaskID(ptq)
@@ -3302,7 +3296,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	s.EqualValues((taskCount*numWorkers)-1, s.taskManager.getTaskCount(ptq))
 
 	// Add pollers which shall also load the fresher version of tqMgr
-	s.pollWorkflowTasks(false, workflowType, 1, (taskCount*numWorkers)-1, ptq, taskQueue, nil)
+	s.pollWorkflowTasks(workflowType, (taskCount*numWorkers)-1, ptq, taskQueue)
 
 	// Update pgMgr to have the latest pgMgr
 	pqMgr = s.getPhysicalTaskQueueManagerImpl(ptq)
@@ -3366,11 +3360,10 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Millisecond)
 
 	var wg sync.WaitGroup
-	wg.Add(2 * numWorkers)
 	workflowType, workflowExecution := s.generateWorkflowExecution()
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
-	s.addWorkflowTasks(true, numWorkers, tasksToAdd, taskQueue, workflowExecution, &wg)
-	s.pollWorkflowTasks(true, workflowType, numWorkers, tasksToPoll, ptq, taskQueue, &wg)
+	s.addWorkflowTasksConcurrently(&wg, numWorkers, tasksToAdd, taskQueue, workflowExecution)
+	s.pollWorkflowTasksConcurrently(&wg, workflowType, numWorkers, tasksToPoll, ptq, taskQueue)
 	wg.Wait()
 
 	ptqMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
