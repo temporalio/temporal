@@ -3,6 +3,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -41,7 +42,7 @@ type (
 		loadedTasks      int         // == number of unacked (non-nil) entries in outstandingTasks
 		readLevel        fairLevel   // == highest level in outstandingTasks, or if empty, the level we should read next
 		ackLevel         fairLevel   // inclusive: task exactly at ackLevel _has_ been acked
-		ackLevelPinned   bool        // pinned while writing tasks so that we don't delete just-written tasks
+		ackLevelPins     int64       // pinned when odd. track when writing tasks so that we don't delete just-written tasks
 		atEnd            bool        // whether we believe outstandingTasks represents the entire queue right now
 
 		// gc state
@@ -156,6 +157,7 @@ func (tr *fairTaskReader) completeTask(task *internalTask, res taskResponse) {
 
 func (tr *fairTaskReader) completeTaskLocked(task *internalTask) {
 	tr.backlogAge.record(task.event.Data.CreateTime, -1)
+	fmt.Printf("@@@ completeTaskLocked %s\n", fairLevelFromAllocatedTask(task.event.AllocatedTaskInfo))
 	tr.outstandingTasks.Put(fairLevelFromAllocatedTask(task.event.AllocatedTaskInfo), nil)
 	tr.loadedTasks--
 	softassert.That(tr.logger, tr.loadedTasks >= 0, "loadedTasks went negative")
@@ -167,7 +169,9 @@ func (tr *fairTaskReader) completeTaskLocked(task *internalTask) {
 func (tr *fairTaskReader) maybeReadTasksLocked() {
 	// If readPending is true here, readTasksImpl is running and will check
 	// shouldReadMoreLocked before it exits.
-	if tr.readPending || !tr.shouldReadMoreLocked() {
+	if tr.readPending || tr.backoffTimer != nil || !tr.shouldReadMoreLocked() || tr.backlogMgr.tqCtx.Err() != nil {
+		fmt.Printf("@@@ maybeReadTasksLocked abort %v %v %v [%v %v] %v\n",
+			tr.readPending, tr.backoffTimer, tr.shouldReadMoreLocked(), tr.atEnd, tr.loadedTasks, tr.backlogMgr.tqCtx.Err())
 		return
 	}
 	tr.readPending = true
@@ -194,14 +198,14 @@ func (tr *fairTaskReader) readTasksImpl() {
 			tr.lock.Unlock()
 			return
 		}
-		readLevel, loadedTasks := tr.readLevel, int(tr.loadedTasks)
+		readLevel, loadedTasks, prevPins := tr.readLevel, tr.loadedTasks, tr.ackLevelPins
 		tr.lock.Unlock()
 
-		lastErr = tr.readTaskBatch(readLevel, loadedTasks)
+		lastErr = tr.readTaskBatch(readLevel, loadedTasks, prevPins)
 	}
 }
 
-func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) error {
+func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int, prevPins int64) error {
 	batchSize := tr.backlogMgr.config.GetTasksBatchSize() - loadedTasks
 	readFrom := readLevel.max(fairLevel{pass: 1, id: 0}).inc()
 	res, err := tr.backlogMgr.db.GetFairTasks(tr.backlogMgr.tqCtx, tr.subqueue, readFrom, batchSize)
@@ -212,13 +216,16 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) er
 		} else if common.IsResourceExhausted(err) {
 			tr.retryReadAfter(taskReaderThrottleRetryDelay)
 		} else {
-			tr.retryReadAfter(tr.retrier.NextBackOff(err))
+			d := tr.retrier.NextBackOff(err)
+			fmt.Printf("@@@ RETRYING READ after %v\n", d)
+			tr.retryReadAfter(d)
 		}
 		return err
 	}
 	tr.retrier.Reset()
 
-	// If we got less than we asked for, we know we hit the end.
+	// If we got less than we asked for, we know we hit the end (but we'll also check for
+	// concurrent writes in mergeTasks).
 	mode := mergeReadMiddle
 	if len(res.Tasks) < batchSize {
 		mode = mergeReadToEnd
@@ -237,7 +244,7 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) er
 
 	// Note: even if (especially if) len(tasks) == 0, we should go through the mergeTasks logic
 	// to update atEnd and the backlog size estimate.
-	tr.mergeTasks(tasks, mode)
+	tr.mergeTasks(tasks, mode, prevPins)
 
 	return nil
 }
@@ -315,11 +322,22 @@ func (tr *fairTaskReader) retryAddAfterError(task *internalTask) {
 }
 
 func (tr *fairTaskReader) wroteNewTasks(tasks []*persistencespb.AllocatedTaskInfo) {
-	tr.mergeTasks(tasks, mergeWrite)
+	tr.mergeTasks(tasks, mergeWrite, 0)
 }
 
-func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, mode mergeMode) {
+func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, mode mergeMode, prevPins int64) {
+	fmt.Printf("@@@ mergeTasks mode %d\n", mode)
 	tr.lock.Lock()
+
+	concurrentWrite := tr.ackLevelPinned() || tr.ackLevelPins != prevPins
+	if mode == mergeReadToEnd && concurrentWrite {
+		// Between when we started the read and now, we may have done a write. In that case we
+		// can't trust that we're at the end. Note this will not detect writes that we gave up
+		// on (considered time out) but took effect at a later time. We can ignore those since
+		// we returned an error and didn't agree to persist those tasks.
+		mode = mergeReadMiddle
+		fmt.Printf("@@@ mergeTasks setting end to middle due to write: %d %d\n", tr.ackLevelPins, prevPins)
+	}
 
 	// Collect (1) currently loaded tasks in the matcher plus (2) the tasks we just read/wrote; sorted by level.
 
@@ -328,20 +346,24 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 		_, ok := v.(*internalTask)
 		return ok
 	})
+	fmt.Printf("@@@ mergeTasks existing %d\n", merged.Size())
 	// (2) Note these values are *AllocatedTaskInfo.
 	for _, t := range tasks {
 		level := fairLevelFromAllocatedTask(t)
 		if mode == mergeWrite && !tr.atEnd && tr.readLevel.less(level) {
 			// If we're writing and we're not at the end, then we have to ignore tasks
 			// above readLevel since we don't know what's in between readLevel and there.
+			fmt.Printf("@@@ mergeTasks NOT AT END %s\n", level)
 			continue
 		} else if _, have := merged.Get(level); have {
 			// If write/read race in certain ways, we may read something we had already
 			// added to the matcher. Ignore tasks we already have.
+			fmt.Printf("@@@ mergeTasks ALREADY %s\n", level)
 			continue
 		}
 		merged.Put(level, t)
 	}
+	fmt.Printf("@@@ mergeTasks merged %d\n", merged.Size())
 
 	// Take as many of those as we want to keep in memory. The ones that are not already in the
 	// matcher, we have to add to the matcher.
@@ -379,12 +401,16 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 			// but not completed yet. In that case this will be a noop. See comment at the top
 			// of completeTask. Lock order: task reader lock < matcher lock so this is okay.
 			task.removeFromMatcher()
+			fmt.Printf("@@@ mergeTasks EVICTED\n")
+		} else {
+			fmt.Printf("@@@ mergeTasks DIDNTADD\n")
 		}
 	}
 
 	internalTasks := make([]*internalTask, len(tasks))
 	for i, t := range tasks {
 		level := fairLevelFromAllocatedTask(t)
+		fmt.Printf("@@@ mergeTasks ADD %s\n", level)
 		internalTasks[i] = newInternalTaskFromBacklog(t, tr.completeTask)
 		// After we get to this point, we must eventually call task.finish or
 		// task.finishForwarded, which will call tr.completeTask.
@@ -410,6 +436,7 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 	}
 
 	// unlock before calling addTaskToMatcher
+	fmt.Printf("@@@ mergeTasks FINAL LOADED %d\n", tr.loadedTasks)
 	tr.lock.Unlock()
 
 	for _, task := range internalTasks {
@@ -434,6 +461,7 @@ func (tr *fairTaskReader) retryReadAfter(duration time.Duration) {
 			tr.lock.Lock()
 			defer tr.lock.Unlock()
 			tr.backoffTimer = nil
+			fmt.Printf("@@@ RETRYING READ now\n")
 			tr.maybeReadTasksLocked()
 		})
 	}
@@ -447,8 +475,12 @@ func (tr *fairTaskReader) getLoadedTasks() int {
 	return tr.loadedTasks
 }
 
+func (tr *fairTaskReader) ackLevelPinned() bool {
+	return tr.ackLevelPins&1 != 0
+}
+
 func (tr *fairTaskReader) advanceAckLevelLocked() {
-	if tr.ackLevelPinned {
+	if tr.ackLevelPinned() {
 		return
 	}
 
@@ -479,8 +511,8 @@ func (tr *fairTaskReader) getAndPinAckLevel() fairLevel {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 
-	softassert.That(tr.logger, !tr.ackLevelPinned, "ack level already pinned")
-	tr.ackLevelPinned = true
+	softassert.That(tr.logger, !tr.ackLevelPinned(), "ack level already pinned")
+	tr.ackLevelPins++
 	return tr.ackLevel
 }
 
@@ -494,8 +526,8 @@ func (tr *fairTaskReader) unpinAckLevel(writeErr error) {
 		tr.atEnd = false
 	}
 
-	softassert.That(tr.logger, tr.ackLevelPinned, "ack level wasn't pinned")
-	tr.ackLevelPinned = false
+	softassert.That(tr.logger, tr.ackLevelPinned(), "ack level wasn't pinned")
+	tr.ackLevelPins++
 	tr.advanceAckLevelLocked()
 }
 
