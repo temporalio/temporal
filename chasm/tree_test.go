@@ -2548,21 +2548,21 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 
 	// Succeed validation as valid.
 	expectValidate(true, nil)
-	task, err := root.ValidateSideEffectTask(ctx, s.registry, taskAttributes, taskInfo)
+	task, err := root.ValidateSideEffectTask(ctx, taskAttributes, taskInfo)
 	s.NotNil(task)
 	s.IsType(&TestSideEffectTask{}, task)
 	s.NoError(err)
 
 	// Succeed validation as invalid.
 	expectValidate(false, nil)
-	task, err = root.ValidateSideEffectTask(ctx, s.registry, taskAttributes, taskInfo)
+	task, err = root.ValidateSideEffectTask(ctx, taskAttributes, taskInfo)
 	s.Nil(task)
 	s.NoError(err)
 
 	// Fail validation.
 	expectedErr := errors.New("validation failed")
 	expectValidate(false, expectedErr)
-	task, err = root.ValidateSideEffectTask(ctx, s.registry, taskAttributes, taskInfo)
+	task, err = root.ValidateSideEffectTask(ctx, taskAttributes, taskInfo)
 	s.Nil(task)
 	s.ErrorIs(expectedErr, err)
 }

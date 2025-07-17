@@ -115,6 +115,21 @@ func (mr *MockChasmTreeMockRecorder) Component(arg0, arg1 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Component", reflect.TypeOf((*MockChasmTree)(nil).Component), arg0, arg1)
 }
 
+// ComponentByPath mocks base method.
+func (m *MockChasmTree) ComponentByPath(arg0 chasm.Context, arg1 string) (chasm.Component, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ComponentByPath", arg0, arg1)
+	ret0, _ := ret[0].(chasm.Component)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ComponentByPath indicates an expected call of ComponentByPath.
+func (mr *MockChasmTreeMockRecorder) ComponentByPath(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ComponentByPath", reflect.TypeOf((*MockChasmTree)(nil).ComponentByPath), arg0, arg1)
+}
+
 // EachPureTask mocks base method.
 func (m *MockChasmTree) EachPureTask(deadline time.Time, callback func(chasm.NodePureTask, chasm.TaskAttributes, any) error) error {
 	m.ctrl.T.Helper()
@@ -228,16 +243,16 @@ func (mr *MockChasmTreeMockRecorder) Terminate(arg0 any) *gomock.Call {
 }
 
 // ValidateSideEffectTask mocks base method.
-func (m *MockChasmTree) ValidateSideEffectTask(ctx context.Context, registry *chasm.Registry, taskAttributes chasm.TaskAttributes, taskInfo *persistence.ChasmTaskInfo) (any, error) {
+func (m *MockChasmTree) ValidateSideEffectTask(ctx context.Context, taskAttributes chasm.TaskAttributes, taskInfo *persistence.ChasmTaskInfo) (any, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateSideEffectTask", ctx, registry, taskAttributes, taskInfo)
+	ret := m.ctrl.Call(m, "ValidateSideEffectTask", ctx, taskAttributes, taskInfo)
 	ret0, _ := ret[0].(any)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ValidateSideEffectTask indicates an expected call of ValidateSideEffectTask.
-func (mr *MockChasmTreeMockRecorder) ValidateSideEffectTask(ctx, registry, taskAttributes, taskInfo any) *gomock.Call {
+func (mr *MockChasmTreeMockRecorder) ValidateSideEffectTask(ctx, taskAttributes, taskInfo any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateSideEffectTask", reflect.TypeOf((*MockChasmTree)(nil).ValidateSideEffectTask), ctx, registry, taskAttributes, taskInfo)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateSideEffectTask", reflect.TypeOf((*MockChasmTree)(nil).ValidateSideEffectTask), ctx, taskAttributes, taskInfo)
 }

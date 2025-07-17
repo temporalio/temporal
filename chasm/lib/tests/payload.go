@@ -15,17 +15,24 @@ type (
 
 		State *persistencespb.TestPayloadStore
 
-		Payloads chasm.Map[string, *commonpb.Payload]
+		Payloads   chasm.Map[string, *commonpb.Payload]
+		Visibility chasm.Field[*chasm.Visibility]
 	}
 )
 
-func NewPayloadStore() *PayloadStore {
+func NewPayloadStore(
+	mutableContext chasm.MutableContext,
+) *PayloadStore {
 	return &PayloadStore{
 		State: &persistencespb.TestPayloadStore{
 			TotalCount:      0,
 			TotalSize:       0,
 			ExpirationTimes: make(map[string]*timestamppb.Timestamp),
 		},
+		Visibility: chasm.NewComponentField(
+			mutableContext,
+			chasm.NewVisibility(mutableContext),
+		),
 	}
 }
 

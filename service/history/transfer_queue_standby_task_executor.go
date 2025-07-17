@@ -131,7 +131,6 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 	) (any, error) {
 		return validateChasmSideEffectTask(
 			ctx,
-			t.shardContext.ChasmRegistry(),
 			ms,
 			task,
 		)

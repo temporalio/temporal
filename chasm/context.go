@@ -56,11 +56,11 @@ type MutableContextImpl struct {
 
 func NewContext(
 	ctx context.Context,
-	root *Node,
+	node *Node,
 ) *ContextImpl {
 	return &ContextImpl{
 		ctx:  ctx,
-		root: root,
+		root: node.root(),
 	}
 }
 

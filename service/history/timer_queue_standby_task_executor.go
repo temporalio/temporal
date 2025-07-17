@@ -179,7 +179,6 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
 	) (any, error) {
 		return validateChasmSideEffectTask(
 			ctx,
-			t.shardContext.ChasmRegistry(),
 			ms,
 			task,
 		)

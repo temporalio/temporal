@@ -162,7 +162,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 					Return(s.mockChasmTree)
 
 				s.mockChasmTree.EXPECT().
-					ValidateSideEffectTask(gomock.Any(),
+					ValidateSideEffectTask(
 						gomock.Any(),
 						gomock.Any(),
 						gomock.Any(),

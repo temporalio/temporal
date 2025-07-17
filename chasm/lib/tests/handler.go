@@ -79,8 +79,8 @@ func NewPayloadStoreHandler(
 			NamespaceID: request.NamespaceID.String(),
 			BusinessID:  request.StoreID,
 		},
-		func(_ chasm.MutableContext, _ any) (*PayloadStore, any, error) {
-			return NewPayloadStore(), nil, nil
+		func(mutableContext chasm.MutableContext, _ any) (*PayloadStore, any, error) {
+			return NewPayloadStore(mutableContext), nil, nil
 		},
 		nil,
 	)

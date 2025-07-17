@@ -150,7 +150,7 @@ type (
 		UpdateWorkflowStateStatus(
 			state enumsspb.WorkflowExecutionState,
 			status enumspb.WorkflowExecutionStatus,
-		) error
+		) (bool, error)
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
@@ -1162,27 +1162,23 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		return NodesMutation{}, err
 	}
 
-	for nodePath, node := range n.andAllChildren() {
-		if node.valueState != valueStateNeedSerialize {
-			continue
-		}
-		if err := node.serialize(); err != nil {
-			return NodesMutation{}, err
-		}
-
-		encodedPath, err := n.pathEncoder.Encode(node, nodePath)
-		if err != nil {
-			return NodesMutation{}, err
-		}
-		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
-	}
-
 	nextVersionedTransition := &persistencespb.VersionedTransition{
 		NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
 		TransitionCount:          n.backend.NextTransitionCount(),
 	}
 
-	if err := n.closeTransactionHandleRootLifecycleChange(nextVersionedTransition); err != nil {
+	rootLifecycleChanged, err := n.closeTransactionHandleRootLifecycleChange(nextVersionedTransition)
+	if err != nil {
+		return NodesMutation{}, err
+	}
+
+	if rootLifecycleChanged {
+		if err := n.closeTransactionForceUpdateVisibility(nextVersionedTransition); err != nil {
+			return NodesMutation{}, err
+		}
+	}
+
+	if err := n.closeTransactionSerializeNodes(); err != nil {
 		return NodesMutation{}, err
 	}
 
@@ -1203,12 +1199,9 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 
 func (n *Node) closeTransactionHandleRootLifecycleChange(
 	nextVersionedTransition *persistencespb.VersionedTransition,
-) error {
-	lastUpdateVT := n.serializedNode.GetMetadata().LastUpdateVersionedTransition
-	if transitionhistory.Compare(lastUpdateVT, nextVersionedTransition) != 0 {
-		// root not updated in this transition
-		// and this covers all standby logic as well
-		return nil
+) (bool, error) {
+	if n.valueState != valueStateNeedSerialize {
+		return false, nil
 	}
 
 	if n.terminated {
@@ -1221,7 +1214,7 @@ func (n *Node) closeTransactionHandleRootLifecycleChange(
 	chasmContext := NewContext(context.Background(), n)
 	component, err := n.Component(chasmContext, ComponentRef{})
 	if err != nil {
-		return err
+		return false, err
 	}
 	lifecycleState := component.LifecycleState(chasmContext)
 
@@ -1238,10 +1231,64 @@ func (n *Node) closeTransactionHandleRootLifecycleChange(
 		newState = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 		newStatus = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 	default:
-		return serviceerror.NewInternalf("unknown component lifecycle state: %v", lifecycleState)
+		return false, serviceerror.NewInternalf("unknown component lifecycle state: %v", lifecycleState)
 	}
 
 	return n.backend.UpdateWorkflowStateStatus(newState, newStatus)
+}
+
+func (n *Node) closeTransactionForceUpdateVisibility(
+	nextVersionedTransition *persistencespb.VersionedTransition,
+) error {
+	for _, child := range n.children {
+		componentAttr := child.serializedNode.Metadata.GetComponentAttributes()
+		if componentAttr == nil ||
+			componentAttr.Type != visibilityComponentFqType ||
+			transitionhistory.Compare(child.serializedNode.Metadata.LastUpdateVersionedTransition, nextVersionedTransition) == 0 {
+			// Skip force update is the node is not a visibility component or already updated in this transition.
+			continue
+		}
+		fmt.Println("closeTransactionForceUpdateVisibility")
+
+		mutableContext := NewMutableContext(context.Background(), n)
+		visComponent, err := child.Component(mutableContext, ComponentRef{})
+		if err != nil {
+			return err
+		}
+
+		visibility, ok := visComponent.(*Visibility)
+		if !ok {
+			return serviceerror.NewInternalf("expected visibility component for component with type %s, but got %T", visibilityComponentFqType, visComponent)
+		}
+		visibility.GenerateTask(mutableContext)
+	}
+
+	return nil
+}
+
+func (n *Node) closeTransactionSerializeNodes() error {
+	for nodePath, node := range n.andAllChildren() {
+		if node.valueState != valueStateNeedSerialize {
+			continue
+		}
+		if err := node.serialize(); err != nil {
+			return err
+		}
+
+		if componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes(); componentAttr != nil &&
+			componentAttr.Type == visibilityComponentFqType &&
+			len(nodePath) != 1 {
+			return serviceerror.NewInternalf("CHASM visibility component must be immeidate child of the root node, but found at path %s", nodePath)
+		}
+
+		encodedPath, err := n.pathEncoder.Encode(node, nodePath)
+		if err != nil {
+			return err
+		}
+		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
+	}
+
+	return nil
 }
 
 //nolint:revive // cognitive complexity 28 (> max enabled 25)
@@ -2037,6 +2084,10 @@ func carryOverTaskStatus(
 func taskCategory(
 	task *persistencespb.ChasmComponentAttributes_Task,
 ) (tasks.Category, error) {
+	if task.Type == visibilityTaskFqType {
+		return tasks.CategoryVisibility, nil
+	}
+
 	isImmediate := task.ScheduledTime == nil || task.ScheduledTime.AsTime().Equal(TaskScheduledTimeImmediate)
 
 	if task.Destination != "" {
@@ -2233,6 +2284,7 @@ func (n *Node) ExecutePureTask(
 // ValidatePureTask runs a pure task's associated validator, returning true
 // if the task is valid. Intended for use by standby executors as part of
 // EachPureTask's callback.
+// This method assumes the node's value has already been prepared (hydrated).
 func (n *Node) ValidatePureTask(
 	ctx context.Context,
 	taskAttributes TaskAttributes,
@@ -2252,18 +2304,41 @@ func (n *Node) ValidatePureTask(
 // If validation fails, that error is returned.
 func (n *Node) ValidateSideEffectTask(
 	ctx context.Context,
-	registry *Registry,
 	taskAttributes TaskAttributes,
 	taskInfo *persistencespb.ChasmTaskInfo,
 ) (any, error) {
 	taskType := taskInfo.Type
-	registrableTask, ok := registry.task(taskType)
+	registrableTask, ok := n.registry.task(taskType)
 	if !ok {
 		return nil, serviceerror.NewInternalf("unknown task type '%s'", taskType)
 	}
 
 	if registrableTask.isPureTask {
 		return nil, serviceerror.NewInternalf("ValidateSideEffectTask called on a Pure task '%s'", taskType)
+	}
+
+	nodePath, err := n.pathEncoder.Decode(taskInfo.Path)
+	if err != nil {
+		return nil, serviceerror.NewInternalf("failed to decode path '%s'", taskInfo.Path)
+	}
+
+	node, ok := n.findNode(nodePath)
+	if !ok {
+		return nil, nil
+	}
+
+	// node.serializedNode should always be available when running a side effect task.
+	if transitionhistory.Compare(
+		taskInfo.ComponentInitialVersionedTransition,
+		node.serializedNode.Metadata.InitialVersionedTransition,
+	) != 0 {
+		return nil, nil
+	}
+
+	// Component must be hydrated before the task's validator is called.
+	validateCtx := NewContext(ctx, n)
+	if err := node.prepareComponentValue(validateCtx); err != nil {
+		return nil, err
 	}
 
 	// TODO - cache deserialized task
@@ -2273,14 +2348,7 @@ func (n *Node) ValidateSideEffectTask(
 	}
 	taskInstance := taskValue.Interface()
 
-	validateCtx := NewContext(ctx, n)
-	// Component must be hydrated before the task's validator is called.
-	err = n.prepareComponentValue(validateCtx)
-	if err != nil {
-		return nil, err
-	}
-
-	valid, err := n.validateTask(validateCtx, taskAttributes, taskInstance)
+	valid, err := node.validateTask(validateCtx, taskAttributes, taskInstance)
 	if err != nil {
 		return nil, err
 	}
@@ -2365,6 +2433,34 @@ func (n *Node) ExecuteSideEffectTask(
 	return nil
 }
 
+func (n *Node) ComponentByPath(
+	chasmContext Context,
+	encodedPath string,
+) (Component, error) {
+	nodePath, err := n.pathEncoder.Decode(encodedPath)
+	if err != nil {
+		return nil, err
+	}
+
+	node, ok := n.findNode(nodePath)
+	if !ok {
+		return nil, errComponentNotFound
+	}
+
+	if err := node.prepareComponentValue(chasmContext); err != nil {
+		return nil, err
+	}
+
+	componentValue, ok := node.value.(Component)
+	if !ok {
+		return nil, serviceerror.NewInternalf(
+			"component value is not of type Component: %v", reflect.TypeOf(node.value),
+		)
+	}
+
+	return componentValue, nil
+}
+
 // makeValidationFn adapts the TaskValidator interface to the ComponentRef's
 // validation callback format. Returns a validation function that wraps the
 // given validation callback to be called before the RegistrableTask's registered
@@ -2399,6 +2495,7 @@ func makeValidationFn(
 
 		// Handle bool result.
 		if !result[0].Bool() {
+			// TODO: this should be not-found error
 			return errTaskValidationFailed
 		}
 

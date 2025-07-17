@@ -14,7 +14,6 @@ import (
 // after mutable state load/physical task validation.
 func validateChasmSideEffectTask(
 	ctx context.Context,
-	registry *chasm.Registry,
 	ms historyi.MutableState,
 	task *tasks.ChasmTask,
 ) (any, error) {
@@ -35,7 +34,7 @@ func validateChasmSideEffectTask(
 		Destination:   task.Destination,
 	}
 
-	taskInstance, err := tree.ValidateSideEffectTask(ctx, registry, taskAttributes, task.Info)
+	taskInstance, err := tree.ValidateSideEffectTask(ctx, taskAttributes, task.Info)
 	if err == nil && taskInstance != nil {
 		// If a taskInstance is returned, the task is still valid, and we should keep
 		// it around.

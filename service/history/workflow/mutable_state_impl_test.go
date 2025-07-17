@@ -4178,7 +4178,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask() {
 
 	// Now make the mutable state non-workflow.
 	mockChasmTree.EXPECT().Archetype().Return("test-archetype").Times(2) // One time for each CloseTransactionAsMutation call
-	err = mutableState.UpdateWorkflowStateStatus(
+	_, err = mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	)

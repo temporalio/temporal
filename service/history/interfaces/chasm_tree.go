@@ -38,10 +38,10 @@ type ChasmTree interface {
 	) error
 	ValidateSideEffectTask(
 		ctx context.Context,
-		registry *chasm.Registry,
 		taskAttributes chasm.TaskAttributes,
 		taskInfo *persistencespb.ChasmTaskInfo,
 	) (any, error)
 	IsStale(chasm.ComponentRef) error
 	Component(chasm.Context, chasm.ComponentRef) (chasm.Component, error)
+	ComponentByPath(chasm.Context, string) (chasm.Component, error)
 }

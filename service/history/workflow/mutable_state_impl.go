@@ -2565,7 +2565,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	); err != nil {
 		return err
 	}
-	if err := ms.UpdateWorkflowStateStatus(
+	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	); err != nil {
@@ -3969,7 +3969,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionCompletedEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 ) error {
-	if err := ms.UpdateWorkflowStateStatus(
+	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	); err != nil {
@@ -4012,7 +4012,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionFailedEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 ) error {
-	if err := ms.UpdateWorkflowStateStatus(
+	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 	); err != nil {
@@ -4059,7 +4059,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimedoutEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 ) error {
-	if err := ms.UpdateWorkflowStateStatus(
+	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	); err != nil {
@@ -4141,7 +4141,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionCanceledEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 ) error {
-	if err := ms.UpdateWorkflowStateStatus(
+	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
 	); err != nil {
@@ -5038,7 +5038,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 ) error {
-	if err := ms.UpdateWorkflowStateStatus(
+	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 	); err != nil {
@@ -5245,7 +5245,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionContinuedAsNewEvent(
 	firstEventID int64,
 	continueAsNewEvent *historypb.HistoryEvent,
 ) error {
-	if err := ms.UpdateWorkflowStateStatus(
+	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 	); err != nil {
@@ -5997,9 +5997,9 @@ func (ms *MutableStateImpl) GetWorkflowStateStatus() (enumsspb.WorkflowExecution
 func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
-) error {
+) (bool, error) {
 	if state == ms.executionState.State && status == ms.executionState.Status {
-		return nil
+		return false, nil
 	}
 	if state != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE &&
 		ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
@@ -6007,7 +6007,7 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 		ms.executionStateUpdated = true
 		ms.visibilityUpdated = true // workflow status & state change triggers visibility change as well
 	}
-	return setStateStatus(ms.executionState, state, status)
+	return true, setStateStatus(ms.executionState, state, status)
 }
 
 // IsDirty is used for sanity check that mutable state is "clean" after mutable state lock is released.
