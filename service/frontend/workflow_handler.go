@@ -4505,6 +4505,8 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	var resetParams batcher.ResetParams
 	var updateOptionsParams batcher.UpdateOptionsParams
 	var unpauseActivitiesParams batcher.UnpauseActivitiesParams
+	var resetActivitiesParams batcher.ResetActivitiesParams
+	var updateOptionsActivitiesParams batcher.UpdateOptionsActivitiesParams
 	switch op := request.Operation.(type) {
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 		identity = op.TerminationOperation.GetIdentity()
@@ -4583,7 +4585,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			visibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, unpauseCause)
 			unpauseActivitiesParams.ActivityType = a.Type
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
-			if a.MatchAll == false {
+			if !a.MatchAll {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
 			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", searchattribute.TemporalPauseInfo)
@@ -4594,24 +4596,81 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		unpauseActivitiesParams.ResetAttempts = op.UnpauseActivitiesOperation.ResetAttempts
 		unpauseActivitiesParams.ResetHeartbeat = op.UnpauseActivitiesOperation.ResetHeartbeat
 		unpauseActivitiesParams.Jitter = op.UnpauseActivitiesOperation.Jitter.AsDuration()
+
+	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
+		operationType = batcher.BatchTypeResetActivities
+		if op.ResetActivitiesOperation == nil {
+			return nil, serviceerror.NewInvalidArgument("reset activities operation is not set")
+		}
+		if op.ResetActivitiesOperation.GetActivity() == nil {
+			return nil, serviceerror.NewInvalidArgument("activity filter must be set")
+		}
+
+		switch a := op.ResetActivitiesOperation.GetActivity().(type) {
+		case *batchpb.BatchOperationResetActivities_Type:
+			if len(a.Type) == 0 {
+				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+			}
+			resetActivitiesParams.ActivityType = a.Type
+		case *batchpb.BatchOperationResetActivities_MatchAll:
+			if !a.MatchAll {
+				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+			}
+			resetActivitiesParams.MatchAll = true
+		}
+
+		resetActivitiesParams.ResetAttempts = op.ResetActivitiesOperation.ResetAttempts
+		resetActivitiesParams.ResetHeartbeat = op.ResetActivitiesOperation.ResetHeartbeat
+		resetActivitiesParams.Jitter = op.ResetActivitiesOperation.Jitter.AsDuration()
+		resetActivitiesParams.KeepPaused = op.ResetActivitiesOperation.KeepPaused
+		resetActivitiesParams.RestoreOriginalOptions = op.ResetActivitiesOperation.RestoreOriginalOptions
+
+	case *workflowservice.StartBatchOperationRequest_UpdateOptionsActivitiesOperation:
+		operationType = batcher.BatchTypeUpdateOptions
+		if op.UpdateOptionsActivitiesOperation == nil {
+			return nil, serviceerror.NewInvalidArgument("update activity options operation is not set")
+		}
+		if op.UpdateOptionsActivitiesOperation.GetActivity() == nil {
+			return nil, serviceerror.NewInvalidArgument("activity filter must be set")
+		}
+
+		switch a := op.UpdateOptionsActivitiesOperation.GetActivity().(type) {
+		case *batchpb.BatchOperationUpdateActivityOptions_Type:
+			if len(a.Type) == 0 {
+				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+			}
+			updateOptionsActivitiesParams.ActivityType = a.Type
+		case *batchpb.BatchOperationUpdateActivityOptions_MatchAll:
+			if !a.MatchAll {
+				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+			}
+			updateOptionsActivitiesParams.MatchAll = true
+		}
+		updateOptionsActivitiesParams.ActivityOptions = op.UpdateOptionsActivitiesOperation.GetActivityOptions()
+		updateOptionsActivitiesParams.UpdateMask = op.UpdateOptionsActivitiesOperation.GetUpdateMask()
+		updateOptionsActivitiesParams.RestoreOriginal = op.UpdateOptionsActivitiesOperation.GetRestoreOriginal()
+		updateOptionsActivitiesParams.Identity = op.UpdateOptionsActivitiesOperation.GetIdentity()
+
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
 
 	input := &batcher.BatchParams{
-		Namespace:               request.GetNamespace(),
-		Query:                   visibilityQuery,
-		Executions:              request.GetExecutions(),
-		Reason:                  request.GetReason(),
-		BatchType:               operationType,
-		RPS:                     float64(request.GetMaxOperationsPerSecond()),
-		TerminateParams:         batcher.TerminateParams{},
-		CancelParams:            batcher.CancelParams{},
-		SignalParams:            signalParams,
-		DeleteParams:            batcher.DeleteParams{},
-		ResetParams:             resetParams,
-		UpdateOptionsParams:     updateOptionsParams,
-		UnpauseActivitiesParams: unpauseActivitiesParams,
+		Namespace:                     request.GetNamespace(),
+		Query:                         visibilityQuery,
+		Executions:                    request.GetExecutions(),
+		Reason:                        request.GetReason(),
+		BatchType:                     operationType,
+		RPS:                           float64(request.GetMaxOperationsPerSecond()),
+		TerminateParams:               batcher.TerminateParams{},
+		CancelParams:                  batcher.CancelParams{},
+		SignalParams:                  signalParams,
+		DeleteParams:                  batcher.DeleteParams{},
+		ResetParams:                   resetParams,
+		UpdateOptionsParams:           updateOptionsParams,
+		UnpauseActivitiesParams:       unpauseActivitiesParams,
+		ResetActivitiesParams:         resetActivitiesParams,
+		UpdateOptionsActivitiesParams: updateOptionsActivitiesParams,
 	}
 	inputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(input)
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	activity "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -42,6 +43,10 @@ const (
 	BatchTypeUpdateOptions = "update_options"
 	// BatchTypePauseActivities is batch type for unpausing activities
 	BatchTypeUnpauseActivities = "unpause_activities"
+	// BatchTypeUpdateOptionsActivities is batch type for updating the options of activities
+	BatchTypeUpdateOptionsActivities = "update_options_activities"
+	// BatchTypeResetActivities is batch type for resetting activities
+	BatchTypeResetActivities = "reset_activities"
 )
 
 var (
@@ -103,6 +108,26 @@ type (
 		Jitter         time.Duration
 	}
 
+	UpdateOptionsActivitiesParams struct {
+		Identity        string
+		ActivityType    string
+		MatchAll        bool
+		ActivityOptions *activity.ActivityOptions
+		UpdateMask      *fieldmaskpb.FieldMask
+		RestoreOriginal bool
+	}
+
+	ResetActivitiesParams struct {
+		Identity               string
+		ActivityType           string
+		MatchAll               bool
+		ResetAttempts          bool
+		ResetHeartbeat         bool
+		KeepPaused             bool
+		Jitter                 time.Duration
+		RestoreOriginalOptions bool
+	}
+
 	// BatchParams is the parameters for batch operation workflow
 	BatchParams struct {
 		// Target namespace to execute batch operation
@@ -131,6 +156,10 @@ type (
 		UpdateOptionsParams UpdateOptionsParams
 		// UnpauseActivitiesParams is params only for BatchTypeUnpauseActivities
 		UnpauseActivitiesParams UnpauseActivitiesParams
+		// UpdateOptionsActivitiesParams is params only for BatchTypeUpdateOptionsActivities
+		UpdateOptionsActivitiesParams UpdateOptionsActivitiesParams
+		// ResetActivitiesParams is params only for BatchTypeResetActivities
+		ResetActivitiesParams ResetActivitiesParams
 
 		// RPS sets the requests-per-second limit for the batch.
 		// The default (and max) is defined by `worker.BatcherRPS` in the dynamic config.

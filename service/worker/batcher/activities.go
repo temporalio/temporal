@@ -339,6 +339,7 @@ func startTaskProcessor(
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
+							// QUESTION: do we want to plumb through the identity from cli/ui/sdk ? @yuri/@chetan
 							Identity:       "batch unpause",
 							Activity:       &workflowservice.UnpauseActivityRequest_Type{Type: batchParams.UnpauseActivitiesParams.ActivityType},
 							ResetAttempts:  !batchParams.UnpauseActivitiesParams.ResetAttempts,
@@ -370,7 +371,61 @@ func startTaskProcessor(
 						})
 						return err
 					})
+
+			case BatchTypeResetActivities:
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						resetRequest := &workflowservice.ResetActivityRequest{
+							Namespace: batchParams.Namespace,
+							Execution: &commonpb.WorkflowExecution{
+								WorkflowId: workflowID,
+								RunId:      runID,
+							},
+							Identity:               "batch reset",
+							Activity:               &workflowservice.ResetActivityRequest_Type{Type: batchParams.ResetActivitiesParams.ActivityType},
+							ResetHeartbeat:         batchParams.ResetActivitiesParams.ResetHeartbeat,
+							Jitter:                 durationpb.New(batchParams.ResetActivitiesParams.Jitter),
+							KeepPaused:             batchParams.ResetActivitiesParams.KeepPaused,
+							RestoreOriginalOptions: batchParams.ResetActivitiesParams.RestoreOriginalOptions,
+						}
+
+						if batchParams.ResetActivitiesParams.MatchAll {
+							resetRequest.Activity = &workflowservice.ResetActivityRequest_ResetAll{ResetAll: true}
+						} else {
+							resetRequest.Activity = &workflowservice.ResetActivityRequest_Type{Type: batchParams.ResetActivitiesParams.ActivityType}
+						}
+
+						_, err = frontendClient.ResetActivity(ctx, resetRequest)
+						return err
+					})
+			case BatchTypeUpdateOptionsActivities:
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						updateRequest := &workflowservice.UpdateActivityOptionsRequest{
+							Namespace: batchParams.Namespace,
+							Execution: &commonpb.WorkflowExecution{
+								WorkflowId: workflowID,
+								RunId:      runID,
+							},
+							Activity:        &workflowservice.UpdateActivityOptionsRequest_Type{Type: batchParams.UpdateOptionsActivitiesParams.ActivityType},
+							UpdateMask:      batchParams.UpdateOptionsActivitiesParams.UpdateMask,
+							RestoreOriginal: batchParams.UpdateOptionsActivitiesParams.RestoreOriginal,
+							Identity:        batchParams.UpdateOptionsActivitiesParams.Identity,
+							ActivityOptions: batchParams.UpdateOptionsActivitiesParams.ActivityOptions,
+						}
+
+						if batchParams.UpdateOptionsActivitiesParams.MatchAll {
+							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_UpdateAll{UpdateAll: true}
+						} else {
+							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Type{Type: batchParams.UpdateOptionsActivitiesParams.ActivityType}
+						}
+
+						_, err = frontendClient.UpdateActivityOptions(ctx, updateRequest)
+						return err
+					})
+			// QUESTION: why do we not have a default case and return an error? @yuri/@chetan
 			}
+
 			if err != nil {
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
