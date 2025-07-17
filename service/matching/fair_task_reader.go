@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -159,7 +158,6 @@ func (tr *fairTaskReader) completeTask(task *internalTask, res taskResponse) {
 
 func (tr *fairTaskReader) completeTaskLocked(task *internalTask) {
 	tr.backlogAge.record(task.event.Data.CreateTime, -1)
-	fmt.Printf("@@@ completeTaskLocked %s\n", fairLevelFromAllocatedTask(task.event.AllocatedTaskInfo))
 	tr.outstandingTasks.Put(fairLevelFromAllocatedTask(task.event.AllocatedTaskInfo), nil)
 	tr.loadedTasks--
 	softassert.That(tr.logger, tr.loadedTasks >= 0, "loadedTasks went negative")
@@ -169,11 +167,11 @@ func (tr *fairTaskReader) completeTaskLocked(task *internalTask) {
 }
 
 func (tr *fairTaskReader) maybeReadTasksLocked() {
-	// If readPending is true here, readTasksImpl is running and will check
-	// shouldReadMoreLocked before it exits.
-	if tr.readPending || tr.backoffTimer != nil || !tr.shouldReadMoreLocked() || tr.backlogMgr.tqCtx.Err() != nil {
-		fmt.Printf("@@@ maybeReadTasksLocked abort %v %v %v [%v %v] %v\n",
-			tr.readPending, tr.backoffTimer, tr.shouldReadMoreLocked(), tr.atEnd, tr.loadedTasks, tr.backlogMgr.tqCtx.Err())
+	// If readPending is true, readTasksImpl is running and will check shouldReadMoreLocked
+	// before it exits, so we'll definitely do another read if shouldReadMoreLocked is true.
+	// We also abort here if we're in the middle of a backoff or shutting down.
+	if tr.readPending || !tr.shouldReadMoreLocked() ||
+		tr.backoffTimer != nil || tr.backlogMgr.tqCtx.Err() != nil {
 		return
 	}
 	tr.readPending = true
@@ -227,7 +225,6 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) er
 			tr.retryReadAfter(taskReaderThrottleRetryDelay)
 		} else {
 			d := tr.retrier.NextBackOff(err)
-			fmt.Printf("@@@ RETRYING READ after %v\n", d)
 			tr.retryReadAfter(d)
 		}
 		return err
@@ -336,7 +333,6 @@ func (tr *fairTaskReader) wroteNewTasks(tasks []*persistencespb.AllocatedTaskInf
 }
 
 func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, mode mergeMode) {
-	fmt.Printf("@@@ mergeTasks mode %d\n", mode)
 	tr.lock.Lock()
 
 	if mode == mergeWrite && tr.readPending {
@@ -348,6 +344,8 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 	}
 
 	newTasks := tr.mergeTasksLocked(tasks, mode)
+
+	// unlock before calling addTaskToMatcher
 	tr.lock.Unlock()
 
 	for _, task := range newTasks {
@@ -363,24 +361,20 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 		_, ok := v.(*internalTask)
 		return ok
 	})
-	fmt.Printf("@@@ mergeTasks existing %d\n", merged.Size())
 	// (2) Note these values are *AllocatedTaskInfo.
 	for _, t := range tasks {
 		level := fairLevelFromAllocatedTask(t)
 		if mode == mergeWrite && !tr.atEnd && tr.readLevel.less(level) {
 			// If we're writing and we're not at the end, then we have to ignore tasks
 			// above readLevel since we don't know what's in between readLevel and there.
-			fmt.Printf("@@@ mergeTasks NOT AT END %s\n", level)
 			continue
 		} else if _, have := merged.Get(level); have {
 			// If write/read race in certain ways, we may read something we had already
 			// added to the matcher. Ignore tasks we already have.
-			fmt.Printf("@@@ mergeTasks ALREADY %s\n", level)
 			continue
 		}
 		merged.Put(level, t)
 	}
-	fmt.Printf("@@@ mergeTasks merged %d\n", merged.Size())
 
 	// Take as many of those as we want to keep in memory. The ones that are not already in the
 	// matcher, we have to add to the matcher.
@@ -418,16 +412,12 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 			// but not completed yet. In that case this will be a noop. See comment at the top
 			// of completeTask. Lock order: task reader lock < matcher lock so this is okay.
 			task.removeFromMatcher()
-			fmt.Printf("@@@ mergeTasks EVICTED\n")
-		} else {
-			fmt.Printf("@@@ mergeTasks DIDNTADD\n")
 		}
 	}
 
 	internalTasks := make([]*internalTask, len(tasks))
 	for i, t := range tasks {
 		level := fairLevelFromAllocatedTask(t)
-		fmt.Printf("@@@ mergeTasks ADD %s\n", level)
 		internalTasks[i] = newInternalTaskFromBacklog(t, tr.completeTask)
 		// After we get to this point, we must eventually call task.finish or
 		// task.finishForwarded, which will call tr.completeTask.
@@ -452,8 +442,6 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 		tr.backlogMgr.db.setKnownFairBacklogCount(tr.subqueue, count)
 	}
 
-	// unlock before calling addTaskToMatcher
-	fmt.Printf("@@@ mergeTasks FINAL LOADED %d\n", tr.loadedTasks)
 	return internalTasks
 
 	// TODO: fine-grained metrics for mergeTasks behavior:
@@ -474,7 +462,6 @@ func (tr *fairTaskReader) retryReadAfter(duration time.Duration) {
 			tr.lock.Lock()
 			defer tr.lock.Unlock()
 			tr.backoffTimer = nil
-			fmt.Printf("@@@ RETRYING READ now\n")
 			tr.maybeReadTasksLocked()
 		})
 	}

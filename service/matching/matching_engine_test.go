@@ -3188,7 +3188,6 @@ func (s *matchingEngineSuite) pollWorkflowTasks(
 	for range taskCount {
 		s.createPollWorkflowTaskRequestAndPoll(taskQueue)
 		tasksPolled += 1
-		fmt.Printf("@@@ polled %d\n", tasksPolled)
 
 		// relax ApproximateBacklogCount for fairness impl
 		if !s.fairness {
@@ -3898,7 +3897,6 @@ func (m *testTaskManager) CreateTasks(
 		tlm.tasks.Put(fairLevelFromAllocatedTask(task), common.CloneProto(task))
 		tlm.createTaskCount++
 	}
-	fmt.Printf("@@@ ttm CreateTasks now %d\n", tlm.tasks.Size())
 
 	resp := &persistence.CreateTasksResponse{}
 	if m.updateMetadataOnCreateTasks {
@@ -3947,7 +3945,6 @@ func (m *testTaskManager) GetTasks(
 		tasks = append(tasks, it.Value().(*persistencespb.AllocatedTaskInfo))
 	}
 	tlm.getTasksCount++
-	fmt.Printf("@@@ ttm GetTasks %s- returning %d\n", fairLevel{pass: request.InclusiveMinPass, id: request.InclusiveMinTaskID}, len(tasks))
 	return &persistence.GetTasksResponse{Tasks: tasks}, nil
 }
 
