@@ -216,9 +216,11 @@ func (tr *fairTaskReader) readTasksImpl() {
 	var newTasks []*internalTask
 	if len(tr.bufferedTasks) != 0 {
 		newTasks = tr.mergeTasksLocked(tr.bufferedTasks, mergeWrite)
+		clear(tr.bufferedTasks)
 		tr.bufferedTasks = tr.bufferedTasks[:0]
 
-		// ack level would have been pinned here, we can advance it now
+		// ack level would have been pinned here, we may be able to advance it now (if it's not
+		// explicitly pinned by another write)
 		tr.advanceAckLevelLocked()
 	}
 
