@@ -32,6 +32,7 @@ type ChasmTree interface {
 		ctx context.Context,
 		registry *chasm.Registry,
 		entityKey chasm.EntityKey,
+		archetype string,
 		taskAttributes chasm.TaskAttributes,
 		taskInfo *persistencespb.ChasmTaskInfo,
 		validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,

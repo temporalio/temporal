@@ -954,6 +954,7 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 	if tree == nil {
 		return errNoChasmTree
 	}
+	archetype := tree.Archetype()
 
 	// Now that we've loaded the CHASM tree, we can release the lock before task
 	// execution. The task's executor must do its own locking as needed, and additional
@@ -966,6 +967,7 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 		t.shardContext.ChasmRegistry(),
 		tree,
 		task,
+		archetype,
 	)
 }
 

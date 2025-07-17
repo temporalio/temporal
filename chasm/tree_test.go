@@ -1468,23 +1468,15 @@ func (s *nodeSuite) TestGetComponent() {
 }
 
 func (s *nodeSuite) TestRef() {
+	tv := testvars.New(s.T())
+	entityKey := EntityKey{
+		NamespaceID: tv.NamespaceID().String(),
+		BusinessID:  tv.WorkflowID(),
+		EntityID:    tv.Any().RunID(),
+	}
+
 	root, err := s.newTestTree(testComponentSerializedNodes())
 	s.NoError(err)
-
-	tv := testvars.New(s.T())
-	workflowKey := tv.Any().WorkflowKey()
-	entityKey := EntityKey{
-		NamespaceID: workflowKey.NamespaceID,
-		BusinessID:  workflowKey.WorkflowID,
-		EntityID:    workflowKey.RunID,
-	}
-	currentVT := &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: 2,
-		TransitionCount:          2,
-	}
-
-	s.nodeBackend.EXPECT().CurrentVersionedTransition().Return(currentVT).AnyTimes()
-	s.nodeBackend.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
 
 	chasmContext := NewContext(context.Background(), root)
 	rootComponent, err := root.Component(chasmContext, NewComponentRef[*TestComponent](entityKey))
@@ -1495,6 +1487,18 @@ func (s *nodeSuite) TestRef() {
 	rc, ok := s.registry.ComponentFor(testComponent)
 	s.True(ok)
 	archetype := rc.FqType()
+
+	keyConverter := s.nodeBase().internalKeyConverter
+	internalKey, err := keyConverter.ToInternalKey(entityKey, archetype)
+	s.NoError(err)
+
+	currentVT := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 2,
+		TransitionCount:          2,
+	}
+
+	s.nodeBackend.EXPECT().CurrentVersionedTransition().Return(currentVT).AnyTimes()
+	s.nodeBackend.EXPECT().GetWorkflowKey().Return(internalKey).AnyTimes()
 
 	subComponent1, err := testComponent.SubComponent1.Get(chasmContext)
 	s.NoError(err)
@@ -2214,10 +2218,11 @@ func (e *testNodePathEncoder) Decode(
 
 func (s *nodeSuite) nodeBase() *nodeBase {
 	return &nodeBase{
-		registry:    s.registry,
-		timeSource:  s.timeSource,
-		backend:     s.nodeBackend,
-		pathEncoder: s.nodePathEncoder,
+		registry:             s.registry,
+		timeSource:           s.timeSource,
+		backend:              s.nodeBackend,
+		pathEncoder:          s.nodePathEncoder,
+		internalKeyConverter: DefaultInternalKeyConverter,
 	}
 }
 
@@ -2429,13 +2434,14 @@ func (s *nodeSuite) TestExecutePureTask() {
 }
 
 func (s *nodeSuite) TestExecuteSideEffectTask() {
+	archetype := "TestLibrary.test_component"
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						Type: "TestLibrary.test_component",
+						Type: archetype,
 					},
 				},
 			},
@@ -2486,13 +2492,13 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 
 	// Succeed task execution.
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskAttributes, taskInfo, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, archetype, taskAttributes, taskInfo, dummyValidationFn)
 	s.NoError(err)
 
 	// Fail task execution.
 	expectedErr := errors.New("dummy error")
 	expectExecute(expectedErr)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskAttributes, taskInfo, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, archetype, taskAttributes, taskInfo, dummyValidationFn)
 	s.ErrorIs(expectedErr, err)
 }
 
@@ -2570,5 +2576,13 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 func (s *nodeSuite) newTestTree(
 	serializedNodes map[string]*persistencespb.ChasmNode,
 ) (*Node, error) {
-	return NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	return NewTree(
+		serializedNodes,
+		s.registry,
+		s.timeSource,
+		s.nodeBackend,
+		s.nodePathEncoder,
+		DefaultInternalKeyConverter,
+		s.logger,
+	)
 }

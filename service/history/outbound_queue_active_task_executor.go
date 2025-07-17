@@ -108,6 +108,7 @@ func (e *outboundQueueActiveTaskExecutor) executeChasmSideEffectTask(
 		return err
 	}
 	tree := ms.ChasmTree()
+	archetype := tree.Archetype()
 
 	// Now that we've loaded the CHASM tree, we can release the lock before task
 	// execution. The task's executor must do its own locking as needed, and additional
@@ -120,6 +121,7 @@ func (e *outboundQueueActiveTaskExecutor) executeChasmSideEffectTask(
 		e.shardContext.ChasmRegistry(),
 		tree,
 		task,
+		archetype,
 	)
 	return err
 }
