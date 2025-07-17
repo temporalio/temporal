@@ -32,9 +32,9 @@ type (
 		taskWriter *fairTaskWriter
 
 		subqueueLock        sync.Mutex
-		subqueues           []*fairTaskReader
-		subqueuesByPriority map[int32]int
-		priorityBySubqueue  map[int]int32
+		subqueues           []*fairTaskReader // subqueue index -> fairTaskReader
+		subqueuesByPriority map[int32]int     // priority key -> subqueue index
+		priorityBySubqueue  map[int]int32     // subqueue index -> priority key
 
 		logger           log.Logger
 		throttledLogger  log.ThrottledLogger
@@ -70,6 +70,7 @@ func newFairBacklogManager(
 		tqCtx:               tqCtx,
 		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler),
 		subqueuesByPriority: make(map[int32]int),
+		priorityBySubqueue:  make(map[int]int32),
 		matchingClient:      matchingClient,
 		metricsHandler:      metricsHandler,
 		logger:              logger,
@@ -108,11 +109,21 @@ func (c *fairBacklogManagerImpl) Stop() {
 	// initialized. Also skip if we're stopping due to lost ownership (the update will
 	// fail in that case). Ignore any errors. Don't bother with GC, the next reload will
 	// handle that.
-	if c.initializedError.Ready() && !c.skipFinalUpdate.Load() {
-		ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
-		_ = c.db.SyncState(ctx)
-		cancel()
+	if !c.initializedError.Ready() || c.skipFinalUpdate.Load() {
+		return
 	}
+
+	c.subqueueLock.Lock()
+	for i, r := range c.subqueues {
+		_, ackLevel := r.getLevels()
+		// oldestTime can be time.Time{} here since countDelta is 0
+		c.db.updateFairAckLevel(i, ackLevel, 0, -1, time.Time{})
+	}
+	c.subqueueLock.Unlock()
+
+	ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
+	_ = c.db.SyncState(ctx)
+	cancel()
 }
 
 func (c *fairBacklogManagerImpl) initState(state taskQueueState, err error) {
@@ -147,6 +158,7 @@ func (c *fairBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.
 			c.subqueues = append(c.subqueues, r)
 		}
 		c.subqueuesByPriority[subqueues[i].Key.Priority] = i
+		c.priorityBySubqueue[i] = subqueues[i].Key.Priority
 	}
 }
 
@@ -301,17 +313,13 @@ func (c *fairBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	return &taskqueuepb.TaskQueueStatus{
 		ReadLevel: readLevel.id,
 		AckLevel:  ackLevel.id,
-		// use getApproximateBacklogCount instead of BacklogCountHint since it's more accurate
+		// use getTotalApproximateBacklogCount instead of BacklogCountHint since it's more accurate
 		BacklogCountHint: c.db.getTotalApproximateBacklogCount(),
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
 		},
 	}
-}
-
-func (c *fairBacklogManagerImpl) TotalApproximateBacklogCount() int64 {
-	return c.db.getTotalApproximateBacklogCount()
 }
 
 func (c *fairBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
