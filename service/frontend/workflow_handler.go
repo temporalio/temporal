@@ -4626,7 +4626,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		resetActivitiesParams.RestoreOriginalOptions = op.ResetActivitiesOperation.RestoreOriginalOptions
 
 	case *workflowservice.StartBatchOperationRequest_UpdateOptionsActivitiesOperation:
-		operationType = batcher.BatchTypeUpdateOptions
+		operationType = batcher.BatchTypeUpdateOptionsActivities
 		if op.UpdateOptionsActivitiesOperation == nil {
 			return nil, serviceerror.NewInvalidArgument("update activity options operation is not set")
 		}
@@ -4836,6 +4836,12 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		operationType = enumspb.BATCH_OPERATION_TYPE_RESET
 	case batcher.BatchTypeUpdateOptions:
 		operationType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
+	// case batcher.BatchTypeUpdateOptionsActivities:
+	// 	operationType = enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS
+	// case batcher.BatchTypeResetActivities:
+	// 	operationType = enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITIES
+	// case batcher.BatchTypeUnpauseActivities:
+	// 	operationType = enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITIES
 	default:
 		operationType = enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED
 		wh.throttledLogger.Warn("Unknown batch operation type", tag.NewStringTag("batch-operation-type", operationTypeString))

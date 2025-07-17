@@ -2,6 +2,7 @@ package updateactivityoptions
 
 import (
 	"context"
+	"log"
 
 	activitypb "go.temporal.io/api/activity/v1"
 	commandpb "go.temporal.io/api/command/v1"
@@ -89,6 +90,7 @@ func processActivityOptionsRequest(
 	updateRequest *workflowservice.UpdateActivityOptionsRequest,
 	namespaceID string,
 ) (*historyservice.UpdateActivityOptionsResponse, error) {
+	log.Printf("processActivityOptionsRequest: updateRequest: %+v", updateRequest)
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return nil, consts.ErrWorkflowCompleted
 	}
@@ -176,6 +178,8 @@ func mergeActivityOptions(
 	updateFields map[string]struct{},
 ) error {
 
+	log.Printf("mergeActivityOptions: mergeInto: %+v, mergeFrom: %+v, updateFields: %+v", mergeInto, mergeFrom, updateFields)
+
 	if _, ok := updateFields["taskQueue.name"]; ok {
 		if mergeFrom.TaskQueue == nil {
 			return serviceerror.NewInvalidArgument("TaskQueue is not provided")
@@ -187,6 +191,7 @@ func mergeActivityOptions(
 	}
 
 	if _, ok := updateFields["scheduleToCloseTimeout"]; ok {
+		log.Printf("mergeActivityOptions: scheduleToCloseTimeout: %+v", mergeFrom.ScheduleToCloseTimeout)
 		mergeInto.ScheduleToCloseTimeout = mergeFrom.ScheduleToCloseTimeout
 	}
 
@@ -255,6 +260,7 @@ func adjustActivityOptions(
 
 	_, err := validator.ValidateActivityScheduleAttributes(namespace.ID(namespaceID), attributes, nil)
 	if err != nil {
+		log.Printf("adjustActivityOptions: err: %+v", err)
 		return nil, err
 	}
 
@@ -307,6 +313,7 @@ func updateActivityOptions(
 		activityInfo.TimerTaskStatus = workflow.TimerTaskStatusNone
 		return nil
 	}); err != nil {
+		log.Printf("updateActivityOptions: err: %+v", err)
 		return nil, err
 	}
 

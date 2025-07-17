@@ -232,6 +232,7 @@ func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDeta
 	var ac *activities
 	err = workflow.ExecuteActivity(opt, ac.BatchActivity, batchParams).Get(ctx, &result)
 	if err != nil {
+		logger.Error("Error executing activity", "error", err)
 		return HeartBeatDetails{}, err
 	}
 
