@@ -375,13 +375,14 @@ func (s *BacklogManagerTestSuite) TestStandingBacklogs() {
 	const upper = 200
 	const gap = 2 // add/finish tasks as long as we're within gap of the target
 	const period = 3 * time.Second
-	const duration = 5 * time.Second
+	const duration = 15 * time.Second
 	const keys = 30
 	zipf := rand.NewZipf(rand.New(rand.NewSource(time.Now().UnixNano())), 3, 1, keys-1) // more lopsided
 	// zipf := rand.NewZipf(rand.New(rand.NewSource(time.Now().UnixNano())), 1.5, 10, keys-1) // more even
 
 	// reduce these for better coverage
 	// TODO: consider testing with write batch size > read batch size
+	s.taskMgr.delayInjection = 5 * time.Millisecond
 	s.cfgcli.OverrideSetting(dynamicconfig.MatchingGetTasksBatchSize, 100)
 	s.cfgcli.OverrideSetting(dynamicconfig.MatchingGetTasksReloadAt, 40)
 	s.cfgcli.OverrideSetting(dynamicconfig.MatchingMaxTaskBatchSize, 50)
