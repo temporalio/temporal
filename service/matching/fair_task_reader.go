@@ -41,12 +41,17 @@ type (
 		loadedTasks      int         // == number of unacked (non-nil) entries in outstandingTasks
 		readLevel        fairLevel   // == highest level in outstandingTasks, or if empty, the level we should read next
 		ackLevel         fairLevel   // inclusive: task exactly at ackLevel _has_ been acked
-		ackLevelPinned   bool        // pinned while writing tasks so that we don't delete just-written tasks
 		atEnd            bool        // whether we believe outstandingTasks represents the entire queue right now
 
-		// buffer tasks written while a read is pending so we make sure to account for them in
+		// Buffer tasks written while a read is pending so we make sure to account for them in
 		// our read level.
 		bufferedTasks []*persistencespb.AllocatedTaskInfo
+
+		// Pin ack level while writing tasks so that we don't delete just-written tasks.
+		// Also pin it while reading if we have bufferedTasks, to handle the case of concurrent
+		// reads and writes: if it's pinned by a write while a read is pending, we need to hold
+		// it pinned until bufferedTasks are processed.
+		ackLevelPinnedByWriter bool
 
 		// gc state
 		inGC       bool
@@ -212,6 +217,9 @@ func (tr *fairTaskReader) readTasksImpl() {
 	if len(tr.bufferedTasks) != 0 {
 		newTasks = tr.mergeTasksLocked(tr.bufferedTasks, mergeWrite)
 		tr.bufferedTasks = tr.bufferedTasks[:0]
+
+		// ack level would have been pinned here, we can advance it now
+		tr.advanceAckLevelLocked()
 	}
 
 	// unlock before calling addTaskToMatcher
@@ -484,8 +492,14 @@ func (tr *fairTaskReader) getLoadedTasks() int {
 	return tr.loadedTasks
 }
 
+func (tr *fairTaskReader) ackLevelPinnedLocked() bool {
+	return tr.ackLevelPinnedByWriter || len(tr.bufferedTasks) > 0
+}
+
+// call this whenever new tasks are acked or when ackLevelPinnedLocked() may turn from true to
+// false (i.e. when ackLevelPinnedByWriter is set to false or bufferedTasks is cleared).
 func (tr *fairTaskReader) advanceAckLevelLocked() {
-	if tr.ackLevelPinned {
+	if tr.ackLevelPinnedLocked() {
 		return
 	}
 
@@ -516,8 +530,8 @@ func (tr *fairTaskReader) getAndPinAckLevel() fairLevel {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 
-	softassert.That(tr.logger, !tr.ackLevelPinned, "ack level already pinned")
-	tr.ackLevelPinned = true
+	softassert.That(tr.logger, !tr.ackLevelPinnedByWriter, "ack level already pinned")
+	tr.ackLevelPinnedByWriter = true
 	return tr.ackLevel
 }
 
@@ -531,8 +545,8 @@ func (tr *fairTaskReader) unpinAckLevel(writeErr error) {
 		tr.atEnd = false
 	}
 
-	softassert.That(tr.logger, tr.ackLevelPinned, "ack level wasn't pinned")
-	tr.ackLevelPinned = false
+	softassert.That(tr.logger, tr.ackLevelPinnedByWriter, "ack level wasn't pinned")
+	tr.ackLevelPinnedByWriter = false
 	tr.advanceAckLevelLocked()
 }
 
