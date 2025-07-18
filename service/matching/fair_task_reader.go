@@ -41,8 +41,17 @@ type (
 		loadedTasks      int         // == number of unacked (non-nil) entries in outstandingTasks
 		readLevel        fairLevel   // == highest level in outstandingTasks, or if empty, the level we should read next
 		ackLevel         fairLevel   // inclusive: task exactly at ackLevel _has_ been acked
-		ackLevelPinned   bool        // pinned while writing tasks so that we don't delete just-written tasks
 		atEnd            bool        // whether we believe outstandingTasks represents the entire queue right now
+
+		// Hold tasks written while a read is pending so we make sure to account for them in
+		// our read level.
+		newlyWrittenTasks []*persistencespb.AllocatedTaskInfo
+
+		// Pin ack level while writing tasks so that we don't delete just-written tasks.
+		// Also pin it while reading if we have newlyWrittenTasks, to handle the case of concurrent
+		// reads and writes: if it's pinned by a write while a read is pending, we need to hold
+		// it pinned until newlyWrittenTasks are processed.
+		ackLevelPinnedByWriter bool
 
 		// gc state
 		inGC       bool
@@ -165,9 +174,11 @@ func (tr *fairTaskReader) completeTaskLocked(task *internalTask) {
 }
 
 func (tr *fairTaskReader) maybeReadTasksLocked() {
-	// If readPending is true here, readTasksImpl is running and will check
-	// shouldReadMoreLocked before it exits.
-	if tr.readPending || !tr.shouldReadMoreLocked() {
+	// If readPending is true, readTasksImpl is running and will check shouldReadMoreLocked
+	// before it exits, so we'll definitely do another read if shouldReadMoreLocked is true.
+	// We also abort here if we're in the middle of a backoff or shutting down.
+	if tr.readPending || !tr.shouldReadMoreLocked() ||
+		tr.backoffTimer != nil || tr.backlogMgr.tqCtx.Err() != nil {
 		return
 	}
 	tr.readPending = true
@@ -190,14 +201,34 @@ func (tr *fairTaskReader) readTasksImpl() {
 	for {
 		tr.lock.Lock()
 		if lastErr != nil || !tr.shouldReadMoreLocked() {
-			tr.readPending = false
-			tr.lock.Unlock()
-			return
+			break // with lock still held
 		}
-		readLevel, loadedTasks := tr.readLevel, int(tr.loadedTasks)
+		readLevel, loadedTasks := tr.readLevel, tr.loadedTasks
 		tr.lock.Unlock()
 
 		lastErr = tr.readTaskBatch(readLevel, loadedTasks)
+	}
+
+	// note tr.lock is still held here!
+	tr.readPending = false
+
+	// process any tasks that were written while readPending was true
+	var newTasks []*internalTask
+	if len(tr.newlyWrittenTasks) != 0 {
+		newTasks = tr.mergeTasksLocked(tr.newlyWrittenTasks, mergeWrite)
+		clear(tr.newlyWrittenTasks)
+		tr.newlyWrittenTasks = tr.newlyWrittenTasks[:0]
+
+		// ack level would have been pinned here, we may be able to advance it now (if it's not
+		// explicitly pinned by another write)
+		tr.advanceAckLevelLocked()
+	}
+
+	// unlock before calling addTaskToMatcher
+	tr.lock.Unlock()
+
+	for _, task := range newTasks {
+		tr.addTaskToMatcher(task)
 	}
 }
 
@@ -206,9 +237,10 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) er
 	readFrom := readLevel.max(fairLevel{pass: 1, id: 0}).inc()
 	res, err := tr.backlogMgr.db.GetFairTasks(tr.backlogMgr.tqCtx, tr.subqueue, readFrom, batchSize)
 	if err != nil {
-		tr.backlogMgr.signalIfFatal(err)
 		// TODO: Should we ever stop retrying on db errors?
-		if common.IsResourceExhausted(err) {
+		if tr.backlogMgr.signalIfFatal(err) || common.IsContextCanceledErr(err) {
+			// don't retry
+		} else if common.IsResourceExhausted(err) {
 			tr.retryReadAfter(taskReaderThrottleRetryDelay)
 		} else {
 			tr.retryReadAfter(tr.retrier.NextBackOff(err))
@@ -218,6 +250,8 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) er
 	tr.retrier.Reset()
 
 	// If we got less than we asked for, we know we hit the end.
+	// If there was a concurrent write such that we incorrectly think we hit the end here,
+	// it will be held and processed after we're done reading, and maybe reset atEnd then.
 	mode := mergeReadMiddle
 	if len(res.Tasks) < batchSize {
 		mode = mergeReadToEnd
@@ -320,6 +354,25 @@ func (tr *fairTaskReader) wroteNewTasks(tasks []*persistencespb.AllocatedTaskInf
 func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, mode mergeMode) {
 	tr.lock.Lock()
 
+	if mode == mergeWrite && tr.readPending {
+		// concurrent write + read: hold the just-written tasks and merge them after we process
+		// the read.
+		tr.newlyWrittenTasks = append(tr.newlyWrittenTasks, tasks...)
+		tr.lock.Unlock()
+		return
+	}
+
+	newTasks := tr.mergeTasksLocked(tasks, mode)
+
+	// unlock before calling addTaskToMatcher
+	tr.lock.Unlock()
+
+	for _, task := range newTasks {
+		tr.addTaskToMatcher(task)
+	}
+}
+
+func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTaskInfo, mode mergeMode) []*internalTask {
 	// Collect (1) currently loaded tasks in the matcher plus (2) the tasks we just read/wrote; sorted by level.
 
 	// (1) Note these values are *internalTask.
@@ -408,12 +461,7 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 		tr.backlogMgr.db.setKnownFairBacklogCount(tr.subqueue, count)
 	}
 
-	// unlock before calling addTaskToMatcher
-	tr.lock.Unlock()
-
-	for _, task := range internalTasks {
-		tr.addTaskToMatcher(task)
-	}
+	return internalTasks
 
 	// TODO: fine-grained metrics for mergeTasks behavior:
 	// we have two sources: currently loaded, and newly read/written.
@@ -446,8 +494,14 @@ func (tr *fairTaskReader) getLoadedTasks() int {
 	return tr.loadedTasks
 }
 
+func (tr *fairTaskReader) ackLevelPinnedLocked() bool {
+	return tr.ackLevelPinnedByWriter || len(tr.newlyWrittenTasks) > 0
+}
+
+// call this whenever new tasks are acked or when ackLevelPinnedLocked() may turn from true to
+// false (i.e. when ackLevelPinnedByWriter is set to false or newlyWrittenTasks is cleared).
 func (tr *fairTaskReader) advanceAckLevelLocked() {
-	if tr.ackLevelPinned {
+	if tr.ackLevelPinnedLocked() {
 		return
 	}
 
@@ -478,8 +532,8 @@ func (tr *fairTaskReader) getAndPinAckLevel() fairLevel {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 
-	softassert.That(tr.logger, !tr.ackLevelPinned, "ack level already pinned")
-	tr.ackLevelPinned = true
+	softassert.That(tr.logger, !tr.ackLevelPinnedByWriter, "ack level already pinned")
+	tr.ackLevelPinnedByWriter = true
 	return tr.ackLevel
 }
 
@@ -493,8 +547,8 @@ func (tr *fairTaskReader) unpinAckLevel(writeErr error) {
 		tr.atEnd = false
 	}
 
-	softassert.That(tr.logger, tr.ackLevelPinned, "ack level wasn't pinned")
-	tr.ackLevelPinned = false
+	softassert.That(tr.logger, tr.ackLevelPinnedByWriter, "ack level wasn't pinned")
+	tr.ackLevelPinnedByWriter = false
 	tr.advanceAckLevelLocked()
 }
 
