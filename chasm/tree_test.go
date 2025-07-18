@@ -1494,7 +1494,7 @@ func (s *nodeSuite) TestRef() {
 
 	rc, ok := s.registry.ComponentFor(testComponent)
 	s.True(ok)
-	archetype := rc.FqType()
+	archetype := Archetype(rc.FqType())
 
 	subComponent1, err := testComponent.SubComponent1.Get(chasmContext)
 	s.NoError(err)
