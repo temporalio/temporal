@@ -2,9 +2,15 @@ package client
 
 import (
 	"context"
-
-	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 )
+
+// GetResult represents the result of getting a document from Elasticsearch
+// This is a generic type that can be used with different ES client libraries
+type GetResult struct {
+	Id_     string                 `json:"_id"`
+	Source_ map[string]interface{} `json:"_source"`
+	Found   bool                   `json:"found"`
+}
 
 // ElasticClient defines the interface for interacting with Elasticsearch.
 type (
@@ -13,6 +19,6 @@ type (
 		Ping(ctx context.Context) error
 		CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error)
 		DeleteIndex(ctx context.Context, indexName string) (bool, error)
-		GetDocument(ctx context.Context, index string, docID string) (*types.GetResult, error)
+		GetDocument(ctx context.Context, index string, docID string) (*GetResult, error)
 	}
 )

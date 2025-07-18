@@ -42,7 +42,7 @@ const (
 type (
 	VisibilityStore struct {
 		esClient                       client.Client        // Legacy client (will be deprecated)
-		esClientV8                     client.ElasticClient // New simplified client interface
+		goESClient                     client.ElasticClient // Official go-elasticsearch client
 		index                          string
 		searchAttributesProvider       searchattribute.Provider
 		searchAttributesMapperProvider searchattribute.MapperProvider
@@ -132,10 +132,10 @@ func NewVisibilityStore(
 			cfg.URL.Redacted(), cfg.Username, err)
 	}
 
-	// Also create the new v8 client for migrated operations
-	esClientV8, err := client.NewV8ElasticClient(cfg, esHttpClient, logger)
+	// Also create the new go-elasticsearch client for migrated operations
+	goESClient, err := client.NewGoElasticsearchClient(cfg, esHttpClient, logger)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create Elasticsearch v8 client (URL = %v, username = %q): %w",
+		return nil, fmt.Errorf("unable to create Elasticsearch go-elasticsearch client (URL = %v, username = %q): %w",
 			cfg.URL.Redacted(), cfg.Username, err)
 	}
 	var (
@@ -149,7 +149,7 @@ func NewVisibilityStore(
 	}
 	return &VisibilityStore{
 		esClient:                       esClient,
-		esClientV8:                     esClientV8,
+		goESClient:                     goESClient,
 		index:                          cfg.GetVisibilityIndex(),
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
@@ -533,8 +533,8 @@ func (s *VisibilityStore) GetWorkflowExecution(
 ) (*store.InternalGetWorkflowExecutionResponse, error) {
 	docID := GetDocID(request.WorkflowID, request.RunID)
 
-	// Use the v8 client for consistency with other methods
-	result, err := s.esClientV8.GetDocument(ctx, s.index, docID)
+	// Use the go-elasticsearch client for consistency with other methods
+	result, err := s.goESClient.GetDocument(ctx, s.index, docID)
 	if err != nil {
 		return nil, ConvertElasticsearchClientError("GetWorkflowExecution failed", err)
 	}
@@ -552,8 +552,13 @@ func (s *VisibilityStore) GetWorkflowExecution(
 		)
 	}
 
-	// Use the v8 client field names: Id_ and Source_
-	workflowExecutionInfo, err := s.ParseESDoc(result.Id_, result.Source_, typeMap, request.Namespace)
+	// Convert Source_ map to json.RawMessage for ParseESDoc
+	sourceBytes, err := json.Marshal(result.Source_)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal document source: %w", err)
+	}
+
+	workflowExecutionInfo, err := s.ParseESDoc(result.Id_, sourceBytes, typeMap, request.Namespace)
 	if err != nil {
 		return nil, err
 	}

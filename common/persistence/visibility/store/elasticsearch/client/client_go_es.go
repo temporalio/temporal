@@ -10,22 +10,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elastic/go-elasticsearch/v8"
-	"github.com/elastic/go-elasticsearch/v8/esapi"
-	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
+	"github.com/elastic/go-elasticsearch/v7"
+	"github.com/elastic/go-elasticsearch/v7/esapi"
 	"go.temporal.io/server/common/log"
 )
 
-// clientV8Impl implements ElasticClient interfaces
-type clientV8Impl struct {
+// elasticClientImpl implements ElasticClient interfaces
+type elasticClientImpl struct {
 	esClient *elasticsearch.Client
 	url      url.URL
 }
 
-var _ ElasticClient = (*clientV8Impl)(nil)
+var _ ElasticClient = (*elasticClientImpl)(nil)
 
-// newClientV8 creates a new ES client using go-elasticsearch v8
-func newClientV8(cfg *Config, httpClient *http.Client, logger log.Logger) (*clientV8Impl, error) {
+// newGoESClient creates a new ES client using go-elasticsearch
+func newGoESClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*elasticClientImpl, error) {
 	var urls []string
 	if len(cfg.URLs) > 0 {
 		urls = make([]string, len(cfg.URLs))
@@ -69,13 +68,13 @@ func newClientV8(cfg *Config, httpClient *http.Client, logger log.Logger) (*clie
 		return nil, err
 	}
 
-	return &clientV8Impl{
+	return &elasticClientImpl{
 		esClient: client,
 		url:      cfg.URL,
 	}, nil
 }
 
-func (c *clientV8Impl) IndexExists(ctx context.Context, indexName string) (bool, error) {
+func (c *elasticClientImpl) IndexExists(ctx context.Context, indexName string) (bool, error) {
 	req := esapi.IndicesExistsRequest{
 		Index: []string{indexName},
 	}
@@ -89,7 +88,7 @@ func (c *clientV8Impl) IndexExists(ctx context.Context, indexName string) (bool,
 	return res.StatusCode == 200, nil
 }
 
-func (c *clientV8Impl) Ping(ctx context.Context) error {
+func (c *elasticClientImpl) Ping(ctx context.Context) error {
 	req := esapi.InfoRequest{}
 	res, err := req.Do(ctx, c.esClient)
 	if err != nil {
@@ -104,7 +103,7 @@ func (c *clientV8Impl) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (c *clientV8Impl) CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error) {
+func (c *elasticClientImpl) CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error) {
 	var bodyBytes []byte
 	var err error
 
@@ -140,7 +139,7 @@ func (c *clientV8Impl) CreateIndex(ctx context.Context, index string, body map[s
 	return result.Acknowledged, nil
 }
 
-func (c *clientV8Impl) DeleteIndex(ctx context.Context, indexName string) (bool, error) {
+func (c *elasticClientImpl) DeleteIndex(ctx context.Context, indexName string) (bool, error) {
 	req := esapi.IndicesDeleteRequest{
 		Index: []string{indexName},
 	}
@@ -170,7 +169,7 @@ func (c *clientV8Impl) DeleteIndex(ctx context.Context, indexName string) (bool,
 	return result.Acknowledged, nil
 }
 
-func (c *clientV8Impl) GetDocument(ctx context.Context, index string, docID string) (*types.GetResult, error) {
+func (c *elasticClientImpl) GetDocument(ctx context.Context, index string, docID string) (*GetResult, error) {
 	req := esapi.GetRequest{
 		Index:      index,
 		DocumentID: docID,
@@ -184,10 +183,9 @@ func (c *clientV8Impl) GetDocument(ctx context.Context, index string, docID stri
 
 	// Handle 404 as document not found
 	if res.StatusCode == 404 {
-		return &types.GetResult{
-			Index_: index,
-			Id_:    docID,
-			Found:  false,
+		return &GetResult{
+			Id_:   docID,
+			Found: false,
 		}, nil
 	}
 
@@ -195,10 +193,27 @@ func (c *clientV8Impl) GetDocument(ctx context.Context, index string, docID stri
 		return nil, fmt.Errorf("get document error: %s", res.String())
 	}
 
-	var result types.GetResult
-	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
+	var rawResult map[string]interface{}
+	if err := json.NewDecoder(res.Body).Decode(&rawResult); err != nil {
 		return nil, err
 	}
 
-	return &result, nil
+	// Extract the fields we need
+	result := &GetResult{
+		Found: false,
+	}
+
+	if id, ok := rawResult["_id"].(string); ok {
+		result.Id_ = id
+	}
+
+	if source, ok := rawResult["_source"].(map[string]interface{}); ok {
+		result.Source_ = source
+	}
+
+	if found, ok := rawResult["found"].(bool); ok {
+		result.Found = found
+	}
+
+	return result, nil
 }

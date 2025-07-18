@@ -34,14 +34,11 @@ func NewFunctionalTestsClient(config *Config, logger log.Logger) (IntegrationTes
 	}
 }
 
-// NewV8ElasticClient creates a new v8 Elasticsearch client
-func NewV8ElasticClient(config *Config, httpClient *http.Client, logger log.Logger) (ElasticClient, error) {
+// NewGoElasticsearchClient creates a new Elasticsearch client using the official go-elasticsearch library
+func NewGoElasticsearchClient(config *Config, httpClient *http.Client, logger log.Logger) (ElasticClient, error) {
 	switch config.Version {
-	case "v8", "official", "go-elasticsearch":
-		return newClientV8(config, httpClient, logger)
-	case "v7", "":
-		// TODO: Create adapter for v7 elastic client
-		return nil, fmt.Errorf("v7 adapter not implemented yet")
+	case "v7", "go-elasticsearch":
+		return newGoESClient(config, httpClient, logger)
 	default:
 		return nil, fmt.Errorf("not supported Elasticsearch version: %v", config.Version)
 	}

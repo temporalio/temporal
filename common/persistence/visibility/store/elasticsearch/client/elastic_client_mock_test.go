@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 	"go.uber.org/mock/gomock"
 )
 
@@ -96,10 +95,9 @@ func TestElasticClientMock_Example(t *testing.T) {
 
 	// Test GetDocument
 	t.Run("GetDocument", func(t *testing.T) {
-		expectedResult := &types.GetResult{
-			Index_: "test-index",
-			Id_:    "doc1",
-			Found:  true,
+		expectedResult := &GetResult{
+			Id_:   "doc1",
+			Found: true,
 		}
 
 		mockClient.EXPECT().
@@ -109,9 +107,6 @@ func TestElasticClientMock_Example(t *testing.T) {
 		result, err := mockClient.GetDocument(ctx, "test-index", "doc1")
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
-		}
-		if result.Index_ != "test-index" {
-			t.Errorf("Expected index 'test-index', got %s", result.Index_)
 		}
 		if !result.Found {
 			t.Error("Expected document to be found")
@@ -166,7 +161,7 @@ func TestElasticClientMock_Advanced(t *testing.T) {
 		// Match with custom matcher
 		mockClient.EXPECT().
 			GetDocument(gomock.Any(), gomock.Any(), gomock.Not(gomock.Eq(""))).
-			Return(&types.GetResult{Found: false}, nil)
+			Return(&GetResult{Found: false}, nil)
 
 		// Test the expectations
 		mockClient.IndexExists(ctx, "specific-index")

@@ -13,7 +13,6 @@ import (
 	context "context"
 	reflect "reflect"
 
-	types "github.com/elastic/go-elasticsearch/v8/typedapi/types"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -72,10 +71,10 @@ func (mr *MockElasticClientMockRecorder) DeleteIndex(ctx, indexName any) *gomock
 }
 
 // GetDocument mocks base method.
-func (m *MockElasticClient) GetDocument(ctx context.Context, index, docID string) (*types.GetResult, error) {
+func (m *MockElasticClient) GetDocument(ctx context.Context, index, docID string) (*GetResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDocument", ctx, index, docID)
-	ret0, _ := ret[0].(*types.GetResult)
+	ret0, _ := ret[0].(*GetResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
