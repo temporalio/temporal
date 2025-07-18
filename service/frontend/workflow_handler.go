@@ -4648,7 +4648,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			}
 			updateActivitiesOptionsParams.MatchAll = true
 		}
-		
+
 		updateActivitiesOptionsParams.ActivityOptions = op.UpdateActivityOptionsOperation.GetActivityOptions()
 		updateActivitiesOptionsParams.UpdateMask = op.UpdateActivityOptionsOperation.GetUpdateMask()
 		updateActivitiesOptionsParams.RestoreOriginal = op.UpdateActivityOptionsOperation.GetRestoreOriginal()
