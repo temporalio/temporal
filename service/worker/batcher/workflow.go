@@ -96,7 +96,7 @@ type (
 	// UpdateOptionsParams is the parameters for updating workflow execution options
 	UpdateOptionsParams struct {
 		WorkflowExecutionOptions *workflowpb.WorkflowExecutionOptions
-		UpdateMask               *FieldMask //*fieldmaskpb.FieldMask
+		UpdateMask               *FieldMask
 	}
 
 	UnpauseActivitiesParams struct {
