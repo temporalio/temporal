@@ -424,6 +424,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 							require.Equal(col, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
 							require.Nil(col, callbackInfo.LastAttemptFailure)
 						}
+						require.NotEmpty(col, callbackInfo.RequestId)
 						descCbs = append(descCbs, callbackInfo.Callback)
 					}
 					protoassert.ProtoElementsMatch(col, cbs, descCbs)
@@ -571,6 +572,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	for _, callbackInfo := range description.Callbacks {
 		s.Equal(enumspb.CALLBACK_STATE_STANDBY, callbackInfo.State)
 		s.Equal(int32(0), callbackInfo.Attempt)
+		s.NotEmpty(callbackInfo.RequestId)
 		descCbs = append(descCbs, callbackInfo.Callback)
 	}
 	s.ProtoElementsMatch(cbs, descCbs)
@@ -601,6 +603,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 			descCbs = make([]*commonpb.Callback, 0, len(description.Callbacks))
 			for _, callbackInfo := range description.Callbacks {
 				require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+				require.NotEmpty(t, callbackInfo.RequestId)
 				descCbs = append(descCbs, callbackInfo.Callback)
 			}
 			protoassert.ProtoElementsMatch(t, cbs, descCbs)

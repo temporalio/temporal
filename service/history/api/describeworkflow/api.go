@@ -365,6 +365,7 @@ func buildCallbackInfo(
 		LastAttemptFailure:      callback.LastAttemptFailure,
 		NextAttemptScheduleTime: callback.NextAttemptScheduleTime,
 		BlockedReason:           blockedReason,
+		RequestId:               callback.RequestId,
 	}, nil
 }
 
