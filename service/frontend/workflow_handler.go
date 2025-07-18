@@ -4506,7 +4506,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	var updateOptionsParams batcher.UpdateOptionsParams
 	var unpauseActivitiesParams batcher.UnpauseActivitiesParams
 	var resetActivitiesParams batcher.ResetActivitiesParams
-	var updateOptionsActivitiesParams batcher.UpdateOptionsActivitiesParams
+	var updateActivitiesOptionsParams batcher.UpdateActivitiesOptionsParams
 	switch op := request.Operation.(type) {
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 		identity = op.TerminationOperation.GetIdentity()
@@ -4596,7 +4596,6 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		unpauseActivitiesParams.ResetAttempts = op.UnpauseActivitiesOperation.ResetAttempts
 		unpauseActivitiesParams.ResetHeartbeat = op.UnpauseActivitiesOperation.ResetHeartbeat
 		unpauseActivitiesParams.Jitter = op.UnpauseActivitiesOperation.Jitter.AsDuration()
-
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 		operationType = batcher.BatchTypeResetActivities
 		if op.ResetActivitiesOperation == nil {
@@ -4624,14 +4623,17 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		resetActivitiesParams.Jitter = op.ResetActivitiesOperation.Jitter.AsDuration()
 		resetActivitiesParams.KeepPaused = op.ResetActivitiesOperation.KeepPaused
 		resetActivitiesParams.RestoreOriginalOptions = op.ResetActivitiesOperation.RestoreOriginalOptions
-
+		resetActivitiesParams.Identity = op.ResetActivitiesOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
-		operationType = batcher.BatchTypeUpdateOptionsActivities
+		operationType = batcher.BatchTypeUpdateActivitiesOptions
 		if op.UpdateActivityOptionsOperation == nil {
 			return nil, serviceerror.NewInvalidArgument("update activity options operation is not set")
 		}
-		if op.UpdateActivityOptionsOperation.GetActivity() == nil {
-			return nil, serviceerror.NewInvalidArgument("activity filter must be set")
+		if op.UpdateActivityOptionsOperation.GetActivityOptions() != nil && op.UpdateActivityOptionsOperation.GetRestoreOriginal() {
+			return nil, serviceerror.NewInvalidArgument("cannot set both activity options and restore original")
+		}
+		if op.UpdateActivityOptionsOperation.GetActivityOptions() == nil && !op.UpdateActivityOptionsOperation.GetRestoreOriginal() {
+			return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or restore original should be set to true")
 		}
 
 		switch a := op.UpdateActivityOptionsOperation.GetActivity().(type) {
@@ -4639,18 +4641,18 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			if len(a.Type) == 0 {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
-			updateOptionsActivitiesParams.ActivityType = a.Type
+			updateActivitiesOptionsParams.ActivityType = a.Type
 		case *batchpb.BatchOperationUpdateActivityOptions_MatchAll:
 			if !a.MatchAll {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
-			updateOptionsActivitiesParams.MatchAll = true
+			updateActivitiesOptionsParams.MatchAll = true
 		}
-		updateOptionsActivitiesParams.ActivityOptions = op.UpdateActivityOptionsOperation.GetActivityOptions()
-		updateOptionsActivitiesParams.UpdateMask = op.UpdateActivityOptionsOperation.GetUpdateMask()
-		updateOptionsActivitiesParams.RestoreOriginal = op.UpdateActivityOptionsOperation.GetRestoreOriginal()
-		updateOptionsActivitiesParams.Identity = op.UpdateActivityOptionsOperation.GetIdentity()
-
+		
+		updateActivitiesOptionsParams.ActivityOptions = op.UpdateActivityOptionsOperation.GetActivityOptions()
+		updateActivitiesOptionsParams.UpdateMask = op.UpdateActivityOptionsOperation.GetUpdateMask()
+		updateActivitiesOptionsParams.RestoreOriginal = op.UpdateActivityOptionsOperation.GetRestoreOriginal()
+		updateActivitiesOptionsParams.Identity = op.UpdateActivityOptionsOperation.GetIdentity()
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
@@ -4670,7 +4672,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		UpdateOptionsParams:           updateOptionsParams,
 		UnpauseActivitiesParams:       unpauseActivitiesParams,
 		ResetActivitiesParams:         resetActivitiesParams,
-		UpdateOptionsActivitiesParams: updateOptionsActivitiesParams,
+		UpdateActivitiesOptionsParams: updateActivitiesOptionsParams,
 	}
 	inputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(input)
 	if err != nil {
@@ -4836,7 +4838,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		operationType = enumspb.BATCH_OPERATION_TYPE_RESET
 	case batcher.BatchTypeUpdateOptions:
 		operationType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
-	case batcher.BatchTypeUpdateOptionsActivities:
+	case batcher.BatchTypeUpdateActivitiesOptions:
 		operationType = enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS
 	case batcher.BatchTypeResetActivities:
 		operationType = enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY

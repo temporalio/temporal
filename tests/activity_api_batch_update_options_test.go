@@ -216,4 +216,24 @@ func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOp
 	s.Error(err)
 	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+
+	// cannot set activity options and restore original
+	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace: s.Namespace().String(),
+		Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
+			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
+				Activity: &batchpb.BatchOperationUpdateActivityOptions_Type{Type: "activity-type"},
+				ActivityOptions: &activitypb.ActivityOptions{
+					ScheduleToCloseTimeout: durationpb.New(1 * time.Second),
+				},
+				RestoreOriginal: true,
+			},
+		},
+		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", "WorkflowFunc"),
+		JobId:           uuid.New(),
+		Reason:          "test",
+	})
+	s.Error(err)
+	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }

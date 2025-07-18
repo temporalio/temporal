@@ -44,8 +44,8 @@ const (
 	BatchTypeUpdateOptions = "update_options"
 	// BatchTypePauseActivities is batch type for unpausing activities
 	BatchTypeUnpauseActivities = "unpause_activities"
-	// BatchTypeUpdateOptionsActivities is batch type for updating the options of activities
-	BatchTypeUpdateOptionsActivities = "update_options_activities"
+	// BatchTypeUpdateActivitiesOptions is batch type for updating the options of activities
+	BatchTypeUpdateActivitiesOptions = "update_activity_options"
 	// BatchTypeResetActivities is batch type for resetting activities
 	BatchTypeResetActivities = "reset_activities"
 )
@@ -109,7 +109,7 @@ type (
 		Jitter         time.Duration
 	}
 
-	UpdateOptionsActivitiesParams struct {
+	UpdateActivitiesOptionsParams struct {
 		Identity        string
 		ActivityType    string
 		MatchAll        bool
@@ -157,8 +157,8 @@ type (
 		UpdateOptionsParams UpdateOptionsParams
 		// UnpauseActivitiesParams is params only for BatchTypeUnpauseActivities
 		UnpauseActivitiesParams UnpauseActivitiesParams
-		// UpdateOptionsActivitiesParams is params only for BatchTypeUpdateOptionsActivities
-		UpdateOptionsActivitiesParams UpdateOptionsActivitiesParams
+		// UpdateActivitiesOptionsParams is params only for BatchTypeUpdateActivitiesOptions
+		UpdateActivitiesOptionsParams UpdateActivitiesOptionsParams
 		// ResetActivitiesParams is params only for BatchTypeResetActivities
 		ResetActivitiesParams ResetActivitiesParams
 
@@ -292,8 +292,8 @@ func validateParams(params BatchParams) error {
 			return errors.New("must provide ActivityType or MatchAll")
 		}
 		return nil
-	case BatchTypeUpdateOptionsActivities:
-		if params.UpdateOptionsActivitiesParams.ActivityType == "" && !params.UpdateOptionsActivitiesParams.MatchAll {
+	case BatchTypeUpdateActivitiesOptions:
+		if params.UpdateActivitiesOptionsParams.ActivityType == "" && !params.UpdateActivitiesOptionsParams.MatchAll {
 			return errors.New("must provide ActivityType or MatchAll")
 		}
 		return nil
