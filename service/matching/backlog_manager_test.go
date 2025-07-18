@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"math/rand"
 	"sync"
@@ -18,6 +19,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	testutil "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -366,33 +368,57 @@ func totalApproximateBacklogCount(c backlogManager) (total int64) {
 	return total
 }
 
-func (s *BacklogManagerTestSuite) TestStandingBacklogs() {
+type standingBacklogParams struct {
+	lower, upper   int64         // range of standing backlog
+	gap            int64         // add/finish tasks as long as we're within gap of the target
+	period         time.Duration // interval between peaks/troughs
+	duration       time.Duration // total duration
+	keys           int           // unique fairness keys
+	zipfS, zipfV   float64       // parameters for fairness key distribution
+	cfg            map[dynamicconfig.Key]any
+	delayInjection time.Duration
+	faultInjection float32
+}
+
+var defaultStandingBacklogParams = standingBacklogParams{
+	lower:    20,
+	upper:    200,
+	gap:      2,
+	period:   3 * time.Second,
+	duration: 5 * time.Second,
+	keys:     30,
+	zipfS:    3,
+	zipfV:    1,
+	cfg: map[dynamicconfig.Key]any{
+		// reduce these for better coverage
+		dynamicconfig.MatchingGetTasksBatchSize.Key(): 100,
+		dynamicconfig.MatchingGetTasksReloadAt.Key():  40,
+		dynamicconfig.MatchingMaxTaskBatchSize.Key():  50,
+	},
+	delayInjection: 1 * time.Millisecond,
+	faultInjection: 0.02,
+}
+
+func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 	if !s.newMatcher && !s.fairness {
 		s.T().Skip("TestStandingBacklogs is for priority + fairness backlog manager only")
 	}
 
-	const lower = 20
-	const upper = 200
-	const gap = 2 // add/finish tasks as long as we're within gap of the target
-	const period = 3 * time.Second
-	const duration = 15 * time.Second
-	const keys = 30
-	zipf := rand.NewZipf(rand.New(rand.NewSource(time.Now().UnixNano())), 3, 1, keys-1) // more lopsided
-	// zipf := rand.NewZipf(rand.New(rand.NewSource(time.Now().UnixNano())), 1.5, 10, keys-1) // more even
+	zipf := rand.NewZipf(rand.New(rand.NewSource(time.Now().UnixNano())), p.zipfS, p.zipfV, uint64(p.keys-1))
 
-	// reduce these for better coverage
-	// TODO: consider testing with write batch size > read batch size
-	s.cfgcli.OverrideSetting(dynamicconfig.MatchingGetTasksBatchSize, 100)
-	s.cfgcli.OverrideSetting(dynamicconfig.MatchingGetTasksReloadAt, 40)
-	s.cfgcli.OverrideSetting(dynamicconfig.MatchingMaxTaskBatchSize, 50)
+	for k, v := range p.cfg {
+		s.cfgcli.OverrideValue(k, v)
+	}
 
 	// add delays and fault injection
-	s.taskMgr.delayInjection = 5 * time.Millisecond
-	s.taskMgr.addFault("GetTasks", "Unavailable", 0.02)
-	s.taskMgr.addFault("CreateTasks", "Unavailable", 0.02)
-	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
+	s.taskMgr.delayInjection = p.delayInjection
+	if p.faultInjection > 0 {
+		s.taskMgr.addFault("GetTasks", "Unavailable", p.faultInjection)
+		s.taskMgr.addFault("CreateTasks", "Unavailable", p.faultInjection)
+		s.logger.Expect(testlogger.Error, "Persistent store operation failure")
+	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), duration+5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), p.duration+5*time.Second)
 	defer cancel()
 
 	var wg sync.WaitGroup
@@ -400,7 +426,7 @@ func (s *BacklogManagerTestSuite) TestStandingBacklogs() {
 	var tasks list.List // this is the in-memory buffer (mock for the matcher)
 	var target, inflight, processed, index atomic.Int64
 	var tracker sync.Map // tracks tasks so we can find missing ones
-	target.Store((lower + upper) / 2)
+	target.Store((p.lower + p.upper) / 2)
 
 	s.addSpooledTask = func(t *internalTask) error {
 		lock.Lock()
@@ -450,7 +476,7 @@ func (s *BacklogManagerTestSuite) TestStandingBacklogs() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for sleepUntil(func() bool { return delta() <= gap }) {
+		for sleepUntil(func() bool { return delta() <= p.gap }) {
 			info := &persistencespb.TaskInfo{
 				CreateTime:       timestamppb.Now(),
 				ScheduledEventId: index.Add(1),
@@ -473,7 +499,7 @@ func (s *BacklogManagerTestSuite) TestStandingBacklogs() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for sleepUntil(func() bool { return delta() >= -gap }) {
+		for sleepUntil(func() bool { return delta() >= -p.gap }) {
 			if t := getTask(); t != nil {
 				// TODO: error sometimes?
 				t.finish(nil, true)
@@ -488,9 +514,9 @@ func (s *BacklogManagerTestSuite) TestStandingBacklogs() {
 	}()
 
 	// adjust target over time
-	for time.Since(start) < duration {
-		factor := (math.Sin(2*math.Pi*time.Since(start).Seconds()/period.Seconds()) + 1.0) / 2
-		target.Store(lower + int64(factor*float64(upper-lower+1)))
+	for time.Since(start) < p.duration {
+		factor := (math.Sin(2*math.Pi*time.Since(start).Seconds()/p.period.Seconds()) + 1.0) / 2
+		target.Store(p.lower + int64(factor*float64(p.upper-p.lower+1)))
 		sleep()
 	}
 
@@ -508,4 +534,43 @@ func (s *BacklogManagerTestSuite) TestStandingBacklogs() {
 
 	elapsed := time.Since(start)
 	s.T().Logf("processed %d tasks, %.3f/s", processed.Load(), float64(processed.Load())/elapsed.Seconds())
+}
+
+func (s *BacklogManagerTestSuite) TestStandingBacklog_Short() {
+	s.testStandingBacklog(defaultStandingBacklogParams)
+}
+
+func (s *BacklogManagerTestSuite) TestStandingBacklog_ManyKeysUniform() {
+	testutil.LongTest(s)
+	p := defaultStandingBacklogParams
+	p.zipfS = 1.01 // not exactly uniform but closer
+	p.zipfV = 10000
+	p.keys = 10000
+	p.period = 5 * time.Second
+	p.duration = 15 * time.Second
+	s.testStandingBacklog(p)
+}
+
+func (s *BacklogManagerTestSuite) TestStandingBacklog_WideRange() {
+	testutil.LongTest(s)
+	p := defaultStandingBacklogParams
+	p.lower = 3
+	p.upper = 1000
+	p.period = 15 * time.Second
+	p.duration = 15 * time.Second
+	s.testStandingBacklog(p)
+}
+
+func (s *BacklogManagerTestSuite) TestStandingBacklog_FiveMin() {
+	testutil.LongTest(s)
+	p := defaultStandingBacklogParams
+	p.upper = 400
+	p.period = time.Minute
+	p.duration = 5 * time.Minute
+	p.cfg = maps.Clone(p.cfg)
+	p.cfg[dynamicconfig.MatchingGetTasksBatchSize.Key()] = 300
+	p.cfg[dynamicconfig.MatchingGetTasksReloadAt.Key()] = 60
+	p.delayInjection = 3 * time.Millisecond
+	p.faultInjection = 0.01
+	s.testStandingBacklog(p)
 }
