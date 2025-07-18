@@ -422,6 +422,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) ExecuteMultiOperation(ctx, in a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteMultiOperation", reflect.TypeOf((*MockWorkflowServiceClient)(nil).ExecuteMultiOperation), varargs...)
 }
 
+// FetchWorkerConfig mocks base method.
+func (m *MockWorkflowServiceClient) FetchWorkerConfig(ctx context.Context, in *workflowservice.FetchWorkerConfigRequest, opts ...grpc.CallOption) (*workflowservice.FetchWorkerConfigResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "FetchWorkerConfig", varargs...)
+	ret0, _ := ret[0].(*workflowservice.FetchWorkerConfigResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchWorkerConfig indicates an expected call of FetchWorkerConfig.
+func (mr *MockWorkflowServiceClientMockRecorder) FetchWorkerConfig(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchWorkerConfig", reflect.TypeOf((*MockWorkflowServiceClient)(nil).FetchWorkerConfig), varargs...)
+}
+
 // GetClusterInfo mocks base method.
 func (m *MockWorkflowServiceClient) GetClusterInfo(ctx context.Context, in *workflowservice.GetClusterInfoRequest, opts ...grpc.CallOption) (*workflowservice.GetClusterInfoResponse, error) {
 	m.ctrl.T.Helper()
@@ -1760,6 +1780,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) UpdateWorkerBuildIdCompatibilit
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdCompatibility", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UpdateWorkerBuildIdCompatibility), varargs...)
+}
+
+// UpdateWorkerConfig mocks base method.
+func (m *MockWorkflowServiceClient) UpdateWorkerConfig(ctx context.Context, in *workflowservice.UpdateWorkerConfigRequest, opts ...grpc.CallOption) (*workflowservice.UpdateWorkerConfigResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateWorkerConfig", varargs...)
+	ret0, _ := ret[0].(*workflowservice.UpdateWorkerConfigResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkerConfig indicates an expected call of UpdateWorkerConfig.
+func (mr *MockWorkflowServiceClientMockRecorder) UpdateWorkerConfig(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerConfig", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UpdateWorkerConfig), varargs...)
 }
 
 // UpdateWorkerDeploymentVersionMetadata mocks base method.

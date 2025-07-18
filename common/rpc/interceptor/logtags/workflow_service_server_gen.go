@@ -91,6 +91,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.ExecuteMultiOperationResponse:
 		return nil
+	case *workflowservice.FetchWorkerConfigRequest:
+		return nil
+	case *workflowservice.FetchWorkerConfigResponse:
+		return nil
 	case *workflowservice.GetClusterInfoRequest:
 		return nil
 	case *workflowservice.GetClusterInfoResponse:
@@ -431,6 +435,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.UpdateWorkerBuildIdCompatibilityRequest:
 		return nil
 	case *workflowservice.UpdateWorkerBuildIdCompatibilityResponse:
+		return nil
+	case *workflowservice.UpdateWorkerConfigRequest:
+		return nil
+	case *workflowservice.UpdateWorkerConfigResponse:
 		return nil
 	case *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest:
 		return nil
