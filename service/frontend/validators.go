@@ -31,13 +31,7 @@ func validateRateLimit(update *workflowservice.UpdateTaskQueueConfigRequest_Rate
 	if update.RateLimit.GetRequestsPerSecond() < 0 {
 		return serviceerror.NewInvalidArgumentf("RequestsPerSecond for %s rate limit must be non-negative.", label)
 	}
-	// if update.RateLimit.GetRequestsPerSecond() > math.MaxFloat32 {
-	// 	return serviceerror.NewInvalidArgumentf("RequestsPerSecond for %s rate limit exceeds the supported maximum.", label)
-	// }
-	if err := validateStringField(label+reason, update.GetReason(), maxReasonLength, false); err != nil {
-		return err
-	}
-	return nil
+	return validateStringField(label+reason, update.GetReason(), maxReasonLength, false)
 }
 
 func validateStringField(fieldName string, value string, maxLen int, required bool) error {
