@@ -2,6 +2,7 @@ package s3store
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -23,10 +24,11 @@ import (
 
 type (
 	visibilityArchiver struct {
-		logger         log.Logger
-		metricsHandler metrics.Handler
-		s3cli          s3iface.S3API
-		queryParser    QueryParser
+		logger               log.Logger
+		metricsHandler       metrics.Handler
+		s3cli                s3iface.S3API
+		queryParser          QueryParser
+		withSearchAttributes bool
 	}
 
 	queryVisibilityRequest struct {
@@ -76,10 +78,11 @@ func newVisibilityArchiver(
 		return nil, err
 	}
 	return &visibilityArchiver{
-		logger:         logger,
-		metricsHandler: metricsHandler,
-		s3cli:          s3.New(sess),
-		queryParser:    NewQueryParser(),
+		logger:               logger,
+		metricsHandler:       metricsHandler,
+		s3cli:                s3.New(sess),
+		queryParser:          NewQueryParser(config.WithSearchAttributes),
+		withSearchAttributes: config.WithSearchAttributes,
 	}, nil
 }
 
@@ -134,6 +137,28 @@ func (v *visibilityArchiver) Archive(
 			return err
 		}
 	}
+
+	if v.withSearchAttributes {
+		// upload to all search attributes
+		for key, value := range request.GetSearchAttributes() {
+			key = fmt.Sprintf(
+				"%s/%s/%s",
+				constructIndexedVisibilitySearchPrefix(
+					URI.Path(),
+					request.GetNamespaceId(),
+					primaryIndexKeyWorkflowTypeName,
+					request.WorkflowTypeName,
+					key),
+				value,
+				request.GetRunId(),
+			)
+			if err := Upload(ctx, v.s3cli, URI, key, encodedVisibilityRecord); err != nil {
+				archiveFailReason = errWriteKey
+				return err
+			}
+		}
+	}
+
 	metrics.VisibilityArchiveSuccessCount.With(handler).Record(1)
 	return nil
 }
@@ -285,6 +310,19 @@ func (v *visibilityArchiver) query(
 			secondaryIndexKeyStartTimeout,
 			*request.parsedQuery.startTime,
 			*request.parsedQuery.searchPrecision,
+		)
+	}
+
+	if v.withSearchAttributes && request.parsedQuery.custom != nil {
+		prefix = fmt.Sprintf(
+			"%s/%s",
+			constructIndexedVisibilitySearchPrefix(URI.Path(),
+				request.namespaceID,
+				primaryIndex,
+				*primaryIndexValue,
+				*request.parsedQuery.custom.name,
+			),
+			*request.parsedQuery.custom.value,
 		)
 	}
 
