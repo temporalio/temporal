@@ -91,7 +91,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 	wfBacklogCount := int64(0)
 	s.Eventually(
 		func() bool {
-			wfBacklogCount = s.getBacklogCount(ctx, tv)
+			wfBacklogCount = s.getBacklogCount(ctx, tv, sdkclient.TaskQueueTypeWorkflow)
 			return wfBacklogCount >= maxBacklog
 		},
 		5*time.Second,
@@ -136,7 +136,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 	// wait for backlog to be 0
 	s.Eventually(
 		func() bool {
-			wfBacklogCount = s.getBacklogCount(ctx, tv)
+			wfBacklogCount = s.getBacklogCount(ctx, tv, sdkclient.TaskQueueTypeWorkflow)
 			return wfBacklogCount == 0
 		},
 		timeToDrain,
@@ -145,7 +145,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 
 }
 
-func (s *TaskQueueSuite) getBacklogCount(ctx context.Context, tv *testvars.TestVars) int64 {
+func (s *TaskQueueSuite) getBacklogCount(ctx context.Context, tv *testvars.TestVars, taskQueueType int32) int64 {
 	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 		Namespace:   s.Namespace().String(),
 		TaskQueue:   tv.TaskQueue(),
@@ -153,7 +153,7 @@ func (s *TaskQueueSuite) getBacklogCount(ctx context.Context, tv *testvars.TestV
 		ReportStats: true,
 	})
 	s.NoError(err)
-	return resp.GetVersionsInfo()[""].GetTypesInfo()[sdkclient.TaskQueueTypeWorkflow].GetStats().GetApproximateBacklogCount()
+	return resp.GetVersionsInfo()[""].GetTypesInfo()[taskQueueType].GetStats().GetApproximateBacklogCount()
 }
 
 func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int, useNewMatching bool) string {
@@ -162,6 +162,76 @@ func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int, u
 		return "NewMatching_" + ret
 	}
 	return "OldMatching_" + ret
+}
+
+func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
+	// Set burst for rate limit to be equal to apiRPS to test enforced rate limit.
+	s.OverrideDynamicConfig(dynamicconfig.MatchingMinTaskThrottlingBurstSize, 2)
+	const apiRPS = 2.0     // Drain time ~ 4 seconds
+	const workerRPS = 50.0 // Drain time ~ 510ms
+	const taskCount = 10
+	const drainTimeout = 10 * time.Second
+	const expectedMinDrainTime = 4 * time.Second
+
+	tv := testvars.New(s.T())
+
+	// Set task queue rate limit to `apiRPS` via UpdateTaskQueueConfig
+	resp, err := s.FrontendClient().UpdateTaskQueueConfig(context.Background(), &workflowservice.UpdateTaskQueueConfigRequest{
+		Namespace:     s.Namespace().String(),
+		Identity:      tv.ClientIdentity(),
+		TaskQueue:     tv.TaskQueue().GetName(),
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			RateLimit: &taskqueuepb.RateLimit{
+				RequestsPerSecond: apiRPS,
+			},
+			Reason: "Test API override",
+		},
+	})
+	s.NotNil(resp)
+	s.NoError(err)
+
+	// Start `taskCount` number of workflows, each of which will schedule one activity task.
+	activity := func(context.Context) error {
+		time.Sleep(1 * time.Second) // Simulate work
+		return nil
+	}
+	workflowFn := func(ctx workflow.Context) error {
+		ao := workflow.ActivityOptions{
+			StartToCloseTimeout: 5 * time.Second,
+		}
+		ctx = workflow.WithActivityOptions(ctx, ao)
+		return workflow.ExecuteActivity(ctx, activity).Get(ctx, nil)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), drainTimeout)
+	defer cancel()
+
+	for i := range taskCount {
+		_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			TaskQueue: tv.TaskQueue().GetName(),
+			ID:        fmt.Sprintf("wf-%d", i),
+		}, workflowFn)
+		s.NoError(err)
+	}
+
+	// Start worker with `workerRPS` which needs to be overriden.
+	w := worker.New(s.SdkClient(), tv.TaskQueue().GetName(), worker.Options{
+		TaskQueueActivitiesPerSecond: workerRPS,
+	})
+	w.RegisterWorkflow(workflowFn)
+	w.RegisterActivity(activity)
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	// Determine the time taken for the backlog to drain
+	start := time.Now()
+	s.Eventually(func() bool {
+		return s.getBacklogCount(ctx, tv, sdkclient.TaskQueueTypeActivity) == 0
+	}, drainTimeout, 100*time.Millisecond)
+	elapsed := time.Since(start)
+	s.Greater(elapsed, expectedMinDrainTime, "Drain was too fast, API rate limit not enforced")
+	s.Less(elapsed, drainTimeout, "Drain timeout exceeded, tasks not drained in time")
 }
 
 // TestUpdateAndDescribeTaskQueueConfig tests the update and describe task queue config functionality.
