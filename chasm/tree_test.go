@@ -37,6 +37,7 @@ type (
 
 		controller  *gomock.Controller
 		nodeBackend *MockNodeBackend
+		testLibrary *TestLibrary
 
 		registry        *Registry
 		timeSource      *clock.EventTimeSource
@@ -53,9 +54,10 @@ func (s *nodeSuite) SetupTest() {
 	s.initAssertions()
 	s.controller = gomock.NewController(s.T())
 	s.nodeBackend = NewMockNodeBackend(s.controller)
+	s.testLibrary = newTestLibrary(s.controller)
 
 	s.registry = NewRegistry()
-	err := s.registry.Register(newTestLibrary(s.controller))
+	err := s.registry.Register(s.testLibrary)
 	s.NoError(err)
 
 	s.timeSource = clock.NewEventTimeSource()
@@ -1817,17 +1819,11 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 		TransitionCount: 2,
 	}
 
-	rt, ok := s.registry.Task("TestLibrary.test_side_effect_task")
-	s.True(ok)
-	rt.validator.(*MockTaskValidator[any, *TestSideEffectTask]).EXPECT().
+	s.testLibrary.mockSideEffectTaskValidator.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
-	rt, ok = s.registry.Task("TestLibrary.test_outbound_side_effect_task")
-	s.True(ok)
-	rt.validator.(*MockTaskValidator[any, TestOutboundSideEffectTask]).EXPECT().
+	s.testLibrary.mockOutboundSideEffectTaskValidator.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
-	rt, ok = s.registry.Task("TestLibrary.test_pure_task")
-	s.True(ok)
-	rt.validator.(*MockTaskValidator[any, *TestPureTask]).EXPECT().
+	s.testLibrary.mockPureTaskValidator.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
 
 	err = root.closeTransactionUpdateComponentTasks(&persistencespb.VersionedTransition{TransitionCount: 2})
@@ -2380,16 +2376,13 @@ func (s *nodeSuite) TestExecutePureTask() {
 		},
 	}
 
-	rt, ok := s.registry.Task("TestLibrary.test_pure_task")
-	s.True(ok)
-
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 	s.NotNil(root)
 	ctx := context.Background()
 
 	expectExecute := func(result error) {
-		rt.handler.(*MockPureTaskExecutor[any, *TestPureTask]).EXPECT().
+		s.testLibrary.mockPureTaskExecutor.EXPECT().
 			Execute(
 				gomock.AssignableToTypeOf(&MutableContextImpl{}),
 				gomock.AssignableToTypeOf(&TestComponent{}),
@@ -2399,7 +2392,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 	}
 
 	expectValidate := func(retValue bool, errValue error) {
-		rt.validator.(*MockTaskValidator[any, *TestPureTask]).EXPECT().
+		s.testLibrary.mockPureTaskValidator.EXPECT().
 			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(retValue, errValue).Times(1)
 	}
 
@@ -2460,9 +2453,6 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	}
 	entityKey := EntityKey{}
 
-	rt, ok := s.registry.Task("TestLibrary.test_side_effect_task")
-	s.True(ok)
-
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 	s.NotNil(root)
@@ -2471,7 +2461,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	ctx := NewEngineContext(context.Background(), mockEngine)
 
 	expectExecute := func(result error) {
-		rt.handler.(*MockSideEffectTaskExecutor[any, *TestSideEffectTask]).EXPECT().
+		s.testLibrary.mockSideEffectTaskExecutor.EXPECT().
 			Execute(
 				gomock.Any(),
 				gomock.Any(),
@@ -2525,9 +2515,6 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 		},
 	}
 
-	rt, ok := s.registry.Task("TestLibrary.test_side_effect_task")
-	s.True(ok)
-
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 	s.NotNil(root)
@@ -2537,7 +2524,7 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	taskAttributes := TaskAttributes{}
 
 	expectValidate := func(retValue bool, errValue error) {
-		rt.validator.(*MockTaskValidator[any, *TestSideEffectTask]).EXPECT().
+		s.testLibrary.mockSideEffectTaskValidator.EXPECT().
 			Validate(
 				gomock.AssignableToTypeOf((*ContextImpl)(nil)),
 				gomock.AssignableToTypeOf((*TestComponent)(nil)),
