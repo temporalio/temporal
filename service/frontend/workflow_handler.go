@@ -100,8 +100,7 @@ const (
 	errTooManyDeleteVersionRequests     = "Too many DeleteWorkerDeploymentVersion requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
 	errTooManyVersionMetadataRequests   = "Too many UpdateWorkerDeploymentVersionMetadata requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
 
-	maxReasonLength   = 256 // Maximum length for the reason field in RateLimitUpdate configurations.
-	maxIdentityLength = 256 // Maximum length for the identity field in UpdateRateLimitRequest
+	maxReasonLength = 1000 // Maximum length for the reason field in RateLimitUpdate configurations.
 )
 
 type (
@@ -6074,21 +6073,14 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	queueRateLimit := request.GetUpdateQueueRateLimit()
 	fairnessKeyRateLimitDefault := request.GetUpdateFairnessKeyRateLimitDefault()
 	// Validate rate limits
-	if err := validateRateLimit(queueRateLimit, "queue"); err != nil {
+	if err := validateRateLimit(queueRateLimit, "UpdateQueueRateLimit"); err != nil {
 		return nil, err
 	}
-	if err := validateRateLimit(fairnessKeyRateLimitDefault, "fairness key"); err != nil {
-		return nil, err
-	}
-	// Validate reason fields
-	if err := validateStringField("UpdateQueueRateLimit.Reason", queueRateLimit.GetReason(), maxReasonLength, false); err != nil {
-		return nil, err
-	}
-	if err := validateStringField("UpdateFairnessKeyRateLimitDefault.Reason", fairnessKeyRateLimitDefault.GetReason(), maxReasonLength, false); err != nil {
+	if err := validateRateLimit(fairnessKeyRateLimitDefault, "UpdateFairnessKeyRateLimitDefault"); err != nil {
 		return nil, err
 	}
 	// Validate identity field
-	if err := validateStringField("Identity", request.GetIdentity(), maxIdentityLength, true); err != nil {
+	if err := validateStringField("Identity", request.GetIdentity(), wh.config.MaxIDLengthLimit(), true); err != nil {
 		return nil, err
 	}
 	resp, err := wh.matchingClient.UpdateTaskQueueConfig(ctx, &matchingservice.UpdateTaskQueueConfigRequest{

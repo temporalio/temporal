@@ -1,12 +1,14 @@
 package frontend
 
 import (
-	"math"
-
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+)
+
+const (
+	reason = ".Reason"
 )
 
 func validateExecution(w *commonpb.WorkflowExecution) error {
@@ -29,13 +31,16 @@ func validateRateLimit(update *workflowservice.UpdateTaskQueueConfigRequest_Rate
 	if update.RateLimit.GetRequestsPerSecond() < 0 {
 		return serviceerror.NewInvalidArgumentf("RequestsPerSecond for %s rate limit must be non-negative.", label)
 	}
-	if update.RateLimit.GetRequestsPerSecond() > math.MaxFloat32 {
-		return serviceerror.NewInvalidArgumentf("RequestsPerSecond for %s rate limit exceeds the supported maximum.", label)
+	// if update.RateLimit.GetRequestsPerSecond() > math.MaxFloat32 {
+	// 	return serviceerror.NewInvalidArgumentf("RequestsPerSecond for %s rate limit exceeds the supported maximum.", label)
+	// }
+	if err := validateStringField(label+reason, update.GetReason(), maxReasonLength, false); err != nil {
+		return err
 	}
 	return nil
 }
 
-func validateStringField(fieldName, value string, maxLen int, required bool) error {
+func validateStringField(fieldName string, value string, maxLen int, required bool) error {
 	if required && len(value) == 0 {
 		return serviceerror.NewInvalidArgumentf("%s field must be non-empty.", fieldName)
 	}
