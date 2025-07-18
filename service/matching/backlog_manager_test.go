@@ -382,19 +382,24 @@ func (s *BacklogManagerTestSuite) TestStandingBacklogs() {
 
 	// reduce these for better coverage
 	// TODO: consider testing with write batch size > read batch size
-	s.taskMgr.delayInjection = 5 * time.Millisecond
 	s.cfgcli.OverrideSetting(dynamicconfig.MatchingGetTasksBatchSize, 100)
 	s.cfgcli.OverrideSetting(dynamicconfig.MatchingGetTasksReloadAt, 40)
 	s.cfgcli.OverrideSetting(dynamicconfig.MatchingMaxTaskBatchSize, 50)
+
+	// add delays and fault injection
+	s.taskMgr.delayInjection = 5 * time.Millisecond
+	s.taskMgr.addFault("GetTasks", "Unavailable", 0.02)
+	s.taskMgr.addFault("CreateTasks", "Unavailable", 0.02)
+	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 
 	ctx, cancel := context.WithTimeout(context.Background(), duration+5*time.Second)
 	defer cancel()
 
 	var wg sync.WaitGroup
 	var lock sync.Mutex
-	var tasks list.List
+	var tasks list.List // this is the in-memory buffer (mock for the matcher)
 	var target, inflight, processed, index atomic.Int64
-	var tracker sync.Map
+	var tracker sync.Map // tracks tasks so we can find missing ones
 	target.Store((lower + upper) / 2)
 
 	s.addSpooledTask = func(t *internalTask) error {
@@ -453,17 +458,18 @@ func (s *BacklogManagerTestSuite) TestStandingBacklogs() {
 					FairnessKey: fmt.Sprintf("fkey-%02d", zipf.Uint64()),
 				},
 			}
-			tracker.Store(info.ScheduledEventId, info.Priority.FairnessKey)
-			inflight.Add(1)
-			fmt.Printf("spool %5d -> %3d\n", info.ScheduledEventId, inflight.Load())
 			err := s.blm.SpoolTask(info)
-			if !s.NoError(err) {
-				return
+			if err == nil {
+				tracker.Store(info.ScheduledEventId, info.Priority.FairnessKey)
+				inflight.Add(1)
+				fmt.Printf("spool %5d -> %3d\n", info.ScheduledEventId, inflight.Load())
+			} else {
+				sleep()
 			}
 		}
 	}()
 
-	// reader
+	// poller
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -485,6 +491,7 @@ func (s *BacklogManagerTestSuite) TestStandingBacklogs() {
 	for time.Since(start) < duration {
 		factor := (math.Sin(2*math.Pi*time.Since(start).Seconds()/period.Seconds()) + 1.0) / 2
 		target.Store(lower + int64(factor*float64(upper-lower+1)))
+		sleep()
 	}
 
 	// drain and wait until exited
