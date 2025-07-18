@@ -91,7 +91,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 	wfBacklogCount := int64(0)
 	s.Eventually(
 		func() bool {
-			wfBacklogCount = s.getBacklogCount(ctx, tv, sdkclient.TaskQueueTypeWorkflow)
+			wfBacklogCount = s.getBacklogCount(ctx, tv)
 			return wfBacklogCount >= maxBacklog
 		},
 		5*time.Second,
@@ -136,7 +136,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 	// wait for backlog to be 0
 	s.Eventually(
 		func() bool {
-			wfBacklogCount = s.getBacklogCount(ctx, tv, sdkclient.TaskQueueTypeWorkflow)
+			wfBacklogCount = s.getBacklogCount(ctx, tv)
 			return wfBacklogCount == 0
 		},
 		timeToDrain,
@@ -145,7 +145,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 
 }
 
-func (s *TaskQueueSuite) getBacklogCount(ctx context.Context, tv *testvars.TestVars, taskQueueType int32) int64 {
+func (s *TaskQueueSuite) getBacklogCount(ctx context.Context, tv *testvars.TestVars) int64 {
 	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 		Namespace:   s.Namespace().String(),
 		TaskQueue:   tv.TaskQueue(),
@@ -153,7 +153,7 @@ func (s *TaskQueueSuite) getBacklogCount(ctx context.Context, tv *testvars.TestV
 		ReportStats: true,
 	})
 	s.NoError(err)
-	return resp.GetVersionsInfo()[""].GetTypesInfo()[taskQueueType].GetStats().GetApproximateBacklogCount()
+	return resp.GetVersionsInfo()[""].GetTypesInfo()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetStats().GetApproximateBacklogCount()
 }
 
 func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int, useNewMatching bool) string {
@@ -164,14 +164,31 @@ func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int, u
 	return "OldMatching_" + ret
 }
 
+func (s *TaskQueueSuite) retrieveBacklogCount(ctx context.Context, tv *testvars.TestVars, taskQueueType int32) int64 {
+	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     s.Namespace().String(),
+		TaskQueue:     tv.TaskQueue(),
+		TaskQueueType: enumspb.TaskQueueType(taskQueueType),
+		ReportStats:   true,
+	})
+	s.NoError(err)
+	fmt.Printf("Time : %s Backlog count : %d\n", time.Now().String(), resp.GetStats().GetApproximateBacklogCount())
+	return resp.GetStats().GetApproximateBacklogCount()
+}
+
 func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
 	// Set burst for rate limit to be equal to apiRPS to test enforced rate limit.
-	s.OverrideDynamicConfig(dynamicconfig.MatchingMinTaskThrottlingBurstSize, 2)
-	const apiRPS = 2.0     // Drain time ~ 4 seconds
+	s.OverrideDynamicConfig(dynamicconfig.MatchingMinTaskThrottlingBurstSize, 1)
+
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
+
+	const apiRPS = 1.0     // Drain time ~ 4 seconds
 	const workerRPS = 50.0 // Drain time ~ 510ms
-	const taskCount = 10
+	const taskCount = 5
 	const drainTimeout = 10 * time.Second
-	const expectedMinDrainTime = 4 * time.Second
+	const expectedMinDrainTime = 5 * time.Second
 
 	tv := testvars.New(s.T())
 
@@ -193,7 +210,8 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
 
 	// Start `taskCount` number of workflows, each of which will schedule one activity task.
 	activity := func(context.Context) error {
-		time.Sleep(1 * time.Second) // Simulate work
+		// last activity run at
+		fmt.Printf("Activity in progress : %s", time.Now().String())
 		return nil
 	}
 	workflowFn := func(ctx workflow.Context) error {
@@ -204,7 +222,7 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
 		return workflow.ExecuteActivity(ctx, activity).Get(ctx, nil)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), drainTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), drainTimeout*2)
 	defer cancel()
 
 	for i := range taskCount {
@@ -219,15 +237,25 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
 	w := worker.New(s.SdkClient(), tv.TaskQueue().GetName(), worker.Options{
 		TaskQueueActivitiesPerSecond: workerRPS,
 	})
+	s.Eventually(func() bool {
+		fmt.Printf("Backlog fo workflow task queue")
+		return s.retrieveBacklogCount(ctx, tv, sdkclient.TaskQueueTypeWorkflow) == taskCount
+	}, drainTimeout*2, 100*time.Millisecond)
+	fmt.Printf("******")
 	w.RegisterWorkflow(workflowFn)
-	w.RegisterActivity(activity)
 	s.NoError(w.Start())
+	s.Eventually(func() bool {
+		fmt.Printf("Backlog before rps in effect")
+		return s.retrieveBacklogCount(ctx, tv, sdkclient.TaskQueueTypeActivity) == taskCount
+	}, drainTimeout*2, 100*time.Millisecond)
+	w.RegisterActivity(activity)
 	defer w.Stop()
 
 	// Determine the time taken for the backlog to drain
 	start := time.Now()
 	s.Eventually(func() bool {
-		return s.getBacklogCount(ctx, tv, sdkclient.TaskQueueTypeActivity) == 0
+		fmt.Printf("Backlog after rps in effect")
+		return s.retrieveBacklogCount(ctx, tv, sdkclient.TaskQueueTypeActivity) == 0
 	}, drainTimeout, 100*time.Millisecond)
 	elapsed := time.Since(start)
 	s.Greater(elapsed, expectedMinDrainTime, "Drain was too fast, API rate limit not enforced")
