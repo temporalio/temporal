@@ -163,6 +163,10 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			return nil, nil
 		}
 
+		if activityInfo.Stamp != transferTask.Stamp || activityInfo.Paused {
+			return nil, consts.ErrStaleReference // drop the task
+		}
+
 		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
 			return nil, err
@@ -170,10 +174,6 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 
 		if activityInfo.StartedEventId == common.EmptyEventID {
 			return newActivityTaskPostActionInfo(mutableState, activityInfo)
-		}
-
-		if activityInfo.Stamp != transferTask.Stamp || activityInfo.Paused {
-			return nil, consts.ErrStaleReference // drop the task
 		}
 
 		return nil, nil
