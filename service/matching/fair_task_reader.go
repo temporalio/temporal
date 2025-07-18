@@ -43,14 +43,14 @@ type (
 		ackLevel         fairLevel   // inclusive: task exactly at ackLevel _has_ been acked
 		atEnd            bool        // whether we believe outstandingTasks represents the entire queue right now
 
-		// Buffer tasks written while a read is pending so we make sure to account for them in
+		// Hold tasks written while a read is pending so we make sure to account for them in
 		// our read level.
-		bufferedTasks []*persistencespb.AllocatedTaskInfo
+		newlyWrittenTasks []*persistencespb.AllocatedTaskInfo
 
 		// Pin ack level while writing tasks so that we don't delete just-written tasks.
-		// Also pin it while reading if we have bufferedTasks, to handle the case of concurrent
+		// Also pin it while reading if we have newlyWrittenTasks, to handle the case of concurrent
 		// reads and writes: if it's pinned by a write while a read is pending, we need to hold
-		// it pinned until bufferedTasks are processed.
+		// it pinned until newlyWrittenTasks are processed.
 		ackLevelPinnedByWriter bool
 
 		// gc state
@@ -214,10 +214,10 @@ func (tr *fairTaskReader) readTasksImpl() {
 
 	// process any tasks that were written while readPending was true
 	var newTasks []*internalTask
-	if len(tr.bufferedTasks) != 0 {
-		newTasks = tr.mergeTasksLocked(tr.bufferedTasks, mergeWrite)
-		clear(tr.bufferedTasks)
-		tr.bufferedTasks = tr.bufferedTasks[:0]
+	if len(tr.newlyWrittenTasks) != 0 {
+		newTasks = tr.mergeTasksLocked(tr.newlyWrittenTasks, mergeWrite)
+		clear(tr.newlyWrittenTasks)
+		tr.newlyWrittenTasks = tr.newlyWrittenTasks[:0]
 
 		// ack level would have been pinned here, we may be able to advance it now (if it's not
 		// explicitly pinned by another write)
@@ -251,7 +251,7 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) er
 
 	// If we got less than we asked for, we know we hit the end.
 	// If there was a concurrent write such that we incorrectly think we hit the end here,
-	// it will be buffered and processed after we're done reading, and maybe reset atEnd then.
+	// it will be held and processed after we're done reading, and maybe reset atEnd then.
 	mode := mergeReadMiddle
 	if len(res.Tasks) < batchSize {
 		mode = mergeReadToEnd
@@ -357,7 +357,7 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 	if mode == mergeWrite && tr.readPending {
 		// concurrent write + read: hold the just-written tasks and merge them after we process
 		// the read.
-		tr.bufferedTasks = append(tr.bufferedTasks, tasks...)
+		tr.newlyWrittenTasks = append(tr.newlyWrittenTasks, tasks...)
 		tr.lock.Unlock()
 		return
 	}
@@ -495,11 +495,11 @@ func (tr *fairTaskReader) getLoadedTasks() int {
 }
 
 func (tr *fairTaskReader) ackLevelPinnedLocked() bool {
-	return tr.ackLevelPinnedByWriter || len(tr.bufferedTasks) > 0
+	return tr.ackLevelPinnedByWriter || len(tr.newlyWrittenTasks) > 0
 }
 
 // call this whenever new tasks are acked or when ackLevelPinnedLocked() may turn from true to
-// false (i.e. when ackLevelPinnedByWriter is set to false or bufferedTasks is cleared).
+// false (i.e. when ackLevelPinnedByWriter is set to false or newlyWrittenTasks is cleared).
 func (tr *fairTaskReader) advanceAckLevelLocked() {
 	if tr.ackLevelPinnedLocked() {
 		return
