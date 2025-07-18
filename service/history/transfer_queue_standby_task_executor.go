@@ -172,6 +172,10 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			return newActivityTaskPostActionInfo(mutableState, activityInfo)
 		}
 
+		if activityInfo.Stamp != transferTask.Stamp || activityInfo.Paused {
+			return nil, consts.ErrStaleReference // drop the task
+		}
+
 		return nil, nil
 	}
 
