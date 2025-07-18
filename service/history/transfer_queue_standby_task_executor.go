@@ -438,8 +438,20 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			return &struct{}{}, nil
 		}
 
+		targetNamespaceID := childWorkflowInfo.NamespaceId
+		if targetNamespaceID == "" {
+			// This is for backward compatibility.
+			// Old mutable state may not have the target namespace ID set in childWorkflowInfo.
+
+			targetNamespaceEntry, err := t.registry.GetNamespace(namespace.Name(childWorkflowInfo.Namespace))
+			if err != nil {
+				return nil, err
+			}
+			targetNamespaceID = targetNamespaceEntry.ID().String()
+		}
+
 		_, err = t.historyRawClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
-			NamespaceId: transferTask.TargetNamespaceID,
+			NamespaceId: targetNamespaceID,
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: childWorkflowInfo.StartedWorkflowId,
 				RunId:      childWorkflowInfo.StartedRunId,

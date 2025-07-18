@@ -107,11 +107,11 @@ func (s *syncWorkflowStateSuite) TearDownTest() {
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_TransitionHistoryDisabled() {
 	mu := historyi.NewMockMutableState(s.controller)
-	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
+	s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
 		RunID:       s.execution.RunId,
-	}, locks.PriorityLow).Return(
+	}, chasm.ArchetypeAny, locks.PriorityLow).Return(
 		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 
 	executionInfo := &persistencespb.WorkflowExecutionInfo{
@@ -133,11 +133,11 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_TransitionHistoryDisabled
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_UnFlushedBufferedEvents() {
 	mu := historyi.NewMockMutableState(s.controller)
-	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
+	s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
 		RunID:       s.execution.RunId,
-	}, locks.PriorityLow).Return(
+	}, chasm.ArchetypeAny, locks.PriorityLow).Return(
 		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 
 	mu.EXPECT().HasBufferedEvents().Return(true)
@@ -155,11 +155,11 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_UnFlushedBufferedEvents()
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 	mu := historyi.NewMockMutableState(s.controller)
-	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
+	s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
 		RunID:       s.execution.RunId,
-	}, locks.PriorityLow).Return(
+	}, chasm.ArchetypeAny, locks.PriorityLow).Return(
 		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
@@ -508,11 +508,11 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
 			mu := historyi.NewMockMutableState(s.controller)
-			s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
+			s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 				NamespaceID: s.namespaceID,
 				WorkflowID:  s.execution.WorkflowId,
 				RunID:       s.execution.RunId,
-			}, locks.PriorityLow).Return(
+			}, chasm.ArchetypeAny, locks.PriorityLow).Return(
 				api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 			versionHistories, transitions, tombstoneBatches, breakPoint := tc.infoFn()
 			executionInfo := &persistencespb.WorkflowExecutionInfo{
@@ -546,11 +546,11 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvided_ReturnSnapshot() {
 	mu := historyi.NewMockMutableState(s.controller)
-	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
+	s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
 		RunID:       s.execution.RunId,
-	}, locks.PriorityLow).Return(
+	}, chasm.ArchetypeAny, locks.PriorityLow).Return(
 		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,

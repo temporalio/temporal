@@ -219,11 +219,12 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		RunId:      task.GetRunID(),
 	}
 
-	weCtx, release, err := t.cache.GetOrCreateWorkflowExecution(
+	weCtx, release, err := t.cache.GetOrCreateChasmEntity(
 		ctx,
 		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),
 		&workflowExecution,
+		chasm.ArchetypeAny, // deletion logic works for all Archetypes.
 		locks.PriorityLow,
 	)
 	if err != nil {
