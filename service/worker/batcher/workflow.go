@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -13,7 +12,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 const (
@@ -98,7 +96,7 @@ type (
 	// UpdateOptionsParams is the parameters for updating workflow execution options
 	UpdateOptionsParams struct {
 		WorkflowExecutionOptions *workflowpb.WorkflowExecutionOptions
-		UpdateMask               *fieldmaskpb.FieldMask
+		UpdateMask               *FieldMask //*fieldmaskpb.FieldMask
 	}
 
 	UnpauseActivitiesParams struct {
@@ -113,9 +111,31 @@ type (
 		Identity        string
 		ActivityType    string
 		MatchAll        bool
-		ActivityOptions *activitypb.ActivityOptions
-		UpdateMask      *fieldmaskpb.FieldMask
+		ActivityOptions *ActivityOptions
+		UpdateMask      *FieldMask
 		RestoreOriginal bool
+	}
+
+	ActivityOptions struct {
+		TaskQueue              *TaskQueue
+		ScheduleToCloseTime    time.Duration
+		ScheduleToStartTimeout time.Duration
+		StartToCloseTimeout    time.Duration
+		HeartbeatTimeout       time.Duration
+		RetryPolicy            *RetryPolicy
+	}
+
+	TaskQueue struct {
+		Name string
+		Kind int32
+	}
+
+	RetryPolicy struct {
+		InitialInterval        time.Duration
+		BackoffCoefficient     float64
+		MaximumInterval        time.Duration
+		MaximumAttempts        int32
+		NonRetryableErrorTypes []string
 	}
 
 	ResetActivitiesParams struct {
@@ -127,6 +147,10 @@ type (
 		KeepPaused             bool
 		Jitter                 time.Duration
 		RestoreOriginalOptions bool
+	}
+
+	FieldMask struct {
+		Paths []string
 	}
 
 	// BatchParams is the parameters for batch operation workflow

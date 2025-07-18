@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -25,6 +26,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 const (
@@ -366,7 +368,7 @@ func startTaskProcessor(
 								RunId:      runID,
 							},
 							WorkflowExecutionOptions: batchParams.UpdateOptionsParams.WorkflowExecutionOptions,
-							UpdateMask:               batchParams.UpdateOptionsParams.UpdateMask,
+							UpdateMask:               &fieldmaskpb.FieldMask{Paths: batchParams.UpdateOptionsParams.UpdateMask.Paths},
 						})
 						return err
 					})
@@ -407,10 +409,28 @@ func startTaskProcessor(
 								RunId:      runID,
 							},
 							Activity:        &workflowservice.UpdateActivityOptionsRequest_Type{Type: batchParams.UpdateActivitiesOptionsParams.ActivityType},
-							UpdateMask:      batchParams.UpdateActivitiesOptionsParams.UpdateMask,
+							UpdateMask:      &fieldmaskpb.FieldMask{Paths: batchParams.UpdateActivitiesOptionsParams.UpdateMask.Paths},
 							RestoreOriginal: batchParams.UpdateActivitiesOptionsParams.RestoreOriginal,
 							Identity:        batchParams.UpdateActivitiesOptionsParams.Identity,
-							ActivityOptions: batchParams.UpdateActivitiesOptionsParams.ActivityOptions,
+						}
+
+						if ao := batchParams.UpdateActivitiesOptionsParams.ActivityOptions; ao != nil {
+							updateRequest.ActivityOptions = &activitypb.ActivityOptions{
+								ScheduleToStartTimeout: durationpb.New(ao.ScheduleToStartTimeout),
+								ScheduleToCloseTimeout: durationpb.New(ao.ScheduleToCloseTime),
+								StartToCloseTimeout:    durationpb.New(ao.StartToCloseTimeout),
+								HeartbeatTimeout:       durationpb.New(ao.HeartbeatTimeout),
+							}
+
+							if rp := ao.RetryPolicy; rp != nil {
+								updateRequest.ActivityOptions.RetryPolicy = &commonpb.RetryPolicy{
+									InitialInterval:        durationpb.New(rp.InitialInterval),
+									BackoffCoefficient:     rp.BackoffCoefficient,
+									MaximumInterval:        durationpb.New(rp.MaximumInterval),
+									MaximumAttempts:        rp.MaximumAttempts,
+									NonRetryableErrorTypes: rp.NonRetryableErrorTypes,
+								}
+							}
 						}
 
 						if batchParams.UpdateActivitiesOptionsParams.MatchAll {

@@ -4555,7 +4555,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
 		operationType = batcher.BatchTypeUpdateOptions
 		updateOptionsParams.WorkflowExecutionOptions = op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions()
-		updateOptionsParams.UpdateMask = op.UpdateWorkflowOptionsOperation.GetUpdateMask()
+		if updateMask := op.UpdateWorkflowOptionsOperation.GetUpdateMask(); updateMask != nil {
+			updateOptionsParams.UpdateMask = &batcher.FieldMask{Paths: updateMask.Paths}
+		}
 		// TODO(carlydf): remove hacky usage of deprecated fields later, after adding support for oneof in BatchParams encoder
 		if o := updateOptionsParams.WorkflowExecutionOptions.VersioningOverride; o.GetOverride() != nil {
 			deprecatedOverride := &workflowpb.VersioningOverride{}
@@ -4649,10 +4651,34 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			updateActivitiesOptionsParams.MatchAll = true
 		}
 
-		updateActivitiesOptionsParams.ActivityOptions = op.UpdateActivityOptionsOperation.GetActivityOptions()
-		updateActivitiesOptionsParams.UpdateMask = op.UpdateActivityOptionsOperation.GetUpdateMask()
 		updateActivitiesOptionsParams.RestoreOriginal = op.UpdateActivityOptionsOperation.GetRestoreOriginal()
 		updateActivitiesOptionsParams.Identity = op.UpdateActivityOptionsOperation.GetIdentity()
+		if updateMask := op.UpdateActivityOptionsOperation.GetUpdateMask(); updateMask != nil {
+			updateActivitiesOptionsParams.UpdateMask = &batcher.FieldMask{Paths: updateMask.Paths}
+		}
+		if ao := op.UpdateActivityOptionsOperation.GetActivityOptions(); ao != nil {
+			updateActivitiesOptionsParams.ActivityOptions = &batcher.ActivityOptions{
+				ScheduleToStartTimeout: ao.ScheduleToStartTimeout.AsDuration(),
+				ScheduleToCloseTime:    ao.ScheduleToCloseTimeout.AsDuration(),
+				StartToCloseTimeout:    ao.StartToCloseTimeout.AsDuration(),
+				HeartbeatTimeout:       ao.HeartbeatTimeout.AsDuration(),
+			}
+			if rp := ao.RetryPolicy; rp != nil {
+				updateActivitiesOptionsParams.ActivityOptions.RetryPolicy = &batcher.RetryPolicy{
+					InitialInterval:        rp.InitialInterval.AsDuration(),
+					MaximumInterval:        rp.MaximumInterval.AsDuration(),
+					BackoffCoefficient:     rp.BackoffCoefficient,
+					NonRetryableErrorTypes: rp.NonRetryableErrorTypes,
+					MaximumAttempts:        rp.MaximumAttempts,
+				}
+			}
+			if tq := ao.TaskQueue; tq != nil {
+				updateActivitiesOptionsParams.ActivityOptions.TaskQueue = &batcher.TaskQueue{
+					Name: tq.Name,
+					Kind: int32(tq.Kind),
+				}
+			}
+		}
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
