@@ -487,14 +487,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Paused()
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	// For standby tasks, paused activities that haven't started yet will still try to be pushed to matching
-	// so we need to mock the AddActivityTask call
-	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
-
-	// Set current time past the discard duration so the task gets discarded instead of retried
-	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(resp.ExecutionErr)
+	s.ErrorIs(resp.ExecutionErr, consts.ErrStaleReference)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending() {
