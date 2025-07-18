@@ -1167,7 +1167,7 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		TransitionCount:          n.backend.NextTransitionCount(),
 	}
 
-	rootLifecycleChanged, err := n.closeTransactionHandleRootLifecycleChange(nextVersionedTransition)
+	rootLifecycleChanged, err := n.closeTransactionHandleRootLifecycleChange()
 	if err != nil {
 		return NodesMutation{}, err
 	}
@@ -1197,9 +1197,7 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	return n.mutation, nil
 }
 
-func (n *Node) closeTransactionHandleRootLifecycleChange(
-	nextVersionedTransition *persistencespb.VersionedTransition,
-) (bool, error) {
+func (n *Node) closeTransactionHandleRootLifecycleChange() (bool, error) {
 	if n.valueState != valueStateNeedSerialize {
 		return false, nil
 	}
@@ -1296,6 +1294,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	nextVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 	taskOffset := int64(1)
+	validateContext := NewContext(context.Background(), n)
 
 	for _, node := range n.andAllChildren() {
 		// no-op if node is not a component
@@ -1321,7 +1320,6 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		}
 
 		// Validate existing tasks and remove invalid ones.
-		validateContext := NewContext(context.Background(), n)
 		var validationErr error
 		deleteFunc := func(existingTask *persistencespb.ChasmComponentAttributes_Task) bool {
 			existingTaskInstance, err := node.deserializeComponentTask(existingTask)
@@ -1360,6 +1358,18 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		}
 
 		for _, newTask := range newTasks {
+			valid, err := node.validateTask(
+				validateContext,
+				newTask.attributes,
+				newTask.task,
+			)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				continue
+			}
+
 			taskValue := newTask.task
 			registrableTask, ok := n.registry.taskFor(taskValue)
 			if !ok {
@@ -1393,6 +1403,12 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		// pure tasks are sorted by scheduled time.
 		slices.SortFunc(componentAttr.PureTasks, comparePureTasks)
 	}
+
+	// TODO: We cannot simply assert that all tasks in n.nodeBase.newTasks are processed.
+	// That should be the case when only one transition for each transaction.
+	// However, when processing pure tasks, we run multiple pure tasks, thus multiple transitions
+	// in one transaction. This means it's possible that task generated for a component in the first
+	// task, and that component get deleted by the second task.
 
 	return nil
 }
