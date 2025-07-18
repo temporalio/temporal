@@ -2925,7 +2925,7 @@ func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
 	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
 }
 
-func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, updateTime *timestamppb.Timestamp) *taskqueuepb.RateLimitConfig {
+func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, updateTime *timestamppb.Timestamp, updateIdentity string) *taskqueuepb.RateLimitConfig {
 	var rateLimit *taskqueuepb.RateLimit
 	if r := update.GetRateLimit(); r != nil {
 		rateLimit = &taskqueuepb.RateLimit{RequestsPerSecond: r.RequestsPerSecond}
@@ -2933,8 +2933,9 @@ func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_R
 	return &taskqueuepb.RateLimitConfig{
 		RateLimit: rateLimit,
 		Metadata: &taskqueuepb.ConfigMetadata{
-			Reason:     update.GetReason(),
-			UpdateTime: updateTime,
+			Reason:         update.GetReason(),
+			UpdateTime:     updateTime,
+			UpdateIdentity: updateIdentity,
 		},
 	}
 }
@@ -2999,13 +3000,14 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request 
 			// Update relevant config fields
 			cfg := data.PerType[int32(taskQueueType)].Config
 			updateTaskQueueConfig := request.GetUpdateTaskqueueConfig()
+			updateIdentity := updateTaskQueueConfig.GetIdentity()
 			// Queue Rate Limit
 			if qrl := updateTaskQueueConfig.GetUpdateQueueRateLimit(); qrl != nil {
-				cfg.QueueRateLimit = buildRateLimitConfig(qrl, protoTs)
+				cfg.QueueRateLimit = buildRateLimitConfig(qrl, protoTs, updateIdentity)
 			}
 			// Fairness Queue Rate Limit
 			if fkrl := updateTaskQueueConfig.GetUpdateFairnessKeyRateLimitDefault(); fkrl != nil {
-				cfg.FairnessKeysRateLimitDefault = buildRateLimitConfig(fkrl, protoTs)
+				cfg.FairnessKeysRateLimitDefault = buildRateLimitConfig(fkrl, protoTs, updateIdentity)
 			}
 			// Update the clock on TaskQueueUserData to enforce LWW on config updates
 			data.Clock = now
