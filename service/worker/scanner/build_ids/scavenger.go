@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -62,6 +63,8 @@ type (
 		// The scavenger should allow enough time to pass before cleaning these build ids.
 		removableBuildIdDurationSinceDefault dynamicconfig.DurationPropertyFn
 		buildIdScavengerVisibilityRPS        dynamicconfig.FloatPropertyFn
+		persistencePerHostQPS                dynamicconfig.IntPropertyFn
+		defaultPersistenceRateLimiter        quotas.RateLimiter
 	}
 
 	heartbeatDetails struct {
@@ -82,6 +85,8 @@ func NewActivities(
 	currentClusterName string,
 	removableBuildIdDurationSinceDefault dynamicconfig.DurationPropertyFn,
 	buildIdScavengerVisibilityRPS dynamicconfig.FloatPropertyFn,
+	persistencePerHostQPS dynamicconfig.IntPropertyFn,
+	defaultRateLimiter quotas.RateLimiter,
 ) *Activities {
 	return &Activities{
 		logger:                               logger,
@@ -93,6 +98,8 @@ func NewActivities(
 		currentClusterName:                   currentClusterName,
 		removableBuildIdDurationSinceDefault: removableBuildIdDurationSinceDefault,
 		buildIdScavengerVisibilityRPS:        buildIdScavengerVisibilityRPS,
+		persistencePerHostQPS:                persistencePerHostQPS,
+		defaultPersistenceRateLimiter:        defaultRateLimiter,
 	}
 }
 
@@ -131,7 +138,19 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 		}
 	}
 	rateLimiter := quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(a.buildIdScavengerVisibilityRPS))
+	persistenceRateLimiter := quotas.NewMultiRateLimiter([]quotas.RateLimiter{
+		quotas.NewDefaultOutgoingRateLimiter(
+			func() float64 { return float64(a.persistencePerHostQPS()) },
+		),
+		a.defaultPersistenceRateLimiter,
+	})
 	for {
+		if err := rateLimiter.Wait(ctx); err != nil {
+			return context.DeadlineExceeded
+		}
+		if err := persistenceRateLimiter.Wait(ctx); err != nil {
+			return context.DeadlineExceeded
+		}
 		nsResponse, err := a.metadataManager.ListNamespaces(ctx, &persistence.ListNamespacesRequest{
 			PageSize:       input.NamespaceListPageSize,
 			NextPageToken:  heartbeat.NamespaceNextPageToken,
@@ -142,7 +161,7 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 		}
 		for heartbeat.NamespaceIdx < len(nsResponse.Namespaces) {
 			nsId := nsResponse.Namespaces[heartbeat.NamespaceIdx].Namespace.Info.Id
-			if err := a.processNamespaceEntry(ctx, rateLimiter, input, &heartbeat, nsId); err != nil {
+			if err := a.processNamespaceEntry(ctx, rateLimiter, persistenceRateLimiter, input, &heartbeat, nsId); err != nil {
 				return err
 			}
 			heartbeat.NamespaceIdx++
@@ -161,6 +180,7 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 func (a *Activities) processNamespaceEntry(
 	ctx context.Context,
 	rateLimiter quotas.RateLimiter,
+	persistenceRateLimiter quotas.RateLimiter,
 	input BuildIdScavangerInput,
 	heartbeat *heartbeatDetails,
 	nsId string,
@@ -174,6 +194,9 @@ func (a *Activities) processNamespaceEntry(
 		return nil
 	}
 	for {
+		if err = persistenceRateLimiter.Wait(ctx); err != nil {
+			return context.DeadlineExceeded
+		}
 		tqResponse, err := a.taskManager.ListTaskQueueUserDataEntries(ctx, &persistence.ListTaskQueueUserDataEntriesRequest{
 			NamespaceID:   nsId,
 			PageSize:      input.TaskQueueListPageSize,
