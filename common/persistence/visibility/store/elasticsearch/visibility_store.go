@@ -41,7 +41,8 @@ const (
 
 type (
 	VisibilityStore struct {
-		esClient                       client.Client
+		esClient                       client.Client        // Legacy client (will be deprecated)
+		goESClient                     client.ElasticClient // Official go-elasticsearch client
 		index                          string
 		searchAttributesProvider       searchattribute.Provider
 		searchAttributesMapperProvider searchattribute.MapperProvider
@@ -130,6 +131,13 @@ func NewVisibilityStore(
 		return nil, fmt.Errorf("unable to create Elasticsearch client (URL = %v, username = %q): %w",
 			cfg.URL.Redacted(), cfg.Username, err)
 	}
+
+	// Also create the new go-elasticsearch client for migrated operations
+	goESClient, err := client.NewGoElasticsearchClient(cfg, esHttpClient, logger)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create Elasticsearch go-elasticsearch client (URL = %v, username = %q): %w",
+			cfg.URL.Redacted(), cfg.Username, err)
+	}
 	var (
 		processor           Processor
 		processorAckTimeout dynamicconfig.DurationPropertyFn
@@ -141,6 +149,7 @@ func NewVisibilityStore(
 	}
 	return &VisibilityStore{
 		esClient:                       esClient,
+		goESClient:                     goESClient,
 		index:                          cfg.GetVisibilityIndex(),
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
@@ -523,7 +532,9 @@ func (s *VisibilityStore) GetWorkflowExecution(
 	request *manager.GetWorkflowExecutionRequest,
 ) (*store.InternalGetWorkflowExecutionResponse, error) {
 	docID := GetDocID(request.WorkflowID, request.RunID)
-	result, err := s.esClient.Get(ctx, s.index, docID)
+
+	// Use the go-elasticsearch client for consistency with other methods
+	result, err := s.goESClient.GetDocument(ctx, s.index, docID)
 	if err != nil {
 		return nil, ConvertElasticsearchClientError("GetWorkflowExecution failed", err)
 	}
@@ -541,7 +552,13 @@ func (s *VisibilityStore) GetWorkflowExecution(
 		)
 	}
 
-	workflowExecutionInfo, err := s.ParseESDoc(result.Id, result.Source, typeMap, request.Namespace)
+	// Convert Source_ map to json.RawMessage for ParseESDoc
+	sourceBytes, err := json.Marshal(result.Source_)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal document source: %w", err)
+	}
+
+	workflowExecutionInfo, err := s.ParseESDoc(result.Id_, sourceBytes, typeMap, request.Namespace)
 	if err != nil {
 		return nil, err
 	}
