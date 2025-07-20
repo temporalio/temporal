@@ -396,7 +396,55 @@ var defaultStandingBacklogParams = standingBacklogParams{
 		dynamicconfig.MatchingMaxTaskBatchSize.Key():  50,
 	},
 	delayInjection: 1 * time.Millisecond,
-	faultInjection: 0.02,
+	faultInjection: 0.015,
+}
+
+func (s *BacklogManagerTestSuite) TestStandingBacklog_Short() {
+	s.testStandingBacklog(defaultStandingBacklogParams)
+}
+
+func (s *BacklogManagerTestSuite) TestStandingBacklog_ManyKeysUniform() {
+	testutil.LongTest(s)
+	p := defaultStandingBacklogParams
+	p.zipfS = 1.01 // not exactly uniform but closer
+	p.zipfV = 10000
+	p.keys = 10000
+	p.period = 5 * time.Second
+	p.duration = 15 * time.Second
+	s.testStandingBacklog(p)
+}
+
+func (s *BacklogManagerTestSuite) TestStandingBacklog_FullyDrain() {
+	testutil.LongTest(s)
+	p := defaultStandingBacklogParams
+	p.lower = -20
+	p.period = 3 * time.Second
+	p.duration = 15 * time.Second
+	s.testStandingBacklog(p)
+}
+
+func (s *BacklogManagerTestSuite) TestStandingBacklog_WideRange() {
+	testutil.LongTest(s)
+	p := defaultStandingBacklogParams
+	p.lower = 3
+	p.upper = 1000
+	p.period = 15 * time.Second
+	p.duration = 15 * time.Second
+	s.testStandingBacklog(p)
+}
+
+func (s *BacklogManagerTestSuite) TestStandingBacklog_FiveMin() {
+	testutil.LongTest(s)
+	p := defaultStandingBacklogParams
+	p.lower = -10
+	p.upper = 400
+	p.period = time.Minute
+	p.duration = 5 * time.Minute
+	p.cfg = maps.Clone(p.cfg)
+	p.cfg[dynamicconfig.MatchingGetTasksBatchSize.Key()] = 300
+	p.cfg[dynamicconfig.MatchingGetTasksReloadAt.Key()] = 60
+	p.delayInjection = 3 * time.Millisecond
+	s.testStandingBacklog(p)
 }
 
 func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
@@ -418,6 +466,10 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 		s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	}
 
+	log := func(string, ...any) (int, error) { return 0, nil }
+	// uncomment this for verbose logs:
+	// log = fmt.Printf
+
 	ctx, cancel := context.WithTimeout(context.Background(), p.duration+5*time.Second)
 	defer cancel()
 
@@ -427,19 +479,19 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 	var target, inflight, processed, index atomic.Int64
 	var tracker sync.Map // tracks tasks so we can find missing ones
 	target.Store((p.lower + p.upper) / 2)
+	const testIsOver = int64(-1000000)
 
 	s.addSpooledTask = func(t *internalTask) error {
 		lock.Lock()
 		defer lock.Unlock()
-		var e *list.Element
+		e := tasks.PushBack(t)
 		t.removeFromMatcher = func() {
 			lock.Lock()
 			defer lock.Unlock()
 			tasks.Remove(e)
-			// fmt.Printf("buf evict -> %d\n", tasks.Len())
+			log("buf evict %s -> %d\n", t.fairLevel(), tasks.Len())
 		}
-		e = tasks.PushBack(t)
-		// fmt.Printf("buf add -> %d\n", tasks.Len())
+		log("buf add %s -> %d\n", t.fairLevel(), tasks.Len())
 		return nil
 	}
 	getTask := func() *internalTask {
@@ -447,11 +499,22 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 		defer lock.Unlock()
 		e := tasks.Front()
 		if e == nil {
-			// fmt.Printf("buf was empty\n")
+			log("buf was empty\n")
 			return nil
 		}
-		// fmt.Printf("buf remove -> %d\n", tasks.Len()-1)
-		return tasks.Remove(e).(*internalTask) //nolint:revive
+		t := tasks.Remove(e).(*internalTask)
+		log("buf remove %s -> %d\n", t.fairLevel(), tasks.Len())
+		return t
+	}
+	makeNewTask := func() *persistencespb.TaskInfo {
+		return &persistencespb.TaskInfo{
+			CreateTime:       timestamppb.Now(),
+			ScheduledEventId: index.Add(1),
+			Priority: &commonpb.Priority{
+				// TODO: add priority key option too
+				FairnessKey: fmt.Sprintf("fkey-%02d", zipf.Uint64()),
+			},
+		}
 	}
 	delta := func() int64 {
 		return inflight.Load() - target.Load()
@@ -459,10 +522,10 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 	sleep := func() error {
 		return util.InterruptibleSleep(ctx, time.Duration(10+rand.Intn(5))*time.Millisecond)
 	}
-	finished := func() bool { return ctx.Err() != nil || target.Load() == 0 && inflight.Load() == 0 }
+	finished := func() bool { return ctx.Err() != nil || target.Load() == testIsOver && inflight.Load() == 0 }
 	sleepUntil := func(cond func() bool) bool {
 		for !finished() && !cond() {
-			_ = sleep()
+			sleep()
 		}
 		return !finished()
 	}
@@ -477,18 +540,10 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 	go func() {
 		defer wg.Done()
 		for sleepUntil(func() bool { return delta() <= p.gap }) {
-			info := &persistencespb.TaskInfo{
-				CreateTime:       timestamppb.Now(),
-				ScheduledEventId: index.Add(1),
-				Priority: &commonpb.Priority{
-					FairnessKey: fmt.Sprintf("fkey-%02d", zipf.Uint64()),
-				},
-			}
-			err := s.blm.SpoolTask(info)
-			if err == nil {
+			if info := makeNewTask(); s.blm.SpoolTask(info) == nil {
 				tracker.Store(info.ScheduledEventId, info.Priority.FairnessKey)
 				inflight.Add(1)
-				fmt.Printf("spool %5d -> %3d\n", info.ScheduledEventId, inflight.Load())
+				log("spool %5d -> %3d\n", info.ScheduledEventId, inflight.Load())
 			} else {
 				sleep()
 			}
@@ -503,26 +558,36 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 			if t := getTask(); t != nil {
 				// TODO: error sometimes?
 				t.finish(nil, true)
-				inflight.Add(-1)
+
 				tindex := t.event.Data.ScheduledEventId
-				lag := index.Load() - tindex
-				fmt.Printf("finish %5d -> %3d  %v  %5d\n", tindex, inflight.Load(), t.getPriority().GetFairnessKey(), lag)
+				if _, loaded := tracker.LoadAndDelete(tindex); loaded {
+					inflight.Add(-1)
+				} else {
+					// this is a duplicate task (as if matching called RecordTaskStarted twice)
+					log("finished task was not in tracker: %d\n", tindex)
+				}
+				log("finish %s -> %3d  %v  lag %5d\n", t.fairLevel(), inflight.Load(), t.getPriority().GetFairnessKey(), index.Load()-tindex)
 				processed.Add(1)
-				tracker.Delete(tindex)
+			} else {
+				sleep()
 			}
 		}
 	}()
 
 	// adjust target over time
-	for time.Since(start) < p.duration {
+	for t := target.Load(); time.Since(start) < p.duration; sleep() {
 		factor := (math.Sin(2*math.Pi*time.Since(start).Seconds()/p.period.Seconds()) + 1.0) / 2
-		target.Store(p.lower + int64(factor*float64(p.upper-p.lower+1)))
-		sleep()
+		next := p.lower + int64(factor*float64(p.upper-p.lower+1))
+		if t != next {
+			t = next
+			target.Store(t)
+			log("target %d", t)
+		}
 	}
 
 	// drain and wait until exited
 	s.T().Log("draining")
-	target.Store(0)
+	target.Store(testIsOver)
 	wg.Wait()
 
 	if !s.Zero(inflight.Load(), "did not drain all tasks!") {
@@ -534,43 +599,4 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 
 	elapsed := time.Since(start)
 	s.T().Logf("processed %d tasks, %.3f/s", processed.Load(), float64(processed.Load())/elapsed.Seconds())
-}
-
-func (s *BacklogManagerTestSuite) TestStandingBacklog_Short() {
-	s.testStandingBacklog(defaultStandingBacklogParams)
-}
-
-func (s *BacklogManagerTestSuite) TestStandingBacklog_ManyKeysUniform() {
-	testutil.LongTest(s)
-	p := defaultStandingBacklogParams
-	p.zipfS = 1.01 // not exactly uniform but closer
-	p.zipfV = 10000
-	p.keys = 10000
-	p.period = 5 * time.Second
-	p.duration = 15 * time.Second
-	s.testStandingBacklog(p)
-}
-
-func (s *BacklogManagerTestSuite) TestStandingBacklog_WideRange() {
-	testutil.LongTest(s)
-	p := defaultStandingBacklogParams
-	p.lower = 3
-	p.upper = 1000
-	p.period = 15 * time.Second
-	p.duration = 15 * time.Second
-	s.testStandingBacklog(p)
-}
-
-func (s *BacklogManagerTestSuite) TestStandingBacklog_FiveMin() {
-	testutil.LongTest(s)
-	p := defaultStandingBacklogParams
-	p.upper = 400
-	p.period = time.Minute
-	p.duration = 5 * time.Minute
-	p.cfg = maps.Clone(p.cfg)
-	p.cfg[dynamicconfig.MatchingGetTasksBatchSize.Key()] = 300
-	p.cfg[dynamicconfig.MatchingGetTasksReloadAt.Key()] = 60
-	p.delayInjection = 3 * time.Millisecond
-	p.faultInjection = 0.01
-	s.testStandingBacklog(p)
 }

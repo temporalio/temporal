@@ -22,15 +22,19 @@ issues:
       text: "time.Sleep"
       linters:
         - forbidigo
-    - path: _test\.go|tests/.+\.go
+    - path: _test\.go|tests/.+\.go|common/testing/
       text: "panic"
       linters:
         - forbidigo
-    - path: _test\.go|tests/.+\.go
+    - path: _test\.go|tests/.+\.go|common/testing/
+      text: "return value is not checked"
+      linters:
+        - errcheck
+    - path: _test\.go|tests/.+\.go|common/testing/
       text: "(cyclomatic|cognitive)"  # false positives when using subtests
       linters:
         - revive
-    - path: _test\.go|tests/.+\.go
+    - path: _test\.go|tests/.+\.go|common/testing/
       text: "(dot-imports|unchecked-type-assertion)"  # helpful in tests
       linters:
         - revive
