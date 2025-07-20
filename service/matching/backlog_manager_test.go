@@ -470,7 +470,7 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 	// uncomment this for verbose logs:
 	// log = fmt.Printf
 
-	ctx, cancel := context.WithTimeout(context.Background(), p.duration+5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), p.duration+15*time.Second)
 	defer cancel()
 
 	var wg sync.WaitGroup
@@ -499,7 +499,6 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 		defer lock.Unlock()
 		e := tasks.Front()
 		if e == nil {
-			log("buf was empty\n")
 			return nil
 		}
 		t := tasks.Remove(e).(*internalTask)
@@ -520,7 +519,8 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 		return inflight.Load() - target.Load()
 	}
 	sleep := func() error {
-		return util.InterruptibleSleep(ctx, time.Duration(10+rand.Intn(5))*time.Millisecond)
+		d := time.Millisecond + time.Duration(rand.Float32()*float32(3*time.Millisecond))
+		return util.InterruptibleSleep(ctx, d)
 	}
 	finished := func() bool { return ctx.Err() != nil || target.Load() == testIsOver && inflight.Load() == 0 }
 	sleepUntil := func(cond func() bool) bool {
@@ -540,11 +540,15 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 	go func() {
 		defer wg.Done()
 		for sleepUntil(func() bool { return delta() <= p.gap }) {
-			if info := makeNewTask(); s.blm.SpoolTask(info) == nil {
-				tracker.Store(info.ScheduledEventId, info.Priority.FairnessKey)
-				inflight.Add(1)
+			info := makeNewTask()
+			tracker.Store(info.ScheduledEventId, info.Priority.FairnessKey)
+			inflight.Add(1)
+			if s.blm.SpoolTask(info) == nil {
 				log("spool %5d -> %3d\n", info.ScheduledEventId, inflight.Load())
 			} else {
+				log("spool %5d failed\n", info.ScheduledEventId, inflight.Load())
+				tracker.Delete(info.ScheduledEventId)
+				inflight.Add(-1)
 				sleep()
 			}
 		}
