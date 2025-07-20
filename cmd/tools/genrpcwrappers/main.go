@@ -304,7 +304,8 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"CheckTaskQueueUserDataPropagationRequest",
 		"ApplyTaskQueueUserDataReplicationEventRequest",
 		"GetWorkerVersioningRulesRequest",
-		"UpdateWorkerVersioningRulesRequest":
+		"UpdateWorkerVersioningRulesRequest",
+		"UpdateTaskQueueConfigRequest":
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_WORKFLOW"}
 		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
@@ -341,7 +342,6 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	client, err := c.getClientForTaskQueuePartition(p)`,
 			tqp.path, nsID.path)
 	}
-
 	if tq.found() && tqt.found() {
 		partitionMaker := fmt.Sprintf("tqid.PartitionFromProto(%s, %s, %s)", tq.path, nsID.path, tqt.path)
 		// Some task queue fields are full messages, some are just strings

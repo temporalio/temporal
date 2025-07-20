@@ -12,6 +12,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -102,7 +103,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	targetCurrentVersionedTransition *persistencespb.VersionedTransition,
 	targetVersionHistories *historyspb.VersionHistories,
 ) (_ *SyncStateResult, retError error) {
-	wfLease, err := s.workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
+	wfLease, err := s.workflowConsistencyChecker.GetChasmLeaseWithConsistencyCheck(
 		ctx,
 		nil,
 		func(mutableState historyi.MutableState) bool {
@@ -116,6 +117,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 			WorkflowID:  execution.WorkflowId,
 			RunID:       execution.RunId,
 		},
+		chasm.ArchetypeAny, // SyncWorkflowState API works on all archetypes
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -258,32 +260,20 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 		versionedTransitionArtifact.NewRunInfo = newRunInfo
 	}
 
-	wfKey := definition.WorkflowKey{
-		NamespaceID: namespaceID,
-		WorkflowID:  execution.WorkflowId,
-		RunID:       execution.RunId,
+	events, err := s.getSyncStateEvents(
+		ctx, definition.WorkflowKey{
+			NamespaceID: namespaceID,
+			WorkflowID:  execution.WorkflowId,
+			RunID:       execution.RunId,
+		},
+		targetVersionHistories,
+		sourceVersionHistories,
+		isNewWorkflow,
+	)
+	if err != nil {
+		return nil, err
 	}
-	var events []*commonpb.DataBlob
-	var err error
-	if isNewWorkflow {
-		sourceHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
-		if err != nil {
-			return nil, err
-		}
-		sourceLastItem, err := versionhistory.GetLastVersionHistoryItem(sourceHistory)
-		if err != nil {
-			return nil, err
-		}
-		events, err = s.getEventsBlob(ctx, wfKey, sourceHistory, 1, sourceLastItem.GetEventId()+1, false)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		events, err = s.getSyncStateEvents(ctx, wfKey, targetVersionHistories, sourceVersionHistories)
-		if err != nil {
-			return nil, err
-		}
-	}
+
 	versionedTransitionArtifact.EventBatches = events
 	result := &SyncStateResult{
 		VersionedTransitionArtifact: versionedTransitionArtifact,
@@ -303,6 +293,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 }
 
 func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId namespace.ID, execution *commonpb.WorkflowExecution, newRunId string) (_ *replicationspb.NewRunInfo, retError error) {
+	// CHASM runs don't have new run, so can continue to use GetOrCreateWorkflowExecution here.
 	wfCtx, releaseFunc, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		s.shardContext,
@@ -491,9 +482,15 @@ func (s *SyncStateRetrieverImpl) getEventsBlob(
 	return eventBlobs, nil
 }
 
-func (s *SyncStateRetrieverImpl) getSyncStateEvents(ctx context.Context, workflowKey definition.WorkflowKey, targetVersionHistories [][]*historyspb.VersionHistoryItem, sourceVersionHistories *historyspb.VersionHistories) ([]*commonpb.DataBlob, error) {
-	if targetVersionHistories == nil || sourceVersionHistories == nil {
-		// return nil, so target will retrieve the missing events from source
+func (s *SyncStateRetrieverImpl) getSyncStateEvents(
+	ctx context.Context,
+	workflowKey definition.WorkflowKey,
+	targetVersionHistories [][]*historyspb.VersionHistoryItem,
+	sourceVersionHistories *historyspb.VersionHistories,
+	isNewWorkflow bool,
+) ([]*commonpb.DataBlob, error) {
+	if sourceVersionHistories == nil {
+		// This should never happen for new workflows.
 		return nil, nil
 	}
 	sourceHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
@@ -502,6 +499,19 @@ func (s *SyncStateRetrieverImpl) getSyncStateEvents(ctx context.Context, workflo
 	}
 
 	if versionhistory.IsEmptyVersionHistory(sourceHistory) {
+		return nil, nil
+	}
+
+	if isNewWorkflow {
+		sourceLastItem, err := versionhistory.GetLastVersionHistoryItem(sourceHistory)
+		if err != nil {
+			return nil, err
+		}
+		return s.getEventsBlob(ctx, workflowKey, sourceHistory, 1, sourceLastItem.GetEventId()+1, false)
+	}
+
+	if targetVersionHistories == nil {
+		// return nil, so target will retrieve the missing events from source
 		return nil, nil
 	}
 

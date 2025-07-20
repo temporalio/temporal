@@ -7,13 +7,13 @@ import (
 )
 
 type Engine interface {
-	newEntity(
+	NewEntity(
 		context.Context,
 		ComponentRef,
 		func(MutableContext) (Component, error),
 		...TransitionOption,
 	) (EntityKey, []byte, error)
-	updateWithNewEntity(
+	UpdateWithNewEntity(
 		context.Context,
 		ComponentRef,
 		func(MutableContext) (Component, error),
@@ -21,20 +21,20 @@ type Engine interface {
 		...TransitionOption,
 	) (EntityKey, []byte, error)
 
-	updateComponent(
+	UpdateComponent(
 		context.Context,
 		ComponentRef,
 		func(MutableContext, Component) error,
 		...TransitionOption,
 	) ([]byte, error)
-	readComponent(
+	ReadComponent(
 		context.Context,
 		ComponentRef,
 		func(Context, Component) error,
 		...TransitionOption,
 	) error
 
-	pollComponent(
+	PollComponent(
 		context.Context,
 		ComponentRef,
 		func(Context, Component) (any, bool, error),
@@ -117,7 +117,7 @@ func NewEntity[C Component, I any, O any](
 	opts ...TransitionOption,
 ) (O, EntityKey, []byte, error) {
 	var output O
-	entityKey, serializedRef, err := engineFromContext(ctx).newEntity(
+	entityKey, serializedRef, err := engineFromContext(ctx).NewEntity(
 		ctx,
 		NewComponentRef[C](key),
 		func(ctx MutableContext) (Component, error) {
@@ -144,7 +144,7 @@ func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
 ) (O1, O2, EntityKey, []byte, error) {
 	var output1 O1
 	var output2 O2
-	entityKey, serializedRef, err := engineFromContext(ctx).updateWithNewEntity(
+	entityKey, serializedRef, err := engineFromContext(ctx).UpdateWithNewEntity(
 		ctx,
 		NewComponentRef[C](key),
 		func(ctx MutableContext) (Component, error) {
@@ -185,7 +185,7 @@ func UpdateComponent[C Component, R []byte | ComponentRef, I any, O any](
 		return output, nil, err
 	}
 
-	newSerializedRef, err := engineFromContext(ctx).updateComponent(
+	newSerializedRef, err := engineFromContext(ctx).UpdateComponent(
 		ctx,
 		ref,
 		func(ctx MutableContext, c Component) error {
@@ -216,7 +216,7 @@ func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
 		return output, err
 	}
 
-	err = engineFromContext(ctx).readComponent(
+	err = engineFromContext(ctx).ReadComponent(
 		ctx,
 		ref,
 		func(ctx Context, c Component) error {
@@ -251,7 +251,7 @@ func PollComponent[C Component, R []byte | ComponentRef, I any, O any, T any](
 		return output, nil, err
 	}
 
-	newSerializedRef, err := engineFromContext(ctx).pollComponent(
+	newSerializedRef, err := engineFromContext(ctx).PollComponent(
 		ctx,
 		ref,
 		func(ctx Context, c Component) (any, bool, error) {

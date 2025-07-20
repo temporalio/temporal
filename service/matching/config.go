@@ -28,7 +28,6 @@ type (
 		AlignMembershipChange                dynamicconfig.DurationPropertyFn
 		ShutdownDrainDuration                dynamicconfig.DurationPropertyFn
 		HistoryMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
-		MatchingDropNonRetryableTasks        dynamicconfig.BoolPropertyFn
 		EnableDeployments                    dynamicconfig.BoolPropertyFnWithNamespaceFilter // [cleanup-wv-pre-release]
 		EnableDeploymentVersions             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		MaxTaskQueuesInDeployment            dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -272,7 +271,6 @@ func NewConfig(
 		TaskQueueInfoByBuildIdTTL:                dynamicconfig.TaskQueueInfoByBuildIdTTL.Get(dc),
 		PriorityLevels:                           dynamicconfig.MatchingPriorityLevels.Get(dc),
 		RateLimiterRefreshInterval:               time.Minute,
-		MatchingDropNonRetryableTasks:            dynamicconfig.MatchingDropNonRetryableTasks.Get(dc),
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
 
 		AdminNamespaceToPartitionDispatchRate:          dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Get(dc),
@@ -400,7 +398,7 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 				return max(1, config.ForwarderMaxChildrenPerNode(ns.String(), taskQueueName, taskType))
 			},
 		},
-		GetUserDataRetryPolicy: backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute),
+		GetUserDataRetryPolicy: backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute).WithExpirationInterval(backoff.NoInterval),
 		TaskQueueInfoByBuildIdTTL: func() time.Duration {
 			return config.TaskQueueInfoByBuildIdTTL(ns.String(), taskQueueName, taskType)
 		},

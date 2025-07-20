@@ -209,15 +209,16 @@ func (f *outboundQueueFactory) CreateQueue(
 		f.WorkflowCache,
 		logger,
 		metricsHandler,
+		f.ChasmEngine,
 	)
 
-	// not implemented yet
 	standbyExecutor := newOutboundQueueStandbyTaskExecutor(
 		shardContext,
 		f.WorkflowCache,
 		currentClusterName,
 		logger,
 		metricsHandler,
+		f.ChasmEngine,
 	)
 
 	executor := queues.NewActiveStandbyExecutor(

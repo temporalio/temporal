@@ -111,12 +111,12 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
 
-	s.engine = NewChasmEngine(
+	s.engine = newChasmEngine(
 		s.entityCache,
-		s.mockShardController,
 		s.registry,
 		s.config,
 	)
+	s.engine.SetShardController(s.mockShardController)
 }
 
 func (s *chasmEngineSuite) SetupSubTest() {
@@ -432,7 +432,7 @@ func (s *chasmEngineSuite) validateNewEntityResponseRef(
 
 	archetype, err := deserializedRef.Archetype(s.registry)
 	s.NoError(err)
-	s.Equal("TestLibrary.test_component", archetype)
+	s.Equal("TestLibrary.test_component", archetype.String())
 }
 
 func (s *chasmEngineSuite) currentRunConditionFailedErr(

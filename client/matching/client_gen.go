@@ -544,6 +544,26 @@ func (c *clientImpl) UpdateNexusEndpoint(
 	return client.UpdateNexusEndpoint(ctx, request, opts...)
 }
 
+func (c *clientImpl) UpdateTaskQueueConfig(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueConfigRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+
+	p, err := tqid.NormalPartitionFromRpcName(request.GetUpdateTaskqueueConfig().GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.UpdateTaskQueueConfig(ctx, request, opts...)
+}
+
 func (c *clientImpl) UpdateTaskQueueUserData(
 	ctx context.Context,
 	request *matchingservice.UpdateTaskQueueUserDataRequest,

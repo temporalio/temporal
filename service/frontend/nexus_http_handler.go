@@ -196,6 +196,13 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r 
 		}
 		switch s.Code() {
 		case codes.NotFound:
+			if r, ok := (err.(interface{ Retryable() bool })); ok {
+				if r.Retryable() {
+					w.Header().Set("nexus-request-retryable", "true")
+				} else {
+					w.Header().Set("nexus-request-retryable", "false")
+				}
+			}
 			h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus endpoint not found"})
 		case codes.DeadlineExceeded:
 			h.writeNexusFailure(w, http.StatusRequestTimeout, &nexus.Failure{Message: "request timed out"})

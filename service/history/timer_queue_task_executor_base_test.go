@@ -90,7 +90,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoErr() {
+func (s *timerQueueTaskExecutorBaseSuite) Test_ExecuteDeleteHistoryEventTask_NoErr() {
 	task := &tasks.DeleteHistoryEventTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			tests.NamespaceID.String(),
@@ -109,13 +109,12 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 
-	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.testShardContext, tests.NamespaceID, we, locks.PriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+	s.mockCache.EXPECT().GetOrCreateChasmEntity(gomock.Any(), s.testShardContext, tests.NamespaceID, we, chasm.ArchetypeAny, locks.PriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.testShardContext).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetWorkflowKey().Return(task.WorkflowKey).AnyTimes()
 	mockMutableState.EXPECT().GetCloseVersion().Return(int64(1), nil)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
-	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
@@ -155,13 +154,12 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 
-	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.testShardContext, tests.NamespaceID, we, locks.PriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+	s.mockCache.EXPECT().GetOrCreateChasmEntity(gomock.Any(), s.testShardContext, tests.NamespaceID, we, chasm.ArchetypeAny, locks.PriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.testShardContext).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetWorkflowKey().Return(task.WorkflowKey).AnyTimes()
 	mockMutableState.EXPECT().GetCloseVersion().Return(int64(1), nil)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
-	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})

@@ -58,14 +58,14 @@ func newBucket() *bucket {
 	}
 }
 
-// upsertHeartbeat inserts or refreshes a WorkerHeartbeat under the given namespace.
-// Returns true if a brand-new entry was created.
-func (b *bucket) upsertHeartbeat(nsID namespace.ID, hb *workerpb.WorkerHeartbeat) bool {
+// upsertHeartbeats inserts or refreshes a WorkerHeartbeat under the given namespace.
+// Returns the number of new entries.
+func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) int64 {
 	now := time.Now()
-	key := hb.WorkerInstanceKey
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	var newEntries int64
 
 	mp, ok := b.namespaces[nsID]
 	if !ok {
@@ -73,21 +73,25 @@ func (b *bucket) upsertHeartbeat(nsID namespace.ID, hb *workerpb.WorkerHeartbeat
 		b.namespaces[nsID] = mp
 	}
 
-	if e, exists := mp[key]; exists {
-		e.hb = hb
-		e.lastSeen = now
-		b.order.MoveToBack(e.elem)
-		return false
+	for _, hb := range heartbeats {
+		key := hb.WorkerInstanceKey
+		if e, exists := mp[key]; exists {
+			e.hb = hb
+			e.lastSeen = now
+			b.order.MoveToBack(e.elem)
+		} else {
+			e = &entry{
+				nsID:     nsID,
+				hb:       hb,
+				lastSeen: now,
+			}
+			e.elem = b.order.PushBack(e)
+			mp[key] = e
+			newEntries += 1
+		}
 	}
 
-	e := &entry{
-		nsID:     nsID,
-		hb:       hb,
-		lastSeen: now,
-	}
-	e.elem = b.order.PushBack(e)
-	mp[key] = e
-	return true
+	return newEntries
 }
 
 // filterWorkers returns all WorkerHeartbeats in a namespace
@@ -202,11 +206,10 @@ func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
 
 // upsertHeartbeat records or refreshes a WorkerHeartbeat under the given namespace.
 // New entries increment the global counter.
-func (m *registryImpl) upsertHeartbeat(nsID namespace.ID, hb *workerpb.WorkerHeartbeat) {
+func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) {
 	b := m.getBucket(nsID)
-	if newEntry := b.upsertHeartbeat(nsID, hb); newEntry {
-		m.total.Add(1)
-	}
+	newEntries := b.upsertHeartbeats(nsID, heartbeats)
+	m.total.Add(newEntries)
 }
 
 // filterWorkers returns all WorkerHeartbeats in a namespace
@@ -281,12 +284,22 @@ func (m *registryImpl) Stop() {
 	close(m.quit)
 }
 
-func (m *registryImpl) RecordWorkerHeartbeat(nsID namespace.ID, workerHeartbeat *workerpb.WorkerHeartbeat) {
-	m.upsertHeartbeat(nsID, workerHeartbeat)
+func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, workerHeartbeat []*workerpb.WorkerHeartbeat) {
+	m.upsertHeartbeats(nsID, workerHeartbeat)
 }
 
-func (m *registryImpl) ListWorkers(nsID namespace.ID, _ string, _ []byte) ([]*workerpb.WorkerHeartbeat, error) {
-	return m.filterWorkers(nsID, func(heartbeat *workerpb.WorkerHeartbeat) bool {
-		return true
-	}), nil
+func (m *registryImpl) ListWorkers(nsID namespace.ID, query string, _ []byte) ([]*workerpb.WorkerHeartbeat, error) {
+	predicate := func(_ *workerpb.WorkerHeartbeat) bool { return true }
+	if query != "" {
+		queryEngine, err := newWorkerQueryEngine(nsID.String(), query)
+		if err != nil {
+			return nil, err
+		}
+
+		predicate = func(heartbeat *workerpb.WorkerHeartbeat) bool {
+			result, err := queryEngine.EvaluateWorker(heartbeat)
+			return err == nil && result
+		}
+	}
+	return m.filterWorkers(nsID, predicate), nil
 }

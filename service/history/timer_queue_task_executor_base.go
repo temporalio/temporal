@@ -89,11 +89,12 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		RunId:      task.GetRunID(),
 	}
 
-	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
+	weContext, release, err := t.cache.GetOrCreateChasmEntity(
 		ctx,
 		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
+		chasm.ArchetypeAny, // Retention time logic works on all Archetypes.
 		locks.PriorityLow,
 	)
 	if err != nil {

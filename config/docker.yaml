@@ -260,6 +260,7 @@ global:
                 {{- end }}
             refreshInterval: {{ default "1m" (env "TEMPORAL_JWT_KEY_REFRESH") }}
         permissionsClaimName: {{ default "permissions" (env "TEMPORAL_JWT_PERMISSIONS_CLAIM") }}
+        permissionsRegex: {{ default "" (env "TEMPORAL_JWT_PERMISSIONS_REGEX") }}
         authorizer: {{ env "TEMPORAL_AUTH_AUTHORIZER" }}
         claimMapper: {{ env "TEMPORAL_AUTH_CLAIM_MAPPER" }}
 

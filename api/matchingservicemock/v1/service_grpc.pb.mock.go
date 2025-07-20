@@ -682,6 +682,26 @@ func (mr *MockMatchingServiceClientMockRecorder) UpdateNexusEndpoint(ctx, in any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNexusEndpoint", reflect.TypeOf((*MockMatchingServiceClient)(nil).UpdateNexusEndpoint), varargs...)
 }
 
+// UpdateTaskQueueConfig mocks base method.
+func (m *MockMatchingServiceClient) UpdateTaskQueueConfig(ctx context.Context, in *matchingservice.UpdateTaskQueueConfigRequest, opts ...grpc.CallOption) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateTaskQueueConfig", varargs...)
+	ret0, _ := ret[0].(*matchingservice.UpdateTaskQueueConfigResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateTaskQueueConfig indicates an expected call of UpdateTaskQueueConfig.
+func (mr *MockMatchingServiceClientMockRecorder) UpdateTaskQueueConfig(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueueConfig", reflect.TypeOf((*MockMatchingServiceClient)(nil).UpdateTaskQueueConfig), varargs...)
+}
+
 // UpdateTaskQueueUserData mocks base method.
 func (m *MockMatchingServiceClient) UpdateTaskQueueUserData(ctx context.Context, in *matchingservice.UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
 	m.ctrl.T.Helper()
@@ -1244,6 +1264,21 @@ func (m *MockMatchingServiceServer) UpdateNexusEndpoint(arg0 context.Context, ar
 func (mr *MockMatchingServiceServerMockRecorder) UpdateNexusEndpoint(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNexusEndpoint", reflect.TypeOf((*MockMatchingServiceServer)(nil).UpdateNexusEndpoint), arg0, arg1)
+}
+
+// UpdateTaskQueueConfig mocks base method.
+func (m *MockMatchingServiceServer) UpdateTaskQueueConfig(arg0 context.Context, arg1 *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateTaskQueueConfig", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.UpdateTaskQueueConfigResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateTaskQueueConfig indicates an expected call of UpdateTaskQueueConfig.
+func (mr *MockMatchingServiceServerMockRecorder) UpdateTaskQueueConfig(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueueConfig", reflect.TypeOf((*MockMatchingServiceServer)(nil).UpdateTaskQueueConfig), arg0, arg1)
 }
 
 // UpdateTaskQueueUserData mocks base method.

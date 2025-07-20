@@ -32,8 +32,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 	// Add some heartbeats
 	hb1 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "workerA", Status: enumspb.WORKER_STATUS_RUNNING}
 	hb2 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "workerB", Status: enumspb.WORKER_STATUS_SHUTDOWN}
-	m.upsertHeartbeat("ns1", hb1)
-	m.upsertHeartbeat("ns1", hb2)
+	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hb1, hb2})
 
 	list = m.filterWorkers("ns1", alwaysTrue)
 	// Order is not guaranteed; check contents by keys
@@ -50,7 +49,7 @@ func TestListNamespacePredicate(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		key := fmt.Sprintf("key%d", i)
 		hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key, CurrentStickyCacheSize: int32(i)}
-		m.upsertHeartbeat("ns", hb)
+		m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
 	}
 
 	// Table-driven tests for predicates
@@ -77,7 +76,7 @@ func TestEvictByTTL(t *testing.T) {
 	defer m.Stop()
 
 	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "oldWorker"}
-	m.upsertHeartbeat("ns", hb)
+	m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
 
 	// Manually move beyond TTL
 	b := m.getBucket("ns")
@@ -101,7 +100,7 @@ func TestEvictByCapacity(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		key := fmt.Sprintf("cap%d", i)
 		hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
-		m.upsertHeartbeat("ns", hb)
+		m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
 	}
 
 	// All entries have lastSeen.Before(now) when MinEvictAge=0, so eligible
@@ -119,7 +118,7 @@ func BenchmarkUpdate(b *testing.B) {
 	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "benchWorker"}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		m.upsertHeartbeat("benchNs", hb)
+		m.upsertHeartbeats("benchNs", []*workerpb.WorkerHeartbeat{hb})
 	}
 }
 
@@ -130,7 +129,7 @@ func BenchmarkListNamespace(b *testing.B) {
 	for i := 0; i < 1000; i++ {
 		key := fmt.Sprintf("worker%d", i)
 		hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
-		m.upsertHeartbeat("benchNs", hb)
+		m.upsertHeartbeats("benchNs", []*workerpb.WorkerHeartbeat{hb})
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -155,7 +154,7 @@ func BenchmarkRandomUpdate(b *testing.B) {
 		for i := 0; i < totalHeartbeats; i++ {
 			key := fmt.Sprintf("%s-worker%d", ns, i)
 			hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key, CurrentStickyCacheSize: int32(i)}
-			m.upsertHeartbeat(ns, hb)
+			m.upsertHeartbeats(ns, []*workerpb.WorkerHeartbeat{hb})
 			pairs = append(pairs, pair{ns: ns, hb: hb})
 		}
 	}
@@ -164,6 +163,6 @@ func BenchmarkRandomUpdate(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		p := pairs[r.Intn(len(pairs))]
-		m.upsertHeartbeat(p.ns, p.hb)
+		m.upsertHeartbeats(p.ns, []*workerpb.WorkerHeartbeat{p.hb})
 	}
 }

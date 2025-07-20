@@ -14,10 +14,12 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		TargetNamespaceID   string
-		TargetWorkflowID    string
-		InitiatedEventID    int64
-		Version             int64
+		// Deprecated: Get TargetNamespaceID from mutable state.
+		TargetNamespaceID string
+		// Deprecated: Get TargetWorkflowID from mutable state.
+		TargetWorkflowID string
+		InitiatedEventID int64
+		Version          int64
 	}
 )
 

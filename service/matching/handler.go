@@ -550,7 +550,8 @@ func (h *Handler) RecordWorkerHeartbeat(
 	_ context.Context, request *matchingservice.RecordWorkerHeartbeatRequest,
 ) (*matchingservice.RecordWorkerHeartbeatResponse, error) {
 	nsID := namespace.ID(request.GetNamespaceId())
-	h.workersRegistry.RecordWorkerHeartbeat(nsID, request.GetHeartbeartRequest().GetWorkerHeartbeat())
+
+	h.workersRegistry.RecordWorkerHeartbeats(nsID, request.GetHeartbeartRequest().GetWorkerHeartbeat())
 	return &matchingservice.RecordWorkerHeartbeatResponse{}, nil
 }
 
@@ -591,4 +592,10 @@ func (h *Handler) reportForwardedPerTaskQueueCounter(opMetrics metrics.Handler, 
 			metrics.OperationTag(metrics.MatchingAddWorkflowTaskScope),
 			metrics.NamespaceTag(h.namespaceName(namespaceId).String()),
 			metrics.ServiceRoleTag(metrics.MatchingRoleTagValue))
+}
+
+func (h *Handler) UpdateTaskQueueConfig(
+	ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest,
+) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+	return h.engine.UpdateTaskQueueConfig(ctx, request)
 }

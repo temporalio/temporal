@@ -31,9 +31,9 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 		{
 			name: "record worker in existing namespace",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "existing-worker",
-				})
+				}})
 			},
 			nsID: "namespace1",
 			workerHeartbeat: &workerpb.WorkerHeartbeat{
@@ -45,10 +45,10 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 		{
 			name: "update existing worker",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
 					TaskQueue:         "tq1",
-				})
+				}})
 			},
 			nsID: "namespace1",
 			workerHeartbeat: &workerpb.WorkerHeartbeat{
@@ -70,7 +70,7 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 			)
 			tt.setup(r)
 
-			r.RecordWorkerHeartbeat(tt.nsID, tt.workerHeartbeat)
+			r.RecordWorkerHeartbeats(tt.nsID, []*workerpb.WorkerHeartbeat{tt.workerHeartbeat})
 
 			// Check if namespace exists
 			nsBuket := r.getBucket(tt.nsID)
@@ -118,9 +118,9 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 		{
 			name: "list single worker",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
-				})
+				}})
 			},
 			nsID:            "namespace1",
 			expectedCount:   1,
@@ -129,15 +129,15 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 		{
 			name: "list multiple workers",
 			setup: func(r *registryImpl) {
-				r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
-				})
-				r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
+				}})
+				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker2",
-				})
-				r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
+				}})
+				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker3",
-				})
+				}})
 			},
 			nsID:            "namespace1",
 			expectedCount:   3,
@@ -147,13 +147,13 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 			name: "list workers from specific namespace only",
 			setup: func(r *registryImpl) {
 				// Setup namespace1
-				r.upsertHeartbeat("namespace1", &workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker1",
-				})
+				}})
 				// Setup namespace2
-				r.upsertHeartbeat("namespace2", &workerpb.WorkerHeartbeat{
+				r.upsertHeartbeats("namespace2", []*workerpb.WorkerHeartbeat{{
 					WorkerInstanceKey: "worker2",
-				})
+				}})
 			},
 			nsID:            "namespace1",
 			expectedCount:   1,

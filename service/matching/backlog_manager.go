@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 var (
@@ -38,10 +39,7 @@ type (
 		// It's returned as a hint to the SDK to influence polling behavior (sticky vs normal).
 		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
-		// TotalApproximateBacklogCount returns an estimate of the total size of the backlog in
-		// persistence. It may be off in either direction.
-		TotalApproximateBacklogCount() int64
-		BacklogHeadAge() time.Duration
+		BacklogStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats
 		InternalStatus() []*taskqueuespb.InternalTaskQueueStatus
 
 		// TODO(pri): remove
@@ -175,17 +173,13 @@ func (c *backlogManagerImpl) BacklogCountHint() int64 {
 	return c.taskAckManager.getBacklogCountHint()
 }
 
-func (c *backlogManagerImpl) BacklogHeadAge() time.Duration {
-	return c.taskReader.getBacklogHeadAge()
-}
-
 func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
 	return &taskqueuepb.TaskQueueStatus{
 		ReadLevel: c.taskAckManager.getReadLevel(),
 		AckLevel:  c.taskAckManager.getAckLevel(),
-		// use getApproximateBacklogCount instead of BacklogCountHint since it's more accurate
-		BacklogCountHint: c.db.getApproximateBacklogCount(subqueueZero),
+		// use getTotalApproximateBacklogCount instead of BacklogCountHint since it's more accurate
+		BacklogCountHint: c.db.getTotalApproximateBacklogCount(),
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
@@ -193,8 +187,14 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	}
 }
 
-func (c *backlogManagerImpl) TotalApproximateBacklogCount() int64 {
-	return c.db.getTotalApproximateBacklogCount()
+func (c *backlogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats {
+	defaultPriority := defaultPriorityLevel(c.config.PriorityLevels())
+	return map[int32]*taskqueuepb.TaskQueueStats{
+		defaultPriority: &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogCount: c.db.getTotalApproximateBacklogCount(),
+			ApproximateBacklogAge:   durationpb.New(c.taskReader.getBacklogHeadAge()),
+		},
+	}
 }
 
 func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
@@ -209,7 +209,7 @@ func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueS
 			},
 			LoadedTasks:             c.taskAckManager.getBacklogCountHint(),
 			MaxReadLevel:            c.db.GetMaxReadLevel(subqueueZero),
-			ApproximateBacklogCount: c.db.getApproximateBacklogCount(subqueueZero),
+			ApproximateBacklogCount: c.db.getTotalApproximateBacklogCount(),
 		},
 	}
 }

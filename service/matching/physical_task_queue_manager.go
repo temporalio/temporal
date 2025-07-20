@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -56,10 +57,11 @@ type (
 	// queue, corresponding to a single versioned queue of a task queue partition.
 	// TODO(pri): rename this
 	physicalTaskQueueManagerImpl struct {
-		status       int32
-		partitionMgr *taskQueuePartitionManagerImpl
-		queue        *PhysicalTaskQueueKey
-		config       *taskQueueConfig
+		status             int32
+		partitionMgr       *taskQueuePartitionManagerImpl
+		queue              *PhysicalTaskQueueKey
+		config             *taskQueueConfig
+		defaultPriorityKey int32
 
 		// This context is valid for lifetime of this physicalTaskQueueManagerImpl.
 		// It can be used to notify when the task queue is closing.
@@ -82,13 +84,13 @@ type (
 		pollerHistory               *pollerHistory
 		currentPolls                atomic.Int64
 		taskValidator               taskValidator
-		tasksAddedInIntervals       *taskTracker
-		tasksDispatchedInIntervals  *taskTracker
 		deploymentRegistrationCh    chan struct{}
 		deploymentVersionRegistered bool
 		pollerScalingRateLimiter    quotas.RateLimiter
 
-		firstPoll time.Time
+		taskTrackerLock sync.RWMutex
+		tasksAdded      map[int32]*taskTracker
+		tasksDispatched map[int32]*taskTracker
 	}
 
 	// TODO(pri): old matcher cleanup
@@ -110,6 +112,10 @@ var (
 	errRemoteSyncMatchFailed     = serviceerror.NewCanceled("remote sync match failed")
 	errMissingNormalQueueName    = errors.New("missing normal queue name")
 	errDeploymentVersionNotReady = serviceerror.NewUnavailable("task queue is not ready to process polls from this deployment version, try again shortly")
+	ErrBlackholedQuery           = "You are trying to query a closed Workflow that is PINNED to Worker Deployment Version %s, but %s is drained and has no pollers to answer the query. Immediately: You can re-deploy Workers in this Deployment Version to take those queries, or you can workflow update-options to change your workflow to AUTO_UPGRADE. For the future: In your infrastructure, consider waiting longer after the last queried timestamp as reported in Describe Deployment before you sunset Workers. Or mark this workflow as AUTO_UPGRADE."
+
+	backlogTagClassic  = tag.NewStringTag("backlog", "classic")
+	backlogTagPriority = tag.NewStringTag("backlog", "priority")
 )
 
 func newPhysicalTaskQueueManager(
@@ -119,8 +125,6 @@ func newPhysicalTaskQueueManager(
 	e := partitionMgr.engine
 	config := partitionMgr.config
 	buildIdTagValue := queue.Version().MetricsTagValue()
-	logger := log.With(partitionMgr.logger, tag.WorkerBuildId(buildIdTagValue))
-	throttledLogger := log.With(partitionMgr.throttledLogger, tag.WorkerBuildId(buildIdTagValue))
 	taggedMetricsHandler := partitionMgr.metricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
 		metrics.WorkerBuildIdTag(buildIdTagValue, config.BreakdownMetricsByBuildID()))
@@ -133,22 +137,21 @@ func newPhysicalTaskQueueManager(
 		return config.PollerScalingDecisionsPerSecond() * 1e6
 	}
 	pqMgr := &physicalTaskQueueManagerImpl{
-		status:                     common.DaemonStatusInitialized,
-		partitionMgr:               partitionMgr,
-		queue:                      queue,
-		config:                     config,
-		tqCtx:                      tqCtx,
-		tqCtxCancel:                tqCancel,
-		namespaceRegistry:          e.namespaceRegistry,
-		matchingClient:             e.matchingRawClient,
-		clusterMeta:                e.clusterMeta,
-		logger:                     logger,
-		throttledLogger:            throttledLogger,
-		metricsHandler:             taggedMetricsHandler,
-		tasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource()),
-		tasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource()),
-		pollerScalingRateLimiter:   quotas.NewDefaultOutgoingRateLimiter(pollerScalingRateLimitFn),
-		deploymentRegistrationCh:   make(chan struct{}, 1),
+		defaultPriorityKey:       defaultPriorityLevel(config.PriorityLevels()),
+		status:                   common.DaemonStatusInitialized,
+		partitionMgr:             partitionMgr,
+		queue:                    queue,
+		config:                   config,
+		tqCtx:                    tqCtx,
+		tqCtxCancel:              tqCancel,
+		namespaceRegistry:        e.namespaceRegistry,
+		matchingClient:           e.matchingRawClient,
+		clusterMeta:              e.clusterMeta,
+		metricsHandler:           taggedMetricsHandler,
+		tasksAdded:               make(map[int32]*taskTracker),
+		tasksDispatched:          make(map[int32]*taskTracker),
+		pollerScalingRateLimiter: quotas.NewDefaultOutgoingRateLimiter(pollerScalingRateLimitFn),
+		deploymentRegistrationCh: make(chan struct{}, 1),
 	}
 	pqMgr.deploymentRegistrationCh <- struct{}{} // seed
 
@@ -176,14 +179,22 @@ func newPhysicalTaskQueueManager(
 	})
 	pqMgr.cancelSub = cancelSub
 
+	buildIdTag := tag.WorkerBuildId(buildIdTagValue)
+	backlogTag := backlogTagClassic
+	if newMatcher {
+		backlogTag = backlogTagPriority
+	}
+	pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTag)
+	pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTag)
+
 	if newMatcher {
 		pqMgr.backlogMgr = newPriBacklogManager(
 			tqCtx,
 			pqMgr,
 			config,
 			e.taskManager,
-			logger,
-			throttledLogger,
+			pqMgr.logger,
+			pqMgr.throttledLogger,
 			e.matchingRawClient,
 			newPriMetricsHandler(taggedMetricsHandler),
 		)
@@ -202,7 +213,7 @@ func newPhysicalTaskQueueManager(
 			queue.partition,
 			fwdr,
 			pqMgr.taskValidator,
-			logger,
+			pqMgr.logger,
 			newPriMetricsHandler(taggedMetricsHandler),
 		)
 		pqMgr.matcher = pqMgr.priMatcher
@@ -212,8 +223,8 @@ func newPhysicalTaskQueueManager(
 			pqMgr,
 			config,
 			e.taskManager,
-			logger,
-			throttledLogger,
+			pqMgr.logger,
+			pqMgr.throttledLogger,
 			e.matchingRawClient,
 			taggedMetricsHandler,
 		)
@@ -338,7 +349,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 
 		if pollMetadata.forwardedFrom == "" && // only track the original polls, not forwarded ones.
 			(!task.isStarted() || !task.started.hasEmptyResponse()) { // Need to filter out the empty "started" ones
-			c.tasksDispatchedInIntervals.incrementTaskCount()
+			c.getOrCreateTaskTracker(c.tasksDispatched, task.getPriority().GetPriorityKey()).incrementTaskCount()
 		}
 		return task, nil
 	}
@@ -399,7 +410,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchQueryTask(
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	task := newInternalQueryTask(taskId, request)
 	if !task.isForwarded() {
-		c.tasksAddedInIntervals.incrementTaskCount()
+		c.getOrCreateTaskTracker(c.tasksAdded, request.GetPriority().GetPriorityKey()).incrementTaskCount()
 	}
 	return c.matcher.OfferQuery(ctx, task)
 }
@@ -424,7 +435,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 	}
 	task := newInternalNexusTask(taskId, deadline, opDeadline, request)
 	if !task.isForwarded() {
-		c.tasksAddedInIntervals.incrementTaskCount()
+		c.getOrCreateTaskTracker(c.tasksAdded, 0).incrementTaskCount() // Nexus has no priorities
 	}
 	return c.matcher.OfferNexusTask(ctx, task)
 }
@@ -469,16 +480,25 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	return response
 }
 
-func (c *physicalTaskQueueManagerImpl) GetStats() *taskqueuepb.TaskQueueStats {
-	return &taskqueuepb.TaskQueueStats{
-		ApproximateBacklogCount: c.backlogMgr.TotalApproximateBacklogCount(),
-		// using this and not matcher's because it reports only the age of the current physical
-		// queue backlog (not including the redirected backlogs) which is consistent with the
-		// ApproximateBacklogCount metric.
-		ApproximateBacklogAge: durationpb.New(c.backlogMgr.BacklogHeadAge()),
-		TasksAddRate:          c.tasksAddedInIntervals.rate(),
-		TasksDispatchRate:     c.tasksDispatchedInIntervals.rate(),
+func (c *physicalTaskQueueManagerImpl) GetStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats {
+	stats := c.backlogMgr.BacklogStatsByPriority()
+
+	c.taskTrackerLock.RLock()
+	defer c.taskTrackerLock.RUnlock()
+
+	for pri, tt := range c.tasksAdded {
+		if _, ok := stats[pri]; !ok {
+			stats[pri] = &taskqueuepb.TaskQueueStats{}
+		}
+		stats[pri].TasksAddRate = tt.rate()
 	}
+	for pri, tt := range c.tasksDispatched {
+		if _, ok := stats[pri]; !ok {
+			stats[pri] = &taskqueuepb.TaskQueueStats{}
+		}
+		stats[pri].TasksDispatchRate = tt.rate()
+	}
+	return stats
 }
 
 func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus {
@@ -489,7 +509,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
-		c.tasksAddedInIntervals.incrementTaskCount()
+		c.getOrCreateTaskTracker(c.tasksAdded, task.getPriority().GetPriorityKey()).incrementTaskCount()
 		if disable, _ := testhooks.Get[bool](c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch); disable {
 			return false, nil
 		}
@@ -645,11 +665,15 @@ func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause un
 
 func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
 	pollStartTime time.Time) *taskqueuepb.PollerScalingDecision {
-	return c.makePollerScalingDecisionImpl(pollStartTime, c.GetStats)
+	return c.makePollerScalingDecisionImpl(pollStartTime, func() *taskqueuepb.TaskQueueStats {
+		return aggregateStats(c.GetStatsByPriority())
+	})
 }
 
 func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
-	pollStartTime time.Time, statsFn func() *taskqueuepb.TaskQueueStats) *taskqueuepb.PollerScalingDecision {
+	pollStartTime time.Time,
+	statsFn func() *taskqueuepb.TaskQueueStats,
+) *taskqueuepb.PollerScalingDecision {
 	pollWaitTime := c.partitionMgr.engine.timeSource.Since(pollStartTime)
 	// If a poller has waited around a while, we can always suggest a decrease.
 	if pollWaitTime >= c.partitionMgr.config.PollerScalingWaitTime() {
@@ -691,4 +715,56 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	return &taskqueuepb.PollerScalingDecision{
 		PollRequestDeltaSuggestion: delta,
 	}
+}
+
+func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
+	intervals map[int32]*taskTracker,
+	priorityKey int32,
+) *taskTracker {
+	if priorityKey == 0 {
+		priorityKey = c.defaultPriorityKey
+	}
+
+	// First try with read lock for the common case where tracker already exists.
+	c.taskTrackerLock.RLock()
+	if tracker, ok := intervals[priorityKey]; ok {
+		c.taskTrackerLock.RUnlock()
+		return tracker
+	}
+	c.taskTrackerLock.RUnlock()
+
+	// Otherwise, we need to maybe create a new tracker with the write lock.
+	c.taskTrackerLock.Lock()
+	defer c.taskTrackerLock.Unlock()
+	if tracker, ok := intervals[priorityKey]; ok {
+		return tracker // tracker was created while we were waiting for the lock
+	}
+
+	// Initalize all task trackers together; or the timeframes won't line up.
+	c.tasksAdded[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
+	c.tasksDispatched[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
+
+	return intervals[priorityKey]
+}
+
+func aggregateStats(stats map[int32]*taskqueuepb.TaskQueueStats) *taskqueuepb.TaskQueueStats {
+	result := &taskqueuepb.TaskQueueStats{ApproximateBacklogAge: durationpb.New(0)}
+	for _, s := range stats {
+		mergeStats(result, s)
+	}
+	return result
+}
+
+func mergeStats(into, from *taskqueuepb.TaskQueueStats) {
+	into.ApproximateBacklogCount += from.ApproximateBacklogCount
+	into.ApproximateBacklogAge = oldestBacklogAge(into.ApproximateBacklogAge, from.ApproximateBacklogAge)
+	into.TasksAddRate += from.TasksAddRate
+	into.TasksDispatchRate += from.TasksDispatchRate
+}
+
+func oldestBacklogAge(left, right *durationpb.Duration) *durationpb.Duration {
+	if left.AsDuration() > right.AsDuration() {
+		return left
+	}
+	return right
 }

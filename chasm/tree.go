@@ -36,6 +36,7 @@ var (
 )
 
 var (
+	errAccessCheckFailed    = serviceerror.NewNotFound("access check failed, CHASM tree is closed for writes")
 	errComponentNotFound    = serviceerror.NewNotFound("component not found")
 	errTaskValidationFailed = errors.New("task validation failed")
 )
@@ -265,11 +266,11 @@ func (n *Node) Component(
 		if !ok {
 			return nil, errComponentNotFound
 		}
-		ref.archetype = rootRC.fqType()
+		ref.archetype = Archetype(rootRC.fqType())
 
 	}
 	if ref.archetype != "" &&
-		n.root().serializedNode.GetMetadata().GetComponentAttributes().Type != ref.archetype {
+		n.root().serializedNode.GetMetadata().GetComponentAttributes().Type != ref.archetype.String() {
 		return nil, errComponentNotFound
 	}
 
@@ -297,13 +298,14 @@ func (n *Node) Component(
 		)
 	}
 
-	// TODO: perform access rule check based on the operation intent
-	// and lifecycle state of all ancestor nodes.
-	//
-	// intent := operationIntentFromContext(chasmContext.getContext())
-	// if intent != OperationIntentUnspecified {
-	// 	...
-	// }
+	// Access check always begins on the target node's parent, and ignored for nodes
+	// without ancestors.
+	if node.parent != nil {
+		err := node.parent.validateAccess(chasmContext)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	if ref.validationFn != nil {
 		if err := ref.validationFn(node.root().backend, chasmContext, componentValue); err != nil {
@@ -312,6 +314,52 @@ func (n *Node) Component(
 	}
 
 	return componentValue, nil
+}
+
+// validateAccess performs the access rule check on a node.
+//
+// When the context's intent is OperationIntentProgress, This check validates that
+// all of a node's ancestors are still in a running state, and can accept writes. In
+// the case of a newly-created node, a detached node, or an OperationIntentObserve
+// intent, the check is skipped.
+func (n *Node) validateAccess(ctx Context) error {
+	intent := operationIntentFromContext(ctx.getContext())
+	if intent != OperationIntentProgress {
+		// Read-only operations are always allowed.
+		return nil
+	}
+
+	// TODO - check if this is a detached node, operations are always allowed.
+
+	if n.parent != nil {
+		err := n.parent.validateAccess(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Only Component nodes need to be validated.
+	if n.serializedNode.Metadata.GetComponentAttributes() == nil {
+		return nil
+	}
+
+	// Hydrate the component so we can access its LifecycleState.
+	err := n.prepareComponentValue(ctx)
+	if err != nil {
+		return err
+	}
+	componentValue, _ := n.value.(Component) //nolint:revive // unchecked-type-assertion
+
+	if componentValue.LifecycleState(ctx).IsClosed() {
+		return errAccessCheckFailed
+	}
+
+	if n.terminated {
+		// Terminated nodes can never be written to.
+		return errAccessCheckFailed
+	}
+
+	return nil
 }
 
 func (n *Node) prepareComponentValue(
@@ -922,9 +970,6 @@ func (n *Node) deserializeComponentNode(
 		case fieldKindUnspecified:
 			softassert.Fail(n.logger, "field.kind can be unspecified only if err is not nil, and there is a check for it above")
 		case fieldKindData:
-			if n.serializedNode.GetData() == nil {
-				continue
-			}
 			value, err := unmarshalProto(n.serializedNode.GetData(), field.typ)
 			if err != nil {
 				return err
@@ -995,6 +1040,16 @@ func unmarshalProto(
 
 	value := reflect.New(valueT.Elem())
 
+	if dataBlob == nil {
+		// If the original data is the zero value of its type, the dataBlob loaded from persistence layer will be nil.
+		// But we know for component & data nodes, they won't get persisted in the first place if there's no data,
+		// so it must be a zero value.
+		dataBlob = &commonpb.DataBlob{
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+			Data:         []byte{},
+		}
+	}
+
 	if err := serialization.ProtoDecodeBlob(dataBlob, value.Interface().(proto.Message)); err != nil {
 		return reflect.Value{}, err
 	}
@@ -1019,7 +1074,7 @@ func (n *Node) Ref(
 					BusinessID:  workflowKey.WorkflowID,
 					EntityID:    workflowKey.RunID,
 				},
-				archetype: n.root().serializedNode.GetMetadata().GetComponentAttributes().Type,
+				archetype: n.Archetype(),
 				// TODO: Consider using node's LastUpdateVersionedTransition for checking staleness here.
 				// Using VersionedTransition of the entire tree might be too strict.
 				entityLastUpdateVT: transitionhistory.CopyVersionedTransition(node.backend.CurrentVersionedTransition()),
@@ -1619,7 +1674,9 @@ func (n *Node) applyUpdates(
 			continue
 		}
 
-		if transitionhistory.Compare(
+		// An empty node may be created when child update is applied before the parent,
+		// in which case node.serializedNode will be nil.
+		if node.serializedNode == nil || transitionhistory.Compare(
 			node.serializedNode.Metadata.LastUpdateVersionedTransition,
 			updatedNode.Metadata.LastUpdateVersionedTransition,
 		) != 0 {
@@ -1825,7 +1882,7 @@ func (n *Node) Terminate(
 	return nil
 }
 
-func (n *Node) Archetype() string {
+func (n *Node) Archetype() Archetype {
 	root := n.root()
 	if root.serializedNode == nil {
 		// Empty tree
@@ -1833,7 +1890,7 @@ func (n *Node) Archetype() string {
 	}
 
 	// Root must have be a component.
-	return root.serializedNode.Metadata.GetComponentAttributes().Type
+	return Archetype(root.serializedNode.Metadata.GetComponentAttributes().Type)
 }
 
 func (n *Node) root() *Node {
@@ -2125,7 +2182,10 @@ func (n *Node) ExecutePureTask(
 		return fmt.Errorf("ExecutePureTask called on a SideEffect task '%s'", registrableTask.fqType())
 	}
 
-	ctx := NewMutableContext(baseCtx, n)
+	ctx := NewMutableContext(
+		newContextWithOperationIntent(baseCtx, OperationIntentProgress),
+		n,
+	)
 
 	// Ensure this node's component value is hydrated before execution. Component
 	// will also check access rules.
@@ -2287,6 +2347,8 @@ func (n *Node) ExecuteSideEffectTask(
 		// Validate the Ref only once it is accessed by the task's executor.
 		validationFn: makeValidationFn(registrableTask, validate, taskAttributes, taskValue),
 	}
+
+	ctx = newContextWithOperationIntent(ctx, OperationIntentProgress)
 
 	fn := reflect.ValueOf(executor).MethodByName("Execute")
 	result := fn.Call([]reflect.Value{

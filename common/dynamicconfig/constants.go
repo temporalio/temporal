@@ -189,8 +189,8 @@ config as the other services.`,
 	)
 	EnableEagerWorkflowStart = NewNamespaceBoolSetting(
 		"system.enableEagerWorkflowStart",
-		false,
-		`EnableEagerWorkflowStart toggles "eager workflow start" - returning the first workflow task inline in the
+		true,
+		`Toggles "eager workflow start" - returning the first workflow task inline in the
 response to a StartWorkflowExecution request and skipping the trip through matching.`,
 	)
 	NamespaceCacheRefreshInterval = NewGlobalDurationSetting(
@@ -1243,11 +1243,6 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.TaskQueueInfoByBuildIdTTL",
 		5*time.Second,
 		`TaskQueueInfoByBuildIdTTL serves as a TTL for the cache holding DescribeTaskQueue partition results`,
-	)
-	MatchingDropNonRetryableTasks = NewGlobalBoolSetting(
-		"matching.dropNonRetryableTasks",
-		false,
-		`MatchingDropNonRetryableTasks states if we should drop matching tasks with Internal/Dataloss errors`,
 	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeployment",
@@ -2360,11 +2355,6 @@ that task will be sent to DLQ.`,
 		"history.EnableReplicationTaskBatching",
 		false,
 		`EnableReplicationTaskBatching is a feature flag for batching replicate history event task`,
-	)
-	EnableReplicateLocalGeneratedEvents = NewGlobalBoolSetting(
-		"history.EnableReplicateLocalGeneratedEvents",
-		false,
-		`EnableReplicateLocalGeneratedEvents is a feature flag for replicating locally generated events`,
 	)
 	EnableReplicationTaskTieredProcessing = NewGlobalBoolSetting(
 		"history.EnableReplicationTaskTieredProcessing",
