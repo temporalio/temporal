@@ -383,13 +383,17 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 	// (2) Note these values are *AllocatedTaskInfo.
 	for _, t := range tasks {
 		level := fairLevelFromAllocatedTask(t)
-		if mode == mergeWrite && !tr.atEnd && tr.readLevel.less(level) {
+		if !tr.ackLevel.less(level) {
+			// Reads may race with completes/acks such that we read some tasks that are already
+			// acked. We should ignore these.
+			continue
+		} else if mode == mergeWrite && !tr.atEnd && tr.readLevel.less(level) {
 			// If we're writing and we're not at the end, then we have to ignore tasks
 			// above readLevel since we don't know what's in between readLevel and there.
 			continue
-		} else if _, have := merged.Get(level); have {
-			// If write/read race in certain ways, we may read something we had already
-			// added to the matcher. Ignore tasks we already have.
+		} else if _, have := tr.outstandingTasks.Get(level); have {
+			// If write/read race or we have to re-read a range, we may read something we had
+			// already added to the matcher or acked. Ignore tasks we already have.
 			continue
 		}
 		merged.Put(level, t)
@@ -411,8 +415,10 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 
 	if highestLevel.id != 0 {
 		// If we have any tasks at all in memory, set readLevel to the maximum of that set.
-		// Otherwise leave readLevel unchanged.
 		tr.readLevel = highestLevel
+	} else {
+		// Otherwise start reading at ack level next.
+		tr.readLevel = tr.ackLevel
 	}
 
 	// If there are remaining tasks in the merged set, they can't fit in memory. If they came
@@ -433,6 +439,18 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 			task.removeFromMatcher()
 		}
 	}
+
+	// We also have to remove any acked levels (nils) in outstandingTasks that are above our
+	// new read level (and accept reprocessing those tasks when we see them again), otherwise
+	// we may use these acks to increment our ack level across dropped ranges of tasks.
+	// TODO: we could add an additional cache to improve this
+	tr.outstandingTasks.Select(func(k, v any) bool {
+		return v == nil && tr.readLevel.less(k.(fairLevel))
+	}).Each(func(k, v any) {
+		evictedAnyTasks = true
+		tr.outstandingTasks.Remove(k)
+		// TODO: metric for this?
+	})
 
 	internalTasks := make([]*internalTask, len(tasks))
 	for i, t := range tasks {
@@ -545,6 +563,8 @@ func (tr *fairTaskReader) unpinAckLevel(writeErr error) {
 		// We got an error writing but the write may have succeeded anyway.
 		// We can't assume we know where the end is anymore.
 		tr.atEnd = false
+		// Initiate a read to try to find the end again.
+		tr.maybeReadTasksLocked()
 	}
 
 	softassert.That(tr.logger, tr.ackLevelPinnedByWriter, "ack level wasn't pinned")
