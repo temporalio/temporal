@@ -35,7 +35,7 @@ issues:
       linters:
         - revive
     - path: _test\.go|tests/.+\.go|common/testing/
-      text: "(dot-imports|unchecked-type-assertion)"  # helpful in tests
+      text: "(dot-imports|unchecked-type-assertion|unhandled-error)"  # helpful in tests
       linters:
         - revive
     - path: ^tools\/.+\.go
