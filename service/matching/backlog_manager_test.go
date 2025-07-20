@@ -466,9 +466,9 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 		s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	}
 
-	log := func(string, ...any) (int, error) { return 0, nil }
+	log := func(string, ...any) {}
 	// uncomment this for verbose logs:
-	// log = fmt.Printf
+	log = func(f string, a ...any) { fmt.Printf(f, a...) }
 
 	ctx, cancel := context.WithTimeout(context.Background(), p.duration+15*time.Second)
 	defer cancel()
@@ -518,9 +518,9 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 	delta := func() int64 {
 		return inflight.Load() - target.Load()
 	}
-	sleep := func() error {
+	sleep := func() {
 		d := time.Millisecond + time.Duration(rand.Float32()*float32(3*time.Millisecond))
-		return util.InterruptibleSleep(ctx, d)
+		_ = util.InterruptibleSleep(ctx, d)
 	}
 	finished := func() bool { return ctx.Err() != nil || target.Load() == testIsOver && inflight.Load() == 0 }
 	sleepUntil := func(cond func() bool) bool {
