@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/quotas"
 )
 
 const (
@@ -30,6 +31,8 @@ type (
 		ChannelWeightUpdateCh chan struct{}
 		// Optional, if specified, delete inactive channels after this duration
 		InactiveChannelDeletionDelay dynamicconfig.DurationPropertyFn
+		// Optional, if specified, use this rate limiter for scheduling
+		SchedulerRateLimiter quotas.RequestRateLimiter
 	}
 
 	// TaskChannelKeyFn is the function for mapping a task to its task channel (key)
@@ -55,6 +58,8 @@ type (
 
 		numInflightTask int64
 
+		schedulerRateLimiter quotas.RequestRateLimiter
+
 		sync.RWMutex
 		weightedChannels map[K]*WeightedChannel[T, K]
 
@@ -78,6 +83,11 @@ func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 	iwrrChannels := atomic.Value{}
 	iwrrChannels.Store(WeightedChannels[T, K]{})
 
+	schedulerRateLimiter := options.SchedulerRateLimiter
+	if schedulerRateLimiter == nil {
+		schedulerRateLimiter = quotas.NoopRequestRateLimiter
+	}
+
 	return &InterleavedWeightedRoundRobinScheduler[T, K]{
 		status: common.DaemonStatusInitialized,
 
@@ -90,9 +100,10 @@ func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 		notifyChan:   make(chan struct{}, 1),
 		shutdownChan: make(chan struct{}),
 
-		numInflightTask:  0,
-		weightedChannels: make(map[K]*WeightedChannel[T, K]),
-		iwrrChannels:     iwrrChannels,
+		numInflightTask:      0,
+		schedulerRateLimiter: schedulerRateLimiter,
+		weightedChannels:     make(map[K]*WeightedChannel[T, K]),
+		iwrrChannels:         iwrrChannels,
 	}
 }
 

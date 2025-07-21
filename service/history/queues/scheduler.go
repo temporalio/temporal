@@ -78,6 +78,7 @@ func NewScheduler(
 	options SchedulerOptions,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	rateLimiter SchedulerRateLimiter,
 ) Scheduler {
 	var scheduler tasks.Scheduler[Executable]
 
@@ -132,6 +133,7 @@ func NewScheduler(
 			ChannelWeightFn:              channelWeightFn,
 			ChannelWeightUpdateCh:        channelWeightUpdateCh,
 			InactiveChannelDeletionDelay: options.InactiveNamespaceDeletionDelay,
+			SchedulerRateLimiter:         rateLimiter,
 		},
 		tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
 			fifoSchedulerOptions,

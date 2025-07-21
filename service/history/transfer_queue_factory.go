@@ -6,6 +6,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/telemetry"
@@ -44,17 +45,24 @@ func NewTransferQueueFactory(
 	return &transferQueueFactory{
 		transferQueueFactoryParams: params,
 		QueueFactoryBase: QueueFactoryBase{
-			HostScheduler: queues.NewScheduler(
-				params.ClusterMetadata.GetCurrentClusterName(),
-				queues.SchedulerOptions{
-					WorkerCount:                    params.Config.TransferProcessorSchedulerWorkerCount,
-					ActiveNamespaceWeights:         params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
-					StandbyNamespaceWeights:        params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
-					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
-				},
-				params.NamespaceRegistry,
-				params.Logger,
-			),
+			HostScheduler: func() queues.Scheduler {
+				rateLimiter := queues.SchedulerRateLimiter(quotas.NoopRequestRateLimiter)
+				if params.Config.TaskSchedulerEnableRateLimiter() {
+					rateLimiter = params.SchedulerRateLimiter
+				}
+				return queues.NewScheduler(
+					params.ClusterMetadata.GetCurrentClusterName(),
+					queues.SchedulerOptions{
+						WorkerCount:                    params.Config.TransferProcessorSchedulerWorkerCount,
+						ActiveNamespaceWeights:         params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
+						StandbyNamespaceWeights:        params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
+						InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
+					},
+					params.NamespaceRegistry,
+					params.Logger,
+					rateLimiter,
+				)
+			}(),
 			HostPriorityAssigner: queues.NewPriorityAssigner(),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
@@ -78,21 +86,6 @@ func (f *transferQueueFactory) CreateQueue(
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 
 	var shardScheduler = f.HostScheduler
-	if f.Config.TaskSchedulerEnableRateLimiter() {
-		shardScheduler = queues.NewRateLimitedScheduler(
-			f.HostScheduler,
-			queues.RateLimitedSchedulerOptions{
-				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
-				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
-			},
-			currentClusterName,
-			f.NamespaceRegistry,
-			f.SchedulerRateLimiter,
-			f.TimeSource,
-			logger,
-			metricsHandler,
-		)
-	}
 
 	rescheduler := queues.NewRescheduler(
 		shardScheduler,
