@@ -24,9 +24,7 @@ const (
 	sessionRefreshMinInternal = 1 * time.Second
 )
 
-var (
-	DatabaseUnavailableError = serviceerror.NewUnavailable("no usable database connection found")
-)
+var DatabaseUnavailableError = serviceerror.NewUnavailable("no usable database connection found")
 
 type DatabaseHandle struct {
 	running      bool
@@ -38,6 +36,9 @@ type DatabaseHandle struct {
 	metrics     metrics.Handler
 	logger      log.Logger
 	timeSource  clock.TimeSource
+
+	reporter *DBMetricsReporter
+
 	// Ensures only one refresh call happens at a time
 	sync.Mutex
 }
@@ -60,6 +61,7 @@ func NewDatabaseHandle(
 		logger:       logger,
 		timeSource:   timeSource,
 	}
+	withDBMetricReporter(handle)
 	handle.reconnect(true)
 	return handle
 }
@@ -121,6 +123,9 @@ func (h *DatabaseHandle) Close() {
 		db := h.db.Swap(nil)
 		if db != nil {
 			db.Close()
+		}
+		if h.reporter != nil {
+			h.reporter.Stop()
 		}
 	}
 }

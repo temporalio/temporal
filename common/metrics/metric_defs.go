@@ -1252,6 +1252,9 @@ var (
 	CassandraSessionRefreshFailures        = NewCounterDef("cassandra_session_refresh_failures")
 	PersistenceSessionRefreshFailures      = NewCounterDef("persistence_session_refresh_failures")
 	PersistenceSessionRefreshAttempts      = NewCounterDef("persistence_session_refresh_attempts")
+	PersistenceSqlMaxOpenConn              = NewGaugeDef("persistence_sql_max_open_conn")
+	PersistenceSqlOpenConn                 = NewGaugeDef("persistence_sql_open_conn")
+	PersistenceSqlIdleConn                 = NewGaugeDef("persistence_sql_idle_conn")
 
 	// Common service base metrics
 	RestartCount           = NewCounterDef("restarts")
