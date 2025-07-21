@@ -8,17 +8,17 @@ import (
 
 // AudienceMapper is a simple implementation of JWTAudienceMapper that returns the configured audience string.
 type AudienceMapper struct {
-	audience string
+	JwtAudience string
 }
 
 // Audience returns the configured audience string.
 func (m *AudienceMapper) Audience(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo) string {
-	return m.audience
+	return m.JwtAudience
 }
 
 // NewAudienceMapper returns a JWTAudienceMapper that always returns the given audience string.
 func NewAudienceMapper(audience string) JWTAudienceMapper {
-	return &AudienceMapper{audience: audience}
+	return &AudienceMapper{JwtAudience: audience}
 }
 
 // GetAudienceMapperFromConfig returns a JWTAudienceMapper based on the provided Authorization config.

@@ -38,7 +38,7 @@ func (s *audienceMapperSuite) TestNewAudienceMapper_Static() {
 
 func (s *audienceMapperSuite) TestGetAudienceMapperFromConfig() {
 	cfg := &config.Authorization{Audience: "bar-audience"}
-	mapper := GetAudienceMapperFromConfig(cfg)
+	mapper, _ := GetAudienceMapperFromConfig(cfg)
 	audience := mapper.Audience(context.Background(), nil, &grpc.UnaryServerInfo{})
 	s.Equal("bar-audience", audience)
 }
