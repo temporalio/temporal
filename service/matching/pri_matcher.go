@@ -246,7 +246,12 @@ func (tm *priTaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier ba
 			// We found an invalid one, complete it and go back for another immediately.
 			task.finish(nil, false)
 			// not sure what scenario this fits
-			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, metrics.TaskExpireStageValidateTag())
+			var expireStateTag = metrics.TaskExpireStageValidateTag()
+			if IsTaskExpired(task.event.AllocatedTaskInfo) {
+				expireStateTag = metrics.TaskExpireStageMemoryTag()
+			}
+			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, expireStateTag)
+
 			retrier.Reset()
 		} else {
 			// Task was valid, put it back and slow down checking.

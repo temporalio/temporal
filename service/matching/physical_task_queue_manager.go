@@ -385,7 +385,11 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 	if !c.taskValidator.maybeValidate(task.event.AllocatedTaskInfo, c.queue.TaskType()) {
 		task.finish(nil, false)
 
-		c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, metrics.TaskExpireStageMemoryTag())
+		var expireStateTag = metrics.TaskExpireStageValidateTag()
+		if IsTaskExpired(task.event.AllocatedTaskInfo) {
+			expireStateTag = metrics.TaskExpireStageMemoryTag()
+		}
+		c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, expireStateTag)
 		// Don't try to set read level here because it may have been advanced already.
 		return nil
 	}
