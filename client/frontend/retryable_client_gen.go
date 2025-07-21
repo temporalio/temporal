@@ -296,6 +296,21 @@ func (c *retryableClient) ExecuteMultiOperation(
 	return resp, err
 }
 
+func (c *retryableClient) FetchWorkerConfig(
+	ctx context.Context,
+	request *workflowservice.FetchWorkerConfigRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.FetchWorkerConfigResponse, error) {
+	var resp *workflowservice.FetchWorkerConfigResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.FetchWorkerConfig(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetClusterInfo(
 	ctx context.Context,
 	request *workflowservice.GetClusterInfoRequest,
@@ -1295,6 +1310,21 @@ func (c *retryableClient) UpdateWorkerBuildIdCompatibility(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateWorkerConfig(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerConfigRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerConfigResponse, error) {
+	var resp *workflowservice.UpdateWorkerConfigResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateWorkerConfig(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
