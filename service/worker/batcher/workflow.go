@@ -100,6 +100,7 @@ type (
 	}
 
 	UnpauseActivitiesParams struct {
+		Identity       string
 		ActivityType   string
 		MatchAll       bool
 		ResetAttempts  bool

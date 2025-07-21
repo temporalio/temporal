@@ -4598,6 +4598,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		unpauseActivitiesParams.ResetAttempts = op.UnpauseActivitiesOperation.ResetAttempts
 		unpauseActivitiesParams.ResetHeartbeat = op.UnpauseActivitiesOperation.ResetHeartbeat
 		unpauseActivitiesParams.Jitter = op.UnpauseActivitiesOperation.Jitter.AsDuration()
+		unpauseActivitiesParams.Identity = op.UnpauseActivitiesOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 		operationType = batcher.BatchTypeResetActivities
 		if op.ResetActivitiesOperation == nil {
