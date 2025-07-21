@@ -6,6 +6,7 @@ import (
 	"context"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/persistence"
@@ -22,6 +23,7 @@ type (
 	WorkflowContext interface {
 		GetWorkflowKey() definition.WorkflowKey
 
+		SetArchetype(archetype chasm.Archetype)
 		LoadMutableState(ctx context.Context, shardContext ShardContext) (MutableState, error)
 		LoadExecutionStats(ctx context.Context, shardContext ShardContext) (*persistencespb.ExecutionStats, error)
 		Clear()

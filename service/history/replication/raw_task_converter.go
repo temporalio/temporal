@@ -12,6 +12,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -120,6 +122,7 @@ func convertActivityStateReplicationTask(
 		ctx,
 		shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
+		chasmworkflow.Archetype,
 		workflowCache,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -206,6 +209,7 @@ func convertWorkflowStateReplicationTask(
 		ctx,
 		shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
+		chasmworkflow.Archetype,
 		workflowCache,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
 			state, _ := mutableState.GetWorkflowStateStatus()
@@ -242,6 +246,7 @@ func convertSyncHSMReplicationTask(
 		ctx,
 		shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
+		chasmworkflow.Archetype,
 		workflowCache,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
 			// HSM can be updated after workflow is completed
@@ -293,6 +298,7 @@ func convertSyncVersionedTransitionTask(
 		ctx,
 		converter.shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
+		chasm.ArchetypeAny, // SyncVersionedTransitionTask works for all Archetypes.
 		converter.workflowCache,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
 			return converter.convert(ctx, taskInfo, targetClusterID, mutableState, releaseFunc)
@@ -367,10 +373,11 @@ func generateStateReplicationTask(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	workflowKey definition.WorkflowKey,
+	archetype chasm.Archetype,
 	workflowCache wcache.Cache,
 	action func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error),
 ) (retReplicationTask *replicationspb.ReplicationTask, retError error) {
-	wfContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
+	wfContext, release, err := workflowCache.GetOrCreateChasmEntity(
 		ctx,
 		shardContext,
 		namespace.ID(workflowKey.NamespaceID),
@@ -378,6 +385,7 @@ func generateStateReplicationTask(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
+		archetype,
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -511,6 +519,8 @@ func getBranchToken(
 	eventID int64,
 	eventVersion int64,
 ) (_ []*historyspb.VersionHistoryItem, _ []byte, _ *workflowspb.BaseExecutionInfo, retError error) {
+	// CHASM runs don't have events so should never reach here.
+	// We can continue to use GetOrCreateWorkflowExecution.
 	wfContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		shardContext,

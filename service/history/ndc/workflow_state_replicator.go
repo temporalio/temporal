@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -104,6 +105,9 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		return serviceerror.NewInternal("Replicate non completed workflow state is not supported.")
 	}
 
+	// SyncWorkflowState is not used by new state-based replication stack,
+	// but CHASM only uses state-based replication, so we can continue to use
+	// GetOrCreateWorkflowExecution here.
 	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		r.shardContext,
@@ -227,7 +231,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	wid := executionInfo.GetWorkflowId()
 	rid := executionState.GetRunId()
 
-	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
+	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateChasmEntity(
 		ctx,
 		r.shardContext,
 		namespaceID,
@@ -235,6 +239,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			WorkflowId: wid,
 			RunId:      rid,
 		},
+		chasm.ArchetypeAny,
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -346,7 +351,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 		return mutation.StateMutation.ExecutionState, mutation.StateMutation.ExecutionInfo
 	}()
 
-	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
+	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateChasmEntity(
 		ctx,
 		r.shardContext,
 		namespace.ID(executionInfo.NamespaceId),
@@ -354,6 +359,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 			WorkflowId: executionInfo.WorkflowId,
 			RunId:      executionState.RunId,
 		},
+		chasm.ArchetypeAny,
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -1238,6 +1244,7 @@ func (r *WorkflowStateReplicatorImpl) createNewRunWorkflow(
 	originalMutableState historyi.MutableState,
 	isStateBased bool,
 ) error {
+	// CHASM runs don't have new run, so we can continue using GetOrCreateWorkflowExecution here.
 	newRunWfContext, newRunReleaseFn, newRunErr := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		r.shardContext,
@@ -1343,6 +1350,8 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	if runID != originalRunID {
 		// At this point, it already acquired the workflow lock on the run ID.
 		// Get the lock of root run id to make sure no concurrent backfill history across multiple runs.
+		//
+		// CHASM runs have no history, so we can continue to use GetOrCreateWorkflowExecution here.
 		_, rootRunReleaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
 			ctx,
 			r.shardContext,

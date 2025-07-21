@@ -432,7 +432,7 @@ func (s *chasmEngineSuite) validateNewEntityResponseRef(
 
 	archetype, err := deserializedRef.Archetype(s.registry)
 	s.NoError(err)
-	s.Equal("TestLibrary.test_component", archetype)
+	s.Equal("TestLibrary.test_component", archetype.String())
 }
 
 func (s *chasmEngineSuite) currentRunConditionFailedErr(

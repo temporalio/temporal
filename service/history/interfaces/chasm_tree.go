@@ -23,7 +23,7 @@ type ChasmTree interface {
 	IsStateDirty() bool
 	IsDirty() bool
 	Terminate(chasm.TerminateComponentRequest) error
-	Archetype() string
+	Archetype() chasm.Archetype
 	EachPureTask(
 		deadline time.Time,
 		callback func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) error,

@@ -68,6 +68,8 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		VersioningOverride:              worker_versioning.ConvertOverrideToV32(request.VersioningOverride),
 		Priority:                        req.GetPriority(),
 		InheritedPinnedVersion:          request.InheritedPinnedVersion,
+		// We expect the API handler to unset RequestEagerExecution if eager execution cannot be accepted.
+		EagerExecutionAccepted: req.GetRequestEagerExecution(),
 	}
 
 	parentInfo := request.ParentExecutionInfo

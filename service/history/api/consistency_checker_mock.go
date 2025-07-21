@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	clock "go.temporal.io/server/api/clock/v1"
+	chasm "go.temporal.io/server/chasm"
 	definition "go.temporal.io/server/common/definition"
 	locks "go.temporal.io/server/common/locks"
 	cache "go.temporal.io/server/service/history/workflow/cache"
@@ -42,6 +43,36 @@ func NewMockWorkflowConsistencyChecker(ctrl *gomock.Controller) *MockWorkflowCon
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockWorkflowConsistencyChecker) EXPECT() *MockWorkflowConsistencyCheckerMockRecorder {
 	return m.recorder
+}
+
+// GetChasmLease mocks base method.
+func (m *MockWorkflowConsistencyChecker) GetChasmLease(ctx context.Context, reqClock *clock.VectorClock, workflowKey definition.WorkflowKey, archetype chasm.Archetype, lockPriority locks.Priority) (WorkflowLease, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetChasmLease", ctx, reqClock, workflowKey, archetype, lockPriority)
+	ret0, _ := ret[0].(WorkflowLease)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetChasmLease indicates an expected call of GetChasmLease.
+func (mr *MockWorkflowConsistencyCheckerMockRecorder) GetChasmLease(ctx, reqClock, workflowKey, archetype, lockPriority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChasmLease", reflect.TypeOf((*MockWorkflowConsistencyChecker)(nil).GetChasmLease), ctx, reqClock, workflowKey, archetype, lockPriority)
+}
+
+// GetChasmLeaseWithConsistencyCheck mocks base method.
+func (m *MockWorkflowConsistencyChecker) GetChasmLeaseWithConsistencyCheck(ctx context.Context, reqClock *clock.VectorClock, consistencyPredicate MutableStateConsistencyPredicate, workflowKey definition.WorkflowKey, archetype chasm.Archetype, lockPriority locks.Priority) (WorkflowLease, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetChasmLeaseWithConsistencyCheck", ctx, reqClock, consistencyPredicate, workflowKey, archetype, lockPriority)
+	ret0, _ := ret[0].(WorkflowLease)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetChasmLeaseWithConsistencyCheck indicates an expected call of GetChasmLeaseWithConsistencyCheck.
+func (mr *MockWorkflowConsistencyCheckerMockRecorder) GetChasmLeaseWithConsistencyCheck(ctx, reqClock, consistencyPredicate, workflowKey, archetype, lockPriority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChasmLeaseWithConsistencyCheck", reflect.TypeOf((*MockWorkflowConsistencyChecker)(nil).GetChasmLeaseWithConsistencyCheck), ctx, reqClock, consistencyPredicate, workflowKey, archetype, lockPriority)
 }
 
 // GetCurrentRunID mocks base method.
