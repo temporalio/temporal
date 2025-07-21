@@ -56,7 +56,7 @@ type (
 		numInflightTask int64
 
 		sync.RWMutex
-		weightedChannels map[K]*WeightedChannel[T]
+		weightedChannels map[K]*WeightedChannel[T, K]
 
 		// precalculated / flattened task chan according to weight
 		// e.g. if
@@ -76,7 +76,7 @@ func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 	logger log.Logger,
 ) *InterleavedWeightedRoundRobinScheduler[T, K] {
 	iwrrChannels := atomic.Value{}
-	iwrrChannels.Store(WeightedChannels[T]{})
+	iwrrChannels.Store(WeightedChannels[T, K]{})
 
 	return &InterleavedWeightedRoundRobinScheduler[T, K]{
 		status: common.DaemonStatusInitialized,
@@ -91,7 +91,7 @@ func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 		shutdownChan: make(chan struct{}),
 
 		numInflightTask:  0,
-		weightedChannels: make(map[K]*WeightedChannel[T]),
+		weightedChannels: make(map[K]*WeightedChannel[T, K]),
 		iwrrChannels:     iwrrChannels,
 	}
 }
@@ -233,7 +233,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doCleanup() {
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 	channelKey K,
-) (*WeightedChannel[T], func()) {
+) (*WeightedChannel[T, K], func()) {
 	s.RLock()
 	channel, ok := s.weightedChannels[channelKey]
 	if ok {
@@ -253,7 +253,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 	}
 
 	weight := s.options.ChannelWeightFn(channelKey)
-	channel = NewWeightedChannel[T](weight, WeightedChannelDefaultSize, s.ts.Now())
+	channel = NewWeightedChannel[T, K](channelKey, weight, WeightedChannelDefaultSize, s.ts.Now())
 	s.weightedChannels[channelKey] = channel
 
 	s.flattenWeightedChannelsLocked()
@@ -262,13 +262,13 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) flattenWeightedChannelsLocked() {
-	weightedChannels := make(WeightedChannels[T], 0, len(s.weightedChannels))
+	weightedChannels := make(WeightedChannels[T, K], 0, len(s.weightedChannels))
 	for _, weightedChan := range s.weightedChannels {
 		weightedChannels = append(weightedChannels, weightedChan)
 	}
 	sort.Sort(weightedChannels)
 
-	iwrrChannels := make(WeightedChannels[T], 0, len(weightedChannels))
+	iwrrChannels := make(WeightedChannels[T, K], 0, len(weightedChannels))
 	if len(weightedChannels) == 0 {
 		s.iwrrChannels.Store(iwrrChannels)
 		return
@@ -283,8 +283,8 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) flattenWeightedChannelsLo
 	s.iwrrChannels.Store(iwrrChannels)
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler[T, K]) channels() WeightedChannels[T] {
-	return s.iwrrChannels.Load().(WeightedChannels[T])
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) channels() WeightedChannels[T, K] {
+	return s.iwrrChannels.Load().(WeightedChannels[T, K])
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) notifyDispatcher() {
@@ -340,7 +340,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) dispatchTasksWithWeight()
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doDispatchTasksWithWeight(
-	channels WeightedChannels[T],
+	channels WeightedChannels[T, K],
 ) {
 	numTasks := int64(0)
 	now := s.ts.Now()
