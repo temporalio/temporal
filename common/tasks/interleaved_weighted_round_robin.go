@@ -340,7 +340,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) updateChannelWeightLocked
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) dispatchTasksWithWeight() {
-	for s.hasRemainingTasks() {
+	for s.hasRemainingTasks() && s.hasChannelsWithoutPendingGoroutines() {
 		if s.receiveWeightUpdateNotification() {
 			s.Lock()
 			s.updateChannelWeightLocked()
@@ -349,13 +349,18 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) dispatchTasksWithWeight()
 		}
 
 		weightedChannels := s.channels()
-		s.doDispatchTasksWithWeight(weightedChannels)
+		dispatched := s.doDispatchTasksWithWeight(weightedChannels)
+		
+		// If no tasks were dispatched in this round, break to avoid infinite loop
+		if dispatched == 0 {
+			break
+		}
 	}
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doDispatchTasksWithWeight(
 	channels WeightedChannels[T, K],
-) {
+) int64 {
 	numTasks := int64(0)
 	now := s.ts.Now()
 LoopDispatch:
@@ -394,13 +399,26 @@ LoopDispatch:
 		}
 	}
 	atomic.AddInt64(&s.numInflightTask, -numTasks)
+	return numTasks
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) submitTaskWithRateLimit(task T, channelKey K) {
 	defer func() {
 		// Clean up pending submission tracking
 		s.pendingSubmissions.Delete(channelKey)
+		
+		// Signal dispatcher that this goroutine is done and dispatcher can try again
+		s.notifyDispatcher()
 	}()
+
+	// Check if component is shutting down early to avoid unnecessary work
+	select {
+	case <-s.shutdownChan:
+		// Component is shutting down, abort the task instead of submitting
+		task.Abort()
+		return
+	default:
+	}
 
 	// Wait on rate limiter before submitting
 	if s.schedulerRateLimiter != nil && s.quotaRequestFn != nil {
@@ -417,7 +435,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) submitTaskWithRateLimit(t
 		}
 	}
 
-	// Check if component is shutting down after rate limiter wait
+	// Check again if component is shutting down after rate limiter wait
 	select {
 	case <-s.shutdownChan:
 		// Component is shutting down, abort the task instead of submitting
@@ -452,6 +470,19 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) tryDispatchTaskDirectly(
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) hasRemainingTasks() bool {
 	numTasks := atomic.LoadInt64(&s.numInflightTask)
 	return numTasks > 0
+}
+
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) hasChannelsWithoutPendingGoroutines() bool {
+	s.RLock()
+	defer s.RUnlock()
+	
+	for channelKey := range s.weightedChannels {
+		if _, hasPending := s.pendingSubmissions.Load(channelKey); !hasPending {
+			// Found at least one channel without a pending goroutine
+			return true
+		}
+	}
+	return false
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) abortTasks() {
