@@ -127,6 +127,18 @@ func NewScheduler(
 		WorkerCount: options.WorkerCount,
 	}
 
+	// Create quotaRequestFn if rate limiter is provided
+	var quotaRequestFn tasks.QuotaRequestFn[Executable]
+	if rateLimiter != nil {
+		quotaRequestFn = func(e Executable) quotas.Request {
+			namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+			if err != nil {
+				namespaceName = namespace.EmptyName
+			}
+			return quotas.NewRequest(e.GetType().String(), taskSchedulerToken, namespaceName.String(), e.GetPriority().CallerType(), 0, "")
+		}
+	}
+
 	scheduler = tasks.NewInterleavedWeightedRoundRobinScheduler(
 		tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
 			TaskChannelKeyFn:             taskChannelKeyFn,
@@ -134,6 +146,7 @@ func NewScheduler(
 			ChannelWeightUpdateCh:        channelWeightUpdateCh,
 			InactiveChannelDeletionDelay: options.InactiveNamespaceDeletionDelay,
 			SchedulerRateLimiter:         rateLimiter,
+			QuotaRequestFn:               quotaRequestFn,
 		},
 		tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
 			fifoSchedulerOptions,
