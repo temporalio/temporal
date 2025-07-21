@@ -189,8 +189,7 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) error {
 			task.finish(nil, false)
 
 			// consider this task expired while processing.
-			taskExpireStateTag := metrics.TaskExpireStateTag("process")
-			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, taskExpireStateTag)
+			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, metrics.TaskExpireStageMemoryTag())
 			return nil
 		}
 
@@ -247,8 +246,7 @@ func (tm *priTaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier ba
 			// We found an invalid one, complete it and go back for another immediately.
 			task.finish(nil, false)
 			// not sure what scenario this fits
-			taskExpireStateTag := metrics.TaskExpireStateTag("memory")
-			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, taskExpireStateTag)
+			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, metrics.TaskExpireStageValidateTag())
 			retrier.Reset()
 		} else {
 			// Task was valid, put it back and slow down checking.
