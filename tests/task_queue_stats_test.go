@@ -58,12 +58,12 @@ type (
 )
 
 // TODO(pri): remove once the classic matcher is removed
-func TestTaskQueueStatsSuite_ClassicMatcher(t *testing.T) {
+func TestTaskQueueStats_Classic_Suite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &TaskQueueStatsSuite{usePriMatcher: false})
 }
 
-func TestTaskQueueStatsSuite_PriMatcher(t *testing.T) {
+func TestTaskQueueStats_Pri_Suite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &TaskQueueStatsSuite{usePriMatcher: true})
 }
