@@ -4530,6 +4530,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			},
 		}
 	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
+		identity = op.CancellationOperation.GetIdentity()
 		operationType = batcher.BatchTypeCancel
 		batchOperation.Operation = &batchpb.BatchOperation_CancellationOperation{
 			CancellationOperation: &batchpb.BatchOperationCancellation{
@@ -4537,6 +4538,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			},
 		}
 	case *workflowservice.StartBatchOperationRequest_DeletionOperation:
+		identity = op.DeletionOperation.GetIdentity()
 		operationType = batcher.BatchTypeDelete
 		batchOperation.Operation = &batchpb.BatchOperation_DeletionOperation{
 			DeletionOperation: &batchpb.BatchOperationDeletion{
@@ -4544,6 +4546,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			},
 		}
 	case *workflowservice.StartBatchOperationRequest_ResetOperation:
+		identity = op.ResetOperation.GetIdentity()
 		operationType = batcher.BatchTypeReset
 		operation := &batchpb.BatchOperation_ResetOperation{
 			ResetOperation: &batchpb.BatchOperationReset{
@@ -4565,6 +4568,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		}
 		batchOperation.Operation = operation
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
+		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
 		operationType = batcher.BatchTypeUpdateOptions
 		operation := &batchpb.BatchOperation_UpdateWorkflowExecutionOptionsOperation{
 			UpdateWorkflowExecutionOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
@@ -4588,6 +4592,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		}
 		batchOperation.Operation = operation
 	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
+		identity = op.UnpauseActivitiesOperation.GetIdentity()
 		operationType = batcher.BatchTypeUnpauseActivities
 		operation := &batchpb.BatchOperation_UnpauseActivitiesOperation{
 			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
@@ -4629,6 +4634,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 		batchOperation.Operation = operation
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
+		identity = op.ResetActivitiesOperation.GetIdentity()
 		operationType = batcher.BatchTypeResetActivities
 		operation := &batchpb.BatchOperation_ResetActivitiesOperation{
 			ResetActivitiesOperation: &batchpb.BatchOperationResetActivities{
