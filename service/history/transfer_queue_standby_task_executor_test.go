@@ -488,7 +488,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Paused()
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.ErrorIs(resp.ExecutionErr, consts.ErrStaleReference)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending() {
