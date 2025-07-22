@@ -168,34 +168,20 @@ func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int, u
 }
 
 func (s *TaskQueueSuite) TestTaskQueueApiLimitOverride() {
-	// Allowable timing buffer to account for scheduling jitter and measurement noise.
 	const buffer = 100 * time.Millisecond
-	var expectedActivityExecutionTime time.Duration
-	// API rate limit = 1 RPS
-	// Expect ~1 second between activity executions. Use (1s - buffer) as the minimum spacing threshold.
-	expectedActivityExecutionTime = time.Second
-	s.RunTestTaskQueueAPIRateLimitOverridesWorkerLimit(1.0, 5, expectedActivityExecutionTime-buffer, expectedActivityExecutionTime+buffer)
 
-	// API rate limit = 2 RPS
-	// Expect ~500ms between activity executions. Use (500ms - buffer) as the minimum spacing threshold.
-	expectedActivityExecutionTime = 500 * time.Millisecond
-	s.RunTestTaskQueueAPIRateLimitOverridesWorkerLimit(2.0, 5, expectedActivityExecutionTime-buffer, expectedActivityExecutionTime+buffer)
-}
+	s.Run("RateLimitTest_1.00", func() {
+		expectedGap := time.Second
+		s.runTestTaskQueueAPIRateLimitOverridesWorkerLimit(1.0, 5, expectedGap-buffer, expectedGap+buffer, "RateLimitTest_1.00")
+	})
 
-// Generate a descriptive test name based on the rate limit,
-// and reuse it as the activity task queue name to ensure uniqueness across test cases.
-func (s *TaskQueueSuite) testTaskQueueRateLimitOverrideName(apiRPS float32) string {
-	return fmt.Sprintf("RateLimitTest_%.2f", apiRPS)
-}
-
-func (s *TaskQueueSuite) RunTestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS float32, taskCount int, minGap time.Duration, maxGap time.Duration) {
-	activityTaskQueueName := s.testTaskQueueRateLimitOverrideName(apiRPS)
-	s.Run(activityTaskQueueName, func() {
-		s.TestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS, taskCount, minGap, maxGap, activityTaskQueueName)
+	s.Run("RateLimitTest_2.00", func() {
+		expectedGap := 500 * time.Millisecond
+		s.runTestTaskQueueAPIRateLimitOverridesWorkerLimit(2.0, 5, expectedGap-buffer, expectedGap+buffer, "RateLimitTest_2.00")
 	})
 }
 
-func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS float32, taskCount int, minGap time.Duration, maxGap time.Duration, activityTaskQueue string) {
+func (s *TaskQueueSuite) runTestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS float32, taskCount int, minGap time.Duration, maxGap time.Duration, activityTaskQueue string) {
 	// Set the burst as 1 to make sure not more than 1 task get's acknowledged at a time.
 	// Helps observe the backlog drain more easily.
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMinTaskThrottlingBurstSize, 1)
