@@ -388,7 +388,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	if !ok {
 		return serviceerror.NewInternalf("expected visibility component, but got %T", visComponent)
 	}
-	// TODO: add a search attribute for archetype
+
 	searchattributes, err := visComponent.GetSearchAttributes(visTaskContext)
 	if err != nil {
 		return err
@@ -410,7 +410,6 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		memo,
 		searchattributes,
 	)
-	// TODO: have a separate search attribute for archetype
 	requestBase.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision] = payload.EncodeString(tree.Archetype())
 
 	if mutableState.IsWorkflowExecutionRunning() {

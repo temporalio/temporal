@@ -1246,7 +1246,6 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 			// Skip force update is the node is not a visibility component or already updated in this transition.
 			continue
 		}
-		fmt.Println("closeTransactionForceUpdateVisibility")
 
 		mutableContext := NewMutableContext(context.Background(), n)
 		visComponent, err := child.Component(mutableContext, ComponentRef{})
