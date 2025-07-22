@@ -88,9 +88,9 @@ func (q *DLQWriter) WriteTaskToDLQ(
 		return fmt.Errorf("%w: %v", ErrSendTaskToDLQ, err)
 	}
 	// "passive" means the namespace is in standby mode and only replicates data
-	namespaceState := "passive"
+	namespaceState := metrics.PassiveNamespaceStateTagValue
 	if isNamespaceActive {
-		namespaceState = "active"
+		namespaceState = metrics.ActiveNamespaceStateTagValue
 	}
 	metrics.DLQWrites.With(q.metricsHandler).Record(
 		1,

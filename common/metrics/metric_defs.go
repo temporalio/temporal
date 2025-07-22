@@ -44,6 +44,10 @@ const (
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
 	InvalidVisibilityURITagValue = "invalid_visibility_uri"
+
+	ActiveNamespaceStateTagValue  = "active"
+	PassiveNamespaceStateTagValue = "passive"
+	UnknownNamespaceStateTagValue = "unknown"
 )
 
 // Admin Client Operations

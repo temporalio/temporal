@@ -114,8 +114,8 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 				assert.Len(t, recordings, 1)
 				assert.Len(t, recordings[0].Tags, 2)
 				assert.Equal(t, "replication", recordings[0].Tags[metrics.TaskCategoryTagName])
-				namespaceStateTag := metrics.NamespaceStateTag("passive")
-				assert.Equal(t, "passive", recordings[0].Tags[namespaceStateTag.Key()])
+				namespaceStateTag := metrics.NamespaceStateTag(metrics.PassiveNamespaceStateTagValue)
+				assert.Equal(t, metrics.PassiveNamespaceStateTagValue, recordings[0].Tags[namespaceStateTag.Key()])
 			}
 		})
 	}
