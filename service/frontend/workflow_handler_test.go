@@ -2206,7 +2206,9 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 		Reason:    inputString,
 		Query:     inputString,
 		Operation: &batchpb.BatchOperation_TerminationOperation{
-			TerminationOperation: &batchpb.BatchOperationTermination{},
+			TerminationOperation: &batchpb.BatchOperationTermination{
+				Identity: inputString,
+			},
 		},
 	}
 	inputPayload, err := payloads.Encode(params)
@@ -2259,7 +2261,9 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 		Reason:    inputString,
 		Query:     inputString,
 		Operation: &batchpb.BatchOperation_CancellationOperation{
-			CancellationOperation: &batchpb.BatchOperationCancellation{},
+			CancellationOperation: &batchpb.BatchOperationCancellation{
+				Identity: inputString,
+			},
 		},
 	}
 	inputPayload, err := payloads.Encode(params)

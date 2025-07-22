@@ -258,6 +258,7 @@ func startTaskProcessor(
 							},
 							SignalName: operation.SignalOperation.GetSignal(),
 							Input:      operation.SignalOperation.GetInput(),
+							Identity:   operation.SignalOperation.GetIdentity(),
 						})
 						return err
 					})
@@ -312,6 +313,7 @@ func startTaskProcessor(
 							ResetReapplyType:          resetReapplyType,
 							ResetReapplyExcludeTypes:  resetReapplyExcludeTypes,
 							PostResetOperations:       operation.ResetOperation.PostResetOperations,
+							Identity:                  operation.ResetOperation.Identity,
 						})
 						return err
 					})
