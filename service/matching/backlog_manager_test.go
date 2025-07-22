@@ -41,8 +41,6 @@ type BacklogManagerTestSuite struct {
 	cancelCtx  context.CancelFunc
 	taskMgr    *testTaskManager
 	ptqMgr     *MockphysicalTaskQueueManager
-
-	addSpooledTask func(*internalTask) error
 }
 
 func TestBacklogManager_Classic_Suite(t *testing.T) {
@@ -80,13 +78,6 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	s.ptqMgr = NewMockphysicalTaskQueueManager(s.controller)
 	s.ptqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
 	s.ptqMgr.EXPECT().ProcessSpooledTask(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).DoAndReturn(func(t *internalTask) error {
-		if s.addSpooledTask != nil {
-			return s.addSpooledTask(t)
-		}
-		return nil
-	}).AnyTimes()
-	s.addSpooledTask = nil
 
 	var ctx context.Context
 	ctx, s.cancelCtx = context.WithCancel(context.Background())
@@ -481,7 +472,7 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 	target.Store((p.lower + p.upper) / 2)
 	const testIsOver = int64(-1000000)
 
-	s.addSpooledTask = func(t *internalTask) error {
+	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).DoAndReturn(func(t *internalTask) error {
 		lock.Lock()
 		defer lock.Unlock()
 		e := tasks.PushBack(t)
@@ -493,7 +484,7 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 		}
 		log("buf add %s -> %d\n", t.fairLevel(), tasks.Len())
 		return nil
-	}
+	}).AnyTimes()
 	getTask := func() *internalTask {
 		lock.Lock()
 		defer lock.Unlock()
