@@ -213,6 +213,7 @@ type Config struct {
 
 	WorkerHeartbeatsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ListWorkersEnabled      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkerCommandsEnabled   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HTTPAllowedHosts *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
 }
@@ -363,6 +364,7 @@ func NewConfig(
 		MaxWorkflowRulesPerNamespace:   dynamicconfig.MaxWorkflowRulesPerNamespace.Get(dc),
 		WorkerHeartbeatsEnabled:        dynamicconfig.WorkerHeartbeatsEnabled.Get(dc),
 		ListWorkersEnabled:             dynamicconfig.ListWorkersEnabled.Get(dc),
+		WorkerCommandsEnabled:          dynamicconfig.WorkerCommandsEnabled.Get(dc),
 
 		HTTPAllowedHosts: dynamicconfig.NewGlobalCachedTypedValue(dc, dynamicconfig.FrontendHTTPAllowedHosts, func(patterns []string) (*regexp.Regexp, error) {
 			if len(patterns) == 0 {

@@ -1,6 +1,7 @@
 package batcher
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,7 +12,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 const (
@@ -42,6 +42,10 @@ const (
 	BatchTypeUpdateOptions = "update_options"
 	// BatchTypePauseActivities is batch type for unpausing activities
 	BatchTypeUnpauseActivities = "unpause_activities"
+	// BatchTypeUpdateActivitiesOptions is batch type for updating the options of activities
+	BatchTypeUpdateActivitiesOptions = "update_activity_options"
+	// BatchTypeResetActivities is batch type for resetting activities
+	BatchTypeResetActivities = "reset_activities"
 )
 
 var (
@@ -92,15 +96,62 @@ type (
 	// UpdateOptionsParams is the parameters for updating workflow execution options
 	UpdateOptionsParams struct {
 		WorkflowExecutionOptions *workflowpb.WorkflowExecutionOptions
-		UpdateMask               *fieldmaskpb.FieldMask
+		UpdateMask               *FieldMask
 	}
 
 	UnpauseActivitiesParams struct {
+		Identity       string
 		ActivityType   string
 		MatchAll       bool
 		ResetAttempts  bool
 		ResetHeartbeat bool
 		Jitter         time.Duration
+	}
+
+	UpdateActivitiesOptionsParams struct {
+		Identity        string
+		ActivityType    string
+		MatchAll        bool
+		ActivityOptions *ActivityOptions
+		UpdateMask      *FieldMask
+		RestoreOriginal bool
+	}
+
+	ActivityOptions struct {
+		TaskQueue              *TaskQueue
+		ScheduleToCloseTime    time.Duration
+		ScheduleToStartTimeout time.Duration
+		StartToCloseTimeout    time.Duration
+		HeartbeatTimeout       time.Duration
+		RetryPolicy            *RetryPolicy
+	}
+
+	TaskQueue struct {
+		Name string
+		Kind int32
+	}
+
+	RetryPolicy struct {
+		InitialInterval        time.Duration
+		BackoffCoefficient     float64
+		MaximumInterval        time.Duration
+		MaximumAttempts        int32
+		NonRetryableErrorTypes []string
+	}
+
+	ResetActivitiesParams struct {
+		Identity               string
+		ActivityType           string
+		MatchAll               bool
+		ResetAttempts          bool
+		ResetHeartbeat         bool
+		KeepPaused             bool
+		Jitter                 time.Duration
+		RestoreOriginalOptions bool
+	}
+
+	FieldMask struct {
+		Paths []string
 	}
 
 	// BatchParams is the parameters for batch operation workflow
@@ -131,6 +182,10 @@ type (
 		UpdateOptionsParams UpdateOptionsParams
 		// UnpauseActivitiesParams is params only for BatchTypeUnpauseActivities
 		UnpauseActivitiesParams UnpauseActivitiesParams
+		// UpdateActivitiesOptionsParams is params only for BatchTypeUpdateActivitiesOptions
+		UpdateActivitiesOptionsParams UpdateActivitiesOptionsParams
+		// ResetActivitiesParams is params only for BatchTypeResetActivities
+		ResetActivitiesParams ResetActivitiesParams
 
 		// RPS sets the requests-per-second limit for the batch.
 		// The default (and max) is defined by `worker.BatcherRPS` in the dynamic config.
@@ -255,6 +310,16 @@ func validateParams(params BatchParams) error {
 	case BatchTypeUnpauseActivities:
 		if params.UnpauseActivitiesParams.ActivityType == "" && !params.UnpauseActivitiesParams.MatchAll {
 			return fmt.Errorf("must provide ActivityType or MatchAll")
+		}
+		return nil
+	case BatchTypeResetActivities:
+		if params.ResetActivitiesParams.ActivityType == "" && !params.ResetActivitiesParams.MatchAll {
+			return errors.New("must provide ActivityType or MatchAll")
+		}
+		return nil
+	case BatchTypeUpdateActivitiesOptions:
+		if params.UpdateActivitiesOptionsParams.ActivityType == "" && !params.UpdateActivitiesOptionsParams.MatchAll {
+			return errors.New("must provide ActivityType or MatchAll")
 		}
 		return nil
 	default:

@@ -25,7 +25,7 @@ type ComponentRef struct {
 	// which determines the shardID of the entity that contains the referenced component.
 	// It is also used to validate if a given entity has the right archetype.
 	// E.g. The EntityKey can be empty and the current run of the BusinessID may have a different archetype.
-	archetype string
+	archetype Archetype
 	// entityGoType is used for determining the ComponetRef's archetype.
 	// When CHASM deverloper needs to create a ComponentRef, they will only provide this information,
 	// and leave the work of determining archetype to the CHASM engine.
@@ -67,7 +67,7 @@ func NewComponentRef[C Component](
 
 func (r *ComponentRef) Archetype(
 	registry *Registry,
-) (string, error) {
+) (Archetype, error) {
 	if r.archetype != "" {
 		return r.archetype, nil
 	}
@@ -76,7 +76,7 @@ func (r *ComponentRef) Archetype(
 	if !ok {
 		return "", serviceerror.NewInternal("unknown chasm component type: " + r.entityGoType.String())
 	}
-	r.archetype = rc.fqType()
+	r.archetype = Archetype(rc.fqType())
 
 	return r.archetype, nil
 }
@@ -92,9 +92,9 @@ func (r *ComponentRef) ShardingKey(
 		return "", err
 	}
 
-	rc, ok := registry.component(archetype)
+	rc, ok := registry.component(archetype.String())
 	if !ok {
-		return "", serviceerror.NewInternal("unknown chasm component type: " + archetype)
+		return "", serviceerror.NewInternal("unknown chasm component type: " + archetype.String())
 	}
 
 	return rc.shardingFn(r.EntityKey), nil
@@ -116,7 +116,7 @@ func (r *ComponentRef) Serialize(
 		NamespaceId:                         r.NamespaceID,
 		BusinessId:                          r.BusinessID,
 		EntityId:                            r.EntityID,
-		Archetype:                           archetype,
+		Archetype:                           archetype.String(),
 		EntityVersionedTransition:           r.entityLastUpdateVT,
 		ComponentPath:                       r.componentPath,
 		ComponentInitialVersionedTransition: r.componentInitialVT,
@@ -138,7 +138,7 @@ func DeserializeComponentRef(data []byte) (ComponentRef, error) {
 			BusinessID:  pRef.BusinessId,
 			EntityID:    pRef.EntityId,
 		},
-		archetype:          pRef.Archetype,
+		archetype:          Archetype(pRef.Archetype),
 		entityLastUpdateVT: pRef.EntityVersionedTransition,
 		componentPath:      pRef.ComponentPath,
 		componentInitialVT: pRef.ComponentInitialVersionedTransition,

@@ -187,7 +187,10 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) error {
 		maybeValid := tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.fwdr.partition.TaskType())
 		if !maybeValid {
 			task.finish(nil, false)
-			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
+			var invalidTaskTag = getInvalidTaskTag(task)
+
+			// consider this task expired while processing.
+			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
 			return nil
 		}
 
@@ -243,7 +246,9 @@ func (tm *priTaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier ba
 		if !maybeValid {
 			// We found an invalid one, complete it and go back for another immediately.
 			task.finish(nil, false)
-			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
+			var invalidStageTag = getInvalidTaskTag(task)
+			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidStageTag)
+
 			retrier.Reset()
 		} else {
 			// Task was valid, put it back and slow down checking.
@@ -610,4 +615,11 @@ func (tm *priTaskMatcher) emitForwardedSourceStats(
 	default:
 		metrics.LocalToLocalMatchPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 	}
+}
+
+func getInvalidTaskTag(task *internalTask) metrics.Tag {
+	if IsTaskExpired(task.event.AllocatedTaskInfo) {
+		return metrics.TaskExpireStageMemoryTag
+	}
+	return metrics.TaskInvalidTag
 }
