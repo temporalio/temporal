@@ -9,11 +9,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	workflowservicepb "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -141,6 +141,17 @@ type (
 		NonRetryableErrorTypes []string
 	}
 
+	ResetActivitiesParams struct {
+		Identity               string
+		ActivityType           string
+		MatchAll               bool
+		ResetAttempts          bool
+		ResetHeartbeat         bool
+		KeepPaused             bool
+		Jitter                 time.Duration
+		RestoreOriginalOptions bool
+	}
+
 	FieldMask struct {
 		Paths []string
 	}
@@ -176,7 +187,7 @@ type (
 		// UpdateActivitiesOptionsParams is params only for BatchTypeUpdateActivitiesOptions
 		UpdateActivitiesOptionsParams UpdateActivitiesOptionsParams
 		// ResetActivitiesParams is params only for BatchTypeResetActivities
-		ResetActivitiesParams *workflowservicepb.StartBatchOperationRequest_ResetActivitiesOperation
+		ResetActivitiesParams ResetActivitiesParams
 
 		// RPS sets the requests-per-second limit for the batch.
 		// The default (and max) is defined by `worker.BatcherRPS` in the dynamic config.
@@ -230,14 +241,18 @@ var (
 )
 
 // BatchWorkflow is the workflow that runs a batch job of resetting workflows.
-func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDetails, error) {
+func BatchWorkflow(ctx workflow.Context, batchParams *batchpb.BatchOperation) (HeartBeatDetails, error) {
+	if batchParams == nil {
+		return HeartBeatDetails{}, fmt.Errorf("batchParams is nil")
+	}
+
 	batchParams = setDefaultParams(batchParams)
 	err := validateParams(batchParams)
 	if err != nil {
 		return HeartBeatDetails{}, err
 	}
 
-	batchActivityOptions.HeartbeatTimeout = batchParams.ActivityHeartBeatTimeout
+	batchActivityOptions.HeartbeatTimeout = batchParams.GetActivityHeartbeatTimeout().AsDuration()
 	opt := workflow.WithActivityOptions(ctx, batchActivityOptions)
 	var result HeartBeatDetails
 	var ac *activities
@@ -270,77 +285,68 @@ func attachBatchOperationStats(ctx workflow.Context, result HeartBeatDetails) er
 	return workflow.UpsertMemo(ctx, memo)
 }
 
-func validateParams(params BatchParams) error {
-	if params.BatchType == "" ||
+func validateParams(params *batchpb.BatchOperation) error {
+	if params.Operation == nil ||
 		params.Reason == "" ||
 		params.Namespace == "" ||
-		(params.Query == "" && len(params.Executions) == 0) {
+		(params.Query == "" && len(params.WorkflowExecutions) == 0) {
 		return fmt.Errorf("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
 	}
 
-	if len(params.Query) > 0 && len(params.Executions) > 0 {
+	if len(params.Query) > 0 && len(params.WorkflowExecutions) > 0 {
 		return fmt.Errorf("batch query and executions are mutually exclusive")
 	}
 
-	switch params.BatchType {
-	case BatchTypeSignal:
-		if params.SignalParams.SignalName == "" {
+	switch op := params.Operation.(type) {
+	case *batchpb.BatchOperation_SignalOperation:
+		if op.SignalOperation.GetSignal() == "" {
 			return fmt.Errorf("must provide signal name")
 		}
 		return nil
-	case BatchTypeUpdateOptions:
-		if params.UpdateOptionsParams.WorkflowExecutionOptions == nil {
+	case *batchpb.BatchOperation_UpdateWorkflowExecutionOptionsOperation:
+		if op.UpdateWorkflowExecutionOptionsOperation.GetWorkflowExecutionOptions() == nil {
 			return fmt.Errorf("must provide UpdateOptions")
 		}
-		if params.UpdateOptionsParams.UpdateMask == nil {
+		if op.UpdateWorkflowExecutionOptionsOperation.GetUpdateMask() == nil {
 			return fmt.Errorf("must provide UpdateMask")
 		}
-		return worker_versioning.ValidateVersioningOverride(params.UpdateOptionsParams.WorkflowExecutionOptions.VersioningOverride)
-	case BatchTypeCancel, BatchTypeTerminate, BatchTypeDelete, BatchTypeReset:
+		return worker_versioning.ValidateVersioningOverride(op.UpdateWorkflowExecutionOptionsOperation.GetWorkflowExecutionOptions().GetVersioningOverride())
+	case *batchpb.BatchOperation_CancellationOperation, *batchpb.BatchOperation_TerminationOperation, *batchpb.BatchOperation_DeletionOperation, *batchpb.BatchOperation_ResetOperation:
 		return nil
-	case BatchTypeUnpauseActivities:
-		if params.UnpauseActivitiesParams.ActivityType == "" && !params.UnpauseActivitiesParams.MatchAll {
+	case *batchpb.BatchOperation_UnpauseActivitiesOperation:
+		if op.UnpauseActivitiesOperation.GetActivity() == nil && !op.UnpauseActivitiesOperation.GetMatchAll() {
 			return fmt.Errorf("must provide ActivityType or MatchAll")
 		}
 		return nil
-	case BatchTypeResetActivities:
-		if params.ResetActivitiesParams.ResetActivitiesOperation.GetActivity() == nil {
-			return fmt.Errorf("must provide ActivityType or MatchAll")
-		}
-
-		switch a := params.ResetActivitiesParams.ResetActivitiesOperation.GetActivity().(type) {
-		case *batchpb.BatchOperationResetActivities_Type:
-			if len(a.Type) == 0 {
-				return fmt.Errorf("must provide ActivityType")
-			}
-		case *batchpb.BatchOperationResetActivities_MatchAll:
-			if !a.MatchAll {
-				return fmt.Errorf("must provide MatchAll")
-			}
+	case *batchpb.BatchOperation_ResetActivitiesOperation:
+		if op.ResetActivitiesOperation.GetActivity() == nil && !op.ResetActivitiesOperation.GetMatchAll() {
+			return errors.New("must provide ActivityType or MatchAll")
 		}
 		return nil
-	case BatchTypeUpdateActivitiesOptions:
-		if params.UpdateActivitiesOptionsParams.ActivityType == "" && !params.UpdateActivitiesOptionsParams.MatchAll {
+	case *batchpb.BatchOperation_UpdateActivityOptionsOperation:
+		if op.UpdateActivityOptionsOperation.GetActivity() == nil && !op.UpdateActivityOptionsOperation.GetMatchAll() {
 			return errors.New("must provide ActivityType or MatchAll")
 		}
 		return nil
 	default:
-		return fmt.Errorf("not supported batch type: %v", params.BatchType)
+		return fmt.Errorf("not supported batch type: %v", params.Operation)
 	}
 }
 
-func setDefaultParams(params BatchParams) BatchParams {
-	if params.AttemptsOnRetryableError <= 1 {
+func setDefaultParams(params *batchpb.BatchOperation) *batchpb.BatchOperation {
+	if params.GetAttemptsOnRetryableError() <= 1 {
 		params.AttemptsOnRetryableError = defaultAttemptsOnRetryableError
 	}
-	if params.ActivityHeartBeatTimeout <= 0 {
-		params.ActivityHeartBeatTimeout = defaultActivityHeartBeatTimeout
-	}
-	if len(params.NonRetryableErrors) > 0 {
-		params._nonRetryableErrors = make(map[string]struct{}, len(params.NonRetryableErrors))
-		for _, estr := range params.NonRetryableErrors {
-			params._nonRetryableErrors[estr] = struct{}{}
+	if params.GetActivityHeartbeatTimeout().AsDuration() <= 0 {
+		params.ActivityHeartbeatTimeout = &durationpb.Duration{
+			Seconds: int64(defaultActivityHeartBeatTimeout / time.Second),
 		}
 	}
+	// if len(params.NonRetryableErrors) > 0 {
+	// 	params._nonRetryableErrors = make(map[string]struct{}, len(params.NonRetryableErrors))
+	// 	for _, estr := range params.NonRetryableErrors {
+	// 		params._nonRetryableErrors[estr] = struct{}{}
+	// 	}
+	// }
 	return params
 }

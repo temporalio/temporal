@@ -13,7 +13,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
@@ -26,7 +25,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"golang.org/x/time/rate"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
@@ -57,7 +55,7 @@ func (a *activities) checkNamespace(namespace string) error {
 }
 
 // BatchActivity is an activity for processing batch operation.
-func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
+func (a *activities) BatchActivity(ctx context.Context, batchParams *batchpb.BatchOperation) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
 	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceTag(batchParams.Namespace))
@@ -69,26 +67,26 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	}
 
 	// Deserialize batch reset options if set
-	if b := batchParams.ResetParams.ResetOptions; b != nil {
-		batchParams.ResetParams.resetOptions = &commonpb.ResetOptions{}
-		if err := batchParams.ResetParams.resetOptions.Unmarshal(b); err != nil {
-			logger.Error("Failed to deserialize batch reset options", tag.Error(err))
-			return hbd, err
-		}
-	}
+	// if b := batchParams.ResetParams.ResetOptions; b != nil {
+	// 	batchParams.ResetParams.resetOptions = &commonpb.ResetOptions{}
+	// 	if err := batchParams.ResetParams.resetOptions.Unmarshal(b); err != nil {
+	// 		logger.Error("Failed to deserialize batch reset options", tag.Error(err))
+	// 		return hbd, err
+	// 	}
+	// }
 
 	// Deserialize batch post reset operations if set
-	if postOps := batchParams.ResetParams.PostResetOperations; postOps != nil {
-		batchParams.ResetParams.postResetOperations = make([]*workflowpb.PostResetOperation, len(postOps))
-		for i, serializedOp := range postOps {
-			op := &workflowpb.PostResetOperation{}
-			if err := op.Unmarshal(serializedOp); err != nil {
-				logger.Error("Failed to deserialize batch post reset operation", tag.Error(err))
-				return hbd, err
-			}
-			batchParams.ResetParams.postResetOperations[i] = op
-		}
-	}
+	// if postOps := batchParams.ResetParams.PostResetOperations; postOps != nil {
+	// 	batchParams.ResetParams.postResetOperations = make([]*workflowpb.PostResetOperation, len(postOps))
+	// 	for i, serializedOp := range postOps {
+	// 		op := &workflowpb.PostResetOperation{}
+	// 		if err := op.Unmarshal(serializedOp); err != nil {
+	// 			logger.Error("Failed to deserialize batch post reset operation", tag.Error(err))
+	// 			return hbd, err
+	// 		}
+	// 		batchParams.ResetParams.postResetOperations[i] = op
+	// 	}
+	// }
 
 	sdkClient := a.ClientFactory.NewClient(sdkclient.Options{
 		Namespace:     batchParams.Namespace,
@@ -106,7 +104,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	adjustedQuery := a.adjustQuery(batchParams)
 
 	if startOver {
-		estimateCount := int64(len(batchParams.Executions))
+		estimateCount := int64(len(batchParams.WorkflowExecutions))
 		if len(adjustedQuery) > 0 {
 			resp, err := sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 				Query: adjustedQuery,
@@ -120,18 +118,18 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		}
 		hbd.TotalEstimate = estimateCount
 	}
-	rps := a.getOperationRPS(batchParams.RPS)
+	rps := a.getOperationRPS(batchParams.Rps)
 	rateLimit := rate.Limit(rps)
 	burstLimit := int(math.Ceil(rps)) // should never be zero because everything would be rejected
 	rateLimiter := rate.NewLimiter(rateLimit, burstLimit)
 	taskCh := make(chan taskDetail, pageSize)
 	respCh := make(chan error, pageSize)
-	for i := 0; i < a.getOperationConcurrency(batchParams.Concurrency); i++ {
+	for i := 0; i < a.getOperationConcurrency(int(batchParams.Concurrency)); i++ {
 		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
 	}
 
 	for {
-		executions := batchParams.Executions
+		executions := batchParams.WorkflowExecutions
 		pageToken := hbd.PageToken
 		if len(adjustedQuery) > 0 {
 			resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
@@ -209,14 +207,14 @@ func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
 	)
 }
 
-func (a *activities) adjustQuery(batchParams BatchParams) string {
+func (a *activities) adjustQuery(batchParams *batchpb.BatchOperation) string {
 	if len(batchParams.Query) == 0 {
 		// don't add anything if query is empty
 		return batchParams.Query
 	}
 
-	switch batchParams.BatchType {
-	case BatchTypeTerminate, BatchTypeSignal, BatchTypeCancel, BatchTypeUpdateOptions, BatchTypeUnpauseActivities:
+	switch batchParams.GetOperation().(type) {
+	case *batchpb.BatchOperation_TerminationOperation, *batchpb.BatchOperation_CancellationOperation, *batchpb.BatchOperation_SignalOperation, *batchpb.BatchOperation_UpdateWorkflowExecutionOptionsOperation, *batchpb.BatchOperation_UnpauseActivitiesOperation:
 		return fmt.Sprintf("(%s) AND (%s)", batchParams.Query, statusRunningQueryFilter)
 	default:
 		return batchParams.Query
@@ -240,7 +238,7 @@ func (a *activities) getOperationConcurrency(concurrency int) int {
 
 func startTaskProcessor(
 	ctx context.Context,
-	batchParams BatchParams,
+	batchParams *batchpb.BatchOperation,
 	taskCh chan taskDetail,
 	respCh chan error,
 	limiter *rate.Limiter,
@@ -259,18 +257,18 @@ func startTaskProcessor(
 			}
 			var err error
 
-			switch batchParams.BatchType {
-			case BatchTypeTerminate:
+			switch operation := batchParams.Operation.(type) {
+			case *batchpb.BatchOperation_TerminationOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						return sdkClient.TerminateWorkflow(ctx, workflowID, runID, batchParams.Reason)
 					})
-			case BatchTypeCancel:
+			case *batchpb.BatchOperation_CancellationOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						return sdkClient.CancelWorkflow(ctx, workflowID, runID)
 					})
-			case BatchTypeSignal:
+			case *batchpb.BatchOperation_SignalOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						_, err := frontendClient.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
@@ -279,12 +277,12 @@ func startTaskProcessor(
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
-							SignalName: batchParams.SignalParams.SignalName,
-							Input:      batchParams.SignalParams.Input,
+							SignalName: operation.SignalOperation.GetSignal(),
+							Input:      operation.SignalOperation.GetInput(),
 						})
 						return err
 					})
-			case BatchTypeDelete:
+			case *batchpb.BatchOperation_DeletionOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						_, err := frontendClient.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
@@ -296,7 +294,7 @@ func startTaskProcessor(
 						})
 						return err
 					})
-			case BatchTypeReset:
+			case *batchpb.BatchOperation_ResetOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						workflowExecution := &commonpb.WorkflowExecution{
@@ -307,16 +305,16 @@ func startTaskProcessor(
 						var err error
 						var resetReapplyType enumspb.ResetReapplyType
 						var resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType
-						if batchParams.ResetParams.resetOptions != nil {
+						if operation.ResetOperation.Options != nil {
 							// Using ResetOptions
 							// Note: getResetEventIDByOptions may modify workflowExecution.RunId, if reset should be to a prior run
-							eventId, err = getResetEventIDByOptions(ctx, batchParams.ResetParams.resetOptions, batchParams.Namespace, workflowExecution, frontendClient, logger)
-							resetReapplyType = batchParams.ResetParams.resetOptions.ResetReapplyType
-							resetReapplyExcludeTypes = batchParams.ResetParams.resetOptions.ResetReapplyExcludeTypes
+							eventId, err = getResetEventIDByOptions(ctx, operation.ResetOperation.Options, batchParams.Namespace, workflowExecution, frontendClient, logger)
+							resetReapplyType = operation.ResetOperation.Options.ResetReapplyType
+							resetReapplyExcludeTypes = operation.ResetOperation.Options.ResetReapplyExcludeTypes
 						} else {
 							// Old fields
-							eventId, err = getResetEventIDByType(ctx, batchParams.ResetParams.ResetType, batchParams.Namespace, workflowExecution, frontendClient, logger)
-							resetReapplyType = batchParams.ResetParams.ResetReapplyType
+							eventId, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, batchParams.Namespace, workflowExecution, frontendClient, logger)
+							resetReapplyType = operation.ResetOperation.ResetReapplyType
 						}
 						if err != nil {
 							return err
@@ -329,11 +327,11 @@ func startTaskProcessor(
 							WorkflowTaskFinishEventId: eventId,
 							ResetReapplyType:          resetReapplyType,
 							ResetReapplyExcludeTypes:  resetReapplyExcludeTypes,
-							PostResetOperations:       batchParams.ResetParams.postResetOperations,
+							PostResetOperations:       operation.ResetOperation.PostResetOperations,
 						})
 						return err
 					})
-			case BatchTypeUnpauseActivities:
+			case *batchpb.BatchOperation_UnpauseActivitiesOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						unpauseRequest := &workflowservice.UnpauseActivityRequest{
@@ -342,23 +340,26 @@ func startTaskProcessor(
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
-							Identity:       batchParams.UnpauseActivitiesParams.Identity,
-							Activity:       &workflowservice.UnpauseActivityRequest_Type{Type: batchParams.UnpauseActivitiesParams.ActivityType},
-							ResetAttempts:  !batchParams.UnpauseActivitiesParams.ResetAttempts,
-							ResetHeartbeat: batchParams.UnpauseActivitiesParams.ResetHeartbeat,
-							Jitter:         durationpb.New(batchParams.UnpauseActivitiesParams.Jitter),
+							Identity:       operation.UnpauseActivitiesOperation.Identity,
+							ResetAttempts:  !operation.UnpauseActivitiesOperation.ResetAttempts,
+							ResetHeartbeat: operation.UnpauseActivitiesOperation.ResetHeartbeat,
+							Jitter:         operation.UnpauseActivitiesOperation.Jitter,
 						}
 
-						if batchParams.UnpauseActivitiesParams.MatchAll {
+						switch ao := operation.UnpauseActivitiesOperation.GetActivity().(type) {
+						case *batchpb.BatchOperationUnpauseActivities_Type:
+							unpauseRequest.Activity = &workflowservice.UnpauseActivityRequest_Type{
+								Type: ao.Type,
+							}
+						case *batchpb.BatchOperationUnpauseActivities_MatchAll:
 							unpauseRequest.Activity = &workflowservice.UnpauseActivityRequest_UnpauseAll{UnpauseAll: true}
-						} else {
-							unpauseRequest.Activity = &workflowservice.UnpauseActivityRequest_Type{Type: batchParams.UnpauseActivitiesParams.ActivityType}
 						}
+
 						_, err = frontendClient.UnpauseActivity(ctx, unpauseRequest)
 						return err
 					})
 
-			case BatchTypeUpdateOptions:
+			case *batchpb.BatchOperation_UpdateWorkflowExecutionOptionsOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						var err error
@@ -368,13 +369,13 @@ func startTaskProcessor(
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
-							WorkflowExecutionOptions: batchParams.UpdateOptionsParams.WorkflowExecutionOptions,
-							UpdateMask:               &fieldmaskpb.FieldMask{Paths: batchParams.UpdateOptionsParams.UpdateMask.Paths},
+							WorkflowExecutionOptions: operation.UpdateWorkflowExecutionOptionsOperation.WorkflowExecutionOptions,
+							UpdateMask:               &fieldmaskpb.FieldMask{Paths: operation.UpdateWorkflowExecutionOptionsOperation.UpdateMask.Paths},
 						})
 						return err
 					})
 
-			case BatchTypeResetActivities:
+			case *batchpb.BatchOperation_ResetActivitiesOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						resetRequest := &workflowservice.ResetActivityRequest{
@@ -383,27 +384,24 @@ func startTaskProcessor(
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
-							Identity:               batchParams.ResetActivitiesParams.ResetActivitiesOperation.Identity,
-							Activity:               &workflowservice.ResetActivityRequest_Type{Type: batchParams.ResetActivitiesParams.ResetActivitiesOperation.GetType()},
-							ResetHeartbeat:         batchParams.ResetActivitiesParams.ResetActivitiesOperation.ResetHeartbeat,
-							Jitter:                 batchParams.ResetActivitiesParams.ResetActivitiesOperation.Jitter,
-							KeepPaused:             batchParams.ResetActivitiesParams.ResetActivitiesOperation.KeepPaused,
-							RestoreOriginalOptions: batchParams.ResetActivitiesParams.ResetActivitiesOperation.RestoreOriginalOptions,
+							Identity:               operation.ResetActivitiesOperation.Identity,
+							ResetHeartbeat:         operation.ResetActivitiesOperation.ResetHeartbeat,
+							Jitter:                 operation.ResetActivitiesOperation.Jitter,
+							KeepPaused:             operation.ResetActivitiesOperation.KeepPaused,
+							RestoreOriginalOptions: operation.ResetActivitiesOperation.RestoreOriginalOptions,
 						}
 
-						switch a := batchParams.ResetActivitiesParams.ResetActivitiesOperation.GetActivity().(type) {
+						switch ao := operation.ResetActivitiesOperation.GetActivity().(type) {
 						case *batchpb.BatchOperationResetActivities_Type:
-							resetRequest.Activity = &workflowservice.ResetActivityRequest_Type{Type: a.Type}
+							resetRequest.Activity = &workflowservice.ResetActivityRequest_Type{Type: ao.Type}
 						case *batchpb.BatchOperationResetActivities_MatchAll:
 							resetRequest.Activity = &workflowservice.ResetActivityRequest_MatchAll{MatchAll: true}
-						default:
-							return fmt.Errorf("invalid activity type: %T", a)
 						}
 
 						_, err = frontendClient.ResetActivity(ctx, resetRequest)
 						return err
 					})
-			case BatchTypeUpdateActivitiesOptions:
+			case *batchpb.BatchOperation_UpdateActivityOptionsOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						updateRequest := &workflowservice.UpdateActivityOptionsRequest{
@@ -412,37 +410,36 @@ func startTaskProcessor(
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
-							Activity:        &workflowservice.UpdateActivityOptionsRequest_Type{Type: batchParams.UpdateActivitiesOptionsParams.ActivityType},
-							UpdateMask:      &fieldmaskpb.FieldMask{Paths: batchParams.UpdateActivitiesOptionsParams.UpdateMask.Paths},
-							RestoreOriginal: batchParams.UpdateActivitiesOptionsParams.RestoreOriginal,
-							Identity:        batchParams.UpdateActivitiesOptionsParams.Identity,
+							UpdateMask:      &fieldmaskpb.FieldMask{Paths: operation.UpdateActivityOptionsOperation.UpdateMask.Paths},
+							RestoreOriginal: operation.UpdateActivityOptionsOperation.RestoreOriginal,
+							Identity:        operation.UpdateActivityOptionsOperation.Identity,
 						}
 
-						if ao := batchParams.UpdateActivitiesOptionsParams.ActivityOptions; ao != nil {
+						switch ao := operation.UpdateActivityOptionsOperation.GetActivity().(type) {
+						case *batchpb.BatchOperationUpdateActivityOptions_Type:
+							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Type{Type: ao.Type}
+						case *batchpb.BatchOperationUpdateActivityOptions_MatchAll:
+							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_MatchAll{MatchAll: true}
+						}
+
+						if ao := operation.UpdateActivityOptionsOperation.GetActivityOptions(); ao != nil {
 							updateRequest.ActivityOptions = &activitypb.ActivityOptions{
-								ScheduleToStartTimeout: durationpb.New(ao.ScheduleToStartTimeout),
-								ScheduleToCloseTimeout: durationpb.New(ao.ScheduleToCloseTime),
-								StartToCloseTimeout:    durationpb.New(ao.StartToCloseTimeout),
-								HeartbeatTimeout:       durationpb.New(ao.HeartbeatTimeout),
+								ScheduleToStartTimeout: ao.ScheduleToStartTimeout,
+								ScheduleToCloseTimeout: ao.ScheduleToCloseTimeout,
+								StartToCloseTimeout:    ao.StartToCloseTimeout,
+								HeartbeatTimeout:       ao.HeartbeatTimeout,
 							}
 
 							if rp := ao.RetryPolicy; rp != nil {
 								updateRequest.ActivityOptions.RetryPolicy = &commonpb.RetryPolicy{
-									InitialInterval:        durationpb.New(rp.InitialInterval),
+									InitialInterval:        rp.InitialInterval,
 									BackoffCoefficient:     rp.BackoffCoefficient,
-									MaximumInterval:        durationpb.New(rp.MaximumInterval),
+									MaximumInterval:        rp.MaximumInterval,
 									MaximumAttempts:        rp.MaximumAttempts,
 									NonRetryableErrorTypes: rp.NonRetryableErrorTypes,
 								}
 							}
 						}
-
-						if batchParams.UpdateActivitiesOptionsParams.MatchAll {
-							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_MatchAll{MatchAll: true}
-						} else {
-							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Type{Type: batchParams.UpdateActivitiesOptionsParams.ActivityType}
-						}
-
 						_, err = frontendClient.UpdateActivityOptions(ctx, updateRequest)
 						return err
 					})
@@ -452,8 +449,14 @@ func startTaskProcessor(
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
 
-				_, ok := batchParams._nonRetryableErrors[err.Error()]
-				if ok || task.attempts > batchParams.AttemptsOnRetryableError {
+				nonRetryable := false
+				for _, errType := range batchParams.NonRetryableErrors {
+					if errType == err.Error() {
+						nonRetryable = true
+						break
+					}
+				}
+				if nonRetryable || task.attempts > int(batchParams.AttemptsOnRetryableError) {
 					respCh <- err
 				} else {
 					// put back to the channel if less than attemptsOnError

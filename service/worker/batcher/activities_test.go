@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/stretchr/testify/suite"
+	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -294,55 +295,62 @@ func (s *activitiesSuite) TestAdjustQuery() {
 		name           string
 		query          string
 		expectedResult string
-		batchType      string
 	}{
 		{
 			name:           "Empty query",
 			query:          "",
 			expectedResult: "",
-			batchType:      BatchTypeTerminate,
 		},
 		{
 			name:           "Acceptance",
 			query:          "A=B",
 			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
-			batchType:      BatchTypeTerminate,
 		},
 		{
 			name:           "Acceptance with parenthesis",
 			query:          "(A=B)",
 			expectedResult: fmt.Sprintf("((A=B)) AND (%s)", statusRunningQueryFilter),
-			batchType:      BatchTypeTerminate,
 		},
 		{
 			name:           "Acceptance with multiple conditions",
 			query:          "(A=B) OR C=D",
 			expectedResult: fmt.Sprintf("((A=B) OR C=D) AND (%s)", statusRunningQueryFilter),
-			batchType:      BatchTypeTerminate,
 		},
 		{
 			name:           "Contains status - 1",
 			query:          "ExecutionStatus=Completed",
 			expectedResult: fmt.Sprintf("(ExecutionStatus=Completed) AND (%s)", statusRunningQueryFilter),
-			batchType:      BatchTypeTerminate,
 		},
 		{
 			name:           "Contains status - 2",
 			query:          "A=B OR ExecutionStatus='Completed'",
 			expectedResult: fmt.Sprintf("(A=B OR ExecutionStatus='Completed') AND (%s)", statusRunningQueryFilter),
-			batchType:      BatchTypeTerminate,
-		},
-		{
-			name:           "Not supported batch type",
-			query:          "A=B",
-			expectedResult: "A=B",
-			batchType:      "NotSupported",
 		},
 	}
 	for _, testRun := range tests {
 		s.Run(testRun.name, func() {
 			a := activities{}
-			batchParams := BatchParams{Query: testRun.query, BatchType: testRun.batchType}
+			batchParams := &batchpb.BatchOperation{Query: testRun.query, Operation: &batchpb.BatchOperation_TerminationOperation{}}
+			adjustedQuery := a.adjustQuery(batchParams)
+			s.Equal(testRun.expectedResult, adjustedQuery)
+		})
+	}
+
+	unknownBatchesTestCase := []struct {
+		name           string
+		query          string
+		expectedResult string
+	}{
+		{
+			name:           "Not supported batch type",
+			query:          "A=B",
+			expectedResult: "A=B",
+		},
+	}
+	for _, testRun := range unknownBatchesTestCase {
+		s.Run(testRun.name, func() {
+			a := activities{}
+			batchParams := &batchpb.BatchOperation{Query: testRun.query}
 			adjustedQuery := a.adjustQuery(batchParams)
 			s.Equal(testRun.expectedResult, adjustedQuery)
 		})
