@@ -341,7 +341,7 @@ func startTaskProcessor(
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
-							Identity:       "batch unpause",
+							Identity:       batchParams.UnpauseActivitiesParams.Identity,
 							Activity:       &workflowservice.UnpauseActivityRequest_Type{Type: batchParams.UnpauseActivitiesParams.ActivityType},
 							ResetAttempts:  !batchParams.UnpauseActivitiesParams.ResetAttempts,
 							ResetHeartbeat: batchParams.UnpauseActivitiesParams.ResetHeartbeat,

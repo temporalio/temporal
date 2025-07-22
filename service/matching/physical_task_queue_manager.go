@@ -338,8 +338,10 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		// there. In that case, go back for another task.
 		// If we didn't do this, the task would be rejected when we call RecordXTaskStarted on
 		// history, but this is more efficient.
+
 		if task.event != nil && IsTaskExpired(task.event.AllocatedTaskInfo) {
-			c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
+			// task is expired while polling
+			c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, metrics.TaskExpireStageMemoryTag)
 			task.finish(nil, false)
 			continue
 		}
@@ -382,7 +384,9 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 ) error {
 	if !c.taskValidator.maybeValidate(task.event.AllocatedTaskInfo, c.queue.TaskType()) {
 		task.finish(nil, false)
-		c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
+
+		var invalidTaskTag = getInvalidTaskTag(task)
+		c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
 		// Don't try to set read level here because it may have been advanced already.
 		return nil
 	}
