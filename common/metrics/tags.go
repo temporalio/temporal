@@ -477,3 +477,7 @@ func ToUnversionedTag(version string) Tag {
 	}
 	return &tagImpl{key: toUnversioned, value: falseValue}
 }
+
+func PersistenceDBKindTag(kind string) Tag {
+	return &tagImpl{key: PersistenceDBKindTagName, value: kind}
+}

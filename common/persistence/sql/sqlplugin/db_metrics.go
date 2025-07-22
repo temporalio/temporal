@@ -9,13 +9,15 @@ import (
 type DBMetricsReporter struct {
 	interval time.Duration
 	handle   *DatabaseHandle
+	metrics  metrics.Handler
 	quit     chan struct{}
 }
 
-func withDBMetricReporter(handle *DatabaseHandle) {
+func withDBMetricReporter(dbKind DbKind, handle *DatabaseHandle) {
 	reporter := &DBMetricsReporter{
 		interval: time.Minute,
 		handle:   handle,
+		metrics:  handle.metrics.WithTags(metrics.PersistenceDBKindTag(dbKind.String())),
 		quit:     make(chan struct{}),
 	}
 	handle.reporter = reporter
@@ -31,15 +33,20 @@ func (r *DBMetricsReporter) Start() {
 		case <-r.quit:
 			return
 		case <-ticker.C:
-			db := r.handle.db.Load()
-			if db != nil {
-				s := db.Stats()
-				metrics.PersistenceSqlMaxOpenConn.With(r.handle.metrics).Record(float64(s.MaxOpenConnections))
-				metrics.PersistenceSqlOpenConn.With(r.handle.metrics).Record(float64(s.OpenConnections))
-				metrics.PersistenceSqlIdleConn.With(r.handle.metrics).Record(float64(s.Idle))
-			}
+			r.report()
 		}
 	}
+}
+
+func (r *DBMetricsReporter) report() {
+	db := r.handle.db.Load()
+	if db == nil {
+		return
+	}
+	s := db.Stats()
+	metrics.PersistenceSQLMaxOpenConn.With(r.metrics).Record(float64(s.MaxOpenConnections))
+	metrics.PersistenceSQLOpenConn.With(r.metrics).Record(float64(s.OpenConnections))
+	metrics.PersistenceSQLIdleConn.With(r.metrics).Record(float64(s.Idle))
 }
 
 func (r *DBMetricsReporter) Stop() {

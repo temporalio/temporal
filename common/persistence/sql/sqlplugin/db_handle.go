@@ -47,6 +47,7 @@ type DatabaseHandle struct {
 type invalidConn struct{}
 
 func NewDatabaseHandle(
+	dbKind DbKind,
 	connect func() (*sqlx.DB, error),
 	needsRefresh func(error) bool,
 	logger log.Logger,
@@ -61,7 +62,7 @@ func NewDatabaseHandle(
 		logger:       logger,
 		timeSource:   timeSource,
 	}
-	withDBMetricReporter(handle)
+	withDBMetricReporter(dbKind, handle)
 	handle.reconnect(true)
 	return handle
 }

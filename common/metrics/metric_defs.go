@@ -27,6 +27,7 @@ const (
 	resourceExhaustedScopeTag   = "resource_exhausted_scope"
 	PartitionTagName            = "partition"
 	PriorityTagName             = "priority"
+	PersistenceDBKindTagName    = "db_kind"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -1252,9 +1253,9 @@ var (
 	CassandraSessionRefreshFailures        = NewCounterDef("cassandra_session_refresh_failures")
 	PersistenceSessionRefreshFailures      = NewCounterDef("persistence_session_refresh_failures")
 	PersistenceSessionRefreshAttempts      = NewCounterDef("persistence_session_refresh_attempts")
-	PersistenceSqlMaxOpenConn              = NewGaugeDef("persistence_sql_max_open_conn")
-	PersistenceSqlOpenConn                 = NewGaugeDef("persistence_sql_open_conn")
-	PersistenceSqlIdleConn                 = NewGaugeDef("persistence_sql_idle_conn")
+	PersistenceSQLMaxOpenConn              = NewGaugeDef("persistence_sql_max_open_conn")
+	PersistenceSQLOpenConn                 = NewGaugeDef("persistence_sql_open_conn")
+	PersistenceSQLIdleConn                 = NewGaugeDef("persistence_sql_idle_conn")
 
 	// Common service base metrics
 	RestartCount           = NewCounterDef("restarts")
