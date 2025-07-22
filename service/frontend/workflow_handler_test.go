@@ -2201,11 +2201,13 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	params := &batcher.BatchParams{
+	params := &batchpb.BatchOperation{
 		Namespace: testNamespace.String(),
 		Reason:    inputString,
-		BatchType: batcher.BatchTypeTerminate,
 		Query:     inputString,
+		Operation: &batchpb.BatchOperation_TerminationOperation{
+			TerminationOperation: &batchpb.BatchOperationTermination{},
+		},
 	}
 	inputPayload, err := payloads.Encode(params)
 	s.NoError(err)
@@ -2252,11 +2254,13 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	params := &batcher.BatchParams{
+	params := &batchpb.BatchOperation{
 		Namespace: testNamespace.String(),
 		Reason:    inputString,
-		BatchType: batcher.BatchTypeCancel,
 		Query:     inputString,
+		Operation: &batchpb.BatchOperation_CancellationOperation{
+			CancellationOperation: &batchpb.BatchOperationCancellation{},
+		},
 	}
 	inputPayload, err := payloads.Encode(params)
 	s.NoError(err)
@@ -2304,14 +2308,16 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	signalPayloads := payloads.EncodeString(signalName)
-	params := &batcher.BatchParams{
+	params := &batchpb.BatchOperation{
 		Namespace: testNamespace.String(),
 		Query:     inputString,
 		Reason:    inputString,
-		BatchType: batcher.BatchTypeSignal,
-		SignalParams: batcher.SignalParams{
-			SignalName: signalName,
-			Input:      signalPayloads,
+		Operation: &batchpb.BatchOperation_SignalOperation{
+			SignalOperation: &batchpb.BatchOperationSignal{
+				Signal:   signalName,
+				Input:    signalPayloads,
+				Identity: inputString,
+			},
 		},
 	}
 	inputPayload, err := payloads.Encode(params)
@@ -2369,14 +2375,16 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	signalPayloads := payloads.EncodeString(signalName)
-	params := &batcher.BatchParams{
-		Namespace:  testNamespace.String(),
-		Executions: executions,
-		Reason:     reason,
-		BatchType:  batcher.BatchTypeSignal,
-		SignalParams: batcher.SignalParams{
-			SignalName: signalName,
-			Input:      signalPayloads,
+	params := &batchpb.BatchOperation{
+		Namespace:          testNamespace.String(),
+		WorkflowExecutions: executions,
+		Reason:             reason,
+		Operation: &batchpb.BatchOperation_SignalOperation{
+			SignalOperation: &batchpb.BatchOperationSignal{
+				Signal:   signalName,
+				Input:    signalPayloads,
+				Identity: identity,
+			},
 		},
 	}
 	inputPayload, err := payloads.Encode(params)
@@ -2432,14 +2440,16 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 	identity := "identity"
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	params := &batcher.BatchParams{
-		Namespace:  testNamespace.String(),
-		Executions: executions,
-		Reason:     reason,
-		BatchType:  batcher.BatchTypeReset,
-		ResetParams: batcher.ResetParams{
-			ResetType:        enumspb.RESET_TYPE_LAST_WORKFLOW_TASK,
-			ResetReapplyType: enumspb.RESET_REAPPLY_TYPE_NONE,
+	params := &batchpb.BatchOperation{
+		Namespace:          testNamespace.String(),
+		WorkflowExecutions: executions,
+		Reason:             reason,
+		Operation: &batchpb.BatchOperation_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				ResetType:        enumspb.RESET_TYPE_LAST_WORKFLOW_TASK,
+				ResetReapplyType: enumspb.RESET_REAPPLY_TYPE_NONE,
+				Identity:         identity,
+			},
 		},
 	}
 	inputPayload, err := payloads.Encode(params)
@@ -2525,25 +2535,25 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			s.Equal(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
 
 			// Decode the input and verify PostResetOperations are correctly set
-			var batchParams batcher.BatchParams
+			var batchParams batchpb.BatchOperation
 			err := payloads.Decode(request.StartRequest.Input, &batchParams)
 			s.NoError(err)
 
 			// Verify that PostResetOperations slice has the correct length and no nil values
-			s.Len(batchParams.ResetParams.PostResetOperations, len(postResetOps))
+			s.Len(batchParams.Operation.(*batchpb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations, len(postResetOps))
 
 			// Ensure no nil values exist in the slice
-			for i, encoded := range batchParams.ResetParams.PostResetOperations {
-				s.NotNil(encoded, "PostResetOperations[%d] should not be nil", i)
-				s.Greater(len(encoded), 0, "PostResetOperations[%d] should not be empty", i)
+			for i, operation := range batchParams.Operation.(*batchpb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations {
+				s.NotNil(operation, "PostResetOperations[%d] should not be nil", i)
+				s.Greater(len(operation.String()), 0, "PostResetOperations[%d] should not be empty", i)
 
 				// Verify we can unmarshal back to the original operation
-				var decodedOp workflowpb.PostResetOperation
-				err := decodedOp.Unmarshal(encoded)
-				s.NoError(err, "Should be able to unmarshal PostResetOperations[%d]", i)
+				// var decodedOp workflowpb.PostResetOperation
+				// err := decodedOp.Unmarshal(encoded.String())
+				// s.NoError(err, "Should be able to unmarshal PostResetOperations[%d]", i)
 
 				// Verify the content matches the original
-				s.ProtoEqual(postResetOps[i], &decodedOp)
+				s.ProtoEqual(postResetOps[i], operation)
 			}
 
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
@@ -2595,13 +2605,13 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			// Decode the input and verify PostResetOperations slice is properly initialized
-			var batchParams batcher.BatchParams
+			var batchParams batchpb.BatchOperation
 			err := payloads.Decode(request.StartRequest.Input, &batchParams)
 			s.NoError(err)
 
 			// When PostResetOperations is empty, the slice should be empty, not nil
-			s.NotNil(batchParams.ResetParams.PostResetOperations)
-			s.Len(batchParams.ResetParams.PostResetOperations, 0)
+			s.NotNil(batchParams.Operation.(*batchpb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations)
+			s.Len(batchParams.Operation.(*batchpb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations, 0)
 
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
