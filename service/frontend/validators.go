@@ -7,10 +7,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 )
 
-const (
-	reason = ".Reason"
-)
-
 func validateExecution(w *commonpb.WorkflowExecution) error {
 	if w == nil {
 		return errExecutionNotSet
@@ -31,7 +27,7 @@ func validateRateLimit(update *workflowservice.UpdateTaskQueueConfigRequest_Rate
 	if update.RateLimit.GetRequestsPerSecond() < 0 {
 		return serviceerror.NewInvalidArgumentf("RequestsPerSecond for %s rate limit must be non-negative.", label)
 	}
-	return validateStringField(label+reason, update.GetReason(), maxReasonLength, false)
+	return validateStringField(label+".Reason", update.GetReason(), maxReasonLength, false)
 }
 
 func validateStringField(fieldName string, value string, maxLen int, required bool) error {

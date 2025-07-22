@@ -6174,7 +6174,7 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 		return nil, err
 	}
 	// Validate identity field
-	if err := validateStringField("Identity", request.GetIdentity(), wh.config.MaxIDLengthLimit(), true); err != nil {
+	if err := validateStringField("Identity", request.GetIdentity(), wh.config.MaxIDLengthLimit(), false); err != nil {
 		return nil, err
 	}
 	resp, err := wh.matchingClient.UpdateTaskQueueConfig(ctx, &matchingservice.UpdateTaskQueueConfigRequest{
