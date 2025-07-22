@@ -376,13 +376,16 @@ func (s *MatcherDataSuite) TestPerKeyRateLimit() {
 					return
 				}
 				lastTask.Store(s.now().UnixNano())
+				s.T().Logf("Polled task with key at %s", s.now())
 			}
 		}()
 	}
 
 	// advance fake time until done
 	for running.Load() > 0 {
-		s.ts.Advance(time.Duration(rand.Int63n(int64(10 * time.Millisecond))))
+		duration := time.Duration(rand.Int63n(int64(10 * time.Millisecond)))
+		s.T().Log("Advancing time by", duration)
+		s.ts.Advance(duration)
 		gosched(3)
 	}
 
