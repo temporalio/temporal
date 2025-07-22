@@ -21,8 +21,8 @@ type (
 	writeTaskRequest struct {
 		taskInfo   *persistencespb.TaskInfo
 		responseCh chan<- error
-		subqueue   int   // for priTaskWriter only
-		id         int64 // filled in by taskWriterLoop
+		subqueue   int // for priTaskWriter only
+		fairLevel      // filled in by taskWriterLoop
 	}
 
 	taskIDBlock struct {
@@ -69,11 +69,7 @@ func (w *taskWriter) Start() {
 }
 
 func (w *taskWriter) initReadWriteState() error {
-	retryForever := backoff.NewExponentialRetryPolicy(1 * time.Second).
-		WithMaximumInterval(10 * time.Second).
-		WithExpirationInterval(backoff.NoInterval)
-
-	state, err := w.renewLeaseWithRetry(retryForever, common.IsPersistenceTransientError)
+	state, err := w.renewLeaseWithRetry(foreverRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		return err
 	}
@@ -110,7 +106,7 @@ func (w *taskWriter) appendTask(
 			return err
 		case <-w.backlogMgr.tqCtx.Done():
 			// if we are shutting down, this request will never make
-			// it to cassandra, just bail out and fail this request
+			// it to persistence, just bail out and fail this request
 			return errShutdown
 		}
 	default: // channel is full, throttle

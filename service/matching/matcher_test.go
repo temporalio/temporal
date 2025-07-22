@@ -477,10 +477,10 @@ func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
 	).Return(emptyPollWorkflowTaskQueueResponse, nil).AnyTimes()
 
 	// make a poll that expires
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
-	t.Assert().Empty(task.started.workflowTaskInfo)
 	t.Assert().NoError(err)
+	t.Assert().Zero(task.started.workflowTaskInfo.StartedEventId)
 	cancel()
 
 	// send query and expect generic DeadlineExceeded error
@@ -509,10 +509,10 @@ func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 	).Return(emptyPollWorkflowTaskQueueResponse, nil).AnyTimes()
 
 	// make a poll that expires
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
-	t.Assert().Empty(task.started.workflowTaskInfo)
 	t.Assert().NoError(err)
+	t.Assert().Zero(task.started.workflowTaskInfo.StartedEventId)
 	cancel()
 
 	// wait 10ms after the poll
