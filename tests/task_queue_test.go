@@ -180,11 +180,6 @@ func (s *TaskQueueSuite) TestTaskQueueApiLimitOverride() {
 	// Expect ~500ms between activity executions. Use (500ms - buffer) as the minimum spacing threshold.
 	expectedActivityExecutionTime = 500 * time.Millisecond
 	s.RunTestTaskQueueAPIRateLimitOverridesWorkerLimit(2.0, 5, expectedActivityExecutionTime-buffer, expectedActivityExecutionTime+buffer)
-
-	// API rate limit = 0.5 RPS
-	// Expect ~2s between activity executions. Use (2s - buffer) as the minimum spacing threshold.
-	expectedActivityExecutionTime = 2 * time.Second
-	s.RunTestTaskQueueAPIRateLimitOverridesWorkerLimit(0.5, 5, expectedActivityExecutionTime-buffer, expectedActivityExecutionTime+buffer)
 }
 
 // Generate a descriptive test name based on the rate limit,

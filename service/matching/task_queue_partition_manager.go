@@ -349,8 +349,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	// Followed by the rate limit set by the poller.
 	// UpdateRateLimit implicitly handles whether an update is required or not,
 	// based on whether the effectiveRPS has changed.
-	pm.rateLimitManager.SetWorkerRPS(pollMetadata)
-	pm.rateLimitManager.UpdateRatelimit()
+	pm.rateLimitManager.InjectWorkerRPS(pollMetadata)
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
 

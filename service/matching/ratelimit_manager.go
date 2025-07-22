@@ -106,14 +106,14 @@ func (r *rateLimitManager) computeEffectiveRPSAndSource() {
 }
 
 // Lazy injection of poll metadata.
-func (r *rateLimitManager) SetWorkerRPS(meta *pollMetadata) {
+// Internally call UpdateRateLimit to share the same mutex.
+func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if meta == nil || meta.taskQueueMetadata == nil {
-		// If no metadata is provided then no worker RPS is set
-		return
+	if meta != nil && meta.taskQueueMetadata != nil {
+		r.workerRPS = meta.taskQueueMetadata.GetMaxTasksPerSecond()
 	}
-	r.workerRPS = meta.taskQueueMetadata.GetMaxTasksPerSecond()
+	r.UpdateRatelimit()
 }
 
 // Return the effective RPS and its source together.
@@ -154,8 +154,6 @@ func (r *rateLimitManager) TrySetRPSFromUserData() {
 
 // UpdateRatelimit checks and updates the rate limit if changed.
 func (r *rateLimitManager) UpdateRatelimit() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	oldRPS := r.effectiveRPS
 	r.computeEffectiveRPSAndSource()
 	newRPS := r.effectiveRPS
