@@ -156,7 +156,7 @@ func (s *TaskQueueSuite) getBacklogCount(ctx context.Context, tv *testvars.TestV
 		ReportStats: true,
 	})
 	s.NoError(err)
-	return resp.GetVersionsInfo()[""].GetTypesInfo()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetStats().GetApproximateBacklogCount()
+	return resp.GetVersionsInfo()[""].GetTypesInfo()[sdkclient.TaskQueueTypeWorkflow].GetStats().GetApproximateBacklogCount()
 }
 
 func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int, useNewMatching bool) string {
@@ -303,12 +303,8 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS fl
 		// and begin enforcing the rate limit check from the third task onward.
 		startIdx = 2
 	}
-	for i, ts := range runTimes {
-		fmt.Printf("Activity %v: %v\n", i, ts)
-	}
 	for i := startIdx; i < len(runTimes); i++ {
 		diff := runTimes[i].Sub(runTimes[i-1])
-		fmt.Printf("Activity %v: %v diff : %s\n", i, i-1, diff.String())
 		s.GreaterOrEqual(diff, minGap, "Activity ran too quickly between executions")
 		s.LessOrEqual(diff, maxGap, "Activity ran too quickly between executions")
 	}

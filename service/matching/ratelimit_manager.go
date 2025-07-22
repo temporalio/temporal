@@ -72,9 +72,10 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 	r.computeEffectiveRPSAndSource()
 }
 
-// Compute the effective RPS and source based on the task dispatch rate.
-// This method sets the `effectiveRPS` and `rateLimitSource` based on the provided `taskDispatchRate`
-// `taskDispatchRate` can be the rate from API, worker or system defaults.
+// Computes the effectiveRPS and its source by evaluating all possible rate limit configurations.
+// - If an API-level RPS is configured, effectiveRPS = min(system default RPS, API-configured RPS)
+// - Else if a worker-level RPS is configured, effectiveRPS = min(system default RPS, worker-configured RPS)
+// - Otherwise, fall back to the system default RPS from dynamic config.
 func (r *rateLimitManager) computeEffectiveRPSAndSource() {
 	r.TrySetRPSFromUserData()
 	systemRPS := min(
@@ -117,7 +118,7 @@ func (r *rateLimitManager) SetWorkerRPS(meta *pollMetadata) {
 
 // Return the effective RPS and its source together.
 // The source can be API, worker or system default.
-// By default, it returns RATE_LIMIT_SOURCE_SYSTEM (default value).
+// It defaults to the system dynamic config.
 func (r *rateLimitManager) GetEffectiveRPSAndSource() (float64, enumspb.RateLimitSource) {
 	r.computeEffectiveRPSAndSourceLocked()
 	return r.effectiveRPS, r.rateLimitSource
@@ -127,18 +128,7 @@ func (r *rateLimitManager) GetRateLimiter() quotas.RateLimiter {
 	return r.rateLimiter
 }
 
-// SelectTaskQueueRateLimiter returns the user defined RPS (configured RPS) if exists/system default along with an update flag.
-// Configured RPS may or may not be equal to the effective RPS.
-// If the RPS set via API or workerOptions is lesser than the system defaults,
-// only then configured RPS will be equal to effective RPS.
-func (r *rateLimitManager) SelectTaskQueueRateLimiter(tqType enumspb.TaskQueueType) (*wrapperspb.DoubleValue, bool) {
-	// Try setting RPS from user data (API-configured rate limit).
-	r.computeEffectiveRPSAndSourceLocked()
-	return wrapperspb.Double(r.effectiveRPS), false
-}
-
 // TrySetRPSFromUserData attempts to set effectiveRPS from user data.
-// Returns true if RPS was set from user data, false otherwise.
 func (r *rateLimitManager) TrySetRPSFromUserData() {
 	userData, _, err := r.userDataManager.GetUserData()
 	if userData == nil || err != nil {
@@ -162,7 +152,7 @@ func (r *rateLimitManager) TrySetRPSFromUserData() {
 	r.apiConfigRPS = wrapperspb.Double(float64(rateLimit.GetRateLimit().GetRequestsPerSecond()))
 }
 
-// UpdateRatelimit updates the task dispatch rate
+// UpdateRatelimit checks and updates the rate limit if changed.
 func (r *rateLimitManager) UpdateRatelimit() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
