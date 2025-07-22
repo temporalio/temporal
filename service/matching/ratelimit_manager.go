@@ -62,17 +62,20 @@ func newRateLimitManager(userDataManager userDataManager,
 			tqConfig.AdminNamespaceToPartitionDispatchRate,
 		),
 	})
-	r.computeEffectiveRPSAndSource()
+	r.computeEffectiveRPSAndSourceLocked()
 	return r
+}
+
+func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.computeEffectiveRPSAndSource()
 }
 
 // Compute the effective RPS and source based on the task dispatch rate.
 // This method sets the `effectiveRPS` and `rateLimitSource` based on the provided `taskDispatchRate`
 // `taskDispatchRate` can be the rate from API, worker or system defaults.
 func (r *rateLimitManager) computeEffectiveRPSAndSource() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	r.TrySetRPSFromUserData()
 	systemRPS := min(
 		r.config.AdminNamespaceTaskQueueToPartitionDispatchRate(),
@@ -116,7 +119,7 @@ func (r *rateLimitManager) SetWorkerRPS(meta *pollMetadata) {
 // The source can be API, worker or system default.
 // By default, it returns RATE_LIMIT_SOURCE_SYSTEM (default value).
 func (r *rateLimitManager) GetEffectiveRPSAndSource() (float64, enumspb.RateLimitSource) {
-	r.computeEffectiveRPSAndSource()
+	r.computeEffectiveRPSAndSourceLocked()
 	return r.effectiveRPS, r.rateLimitSource
 }
 
@@ -130,7 +133,7 @@ func (r *rateLimitManager) GetRateLimiter() quotas.RateLimiter {
 // only then configured RPS will be equal to effective RPS.
 func (r *rateLimitManager) SelectTaskQueueRateLimiter(tqType enumspb.TaskQueueType) (*wrapperspb.DoubleValue, bool) {
 	// Try setting RPS from user data (API-configured rate limit).
-	r.computeEffectiveRPSAndSource()
+	r.computeEffectiveRPSAndSourceLocked()
 	return wrapperspb.Double(r.effectiveRPS), false
 }
 
@@ -161,26 +164,29 @@ func (r *rateLimitManager) TrySetRPSFromUserData() {
 
 // UpdateRatelimit updates the task dispatch rate
 func (r *rateLimitManager) UpdateRatelimit() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	oldRPS := r.effectiveRPS
 	r.computeEffectiveRPSAndSource()
-	if oldRPS == r.effectiveRPS {
+	newRPS := r.effectiveRPS
+
+	if oldRPS == newRPS {
 		// No update required
 		return
 	}
-	effectiveRPS := r.effectiveRPS
 	nPartitions := float64(r.config.NumReadPartitions())
 	if nPartitions > 0 {
 		// divide the rate equally across all partitions
-		effectiveRPS = effectiveRPS / nPartitions
+		newRPS = newRPS / nPartitions
 	}
-	burst := int(math.Ceil(effectiveRPS))
+	burst := int(math.Ceil(newRPS))
 
 	minTaskThrottlingBurstSize := r.config.MinTaskThrottlingBurstSize()
 	if burst < minTaskThrottlingBurstSize {
 		burst = minTaskThrottlingBurstSize
 	}
 
-	r.dynamicRateBurst.SetRPS(effectiveRPS)
+	r.dynamicRateBurst.SetRPS(newRPS)
 	r.dynamicRateBurst.SetBurst(burst)
 	r.forceRefreshRateOnce.Do(func() {
 		// Dynamic rate limiter only refresh its rate every 1m. Before that initial 1m interval, it uses default rate

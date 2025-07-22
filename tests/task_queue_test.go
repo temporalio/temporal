@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -218,11 +219,12 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS fl
 
 	const (
 		workerRPS    = 50.0
-		drainTimeout = 15 * time.Second
+		drainTimeout = 20 * time.Second
 		activityName = "trackableActivity"
 	)
 
 	tv := testvars.New(s.T())
+	tv = tv.WithNamespaceName(namespace.Name(fmt.Sprintf("ns-rps-%.2f", apiRPS))) // To isolate state and avoid flaking
 
 	// Apply API rate limit on `activityTaskQueue`
 	_, err := s.FrontendClient().UpdateTaskQueueConfig(context.Background(), &workflowservice.UpdateTaskQueueConfigRequest{
@@ -301,8 +303,12 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS fl
 		// and begin enforcing the rate limit check from the third task onward.
 		startIdx = 2
 	}
+	for i, ts := range runTimes {
+		fmt.Printf("Activity %v: %v\n", i, ts)
+	}
 	for i := startIdx; i < len(runTimes); i++ {
 		diff := runTimes[i].Sub(runTimes[i-1])
+		fmt.Printf("Activity %v: %v diff : %s\n", i, i-1, diff.String())
 		s.GreaterOrEqual(diff, minGap, "Activity ran too quickly between executions")
 		s.LessOrEqual(diff, maxGap, "Activity ran too quickly between executions")
 	}

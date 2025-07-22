@@ -149,10 +149,10 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) GetCache(key any) *gomock.C
 }
 
 // GetRateLimitManager mocks base method.
-func (m *MocktaskQueuePartitionManager) GetRateLimitManager() rateLimitManager {
+func (m *MocktaskQueuePartitionManager) GetRateLimitManager() *rateLimitManager {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRateLimitManager")
-	ret0, _ := ret[0].(rateLimitManager)
+	ret0, _ := ret[0].(*rateLimitManager)
 	return ret0
 }
 
