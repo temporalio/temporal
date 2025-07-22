@@ -163,6 +163,10 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			return nil, nil
 		}
 
+		if activityInfo.Stamp != transferTask.Stamp || activityInfo.Paused {
+			return nil, nil // drop the task
+		}
+
 		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
 			return nil, err
