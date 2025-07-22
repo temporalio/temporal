@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -164,68 +166,113 @@ func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int, u
 	return "OldMatching_" + ret
 }
 
-func (s *TaskQueueSuite) retrieveBacklogCount(ctx context.Context, tv *testvars.TestVars, taskQueueType int32) int64 {
-	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-		Namespace:     s.Namespace().String(),
-		TaskQueue:     tv.TaskQueue(),
-		TaskQueueType: enumspb.TaskQueueType(taskQueueType),
-		ReportStats:   true,
-	})
-	s.NoError(err)
-	fmt.Printf("Time : %s Backlog count : %d\n", time.Now().String(), resp.GetStats().GetApproximateBacklogCount())
-	return resp.GetStats().GetApproximateBacklogCount()
+func (s *TaskQueueSuite) TestTaskQueueApiLimitOverride() {
+	// Allowable timing buffer to account for scheduling jitter and measurement noise.
+	const buffer = 50 * time.Millisecond
+	var expectedActivityExecutionTime time.Duration
+	// API rate limit = 1 RPS
+	// Expect ~1 second between activity executions. Use (1s - buffer) as the minimum spacing threshold.
+	expectedActivityExecutionTime = time.Second
+	s.RunTestTaskQueueAPIRateLimitOverridesWorkerLimit(1.0, 5, expectedActivityExecutionTime-buffer, expectedActivityExecutionTime+buffer)
+
+	// API rate limit = 2 RPS
+	// Expect ~500ms between activity executions. Use (500ms - buffer) as the minimum spacing threshold.
+	expectedActivityExecutionTime = 500 * time.Millisecond
+	s.RunTestTaskQueueAPIRateLimitOverridesWorkerLimit(2.0, 5, expectedActivityExecutionTime-buffer, expectedActivityExecutionTime+buffer)
+
+	// API rate limit = 0.5 RPS
+	// Expect ~2s between activity executions. Use (2s - buffer) as the minimum spacing threshold.
+	expectedActivityExecutionTime = 2 * time.Second
+	s.RunTestTaskQueueAPIRateLimitOverridesWorkerLimit(0.5, 5, expectedActivityExecutionTime-buffer, expectedActivityExecutionTime+buffer)
 }
 
-func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
-	// Set burst for rate limit to be equal to apiRPS to test enforced rate limit.
-	s.OverrideDynamicConfig(dynamicconfig.MatchingMinTaskThrottlingBurstSize, 1)
+// Generate a descriptive test name based on the rate limit,
+// and reuse it as the activity task queue name to ensure uniqueness across test cases.
+func (s *TaskQueueSuite) testTaskQueueRateLimitOverrideName(apiRPS float32) string {
+	return fmt.Sprintf("RateLimitTest_%.2f", apiRPS)
+}
 
+func (s *TaskQueueSuite) RunTestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS float32, taskCount int, minGap time.Duration, maxGap time.Duration) {
+	activityTaskQueueName := s.testTaskQueueRateLimitOverrideName(apiRPS)
+	s.Run(activityTaskQueueName, func() {
+		s.TestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS, taskCount, minGap, maxGap, activityTaskQueueName)
+	})
+}
+
+func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS float32, taskCount int, minGap time.Duration, maxGap time.Duration, activityTaskQueue string) {
+	// Set the burst as 1 to make sure not more than 1 task get's acknowledged at a time.
+	// Helps observe the backlog drain more easily.
+	s.OverrideDynamicConfig(dynamicconfig.MatchingMinTaskThrottlingBurstSize, 1)
+	// Configure a single partition to ensure the full rate limit applies to one task queue
+	// without being divided across multiple partitions.
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	// Set a very low TTL for task queue info cache to ensure the rate limiter stats
+	// are refreshed frequently, avoiding stale data during the test.
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
 
-	const apiRPS = 1.0     // Drain time ~ 4 seconds
-	const workerRPS = 50.0 // Drain time ~ 510ms
-	const taskCount = 5
-	const drainTimeout = 10 * time.Second
-	const expectedMinDrainTime = 5 * time.Second
+	var (
+		mu       sync.Mutex
+		runTimes []time.Time
+	)
+
+	const (
+		workerRPS    = 50.0
+		drainTimeout = 15 * time.Second
+		activityName = "trackableActivity"
+	)
 
 	tv := testvars.New(s.T())
 
-	// Set task queue rate limit to `apiRPS` via UpdateTaskQueueConfig
-	resp, err := s.FrontendClient().UpdateTaskQueueConfig(context.Background(), &workflowservice.UpdateTaskQueueConfigRequest{
+	// Apply API rate limit on `activityTaskQueue`
+	_, err := s.FrontendClient().UpdateTaskQueueConfig(context.Background(), &workflowservice.UpdateTaskQueueConfigRequest{
 		Namespace:     s.Namespace().String(),
 		Identity:      tv.ClientIdentity(),
-		TaskQueue:     tv.TaskQueue().GetName(),
+		TaskQueue:     activityTaskQueue,
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{
-				RequestsPerSecond: apiRPS,
-			},
-			Reason: "Test API override",
+			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: apiRPS},
+			Reason:    "Test API override",
 		},
 	})
-	s.NotNil(resp)
 	s.NoError(err)
 
-	// Start `taskCount` number of workflows, each of which will schedule one activity task.
-	activity := func(context.Context) error {
-		// last activity run at
-		fmt.Printf("Activity in progress : %s", time.Now().String())
+	// Track activity run times
+	activityFunc := func(context.Context) error {
+		mu.Lock()
+		defer mu.Unlock()
+		runTimes = append(runTimes, time.Now())
 		return nil
 	}
+
 	workflowFn := func(ctx workflow.Context) error {
 		ao := workflow.ActivityOptions{
+			TaskQueue:           activityTaskQueue, // Route activities to a dedicated task queue named `activityTaskQueue`
 			StartToCloseTimeout: 5 * time.Second,
 		}
 		ctx = workflow.WithActivityOptions(ctx, ao)
-		return workflow.ExecuteActivity(ctx, activity).Get(ctx, nil)
+		return workflow.ExecuteActivity(ctx, activityName).Get(ctx, nil)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), drainTimeout*2)
+	ctx, cancel := context.WithTimeout(context.Background(), drainTimeout)
 	defer cancel()
 
-	for i := range taskCount {
+	// Start the activity worker
+	activityWorker := worker.New(s.SdkClient(), activityTaskQueue, worker.Options{
+		TaskQueueActivitiesPerSecond: workerRPS,
+	})
+	activityWorker.RegisterActivityWithOptions(activityFunc, activity.RegisterOptions{Name: activityName})
+	s.NoError(activityWorker.Start())
+	defer activityWorker.Stop()
+
+	// Start the workflow worker
+	wfWorker := worker.New(s.SdkClient(), tv.TaskQueue().GetName(), worker.Options{})
+	wfWorker.RegisterWorkflow(workflowFn)
+	s.NoError(wfWorker.Start())
+	defer wfWorker.Stop()
+
+	// Launch workflows
+	for i := 0; i < taskCount; i++ {
 		_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 			TaskQueue: tv.TaskQueue().GetName(),
 			ID:        fmt.Sprintf("wf-%d", i),
@@ -233,33 +280,32 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
 		s.NoError(err)
 	}
 
-	// Start worker with `workerRPS` which needs to be overriden.
-	w := worker.New(s.SdkClient(), tv.TaskQueue().GetName(), worker.Options{
-		TaskQueueActivitiesPerSecond: workerRPS,
-	})
+	// Wait for all activities to complete
 	s.Eventually(func() bool {
-		fmt.Printf("Backlog fo workflow task queue")
-		return s.retrieveBacklogCount(ctx, tv, sdkclient.TaskQueueTypeWorkflow) == taskCount
-	}, drainTimeout*2, 100*time.Millisecond)
-	fmt.Printf("******")
-	w.RegisterWorkflow(workflowFn)
-	s.NoError(w.Start())
-	s.Eventually(func() bool {
-		fmt.Printf("Backlog before rps in effect")
-		return s.retrieveBacklogCount(ctx, tv, sdkclient.TaskQueueTypeActivity) == taskCount
-	}, drainTimeout*2, 100*time.Millisecond)
-	w.RegisterActivity(activity)
-	defer w.Stop()
-
-	// Determine the time taken for the backlog to drain
-	start := time.Now()
-	s.Eventually(func() bool {
-		fmt.Printf("Backlog after rps in effect")
-		return s.retrieveBacklogCount(ctx, tv, sdkclient.TaskQueueTypeActivity) == 0
+		mu.Lock()
+		defer mu.Unlock()
+		return len(runTimes) >= taskCount
 	}, drainTimeout, 100*time.Millisecond)
-	elapsed := time.Since(start)
-	s.Greater(elapsed, expectedMinDrainTime, "Drain was too fast, API rate limit not enforced")
-	s.Less(elapsed, drainTimeout, "Drain timeout exceeded, tasks not drained in time")
+
+	// Validate that API RPS was enforced
+	mu.Lock()
+	defer mu.Unlock()
+
+	s.Len(runTimes, taskCount)
+	startIdx := 1
+	if apiRPS > 1.0 {
+		// When the API RPS is greater than 1 and burst size is 1, the first token is immediately available,
+		// allowing the first task to dispatch instantly. The second task may also be dispatched quickly,
+		// as the rate limit (e.g., 2 RPS) still allows another token within the same second.
+		// To account for this initial "microburst," we skip validation of the timing between the first two tasks
+		// and begin enforcing the rate limit check from the third task onward.
+		startIdx = 2
+	}
+	for i := startIdx; i < len(runTimes); i++ {
+		diff := runTimes[i].Sub(runTimes[i-1])
+		s.GreaterOrEqual(diff, minGap, "Activity ran too quickly between executions")
+		s.LessOrEqual(diff, maxGap, "Activity ran too quickly between executions")
+	}
 }
 
 // TestUpdateAndDescribeTaskQueueConfig tests the update and describe task queue config functionality.

@@ -62,6 +62,6 @@ type (
 		LongPollExpirationInterval() time.Duration
 		PutCache(key any, value any)
 		GetCache(key any) any
-		GetRateLimitManager() rateLimitManager
+		GetRateLimitManager() *rateLimitManager
 	}
 )

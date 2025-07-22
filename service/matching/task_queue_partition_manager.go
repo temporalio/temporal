@@ -63,7 +63,7 @@ type (
 		cache cache.Cache // non-nil for root-partition
 
 		// rateLimitManager is used to manage the rate limit for task queues.
-		rateLimitManager rateLimitManager
+		rateLimitManager *rateLimitManager
 	}
 )
 
@@ -89,9 +89,8 @@ func newTaskQueuePartitionManager(
 ) (*taskQueuePartitionManagerImpl, error) {
 	rateLimitManager := newRateLimitManager(
 		userDataManager,
-		nil, // no poll metadata at this point
-		nil, // no API configured RPS at this point
-		tqConfig)
+		tqConfig,
+		partition.TaskQueue().TaskType())
 	pm := &taskQueuePartitionManagerImpl{
 		engine:           e,
 		partition:        partition,
@@ -126,7 +125,7 @@ func (pm *taskQueuePartitionManagerImpl) Start() {
 	pm.defaultQueue.Start()
 }
 
-func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() rateLimitManager {
+func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager {
 	return pm.rateLimitManager
 }
 
@@ -351,11 +350,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	// Followed by the rate limit set by the poller.
 	// If no rate limit is set, updateRequired will be false and we will continue to use the default rate limit.
 	pm.rateLimitManager.SetWorkerRPS(pollMetadata)
-	taskQueueType := pm.partition.TaskType()
-	effectiveRPSToBeSet, updateRequired := pm.rateLimitManager.SelectTaskQueueRateLimiter(taskQueueType)
-	if updateRequired {
-		pm.rateLimitManager.UpdateRatelimit(effectiveRPSToBeSet.Value)
-	}
+	pm.rateLimitManager.UpdateRatelimit()
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
 
