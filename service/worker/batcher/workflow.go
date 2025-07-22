@@ -243,7 +243,7 @@ var (
 // BatchWorkflow is the workflow that runs a batch job of resetting workflows.
 func BatchWorkflow(ctx workflow.Context, batchParams *batchpb.BatchOperation) (HeartBeatDetails, error) {
 	if batchParams == nil {
-		return HeartBeatDetails{}, fmt.Errorf("batchParams is nil")
+		return HeartBeatDetails{}, errors.New("batchParams is nil")
 	}
 
 	batchParams = setDefaultParams(batchParams)

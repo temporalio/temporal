@@ -66,28 +66,6 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams *batchpb.Bat
 		return hbd, err
 	}
 
-	// Deserialize batch reset options if set
-	// if b := batchParams.ResetParams.ResetOptions; b != nil {
-	// 	batchParams.ResetParams.resetOptions = &commonpb.ResetOptions{}
-	// 	if err := batchParams.ResetParams.resetOptions.Unmarshal(b); err != nil {
-	// 		logger.Error("Failed to deserialize batch reset options", tag.Error(err))
-	// 		return hbd, err
-	// 	}
-	// }
-
-	// Deserialize batch post reset operations if set
-	// if postOps := batchParams.ResetParams.PostResetOperations; postOps != nil {
-	// 	batchParams.ResetParams.postResetOperations = make([]*workflowpb.PostResetOperation, len(postOps))
-	// 	for i, serializedOp := range postOps {
-	// 		op := &workflowpb.PostResetOperation{}
-	// 		if err := op.Unmarshal(serializedOp); err != nil {
-	// 			logger.Error("Failed to deserialize batch post reset operation", tag.Error(err))
-	// 			return hbd, err
-	// 		}
-	// 		batchParams.ResetParams.postResetOperations[i] = op
-	// 	}
-	// }
-
 	sdkClient := a.ClientFactory.NewClient(sdkclient.Options{
 		Namespace:     batchParams.Namespace,
 		DataConverter: sdk.PreferProtoDataConverter,
@@ -308,8 +286,11 @@ func startTaskProcessor(
 						if operation.ResetOperation.Options != nil {
 							// Using ResetOptions
 							// Note: getResetEventIDByOptions may modify workflowExecution.RunId, if reset should be to a prior run
+							//nolint:staticcheck // SA1019: worker versioning v0.31
 							eventId, err = getResetEventIDByOptions(ctx, operation.ResetOperation.Options, batchParams.Namespace, workflowExecution, frontendClient, logger)
+							//nolint:staticcheck // SA1019: worker versioning v0.31
 							resetReapplyType = operation.ResetOperation.Options.ResetReapplyType
+							//nolint:staticcheck // SA1019: worker versioning v0.31
 							resetReapplyExcludeTypes = operation.ResetOperation.Options.ResetReapplyExcludeTypes
 						} else {
 							// Old fields
