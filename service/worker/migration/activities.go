@@ -15,11 +15,13 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -100,18 +102,20 @@ type (
 	}
 
 	activities struct {
-		historyShardCount              int32
-		executionManager               persistence.ExecutionManager
-		taskManager                    persistence.TaskManager
-		namespaceRegistry              namespace.Registry
-		historyClient                  historyservice.HistoryServiceClient
-		frontendClient                 workflowservice.WorkflowServiceClient
-		clientFactory                  serverClient.Factory
-		clientBean                     serverClient.Bean
-		logger                         log.Logger
-		metricsHandler                 metrics.Handler
-		forceReplicationMetricsHandler metrics.Handler
-		namespaceReplicationQueue      persistence.NamespaceReplicationQueue
+		historyShardCount                int32
+		executionManager                 persistence.ExecutionManager
+		taskManager                      persistence.TaskManager
+		namespaceRegistry                namespace.Registry
+		historyClient                    historyservice.HistoryServiceClient
+		frontendClient                   workflowservice.WorkflowServiceClient
+		adminClient                      adminservice.AdminServiceClient
+		clientFactory                    serverClient.Factory
+		clientBean                       serverClient.Bean
+		logger                           log.Logger
+		metricsHandler                   metrics.Handler
+		forceReplicationMetricsHandler   metrics.Handler
+		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
+		generateMigrationTaskViaFrontend dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -336,7 +340,15 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	return readyShardCount == len(resp.Shards), nil
 }
 
-func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLimiter quotas.RateLimiter, wKey definition.WorkflowKey, targetClusters []string) error {
+func (a *activities) generateWorkflowReplicationTask(
+	ctx context.Context,
+	rateLimiter quotas.RateLimiter,
+	namespaceName string,
+	namespaceID string,
+	we *commonpb.WorkflowExecution,
+	targetClusters []string,
+	generateViaFrontend bool,
+) error {
 	if err := rateLimiter.WaitN(ctx, 1); err != nil {
 		return err
 	}
@@ -345,24 +357,36 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLi
 	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
 
-	resp, err := a.historyClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
-		NamespaceId: wKey.NamespaceID,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: wKey.WorkflowID,
-			RunId:      wKey.RunID,
-		},
-		TargetClusters: targetClusters,
-	})
-
-	if err != nil {
-		return err
+	var stateTransitionCount, historyLength int64
+	if generateViaFrontend {
+		resp, err := a.adminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
+			Namespace:      namespaceName,
+			Execution:      we,
+			TargetClusters: targetClusters,
+		})
+		if err != nil {
+			return err
+		}
+		stateTransitionCount = resp.StateTransitionCount
+		historyLength = resp.HistoryLength
+	} else {
+		resp, err := a.historyClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
+			NamespaceId:    namespaceID,
+			Execution:      we,
+			TargetClusters: targetClusters,
+		})
+		if err != nil {
+			return err
+		}
+		stateTransitionCount = resp.StateTransitionCount
+		historyLength = resp.HistoryLength
 	}
 
 	// If workflow has many activity retries (bug in activity code e.g.,), the state transition count can be
 	// large but the number of actual state transition that is applied on target cluster can be very small.
 	// Take the minimum between StateTransitionCount and HistoryLength as heuristic to avoid unnecessary throttling
 	// in such situation.
-	count := min(resp.StateTransitionCount, resp.HistoryLength)
+	count := min(stateTransitionCount, historyLength)
 	for count > 0 {
 		token := min(int(count), rateLimiter.Burst())
 		count -= int64(token)
@@ -475,27 +499,37 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 		}
 	}
 
-	for i := startIndex; i < len(request.Executions); i++ {
-		var executionCandidates []definition.WorkflowKey
-		executionCandidates = []definition.WorkflowKey{definition.NewWorkflowKey(request.NamespaceID, request.Executions[i].GetWorkflowId(), request.Executions[i].GetRunId())}
+	namespaceName, err := a.namespaceRegistry.GetNamespaceName(namespace.ID(request.NamespaceID))
+	if err != nil {
+		a.logger.Error("force-replication failed to translate namespaceID to name", tag.WorkflowNamespaceID(request.NamespaceID))
+		return err
+	}
 
-		for _, we := range executionCandidates {
-			if err := a.generateWorkflowReplicationTask(ctx, rateLimiter, we, request.TargetClusters); err != nil {
-				if !isNotFoundServiceError(err) {
-					a.logger.Error("force-replication failed to generate replication task",
-						tag.WorkflowNamespaceID(we.GetNamespaceID()),
-						tag.WorkflowID(we.GetWorkflowID()),
-						tag.WorkflowRunID(we.GetRunID()),
-						tag.Error(err))
-					return err
-				}
-
-				a.logger.Warn("force-replication ignore replication task due to NotFoundServiceError",
-					tag.WorkflowNamespaceID(we.GetNamespaceID()),
-					tag.WorkflowID(we.GetWorkflowID()),
-					tag.WorkflowRunID(we.GetRunID()),
+	generateViaFrontend := a.generateMigrationTaskViaFrontend()
+	for i, we := range request.Executions {
+		if err := a.generateWorkflowReplicationTask(
+			ctx,
+			rateLimiter,
+			namespaceName.String(),
+			request.NamespaceID,
+			we,
+			request.TargetClusters,
+			generateViaFrontend,
+		); err != nil {
+			if !isNotFoundServiceError(err) {
+				a.logger.Error("force-replication failed to generate replication task",
+					tag.WorkflowNamespaceID(request.NamespaceID),
+					tag.WorkflowID(we.GetWorkflowId()),
+					tag.WorkflowRunID(we.GetRunId()),
 					tag.Error(err))
+				return err
 			}
+
+			a.logger.Warn("force-replication ignore replication task due to NotFoundServiceError",
+				tag.WorkflowNamespaceID(request.NamespaceID),
+				tag.WorkflowID(we.GetWorkflowId()),
+				tag.WorkflowRunID(we.GetRunId()),
+				tag.Error(err))
 		}
 		activity.RecordHeartbeat(ctx, i)
 	}
