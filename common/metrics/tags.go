@@ -479,18 +479,6 @@ func ToUnversionedTag(version string) Tag {
 	return &tagImpl{key: toUnversioned, value: falseValue}
 }
 
-var taskExpireStageReadTag = tagImpl{key: taskExpireStage, value: "read"}
-var taskExpireStageMemoryTag = tagImpl{key: taskExpireStage, value: "memory"}
-var taskExpireStageInvalidTag = tagImpl{key: taskExpireStage, value: "invalid"}
-
-func TaskExpireStageReadTag() Tag {
-	return &taskExpireStageReadTag
-}
-
-func TaskExpireStageMemoryTag() Tag {
-	return &taskExpireStageMemoryTag
-}
-
-func TaskExpireStageValidateTag() Tag {
-	return &taskExpireStageInvalidTag
-}
+var TaskExpireStageReadTag Tag = &tagImpl{key: taskExpireStage, value: "read"}
+var TaskExpireStageMemoryTag Tag = &tagImpl{key: taskExpireStage, value: "memory"}
+var TaskInvalidTag Tag = &tagImpl{key: taskExpireStage, value: "invalid"}
