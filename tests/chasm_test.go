@@ -2,11 +2,12 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests"
@@ -70,7 +71,7 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 
 	storeID := tv.Any().String()
 	engineContext := chasm.NewEngineContext(ctx, s.chasmEngine)
-	_, err := tests.NewPayloadStoreHandler(
+	createResp, err := tests.NewPayloadStoreHandler(
 		engineContext,
 		tests.NewPayloadStoreRequest{
 			NamespaceID: s.NamespaceID(),
@@ -79,19 +80,33 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	)
 	s.NoError(err)
 
-	time.Sleep(time.Second * 3)
+	var visRecord *workflow.WorkflowExecutionInfo
+	s.Eventually(
+		func() bool {
+			resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				PageSize:  10,
+				Query:     "TemporalNamespaceDivision = 'tests.payloadStore'",
+			})
+			s.NoError(err)
+			if len(resp.Executions) != 1 {
+				return false
+			}
 
-	resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace().String(),
-		PageSize:  10,
-		Query:     "TemporalNamespaceDivision = 'tests.payloadStore'",
-	})
-	s.NoError(err)
-
-	fmt.Println("Started")
-	fmt.Println(resp.Executions)
-
-	fmt.Println("Closing")
+			visRecord = resp.Executions[0]
+			return true
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+	s.Equal(storeID, visRecord.Execution.WorkflowId)
+	s.Equal(createResp.RunID, visRecord.Execution.RunId)
+	s.Equal(enums.WORKFLOW_EXECUTION_STATUS_RUNNING, visRecord.Status)
+	s.NotEmpty(visRecord.StartTime)
+	s.NotEmpty(visRecord.ExecutionTime)
+	s.Empty(visRecord.StateTransitionCount)
+	s.Empty(visRecord.CloseTime)
+	s.Empty(visRecord.HistoryLength)
 
 	_, err = tests.ClosePayloadStoreHandler(
 		engineContext,
@@ -102,17 +117,27 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	)
 	s.NoError(err)
 
-	time.Sleep(time.Second * 3)
-	resp, err = s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace().String(),
-		PageSize:  10,
-		Query:     "TemporalNamespaceDivision = 'tests.payloadStore'",
-	})
-	s.NoError(err)
+	s.Eventually(
+		func() bool {
+			resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				PageSize:  10,
+				Query:     "TemporalNamespaceDivision = 'tests.payloadStore'",
+			})
+			s.NoError(err)
+			if len(resp.Executions) != 1 {
+				return false
+			}
 
-	fmt.Println("Closed")
-
-	fmt.Println(resp.Executions)
-
-	s.Fail("expected failure here.")
+			visRecord = resp.Executions[0]
+			return true
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+	s.Equal(enums.WORKFLOW_EXECUTION_STATUS_COMPLETED, visRecord.Status)
+	s.Equal(int64(2), visRecord.StateTransitionCount)
+	s.NotEmpty(visRecord.CloseTime)
+	s.NotEmpty(visRecord.ExecutionDuration)
+	s.Empty(visRecord.HistoryLength)
 }

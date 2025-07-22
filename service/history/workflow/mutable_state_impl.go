@@ -332,6 +332,7 @@ func NewMutableState(
 		LastCompletedWorkflowTaskStartedEventId: common.EmptyEventID,
 
 		StartTime:              timestamppb.New(startTime),
+		ExecutionTime:          timestamppb.New(startTime),
 		VersionHistories:       versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 		ExecutionStats:         &persistencespb.ExecutionStats{HistorySize: 0},
 		SubStateMachinesByType: make(map[string]*persistencespb.StateMachineMap),

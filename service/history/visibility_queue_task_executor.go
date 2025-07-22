@@ -2,7 +2,6 @@ package history
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -416,7 +415,6 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 
 	if mutableState.IsWorkflowExecutionRunning() {
 		release(nil)
-		fmt.Println("UpsertWorkflowExecution CHASM task:", requestBase)
 		return t.visibilityMgr.UpsertWorkflowExecution(
 			ctx,
 			&manager.UpsertWorkflowExecutionRequest{
@@ -431,7 +429,6 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	}
 
 	release(nil)
-	fmt.Println("RecordWorkflowExecutionClosed CHASM task:", closedRequest)
 	return t.visibilityMgr.RecordWorkflowExecutionClosed(ctx, closedRequest)
 }
 
