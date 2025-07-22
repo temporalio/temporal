@@ -122,12 +122,12 @@ func (w *fairTaskWriter) pickPasses(tasks []*writeTaskRequest, bases []fairLevel
 		weight := getEffectiveWeight(overrides, pri)
 		inc := max(1, int64(strideFactor/weight))
 		base := bases[task.subqueue].pass
-		counter := w.counters[task.subqueue]
-		if counter == nil {
-			counter = w.counterFactory()
-			w.counters[task.subqueue] = counter
+		cntr := w.counters[task.subqueue]
+		if cntr == nil {
+			cntr = w.counterFactory()
+			w.counters[task.subqueue] = cntr
 		}
-		pass := counter.GetPass(key, base, inc)
+		pass := cntr.GetPass(key, base, inc)
 		softassert.That(w.logger, pass >= base, "counter returned pass below base")
 		tasks[i].pass = pass
 	}

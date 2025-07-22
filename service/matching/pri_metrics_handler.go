@@ -1,3 +1,4 @@
+// nolint:forbidigo,panic // panic for unused metric handler methods
 package matching
 
 import (

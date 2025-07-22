@@ -339,7 +339,7 @@ func (s *MatcherDataSuite) TestRateLimitedBacklog() {
 
 	// advance fake time until done
 	for running.Load() > 0 {
-		s.ts.Advance(time.Duration(rand.Int63n(int64(10 * time.Millisecond))))
+		s.ts.Advance(time.Duration(rand.Int63n(int64(1 * time.Millisecond))))
 		gosched(3)
 	}
 
@@ -382,7 +382,7 @@ func (s *MatcherDataSuite) TestPerKeyRateLimit() {
 
 	// advance fake time until done
 	for running.Load() > 0 {
-		s.ts.Advance(time.Duration(rand.Int63n(int64(10 * time.Millisecond))))
+		s.ts.Advance(time.Duration(rand.Int63n(int64(1 * time.Millisecond))))
 		gosched(3)
 	}
 
