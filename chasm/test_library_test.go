@@ -9,6 +9,13 @@ type TestLibrary struct {
 	UnimplementedLibrary
 
 	controller *gomock.Controller
+
+	mockSideEffectTaskValidator         *MockTaskValidator[any, *TestSideEffectTask]
+	mockSideEffectTaskExecutor          *MockSideEffectTaskExecutor[any, *TestSideEffectTask]
+	mockOutboundSideEffectTaskValidator *MockTaskValidator[any, TestOutboundSideEffectTask]
+	mockOutboundSideEffectTaskExecutor  *MockSideEffectTaskExecutor[any, TestOutboundSideEffectTask]
+	mockPureTaskValidator               *MockTaskValidator[any, *TestPureTask]
+	mockPureTaskExecutor                *MockPureTaskExecutor[any, *TestPureTask]
 }
 
 func newTestLibrary(
@@ -16,6 +23,13 @@ func newTestLibrary(
 ) *TestLibrary {
 	return &TestLibrary{
 		controller: controller,
+
+		mockSideEffectTaskValidator:         NewMockTaskValidator[any, *TestSideEffectTask](controller),
+		mockSideEffectTaskExecutor:          NewMockSideEffectTaskExecutor[any, *TestSideEffectTask](controller),
+		mockOutboundSideEffectTaskValidator: NewMockTaskValidator[any, TestOutboundSideEffectTask](controller),
+		mockOutboundSideEffectTaskExecutor:  NewMockSideEffectTaskExecutor[any, TestOutboundSideEffectTask](controller),
+		mockPureTaskValidator:               NewMockTaskValidator[any, *TestPureTask](controller),
+		mockPureTaskExecutor:                NewMockPureTaskExecutor[any, *TestPureTask](controller),
 	}
 }
 
@@ -36,19 +50,19 @@ func (l *TestLibrary) Tasks() []*RegistrableTask {
 	return []*RegistrableTask{
 		NewRegistrableSideEffectTask(
 			"test_side_effect_task",
-			NewMockTaskValidator[any, *TestSideEffectTask](l.controller),
-			NewMockSideEffectTaskExecutor[any, *TestSideEffectTask](l.controller),
+			l.mockSideEffectTaskValidator,
+			l.mockSideEffectTaskExecutor,
 		),
 		NewRegistrableSideEffectTask(
 			// NOTE this task is registered as a struct, instead of pointer to struct.
 			"test_outbound_side_effect_task",
-			NewMockTaskValidator[any, TestOutboundSideEffectTask](l.controller),
-			NewMockSideEffectTaskExecutor[any, TestOutboundSideEffectTask](l.controller),
+			l.mockOutboundSideEffectTaskValidator,
+			l.mockOutboundSideEffectTaskExecutor,
 		),
 		NewRegistrablePureTask(
 			"test_pure_task",
-			NewMockTaskValidator[any, *TestPureTask](l.controller),
-			NewMockPureTaskExecutor[any, *TestPureTask](l.controller),
+			l.mockPureTaskValidator,
+			l.mockPureTaskExecutor,
 		),
 	}
 }
