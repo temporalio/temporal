@@ -4505,7 +4505,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	var resetParams batcher.ResetParams
 	var updateOptionsParams batcher.UpdateOptionsParams
 	var unpauseActivitiesParams batcher.UnpauseActivitiesParams
-	var resetActivitiesParams batcher.ResetActivitiesParams
+	var resetActivitiesParams *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation
 	var updateActivitiesOptionsParams batcher.UpdateActivitiesOptionsParams
 	switch op := request.Operation.(type) {
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
@@ -4601,7 +4601,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		unpauseActivitiesParams.Identity = op.UnpauseActivitiesOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 		operationType = batcher.BatchTypeResetActivities
-		if op.ResetActivitiesOperation == nil {
+		if op.ResetActivitiesOperation == nil {			
 			return nil, serviceerror.NewInvalidArgument("reset activities operation is not set")
 		}
 		if op.ResetActivitiesOperation.GetActivity() == nil {
@@ -4613,20 +4613,20 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			if len(a.Type) == 0 {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
-			resetActivitiesParams.ActivityType = a.Type
+			resetActivitiesParams.ResetActivitiesOperation.Activity = a
 		case *batchpb.BatchOperationResetActivities_MatchAll:
 			if !a.MatchAll {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
-			resetActivitiesParams.MatchAll = true
+			resetActivitiesParams.ResetActivitiesOperation.Activity = a
 		}
 
-		resetActivitiesParams.ResetAttempts = op.ResetActivitiesOperation.ResetAttempts
-		resetActivitiesParams.ResetHeartbeat = op.ResetActivitiesOperation.ResetHeartbeat
-		resetActivitiesParams.Jitter = op.ResetActivitiesOperation.Jitter.AsDuration()
-		resetActivitiesParams.KeepPaused = op.ResetActivitiesOperation.KeepPaused
-		resetActivitiesParams.RestoreOriginalOptions = op.ResetActivitiesOperation.RestoreOriginalOptions
-		resetActivitiesParams.Identity = op.ResetActivitiesOperation.GetIdentity()
+		resetActivitiesParams.ResetActivitiesOperation.ResetAttempts = op.ResetActivitiesOperation.ResetAttempts
+		resetActivitiesParams.ResetActivitiesOperation.ResetHeartbeat = op.ResetActivitiesOperation.ResetHeartbeat
+		resetActivitiesParams.ResetActivitiesOperation.Jitter = op.ResetActivitiesOperation.Jitter
+		resetActivitiesParams.ResetActivitiesOperation.KeepPaused = op.ResetActivitiesOperation.KeepPaused
+		resetActivitiesParams.ResetActivitiesOperation.RestoreOriginalOptions = op.ResetActivitiesOperation.RestoreOriginalOptions
+		resetActivitiesParams.ResetActivitiesOperation.Identity = op.ResetActivitiesOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
 		operationType = batcher.BatchTypeUpdateActivitiesOptions
 		if op.UpdateActivityOptionsOperation == nil {

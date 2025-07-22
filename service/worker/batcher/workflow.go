@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	workflowservicepb "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/searchattribute"
@@ -139,17 +141,6 @@ type (
 		NonRetryableErrorTypes []string
 	}
 
-	ResetActivitiesParams struct {
-		Identity               string
-		ActivityType           string
-		MatchAll               bool
-		ResetAttempts          bool
-		ResetHeartbeat         bool
-		KeepPaused             bool
-		Jitter                 time.Duration
-		RestoreOriginalOptions bool
-	}
-
 	FieldMask struct {
 		Paths []string
 	}
@@ -185,7 +176,7 @@ type (
 		// UpdateActivitiesOptionsParams is params only for BatchTypeUpdateActivitiesOptions
 		UpdateActivitiesOptionsParams UpdateActivitiesOptionsParams
 		// ResetActivitiesParams is params only for BatchTypeResetActivities
-		ResetActivitiesParams ResetActivitiesParams
+		ResetActivitiesParams *workflowservicepb.StartBatchOperationRequest_ResetActivitiesOperation
 
 		// RPS sets the requests-per-second limit for the batch.
 		// The default (and max) is defined by `worker.BatcherRPS` in the dynamic config.
@@ -313,8 +304,19 @@ func validateParams(params BatchParams) error {
 		}
 		return nil
 	case BatchTypeResetActivities:
-		if params.ResetActivitiesParams.ActivityType == "" && !params.ResetActivitiesParams.MatchAll {
-			return errors.New("must provide ActivityType or MatchAll")
+		if params.ResetActivitiesParams.ResetActivitiesOperation.GetActivity() == nil {
+			return fmt.Errorf("must provide ActivityType or MatchAll")
+		}
+
+		switch a := params.ResetActivitiesParams.ResetActivitiesOperation.GetActivity().(type) {
+		case *batchpb.BatchOperationResetActivities_Type:
+			if len(a.Type) == 0 {
+				return fmt.Errorf("must provide ActivityType")
+			}
+		case *batchpb.BatchOperationResetActivities_MatchAll:
+			if !a.MatchAll {
+				return fmt.Errorf("must provide MatchAll")
+			}
 		}
 		return nil
 	case BatchTypeUpdateActivitiesOptions:

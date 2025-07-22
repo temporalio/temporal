@@ -9,6 +9,7 @@ import (
 
 	"github.com/pborman/uuid"
 	activitypb "go.temporal.io/api/activity/v1"
+	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -382,18 +383,21 @@ func startTaskProcessor(
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
-							Identity:               batchParams.ResetActivitiesParams.Identity,
-							Activity:               &workflowservice.ResetActivityRequest_Type{Type: batchParams.ResetActivitiesParams.ActivityType},
-							ResetHeartbeat:         batchParams.ResetActivitiesParams.ResetHeartbeat,
-							Jitter:                 durationpb.New(batchParams.ResetActivitiesParams.Jitter),
-							KeepPaused:             batchParams.ResetActivitiesParams.KeepPaused,
-							RestoreOriginalOptions: batchParams.ResetActivitiesParams.RestoreOriginalOptions,
+							Identity:               batchParams.ResetActivitiesParams.ResetActivitiesOperation.Identity,
+							Activity:               &workflowservice.ResetActivityRequest_Type{Type: batchParams.ResetActivitiesParams.ResetActivitiesOperation.GetType()},
+							ResetHeartbeat:         batchParams.ResetActivitiesParams.ResetActivitiesOperation.ResetHeartbeat,
+							Jitter:                 batchParams.ResetActivitiesParams.ResetActivitiesOperation.Jitter,
+							KeepPaused:             batchParams.ResetActivitiesParams.ResetActivitiesOperation.KeepPaused,
+							RestoreOriginalOptions: batchParams.ResetActivitiesParams.ResetActivitiesOperation.RestoreOriginalOptions,
 						}
 
-						if batchParams.ResetActivitiesParams.MatchAll {
+						switch a := batchParams.ResetActivitiesParams.ResetActivitiesOperation.GetActivity().(type) {
+						case *batchpb.BatchOperationResetActivities_Type:
+							resetRequest.Activity = &workflowservice.ResetActivityRequest_Type{Type: a.Type}
+						case *batchpb.BatchOperationResetActivities_MatchAll:
 							resetRequest.Activity = &workflowservice.ResetActivityRequest_MatchAll{MatchAll: true}
-						} else {
-							resetRequest.Activity = &workflowservice.ResetActivityRequest_Type{Type: batchParams.ResetActivitiesParams.ActivityType}
+						default:
+							return fmt.Errorf("invalid activity type: %T", a)
 						}
 
 						_, err = frontendClient.ResetActivity(ctx, resetRequest)
