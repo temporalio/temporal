@@ -670,22 +670,23 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Success_ViaFrontend() {
 		TargetClusters:   []string{remoteCluster},
 	}
 
-	for i := 0; i < len(request.Executions); i++ {
-		we := request.Executions[i]
-		s.mockAdminClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), protomock.Eq(&adminservice.GenerateLastHistoryReplicationTasksRequest{
-			Namespace:      mockedNamespace,
-			Execution:      we,
-			TargetClusters: []string{remoteCluster},
-		})).Return(&adminservice.GenerateLastHistoryReplicationTasksResponse{}, nil).Times(1)
-	}
+	// Test startIndex logic, and it should be 1 when running the activity.
+	env.SetHeartbeatDetails(0)
+
+	we := request.Executions[1]
+	s.mockAdminClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), protomock.Eq(&adminservice.GenerateLastHistoryReplicationTasksRequest{
+		Namespace:      mockedNamespace,
+		Execution:      we,
+		TargetClusters: []string{remoteCluster},
+	})).Return(&adminservice.GenerateLastHistoryReplicationTasksResponse{}, nil).Times(1)
 
 	_, err := env.ExecuteActivity(s.a.GenerateReplicationTasks, &request)
 	s.NoError(err)
 
-	s.Greater(len(iceptor.generateReplicationRecordedHeartbeats), 0)
+	s.Len(iceptor.generateReplicationRecordedHeartbeats, 1)
 	lastIdx := len(iceptor.generateReplicationRecordedHeartbeats) - 1
 	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
-	s.Equal(lastIdx, lastHeartBeat)
+	s.Equal(1, lastHeartBeat)
 }
 
 func (s *activitiesSuite) TestCountWorkflows() {

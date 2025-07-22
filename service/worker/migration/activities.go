@@ -506,7 +506,8 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 	}
 
 	generateViaFrontend := a.generateMigrationTaskViaFrontend()
-	for i, we := range request.Executions {
+	for i := startIndex; i < len(request.Executions); i++ {
+		we := request.Executions[i]
 		if err := a.generateWorkflowReplicationTask(
 			ctx,
 			rateLimiter,
