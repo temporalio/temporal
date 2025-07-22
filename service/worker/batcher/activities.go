@@ -54,7 +54,8 @@ func (a *activities) checkNamespace(namespace string) error {
 	return nil
 }
 
-// BatchActivity is an activity for processing batch operation. 
+// BatchActivity is an activity for processing batch operation.
+// nolint:revive,cognitive-complexity
 func (a *activities) BatchActivity(ctx context.Context, batchParams *batchpb.BatchOperation) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
@@ -106,23 +107,6 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams *batchpb.Bat
 		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
 	}
 
-	// Process all workflow batches
-	return a.processWorkflowBatches(ctx, batchParams, sdkClient, adjustedQuery, taskCh, respCh, hbd, metricsHandler, logger)
-}
-
-// processWorkflowBatches handles the main processing loop for batch operations.
-// It manages pagination, task distribution, and result collection.
-func (a *activities) processWorkflowBatches(
-	ctx context.Context,
-	batchParams *batchpb.BatchOperation,
-	sdkClient sdkclient.Client,
-	adjustedQuery string,
-	taskCh chan taskDetail,
-	respCh chan error,
-	hbd HeartBeatDetails,
-	metricsHandler metrics.Handler,
-	logger log.Logger,
-) (HeartBeatDetails, error) {
 	for {
 		executions := batchParams.WorkflowExecutions
 		pageToken := hbd.PageToken
