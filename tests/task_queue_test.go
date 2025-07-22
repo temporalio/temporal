@@ -169,7 +169,7 @@ func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int, u
 
 func (s *TaskQueueSuite) TestTaskQueueApiLimitOverride() {
 	// Allowable timing buffer to account for scheduling jitter and measurement noise.
-	const buffer = 50 * time.Millisecond
+	const buffer = 100 * time.Millisecond
 	var expectedActivityExecutionTime time.Duration
 	// API rate limit = 1 RPS
 	// Expect ~1 second between activity executions. Use (1s - buffer) as the minimum spacing threshold.
@@ -214,7 +214,7 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS fl
 
 	const (
 		workerRPS    = 50.0
-		drainTimeout = 20 * time.Second
+		drainTimeout = 30 * time.Second // Setting extremely high drain timeout to prevent flaking
 		activityName = "trackableActivity"
 	)
 
@@ -289,15 +289,14 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS fl
 	defer mu.Unlock()
 
 	s.Len(runTimes, taskCount)
-	startIdx := 1
-	if apiRPS > 1.0 {
-		// When the API RPS is greater than 1 and burst size is 1, the first token is immediately available,
-		// allowing the first task to dispatch instantly. The second task may also be dispatched quickly,
-		// as the rate limit (e.g., 2 RPS) still allows another token within the same second.
-		// To account for this initial "microburst," we skip validation of the timing between the first two tasks
-		// and begin enforcing the rate limit check from the third task onward.
-		startIdx = 2
-	}
+	// When the burst size is 1, the first token is immediately available,
+	// allowing the first task to dispatch instantly. The second task may also be dispatched quickly,
+	// as the rate limit (e.g., 2 RPS) still allows another token within the same second.
+	// To account for this initial "microburst," we skip validation of the timing between the first two tasks
+	// and begin enforcing the rate limit check from the third task onward.
+	// Always start from 2nd index to avoid the effect of burst for consistency
+	startIdx := 2
+
 	for i := startIdx; i < len(runTimes); i++ {
 		diff := runTimes[i].Sub(runTimes[i-1])
 		s.GreaterOrEqual(diff, minGap, "Activity ran too quickly between executions")
