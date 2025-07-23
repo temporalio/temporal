@@ -885,7 +885,6 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 			RampingSinceTime:  versionUpdateArgs.RampingSinceTime,
 		}
 		if activated {
-			fmt.Println("setting first activation time", versionUpdateArgs.RoutingUpdateTime, "for version", targetVersion)
 			summary.FirstActivationTime = versionUpdateArgs.RoutingUpdateTime
 		} else {
 			summary.LastDeactivationTime = versionUpdateArgs.RoutingUpdateTime
