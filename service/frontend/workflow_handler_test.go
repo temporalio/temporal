@@ -2220,15 +2220,15 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 			request *historyservice.StartWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
-			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
-			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
-			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
-			s.Equal(inputString, request.StartRequest.Identity)
-			s.Equal(payload.EncodeString(batcher.BatchTypeTerminate), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
-			s.Equal(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.Equal(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
-			s.Equal(inputPayload, request.StartRequest.Input)
+			s.Equal(namespaceID.String(), request.NamespaceId, "namespaceID")
+			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name, "workflowType")
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name, "taskQueue")
+			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy, "workflowIdReusePolicy")
+			s.Equal(inputString, request.StartRequest.Identity, "identity")
+			s.Equal(payload.EncodeString(batcher.BatchTypeTerminate), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo], "batchOperationTypeMemo")
+			s.Equal(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo], "batchReasonMemo")
+			s.Equal(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser], "batcherUser")
+			s.Equal(inputPayload, request.StartRequest.Input, "input")
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
 	)

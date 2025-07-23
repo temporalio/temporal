@@ -4735,7 +4735,8 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
 
-	inputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(batchOperation)
+	// inputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(batchOperation)
+	inputPayload, err := payloads.Encode(batchOperation)
 	if err != nil {
 		return nil, err
 	}
