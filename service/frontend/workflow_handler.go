@@ -99,6 +99,8 @@ const (
 	errTooManyDeleteDeploymentRequests  = "Too many DeleteWorkerDeployment requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
 	errTooManyDeleteVersionRequests     = "Too many DeleteWorkerDeploymentVersion requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
 	errTooManyVersionMetadataRequests   = "Too many UpdateWorkerDeploymentVersionMetadata requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
+
+	maxReasonLength = 1000 // Maximum length for the reason field in RateLimitUpdate configurations.
 )
 
 type (
@@ -6156,6 +6158,23 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	namespaceName := namespace.Name(request.GetNamespace())
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
+		return nil, err
+	}
+	// Validation: prohibit setting rate limit on workflow task queues
+	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		return nil, serviceerror.NewInvalidArgument("Setting rate limit on workflow task queues is not allowed.")
+	}
+	queueRateLimit := request.GetUpdateQueueRateLimit()
+	fairnessKeyRateLimitDefault := request.GetUpdateFairnessKeyRateLimitDefault()
+	// Validate rate limits
+	if err := validateRateLimit(queueRateLimit, "UpdateQueueRateLimit"); err != nil {
+		return nil, err
+	}
+	if err := validateRateLimit(fairnessKeyRateLimitDefault, "UpdateFairnessKeyRateLimitDefault"); err != nil {
+		return nil, err
+	}
+	// Validate identity field
+	if err := validateStringField("Identity", request.GetIdentity(), wh.config.MaxIDLengthLimit(), false); err != nil {
 		return nil, err
 	}
 	resp, err := wh.matchingClient.UpdateTaskQueueConfig(ctx, &matchingservice.UpdateTaskQueueConfigRequest{
