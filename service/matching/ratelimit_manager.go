@@ -62,27 +62,26 @@ func newRateLimitManager(userDataManager userDataManager,
 			tqConfig.AdminNamespaceToPartitionDispatchRate,
 		),
 	})
-	r.computeEffectiveRPSAndSourceLocked()
+	r.computeEffectiveRPSAndSource()
 	return r
 }
 
-func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
+func (r *rateLimitManager) computeEffectiveRPSAndSource() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.computeEffectiveRPSAndSource()
+	r.computeEffectiveRPSAndSourceLocked()
 }
 
 // Computes the effectiveRPS and its source by evaluating all possible rate limit configurations.
 // - If an API-level RPS is configured, effectiveRPS = min(system default RPS, API-configured RPS)
 // - Else if a worker-level RPS is configured, effectiveRPS = min(system default RPS, worker-configured RPS)
 // - Otherwise, fall back to the system default RPS from dynamic config.
-func (r *rateLimitManager) computeEffectiveRPSAndSource() {
-	r.TrySetRPSFromUserData()
+func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
+	r.TrySetRPSFromUserDataLocked()
 	systemRPS := min(
 		r.config.AdminNamespaceTaskQueueToPartitionDispatchRate(),
 		r.config.AdminNamespaceToPartitionDispatchRate(),
 	)
-
 	// Default to MaxFloat64 so systemRPS is chosen unless API or worker config is set.
 	effectiveRPS := math.MaxFloat64
 	rateLimitSource := enumspb.RATE_LIMIT_SOURCE_SYSTEM
@@ -110,16 +109,33 @@ func (r *rateLimitManager) computeEffectiveRPSAndSource() {
 func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	nPartitions := float64(r.config.NumReadPartitions())
 	if meta != nil && meta.taskQueueMetadata != nil {
-		r.workerRPS = meta.taskQueueMetadata.GetMaxTasksPerSecond()
+		if workerRPS := meta.taskQueueMetadata.GetMaxTasksPerSecond(); workerRPS != nil {
+			if nPartitions > 0 {
+				r.workerRPS = wrapperspb.Double(workerRPS.GetValue() / nPartitions)
+			} else {
+				// Defaulting to 1 partition in case nPartitions is misconfigured.
+				r.workerRPS = wrapperspb.Double(workerRPS.GetValue())
+			}
+		} else {
+			r.workerRPS = nil
+		}
 	}
-	r.UpdateRatelimit()
+	// Ensure the rate limit is updated regardless of whether pollMetadata is present.
+	// This is necessary because the UpdateTaskQueueConfig API is a new source for setting rate limits,
+	// and must override any rate limits previously set by workers.
+	// UpdateRatelimitLocked includes internal logic to determine if an update is needed,
+	// so calling it unconditionally is safe and avoids redundant updates.
+	r.UpdateRatelimitLocked()
 }
 
 // Return the effective RPS and its source together.
 // The source can be API, worker or system default.
 // It defaults to the system dynamic config.
 func (r *rateLimitManager) GetEffectiveRPSAndSource() (float64, enumspb.RateLimitSource) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.computeEffectiveRPSAndSourceLocked()
 	return r.effectiveRPS, r.rateLimitSource
 }
@@ -129,43 +145,40 @@ func (r *rateLimitManager) GetRateLimiter() quotas.RateLimiter {
 }
 
 // TrySetRPSFromUserData attempts to set effectiveRPS from user data.
-func (r *rateLimitManager) TrySetRPSFromUserData() {
+func (r *rateLimitManager) TrySetRPSFromUserDataLocked() {
 	userData, _, err := r.userDataManager.GetUserData()
-	if userData == nil || err != nil {
+	if err != nil {
 		return
 	}
-	taskQueueData := userData.GetData()
-	if taskQueueData == nil || taskQueueData.GetPerType() == nil {
-		return
-	}
-	taskQueueTypeData := taskQueueData.GetPerType()[int32(r.taskQueueType)]
-	if taskQueueTypeData == nil || taskQueueTypeData.GetConfig() == nil {
+	config := userData.GetData().GetPerType()[int32(r.taskQueueType)].GetConfig()
+	if config == nil {
 		return
 	}
 	// If rate limit is an empty message, it means rate limit could have been unset via API.
 	// In this case, the apiConfigRPS will need to be unset.
-	rateLimit := taskQueueTypeData.Config.GetQueueRateLimit()
+	rateLimit := config.GetQueueRateLimit()
 	if rateLimit == nil || rateLimit.GetRateLimit() == nil {
 		r.apiConfigRPS = nil
 		return
 	}
+	nPartitions := float64(r.config.NumReadPartitions())
+	if nPartitions > 0 {
+		r.apiConfigRPS = wrapperspb.Double(float64(rateLimit.GetRateLimit().GetRequestsPerSecond()) / nPartitions)
+		return
+	}
+	// Defaulting to 1 partition in case nPartitions is misconfigured.
 	r.apiConfigRPS = wrapperspb.Double(float64(rateLimit.GetRateLimit().GetRequestsPerSecond()))
 }
 
 // UpdateRatelimit checks and updates the rate limit if changed.
-func (r *rateLimitManager) UpdateRatelimit() {
+func (r *rateLimitManager) UpdateRatelimitLocked() {
 	oldRPS := r.effectiveRPS
-	r.computeEffectiveRPSAndSource()
+	r.computeEffectiveRPSAndSourceLocked()
 	newRPS := r.effectiveRPS
 
 	if oldRPS == newRPS {
 		// No update required
 		return
-	}
-	nPartitions := float64(r.config.NumReadPartitions())
-	if nPartitions > 0 {
-		// divide the rate equally across all partitions
-		newRPS = newRPS / nPartitions
 	}
 	burst := int(math.Ceil(newRPS))
 
