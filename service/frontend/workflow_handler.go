@@ -5053,10 +5053,10 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
 
-	inputPayload, err := payloads.Encode(batchOperation)
-	if err != nil {
-		return nil, err
-	}
+	// inputPayload, err := payloads.Encode(batchOperation)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
@@ -5070,12 +5070,12 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.BatcherUser, payload.EncodeString(identity))
 	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
 
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	startReq := &workflowservice.StartBatchWorkflowExecutionRequest{
 		Namespace:                request.Namespace,
 		WorkflowId:               request.GetJobId(),
 		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    inputPayload,
+		Input:                    batchOperation,
 		Identity:                 identity,
 		RequestId:                uuid.New(),
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
@@ -5085,7 +5085,8 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 		Priority:                 &commonpb.Priority{}, // ie default priority
 	}
 
-	_, err = wh.historyClient.StartWorkflowExecution(
+	// NOTE seankane: this is where the issue is, cannot figure out how to create a new method on historyclient
+	_, err = wh.historyClient.StartBatchWorkflowExecution(
 		ctx,
 		common.CreateHistoryStartWorkflowRequest(
 			namespaceID.String(),

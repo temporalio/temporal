@@ -42,7 +42,7 @@ const (
 	BatchTypeReset = "reset"
 	// BatchTypeUpdateOptions is batch type for updating the options of workflow executions
 	BatchTypeUpdateOptions = "update_options"
-	// BatchTypePauseActivities is batch type for unpausing activities
+	// BatchTypeUnpauseActivities is batch type for unpausing activities
 	BatchTypeUnpauseActivities = "unpause_activities"
 	// BatchTypeUpdateActivitiesOptions is batch type for updating the options of activities
 	BatchTypeUpdateActivitiesOptions = "update_activity_options"

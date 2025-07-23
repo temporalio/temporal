@@ -1087,6 +1087,20 @@ func (c *metricClient) StartBatchOperation(
 	return c.client.StartBatchOperation(ctx, request, opts...)
 }
 
+func (c *metricClient) StartBatchWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.StartBatchWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.StartBatchWorkflowExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientStartBatchWorkflowExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.StartBatchWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *metricClient) StartWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,
