@@ -1159,9 +1159,8 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.NotNil(descResp.DescResponse.GetTaskQueueStatus())
 	numPartitions := float64(s.matchingEngine.config.NumTaskqueueWritePartitions("", "", tlType))
 	//nolint:staticcheck // checking deprecated field
-	// The effective task queue rate should be at least 24999 RPS,
-	// given that both system-level rate limits are overridden to 25000.
-	s.GreaterOrEqual(descResp.DescResponse.GetTaskQueueStatus().GetRatePerSecond()*numPartitions, 24999.0)
+	s.GreaterOrEqual(descResp.DescResponse.GetTaskQueueStatus().GetRatePerSecond()*numPartitions,
+		(defaultTaskDispatchRPS - 1))
 }
 
 func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
