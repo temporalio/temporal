@@ -2976,6 +2976,8 @@ func (wh *WorkflowHandler) GetClusterInfo(ctx context.Context, _ *workflowservic
 		HistoryShardCount: metadata.HistoryShardCount,
 		PersistenceStore:  wh.persistenceExecutionName,
 		VisibilityStore:   strings.Join(wh.visibilityMgr.GetStoreNames(), ","),
+		FailoverVersionIncrement: metadata.FailoverVersionIncrement,
+		InitialFailoverVersion: metadata.InitialFailoverVersion,
 	}, nil
 }
 
