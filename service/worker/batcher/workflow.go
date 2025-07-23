@@ -342,11 +342,5 @@ func setDefaultParams(params *batchpb.BatchOperation) *batchpb.BatchOperation {
 			Seconds: int64(defaultActivityHeartBeatTimeout / time.Second),
 		}
 	}
-	// if len(params.NonRetryableErrors) > 0 {
-	// 	params._nonRetryableErrors = make(map[string]struct{}, len(params.NonRetryableErrors))
-	// 	for _, estr := range params.NonRetryableErrors {
-	// 		params._nonRetryableErrors[estr] = struct{}{}
-	// 	}
-	// }
 	return params
 }

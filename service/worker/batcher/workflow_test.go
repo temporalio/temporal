@@ -88,6 +88,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions() {
 		Operation: &batchpb.BatchOperation_TerminationOperation{
 			TerminationOperation: &batchpb.BatchOperationTermination{},
 		},
+		Reason:    "test-reason",
 		Namespace: "test-namespace",
 		WorkflowExecutions: []*commonpb.WorkflowExecution{
 			{
@@ -95,19 +96,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions() {
 				RunId:      "run1",
 			},
 		},
-		Reason: "test-reason",
 	})
-	// s.env.ExecuteWorkflow(BatchWorkflow, BatchParams{
-	// 	BatchType: BatchTypeTerminate,
-	// 	Reason:    "test-reason",
-	// 	Namespace: "test-namespace",
-	// 	Executions: []*commonpb.WorkflowExecution{
-	// 		{
-	// 			WorkflowId: uuid.New(),
-	// 			RunId:      uuid.New(),
-	// 		},
-	// 	},
-	// })
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)
 }

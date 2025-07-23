@@ -2551,11 +2551,6 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 				s.NotNil(operation, "PostResetOperations[%d] should not be nil", i)
 				s.Greater(len(operation.String()), 0, "PostResetOperations[%d] should not be empty", i)
 
-				// Verify we can unmarshal back to the original operation
-				// var decodedOp workflowpb.PostResetOperation
-				// err := decodedOp.Unmarshal(encoded.String())
-				// s.NoError(err, "Should be able to unmarshal PostResetOperations[%d]", i)
-
 				// Verify the content matches the original
 				s.ProtoEqual(postResetOps[i], operation)
 			}
