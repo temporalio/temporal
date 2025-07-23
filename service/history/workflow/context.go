@@ -1151,33 +1151,27 @@ func emitStateTransitionCount(
 	)
 }
 
-const (
-	namespaceStateActive  = "active"
-	namespaceStatePassive = "passive"
-	namespaceStateUnknown = "_unknown_"
-)
-
 func namespaceState(
 	clusterMetadata cluster.Metadata,
 	mutableStateCurrentVersion *int64,
 ) string {
 
 	if mutableStateCurrentVersion == nil {
-		return namespaceStateUnknown
+		return metrics.UnknownNamespaceStateTagValue
 	}
 
 	// default value, need to special handle
 	if *mutableStateCurrentVersion == 0 {
-		return namespaceStateActive
+		return metrics.ActiveNamespaceStateTagValue
 	}
 
 	if clusterMetadata.IsVersionFromSameCluster(
 		clusterMetadata.GetClusterID(),
 		*mutableStateCurrentVersion,
 	) {
-		return namespaceStateActive
+		return metrics.ActiveNamespaceStateTagValue
 	}
-	return namespaceStatePassive
+	return metrics.PassiveNamespaceStateTagValue
 }
 
 func MutableStateFailoverVersion(
