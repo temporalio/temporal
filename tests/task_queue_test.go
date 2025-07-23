@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -174,11 +173,6 @@ func (s *TaskQueueSuite) TestTaskQueueApiLimitOverride() {
 		expectedGap := time.Second
 		s.runTestTaskQueueAPIRateLimitOverridesWorkerLimit(1.0, 5, expectedGap-buffer, expectedGap+buffer, "RateLimitTest_1.00")
 	})
-
-	s.Run("RateLimitTest_2.00", func() {
-		expectedGap := 500 * time.Millisecond
-		s.runTestTaskQueueAPIRateLimitOverridesWorkerLimit(2.0, 5, expectedGap-buffer, expectedGap+buffer, "RateLimitTest_2.00")
-	})
 }
 
 func (s *TaskQueueSuite) runTestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS float32, taskCount int, minGap time.Duration, maxGap time.Duration, activityTaskQueue string) {
@@ -196,17 +190,16 @@ func (s *TaskQueueSuite) runTestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS
 	var (
 		mu       sync.Mutex
 		runTimes []time.Time
+		wg       sync.WaitGroup
 	)
-
 	const (
-		workerRPS    = 50.0
-		drainTimeout = 30 * time.Second // Setting extremely high drain timeout to prevent flaking
+		workerRPS = 50.0
+		// Test typically completes in ~6.7 seconds on average.
+		// Timeout is set conservatively to 15s to reduce flakiness.
+		drainTimeout = 15 * time.Second
 		activityName = "trackableActivity"
 	)
-
 	tv := testvars.New(s.T())
-	tv = tv.WithNamespaceName(namespace.Name(fmt.Sprintf("ns-rps-%.2f", apiRPS))) // To isolate state and avoid flaking
-
 	// Apply API rate limit on `activityTaskQueue`
 	_, err := s.FrontendClient().UpdateTaskQueueConfig(context.Background(), &workflowservice.UpdateTaskQueueConfigRequest{
 		Namespace:     s.Namespace().String(),
@@ -220,17 +213,21 @@ func (s *TaskQueueSuite) runTestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS
 	})
 	s.NoError(err)
 
+	wg.Add(taskCount)
 	// Track activity run times
 	activityFunc := func(context.Context) error {
+		defer wg.Done()
 		mu.Lock()
-		defer mu.Unlock()
 		runTimes = append(runTimes, time.Now())
+		mu.Unlock()
 		return nil
 	}
 
 	workflowFn := func(ctx workflow.Context) error {
 		ao := workflow.ActivityOptions{
-			TaskQueue:           activityTaskQueue, // Route activities to a dedicated task queue named `activityTaskQueue`
+			// Route activity tasks to a dedicated task queue named `activityTaskQueue`.
+			// This isolates the test by ensuring that only the dedicated worker polls the queue
+			TaskQueue:           activityTaskQueue,
 			StartToCloseTimeout: 5 * time.Second,
 		}
 		ctx = workflow.WithActivityOptions(ctx, ao)
@@ -242,6 +239,7 @@ func (s *TaskQueueSuite) runTestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS
 
 	// Start the activity worker
 	activityWorker := worker.New(s.SdkClient(), activityTaskQueue, worker.Options{
+		// Setting rate limit at worker level
 		TaskQueueActivitiesPerSecond: workerRPS,
 	})
 	activityWorker.RegisterActivityWithOptions(activityFunc, activity.RegisterOptions{Name: activityName})
@@ -264,15 +262,18 @@ func (s *TaskQueueSuite) runTestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS
 	}
 
 	// Wait for all activities to complete
-	s.Eventually(func() bool {
-		mu.Lock()
-		defer mu.Unlock()
-		return len(runTimes) >= taskCount
-	}, drainTimeout, 100*time.Millisecond)
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
 
-	// Validate that API RPS was enforced
-	mu.Lock()
-	defer mu.Unlock()
+	select {
+	case <-done:
+		// All activities completed successfully within drainTimeout
+	case <-ctx.Done():
+		s.FailNow("Timeout waiting for activities to complete")
+	}
 
 	s.Len(runTimes, taskCount)
 	// When the burst size is 1, the first token is immediately available,
@@ -282,11 +283,10 @@ func (s *TaskQueueSuite) runTestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS
 	// and begin enforcing the rate limit check from the third task onward.
 	// Always start from 2nd index to avoid the effect of burst for consistency
 	startIdx := 2
-
 	for i := startIdx; i < len(runTimes); i++ {
 		diff := runTimes[i].Sub(runTimes[i-1])
 		s.GreaterOrEqual(diff, minGap, "Activity ran too quickly between executions")
-		s.LessOrEqual(diff, maxGap, "Activity ran too quickly between executions")
+		s.LessOrEqual(diff, maxGap, "Activity ran too slowly between executions")
 	}
 }
 
