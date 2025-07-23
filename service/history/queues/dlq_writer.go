@@ -60,6 +60,7 @@ func (q *DLQWriter) WriteTaskToDLQ(
 	sourceCluster, targetCluster string,
 	sourceShardID int,
 	task tasks.Task,
+	isNamespaceActive bool,
 ) error {
 	queueKey := persistence.QueueKey{
 		QueueType:     persistence.QueueTypeHistoryDLQ,
@@ -86,7 +87,16 @@ func (q *DLQWriter) WriteTaskToDLQ(
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrSendTaskToDLQ, err)
 	}
-	metrics.DLQWrites.With(q.metricsHandler).Record(1, metrics.TaskCategoryTag(task.GetCategory().Name()))
+	// "passive" means the namespace is in standby mode and only replicates data
+	namespaceState := metrics.PassiveNamespaceStateTagValue
+	if isNamespaceActive {
+		namespaceState = metrics.ActiveNamespaceStateTagValue
+	}
+	metrics.DLQWrites.With(q.metricsHandler).Record(
+		1,
+		metrics.TaskCategoryTag(task.GetCategory().Name()),
+		metrics.NamespaceStateTag(namespaceState),
+	)
 	ns, err := q.namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
 	var namespaceTag tag.Tag
 	if err != nil {
