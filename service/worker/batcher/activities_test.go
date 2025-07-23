@@ -295,6 +295,67 @@ func (s *activitiesSuite) TestAdjustQuery() {
 		name           string
 		query          string
 		expectedResult string
+		batchType      string
+	}{
+		{
+			name:           "Empty query",
+			query:          "",
+			expectedResult: "",
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Acceptance",
+			query:          "A=B",
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+
+			batchType: BatchTypeTerminate,
+		},
+		{
+			name:           "Acceptance with parenthesis",
+			query:          "(A=B)",
+			expectedResult: fmt.Sprintf("((A=B)) AND (%s)", statusRunningQueryFilter),
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Acceptance with multiple conditions",
+			query:          "(A=B) OR C=D",
+			expectedResult: fmt.Sprintf("((A=B) OR C=D) AND (%s)", statusRunningQueryFilter),
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Contains status - 1",
+			query:          "ExecutionStatus=Completed",
+			expectedResult: fmt.Sprintf("(ExecutionStatus=Completed) AND (%s)", statusRunningQueryFilter),
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Contains status - 2",
+			query:          "A=B OR ExecutionStatus='Completed'",
+			expectedResult: fmt.Sprintf("(A=B OR ExecutionStatus='Completed') AND (%s)", statusRunningQueryFilter),
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Not supported batch type",
+			query:          "A=B",
+			expectedResult: "A=B",
+			batchType:      "NotSupported",
+		},
+	}
+	for _, testRun := range tests {
+		s.Run(testRun.name, func() {
+			a := activities{}
+			batchParams := BatchParams{Query: testRun.query, BatchType: testRun.batchType}
+			adjustedQuery := a.adjustQuery(batchParams)
+			s.Equal(testRun.expectedResult, adjustedQuery)
+		})
+	}
+}
+
+func (s *activitiesSuite) TestAdjustQueryProtobuf() {
+	tests := []struct {
+		name           string
+		query          string
+		expectedResult string
 	}{
 		{
 			name:           "Empty query",
@@ -331,7 +392,7 @@ func (s *activitiesSuite) TestAdjustQuery() {
 		s.Run(testRun.name, func() {
 			a := activities{}
 			batchParams := &batchpb.BatchOperation{Query: testRun.query, Operation: &batchpb.BatchOperation_TerminationOperation{}}
-			adjustedQuery := a.adjustQuery(batchParams)
+			adjustedQuery := a.adjustQueryProtobuf(batchParams)
 			s.Equal(testRun.expectedResult, adjustedQuery)
 		})
 	}
@@ -351,7 +412,7 @@ func (s *activitiesSuite) TestAdjustQuery() {
 		s.Run(testRun.name, func() {
 			a := activities{}
 			batchParams := &batchpb.BatchOperation{Query: testRun.query}
-			adjustedQuery := a.adjustQuery(batchParams)
+			adjustedQuery := a.adjustQueryProtobuf(batchParams)
 			s.Equal(testRun.expectedResult, adjustedQuery)
 		})
 	}

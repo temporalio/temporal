@@ -15,8 +15,9 @@ import (
 
 const (
 	// BatchWFTypeName is the workflow type
-	BatchWFTypeName   = "temporal-sys-batch-workflow"
-	NamespaceDivision = "TemporalBatcher"
+	BatchWFTypeName         = "temporal-sys-batch-workflow"
+	BatchWFTypeNameProtobuf = "temporal-sys-batch-workflow-protobuf"
+	NamespaceDivision       = "TemporalBatcher"
 )
 
 type (
@@ -68,6 +69,8 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, _ workercommon.RegistrationDetails) func() {
 	registry.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	registry.RegisterActivity(s.activities(ns.Name(), ns.ID()))
+
+	registry.RegisterWorkflowWithOptions(BatchWorkflowProtobuf, workflow.RegisterOptions{Name: BatchWFTypeNameProtobuf})
 	return nil
 }
 
