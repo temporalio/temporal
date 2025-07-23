@@ -4559,6 +4559,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			}
 			operation.ResetOperation.Options = op.ResetOperation.Options
 			operation.ResetOperation.PostResetOperations = op.ResetOperation.PostResetOperations
+			if op.ResetOperation.PostResetOperations == nil {
+				operation.ResetOperation.PostResetOperations = []*workflowpb.PostResetOperation{}
+			}
 		} else {
 			// TODO: remove support for old fields later
 			//nolint:staticcheck // SA1019: worker versioning v0.31

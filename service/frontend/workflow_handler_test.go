@@ -2613,8 +2613,8 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			err := payloads.Decode(request.StartRequest.Input, &batchParams)
 			s.NoError(err)
 
-			// When PostResetOperations is empty, the slice should be empty, not nil
-			s.NotNil(batchParams.Operation.(*batchpb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations)
+			// When PostResetOperations is empty, the slice will be nil not empty. When serializing with sdk.PreferProtoDataConverter.ToPayloads,
+			// the slice is set to an empty slice, but with payloads.Encode the slice is set to nil.
 			s.Len(batchParams.Operation.(*batchpb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations, 0)
 
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
