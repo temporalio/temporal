@@ -3285,6 +3285,7 @@ type GetTaskQueueTasksRequest struct {
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	TaskQueueType v16.TaskQueueType      `protobuf:"varint,3,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
+	MinPass       int64                  `protobuf:"varint,9,opt,name=min_pass,json=minPass,proto3" json:"min_pass,omitempty"`
 	MinTaskId     int64                  `protobuf:"varint,4,opt,name=min_task_id,json=minTaskId,proto3" json:"min_task_id,omitempty"`
 	MaxTaskId     int64                  `protobuf:"varint,5,opt,name=max_task_id,json=maxTaskId,proto3" json:"max_task_id,omitempty"`
 	BatchSize     int32                  `protobuf:"varint,6,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
@@ -3343,6 +3344,13 @@ func (x *GetTaskQueueTasksRequest) GetTaskQueueType() v16.TaskQueueType {
 		return x.TaskQueueType
 	}
 	return v16.TaskQueueType(0)
+}
+
+func (x *GetTaskQueueTasksRequest) GetMinPass() int64 {
+	if x != nil {
+		return x.MinPass
+	}
+	return 0
 }
 
 func (x *GetTaskQueueTasksRequest) GetMinTaskId() int64 {
@@ -5593,12 +5601,13 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"endEventId\x12\x1f\n" +
 	"\vend_version\x18\b \x01(\x03R\n" +
 	"endVersion\" \n" +
-	"\x1eResendReplicationTasksResponse\"\xc8\x02\n" +
+	"\x1eResendReplicationTasksResponse\"\xe3\x02\n" +
 	"\x18GetTaskQueueTasksRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1d\n" +
 	"\n" +
 	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12L\n" +
-	"\x0ftask_queue_type\x18\x03 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12\x1e\n" +
+	"\x0ftask_queue_type\x18\x03 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12\x19\n" +
+	"\bmin_pass\x18\t \x01(\x03R\aminPass\x12\x1e\n" +
 	"\vmin_task_id\x18\x04 \x01(\x03R\tminTaskId\x12\x1e\n" +
 	"\vmax_task_id\x18\x05 \x01(\x03R\tmaxTaskId\x12\x1d\n" +
 	"\n" +

@@ -300,8 +300,10 @@ func (s *TaskQueueSuite) TestUpdateAndDescribeTaskQueueConfig() {
 	taskQueueType := enumspb.TASK_QUEUE_TYPE_ACTIVITY
 	updateRPS := float32(42)
 	updateReason := "frontend-update-test"
+	updateIdentity := "test-identity"
 	updateReq := &workflowservice.UpdateTaskQueueConfigRequest{
 		Namespace:     namespace,
+		Identity:      updateIdentity,
 		TaskQueue:     taskQueueName,
 		TaskQueueType: taskQueueType,
 		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
@@ -323,8 +325,10 @@ func (s *TaskQueueSuite) TestUpdateAndDescribeTaskQueueConfig() {
 	s.NotNil(updateResp.Config)
 	s.Equal(updateRPS, updateResp.Config.QueueRateLimit.RateLimit.RequestsPerSecond)
 	s.Equal(updateReason, updateResp.Config.QueueRateLimit.Metadata.Reason)
+	s.Equal(updateIdentity, updateResp.Config.QueueRateLimit.Metadata.UpdateIdentity)
 	s.Equal(updateRPS, updateResp.Config.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
 	s.Equal(updateReason, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
+	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
 
 	describeReq := &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     namespace,
@@ -339,6 +343,93 @@ func (s *TaskQueueSuite) TestUpdateAndDescribeTaskQueueConfig() {
 	s.NotNil(describeResp.Config.QueueRateLimit)
 	s.Equal(updateRPS, describeResp.Config.QueueRateLimit.RateLimit.RequestsPerSecond)
 	s.Equal(updateReason, describeResp.Config.QueueRateLimit.Metadata.Reason)
+	s.Equal(updateIdentity, updateResp.Config.QueueRateLimit.Metadata.UpdateIdentity)
 	s.Equal(updateRPS, describeResp.Config.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
 	s.Equal(updateReason, describeResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
+	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
+}
+
+func (s *TaskQueueSuite) TestUpdateUnsetAndDescribeTaskQueueConfig() {
+	tv := testvars.New(s.T())
+	taskQueueName := tv.TaskQueue().Name
+	namespace := s.Namespace().String()
+	taskQueueType := enumspb.TASK_QUEUE_TYPE_ACTIVITY
+	updateRPS := float32(42)
+	updateReason := "TestUpdateUnsetAndDescribeTaskQueueConfig"
+	unsetReasonQueue := "unset queue rate limit"
+	unsetReasonFairness := "unset fairness key rate limit"
+	updateIdentity := "test-identity"
+	// Set rate limit via UpdateTaskQueueConfig api.
+	updateReq := &workflowservice.UpdateTaskQueueConfigRequest{
+		Namespace:     namespace,
+		Identity:      updateIdentity,
+		TaskQueue:     taskQueueName,
+		TaskQueueType: taskQueueType,
+		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			RateLimit: &taskqueuepb.RateLimit{
+				RequestsPerSecond: updateRPS,
+			},
+			Reason: updateReason,
+		},
+		UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			RateLimit: &taskqueuepb.RateLimit{
+				RequestsPerSecond: updateRPS,
+			},
+			Reason: updateReason,
+		},
+	}
+	updateResp, err := s.FrontendClient().UpdateTaskQueueConfig(testcore.NewContext(), updateReq)
+	s.NoError(err)
+	s.NotNil(updateResp)
+	s.NotNil(updateResp.Config)
+	s.Equal(updateRPS, updateResp.Config.QueueRateLimit.RateLimit.RequestsPerSecond)
+	s.Equal(updateReason, updateResp.Config.QueueRateLimit.Metadata.Reason)
+	s.Equal(updateIdentity, updateResp.Config.QueueRateLimit.Metadata.UpdateIdentity)
+	s.Equal(updateRPS, updateResp.Config.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
+	s.Equal(updateReason, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
+	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
+
+	// Unset rate limit via UpdateTaskQueueConfig api.
+	unsetReq := &workflowservice.UpdateTaskQueueConfigRequest{
+		Namespace:     namespace,
+		Identity:      updateIdentity,
+		TaskQueue:     taskQueueName,
+		TaskQueueType: taskQueueType,
+		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			RateLimit: nil,
+			Reason:    unsetReasonQueue,
+		},
+		UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			RateLimit: nil,
+			Reason:    unsetReasonFairness,
+		},
+	}
+	unsetResp, err := s.FrontendClient().UpdateTaskQueueConfig(testcore.NewContext(), unsetReq)
+	s.NoError(err)
+	s.NotNil(unsetResp)
+	s.NotNil(unsetResp.Config)
+	s.Nil(unsetResp.Config.QueueRateLimit.RateLimit)
+	s.Equal(unsetReasonQueue, unsetResp.Config.QueueRateLimit.Metadata.Reason)
+	s.Equal(updateIdentity, updateResp.Config.QueueRateLimit.Metadata.UpdateIdentity)
+	s.Nil(unsetResp.Config.FairnessKeysRateLimitDefault.RateLimit)
+	s.Equal(unsetReasonFairness, unsetResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
+	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
+
+	// Describe the task queue to verify the unset configuration.
+	describeReq := &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     namespace,
+		TaskQueue:     &taskqueuepb.TaskQueue{Name: taskQueueName},
+		TaskQueueType: taskQueueType,
+		ReportConfig:  true,
+	}
+	describeResp, err := s.FrontendClient().DescribeTaskQueue(testcore.NewContext(), describeReq)
+	s.NoError(err)
+	s.NotNil(describeResp)
+	s.NotNil(describeResp.Config)
+	s.Nil(describeResp.Config.QueueRateLimit.RateLimit)
+	s.Equal(unsetReasonQueue, describeResp.Config.QueueRateLimit.Metadata.Reason)
+	s.Equal(updateIdentity, updateResp.Config.QueueRateLimit.Metadata.UpdateIdentity)
+	s.Nil(describeResp.Config.FairnessKeysRateLimitDefault.RateLimit)
+	s.Equal(unsetReasonFairness, describeResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
+	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
 }

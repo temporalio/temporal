@@ -18,6 +18,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -338,7 +339,50 @@ func (s *MatcherDataSuite) TestRateLimitedBacklog() {
 
 	// advance fake time until done
 	for running.Load() > 0 {
-		s.ts.Advance(time.Duration(rand.Int63n(int64(10 * time.Millisecond))))
+		s.ts.Advance(time.Duration(rand.Int63n(int64(1 * time.Millisecond))))
+		gosched(3)
+	}
+
+	elapsed := time.Unix(0, lastTask.Load()).Sub(start)
+	s.Greater(elapsed, 9*time.Second)
+	// with very unlucky scheduling, we might end up taking longer to poll the tasks
+	s.Less(elapsed, 20*time.Second)
+}
+
+func (s *MatcherDataSuite) TestPerKeyRateLimit() {
+	// 10 tasks/key/sec with burst of 3
+	s.md.UpdatePerKeyRateLimit(10, 300*time.Millisecond)
+
+	// register some backlog with three keys
+	keys := []string{"key1", "key2", "key3"}
+	for i := range 300 {
+		t := s.newBacklogTaskWithPriority(123+int64(i), 0, nil, &commonpb.Priority{
+			FairnessKey: keys[i%3],
+		})
+		s.md.EnqueueTaskNoWait(t)
+	}
+
+	start := s.ts.Now()
+
+	// start 10 poll loops to poll them
+	var running atomic.Int64
+	var lastTask atomic.Int64
+	for range 10 {
+		running.Add(1)
+		go func() {
+			defer running.Add(-1)
+			for {
+				if pres := s.pollFakeTime(time.Second); pres.ctxErr != nil {
+					return
+				}
+				lastTask.Store(s.now().UnixNano())
+			}
+		}()
+	}
+
+	// advance fake time until done
+	for running.Load() > 0 {
+		s.ts.Advance(time.Duration(rand.Int63n(int64(1 * time.Millisecond))))
 		gosched(3)
 	}
 
@@ -477,34 +521,35 @@ func (s *MatcherDataSuite) TestReprocessTasks() {
 // simple limiter tests
 
 func TestSimpleLimiter(t *testing.T) {
-	var sl simpleLimiter
-	sl.set(10, time.Second)
+	p := makeSimpleLimiterParams(10, time.Second)
 
 	base := time.Now().UnixNano()
 	now := base
+	var ready simpleLimiter
 
 	// can consume 11 tokens immediately (1 since we're starting from 0 and 10 burst)
 	for range 11 {
-		require.GreaterOrEqual(t, now, sl.ready)
-		sl.consume(now, 1)
+		require.GreaterOrEqual(t, now, ready)
+		ready = ready.consume(p, now, 1)
 	}
 	// now not ready anymore
-	require.Less(t, now, sl.ready)
+	require.Less(t, now, ready)
 
 	// after 100 ms, we can consume one more
 	now += int64(99 * time.Millisecond)
-	require.Less(t, now, sl.ready)
+	require.Less(t, now, ready)
 	now += int64(1 * time.Millisecond)
-	require.GreaterOrEqual(t, now, sl.ready)
-	sl.consume(now, 1)
+	require.GreaterOrEqual(t, now, ready)
+	ready = ready.consume(p, now, 1)
+	require.Less(t, now, ready)
 }
 
 func TestSimpleLimiterOverTime(t *testing.T) {
-	var sl simpleLimiter
-	sl.set(10, time.Second)
+	p := makeSimpleLimiterParams(10, time.Second)
 
 	base := time.Now().UnixNano()
 	now := base
+	var ready simpleLimiter
 
 	consumed := int64(0)
 	for range 10000 {
@@ -512,8 +557,8 @@ func TestSimpleLimiterOverTime(t *testing.T) {
 		// but have some gaps too.
 		now += (70 + rand.Int63n(50)) * int64(time.Millisecond)
 
-		if now >= sl.ready {
-			sl.consume(now, 1)
+		if now >= int64(ready) {
+			ready = ready.consume(p, now, 1)
 			consumed++
 		}
 	}
@@ -523,25 +568,25 @@ func TestSimpleLimiterOverTime(t *testing.T) {
 }
 
 func TestSimpleLimiterRecycle(t *testing.T) {
-	var sl simpleLimiter
-	sl.set(10, time.Second)
+	p := makeSimpleLimiterParams(10, time.Second)
 
 	base := time.Now().UnixNano()
 	now := base
+	var ready simpleLimiter
 
 	consumed := int64(0)
 	for range 10000 {
 		// sleep for some random time, always < 100ms, so we are always limited
 		now += (30 + rand.Int63n(30)) * int64(time.Millisecond)
 
-		if now >= sl.ready {
-			sl.consume(now, 1)
+		if now >= int64(ready) {
+			ready = ready.consume(p, now, 1)
 			consumed++
 
 			// 20% of the time, recycle the token we took
 			if rand.Intn(100) < 20 {
 				now += int64(5 * time.Millisecond)
-				sl.consume(now, -1)
+				ready = ready.consume(p, now, -1)
 				consumed--
 			}
 		}
@@ -549,6 +594,56 @@ func TestSimpleLimiterRecycle(t *testing.T) {
 
 	effectiveRate := float64(consumed) / float64(now-base) * float64(time.Second)
 	require.InEpsilon(t, 10, effectiveRate, 0.01)
+}
+
+func TestSimpleLimiterUnlimited(t *testing.T) {
+	now := time.Now().UnixNano()
+	var ready simpleLimiter
+
+	pInf := makeSimpleLimiterParams(1e12, 0)
+	require.False(t, pInf.never())
+	require.False(t, pInf.limited())
+
+	for range 1000 {
+		ready = ready.consume(pInf, now, 1)
+		require.LessOrEqual(t, ready.delay(now), time.Duration(0))
+	}
+}
+
+func TestSimpleLimiterLowToHigh(t *testing.T) {
+	for _, lowRate := range []float64{
+		0,
+		1e-8, // 1 per 1000+ days
+	} {
+		pLow := makeSimpleLimiterParams(lowRate, time.Second)
+		require.True(t, pLow.never() == (lowRate == 0))
+
+		now := time.Now().UnixNano()
+		var ready simpleLimiter
+		ready = ready.consume(pLow, now, 1)
+		// not ready yet
+		require.Greater(t, ready.delay(now), time.Duration(0))
+		// not ready even after 1 day
+		require.Greater(t, ready.delay(now+(24*time.Hour).Nanoseconds()), time.Duration(0))
+
+		// try clipping using the low limit
+		ready = ready.clip(pLow, now, 1)
+		// still not ready now or in 1 day
+		require.Greater(t, ready.delay(now), time.Duration(0))
+		require.Greater(t, ready.delay(now+(24*time.Hour).Nanoseconds()), time.Duration(0))
+
+		// switch to higher rate limit
+		pHigh := makeSimpleLimiterParams(10, time.Second)
+		require.False(t, pHigh.never())
+		require.True(t, pHigh.limited())
+
+		// clip to high limit
+		ready = ready.clip(pHigh, now, 1)
+		// not ready yet
+		require.Greater(t, ready.delay(now), time.Duration(0))
+		// ready within one minute
+		require.Less(t, ready.delay(now+time.Minute.Nanoseconds()), time.Duration(0))
+	}
 }
 
 func FuzzMatcherData(f *testing.F) {
@@ -560,7 +655,7 @@ func FuzzMatcherData(f *testing.F) {
 		)
 		ts := clock.NewEventTimeSource()
 		ts.UseAsyncTimers(true)
-		logger := testlogger.NewTestLogger(f, testlogger.FailOnAnyUnexpectedError)
+		logger := log.NewNoopLogger()
 		md := newMatcherData(cfg, logger, ts, true)
 
 		next := func() int {

@@ -61,6 +61,7 @@ type (
 		// it should adjust its poller count
 		pollerScalingDecision *taskqueuepb.PollerScalingDecision
 		recycleToken          func(*internalTask)
+		removeFromMatcher     func()
 
 		// These fields are for use by matcherData:
 		waitableMatchResult
@@ -261,6 +262,10 @@ func (task *internalTask) getPriority() *commonpb.Priority {
 	}
 	// nexus tasks don't have priorities for now
 	return nil
+}
+
+func (task *internalTask) fairLevel() fairLevel {
+	return fairLevelFromAllocatedTask(task.event.AllocatedTaskInfo)
 }
 
 // finish marks a task as finished. Should be called after a poller picks up a task
