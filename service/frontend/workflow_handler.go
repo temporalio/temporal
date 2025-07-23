@@ -4500,7 +4500,6 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	if err != nil {
 		return nil, err
 	}
-
 	var identity string
 	var operationType string
 	var signalParams batcher.SignalParams
@@ -4602,7 +4601,6 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		unpauseActivitiesParams.Jitter = op.UnpauseActivitiesOperation.Jitter.AsDuration()
 		unpauseActivitiesParams.Identity = op.UnpauseActivitiesOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
-		identity = op.ResetActivitiesOperation.GetIdentity()
 		operationType = batcher.BatchTypeResetActivities
 		if op.ResetActivitiesOperation == nil {
 			return nil, serviceerror.NewInvalidArgument("reset activities operation is not set")
@@ -4686,7 +4684,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
-	
+
 	input := &batcher.BatchParams{
 		Namespace:                     request.GetNamespace(),
 		Query:                         visibilityQuery,

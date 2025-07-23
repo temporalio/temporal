@@ -57,7 +57,6 @@ func (a *activities) checkNamespace(namespace string) error {
 }
 
 // BatchActivity is an activity for processing batch operation.
-// nolint:revive,cognitive-complexity
 func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
@@ -444,7 +443,7 @@ func startTaskProcessor(
 						var err error
 						var resetReapplyType enumspb.ResetReapplyType
 						var resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType
-						if batchParams.ResetParams.ResetOptions != nil {
+						if batchParams.ResetParams.resetOptions != nil {
 							// Using ResetOptions
 							// Note: getResetEventIDByOptions may modify workflowExecution.RunId, if reset should be to a prior run
 							eventId, err = getResetEventIDByOptions(ctx, batchParams.ResetParams.resetOptions, batchParams.Namespace, workflowExecution, frontendClient, logger)
