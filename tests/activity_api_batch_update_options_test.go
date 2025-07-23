@@ -121,7 +121,7 @@ func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOp
 					ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 				},
 				UpdateMask: &fieldmaskpb.FieldMask{
-					Paths: []string{"scheduleToCloseTimeout"},
+					Paths: []string{"schedule_to_close_timeout"},
 				},
 			},
 		},
