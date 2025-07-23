@@ -66,9 +66,9 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query() {
 	}).Once()
 	s.env.ExecuteWorkflow(BatchWorkflow, BatchParams{
 		BatchType: BatchTypeTerminate,
+		Reason:    "test-reason",
 		Namespace: "test-namespace",
 		Query:     "test-query",
-		Reason:    "test-reason",
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)

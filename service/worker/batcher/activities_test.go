@@ -307,8 +307,7 @@ func (s *activitiesSuite) TestAdjustQuery() {
 			name:           "Acceptance",
 			query:          "A=B",
 			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
-
-			batchType: BatchTypeTerminate,
+			batchType:      BatchTypeTerminate,
 		},
 		{
 			name:           "Acceptance with parenthesis",
