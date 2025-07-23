@@ -199,6 +199,16 @@ func (c *clientImpl) ExecuteMultiOperation(
 	return c.client.ExecuteMultiOperation(ctx, request, opts...)
 }
 
+func (c *clientImpl) FetchWorkerConfig(
+	ctx context.Context,
+	request *workflowservice.FetchWorkerConfigRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.FetchWorkerConfigResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.FetchWorkerConfig(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetClusterInfo(
 	ctx context.Context,
 	request *workflowservice.GetClusterInfoRequest,
@@ -867,6 +877,16 @@ func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateWorkerConfig(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerConfigRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerConfigResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateWorkerConfig(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateWorkerDeploymentVersionMetadata(

@@ -99,6 +99,8 @@ const (
 	errTooManyDeleteDeploymentRequests  = "Too many DeleteWorkerDeployment requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
 	errTooManyDeleteVersionRequests     = "Too many DeleteWorkerDeploymentVersion requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
 	errTooManyVersionMetadataRequests   = "Too many UpdateWorkerDeploymentVersionMetadata requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
+
+	maxReasonLength = 1000 // Maximum length for the reason field in RateLimitUpdate configurations.
 )
 
 type (
@@ -4598,6 +4600,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		unpauseActivitiesParams.ResetAttempts = op.UnpauseActivitiesOperation.ResetAttempts
 		unpauseActivitiesParams.ResetHeartbeat = op.UnpauseActivitiesOperation.ResetHeartbeat
 		unpauseActivitiesParams.Jitter = op.UnpauseActivitiesOperation.Jitter.AsDuration()
+		unpauseActivitiesParams.Identity = op.UnpauseActivitiesOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 		operationType = batcher.BatchTypeResetActivities
 		if op.ResetActivitiesOperation == nil {
@@ -6157,6 +6160,23 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	if err != nil {
 		return nil, err
 	}
+	// Validation: prohibit setting rate limit on workflow task queues
+	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		return nil, serviceerror.NewInvalidArgument("Setting rate limit on workflow task queues is not allowed.")
+	}
+	queueRateLimit := request.GetUpdateQueueRateLimit()
+	fairnessKeyRateLimitDefault := request.GetUpdateFairnessKeyRateLimitDefault()
+	// Validate rate limits
+	if err := validateRateLimit(queueRateLimit, "UpdateQueueRateLimit"); err != nil {
+		return nil, err
+	}
+	if err := validateRateLimit(fairnessKeyRateLimitDefault, "UpdateFairnessKeyRateLimitDefault"); err != nil {
+		return nil, err
+	}
+	// Validate identity field
+	if err := validateStringField("Identity", request.GetIdentity(), wh.config.MaxIDLengthLimit(), false); err != nil {
+		return nil, err
+	}
 	resp, err := wh.matchingClient.UpdateTaskQueueConfig(ctx, &matchingservice.UpdateTaskQueueConfigRequest{
 		NamespaceId:           namespaceID.String(),
 		UpdateTaskqueueConfig: request,
@@ -6167,4 +6187,33 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	return &workflowservice.UpdateTaskQueueConfigResponse{
 		Config: resp.UpdatedTaskqueueConfig,
 	}, nil
+}
+
+func (wh *WorkflowHandler) FetchWorkerConfig(_ context.Context, request *workflowservice.FetchWorkerConfigRequest,
+) (*workflowservice.FetchWorkerConfigResponse, error) {
+	if !wh.config.WorkerCommandsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("FetchWorkerConfig command is not supported")
+	}
+	return nil, serviceerror.NewUnimplemented("FetchWorkerConfig command is not supported")
+}
+
+func (wh *WorkflowHandler) UpdateWorkerConfig(_ context.Context, request *workflowservice.UpdateWorkerConfigRequest,
+) (*workflowservice.UpdateWorkerConfigResponse, error) {
+	if !wh.config.WorkerCommandsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("UpdateWorkerConfig command is not supported")
+	}
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if request.GetWorkerConfig() == nil {
+		return nil, serviceerror.NewInvalidArgument("WorkerConfig is not set")
+	}
+
+	_, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	return nil, serviceerror.NewUnimplemented("UpdateWorkerConfig command is not supported")
 }

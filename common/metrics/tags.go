@@ -41,6 +41,7 @@ const (
 	// See server.api.enums.v1.ReplicationTaskType
 	replicationTaskType     = "replicationTaskType"
 	replicationTaskPriority = "replicationTaskPriority"
+	taskExpireStage         = "task_expire_stage"
 	versioningBehavior      = "versioning_behavior"
 	isFirstAttempt          = "first-attempt"
 	workflowStatus          = "workflow_status"
@@ -477,6 +478,10 @@ func ToUnversionedTag(version string) Tag {
 	}
 	return &tagImpl{key: toUnversioned, value: falseValue}
 }
+
+var TaskExpireStageReadTag Tag = &tagImpl{key: taskExpireStage, value: "read"}
+var TaskExpireStageMemoryTag Tag = &tagImpl{key: taskExpireStage, value: "memory"}
+var TaskInvalidTag Tag = &tagImpl{key: taskExpireStage, value: "invalid"}
 
 func PersistenceDBKindTag(kind string) Tag {
 	return &tagImpl{key: PersistenceDBKindTagName, value: kind}

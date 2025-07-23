@@ -222,3 +222,129 @@ func wrongorderness(vs []int) float64 {
 	}
 	return float64(wrong) / float64(l*(l-1)/2)
 }
+
+type FairnessSuite struct {
+	testcore.FunctionalTestBase
+}
+
+func TestFairnessSuite(t *testing.T) {
+	t.Parallel()
+	if !testcore.UseCassandraPersistence() {
+		t.Skip("only on cassandra for now")
+	}
+	suite.Run(t, new(FairnessSuite))
+}
+
+func (s *FairnessSuite) SetupSuite() {
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+		dynamicconfig.MatchingEnableFairness.Key():         true,
+		dynamicconfig.MatchingGetTasksBatchSize.Key():      20,
+		dynamicconfig.MatchingGetTasksReloadAt.Key():       5,
+		dynamicconfig.NumPendingActivitiesLimitError.Key(): 1000,
+		// TODO: disable this later?
+		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  1,
+		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 1,
+	}
+	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+}
+
+func (s *FairnessSuite) TestFairness_Activity_Basic() {
+	const Workflows = 15
+	const Tasks = 15
+	const Keys = 10
+
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	zipf := rand.NewZipf(rand.New(rand.NewSource(12345)), 2, 2, Keys-1)
+
+	for wfidx := range Workflows {
+		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			WorkflowId:   fmt.Sprintf("wf%d", wfidx),
+			WorkflowType: tv.WorkflowType(),
+			TaskQueue:    tv.TaskQueue(),
+		})
+		s.NoError(err)
+	}
+
+	// process workflow tasks
+	for range Workflows {
+		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
+			tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.Equal(3, len(task.History.Events))
+
+				var wfidx int
+				_, err := fmt.Sscanf(task.WorkflowExecution.WorkflowId, "wf%d", &wfidx)
+				s.NoError(err)
+
+				var commands []*commandpb.Command
+
+				for i := range Tasks {
+					fkey := int(zipf.Uint64())
+					input, err := payloads.Encode(wfidx, fkey)
+					s.NoError(err)
+					commands = append(commands, &commandpb.Command{
+						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+							ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+								ActivityId:             fmt.Sprintf("act%d", i),
+								ActivityType:           tv.ActivityType(),
+								TaskQueue:              tv.TaskQueue(),
+								ScheduleToCloseTimeout: durationpb.New(time.Minute),
+								Priority: &commonpb.Priority{
+									FairnessKey: fmt.Sprintf("key%d", fkey),
+								},
+								Input: input,
+							},
+						},
+					})
+				}
+
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
+			},
+			taskpoller.WithContext(ctx),
+		)
+		s.NoError(err)
+	}
+
+	// process activity tasks
+	var runs []int
+	for range Workflows * Tasks {
+		_, err := s.TaskPoller().PollAndHandleActivityTask(
+			tv,
+			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+				var wfidx, fkey int
+				s.NoError(payloads.Decode(task.Input, &wfidx, &fkey))
+				s.T().Log("activity", "fkey", fkey, "wfidx", wfidx)
+				runs = append(runs, fkey)
+				nothing, err := payloads.Encode()
+				s.NoError(err)
+				return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
+			},
+			taskpoller.WithContext(ctx),
+		)
+		s.NoError(err)
+	}
+
+	u := unfairness(runs)
+	s.T().Log("unfairness:", u)
+	s.Less(u, 1.0)
+}
+
+func unfairness(vs []int) float64 {
+	firsts := make(map[int]int)
+	for i, v := range vs {
+		if _, ok := firsts[v]; !ok {
+			firsts[v] = i
+		}
+	}
+	var totalDelay int
+	for _, first := range firsts {
+		totalDelay += first
+	}
+	return float64(totalDelay) / float64(len(firsts)*len(firsts))
+}

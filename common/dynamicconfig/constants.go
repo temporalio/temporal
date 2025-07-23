@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/service/matching/counter"
 )
 
 var (
@@ -1287,6 +1288,11 @@ second per poller by one physical queue manager`,
 		false,
 		`Use priority-enabled TaskMatcher`,
 	)
+	MatchingEnableFairness = NewTaskQueueBoolSetting(
+		"matching.enableFairness",
+		false,
+		`Enable fairness for task dispatching. Implies matching.useNewMatcher.`,
+	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(
 		"matching.priorityLevels",
 		5,
@@ -1296,6 +1302,16 @@ second per poller by one physical queue manager`,
 		"matching.backlogTaskForwardTimeout",
 		60*time.Second,
 		`Timeout for forwarded backlog task (requires new matcher)`,
+	)
+	MatchingFairnessCounter = NewTaskQueueTypedSetting(
+		"matching.fairnessCounter",
+		counter.DefaultCounterParams,
+		`Configuration for counter used in matching fairness.`,
+	)
+	MatchingFairnessKeyRateLimitCacheSize = NewTaskQueueIntSetting(
+		"matching.fairnessKeyRateLimitCacheSize",
+		2000,
+		"Cache size for fairness key rate limits.",
 	)
 
 	// keys for history
@@ -2727,5 +2743,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.ListWorkersEnabled",
 		false,
 		`ListWorkersEnabled is a "feature enable" flag. It allows clients to get workers heartbeat information.`,
+	)
+
+	WorkerCommandsEnabled = NewNamespaceBoolSetting(
+		"frontend.WorkerCommandsEnabled",
+		false,
+		`WorkerCommandsEnabled is a "feature enable" flag. It allows clients to send commands to the workers.`,
 	)
 )

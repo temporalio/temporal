@@ -44,6 +44,7 @@ type PhysicalTaskQueueManagerTestSuite struct {
 	suite.Suite
 
 	newMatcher           bool
+	fairness             bool
 	config               *Config
 	controller           *gomock.Controller
 	physicalTaskQueueKey *PhysicalTaskQueueKey
@@ -60,9 +61,15 @@ func TestPhysicalTaskQueueManager_Pri_Suite(t *testing.T) {
 	suite.Run(t, &PhysicalTaskQueueManagerTestSuite{newMatcher: true})
 }
 
+func TestPhysicalTaskQueueManager_Fair_TestSuite(t *testing.T) {
+	suite.Run(t, &PhysicalTaskQueueManagerTestSuite{newMatcher: true, fairness: true})
+}
+
 func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	s.config = defaultTestConfig()
-	if s.newMatcher {
+	if s.fairness {
+		useFairness(s.config)
+	} else if s.newMatcher {
 		useNewMatcher(s.config)
 	}
 	s.controller = gomock.NewController(s.T())
@@ -363,7 +370,12 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 	// wait for goroutines to start and to acquire rangeid lock
 	time.Sleep(10 * time.Millisecond) // nolint:forbidigo
 
-	tm, _ := s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
+	var tm *testTaskManager
+	if s.fairness {
+		tm = s.tqMgr.partitionMgr.engine.fairTaskManager.(*testTaskManager) // nolint:revive
+	} else {
+		tm = s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager) // nolint:revive
+	}
 	s.Equal(0, tm.getUpdateCount(s.physicalTaskQueueKey))
 
 	// simulate stolen lock

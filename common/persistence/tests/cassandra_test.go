@@ -212,6 +212,10 @@ func TestCassandraTaskQueueSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestCassandraFairTaskQueueSuite(t *testing.T) {
+	// TODO(fairness): adapt test suite for fair task store
+}
+
 func TestCassandraTaskQueueTaskSuite(t *testing.T) {
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
@@ -223,6 +227,10 @@ func TestCassandraTaskQueueTaskSuite(t *testing.T) {
 
 	s := NewTaskQueueTaskSuite(t, taskQueueStore, testData.Logger)
 	suite.Run(t, s)
+}
+
+func TestCassandraFairTaskQueueTaskSuite(t *testing.T) {
+	// TODO(fairness): adapt test suite for fair task store
 }
 
 func TestCassandraTaskQueueUserDataSuite(t *testing.T) {
