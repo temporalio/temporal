@@ -15,7 +15,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/testsuite"
-	"go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
@@ -344,74 +343,7 @@ func (s *activitiesSuite) TestAdjustQuery() {
 		s.Run(testRun.name, func() {
 			a := activities{}
 			batchParams := BatchParams{Query: testRun.query, BatchType: testRun.batchType}
-			adjustedQuery := a.adjustQuery(batchParams)
-			s.Equal(testRun.expectedResult, adjustedQuery)
-		})
-	}
-}
-
-func (s *activitiesSuite) TestAdjustQueryProtobuf() {
-	tests := []struct {
-		name           string
-		query          string
-		expectedResult string
-	}{
-		{
-			name:           "Empty query",
-			query:          "",
-			expectedResult: "",
-		},
-		{
-			name:           "Acceptance",
-			query:          "A=B",
-			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
-		},
-		{
-			name:           "Acceptance with parenthesis",
-			query:          "(A=B)",
-			expectedResult: fmt.Sprintf("((A=B)) AND (%s)", statusRunningQueryFilter),
-		},
-		{
-			name:           "Acceptance with multiple conditions",
-			query:          "(A=B) OR C=D",
-			expectedResult: fmt.Sprintf("((A=B) OR C=D) AND (%s)", statusRunningQueryFilter),
-		},
-		{
-			name:           "Contains status - 1",
-			query:          "ExecutionStatus=Completed",
-			expectedResult: fmt.Sprintf("(ExecutionStatus=Completed) AND (%s)", statusRunningQueryFilter),
-		},
-		{
-			name:           "Contains status - 2",
-			query:          "A=B OR ExecutionStatus='Completed'",
-			expectedResult: fmt.Sprintf("(A=B OR ExecutionStatus='Completed') AND (%s)", statusRunningQueryFilter),
-		},
-	}
-	for _, testRun := range tests {
-		s.Run(testRun.name, func() {
-			a := activities{}
-			batchParams := &batch.BatchOperation{Query: testRun.query, Operation: &batch.BatchOperation_TerminationOperation{}}
-			adjustedQuery := a.adjustQueryProtobuf(batchParams)
-			s.Equal(testRun.expectedResult, adjustedQuery)
-		})
-	}
-
-	unknownBatchesTestCase := []struct {
-		name           string
-		query          string
-		expectedResult string
-	}{
-		{
-			name:           "Not supported batch type",
-			query:          "A=B",
-			expectedResult: "A=B",
-		},
-	}
-	for _, testRun := range unknownBatchesTestCase {
-		s.Run(testRun.name, func() {
-			a := activities{}
-			batchParams := &batch.BatchOperation{Query: testRun.query}
-			adjustedQuery := a.adjustQueryProtobuf(batchParams)
+			adjustedQuery := a.adjustQuery(batchParams.Query, batchParams.BatchType)
 			s.Equal(testRun.expectedResult, adjustedQuery)
 		})
 	}

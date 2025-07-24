@@ -104,7 +104,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		}
 	}
 
-	adjustedQuery := a.adjustQuery(batchParams)
+	adjustedQuery := a.adjustQuery(batchParams.Query, batchParams.BatchType)
 
 	if startOver {
 		estimateCount := int64(len(batchParams.Executions))
@@ -226,7 +226,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		}
 	}
 
-	adjustedQuery := a.adjustQueryProtobuf(batchParams)
+	adjustedQuery := a.adjustQuery(batchParams.Query, batchParams.BatchType)
 
 	if startOver {
 		estimateCount := int64(len(batchParams.WorkflowExecutions))
@@ -332,37 +332,17 @@ func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
 	)
 }
 
-func (a *activities) adjustQuery(batchParams BatchParams) string {
-	if len(batchParams.Query) == 0 {
+func (a *activities) adjustQuery(query, batchType string) string {
+	if len(query) == 0 {
 		// don't add anything if query is empty
-		return batchParams.Query
+		return query
 	}
 
-	switch batchParams.BatchType {
+	switch batchType {
 	case BatchTypeTerminate, BatchTypeSignal, BatchTypeCancel, BatchTypeUpdateOptions, BatchTypeUnpauseActivities:
-		return fmt.Sprintf("(%s) AND (%s)", batchParams.Query, statusRunningQueryFilter)
+		return fmt.Sprintf("(%s) AND (%s)", query, statusRunningQueryFilter)
 	default:
-		return batchParams.Query
-	}
-}
-
-func (a *activities) adjustQueryProtobuf(batchParams *batchspb.BatchOperation) string {
-	if len(batchParams.Query) == 0 {
-		// don't add anything if query is empty
-		return batchParams.Query
-	}
-
-	switch batchParams.GetOperation().(type) {
-	case *batchspb.BatchOperation_TerminationOperation,
-		*batchspb.BatchOperation_CancellationOperation,
-		*batchspb.BatchOperation_SignalOperation,
-		*batchspb.BatchOperation_UpdateWorkflowExecutionOptionsOperation,
-		*batchspb.BatchOperation_UnpauseActivitiesOperation,
-		*batchspb.BatchOperation_ResetActivitiesOperation,
-		*batchspb.BatchOperation_UpdateActivityOptionsOperation:
-		return fmt.Sprintf("(%s) AND (%s)", batchParams.Query, statusRunningQueryFilter)
-	default:
-		return batchParams.Query
+		return query
 	}
 }
 
@@ -586,7 +566,8 @@ func startTaskProcessor(
 						_, err = frontendClient.UpdateActivityOptions(ctx, updateRequest)
 						return err
 					})
-				// QUESTION seankane (2025-07-18): why do we not have a default case and return an error? @yuri/@chetan
+			default:
+				err = errors.New("unknown batch type: " + batchParams.BatchType)
 			}
 			if err != nil {
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
@@ -803,28 +784,12 @@ func startTaskProcessorProtobuf(
 							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_MatchAll{MatchAll: true}
 						}
 
-						if ao := operation.UpdateActivityOptionsOperation.GetActivityOptions(); ao != nil {
-							updateRequest.ActivityOptions = &activitypb.ActivityOptions{
-								ScheduleToStartTimeout: ao.ScheduleToStartTimeout,
-								ScheduleToCloseTimeout: ao.ScheduleToCloseTimeout,
-								StartToCloseTimeout:    ao.StartToCloseTimeout,
-								HeartbeatTimeout:       ao.HeartbeatTimeout,
-							}
-
-							if rp := ao.RetryPolicy; rp != nil {
-								updateRequest.ActivityOptions.RetryPolicy = &commonpb.RetryPolicy{
-									InitialInterval:        rp.InitialInterval,
-									BackoffCoefficient:     rp.BackoffCoefficient,
-									MaximumInterval:        rp.MaximumInterval,
-									MaximumAttempts:        rp.MaximumAttempts,
-									NonRetryableErrorTypes: rp.NonRetryableErrorTypes,
-								}
-							}
-						}
+						updateRequest.ActivityOptions = operation.UpdateActivityOptionsOperation.GetActivityOptions()
 						_, err = frontendClient.UpdateActivityOptions(ctx, updateRequest)
 						return err
 					})
-				// QUESTION seankane (2025-07-18): why do we not have a default case and return an error? @yuri/@chetan
+			default:
+				err = errors.New("unknown batch type: " + batchParams.BatchType)
 			}
 			if err != nil {
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)

@@ -170,13 +170,20 @@ func processActivityOptionsUpdate(
 	return updateActivityOptions(mutableState, ai, adjustedOptions)
 }
 
+// hasUpdateField checks if either camelCase or snake_case variant of a field exists in updateFields
+func hasUpdateField(updateFields map[string]struct{}, camelCase, snakeCase string) bool {
+	_, hasCamel := updateFields[camelCase]
+	_, hasSnake := updateFields[snakeCase]
+	return hasCamel || hasSnake
+}
+
 func mergeActivityOptions(
 	mergeInto *activitypb.ActivityOptions,
 	mergeFrom *activitypb.ActivityOptions,
 	updateFields map[string]struct{},
 ) error {
 
-	if _, ok := updateFields["taskQueue.name"]; ok {
+	if hasUpdateField(updateFields, "taskQueue.name", "task_queue.name") {
 		if mergeFrom.TaskQueue == nil {
 			return serviceerror.NewInvalidArgument("TaskQueue is not provided")
 		}
@@ -186,19 +193,19 @@ func mergeActivityOptions(
 		mergeInto.TaskQueue.Name = mergeFrom.TaskQueue.Name
 	}
 
-	if _, ok := updateFields["scheduleToCloseTimeout"]; ok {
+	if hasUpdateField(updateFields, "scheduleToCloseTimeout", "schedule_to_close_timeout") {
 		mergeInto.ScheduleToCloseTimeout = mergeFrom.ScheduleToCloseTimeout
 	}
 
-	if _, ok := updateFields["scheduleToStartTimeout"]; ok {
+	if hasUpdateField(updateFields, "scheduleToStartTimeout", "schedule_to_start_timeout") {
 		mergeInto.ScheduleToStartTimeout = mergeFrom.ScheduleToStartTimeout
 	}
 
-	if _, ok := updateFields["startToCloseTimeout"]; ok {
+	if hasUpdateField(updateFields, "startToCloseTimeout", "start_to_close_timeout") {
 		mergeInto.StartToCloseTimeout = mergeFrom.StartToCloseTimeout
 	}
 
-	if _, ok := updateFields["heartbeatTimeout"]; ok {
+	if hasUpdateField(updateFields, "heartbeatTimeout", "heartbeat_timeout") {
 		mergeInto.HeartbeatTimeout = mergeFrom.HeartbeatTimeout
 	}
 
@@ -206,27 +213,28 @@ func mergeActivityOptions(
 		mergeInto.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
-	if _, ok := updateFields["retryPolicy.initialInterval"]; ok {
+	if hasUpdateField(updateFields, "retryPolicy.initialInterval", "retry_policy.initial_interval") {
 		if mergeFrom.RetryPolicy == nil {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
 		}
 		mergeInto.RetryPolicy.InitialInterval = mergeFrom.RetryPolicy.InitialInterval
 	}
 
-	if _, ok := updateFields["retryPolicy.backoffCoefficient"]; ok {
+	if hasUpdateField(updateFields, "retryPolicy.backoffCoefficient", "retry_policy.backoff_coefficient") {
 		if mergeFrom.RetryPolicy == nil {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
 		}
 		mergeInto.RetryPolicy.BackoffCoefficient = mergeFrom.RetryPolicy.BackoffCoefficient
 	}
 
-	if _, ok := updateFields["retryPolicy.maximumInterval"]; ok {
+	if hasUpdateField(updateFields, "retryPolicy.maximumInterval", "retry_policy.maximum_interval") {
 		if mergeFrom.RetryPolicy == nil {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
 		}
 		mergeInto.RetryPolicy.MaximumInterval = mergeFrom.RetryPolicy.MaximumInterval
 	}
-	if _, ok := updateFields["retryPolicy.maximumAttempts"]; ok {
+
+	if hasUpdateField(updateFields, "retryPolicy.maximumAttempts", "retry_policy.maximum_attempts") {
 		if mergeFrom.RetryPolicy == nil {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
 		}
