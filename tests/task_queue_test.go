@@ -17,6 +17,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -262,18 +263,7 @@ func (s *TaskQueueSuite) runTestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS
 	}
 
 	// Wait for all activities to complete
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		// All activities completed successfully within drainTimeout
-	case <-ctx.Done():
-		s.FailNow("Timeout waiting for activities to complete")
-	}
+	s.True(common.AwaitWaitGroup(&wg, drainTimeout), "timeout waiting for activities to complete")
 
 	s.Len(runTimes, taskCount)
 	// When the burst size is 1, the first token is immediately available,

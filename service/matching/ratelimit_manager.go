@@ -6,18 +6,18 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/quotas"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 type (
 	rateLimitManager struct {
 		mu sync.Mutex
 
-		effectiveRPS    float64                 // Min of api/worker set RPS and system defaults.
+		effectiveRPS    *float64                // Min of api/worker set RPS and system defaults. Always reflects the overall task queue RPS.
 		rateLimitSource enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
 		userDataManager userDataManager         // User data manager to fetch user data for task queue configurations.
-		workerRPS       *wrapperspb.DoubleValue // RPS set by worker at the time of polling, if available.
-		apiConfigRPS    *wrapperspb.DoubleValue // RPS set via API, if available.
+		workerRPS       *float64                // RPS set by worker at the time of polling, if available.
+		apiConfigRPS    *float64                // RPS set via API, if available.
+		systemRPS       *float64                // min of partition level dispatch rates times the number of read partitions.
 		config          *taskQueueConfig        // Dynamic configuration for task queues set by system.
 		taskQueueType   enumspb.TaskQueueType   // Task queue type
 
@@ -27,23 +27,18 @@ type (
 		dynamicRateLimiter *quotas.DynamicRateLimiterImpl
 		// forceRefreshRateOnce is used to force refresh rate limit for first time
 		forceRefreshRateOnce sync.Once
-		// rateLimiter that limits the rate at which tasks can be dispatched to consumers
-		rateLimiter quotas.RateLimiter
 	}
 )
 
 // Create a new rate limit manager for the task queue partition.
 func newRateLimitManager(userDataManager userDataManager,
-	tqConfig *taskQueueConfig,
-	tqType enumspb.TaskQueueType,
+	config *taskQueueConfig,
+	taskQueueType enumspb.TaskQueueType,
 ) *rateLimitManager {
 	r := &rateLimitManager{
 		userDataManager: userDataManager,
-		workerRPS:       nil,
-		apiConfigRPS:    nil,
-		config:          tqConfig,
-		rateLimitSource: enumspb.RATE_LIMIT_SOURCE_SYSTEM,
-		taskQueueType:   tqType,
+		config:          config,
+		taskQueueType:   taskQueueType,
 	}
 	r.dynamicRateBurst = quotas.NewMutableRateBurst(
 		defaultTaskDispatchRPS,
@@ -51,19 +46,25 @@ func newRateLimitManager(userDataManager userDataManager,
 	)
 	r.dynamicRateLimiter = quotas.NewDynamicRateLimiter(
 		r.dynamicRateBurst,
-		tqConfig.RateLimiterRefreshInterval,
+		config.RateLimiterRefreshInterval,
 	)
-	r.rateLimiter = quotas.NewMultiRateLimiter([]quotas.RateLimiter{
-		r.dynamicRateLimiter,
-		quotas.NewDefaultOutgoingRateLimiter(
-			tqConfig.AdminNamespaceTaskQueueToPartitionDispatchRate,
-		),
-		quotas.NewDefaultOutgoingRateLimiter(
-			tqConfig.AdminNamespaceToPartitionDispatchRate,
-		),
-	})
+	// Overall system rate limit will be the min of the two configs that are partition wise times the number of partions.
+	systemRPS := min(
+		config.AdminNamespaceTaskQueueToPartitionDispatchRate(),
+		config.AdminNamespaceToPartitionDispatchRate(),
+	) * r.getNumberOfReadPartitions()
+	r.systemRPS = &(systemRPS)
 	r.computeEffectiveRPSAndSource()
 	return r
+}
+
+func (r *rateLimitManager) getNumberOfReadPartitions() float64 {
+	nPartitions := float64(r.config.NumReadPartitions())
+	if nPartitions <= 0 {
+		// Defaulting to 1 partition if misconfigured
+		nPartitions = 1
+	}
+	return nPartitions
 }
 
 func (r *rateLimitManager) computeEffectiveRPSAndSource() {
@@ -77,29 +78,26 @@ func (r *rateLimitManager) computeEffectiveRPSAndSource() {
 // - Else if a worker-level RPS is configured, effectiveRPS = min(system default RPS, worker-configured RPS)
 // - Otherwise, fall back to the system default RPS from dynamic config.
 func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
-	r.TrySetRPSFromUserDataLocked()
-	systemRPS := min(
-		r.config.AdminNamespaceTaskQueueToPartitionDispatchRate(),
-		r.config.AdminNamespaceToPartitionDispatchRate(),
+
+	var (
+		effectiveRPS    *float64
+		rateLimitSource enumspb.RateLimitSource
 	)
-	// Default to MaxFloat64 so systemRPS is chosen unless API or worker config is set.
-	effectiveRPS := math.MaxFloat64
-	rateLimitSource := enumspb.RATE_LIMIT_SOURCE_SYSTEM
 
 	switch {
 	case r.apiConfigRPS != nil:
-		effectiveRPS = r.apiConfigRPS.GetValue()
+		effectiveRPS = r.apiConfigRPS
 		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_API
 	case r.workerRPS != nil:
-		effectiveRPS = r.workerRPS.GetValue()
+		effectiveRPS = r.workerRPS
 		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_WORKER
 	}
 
-	if effectiveRPS < systemRPS {
+	if effectiveRPS != nil && *effectiveRPS < *r.systemRPS {
 		r.effectiveRPS = effectiveRPS
 		r.rateLimitSource = rateLimitSource
 	} else {
-		r.effectiveRPS = systemRPS
+		r.effectiveRPS = r.systemRPS
 		r.rateLimitSource = enumspb.RATE_LIMIT_SOURCE_SYSTEM
 	}
 }
@@ -109,31 +107,23 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	nPartitions := float64(r.config.NumReadPartitions())
+	var rps *float64
 	if meta != nil && meta.taskQueueMetadata != nil {
 		if workerRPS := meta.taskQueueMetadata.GetMaxTasksPerSecond(); workerRPS != nil {
-			if nPartitions > 0 {
-				r.workerRPS = wrapperspb.Double(workerRPS.GetValue() / nPartitions)
-			} else {
-				// Defaulting to 1 partition in case nPartitions is misconfigured.
-				r.workerRPS = wrapperspb.Double(workerRPS.GetValue())
-			}
-		} else {
-			r.workerRPS = nil
+			value := workerRPS.GetValue()
+			rps = &value
 		}
 	}
-	// Ensure the rate limit is updated regardless of whether pollMetadata is present.
-	// This is necessary because the UpdateTaskQueueConfig API is a new source for setting rate limits,
-	// and must override any rate limits previously set by workers.
-	// UpdateRatelimitLocked includes internal logic to determine if an update is needed,
+	r.workerRPS = rps
+	// updateRatelimitLocked includes internal logic to determine if an update is needed,
 	// so calling it unconditionally is safe and avoids redundant updates.
-	r.UpdateRatelimitLocked()
+	r.updateRatelimitLocked()
 }
 
 // Return the effective RPS and its source together.
 // The source can be API, worker or system default.
 // It defaults to the system dynamic config.
-func (r *rateLimitManager) GetEffectiveRPSAndSource() (float64, enumspb.RateLimitSource) {
+func (r *rateLimitManager) GetEffectiveRPSAndSource() (*float64, enumspb.RateLimitSource) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.computeEffectiveRPSAndSourceLocked()
@@ -141,11 +131,20 @@ func (r *rateLimitManager) GetEffectiveRPSAndSource() (float64, enumspb.RateLimi
 }
 
 func (r *rateLimitManager) GetRateLimiter() quotas.RateLimiter {
-	return r.rateLimiter
+	return r.dynamicRateLimiter
 }
 
-// TrySetRPSFromUserData attempts to set effectiveRPS from user data.
-func (r *rateLimitManager) TrySetRPSFromUserDataLocked() {
+// Updates the API-configured RPS based on the latest user data
+// and applies the new rate limit if the effective RPS has changed.
+func (r *rateLimitManager) UserDataChanged() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// Immediately recompute and apply rate limit if necessary.
+	r.updateRatelimitLocked()
+}
+
+// trySetRPSFromUserDataLocked sets the apiConfigRPS from user data.
+func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 	userData, _, err := r.userDataManager.GetUserData()
 	if err != nil {
 		return
@@ -157,37 +156,33 @@ func (r *rateLimitManager) TrySetRPSFromUserDataLocked() {
 	// If rate limit is an empty message, it means rate limit could have been unset via API.
 	// In this case, the apiConfigRPS will need to be unset.
 	rateLimit := config.GetQueueRateLimit()
-	if rateLimit == nil || rateLimit.GetRateLimit() == nil {
+	if rateLimit.GetRateLimit() == nil {
 		r.apiConfigRPS = nil
 		return
 	}
-	nPartitions := float64(r.config.NumReadPartitions())
-	if nPartitions > 0 {
-		r.apiConfigRPS = wrapperspb.Double(float64(rateLimit.GetRateLimit().GetRequestsPerSecond()) / nPartitions)
-		return
-	}
-	// Defaulting to 1 partition in case nPartitions is misconfigured.
-	r.apiConfigRPS = wrapperspb.Double(float64(rateLimit.GetRateLimit().GetRequestsPerSecond()))
+	val := float64(rateLimit.GetRateLimit().GetRequestsPerSecond())
+	r.apiConfigRPS = &val
 }
 
-// UpdateRatelimit checks and updates the rate limit if changed.
-func (r *rateLimitManager) UpdateRatelimitLocked() {
+func (r *rateLimitManager) getEffectiveRateLimitPartitionWiseLocked() float64 {
+	return (*r.effectiveRPS) / r.getNumberOfReadPartitions()
+}
+
+// updateRatelimitLocked checks and updates the rate limit if changed.
+func (r *rateLimitManager) updateRatelimitLocked() {
+	// Always check for api configured rate limits before any update to the rate limits.
+	r.trySetRPSFromUserDataLocked()
 	oldRPS := r.effectiveRPS
 	r.computeEffectiveRPSAndSourceLocked()
 	newRPS := r.effectiveRPS
-
-	if oldRPS == newRPS {
+	if *oldRPS == *newRPS {
 		// No update required
 		return
 	}
-	burst := int(math.Ceil(newRPS))
-
-	minTaskThrottlingBurstSize := r.config.MinTaskThrottlingBurstSize()
-	if burst < minTaskThrottlingBurstSize {
-		burst = minTaskThrottlingBurstSize
-	}
-
-	r.dynamicRateBurst.SetRPS(newRPS)
+	effectiveRPSPartitionWise := r.getEffectiveRateLimitPartitionWiseLocked()
+	burst := int(math.Ceil(effectiveRPSPartitionWise))
+	burst = max(burst, r.config.MinTaskThrottlingBurstSize())
+	r.dynamicRateBurst.SetRPS(effectiveRPSPartitionWise)
 	r.dynamicRateBurst.SetBurst(burst)
 	r.forceRefreshRateOnce.Do(func() {
 		// Dynamic rate limiter only refresh its rate every 1m. Before that initial 1m interval, it uses default rate
