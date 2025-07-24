@@ -46,8 +46,7 @@ type Visibility struct {
 	SA   Map[string, *common.Payload]
 	Memo Map[string, *common.Payload]
 
-	// Add CATMemo here if we want to support Memo added by the Components
-	// (instead of end users).
+	// TODO: Add CATMemo here for Memo added by the Components
 }
 
 func NewVisibility(
@@ -153,6 +152,58 @@ func (v *Visibility) GenerateTask(
 		TaskAttributes{},
 		&persistencespb.ChasmVisibilityTaskData{TransitionCount: v.Data.TransitionCount},
 	)
+}
+
+func GetSearchAttribute[T any](
+	chasmContext Context,
+	visibility *Visibility,
+	key string,
+) (T, error) {
+	return decodePayloadValueFromMap[T](chasmContext, visibility.SA, key)
+}
+
+func UpdateSearchAttribute[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
+	chasmContext MutableContext,
+	visibility *Visibility,
+	name string,
+	value T,
+) {
+	p, _ := payload.Encode(value)
+	visibility.SA[name] = NewDataField(chasmContext, p)
+}
+
+func GetMemo[T any](
+	chasmContext Context,
+	visibility *Visibility,
+	key string,
+) (T, error) {
+	return decodePayloadValueFromMap[T](chasmContext, visibility.Memo, key)
+}
+
+func UpdateMemo[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
+	chasmContext MutableContext,
+	visibility *Visibility,
+	name string,
+	value T,
+) {
+	p, _ := payload.Encode(value)
+	visibility.Memo[name] = NewDataField(chasmContext, p)
+}
+
+func decodePayloadValueFromMap[T any](
+	chasmContext Context,
+	payloadMap Map[string, *common.Payload],
+	key string,
+) (T, error) {
+	var value T
+	p, err := payloadMap[key].Get(chasmContext)
+	if err != nil {
+		return value, err
+	}
+	if err = payload.Decode(p, &value); err != nil {
+		return value, err
+	}
+	return value, nil
 }
 
 type visibilityTaskValidator struct{}

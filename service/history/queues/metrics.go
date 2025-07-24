@@ -140,7 +140,7 @@ func GetVisibilityTaskTypeTagValue(
 	case *tasks.DeleteExecutionVisibilityTask:
 		return metrics.TaskTypeVisibilityTaskDeleteExecution
 	case *tasks.ChasmTask:
-		return "" // TODO
+		return metrics.TaskTypeVisibilityTaskUpsertChasmExecution
 	default:
 		return task.GetType().String()
 	}
