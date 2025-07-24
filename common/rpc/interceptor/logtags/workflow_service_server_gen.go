@@ -380,14 +380,6 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.StartBatchOperationResponse:
 		return nil
-	case *workflowservice.StartBatchWorkflowExecutionRequest:
-		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowId()),
-		}
-	case *workflowservice.StartBatchWorkflowExecutionResponse:
-		return []tag.Tag{
-			tag.WorkflowRunID(r.GetRunId()),
-		}
 	case *workflowservice.StartWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowId()),

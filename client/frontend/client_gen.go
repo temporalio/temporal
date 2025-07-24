@@ -779,16 +779,6 @@ func (c *clientImpl) StartBatchOperation(
 	return c.client.StartBatchOperation(ctx, request, opts...)
 }
 
-func (c *clientImpl) StartBatchWorkflowExecution(
-	ctx context.Context,
-	request *workflowservice.StartBatchWorkflowExecutionRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.StartBatchWorkflowExecutionResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.StartBatchWorkflowExecution(ctx, request, opts...)
-}
-
 func (c *clientImpl) StartWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,

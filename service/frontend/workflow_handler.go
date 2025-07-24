@@ -27,6 +27,7 @@ import (
 	workerpb "go.temporal.io/api/worker/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/batch/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -4500,421 +4501,159 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	if err != nil {
 		return nil, err
 	}
-	var identity string
-	var operationType string
-	var signalParams batcher.SignalParams
-	var resetParams batcher.ResetParams
-	var updateOptionsParams batcher.UpdateOptionsParams
-	var unpauseActivitiesParams batcher.UnpauseActivitiesParams
-	var resetActivitiesParams batcher.ResetActivitiesParams
-	var updateActivitiesOptionsParams batcher.UpdateActivitiesOptionsParams
-	switch op := request.Operation.(type) {
-	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
-		identity = op.TerminationOperation.GetIdentity()
-		operationType = batcher.BatchTypeTerminate
-	case *workflowservice.StartBatchOperationRequest_SignalOperation:
-		identity = op.SignalOperation.GetIdentity()
-		operationType = batcher.BatchTypeSignal
-		signalParams.SignalName = op.SignalOperation.GetSignal()
-		signalParams.Input = op.SignalOperation.GetInput()
-	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
-		identity = op.CancellationOperation.GetIdentity()
-		operationType = batcher.BatchTypeCancel
-	case *workflowservice.StartBatchOperationRequest_DeletionOperation:
-		identity = op.DeletionOperation.GetIdentity()
-		operationType = batcher.BatchTypeDelete
-	case *workflowservice.StartBatchOperationRequest_ResetOperation:
-		identity = op.ResetOperation.GetIdentity()
-		operationType = batcher.BatchTypeReset
-		if op.ResetOperation.Options != nil {
-			if op.ResetOperation.Options.Target == nil {
-				return nil, serviceerror.NewInvalidArgument("batch reset missing target")
-			}
-			encodedResetOptions, err := op.ResetOperation.Options.Marshal()
-			if err != nil {
-				return nil, err
-			}
-			resetParams.ResetOptions = encodedResetOptions
-			resetParams.PostResetOperations = make([][]byte, len(op.ResetOperation.PostResetOperations))
-			for i, postResetOperation := range op.ResetOperation.PostResetOperations {
-				encodedPostResetOperations, err := postResetOperation.Marshal()
-				if err != nil {
-					return nil, err
-				}
-				resetParams.PostResetOperations[i] = encodedPostResetOperations
-			}
-		} else {
-			// TODO: remove support for old fields later
-			resetType := op.ResetOperation.GetResetType()
-			if _, ok := enumspb.ResetType_name[int32(resetType)]; !ok || resetType == enumspb.RESET_TYPE_UNSPECIFIED {
-				return nil, serviceerror.NewInvalidArgumentf("unknown batch reset type %v", resetType)
-			}
-			resetParams.ResetType = resetType
-			resetParams.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
-		}
-	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
-		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
-		operationType = batcher.BatchTypeUpdateOptions
-		updateOptionsParams.WorkflowExecutionOptions = op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions()
-		if updateMask := op.UpdateWorkflowOptionsOperation.GetUpdateMask(); updateMask != nil {
-			updateOptionsParams.UpdateMask = &batcher.FieldMask{Paths: updateMask.Paths}
-		}
-		// TODO(carlydf): remove hacky usage of deprecated fields later, after adding support for oneof in BatchParams encoder
-		if o := updateOptionsParams.WorkflowExecutionOptions.VersioningOverride; o.GetOverride() != nil {
-			deprecatedOverride := &workflowpb.VersioningOverride{}
-			if o.GetAutoUpgrade() {
-				deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE //nolint:staticcheck // SA1019: worker versioning v0.31
-			} else if o.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED {
-				deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED                                                            //nolint:staticcheck // SA1019: worker versioning v0.31
-				deprecatedOverride.PinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(o.GetPinned().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
-			}
-			updateOptionsParams.WorkflowExecutionOptions.VersioningOverride = deprecatedOverride
-		}
-	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
-		operationType = batcher.BatchTypeUnpauseActivities
-		if op.UnpauseActivitiesOperation == nil {
-			return nil, serviceerror.NewInvalidArgument("unpause activities operation is not set")
-		}
-		if op.UnpauseActivitiesOperation.GetActivity() == nil {
-			return nil, serviceerror.NewInvalidArgument("activity filter must be set")
-		}
 
-		switch a := op.UnpauseActivitiesOperation.GetActivity().(type) {
-		case *batchpb.BatchOperationUnpauseActivities_Type:
-			if len(a.Type) == 0 {
-				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
-			}
-			unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, a.Type)
-			visibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, unpauseCause)
-			unpauseActivitiesParams.ActivityType = a.Type
-		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
-			if !a.MatchAll {
-				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
-			}
-			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", searchattribute.TemporalPauseInfo)
-			visibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
-			unpauseActivitiesParams.MatchAll = true
-		}
-
-		unpauseActivitiesParams.ResetAttempts = op.UnpauseActivitiesOperation.ResetAttempts
-		unpauseActivitiesParams.ResetHeartbeat = op.UnpauseActivitiesOperation.ResetHeartbeat
-		unpauseActivitiesParams.Jitter = op.UnpauseActivitiesOperation.Jitter.AsDuration()
-		unpauseActivitiesParams.Identity = op.UnpauseActivitiesOperation.GetIdentity()
-	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
-		operationType = batcher.BatchTypeResetActivities
-		if op.ResetActivitiesOperation == nil {
-			return nil, serviceerror.NewInvalidArgument("reset activities operation is not set")
-		}
-		if op.ResetActivitiesOperation.GetActivity() == nil {
-			return nil, serviceerror.NewInvalidArgument("activity filter must be set")
-		}
-
-		switch a := op.ResetActivitiesOperation.GetActivity().(type) {
-		case *batchpb.BatchOperationResetActivities_Type:
-			if len(a.Type) == 0 {
-				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
-			}
-			resetActivitiesParams.ActivityType = a.Type
-		case *batchpb.BatchOperationResetActivities_MatchAll:
-			if !a.MatchAll {
-				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
-			}
-			resetActivitiesParams.MatchAll = true
-		}
-
-		resetActivitiesParams.ResetAttempts = op.ResetActivitiesOperation.ResetAttempts
-		resetActivitiesParams.ResetHeartbeat = op.ResetActivitiesOperation.ResetHeartbeat
-		resetActivitiesParams.Jitter = op.ResetActivitiesOperation.Jitter.AsDuration()
-		resetActivitiesParams.KeepPaused = op.ResetActivitiesOperation.KeepPaused
-		resetActivitiesParams.RestoreOriginalOptions = op.ResetActivitiesOperation.RestoreOriginalOptions
-		resetActivitiesParams.Identity = op.ResetActivitiesOperation.GetIdentity()
-	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
-		operationType = batcher.BatchTypeUpdateActivitiesOptions
-		if op.UpdateActivityOptionsOperation == nil {
-			return nil, serviceerror.NewInvalidArgument("update activity options operation is not set")
-		}
-		if op.UpdateActivityOptionsOperation.GetActivityOptions() != nil && op.UpdateActivityOptionsOperation.GetRestoreOriginal() {
-			return nil, serviceerror.NewInvalidArgument("cannot set both activity options and restore original")
-		}
-		if op.UpdateActivityOptionsOperation.GetActivityOptions() == nil && !op.UpdateActivityOptionsOperation.GetRestoreOriginal() {
-			return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or restore original should be set to true")
-		}
-
-		switch a := op.UpdateActivityOptionsOperation.GetActivity().(type) {
-		case *batchpb.BatchOperationUpdateActivityOptions_Type:
-			if len(a.Type) == 0 {
-				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
-			}
-			updateActivitiesOptionsParams.ActivityType = a.Type
-		case *batchpb.BatchOperationUpdateActivityOptions_MatchAll:
-			if !a.MatchAll {
-				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
-			}
-			updateActivitiesOptionsParams.MatchAll = true
-		}
-
-		updateActivitiesOptionsParams.RestoreOriginal = op.UpdateActivityOptionsOperation.GetRestoreOriginal()
-		updateActivitiesOptionsParams.Identity = op.UpdateActivityOptionsOperation.GetIdentity()
-		if updateMask := op.UpdateActivityOptionsOperation.GetUpdateMask(); updateMask != nil {
-			updateActivitiesOptionsParams.UpdateMask = &batcher.FieldMask{Paths: updateMask.Paths}
-		}
-		if ao := op.UpdateActivityOptionsOperation.GetActivityOptions(); ao != nil {
-			updateActivitiesOptionsParams.ActivityOptions = &batcher.ActivityOptions{
-				ScheduleToStartTimeout: ao.ScheduleToStartTimeout.AsDuration(),
-				ScheduleToCloseTime:    ao.ScheduleToCloseTimeout.AsDuration(),
-				StartToCloseTimeout:    ao.StartToCloseTimeout.AsDuration(),
-				HeartbeatTimeout:       ao.HeartbeatTimeout.AsDuration(),
-			}
-			if rp := ao.RetryPolicy; rp != nil {
-				updateActivitiesOptionsParams.ActivityOptions.RetryPolicy = &batcher.RetryPolicy{
-					InitialInterval:        rp.InitialInterval.AsDuration(),
-					MaximumInterval:        rp.MaximumInterval.AsDuration(),
-					BackoffCoefficient:     rp.BackoffCoefficient,
-					NonRetryableErrorTypes: rp.NonRetryableErrorTypes,
-					MaximumAttempts:        rp.MaximumAttempts,
-				}
-			}
-			if tq := ao.TaskQueue; tq != nil {
-				updateActivitiesOptionsParams.ActivityOptions.TaskQueue = &batcher.TaskQueue{
-					Name: tq.Name,
-					Kind: int32(tq.Kind),
-				}
-			}
-		}
-	default:
-		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
-	}
-
-	input := &batcher.BatchParams{
-		Namespace:                     request.GetNamespace(),
-		Query:                         visibilityQuery,
-		Executions:                    request.GetExecutions(),
-		Reason:                        request.GetReason(),
-		BatchType:                     operationType,
-		RPS:                           float64(request.GetMaxOperationsPerSecond()),
-		TerminateParams:               batcher.TerminateParams{},
-		CancelParams:                  batcher.CancelParams{},
-		SignalParams:                  signalParams,
-		DeleteParams:                  batcher.DeleteParams{},
-		ResetParams:                   resetParams,
-		UpdateOptionsParams:           updateOptionsParams,
-		UnpauseActivitiesParams:       unpauseActivitiesParams,
-		ResetActivitiesParams:         resetActivitiesParams,
-		UpdateActivitiesOptionsParams: updateActivitiesOptionsParams,
-	}
-	inputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(input)
-	if err != nil {
-		return nil, err
-	}
-
-	memo := &commonpb.Memo{
-		Fields: map[string]*commonpb.Payload{
-			batcher.BatchOperationTypeMemo: payload.EncodeString(operationType),
-			batcher.BatchReasonMemo:        payload.EncodeString(request.GetReason()),
+	input := &batch.StartBatchWorkflowExecutionRequest{
+		Namespace:    request.GetNamespace(),
+		WorkflowId:   request.GetJobId(),
+		WorkflowType: &commonpb.WorkflowType{Name: batcher.BatchWFTypeProtobufName},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input: &batch.BatchOperation{
+			Query: request.GetVisibilityQuery(),
 		},
 	}
 
-	// Add pre-define search attributes
-	var searchAttributes *commonpb.SearchAttributes
-	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.BatcherUser, payload.EncodeString(identity))
-	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
-
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                request.Namespace,
-		WorkflowId:               request.GetJobId(),
-		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    inputPayload,
-		Identity:                 identity,
-		RequestId:                uuid.New(),
-		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-		Memo:                     memo,
-		SearchAttributes:         searchAttributes,
-		Priority:                 &commonpb.Priority{}, // ie default priority
-	}
-
-	_, err = wh.historyClient.StartWorkflowExecution(
-		ctx,
-		common.CreateHistoryStartWorkflowRequest(
-			namespaceID.String(),
-			startReq,
-			nil,
-			nil,
-			time.Now().UTC(),
-		),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &workflowservice.StartBatchOperationResponse{}, nil
-}
-
-func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
-	ctx context.Context,
-	request *workflowservice.StartBatchOperationRequest,
-) (_ *workflowservice.StartBatchOperationResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if err := wh.versionChecker.ClientSupported(ctx); err != nil {
-		return nil, err
-	}
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if len(request.GetJobId()) == 0 {
-		return nil, errBatchJobIDNotSet
-	}
-	if len(request.Namespace) == 0 {
-		return nil, errNamespaceNotSet
-	}
-	if len(request.VisibilityQuery) == 0 && len(request.Executions) == 0 {
-		return nil, errBatchOpsWorkflowFilterNotSet
-	}
-	if len(request.VisibilityQuery) != 0 && len(request.Executions) != 0 {
-		return nil, errBatchOpsWorkflowFiltersNotAllowed
-	}
-	if len(request.Executions) > wh.config.MaxExecutionCountBatchOperation(request.Namespace) {
-		return nil, errBatchOpsMaxWorkflowExecutionCount
-	}
-	if len(request.Reason) == 0 {
-		return nil, errReasonNotSet
-	}
-	if request.Operation == nil {
-		return nil, errBatchOperationNotSet
-	}
-
-	if !wh.config.EnableBatcher(request.Namespace) {
-		return nil, errBatchAPINotAllowed
-	}
-
-	// Validate concurrent batch operation
-	maxConcurrentBatchOperation := wh.config.MaxConcurrentBatchOperation(request.GetNamespace())
-	countResp, err := wh.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-		Namespace: request.GetNamespace(),
-		Query:     batcher.OpenBatchOperationQuery,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	openBatchOperationCount := int(countResp.GetCount())
-	if openBatchOperationCount >= maxConcurrentBatchOperation {
-		return nil, &serviceerror.ResourceExhausted{
-			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
-			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-			Message: "Max concurrent batch operations is reached",
-		}
-	}
-
-	visibilityQuery := request.GetVisibilityQuery()
-
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
-	batchOperation := &batchpb.BatchOperation{
-		Namespace:          request.GetNamespace(),
-		Query:              request.GetVisibilityQuery(),
-		WorkflowExecutions: request.GetExecutions(),
-		Reason:             request.GetReason(),
-	}
-
-	var operationType string
 	var identity string
+	var operationType string
+	// var signalParams batcher.SignalParams
+	// var resetParams batcher.ResetParams
+	// var updateOptionsParams batcher.UpdateOptionsParams
+	// var unpauseActivitiesParams batcher.UnpauseActivitiesParams
+	// var resetActivitiesParams batcher.ResetActivitiesParams
+	// var updateActivitiesOptionsParams batcher.UpdateActivitiesOptionsParams
 	switch op := request.Operation.(type) {
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
-		identity = op.TerminationOperation.GetIdentity()
-		operationType = batcher.BatchTypeTerminate
-		batchOperation.Operation = &batchpb.BatchOperation_TerminationOperation{
+		input.Input.Operation = &batch.BatchOperation_TerminationOperation{
 			TerminationOperation: &batchpb.BatchOperationTermination{
 				Identity: op.TerminationOperation.GetIdentity(),
 			},
 		}
+		identity = op.TerminationOperation.GetIdentity()
+		operationType = batcher.BatchTypeTerminate
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
-		identity = op.SignalOperation.GetIdentity()
-		operationType = batcher.BatchTypeSignal
-		batchOperation.Operation = &batchpb.BatchOperation_SignalOperation{
+		input.Input.Operation = &batch.BatchOperation_SignalOperation{
 			SignalOperation: &batchpb.BatchOperationSignal{
 				Identity: op.SignalOperation.GetIdentity(),
 				Signal:   op.SignalOperation.GetSignal(),
 				Input:    op.SignalOperation.GetInput(),
 			},
 		}
+		identity = op.SignalOperation.GetIdentity()
+		operationType = batcher.BatchTypeSignal
+		// signalParams.SignalName = op.SignalOperation.GetSignal()
+		// signalParams.Input = op.SignalOperation.GetInput()
 	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
-		identity = op.CancellationOperation.GetIdentity()
-		operationType = batcher.BatchTypeCancel
-		batchOperation.Operation = &batchpb.BatchOperation_CancellationOperation{
+		input.Input.Operation = &batch.BatchOperation_CancellationOperation{
 			CancellationOperation: &batchpb.BatchOperationCancellation{
 				Identity: op.CancellationOperation.GetIdentity(),
 			},
 		}
+		identity = op.CancellationOperation.GetIdentity()
+		operationType = batcher.BatchTypeCancel
 	case *workflowservice.StartBatchOperationRequest_DeletionOperation:
-		identity = op.DeletionOperation.GetIdentity()
-		operationType = batcher.BatchTypeDelete
-		batchOperation.Operation = &batchpb.BatchOperation_DeletionOperation{
+		input.Input.Operation = &batch.BatchOperation_DeletionOperation{
 			DeletionOperation: &batchpb.BatchOperationDeletion{
 				Identity: op.DeletionOperation.GetIdentity(),
 			},
 		}
+		identity = op.DeletionOperation.GetIdentity()
+		operationType = batcher.BatchTypeDelete
 	case *workflowservice.StartBatchOperationRequest_ResetOperation:
-		identity = op.ResetOperation.GetIdentity()
-		operationType = batcher.BatchTypeReset
-		operation := &batchpb.BatchOperation_ResetOperation{
+		input.Input.Operation = &batch.BatchOperation_ResetOperation{
 			ResetOperation: &batchpb.BatchOperationReset{
 				Identity: op.ResetOperation.GetIdentity(),
 			},
 		}
+		identity = op.ResetOperation.GetIdentity()
+		operationType = batcher.BatchTypeReset
 		if op.ResetOperation.Options != nil {
 			if op.ResetOperation.Options.Target == nil {
 				return nil, serviceerror.NewInvalidArgument("batch reset missing target")
 			}
-			operation.ResetOperation.Options = op.ResetOperation.Options
-			operation.ResetOperation.PostResetOperations = op.ResetOperation.PostResetOperations
-			if op.ResetOperation.PostResetOperations == nil {
-				operation.ResetOperation.PostResetOperations = []*workflowpb.PostResetOperation{}
+
+			input.Input.Operation = &batch.BatchOperation_ResetOperation{
+				ResetOperation: &batchpb.BatchOperationReset{
+					Identity: op.ResetOperation.GetIdentity(),
+					Options:  op.ResetOperation.Options,
+				},
 			}
+			// encodedResetOptions, err := op.ResetOperation.Options.Marshal()
+			// if err != nil {
+			// 	return nil, err
+			// }
+			// resetParams.ResetOptions = encodedResetOptions
+			// resetParams.PostResetOperations = make([][]byte, len(op.ResetOperation.PostResetOperations))
+			// for i, postResetOperation := range op.ResetOperation.PostResetOperations {
+			// 	encodedPostResetOperations, err := postResetOperation.Marshal()
+			// 	if err != nil {
+			// 		return nil, err
+			// 	}
+			// 	resetParams.PostResetOperations[i] = encodedPostResetOperations
+			// }
 		} else {
 			// TODO: remove support for old fields later
-			//nolint:staticcheck // SA1019: worker versioning v0.31
-			operation.ResetOperation.ResetType = op.ResetOperation.GetResetType()
-			//nolint:staticcheck // SA1019: worker versioning v0.31
-			operation.ResetOperation.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
+			resetType := op.ResetOperation.GetResetType()
+			if _, ok := enumspb.ResetType_name[int32(resetType)]; !ok || resetType == enumspb.RESET_TYPE_UNSPECIFIED {
+				return nil, serviceerror.NewInvalidArgumentf("unknown batch reset type %v", resetType)
+			}
+			// resetParams.ResetType = resetType
+			// resetParams.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
+			input.Input.Operation = &batch.BatchOperation_ResetOperation{
+				ResetOperation: &batchpb.BatchOperationReset{
+					Identity:         op.ResetOperation.GetIdentity(),
+					Options:          op.ResetOperation.Options,
+					ResetType:        resetType,
+					ResetReapplyType: op.ResetOperation.GetResetReapplyType(),
+				},
+			}
 		}
-		batchOperation.Operation = operation
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
 		operationType = batcher.BatchTypeUpdateOptions
-		operation := &batchpb.BatchOperation_UpdateWorkflowExecutionOptionsOperation{
+		// updateOptionsParams.WorkflowExecutionOptions = op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions()
+		// if updateMask := op.UpdateWorkflowOptionsOperation.GetUpdateMask(); updateMask != nil {
+		// 	updateOptionsParams.UpdateMask = &batcher.FieldMask{Paths: updateMask.Paths}
+		// }
+		// TODO(carlydf): remove hacky usage of deprecated fields later, after adding support for oneof in BatchParams encoder
+		// if o := updateOptionsParams.WorkflowExecutionOptions.VersioningOverride; o.GetOverride() != nil {
+		// 	deprecatedOverride := &workflowpb.VersioningOverride{}
+		// 	if o.GetAutoUpgrade() {
+		// 		deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE //nolint:staticcheck // SA1019: worker versioning v0.31
+		// 	} else if o.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED {
+		// 		deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED                                                            //nolint:staticcheck // SA1019: worker versioning v0.31
+		// 		deprecatedOverride.PinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(o.GetPinned().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+		// 	}
+		// 	updateOptionsParams.WorkflowExecutionOptions.VersioningOverride = deprecatedOverride
+		// }
+		operation := &batch.BatchOperation_UpdateWorkflowExecutionOptionsOperation{
 			UpdateWorkflowExecutionOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
 				Identity:                 op.UpdateWorkflowOptionsOperation.GetIdentity(),
 				WorkflowExecutionOptions: op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions(),
+				UpdateMask:               op.UpdateWorkflowOptionsOperation.GetUpdateMask(),
 			},
 		}
-		if updateMask := op.UpdateWorkflowOptionsOperation.GetUpdateMask(); updateMask != nil {
-			operation.UpdateWorkflowExecutionOptionsOperation.UpdateMask = updateMask
-		}
+		// TODO(seankane): this portion might be able to be deleted after the next OSS release and deprecating BatchParams
 		// TODO(carlydf): remove hacky usage of deprecated fields later, after adding support for oneof in BatchParams encoder
-		if o := op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions().VersioningOverride; o.GetOverride() != nil {
-			deprecatedOverride := &workflowpb.VersioningOverride{}
-			if o.GetAutoUpgrade() {
-				deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE //nolint:staticcheck // SA1019: worker versioning v0.31
-			} else if o.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED {
-				deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED                                                            //nolint:staticcheck // SA1019: worker versioning v0.31
-				deprecatedOverride.PinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(o.GetPinned().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+		if o := op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions(); o != nil {
+			if o.VersioningOverride.GetOverride() != nil {
+				deprecatedOverride := &workflowpb.VersioningOverride{}
+				if o.VersioningOverride.GetAutoUpgrade() {
+					deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE //nolint:staticcheck // SA1019: worker versioning v0.31
+				} else if o.VersioningOverride.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED {
+					deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED                                                                               //nolint:staticcheck // SA1019: worker versioning v0.31
+					deprecatedOverride.PinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(o.VersioningOverride.GetPinned().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+				}
+				operation.UpdateWorkflowExecutionOptionsOperation.WorkflowExecutionOptions.VersioningOverride = deprecatedOverride
 			}
-			operation.UpdateWorkflowExecutionOptionsOperation.WorkflowExecutionOptions.VersioningOverride = deprecatedOverride
 		}
-		batchOperation.Operation = operation
+		input.Input.Operation = operation
 	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
 		identity = op.UnpauseActivitiesOperation.GetIdentity()
 		operationType = batcher.BatchTypeUnpauseActivities
-		operation := &batchpb.BatchOperation_UnpauseActivitiesOperation{
+		operation := &batch.BatchOperation_UnpauseActivitiesOperation{
 			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
-				Identity: op.UnpauseActivitiesOperation.GetIdentity(),
+				Identity:      op.UnpauseActivitiesOperation.GetIdentity(),
+				Activity:      op.UnpauseActivitiesOperation.GetActivity(),
+				ResetAttempts: op.UnpauseActivitiesOperation.GetResetAttempts(),
 			},
 		}
 		if op.UnpauseActivitiesOperation == nil {
@@ -4931,6 +4670,7 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 			}
 			unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, a.Type)
 			visibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, unpauseCause)
+			// unpauseActivitiesParams.ActivityType = a.Type
 			operation.UnpauseActivitiesOperation.Activity = &batchpb.BatchOperationUnpauseActivities_Type{
 				Type: a.Type,
 			}
@@ -4940,6 +4680,7 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 			}
 			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", searchattribute.TemporalPauseInfo)
 			visibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
+			// unpauseActivitiesParams.MatchAll = true
 			operation.UnpauseActivitiesOperation.Activity = &batchpb.BatchOperationUnpauseActivities_MatchAll{
 				MatchAll: true,
 			}
@@ -4949,14 +4690,15 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 		operation.UnpauseActivitiesOperation.ResetHeartbeat = op.UnpauseActivitiesOperation.ResetHeartbeat
 		operation.UnpauseActivitiesOperation.Jitter = op.UnpauseActivitiesOperation.Jitter
 		operation.UnpauseActivitiesOperation.Identity = op.UnpauseActivitiesOperation.GetIdentity()
-
-		batchOperation.Operation = operation
+		input.Input.Operation = operation
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 		identity = op.ResetActivitiesOperation.GetIdentity()
 		operationType = batcher.BatchTypeResetActivities
-		operation := &batchpb.BatchOperation_ResetActivitiesOperation{
+		operation := &batch.BatchOperation_ResetActivitiesOperation{
 			ResetActivitiesOperation: &batchpb.BatchOperationResetActivities{
-				Identity: op.ResetActivitiesOperation.GetIdentity(),
+				Identity:      op.ResetActivitiesOperation.GetIdentity(),
+				Activity:      op.ResetActivitiesOperation.GetActivity(),
+				ResetAttempts: op.ResetActivitiesOperation.ResetAttempts,
 			},
 		}
 		if op.ResetActivitiesOperation == nil {
@@ -4971,6 +4713,7 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 			if len(a.Type) == 0 {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
+			// resetActivitiesParams.ActivityType = a.Type
 			operation.ResetActivitiesOperation.Activity = &batchpb.BatchOperationResetActivities_Type{
 				Type: a.Type,
 			}
@@ -4978,6 +4721,7 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 			if !a.MatchAll {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
+			// resetActivitiesParams.MatchAll = true
 			operation.ResetActivitiesOperation.Activity = &batchpb.BatchOperationResetActivities_MatchAll{
 				MatchAll: true,
 			}
@@ -4989,13 +4733,15 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 		operation.ResetActivitiesOperation.KeepPaused = op.ResetActivitiesOperation.KeepPaused
 		operation.ResetActivitiesOperation.RestoreOriginalOptions = op.ResetActivitiesOperation.RestoreOriginalOptions
 		operation.ResetActivitiesOperation.Identity = op.ResetActivitiesOperation.GetIdentity()
-		batchOperation.Operation = operation
+		input.Input.Operation = operation
 	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
-		operationType = batcher.BatchTypeUpdateActivitiesOptions
 		identity = op.UpdateActivityOptionsOperation.GetIdentity()
-		operation := &batchpb.BatchOperation_UpdateActivityOptionsOperation{
+		operationType = batcher.BatchTypeUpdateActivitiesOptions
+		operation := &batch.BatchOperation_UpdateActivityOptionsOperation{
 			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
-				Identity: op.UpdateActivityOptionsOperation.GetIdentity(),
+				Identity:   op.UpdateActivityOptionsOperation.GetIdentity(),
+				Activity:   op.UpdateActivityOptionsOperation.GetActivity(),
+				UpdateMask: op.UpdateActivityOptionsOperation.GetUpdateMask(),
 			},
 		}
 		if op.UpdateActivityOptionsOperation == nil {
@@ -5013,6 +4759,7 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 			if len(a.Type) == 0 {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
+			// updateActivitiesOptionsParams.ActivityType = a.Type
 			operation.UpdateActivityOptionsOperation.Activity = &batchpb.BatchOperationUpdateActivityOptions_Type{
 				Type: a.Type,
 			}
@@ -5020,6 +4767,7 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 			if !a.MatchAll {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
+			// updateActivitiesOptionsParams.MatchAll = true
 			operation.UpdateActivityOptionsOperation.Activity = &batchpb.BatchOperationUpdateActivityOptions_MatchAll{
 				MatchAll: true,
 			}
@@ -5028,7 +4776,7 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 		operation.UpdateActivityOptionsOperation.RestoreOriginal = op.UpdateActivityOptionsOperation.GetRestoreOriginal()
 		operation.UpdateActivityOptionsOperation.Identity = op.UpdateActivityOptionsOperation.GetIdentity()
 		if updateMask := op.UpdateActivityOptionsOperation.GetUpdateMask(); updateMask != nil {
-			operation.UpdateActivityOptionsOperation.UpdateMask = updateMask
+			operation.UpdateActivityOptionsOperation.UpdateMask = &fieldmaskpb.FieldMask{Paths: updateMask.Paths}
 		}
 		if ao := op.UpdateActivityOptionsOperation.GetActivityOptions(); ao != nil {
 			operation.UpdateActivityOptionsOperation.ActivityOptions = &activitypb.ActivityOptions{
@@ -5048,15 +4796,33 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 			}
 			operation.UpdateActivityOptionsOperation.ActivityOptions.TaskQueue = ao.TaskQueue
 		}
-		batchOperation.Operation = operation
+		input.Input.Operation = operation
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
 
-	// inputPayload, err := payloads.Encode(batchOperation)
-	// if err != nil {
-	// 	return nil, err
+	// input := &batcher.BatchParams{
+	// 	Namespace:                     request.GetNamespace(),
+	// 	Query:                         visibilityQuery,
+	// 	Executions:                    request.GetExecutions(),
+	// 	Reason:                        request.GetReason(),
+	// 	BatchType:                     operationType,
+	// 	RPS:                           float64(request.GetMaxOperationsPerSecond()),
+	// 	TerminateParams:               batcher.TerminateParams{},
+	// 	CancelParams:                  batcher.CancelParams{},
+	// 	SignalParams:                  signalParams,
+	// 	DeleteParams:                  batcher.DeleteParams{},
+	// 	ResetParams:                   resetParams,
+	// 	UpdateOptionsParams:           updateOptionsParams,
+	// 	UnpauseActivitiesParams:       unpauseActivitiesParams,
+	// 	ResetActivitiesParams:         resetActivitiesParams,
+	// 	UpdateActivitiesOptionsParams: updateActivitiesOptionsParams,
 	// }
+	// inputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(input)
+	inputPayload, err := payloads.Encode(input)
+	if err != nil {
+		return nil, err
+	}
 
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
@@ -5070,12 +4836,12 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.BatcherUser, payload.EncodeString(identity))
 	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
 
-	startReq := &workflowservice.StartBatchWorkflowExecutionRequest{
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.Namespace,
 		WorkflowId:               request.GetJobId(),
-		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
+		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeProtobufName},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    batchOperation,
+		Input:                    inputPayload,
 		Identity:                 identity,
 		RequestId:                uuid.New(),
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
@@ -5084,9 +4850,7 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 		SearchAttributes:         searchAttributes,
 		Priority:                 &commonpb.Priority{}, // ie default priority
 	}
-
-	// NOTE seankane: this is where the issue is, cannot figure out how to create a new method on historyclient
-	_, err = wh.historyClient.StartBatchWorkflowExecution(
+	_, err = wh.historyClient.StartWorkflowExecution(
 		ctx,
 		common.CreateHistoryStartWorkflowRequest(
 			namespaceID.String(),
@@ -5101,6 +4865,358 @@ func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
 	}
 	return &workflowservice.StartBatchOperationResponse{}, nil
 }
+
+// func (wh *WorkflowHandler) StartBatchOperationWithProtobuf(
+// 	ctx context.Context,
+// 	request *workflowservice.StartBatchOperationRequest,
+// ) (_ *workflowservice.StartBatchOperationResponse, retError error) {
+// 	defer log.CapturePanic(wh.logger, &retError)
+
+// 	if err := wh.versionChecker.ClientSupported(ctx); err != nil {
+// 		return nil, err
+// 	}
+
+// 	if request == nil {
+// 		return nil, errRequestNotSet
+// 	}
+
+// 	if len(request.GetJobId()) == 0 {
+// 		return nil, errBatchJobIDNotSet
+// 	}
+// 	if len(request.Namespace) == 0 {
+// 		return nil, errNamespaceNotSet
+// 	}
+// 	if len(request.VisibilityQuery) == 0 && len(request.Executions) == 0 {
+// 		return nil, errBatchOpsWorkflowFilterNotSet
+// 	}
+// 	if len(request.VisibilityQuery) != 0 && len(request.Executions) != 0 {
+// 		return nil, errBatchOpsWorkflowFiltersNotAllowed
+// 	}
+// 	if len(request.Executions) > wh.config.MaxExecutionCountBatchOperation(request.Namespace) {
+// 		return nil, errBatchOpsMaxWorkflowExecutionCount
+// 	}
+// 	if len(request.Reason) == 0 {
+// 		return nil, errReasonNotSet
+// 	}
+// 	if request.Operation == nil {
+// 		return nil, errBatchOperationNotSet
+// 	}
+
+// 	if !wh.config.EnableBatcher(request.Namespace) {
+// 		return nil, errBatchAPINotAllowed
+// 	}
+
+// 	// Validate concurrent batch operation
+// 	maxConcurrentBatchOperation := wh.config.MaxConcurrentBatchOperation(request.GetNamespace())
+// 	countResp, err := wh.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+// 		Namespace: request.GetNamespace(),
+// 		Query:     batcher.OpenBatchOperationQuery,
+// 	})
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	openBatchOperationCount := int(countResp.GetCount())
+// 	if openBatchOperationCount >= maxConcurrentBatchOperation {
+// 		return nil, &serviceerror.ResourceExhausted{
+// 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+// 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+// 			Message: "Max concurrent batch operations is reached",
+// 		}
+// 	}
+
+// 	visibilityQuery := request.GetVisibilityQuery()
+
+// 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	batchOperation := &batchpb.BatchOperation{
+// 		Namespace:          request.GetNamespace(),
+// 		Query:              request.GetVisibilityQuery(),
+// 		WorkflowExecutions: request.GetExecutions(),
+// 		Reason:             request.GetReason(),
+// 	}
+
+// 	var operationType string
+// 	var identity string
+// 	switch op := request.Operation.(type) {
+// 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
+// 		identity = op.TerminationOperation.GetIdentity()
+// 		operationType = batcher.BatchTypeTerminate
+// 		batchOperation.Operation = &batchpb.BatchOperation_TerminationOperation{
+// 			TerminationOperation: &batchpb.BatchOperationTermination{
+// 				Identity: op.TerminationOperation.GetIdentity(),
+// 			},
+// 		}
+// 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
+// 		identity = op.SignalOperation.GetIdentity()
+// 		operationType = batcher.BatchTypeSignal
+// 		batchOperation.Operation = &batchpb.BatchOperation_SignalOperation{
+// 			SignalOperation: &batchpb.BatchOperationSignal{
+// 				Identity: op.SignalOperation.GetIdentity(),
+// 				Signal:   op.SignalOperation.GetSignal(),
+// 				Input:    op.SignalOperation.GetInput(),
+// 			},
+// 		}
+// 	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
+// 		identity = op.CancellationOperation.GetIdentity()
+// 		operationType = batcher.BatchTypeCancel
+// 		batchOperation.Operation = &batchpb.BatchOperation_CancellationOperation{
+// 			CancellationOperation: &batchpb.BatchOperationCancellation{
+// 				Identity: op.CancellationOperation.GetIdentity(),
+// 			},
+// 		}
+// 	case *workflowservice.StartBatchOperationRequest_DeletionOperation:
+// 		identity = op.DeletionOperation.GetIdentity()
+// 		operationType = batcher.BatchTypeDelete
+// 		batchOperation.Operation = &batchpb.BatchOperation_DeletionOperation{
+// 			DeletionOperation: &batchpb.BatchOperationDeletion{
+// 				Identity: op.DeletionOperation.GetIdentity(),
+// 			},
+// 		}
+// 	case *workflowservice.StartBatchOperationRequest_ResetOperation:
+// 		identity = op.ResetOperation.GetIdentity()
+// 		operationType = batcher.BatchTypeReset
+// 		operation := &batchpb.BatchOperation_ResetOperation{
+// 			ResetOperation: &batchpb.BatchOperationReset{
+// 				Identity: op.ResetOperation.GetIdentity(),
+// 			},
+// 		}
+// 		if op.ResetOperation.Options != nil {
+// 			if op.ResetOperation.Options.Target == nil {
+// 				return nil, serviceerror.NewInvalidArgument("batch reset missing target")
+// 			}
+// 			operation.ResetOperation.Options = op.ResetOperation.Options
+// 			operation.ResetOperation.PostResetOperations = op.ResetOperation.PostResetOperations
+// 			if op.ResetOperation.PostResetOperations == nil {
+// 				operation.ResetOperation.PostResetOperations = []*workflowpb.PostResetOperation{}
+// 			}
+// 		} else {
+// 			// TODO: remove support for old fields later
+// 			//nolint:staticcheck // SA1019: worker versioning v0.31
+// 			operation.ResetOperation.ResetType = op.ResetOperation.GetResetType()
+// 			//nolint:staticcheck // SA1019: worker versioning v0.31
+// 			operation.ResetOperation.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
+// 		}
+// 		batchOperation.Operation = operation
+// 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
+// 		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
+// 		operationType = batcher.BatchTypeUpdateOptions
+// 		operation := &batchpb.BatchOperation_UpdateWorkflowExecutionOptionsOperation{
+// 			UpdateWorkflowExecutionOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
+// 				Identity:                 op.UpdateWorkflowOptionsOperation.GetIdentity(),
+// 				WorkflowExecutionOptions: op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions(),
+// 			},
+// 		}
+// 		if updateMask := op.UpdateWorkflowOptionsOperation.GetUpdateMask(); updateMask != nil {
+// 			operation.UpdateWorkflowExecutionOptionsOperation.UpdateMask = updateMask
+// 		}
+// 		// TODO(carlydf): remove hacky usage of deprecated fields later, after adding support for oneof in BatchParams encoder
+// 		if o := op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions().VersioningOverride; o.GetOverride() != nil {
+// 			deprecatedOverride := &workflowpb.VersioningOverride{}
+// 			if o.GetAutoUpgrade() {
+// 				deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE //nolint:staticcheck // SA1019: worker versioning v0.31
+// 			} else if o.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED {
+// 				deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED                                                            //nolint:staticcheck // SA1019: worker versioning v0.31
+// 				deprecatedOverride.PinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(o.GetPinned().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+// 			}
+// 			operation.UpdateWorkflowExecutionOptionsOperation.WorkflowExecutionOptions.VersioningOverride = deprecatedOverride
+// 		}
+// 		batchOperation.Operation = operation
+// 	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
+// 		identity = op.UnpauseActivitiesOperation.GetIdentity()
+// 		operationType = batcher.BatchTypeUnpauseActivities
+// 		operation := &batchpb.BatchOperation_UnpauseActivitiesOperation{
+// 			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
+// 				Identity: op.UnpauseActivitiesOperation.GetIdentity(),
+// 			},
+// 		}
+// 		if op.UnpauseActivitiesOperation == nil {
+// 			return nil, serviceerror.NewInvalidArgument("unpause activities operation is not set")
+// 		}
+// 		if op.UnpauseActivitiesOperation.GetActivity() == nil {
+// 			return nil, serviceerror.NewInvalidArgument("activity filter must be set")
+// 		}
+
+// 		switch a := op.UnpauseActivitiesOperation.GetActivity().(type) {
+// 		case *batchpb.BatchOperationUnpauseActivities_Type:
+// 			if len(a.Type) == 0 {
+// 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+// 			}
+// 			unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, a.Type)
+// 			visibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, unpauseCause)
+// 			operation.UnpauseActivitiesOperation.Activity = &batchpb.BatchOperationUnpauseActivities_Type{
+// 				Type: a.Type,
+// 			}
+// 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
+// 			if !a.MatchAll {
+// 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+// 			}
+// 			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", searchattribute.TemporalPauseInfo)
+// 			visibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
+// 			operation.UnpauseActivitiesOperation.Activity = &batchpb.BatchOperationUnpauseActivities_MatchAll{
+// 				MatchAll: true,
+// 			}
+// 		}
+
+// 		operation.UnpauseActivitiesOperation.ResetAttempts = op.UnpauseActivitiesOperation.ResetAttempts
+// 		operation.UnpauseActivitiesOperation.ResetHeartbeat = op.UnpauseActivitiesOperation.ResetHeartbeat
+// 		operation.UnpauseActivitiesOperation.Jitter = op.UnpauseActivitiesOperation.Jitter
+// 		operation.UnpauseActivitiesOperation.Identity = op.UnpauseActivitiesOperation.GetIdentity()
+
+// 		batchOperation.Operation = operation
+// 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
+// 		identity = op.ResetActivitiesOperation.GetIdentity()
+// 		operationType = batcher.BatchTypeResetActivities
+// 		operation := &batchpb.BatchOperation_ResetActivitiesOperation{
+// 			ResetActivitiesOperation: &batchpb.BatchOperationResetActivities{
+// 				Identity: op.ResetActivitiesOperation.GetIdentity(),
+// 			},
+// 		}
+// 		if op.ResetActivitiesOperation == nil {
+// 			return nil, serviceerror.NewInvalidArgument("reset activities operation is not set")
+// 		}
+// 		if op.ResetActivitiesOperation.GetActivity() == nil {
+// 			return nil, serviceerror.NewInvalidArgument("activity filter must be set")
+// 		}
+
+// 		switch a := op.ResetActivitiesOperation.GetActivity().(type) {
+// 		case *batchpb.BatchOperationResetActivities_Type:
+// 			if len(a.Type) == 0 {
+// 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+// 			}
+// 			operation.ResetActivitiesOperation.Activity = &batchpb.BatchOperationResetActivities_Type{
+// 				Type: a.Type,
+// 			}
+// 		case *batchpb.BatchOperationResetActivities_MatchAll:
+// 			if !a.MatchAll {
+// 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+// 			}
+// 			operation.ResetActivitiesOperation.Activity = &batchpb.BatchOperationResetActivities_MatchAll{
+// 				MatchAll: true,
+// 			}
+// 		}
+
+// 		operation.ResetActivitiesOperation.ResetAttempts = op.ResetActivitiesOperation.ResetAttempts
+// 		operation.ResetActivitiesOperation.ResetHeartbeat = op.ResetActivitiesOperation.ResetHeartbeat
+// 		operation.ResetActivitiesOperation.Jitter = op.ResetActivitiesOperation.Jitter
+// 		operation.ResetActivitiesOperation.KeepPaused = op.ResetActivitiesOperation.KeepPaused
+// 		operation.ResetActivitiesOperation.RestoreOriginalOptions = op.ResetActivitiesOperation.RestoreOriginalOptions
+// 		operation.ResetActivitiesOperation.Identity = op.ResetActivitiesOperation.GetIdentity()
+// 		batchOperation.Operation = operation
+// 	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
+// 		operationType = batcher.BatchTypeUpdateActivitiesOptions
+// 		identity = op.UpdateActivityOptionsOperation.GetIdentity()
+// 		operation := &batchpb.BatchOperation_UpdateActivityOptionsOperation{
+// 			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
+// 				Identity: op.UpdateActivityOptionsOperation.GetIdentity(),
+// 			},
+// 		}
+// 		if op.UpdateActivityOptionsOperation == nil {
+// 			return nil, serviceerror.NewInvalidArgument("update activity options operation is not set")
+// 		}
+// 		if op.UpdateActivityOptionsOperation.GetActivityOptions() != nil && op.UpdateActivityOptionsOperation.GetRestoreOriginal() {
+// 			return nil, serviceerror.NewInvalidArgument("cannot set both activity options and restore original")
+// 		}
+// 		if op.UpdateActivityOptionsOperation.GetActivityOptions() == nil && !op.UpdateActivityOptionsOperation.GetRestoreOriginal() {
+// 			return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or restore original should be set to true")
+// 		}
+
+// 		switch a := op.UpdateActivityOptionsOperation.GetActivity().(type) {
+// 		case *batchpb.BatchOperationUpdateActivityOptions_Type:
+// 			if len(a.Type) == 0 {
+// 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+// 			}
+// 			operation.UpdateActivityOptionsOperation.Activity = &batchpb.BatchOperationUpdateActivityOptions_Type{
+// 				Type: a.Type,
+// 			}
+// 		case *batchpb.BatchOperationUpdateActivityOptions_MatchAll:
+// 			if !a.MatchAll {
+// 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+// 			}
+// 			operation.UpdateActivityOptionsOperation.Activity = &batchpb.BatchOperationUpdateActivityOptions_MatchAll{
+// 				MatchAll: true,
+// 			}
+// 		}
+
+// 		operation.UpdateActivityOptionsOperation.RestoreOriginal = op.UpdateActivityOptionsOperation.GetRestoreOriginal()
+// 		operation.UpdateActivityOptionsOperation.Identity = op.UpdateActivityOptionsOperation.GetIdentity()
+// 		if updateMask := op.UpdateActivityOptionsOperation.GetUpdateMask(); updateMask != nil {
+// 			operation.UpdateActivityOptionsOperation.UpdateMask = updateMask
+// 		}
+// 		if ao := op.UpdateActivityOptionsOperation.GetActivityOptions(); ao != nil {
+// 			operation.UpdateActivityOptionsOperation.ActivityOptions = &activitypb.ActivityOptions{
+// 				ScheduleToStartTimeout: ao.ScheduleToStartTimeout,
+// 				ScheduleToCloseTimeout: ao.ScheduleToCloseTimeout,
+// 				StartToCloseTimeout:    ao.StartToCloseTimeout,
+// 				HeartbeatTimeout:       ao.HeartbeatTimeout,
+// 			}
+// 			if rp := ao.RetryPolicy; rp != nil {
+// 				operation.UpdateActivityOptionsOperation.ActivityOptions.RetryPolicy = &commonpb.RetryPolicy{
+// 					InitialInterval:        rp.InitialInterval,
+// 					MaximumInterval:        rp.MaximumInterval,
+// 					BackoffCoefficient:     rp.BackoffCoefficient,
+// 					NonRetryableErrorTypes: rp.NonRetryableErrorTypes,
+// 					MaximumAttempts:        rp.MaximumAttempts,
+// 				}
+// 			}
+// 			operation.UpdateActivityOptionsOperation.ActivityOptions.TaskQueue = ao.TaskQueue
+// 		}
+// 		batchOperation.Operation = operation
+// 	default:
+// 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
+// 	}
+
+// 	// inputPayload, err := payloads.Encode(batchOperation)
+// 	// if err != nil {
+// 	// 	return nil, err
+// 	// }
+
+// 	memo := &commonpb.Memo{
+// 		Fields: map[string]*commonpb.Payload{
+// 			batcher.BatchOperationTypeMemo: payload.EncodeString(operationType),
+// 			batcher.BatchReasonMemo:        payload.EncodeString(request.GetReason()),
+// 		},
+// 	}
+
+// 	// Add pre-define search attributes
+// 	var searchAttributes *commonpb.SearchAttributes
+// 	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.BatcherUser, payload.EncodeString(identity))
+// 	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
+
+// 	startReq := &workflowservice.StartBatchWorkflowExecutionRequest{
+// 		Namespace:                request.Namespace,
+// 		WorkflowId:               request.GetJobId(),
+// 		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
+// 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+// 		Input:                    batchOperation,
+// 		Identity:                 identity,
+// 		RequestId:                uuid.New(),
+// 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+// 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+// 		Memo:                     memo,
+// 		SearchAttributes:         searchAttributes,
+// 		Priority:                 &commonpb.Priority{}, // ie default priority
+// 	}
+
+// 	// NOTE seankane: this is where the issue is, cannot figure out how to create a new method on historyclient
+// 	_, err = wh.historyClient.StartBatchWorkflowExecution(
+// 		ctx,
+// 		common.CreateHistoryStartWorkflowRequest(
+// 			namespaceID.String(),
+// 			startReq,
+// 			nil,
+// 			nil,
+// 			time.Now().UTC(),
+// 		),
+// 	)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return &workflowservice.StartBatchOperationResponse{}, nil
+// }
 
 func (wh *WorkflowHandler) StopBatchOperation(
 	ctx context.Context,

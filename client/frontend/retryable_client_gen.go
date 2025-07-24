@@ -1166,21 +1166,6 @@ func (c *retryableClient) StartBatchOperation(
 	return resp, err
 }
 
-func (c *retryableClient) StartBatchWorkflowExecution(
-	ctx context.Context,
-	request *workflowservice.StartBatchWorkflowExecutionRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.StartBatchWorkflowExecutionResponse, error) {
-	var resp *workflowservice.StartBatchWorkflowExecutionResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.StartBatchWorkflowExecution(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) StartWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,

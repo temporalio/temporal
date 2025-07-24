@@ -2297,7 +2297,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate_Protobuf() {
 		VisibilityQuery: inputString,
 	}
 
-	_, err = wh.StartBatchOperationWithProtobuf(context.Background(), request)
+	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
 }
 
@@ -2403,7 +2403,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation_Protobuf() {
 		VisibilityQuery: inputString,
 	}
 
-	_, err = wh.StartBatchOperationWithProtobuf(context.Background(), request)
+	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
 }
 
@@ -2521,7 +2521,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal_Protobuf() {
 		VisibilityQuery: inputString,
 	}
 
-	_, err = wh.StartBatchOperationWithProtobuf(context.Background(), request)
+	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
 }
 
@@ -2653,7 +2653,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 		Executions: executions,
 	}
 
-	_, err = wh.StartBatchOperationWithProtobuf(context.Background(), request)
+	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
 }
 
@@ -2781,7 +2781,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 		Executions: executions,
 	}
 
-	_, err = wh.StartBatchOperationWithProtobuf(context.Background(), request)
+	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
 }
 
@@ -2958,7 +2958,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 		Executions: executions,
 	}
 
-	_, err := wh.StartBatchOperationWithProtobuf(context.Background(), request)
+	_, err := wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
 }
 
@@ -3072,7 +3072,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 		Executions: executions,
 	}
 
-	_, err := wh.StartBatchOperationWithProtobuf(context.Background(), request)
+	_, err := wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
 }
 
