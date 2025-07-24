@@ -609,3 +609,13 @@ message UpdateTaskQueueConfigRequest {
 message UpdateTaskQueueConfigResponse {
     temporal.api.taskqueue.v1.TaskQueueConfig updated_taskqueue_config = 1;
 }
+
+message DescribeWorkerRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.DescribeWorkerRequest request = 2;
+}
+
+message DescribeWorkerResponse {
+    temporal.api.worker.v1.WorkerInfo workers_info = 1;
+}
+
