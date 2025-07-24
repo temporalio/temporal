@@ -438,7 +438,7 @@ func (tm *priTaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask
 
 func (tm *priTaskMatcher) AddTask(task *internalTask) {
 	if !task.setRemoveFunc(func() { tm.data.RemoveTask(task) }) {
-		return
+		return // handle race where task is evicted from reader before being added
 	}
 	tm.data.EnqueueTaskNoWait(task)
 }

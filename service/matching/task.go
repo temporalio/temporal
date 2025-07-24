@@ -281,7 +281,7 @@ func (task *internalTask) fairLevel() fairLevel {
 	return fairLevelFromAllocatedTask(task.event.AllocatedTaskInfo)
 }
 
-// resetMatcherState should be called before adding or re-adding a backlog task to priMatcher.
+// resetMatcherState must be called before adding or re-adding a backlog task to priMatcher.
 func (task *internalTask) resetMatcherState() {
 	task.removeFromMatcher.Store(&removeFuncNotAddedYet)
 }
@@ -299,7 +299,7 @@ func (task *internalTask) setEvicted() {
 	(*remove)()
 }
 
-// finish marks a task as finished. Should be called after a poller picks up a task
+// finish marks a task as finished. Must be called after a poller picks up a task
 // and marks it as started. If the task is unable to marked as started, then this
 // method should be called with a non-nil error argument.
 //
@@ -312,7 +312,7 @@ func (task *internalTask) finish(err error, wasValid bool) {
 	task.finishInternal(res, wasValid)
 }
 
-// finishForward should be called after forwarding a task.
+// finishForward must be called after forwarding a task.
 func (task *internalTask) finishForward(forwardRes any, forwardErr error, wasValid bool) {
 	res := taskResponse{forwarded: true, forwardRes: forwardRes, forwardErr: forwardErr}
 	task.finishInternal(res, wasValid)
