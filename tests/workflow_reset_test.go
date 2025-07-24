@@ -293,7 +293,7 @@ func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
 
 	// Start batch reset operation
 	batchJobID := "batch-reset-job-" + uuid.NewString()
- 	_, err := s.FrontendClient().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+	_, err := s.FrontendClient().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
 		Namespace: s.Namespace().String(),
 		JobId:     batchJobID,
 		Reason:    "testing-batch-reset-with-options",
