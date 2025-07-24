@@ -42,6 +42,8 @@ type (
 	// internalTask represents an activity, workflow, query or started (received from another host).
 	// this struct is more like a union and only one of [ query, event, forwarded ] is
 	// non-nil for any given task
+	// TODO(pri): after deprecating classic matcher, we can consolidate backlogCountHint, recycleToken,
+	// and removeFromMatcher into a single *physicalTaskQueueManager field.
 	internalTask struct {
 		event            *genericTaskInfo // non-nil for activity or workflow task that's locally generated
 		query            *queryTaskInfo   // non-nil for a query task that's locally sync matched
