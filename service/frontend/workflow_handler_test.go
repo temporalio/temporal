@@ -2208,7 +2208,6 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 		BatchType: batcher.BatchTypeTerminate,
 		Query:     inputString,
 	}
-
 	inputPayload, err := payloads.Encode(params)
 	s.NoError(err)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
@@ -2223,9 +2222,9 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
-			s.Equal(payloads.EncodeString(batcher.BatchTypeTerminate), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
-			s.Equal(payloads.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.Equal(payloads.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+			s.Equal(payload.EncodeString(batcher.BatchTypeTerminate), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.Equal(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
+			s.Equal(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
 			s.Equal(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -2274,9 +2273,9 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
-			s.Equal(payloads.EncodeString(batcher.BatchTypeCancel), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
-			s.Equal(payloads.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.Equal(payloads.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+			s.Equal(payload.EncodeString(batcher.BatchTypeCancel), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.Equal(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
+			s.Equal(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
 			s.Equal(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -2333,9 +2332,9 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
-			s.Equal(payloads.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
-			s.Equal(payloads.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.Equal(payloads.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+			s.Equal(payload.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.Equal(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
+			s.Equal(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
 			s.Equal(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -2396,14 +2395,14 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 			request *historyservice.StartWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
-			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
-			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
-			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
+			s.Equal(namespaceID.String(), request.NamespaceId, "namespaceID")
+			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name, "workflowType")
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name, "taskQueue")
+			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy, "workflowIdReusePolicy")
 			s.Equal(identity, request.StartRequest.Identity)
-			s.Equal(payloads.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
-			s.Equal(payloads.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.Equal(payloads.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+			s.Equal(payload.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo], "batchOperationTypeMemo")
+			s.Equal(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo], "batchReasonMemo")
+			s.Equal(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser], "batcherUser")
 			s.Equal(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -2467,9 +2466,9 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(identity, request.StartRequest.Identity)
-			s.Equal(payloads.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
-			s.Equal(payloads.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.Equal(payloads.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+			s.Equal(payload.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.Equal(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
+			s.Equal(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
 			s.Equal(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -2531,9 +2530,9 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(identity, request.StartRequest.Identity)
-			s.Equal(payloads.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
-			s.Equal(payloads.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.Equal(payloads.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+			s.Equal(payload.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.Equal(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
+			s.Equal(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
 
 			// Decode the input and verify PostResetOperations are correctly set
 			var batchParams batchspb.BatchOperation
