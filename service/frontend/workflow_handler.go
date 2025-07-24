@@ -4597,6 +4597,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			}
 			// resetParams.ResetType = resetType
 			// resetParams.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
+			// nolint:staticcheck // SA1019: worker versioning v0.31
 			input.Input.Operation = &batch.BatchOperation_ResetOperation{
 				ResetOperation: &batchpb.BatchOperationReset{
 					Identity:         op.ResetOperation.GetIdentity(),

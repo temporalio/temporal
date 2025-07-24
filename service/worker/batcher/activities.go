@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/batch/v1"
+	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -202,7 +203,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 
 // BatchActivityWithProtobuf is an activity for processing batch operations using protobuf as the input type.
 // nolint:revive,cognitive-complexity
-func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams *batch.BatchOperation) (HeartBeatDetails, error) {
+func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams *batchspb.BatchOperation) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
 	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceTag(batchParams.Namespace))
@@ -608,6 +609,7 @@ func startTaskProcessor(
 	}
 }
 
+// nolint:revive,cognitive-complexity
 func startTaskProcessorProtobuf(
 	ctx context.Context,
 	batchParams *batch.BatchOperation,
@@ -676,6 +678,7 @@ func startTaskProcessorProtobuf(
 						}
 						var eventId int64
 						var err error
+						//nolint:staticcheck // SA1019: worker versioning v0.31
 						var resetReapplyType enumspb.ResetReapplyType
 						var resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType
 						if operation.ResetOperation.Options != nil {
