@@ -592,7 +592,7 @@ func startTaskProcessor(
 // nolint:revive,cognitive-complexity
 func startTaskProcessorProtobuf(
 	ctx context.Context,
-	batchParams *batchspb.BatchOperation,
+	batchOperation *batchspb.BatchOperation,
 	taskCh chan taskDetail,
 	respCh chan error,
 	limiter *rate.Limiter,
@@ -611,11 +611,11 @@ func startTaskProcessorProtobuf(
 			}
 			var err error
 
-			switch operation := batchParams.Operation.(type) {
+			switch operation := batchOperation.Operation.(type) {
 			case *batchspb.BatchOperation_TerminationOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
-						return sdkClient.TerminateWorkflow(ctx, workflowID, runID, batchParams.Reason)
+						return sdkClient.TerminateWorkflow(ctx, workflowID, runID, batchOperation.Reason)
 					})
 			case *batchspb.BatchOperation_CancellationOperation:
 				err = processTask(ctx, limiter, task,
@@ -626,7 +626,7 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						_, err := frontendClient.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-							Namespace: batchParams.Namespace,
+							Namespace: batchOperation.Namespace,
 							WorkflowExecution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -641,7 +641,7 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						_, err := frontendClient.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
-							Namespace: batchParams.Namespace,
+							Namespace: batchOperation.Namespace,
 							WorkflowExecution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -665,7 +665,7 @@ func startTaskProcessorProtobuf(
 							// Using ResetOptions
 							// Note: getResetEventIDByOptions may modify workflowExecution.RunId, if reset should be to a prior run
 							//nolint:staticcheck // SA1019: worker versioning v0.31
-							eventId, err = getResetEventIDByOptions(ctx, operation.ResetOperation.Options, batchParams.Namespace, workflowExecution, frontendClient, logger)
+							eventId, err = getResetEventIDByOptions(ctx, operation.ResetOperation.Options, batchOperation.Namespace, workflowExecution, frontendClient, logger)
 							//nolint:staticcheck // SA1019: worker versioning v0.31
 							resetReapplyType = operation.ResetOperation.Options.ResetReapplyType
 							//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -673,7 +673,7 @@ func startTaskProcessorProtobuf(
 						} else {
 							// Old fields
 							//nolint:staticcheck // SA1019: worker versioning v0.31
-							eventId, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, batchParams.Namespace, workflowExecution, frontendClient, logger)
+							eventId, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, batchOperation.Namespace, workflowExecution, frontendClient, logger)
 							//nolint:staticcheck // SA1019: worker versioning v0.31
 							resetReapplyType = operation.ResetOperation.ResetReapplyType
 						}
@@ -681,9 +681,9 @@ func startTaskProcessorProtobuf(
 							return err
 						}
 						_, err = frontendClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-							Namespace:                 batchParams.Namespace,
+							Namespace:                 batchOperation.Namespace,
 							WorkflowExecution:         workflowExecution,
-							Reason:                    batchParams.Reason,
+							Reason:                    batchOperation.Reason,
 							RequestId:                 uuid.New(),
 							WorkflowTaskFinishEventId: eventId,
 							ResetReapplyType:          resetReapplyType,
@@ -697,7 +697,7 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						unpauseRequest := &workflowservice.UnpauseActivityRequest{
-							Namespace: batchParams.Namespace,
+							Namespace: batchOperation.Namespace,
 							Execution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -726,7 +726,7 @@ func startTaskProcessorProtobuf(
 					func(workflowID, runID string) error {
 						var err error
 						_, err = frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-							Namespace: batchParams.Namespace,
+							Namespace: batchOperation.Namespace,
 							WorkflowExecution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -741,7 +741,7 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						resetRequest := &workflowservice.ResetActivityRequest{
-							Namespace: batchParams.Namespace,
+							Namespace: batchOperation.Namespace,
 							Execution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -767,7 +767,7 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						updateRequest := &workflowservice.UpdateActivityOptionsRequest{
-							Namespace: batchParams.Namespace,
+							Namespace: batchOperation.Namespace,
 							Execution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -789,20 +789,20 @@ func startTaskProcessorProtobuf(
 						return err
 					})
 			default:
-				err = errors.New("unknown batch type: " + batchParams.BatchType)
+				err = errors.New("unknown batch type: " + batchOperation.BatchType)
 			}
 			if err != nil {
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
 
 				nonRetryable := false
-				for _, errType := range batchParams.NonRetryableErrors {
+				for _, errType := range batchOperation.NonRetryableErrors {
 					if errType == err.Error() {
 						nonRetryable = true
 						break
 					}
 				}
-				if nonRetryable || task.attempts > int(batchParams.AttemptsOnRetryableError) {
+				if nonRetryable || task.attempts > int(batchOperation.AttemptsOnRetryableError) {
 					respCh <- err
 				} else {
 					// put back to the channel if less than attemptsOnError

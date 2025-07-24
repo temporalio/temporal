@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	activitypb "go.temporal.io/api/activity/v1"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -4521,44 +4520,39 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		input.BatchType = batcher.BatchTypeSignal
 		input.Operation = &batchspb.BatchOperation_SignalOperation{
-			SignalOperation: &batchpb.BatchOperationSignal{
-				Identity: op.SignalOperation.GetIdentity(),
-				Signal:   op.SignalOperation.GetSignal(),
-				Input:    op.SignalOperation.GetInput(),
-			},
+			SignalOperation: op.SignalOperation,
 		}
 		identity = op.SignalOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
 		input.BatchType = batcher.BatchTypeCancel
 		input.Operation = &batchspb.BatchOperation_CancellationOperation{
-			CancellationOperation: &batchpb.BatchOperationCancellation{
-				Identity: op.CancellationOperation.GetIdentity(),
-			},
+			CancellationOperation: op.CancellationOperation,
 		}
 		identity = op.CancellationOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_DeletionOperation:
 		input.BatchType = batcher.BatchTypeDelete
 		input.Operation = &batchspb.BatchOperation_DeletionOperation{
-			DeletionOperation: &batchpb.BatchOperationDeletion{
-				Identity: op.DeletionOperation.GetIdentity(),
-			},
+			DeletionOperation: op.DeletionOperation,
 		}
 		identity = op.DeletionOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_ResetOperation:
 		input.BatchType = batcher.BatchTypeReset
 		identity = op.ResetOperation.GetIdentity()
+		input.Operation = &batchspb.BatchOperation_ResetOperation{
+			ResetOperation: op.ResetOperation,
+		}
 		if op.ResetOperation.Options != nil {
 			if op.ResetOperation.Options.Target == nil {
 				return nil, serviceerror.NewInvalidArgument("batch reset missing target")
 			}
 
-			input.Operation = &batchspb.BatchOperation_ResetOperation{
-				ResetOperation: &batchpb.BatchOperationReset{
-					Identity:            op.ResetOperation.GetIdentity(),
-					Options:             op.ResetOperation.Options,
-					PostResetOperations: op.ResetOperation.PostResetOperations,
-				},
-			}
+			// input.Operation = &batchspb.BatchOperation_ResetOperation{
+			// 	ResetOperation: &batchpb.BatchOperationReset{
+			// 		Identity:            op.ResetOperation.GetIdentity(),
+			// 		Options:             op.ResetOperation.Options,
+			// 		PostResetOperations: op.ResetOperation.PostResetOperations,
+			// 	},
+			// }
 		} else {
 			// TODO: remove support for old fields later
 			resetType := op.ResetOperation.GetResetType()
@@ -4566,50 +4560,56 @@ func (wh *WorkflowHandler) StartBatchOperation(
 				return nil, serviceerror.NewInvalidArgumentf("unknown batch reset type %v", resetType)
 			}
 			// nolint:staticcheck // SA1019: worker versioning v0.31
-			input.Operation = &batchspb.BatchOperation_ResetOperation{
-				ResetOperation: &batchpb.BatchOperationReset{
-					Identity:         op.ResetOperation.GetIdentity(),
-					Options:          op.ResetOperation.Options,
-					ResetType:        resetType,
-					ResetReapplyType: op.ResetOperation.GetResetReapplyType(),
-				},
-			}
+			// input.Operation = &batchspb.BatchOperation_ResetOperation{
+			// 	ResetOperation: &batchpb.BatchOperationReset{
+			// 		Identity:         op.ResetOperation.GetIdentity(),
+			// 		Options:          op.ResetOperation.Options,
+			// 		ResetType:        resetType,
+			// 		ResetReapplyType: op.ResetOperation.GetResetReapplyType(),
+			// 	},
+			// }
 		}
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 		input.BatchType = batcher.BatchTypeUpdateOptions
 		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
-		// TODO(carlydf): remove hacky usage of deprecated fields later, after adding support for oneof in BatchParams encoder
-		operation := &batchspb.BatchOperation_UpdateWorkflowExecutionOptionsOperation{
-			UpdateWorkflowExecutionOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
-				Identity:                 op.UpdateWorkflowOptionsOperation.GetIdentity(),
-				WorkflowExecutionOptions: op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions(),
-				UpdateMask:               op.UpdateWorkflowOptionsOperation.GetUpdateMask(),
-			},
+		input.Operation = &batchspb.BatchOperation_UpdateWorkflowExecutionOptionsOperation{
+			UpdateWorkflowExecutionOptionsOperation: op.UpdateWorkflowOptionsOperation,
 		}
 		// TODO(carlydf): remove hacky usage of deprecated fields later, after adding support for oneof in BatchParams encoder
-		if o := op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions(); o != nil {
-			if o.VersioningOverride.GetOverride() != nil {
-				deprecatedOverride := &workflowpb.VersioningOverride{}
-				if o.VersioningOverride.GetAutoUpgrade() {
-					deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE //nolint:staticcheck // SA1019: worker versioning v0.31
-				} else if o.VersioningOverride.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED {
-					deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED                                                                               //nolint:staticcheck // SA1019: worker versioning v0.31
-					deprecatedOverride.PinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(o.VersioningOverride.GetPinned().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
-				}
-				operation.UpdateWorkflowExecutionOptionsOperation.WorkflowExecutionOptions.VersioningOverride = deprecatedOverride
-			}
-		}
-		input.Operation = operation
+		// operation := &batchspb.BatchOperation_UpdateWorkflowExecutionOptionsOperation{
+		// 	UpdateWorkflowExecutionOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
+		// 		Identity:                 op.UpdateWorkflowOptionsOperation.GetIdentity(),
+		// 		WorkflowExecutionOptions: op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions(),
+		// 		UpdateMask:               op.UpdateWorkflowOptionsOperation.GetUpdateMask(),
+		// 	},
+		// }
+		// TODO(carlydf): remove hacky usage of deprecated fields later, after adding support for oneof in BatchParams encoder
+		// if o := op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions(); o != nil {
+		// 	if o.VersioningOverride.GetOverride() != nil {
+		// 		deprecatedOverride := &workflowpb.VersioningOverride{}
+		// 		if o.VersioningOverride.GetAutoUpgrade() {
+		// 			deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE //nolint:staticcheck // SA1019: worker versioning v0.31
+		// 		} else if o.VersioningOverride.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED {
+		// 			deprecatedOverride.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED                                                                               //nolint:staticcheck // SA1019: worker versioning v0.31
+		// 			deprecatedOverride.PinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(o.VersioningOverride.GetPinned().GetVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+		// 		}
+		// 		operation.UpdateWorkflowExecutionOptionsOperation.WorkflowExecutionOptions.VersioningOverride = deprecatedOverride
+		// 	}
+		// }
+		// input.Operation = operation
 	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
 		input.BatchType = batcher.BatchTypeUnpauseActivities
 		identity = op.UnpauseActivitiesOperation.GetIdentity()
-		operation := &batchspb.BatchOperation_UnpauseActivitiesOperation{
-			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
-				Identity:      op.UnpauseActivitiesOperation.GetIdentity(),
-				Activity:      op.UnpauseActivitiesOperation.GetActivity(),
-				ResetAttempts: op.UnpauseActivitiesOperation.GetResetAttempts(),
-			},
+		input.Operation = &batchspb.BatchOperation_UnpauseActivitiesOperation{
+			UnpauseActivitiesOperation: op.UnpauseActivitiesOperation,
 		}
+		// operation := &batchspb.BatchOperation_UnpauseActivitiesOperation{
+		// 	UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
+		// 		Identity:      op.UnpauseActivitiesOperation.GetIdentity(),
+		// 		Activity:      op.UnpauseActivitiesOperation.GetActivity(),
+		// 		ResetAttempts: op.UnpauseActivitiesOperation.GetResetAttempts(),
+		// 	},
+		// }
 		if op.UnpauseActivitiesOperation == nil {
 			return nil, serviceerror.NewInvalidArgument("unpause activities operation is not set")
 		}
@@ -4624,35 +4624,38 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			}
 			unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, a.Type)
 			input.Query = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, unpauseCause)
-			operation.UnpauseActivitiesOperation.Activity = &batchpb.BatchOperationUnpauseActivities_Type{
-				Type: a.Type,
-			}
+			// operation.UnpauseActivitiesOperation.Activity = &batchpb.BatchOperationUnpauseActivities_Type{
+			// 	Type: a.Type,
+			// }
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
 			if !a.MatchAll {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
 			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", searchattribute.TemporalPauseInfo)
 			input.Query = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
-			operation.UnpauseActivitiesOperation.Activity = &batchpb.BatchOperationUnpauseActivities_MatchAll{
-				MatchAll: true,
-			}
+			// operation.UnpauseActivitiesOperation.Activity = &batchpb.BatchOperationUnpauseActivities_MatchAll{
+			// 	MatchAll: true,
+			// }
 		}
 
-		operation.UnpauseActivitiesOperation.ResetAttempts = op.UnpauseActivitiesOperation.ResetAttempts
-		operation.UnpauseActivitiesOperation.ResetHeartbeat = op.UnpauseActivitiesOperation.ResetHeartbeat
-		operation.UnpauseActivitiesOperation.Jitter = op.UnpauseActivitiesOperation.Jitter
-		operation.UnpauseActivitiesOperation.Identity = op.UnpauseActivitiesOperation.GetIdentity()
-		input.Operation = operation
+		// operation.UnpauseActivitiesOperation.ResetAttempts = op.UnpauseActivitiesOperation.ResetAttempts
+		// operation.UnpauseActivitiesOperation.ResetHeartbeat = op.UnpauseActivitiesOperation.ResetHeartbeat
+		// operation.UnpauseActivitiesOperation.Jitter = op.UnpauseActivitiesOperation.Jitter
+		// operation.UnpauseActivitiesOperation.Identity = op.UnpauseActivitiesOperation.GetIdentity()
+		// input.Operation = operation
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 		input.BatchType = batcher.BatchTypeResetActivities
 		identity = op.ResetActivitiesOperation.GetIdentity()
-		operation := &batchspb.BatchOperation_ResetActivitiesOperation{
-			ResetActivitiesOperation: &batchpb.BatchOperationResetActivities{
-				Identity:      op.ResetActivitiesOperation.GetIdentity(),
-				Activity:      op.ResetActivitiesOperation.GetActivity(),
-				ResetAttempts: op.ResetActivitiesOperation.ResetAttempts,
-			},
+		input.Operation = &batchspb.BatchOperation_ResetActivitiesOperation{
+			ResetActivitiesOperation: op.ResetActivitiesOperation,
 		}
+		// operation := &batchspb.BatchOperation_ResetActivitiesOperation{
+		// 	ResetActivitiesOperation: &batchpb.BatchOperationResetActivities{
+		// 		Identity:      op.ResetActivitiesOperation.GetIdentity(),
+		// 		Activity:      op.ResetActivitiesOperation.GetActivity(),
+		// 		ResetAttempts: op.ResetActivitiesOperation.ResetAttempts,
+		// 	},
+		// }
 		if op.ResetActivitiesOperation == nil {
 			return nil, serviceerror.NewInvalidArgument("reset activities operation is not set")
 		}
@@ -4665,35 +4668,39 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			if len(a.Type) == 0 {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
-			operation.ResetActivitiesOperation.Activity = &batchpb.BatchOperationResetActivities_Type{
-				Type: a.Type,
-			}
+			// operation.ResetActivitiesOperation.Activity = &batchpb.BatchOperationResetActivities_Type{
+			// 	Type: a.Type,
+			// }
 		case *batchpb.BatchOperationResetActivities_MatchAll:
 			if !a.MatchAll {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
-			operation.ResetActivitiesOperation.Activity = &batchpb.BatchOperationResetActivities_MatchAll{
-				MatchAll: true,
-			}
+			// operation.ResetActivitiesOperation.Activity = &batchpb.BatchOperationResetActivities_MatchAll{
+			// 	MatchAll: true,
+			// }
 		}
 
-		operation.ResetActivitiesOperation.ResetAttempts = op.ResetActivitiesOperation.ResetAttempts
-		operation.ResetActivitiesOperation.ResetHeartbeat = op.ResetActivitiesOperation.ResetHeartbeat
-		operation.ResetActivitiesOperation.Jitter = op.ResetActivitiesOperation.Jitter
-		operation.ResetActivitiesOperation.KeepPaused = op.ResetActivitiesOperation.KeepPaused
-		operation.ResetActivitiesOperation.RestoreOriginalOptions = op.ResetActivitiesOperation.RestoreOriginalOptions
-		operation.ResetActivitiesOperation.Identity = op.ResetActivitiesOperation.GetIdentity()
-		input.Operation = operation
+		// operation.ResetActivitiesOperation.ResetAttempts = op.ResetActivitiesOperation.ResetAttempts
+		// operation.ResetActivitiesOperation.ResetHeartbeat = op.ResetActivitiesOperation.ResetHeartbeat
+		// operation.ResetActivitiesOperation.Jitter = op.ResetActivitiesOperation.Jitter
+		// operation.ResetActivitiesOperation.KeepPaused = op.ResetActivitiesOperation.KeepPaused
+		// operation.ResetActivitiesOperation.RestoreOriginalOptions = op.ResetActivitiesOperation.RestoreOriginalOptions
+		// operation.ResetActivitiesOperation.Identity = op.ResetActivitiesOperation.GetIdentity()
+		// input.Operation = operation
 	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
 		input.BatchType = batcher.BatchTypeUpdateActivitiesOptions
 		identity = op.UpdateActivityOptionsOperation.GetIdentity()
-		operation := &batchspb.BatchOperation_UpdateActivityOptionsOperation{
-			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
-				Identity:   op.UpdateActivityOptionsOperation.GetIdentity(),
-				Activity:   op.UpdateActivityOptionsOperation.GetActivity(),
-				UpdateMask: op.UpdateActivityOptionsOperation.GetUpdateMask(),
-			},
+		input.Operation = &batchspb.BatchOperation_UpdateActivityOptionsOperation{
+			UpdateActivityOptionsOperation: op.UpdateActivityOptionsOperation,
 		}
+
+		// operation := &batchspb.BatchOperation_UpdateActivityOptionsOperation{
+		// 	UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
+		// 		Identity:   op.UpdateActivityOptionsOperation.GetIdentity(),
+		// 		Activity:   op.UpdateActivityOptionsOperation.GetActivity(),
+		// 		UpdateMask: op.UpdateActivityOptionsOperation.GetUpdateMask(),
+		// 	},
+		// }
 		if op.UpdateActivityOptionsOperation == nil {
 			return nil, serviceerror.NewInvalidArgument("update activity options operation is not set")
 		}
@@ -4709,42 +4716,42 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			if len(a.Type) == 0 {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
-			operation.UpdateActivityOptionsOperation.Activity = &batchpb.BatchOperationUpdateActivityOptions_Type{
-				Type: a.Type,
-			}
+			// operation.UpdateActivityOptionsOperation.Activity = &batchpb.BatchOperationUpdateActivityOptions_Type{
+			// 	Type: a.Type,
+			// }
 		case *batchpb.BatchOperationUpdateActivityOptions_MatchAll:
 			if !a.MatchAll {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
-			operation.UpdateActivityOptionsOperation.Activity = &batchpb.BatchOperationUpdateActivityOptions_MatchAll{
-				MatchAll: true,
-			}
+			// operation.UpdateActivityOptionsOperation.Activity = &batchpb.BatchOperationUpdateActivityOptions_MatchAll{
+			// 	MatchAll: true,
+			// }
 		}
 
-		operation.UpdateActivityOptionsOperation.RestoreOriginal = op.UpdateActivityOptionsOperation.GetRestoreOriginal()
-		operation.UpdateActivityOptionsOperation.Identity = op.UpdateActivityOptionsOperation.GetIdentity()
-		if updateMask := op.UpdateActivityOptionsOperation.GetUpdateMask(); updateMask != nil {
-			operation.UpdateActivityOptionsOperation.UpdateMask = &fieldmaskpb.FieldMask{Paths: updateMask.Paths}
-		}
-		if ao := op.UpdateActivityOptionsOperation.GetActivityOptions(); ao != nil {
-			operation.UpdateActivityOptionsOperation.ActivityOptions = &activitypb.ActivityOptions{
-				ScheduleToStartTimeout: ao.ScheduleToStartTimeout,
-				ScheduleToCloseTimeout: ao.ScheduleToCloseTimeout,
-				StartToCloseTimeout:    ao.StartToCloseTimeout,
-				HeartbeatTimeout:       ao.HeartbeatTimeout,
-			}
-			if rp := ao.RetryPolicy; rp != nil {
-				operation.UpdateActivityOptionsOperation.ActivityOptions.RetryPolicy = &commonpb.RetryPolicy{
-					InitialInterval:        rp.InitialInterval,
-					MaximumInterval:        rp.MaximumInterval,
-					BackoffCoefficient:     rp.BackoffCoefficient,
-					NonRetryableErrorTypes: rp.NonRetryableErrorTypes,
-					MaximumAttempts:        rp.MaximumAttempts,
-				}
-			}
-			operation.UpdateActivityOptionsOperation.ActivityOptions.TaskQueue = ao.TaskQueue
-		}
-		input.Operation = operation
+		// operation.UpdateActivityOptionsOperation.RestoreOriginal = op.UpdateActivityOptionsOperation.GetRestoreOriginal()
+		// operation.UpdateActivityOptionsOperation.Identity = op.UpdateActivityOptionsOperation.GetIdentity()
+		// if updateMask := op.UpdateActivityOptionsOperation.GetUpdateMask(); updateMask != nil {
+		// 	operation.UpdateActivityOptionsOperation.UpdateMask = &fieldmaskpb.FieldMask{Paths: updateMask.Paths}
+		// }
+		// if ao := op.UpdateActivityOptionsOperation.GetActivityOptions(); ao != nil {
+		// 	operation.UpdateActivityOptionsOperation.ActivityOptions = &activitypb.ActivityOptions{
+		// 		ScheduleToStartTimeout: ao.ScheduleToStartTimeout,
+		// 		ScheduleToCloseTimeout: ao.ScheduleToCloseTimeout,
+		// 		StartToCloseTimeout:    ao.StartToCloseTimeout,
+		// 		HeartbeatTimeout:       ao.HeartbeatTimeout,
+		// 	}
+		// 	if rp := ao.RetryPolicy; rp != nil {
+		// 		operation.UpdateActivityOptionsOperation.ActivityOptions.RetryPolicy = &commonpb.RetryPolicy{
+		// 			InitialInterval:        rp.InitialInterval,
+		// 			MaximumInterval:        rp.MaximumInterval,
+		// 			BackoffCoefficient:     rp.BackoffCoefficient,
+		// 			NonRetryableErrorTypes: rp.NonRetryableErrorTypes,
+		// 			MaximumAttempts:        rp.MaximumAttempts,
+		// 		}
+		// 	}
+		// 	operation.UpdateActivityOptionsOperation.ActivityOptions.TaskQueue = ao.TaskQueue
+		// }
+		// input.Operation = operation
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}

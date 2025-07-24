@@ -98,6 +98,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 		Namespace: "test-namespace",
 		Query:     "test-query",
 		Reason:    "test-reason",
+		BatchType: BatchTypeTerminate,
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)
@@ -161,7 +162,8 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 				RunId:      uuid.New(),
 			},
 		},
-		Reason: "test-reason",
+		BatchType: BatchTypeTerminate,
+		Reason:    "test-reason",
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)
