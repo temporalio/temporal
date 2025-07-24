@@ -13,7 +13,6 @@ import (
 	context "context"
 	reflect "reflect"
 
-	elastic "github.com/olivere/elastic/v7"
 	enums "go.temporal.io/api/enums/v1"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -43,10 +42,10 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // CatIndices mocks base method.
-func (m *MockClient) CatIndices(ctx context.Context, target string) (elastic.CatIndicesResponse, error) {
+func (m *MockClient) CatIndices(ctx context.Context, target string) (CatIndicesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CatIndices", ctx, target)
-	ret0, _ := ret[0].(elastic.CatIndicesResponse)
+	ret0, _ := ret[0].(CatIndicesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -87,7 +86,7 @@ func (mr *MockClientMockRecorder) CloseScroll(ctx, id any) *gomock.Call {
 }
 
 // Count mocks base method.
-func (m *MockClient) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
+func (m *MockClient) Count(ctx context.Context, index string, query Query) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Count", ctx, index, query)
 	ret0, _ := ret[0].(int64)
@@ -102,10 +101,10 @@ func (mr *MockClientMockRecorder) Count(ctx, index, query any) *gomock.Call {
 }
 
 // CountGroupBy mocks base method.
-func (m *MockClient) CountGroupBy(ctx context.Context, index string, query elastic.Query, aggName string, agg elastic.Aggregation) (*elastic.SearchResult, error) {
+func (m *MockClient) CountGroupBy(ctx context.Context, index string, query Query, aggName string, agg Aggregation) (*SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CountGroupBy", ctx, index, query, aggName, agg)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -147,10 +146,10 @@ func (mr *MockClientMockRecorder) DeleteIndex(ctx, indexName any) *gomock.Call {
 }
 
 // Get mocks base method.
-func (m *MockClient) Get(ctx context.Context, index, docID string) (*elastic.GetResult, error) {
+func (m *MockClient) Get(ctx context.Context, index, docID string) (*GetResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", ctx, index, docID)
-	ret0, _ := ret[0].(*elastic.GetResult)
+	ret0, _ := ret[0].(*GetResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -221,10 +220,10 @@ func (mr *MockClientMockRecorder) OpenPointInTime(ctx, index, keepAliveInterval 
 }
 
 // OpenScroll mocks base method.
-func (m *MockClient) OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error) {
+func (m *MockClient) OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenScroll", ctx, p, keepAliveInterval)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -266,10 +265,10 @@ func (mr *MockClientMockRecorder) RunBulkProcessor(ctx, p any) *gomock.Call {
 }
 
 // Scroll mocks base method.
-func (m *MockClient) Scroll(ctx context.Context, id, keepAliveInterval string) (*elastic.SearchResult, error) {
+func (m *MockClient) Scroll(ctx context.Context, id, keepAliveInterval string) (*SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Scroll", ctx, id, keepAliveInterval)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -281,10 +280,10 @@ func (mr *MockClientMockRecorder) Scroll(ctx, id, keepAliveInterval any) *gomock
 }
 
 // Search mocks base method.
-func (m *MockClient) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
+func (m *MockClient) Search(ctx context.Context, p *SearchParameters) (*SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Search", ctx, p)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -335,10 +334,10 @@ func (m *MockCLIClient) EXPECT() *MockCLIClientMockRecorder {
 }
 
 // CatIndices mocks base method.
-func (m *MockCLIClient) CatIndices(ctx context.Context, target string) (elastic.CatIndicesResponse, error) {
+func (m *MockCLIClient) CatIndices(ctx context.Context, target string) (CatIndicesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CatIndices", ctx, target)
-	ret0, _ := ret[0].(elastic.CatIndicesResponse)
+	ret0, _ := ret[0].(CatIndicesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -379,7 +378,7 @@ func (mr *MockCLIClientMockRecorder) CloseScroll(ctx, id any) *gomock.Call {
 }
 
 // Count mocks base method.
-func (m *MockCLIClient) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
+func (m *MockCLIClient) Count(ctx context.Context, index string, query Query) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Count", ctx, index, query)
 	ret0, _ := ret[0].(int64)
@@ -394,10 +393,10 @@ func (mr *MockCLIClientMockRecorder) Count(ctx, index, query any) *gomock.Call {
 }
 
 // CountGroupBy mocks base method.
-func (m *MockCLIClient) CountGroupBy(ctx context.Context, index string, query elastic.Query, aggName string, agg elastic.Aggregation) (*elastic.SearchResult, error) {
+func (m *MockCLIClient) CountGroupBy(ctx context.Context, index string, query Query, aggName string, agg Aggregation) (*SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CountGroupBy", ctx, index, query, aggName, agg)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -453,10 +452,10 @@ func (mr *MockCLIClientMockRecorder) DeleteIndex(ctx, indexName any) *gomock.Cal
 }
 
 // Get mocks base method.
-func (m *MockCLIClient) Get(ctx context.Context, index, docID string) (*elastic.GetResult, error) {
+func (m *MockCLIClient) Get(ctx context.Context, index, docID string) (*GetResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", ctx, index, docID)
-	ret0, _ := ret[0].(*elastic.GetResult)
+	ret0, _ := ret[0].(*GetResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -527,10 +526,10 @@ func (mr *MockCLIClientMockRecorder) OpenPointInTime(ctx, index, keepAliveInterv
 }
 
 // OpenScroll mocks base method.
-func (m *MockCLIClient) OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error) {
+func (m *MockCLIClient) OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenScroll", ctx, p, keepAliveInterval)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -572,10 +571,10 @@ func (mr *MockCLIClientMockRecorder) RunBulkProcessor(ctx, p any) *gomock.Call {
 }
 
 // Scroll mocks base method.
-func (m *MockCLIClient) Scroll(ctx context.Context, id, keepAliveInterval string) (*elastic.SearchResult, error) {
+func (m *MockCLIClient) Scroll(ctx context.Context, id, keepAliveInterval string) (*SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Scroll", ctx, id, keepAliveInterval)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -587,10 +586,10 @@ func (mr *MockCLIClientMockRecorder) Scroll(ctx, id, keepAliveInterval any) *gom
 }
 
 // Search mocks base method.
-func (m *MockCLIClient) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
+func (m *MockCLIClient) Search(ctx context.Context, p *SearchParameters) (*SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Search", ctx, p)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -641,10 +640,10 @@ func (m *MockIntegrationTestsClient) EXPECT() *MockIntegrationTestsClientMockRec
 }
 
 // CatIndices mocks base method.
-func (m *MockIntegrationTestsClient) CatIndices(ctx context.Context, target string) (elastic.CatIndicesResponse, error) {
+func (m *MockIntegrationTestsClient) CatIndices(ctx context.Context, target string) (CatIndicesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CatIndices", ctx, target)
-	ret0, _ := ret[0].(elastic.CatIndicesResponse)
+	ret0, _ := ret[0].(CatIndicesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -685,7 +684,7 @@ func (mr *MockIntegrationTestsClientMockRecorder) CloseScroll(ctx, id any) *gomo
 }
 
 // Count mocks base method.
-func (m *MockIntegrationTestsClient) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
+func (m *MockIntegrationTestsClient) Count(ctx context.Context, index string, query Query) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Count", ctx, index, query)
 	ret0, _ := ret[0].(int64)
@@ -700,10 +699,10 @@ func (mr *MockIntegrationTestsClientMockRecorder) Count(ctx, index, query any) *
 }
 
 // CountGroupBy mocks base method.
-func (m *MockIntegrationTestsClient) CountGroupBy(ctx context.Context, index string, query elastic.Query, aggName string, agg elastic.Aggregation) (*elastic.SearchResult, error) {
+func (m *MockIntegrationTestsClient) CountGroupBy(ctx context.Context, index string, query Query, aggName string, agg Aggregation) (*SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CountGroupBy", ctx, index, query, aggName, agg)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -745,10 +744,10 @@ func (mr *MockIntegrationTestsClientMockRecorder) DeleteIndex(ctx, indexName any
 }
 
 // Get mocks base method.
-func (m *MockIntegrationTestsClient) Get(ctx context.Context, index, docID string) (*elastic.GetResult, error) {
+func (m *MockIntegrationTestsClient) Get(ctx context.Context, index, docID string) (*GetResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", ctx, index, docID)
-	ret0, _ := ret[0].(*elastic.GetResult)
+	ret0, _ := ret[0].(*GetResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -790,10 +789,10 @@ func (mr *MockIntegrationTestsClientMockRecorder) IndexExists(ctx, indexName any
 }
 
 // IndexGetSettings mocks base method.
-func (m *MockIntegrationTestsClient) IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error) {
+func (m *MockIntegrationTestsClient) IndexGetSettings(ctx context.Context, indexName string) (map[string]*IndicesGetSettingsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IndexGetSettings", ctx, indexName)
-	ret0, _ := ret[0].(map[string]*elastic.IndicesGetSettingsResponse)
+	ret0, _ := ret[0].(map[string]*IndicesGetSettingsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -864,10 +863,10 @@ func (mr *MockIntegrationTestsClientMockRecorder) OpenPointInTime(ctx, index, ke
 }
 
 // OpenScroll mocks base method.
-func (m *MockIntegrationTestsClient) OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error) {
+func (m *MockIntegrationTestsClient) OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenScroll", ctx, p, keepAliveInterval)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -923,10 +922,10 @@ func (mr *MockIntegrationTestsClientMockRecorder) RunBulkProcessor(ctx, p any) *
 }
 
 // Scroll mocks base method.
-func (m *MockIntegrationTestsClient) Scroll(ctx context.Context, id, keepAliveInterval string) (*elastic.SearchResult, error) {
+func (m *MockIntegrationTestsClient) Scroll(ctx context.Context, id, keepAliveInterval string) (*SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Scroll", ctx, id, keepAliveInterval)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -938,10 +937,10 @@ func (mr *MockIntegrationTestsClientMockRecorder) Scroll(ctx, id, keepAliveInter
 }
 
 // Search mocks base method.
-func (m *MockIntegrationTestsClient) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
+func (m *MockIntegrationTestsClient) Search(ctx context.Context, p *SearchParameters) (*SearchResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Search", ctx, p)
-	ret0, _ := ret[0].(*elastic.SearchResult)
+	ret0, _ := ret[0].(*SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -965,4 +964,121 @@ func (m *MockIntegrationTestsClient) WaitForYellowStatus(ctx context.Context, in
 func (mr *MockIntegrationTestsClientMockRecorder) WaitForYellowStatus(ctx, index any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForYellowStatus", reflect.TypeOf((*MockIntegrationTestsClient)(nil).WaitForYellowStatus), ctx, index)
+}
+
+// MockQuery is a mock of Query interface.
+type MockQuery struct {
+	ctrl     *gomock.Controller
+	recorder *MockQueryMockRecorder
+	isgomock struct{}
+}
+
+// MockQueryMockRecorder is the mock recorder for MockQuery.
+type MockQueryMockRecorder struct {
+	mock *MockQuery
+}
+
+// NewMockQuery creates a new mock instance.
+func NewMockQuery(ctrl *gomock.Controller) *MockQuery {
+	mock := &MockQuery{ctrl: ctrl}
+	mock.recorder = &MockQueryMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockQuery) EXPECT() *MockQueryMockRecorder {
+	return m.recorder
+}
+
+// Source mocks base method.
+func (m *MockQuery) Source() (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Source")
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Source indicates an expected call of Source.
+func (mr *MockQueryMockRecorder) Source() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Source", reflect.TypeOf((*MockQuery)(nil).Source))
+}
+
+// MockSorter is a mock of Sorter interface.
+type MockSorter struct {
+	ctrl     *gomock.Controller
+	recorder *MockSorterMockRecorder
+	isgomock struct{}
+}
+
+// MockSorterMockRecorder is the mock recorder for MockSorter.
+type MockSorterMockRecorder struct {
+	mock *MockSorter
+}
+
+// NewMockSorter creates a new mock instance.
+func NewMockSorter(ctrl *gomock.Controller) *MockSorter {
+	mock := &MockSorter{ctrl: ctrl}
+	mock.recorder = &MockSorterMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSorter) EXPECT() *MockSorterMockRecorder {
+	return m.recorder
+}
+
+// Source mocks base method.
+func (m *MockSorter) Source() (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Source")
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Source indicates an expected call of Source.
+func (mr *MockSorterMockRecorder) Source() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Source", reflect.TypeOf((*MockSorter)(nil).Source))
+}
+
+// MockAggregation is a mock of Aggregation interface.
+type MockAggregation struct {
+	ctrl     *gomock.Controller
+	recorder *MockAggregationMockRecorder
+	isgomock struct{}
+}
+
+// MockAggregationMockRecorder is the mock recorder for MockAggregation.
+type MockAggregationMockRecorder struct {
+	mock *MockAggregation
+}
+
+// NewMockAggregation creates a new mock instance.
+func NewMockAggregation(ctrl *gomock.Controller) *MockAggregation {
+	mock := &MockAggregation{ctrl: ctrl}
+	mock.recorder = &MockAggregationMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockAggregation) EXPECT() *MockAggregationMockRecorder {
+	return m.recorder
+}
+
+// Source mocks base method.
+func (m *MockAggregation) Source() (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Source")
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Source indicates an expected call of Source.
+func (mr *MockAggregationMockRecorder) Source() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Source", reflect.TypeOf((*MockAggregation)(nil).Source))
 }

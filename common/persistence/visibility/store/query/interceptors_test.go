@@ -51,7 +51,7 @@ func TestNameInterceptor(t *testing.T) {
 	assert.NoError(t, err)
 	actualQueryMap, _ := queryParams.Query.Source()
 	actualQueryJson, _ := json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"term":{"ExecutionStatus1":"Running"}}}}`, string(actualQueryJson))
+	assert.Equal(t, `{"bool":{"filter":[{"term":{"ExecutionStatus1":"Running"}}]}}`, string(actualQueryJson))
 	var actualSorterMaps []interface{}
 	for _, sorter := range queryParams.Sorter {
 		actualSorterMap, _ := sorter.Source()
@@ -71,19 +71,19 @@ func TestValuesInterceptor(t *testing.T) {
 	assert.NoError(t, err)
 	actualQueryMap, _ := queryParams.Query.Source()
 	actualQueryJson, _ := json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"term":{"ExecutionStatus":"Status1"}}}}`, string(actualQueryJson))
+	assert.Equal(t, `{"bool":{"filter":[{"term":{"ExecutionStatus":"Status1"}}]}}`, string(actualQueryJson))
 
 	queryParams, err = c.ConvertWhereOrderBy("ExecutionStatus in (1,2)")
 	assert.NoError(t, err)
 	actualQueryMap, _ = queryParams.Query.Source()
 	actualQueryJson, _ = json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"terms":{"ExecutionStatus":["Status1","Status2"]}}}}`, string(actualQueryJson))
+	assert.Equal(t, `{"bool":{"filter":[{"terms":{"ExecutionStatus":["Status1","Status2"]}}]}}`, string(actualQueryJson))
 
 	queryParams, err = c.ConvertWhereOrderBy("ExecutionStatus between 5 and 7")
 	assert.NoError(t, err)
 	actualQueryMap, _ = queryParams.Query.Source()
 	actualQueryJson, _ = json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"range":{"ExecutionStatus":{"from":"Status5","include_lower":true,"include_upper":true,"to":"Status7"}}}}}`, string(actualQueryJson))
+	assert.Equal(t, `{"bool":{"filter":[{"range":{"ExecutionStatus":{"gte":"Status5","lte":"Status7"}}}]}}`, string(actualQueryJson))
 
 	_, err = c.ConvertWhereOrderBy("error='Running'")
 	assert.Error(t, err)
