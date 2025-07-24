@@ -375,6 +375,7 @@ func (e *executableImpl) writeToDLQ(ctx context.Context) error {
 		currentClusterName,
 		tasks.GetShardIDForTask(e.Task, int(numShards)),
 		e.GetTask(),
+		e.lastActiveness,
 	)
 	if err != nil {
 		metrics.TaskDLQFailures.With(e.metricsHandler).Record(1)
