@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -61,7 +62,7 @@ type (
 		// it should adjust its poller count
 		pollerScalingDecision *taskqueuepb.PollerScalingDecision
 		recycleToken          func(*internalTask)
-		removeFromMatcher     func()
+		removeFromMatcher     atomic.Pointer[func()]
 
 		// These fields are for use by matcherData:
 		waitableMatchResult
@@ -79,6 +80,12 @@ type (
 		forwardErr error
 		startErr   error
 	}
+)
+
+var (
+	// sentinel values for task.removeFromMatcher
+	removeFuncNotAddedYet = func() {}
+	removeFuncEvicted     = func() {}
 )
 
 func (res taskResponse) err() error {
@@ -163,6 +170,10 @@ func newInternalNexusTask(
 
 func newInternalStartedTask(info *startedTaskInfo) *internalTask {
 	return &internalTask{started: info}
+}
+
+func newPollForwarderTask() *internalTask {
+	return &internalTask{isPollForwarder: true}
 }
 
 // hasEmptyResponse is true if a task contains an empty response for the appropriate TaskInfo
@@ -266,6 +277,24 @@ func (task *internalTask) getPriority() *commonpb.Priority {
 
 func (task *internalTask) fairLevel() fairLevel {
 	return fairLevelFromAllocatedTask(task.event.AllocatedTaskInfo)
+}
+
+// resetMatcherState should be called before adding or re-adding a backlog task to priMatcher.
+func (task *internalTask) resetMatcherState() {
+	task.removeFromMatcher.Store(&removeFuncNotAddedYet)
+}
+
+// setRemoveFunc sets the function to remove the task from the matcher.
+// It returns true if the task is still valid and the function was set,
+// false if the task was evicted already and should not be added.
+func (task *internalTask) setRemoveFunc(remove func()) bool {
+	return task.removeFromMatcher.CompareAndSwap(&removeFuncNotAddedYet, &remove)
+}
+
+// setEvicted marks the task as evicted. If it was added to a matcher it will be removed.
+func (task *internalTask) setEvicted() {
+	remove := task.removeFromMatcher.Swap(&removeFuncEvicted)
+	(*remove)()
 }
 
 // finish marks a task as finished. Should be called after a poller picks up a task
