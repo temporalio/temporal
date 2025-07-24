@@ -49,6 +49,8 @@ message BatchOperation {
   google.protobuf.Duration activity_heartbeat_timeout = 17;
 
   repeated string non_retryable_errors = 18;
+
+  string batch_type = 19;
 }
 
 

@@ -17,7 +17,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/server/api/batch/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -347,20 +346,20 @@ func (a *activities) adjustQuery(batchParams BatchParams) string {
 	}
 }
 
-func (a *activities) adjustQueryProtobuf(batchParams *batch.BatchOperation) string {
+func (a *activities) adjustQueryProtobuf(batchParams *batchspb.BatchOperation) string {
 	if len(batchParams.Query) == 0 {
 		// don't add anything if query is empty
 		return batchParams.Query
 	}
 
 	switch batchParams.GetOperation().(type) {
-	case *batch.BatchOperation_TerminationOperation,
-		*batch.BatchOperation_CancellationOperation,
-		*batch.BatchOperation_SignalOperation,
-		*batch.BatchOperation_UpdateWorkflowExecutionOptionsOperation,
-		*batch.BatchOperation_UnpauseActivitiesOperation,
-		*batch.BatchOperation_ResetActivitiesOperation,
-		*batch.BatchOperation_UpdateActivityOptionsOperation:
+	case *batchspb.BatchOperation_TerminationOperation,
+		*batchspb.BatchOperation_CancellationOperation,
+		*batchspb.BatchOperation_SignalOperation,
+		*batchspb.BatchOperation_UpdateWorkflowExecutionOptionsOperation,
+		*batchspb.BatchOperation_UnpauseActivitiesOperation,
+		*batchspb.BatchOperation_ResetActivitiesOperation,
+		*batchspb.BatchOperation_UpdateActivityOptionsOperation:
 		return fmt.Sprintf("(%s) AND (%s)", batchParams.Query, statusRunningQueryFilter)
 	default:
 		return batchParams.Query
@@ -612,7 +611,7 @@ func startTaskProcessor(
 // nolint:revive,cognitive-complexity
 func startTaskProcessorProtobuf(
 	ctx context.Context,
-	batchParams *batch.BatchOperation,
+	batchParams *batchspb.BatchOperation,
 	taskCh chan taskDetail,
 	respCh chan error,
 	limiter *rate.Limiter,
@@ -632,17 +631,17 @@ func startTaskProcessorProtobuf(
 			var err error
 
 			switch operation := batchParams.Operation.(type) {
-			case *batch.BatchOperation_TerminationOperation:
+			case *batchspb.BatchOperation_TerminationOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						return sdkClient.TerminateWorkflow(ctx, workflowID, runID, batchParams.Reason)
 					})
-			case *batch.BatchOperation_CancellationOperation:
+			case *batchspb.BatchOperation_CancellationOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						return sdkClient.CancelWorkflow(ctx, workflowID, runID)
 					})
-			case *batch.BatchOperation_SignalOperation:
+			case *batchspb.BatchOperation_SignalOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						_, err := frontendClient.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
@@ -657,7 +656,7 @@ func startTaskProcessorProtobuf(
 						})
 						return err
 					})
-			case *batch.BatchOperation_DeletionOperation:
+			case *batchspb.BatchOperation_DeletionOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						_, err := frontendClient.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
@@ -669,7 +668,7 @@ func startTaskProcessorProtobuf(
 						})
 						return err
 					})
-			case *batch.BatchOperation_ResetOperation:
+			case *batchspb.BatchOperation_ResetOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						workflowExecution := &commonpb.WorkflowExecution{
@@ -713,7 +712,7 @@ func startTaskProcessorProtobuf(
 						})
 						return err
 					})
-			case *batch.BatchOperation_UnpauseActivitiesOperation:
+			case *batchspb.BatchOperation_UnpauseActivitiesOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						unpauseRequest := &workflowservice.UnpauseActivityRequest{
@@ -741,7 +740,7 @@ func startTaskProcessorProtobuf(
 						return err
 					})
 
-			case *batch.BatchOperation_UpdateWorkflowExecutionOptionsOperation:
+			case *batchspb.BatchOperation_UpdateWorkflowExecutionOptionsOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						var err error
@@ -757,7 +756,7 @@ func startTaskProcessorProtobuf(
 						return err
 					})
 
-			case *batch.BatchOperation_ResetActivitiesOperation:
+			case *batchspb.BatchOperation_ResetActivitiesOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						resetRequest := &workflowservice.ResetActivityRequest{
@@ -783,7 +782,7 @@ func startTaskProcessorProtobuf(
 						_, err = frontendClient.ResetActivity(ctx, resetRequest)
 						return err
 					})
-			case *batch.BatchOperation_UpdateActivityOptionsOperation:
+			case *batchspb.BatchOperation_UpdateActivityOptionsOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						updateRequest := &workflowservice.UpdateActivityOptionsRequest{

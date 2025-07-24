@@ -57,6 +57,7 @@ type BatchOperation struct {
 	AttemptsOnRetryableError int64                      `protobuf:"varint,16,opt,name=attempts_on_retryable_error,json=attemptsOnRetryableError,proto3" json:"attempts_on_retryable_error,omitempty"`
 	ActivityHeartbeatTimeout *durationpb.Duration       `protobuf:"bytes,17,opt,name=activity_heartbeat_timeout,json=activityHeartbeatTimeout,proto3" json:"activity_heartbeat_timeout,omitempty"`
 	NonRetryableErrors       []string                   `protobuf:"bytes,18,rep,name=non_retryable_errors,json=nonRetryableErrors,proto3" json:"non_retryable_errors,omitempty"`
+	BatchType                string                     `protobuf:"bytes,19,opt,name=batch_type,json=batchType,proto3" json:"batch_type,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
@@ -240,6 +241,13 @@ func (x *BatchOperation) GetNonRetryableErrors() []string {
 		return x.NonRetryableErrors
 	}
 	return nil
+}
+
+func (x *BatchOperation) GetBatchType() string {
+	if x != nil {
+		return x.BatchType
+	}
+	return ""
 }
 
 type isBatchOperation_Operation interface {
@@ -682,7 +690,7 @@ var File_temporal_server_api_batch_v1_request_response_proto protoreflect.FileDe
 
 const file_temporal_server_api_batch_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"3temporal/server/api/batch/v1/request_response.proto\x12\x1ctemporal.server.api.batch.v1\x1a\x1egoogle/protobuf/duration.proto\x1a#temporal/api/batch/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/workflow/v1/message.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a*temporal/server/api/clock/v1/message.proto\"\xcb\v\n" +
+	"3temporal/server/api/batch/v1/request_response.proto\x12\x1ctemporal.server.api.batch.v1\x1a\x1egoogle/protobuf/duration.proto\x1a#temporal/api/batch/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/workflow/v1/message.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a*temporal/server/api/clock/v1/message.proto\"\xea\v\n" +
 	"\x0eBatchOperation\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x14\n" +
 	"\x05query\x18\x02 \x01(\tR\x05query\x12Z\n" +
@@ -702,7 +710,9 @@ const file_temporal_server_api_batch_v1_request_response_proto_rawDesc = "" +
 	"\vconcurrency\x18\x0f \x01(\x03R\vconcurrency\x12=\n" +
 	"\x1battempts_on_retryable_error\x18\x10 \x01(\x03R\x18attemptsOnRetryableError\x12W\n" +
 	"\x1aactivity_heartbeat_timeout\x18\x11 \x01(\v2\x19.google.protobuf.DurationR\x18activityHeartbeatTimeout\x120\n" +
-	"\x14non_retryable_errors\x18\x12 \x03(\tR\x12nonRetryableErrorsB\v\n" +
+	"\x14non_retryable_errors\x18\x12 \x03(\tR\x12nonRetryableErrors\x12\x1d\n" +
+	"\n" +
+	"batch_type\x18\x13 \x01(\tR\tbatchTypeB\v\n" +
 	"\toperation\"\xe3\x0e\n" +
 	"\"StartBatchWorkflowExecutionRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +

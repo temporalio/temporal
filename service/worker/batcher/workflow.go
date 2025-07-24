@@ -358,36 +358,42 @@ func validateParams(params BatchParams) error {
 }
 
 func validateParamsProtobuf(params *batch.BatchOperation) error {
-	if params.Operation == nil ||
-		params.Reason == "" ||
-		params.Namespace == "" ||
-		(params.Query == "" && len(params.WorkflowExecutions) == 0) {
-		return fmt.Errorf("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
+	if params.Operation == nil {
+		return errors.New("must provide Operation")
+	}
+	if params.Reason == "" {
+		return errors.New("must provide Reason")
+	}
+	if params.Namespace == "" {
+		return errors.New("must provide Namespace")
+	}
+	if params.Query == "" && len(params.WorkflowExecutions) == 0 {
+		return errors.New("must provide Query or WorkflowExecutions")
 	}
 
 	if len(params.Query) > 0 && len(params.WorkflowExecutions) > 0 {
-		return fmt.Errorf("batch query and executions are mutually exclusive")
+		return errors.New("batch query and executions are mutually exclusive")
 	}
 
 	switch op := params.Operation.(type) {
 	case *batch.BatchOperation_SignalOperation:
 		if op.SignalOperation.GetSignal() == "" {
-			return fmt.Errorf("must provide signal name")
+			return errors.New("must provide signal name")
 		}
 		return nil
 	case *batch.BatchOperation_UpdateWorkflowExecutionOptionsOperation:
 		if op.UpdateWorkflowExecutionOptionsOperation.GetWorkflowExecutionOptions() == nil {
-			return fmt.Errorf("must provide UpdateOptions")
+			return errors.New("must provide UpdateOptions")
 		}
 		if op.UpdateWorkflowExecutionOptionsOperation.GetUpdateMask() == nil {
-			return fmt.Errorf("must provide UpdateMask")
+			return errors.New("must provide UpdateMask")
 		}
 		return worker_versioning.ValidateVersioningOverride(op.UpdateWorkflowExecutionOptionsOperation.GetWorkflowExecutionOptions().GetVersioningOverride())
 	case *batch.BatchOperation_CancellationOperation, *batch.BatchOperation_TerminationOperation, *batch.BatchOperation_DeletionOperation, *batch.BatchOperation_ResetOperation:
 		return nil
 	case *batch.BatchOperation_UnpauseActivitiesOperation:
 		if op.UnpauseActivitiesOperation.GetActivity() == nil && !op.UnpauseActivitiesOperation.GetMatchAll() {
-			return fmt.Errorf("must provide ActivityType or MatchAll")
+			return errors.New("must provide ActivityType or MatchAll")
 		}
 		return nil
 	case *batch.BatchOperation_ResetActivitiesOperation:
