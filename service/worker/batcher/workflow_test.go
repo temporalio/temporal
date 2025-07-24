@@ -9,7 +9,7 @@ import (
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/testsuite"
-	"go.temporal.io/server/api/batch/v1"
+	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.uber.org/mock/gomock"
 )
 
@@ -43,7 +43,7 @@ func (s *batcherSuite) TestBatchWorkflow_MissingParams() {
 }
 
 func (s *batcherSuite) TestBatchWorkflow_MissingParams_Protobuf() {
-	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batch.BatchOperation{})
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{})
 	err := s.env.GetWorkflowError()
 	s.Require().Error(err)
 	s.Contains(err.Error(), "must provide required parameters")
@@ -91,8 +91,8 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 			},
 		}, memo)
 	}).Once()
-	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batch.BatchOperation{
-		Operation: &batch.BatchOperation_TerminationOperation{
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{
+		Operation: &batchspb.BatchOperation_TerminationOperation{
 			TerminationOperation: &batchpb.BatchOperationTermination{},
 		},
 		Namespace: "test-namespace",
@@ -150,8 +150,8 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 			},
 		}, memo)
 	}).Once()
-	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batch.BatchOperation{
-		Operation: &batch.BatchOperation_TerminationOperation{
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{
+		Operation: &batchspb.BatchOperation_TerminationOperation{
 			TerminationOperation: &batchpb.BatchOperationTermination{},
 		},
 		Namespace: "test-namespace",
@@ -161,6 +161,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 				RunId:      uuid.New(),
 			},
 		},
+		Reason: "test-reason",
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)

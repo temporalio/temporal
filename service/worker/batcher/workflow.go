@@ -10,7 +10,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/api/batch/v1"
+	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -265,7 +265,7 @@ func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDeta
 }
 
 // BatchWorkflowProtobuf is the workflow that runs a batch job of resetting workflows.
-func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batch.BatchOperation) (HeartBeatDetails, error) {
+func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOperation) (HeartBeatDetails, error) {
 	if batchParams == nil {
 		return HeartBeatDetails{}, errors.New("batchParams is nil")
 	}
@@ -357,18 +357,12 @@ func validateParams(params BatchParams) error {
 	}
 }
 
-func validateParamsProtobuf(params *batch.BatchOperation) error {
-	if params.Operation == nil {
-		return errors.New("must provide Operation")
-	}
-	if params.Reason == "" {
-		return errors.New("must provide Reason")
-	}
-	if params.Namespace == "" {
-		return errors.New("must provide Namespace")
-	}
-	if params.Query == "" && len(params.WorkflowExecutions) == 0 {
-		return errors.New("must provide Query or WorkflowExecutions")
+func validateParamsProtobuf(params *batchspb.BatchOperation) error {
+	if params.BatchType == "" ||
+		params.Reason == "" ||
+		params.Namespace == "" ||
+		(params.Query == "" && len(params.WorkflowExecutions) == 0) {
+		return errors.New("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
 	}
 
 	if len(params.Query) > 0 && len(params.WorkflowExecutions) > 0 {
@@ -376,12 +370,12 @@ func validateParamsProtobuf(params *batch.BatchOperation) error {
 	}
 
 	switch op := params.Operation.(type) {
-	case *batch.BatchOperation_SignalOperation:
+	case *batchspb.BatchOperation_SignalOperation:
 		if op.SignalOperation.GetSignal() == "" {
 			return errors.New("must provide signal name")
 		}
 		return nil
-	case *batch.BatchOperation_UpdateWorkflowExecutionOptionsOperation:
+	case *batchspb.BatchOperation_UpdateWorkflowExecutionOptionsOperation:
 		if op.UpdateWorkflowExecutionOptionsOperation.GetWorkflowExecutionOptions() == nil {
 			return errors.New("must provide UpdateOptions")
 		}
@@ -389,19 +383,19 @@ func validateParamsProtobuf(params *batch.BatchOperation) error {
 			return errors.New("must provide UpdateMask")
 		}
 		return worker_versioning.ValidateVersioningOverride(op.UpdateWorkflowExecutionOptionsOperation.GetWorkflowExecutionOptions().GetVersioningOverride())
-	case *batch.BatchOperation_CancellationOperation, *batch.BatchOperation_TerminationOperation, *batch.BatchOperation_DeletionOperation, *batch.BatchOperation_ResetOperation:
+	case *batchspb.BatchOperation_CancellationOperation, *batchspb.BatchOperation_TerminationOperation, *batchspb.BatchOperation_DeletionOperation, *batchspb.BatchOperation_ResetOperation:
 		return nil
-	case *batch.BatchOperation_UnpauseActivitiesOperation:
+	case *batchspb.BatchOperation_UnpauseActivitiesOperation:
 		if op.UnpauseActivitiesOperation.GetActivity() == nil && !op.UnpauseActivitiesOperation.GetMatchAll() {
 			return errors.New("must provide ActivityType or MatchAll")
 		}
 		return nil
-	case *batch.BatchOperation_ResetActivitiesOperation:
+	case *batchspb.BatchOperation_ResetActivitiesOperation:
 		if op.ResetActivitiesOperation.GetActivity() == nil && !op.ResetActivitiesOperation.GetMatchAll() {
 			return errors.New("must provide ActivityType or MatchAll")
 		}
 		return nil
-	case *batch.BatchOperation_UpdateActivityOptionsOperation:
+	case *batchspb.BatchOperation_UpdateActivityOptionsOperation:
 		if op.UpdateActivityOptionsOperation.GetActivity() == nil && !op.UpdateActivityOptionsOperation.GetMatchAll() {
 			return errors.New("must provide ActivityType or MatchAll")
 		}
@@ -427,7 +421,7 @@ func setDefaultParams(params BatchParams) BatchParams {
 	return params
 }
 
-func setDefaultParamsProtobuf(params *batch.BatchOperation) *batch.BatchOperation {
+func setDefaultParamsProtobuf(params *batchspb.BatchOperation) *batchspb.BatchOperation {
 	if params.GetAttemptsOnRetryableError() <= 1 {
 		params.AttemptsOnRetryableError = defaultAttemptsOnRetryableError
 	}
