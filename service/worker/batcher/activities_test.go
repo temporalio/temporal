@@ -9,13 +9,13 @@ import (
 	"unicode"
 
 	"github.com/stretchr/testify/suite"
-	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
@@ -390,7 +390,7 @@ func (s *activitiesSuite) TestAdjustQueryProtobuf() {
 	for _, testRun := range tests {
 		s.Run(testRun.name, func() {
 			a := activities{}
-			batchParams := &batchpb.BatchOperation{Query: testRun.query, Operation: &batchpb.BatchOperation_TerminationOperation{}}
+			batchParams := &batch.BatchOperation{Query: testRun.query, Operation: &batch.BatchOperation_TerminationOperation{}}
 			adjustedQuery := a.adjustQueryProtobuf(batchParams)
 			s.Equal(testRun.expectedResult, adjustedQuery)
 		})
@@ -410,7 +410,7 @@ func (s *activitiesSuite) TestAdjustQueryProtobuf() {
 	for _, testRun := range unknownBatchesTestCase {
 		s.Run(testRun.name, func() {
 			a := activities{}
-			batchParams := &batchpb.BatchOperation{Query: testRun.query}
+			batchParams := &batch.BatchOperation{Query: testRun.query}
 			adjustedQuery := a.adjustQueryProtobuf(batchParams)
 			s.Equal(testRun.expectedResult, adjustedQuery)
 		})

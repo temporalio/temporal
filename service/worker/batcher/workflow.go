@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -265,7 +265,7 @@ func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDeta
 }
 
 // BatchWorkflowProtobuf is the workflow that runs a batch job of resetting workflows.
-func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchpb.BatchOperation) (HeartBeatDetails, error) {
+func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batch.BatchOperation) (HeartBeatDetails, error) {
 	if batchParams == nil {
 		return HeartBeatDetails{}, errors.New("batchParams is nil")
 	}
@@ -357,7 +357,7 @@ func validateParams(params BatchParams) error {
 	}
 }
 
-func validateParamsProtobuf(params *batchpb.BatchOperation) error {
+func validateParamsProtobuf(params *batch.BatchOperation) error {
 	if params.Operation == nil ||
 		params.Reason == "" ||
 		params.Namespace == "" ||
@@ -370,12 +370,12 @@ func validateParamsProtobuf(params *batchpb.BatchOperation) error {
 	}
 
 	switch op := params.Operation.(type) {
-	case *batchpb.BatchOperation_SignalOperation:
+	case *batch.BatchOperation_SignalOperation:
 		if op.SignalOperation.GetSignal() == "" {
 			return fmt.Errorf("must provide signal name")
 		}
 		return nil
-	case *batchpb.BatchOperation_UpdateWorkflowExecutionOptionsOperation:
+	case *batch.BatchOperation_UpdateWorkflowExecutionOptionsOperation:
 		if op.UpdateWorkflowExecutionOptionsOperation.GetWorkflowExecutionOptions() == nil {
 			return fmt.Errorf("must provide UpdateOptions")
 		}
@@ -383,19 +383,19 @@ func validateParamsProtobuf(params *batchpb.BatchOperation) error {
 			return fmt.Errorf("must provide UpdateMask")
 		}
 		return worker_versioning.ValidateVersioningOverride(op.UpdateWorkflowExecutionOptionsOperation.GetWorkflowExecutionOptions().GetVersioningOverride())
-	case *batchpb.BatchOperation_CancellationOperation, *batchpb.BatchOperation_TerminationOperation, *batchpb.BatchOperation_DeletionOperation, *batchpb.BatchOperation_ResetOperation:
+	case *batch.BatchOperation_CancellationOperation, *batch.BatchOperation_TerminationOperation, *batch.BatchOperation_DeletionOperation, *batch.BatchOperation_ResetOperation:
 		return nil
-	case *batchpb.BatchOperation_UnpauseActivitiesOperation:
+	case *batch.BatchOperation_UnpauseActivitiesOperation:
 		if op.UnpauseActivitiesOperation.GetActivity() == nil && !op.UnpauseActivitiesOperation.GetMatchAll() {
 			return fmt.Errorf("must provide ActivityType or MatchAll")
 		}
 		return nil
-	case *batchpb.BatchOperation_ResetActivitiesOperation:
+	case *batch.BatchOperation_ResetActivitiesOperation:
 		if op.ResetActivitiesOperation.GetActivity() == nil && !op.ResetActivitiesOperation.GetMatchAll() {
 			return errors.New("must provide ActivityType or MatchAll")
 		}
 		return nil
-	case *batchpb.BatchOperation_UpdateActivityOptionsOperation:
+	case *batch.BatchOperation_UpdateActivityOptionsOperation:
 		if op.UpdateActivityOptionsOperation.GetActivity() == nil && !op.UpdateActivityOptionsOperation.GetMatchAll() {
 			return errors.New("must provide ActivityType or MatchAll")
 		}
@@ -421,7 +421,7 @@ func setDefaultParams(params BatchParams) BatchParams {
 	return params
 }
 
-func setDefaultParamsProtobuf(params *batchpb.BatchOperation) *batchpb.BatchOperation {
+func setDefaultParamsProtobuf(params *batch.BatchOperation) *batch.BatchOperation {
 	if params.GetAttemptsOnRetryableError() <= 1 {
 		params.AttemptsOnRetryableError = defaultAttemptsOnRetryableError
 	}
