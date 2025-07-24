@@ -11,6 +11,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -74,8 +75,10 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 			taskSerializer := serialization.NewTaskSerializer()
 			namespaceRegistry := namespace.NewMockRegistry(controller)
 			namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
 			writer := replication.NewDLQWriterAdapter(
-				queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), namespaceRegistry),
+				queues.NewDLQWriter(queueWriter, metricsHandler, log.NewTestLogger(), namespaceRegistry),
 				taskSerializer,
 				"test-current-cluster",
 			)
@@ -106,6 +109,13 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 				assert.Equal(t, 21, int(request.Task.GetTaskID()))
 				assert.Equal(t, "test-source-cluster", request.SourceCluster)
 				assert.Equal(t, "test-current-cluster", request.TargetCluster)
+				snapshot := capture.Snapshot()
+				recordings := snapshot[metrics.DLQWrites.Name()]
+				assert.Len(t, recordings, 1)
+				assert.Len(t, recordings[0].Tags, 2)
+				assert.Equal(t, "replication", recordings[0].Tags[metrics.TaskCategoryTagName])
+				namespaceStateTag := metrics.NamespaceStateTag(metrics.PassiveNamespaceStateTagValue)
+				assert.Equal(t, metrics.PassiveNamespaceStateTagValue, recordings[0].Tags[namespaceStateTag.Key()])
 			}
 		})
 	}

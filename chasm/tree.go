@@ -1380,11 +1380,7 @@ func (n *Node) validateTask(
 			"task type for goType %s is not registered", reflect.TypeOf(taskInstance).Name())
 	}
 
-	// TODO: cache validateMethod (reflect.Value) in the registry
-	validator := registableTask.validator
-	validateMethod := reflect.ValueOf(validator).MethodByName("Validate")
-
-	retValues := validateMethod.Call([]reflect.Value{
+	retValues := registableTask.validateFn.Call([]reflect.Value{
 		reflect.ValueOf(validateContext),
 		reflect.ValueOf(n.value),
 		reflect.ValueOf(taskAttributes),
@@ -2203,13 +2199,7 @@ func (n *Node) ExecutePureTask(
 		return nil
 	}
 
-	executor := registrableTask.handler
-	if executor == nil {
-		return fmt.Errorf("no handler registered for task type '%s'", registrableTask.taskType)
-	}
-
-	fn := reflect.ValueOf(executor).MethodByName("Execute")
-	result := fn.Call([]reflect.Value{
+	result := registrableTask.executeFn.Call([]reflect.Value{
 		reflect.ValueOf(ctx),
 		reflect.ValueOf(component),
 		reflect.ValueOf(taskAttributes),
@@ -2320,11 +2310,6 @@ func (n *Node) ExecuteSideEffectTask(
 		return serviceerror.NewInternalf("ExecuteSideEffectTask called on a Pure task '%s'", taskType)
 	}
 
-	executor := registrableTask.handler
-	if executor == nil {
-		return serviceerror.NewInternalf("no handler registered for task type '%s'", taskType)
-	}
-
 	// TODO - update ComponentRef to use the encoded path, and then leave decoding
 	// until access/dereference time.
 	path, err := n.pathEncoder.Decode(taskInfo.Path)
@@ -2350,8 +2335,7 @@ func (n *Node) ExecuteSideEffectTask(
 
 	ctx = newContextWithOperationIntent(ctx, OperationIntentProgress)
 
-	fn := reflect.ValueOf(executor).MethodByName("Execute")
-	result := fn.Call([]reflect.Value{
+	result := registrableTask.executeFn.Call([]reflect.Value{
 		reflect.ValueOf(ctx),
 		reflect.ValueOf(ref),
 		reflect.ValueOf(taskAttributes),
@@ -2383,8 +2367,7 @@ func makeValidationFn(
 		}
 
 		// Call the TaskValidator interface.
-		fn := reflect.ValueOf(registrableTask.validator).MethodByName("Validate")
-		result := fn.Call([]reflect.Value{
+		result := registrableTask.validateFn.Call([]reflect.Value{
 			reflect.ValueOf(ctx),
 			reflect.ValueOf(component),
 			reflect.ValueOf(taskAttributes),

@@ -63,7 +63,12 @@ func NewFactoryFromSession(
 
 // NewTaskStore returns a new task store
 func (f *Factory) NewTaskStore() (p.TaskStore, error) {
-	return NewMatchingTaskStore(f.session, f.logger), nil
+	return NewMatchingTaskStore(f.session, f.logger, false), nil
+}
+
+// NewTaskStore returns a new task store
+func (f *Factory) NewFairTaskStore() (p.TaskStore, error) {
+	return NewMatchingTaskStore(f.session, f.logger, true), nil
 }
 
 // NewShardStore returns a new shard store

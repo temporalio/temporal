@@ -176,7 +176,8 @@ func (m *taskManagerImpl) CreateTasks(
 			return nil, serviceerror.NewUnavailablef("CreateTasks operation failed during serialization. Error : %v", err)
 		}
 		tasks[i] = &InternalCreateTask{
-			TaskId:     task.GetTaskId(),
+			TaskPass:   task.TaskPass,
+			TaskId:     task.TaskId,
 			ExpiryTime: task.Data.ExpiryTime,
 			Task:       taskBlob,
 		}

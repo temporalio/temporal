@@ -229,6 +229,11 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 		return consts.ErrActivityTaskNotFound
 	}
 
+	if ai.Stamp != task.Stamp || ai.Paused {
+		release(nil)                    // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrStaleReference // drop the task
+	}
+
 	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), ai.Version, task.Version, task)
 	if err != nil {
 		return err

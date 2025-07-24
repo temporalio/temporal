@@ -14,6 +14,7 @@ import "temporal/server/api/taskqueue/v1/message.proto";
 // task column
 message AllocatedTaskInfo {
     TaskInfo data = 1;
+    int64 task_pass = 3;
     int64 task_id = 2;
 }
 
@@ -66,7 +67,13 @@ message SubqueueInfo {
 
     // The rest are mutable state for the subqueue:
     int64 ack_level = 2;
+    temporal.server.api.taskqueue.v1.FairLevel fair_ack_level = 4;
+
     int64 approximate_backlog_count = 3;
+
+    // Max read level keeps track of the highest task level ever written, but is only
+    // maintained best-effort. Do not trust these values.
+    temporal.server.api.taskqueue.v1.FairLevel fair_max_read_level = 5;
 }
 
 message SubqueueKey {

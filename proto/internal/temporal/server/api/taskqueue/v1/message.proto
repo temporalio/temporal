@@ -40,13 +40,21 @@ message TaskVersionDirective {
     temporal.server.api.deployment.v1.WorkerDeploymentVersion deployment_version = 5;
 }
 
+message FairLevel {
+    int64 task_pass = 1;
+    int64 task_id = 2;
+}
+
 message InternalTaskQueueStatus {
     int64 read_level = 1;
+    FairLevel fair_read_level = 7;
     int64 ack_level = 2;
+    FairLevel fair_ack_level = 8;
     temporal.api.taskqueue.v1.TaskIdBlock task_id_block = 3;
     int64 loaded_tasks = 4;
     int64 approximate_backlog_count = 5;
     int64 max_read_level = 6;
+    FairLevel fair_max_read_level = 9;
 }
 
 message TaskQueueVersionInfoInternal {
@@ -56,8 +64,11 @@ message TaskQueueVersionInfoInternal {
 message PhysicalTaskQueueInfo {
     // Unversioned workers (with `useVersioning=false`) are reported in unversioned result even if they set a Build ID.
     repeated temporal.api.taskqueue.v1.PollerInfo pollers = 1;
-    temporal.api.taskqueue.v1.TaskQueueStats task_queue_stats = 2;
     repeated InternalTaskQueueStatus internal_task_queue_status = 3;
+    temporal.api.taskqueue.v1.TaskQueueStats task_queue_stats = 2;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "by" is used to clarify the keys. --)
+    map<int32, temporal.api.taskqueue.v1.TaskQueueStats> task_queue_stats_by_priority_key = 4;
 }
 
 // Represents a normal or sticky partition of a task queue.

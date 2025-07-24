@@ -144,6 +144,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ShutdownWorker":                     5,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": 5,
 		"/temporal.api.workflowservice.v1.WorkflowService/RecordWorkerHeartbeat":              5,
+		"/temporal.api.workflowservice.v1.WorkflowService/FetchWorkerConfig":                  5,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerConfig":                 5,
 
 		// GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API. Consider it as any other poll API.
 		PollWorkflowHistoryAPIName: 5,

@@ -9,9 +9,9 @@ type (
 		taskType        string
 		library         namer
 		goType          reflect.Type
-		componentGoType reflect.Type // It is not clear how this one is used.
-		validator       any
-		handler         any
+		componentGoType reflect.Type  // It is not clear how this one is used.
+		validateFn      reflect.Value // The Validate() method of the TaskValidator interface.
+		executeFn       reflect.Value // The Execute() method of the TaskExecutor interface.
 		isPureTask      bool
 	}
 
@@ -22,15 +22,15 @@ type (
 func NewRegistrableSideEffectTask[C any, T any](
 	taskType string,
 	validator TaskValidator[C, T],
-	handler SideEffectTaskExecutor[C, T],
+	executor SideEffectTaskExecutor[C, T],
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	return newRegistrableTask(
 		taskType,
 		reflect.TypeFor[T](),
 		reflect.TypeFor[C](),
-		validator,
-		handler,
+		reflect.ValueOf(validator).MethodByName("Validate"),
+		reflect.ValueOf(executor).MethodByName("Execute"),
 		false,
 		opts...,
 	)
@@ -39,15 +39,15 @@ func NewRegistrableSideEffectTask[C any, T any](
 func NewRegistrablePureTask[C any, T any](
 	taskType string,
 	validator TaskValidator[C, T],
-	handler PureTaskExecutor[C, T],
+	executor PureTaskExecutor[C, T],
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	return newRegistrableTask(
 		taskType,
 		reflect.TypeFor[T](),
 		reflect.TypeFor[C](),
-		validator,
-		handler,
+		reflect.ValueOf(validator).MethodByName("Validate"),
+		reflect.ValueOf(executor).MethodByName("Execute"),
 		true,
 		opts...,
 	)
@@ -56,7 +56,7 @@ func NewRegistrablePureTask[C any, T any](
 func newRegistrableTask(
 	taskType string,
 	goType, componentGoType reflect.Type,
-	validator, handler any,
+	validateFn, executeFn reflect.Value,
 	isPureTask bool,
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
@@ -64,8 +64,8 @@ func newRegistrableTask(
 		taskType:        taskType,
 		goType:          goType,
 		componentGoType: componentGoType,
-		validator:       validator,
-		handler:         handler,
+		validateFn:      validateFn,
+		executeFn:       executeFn,
 		isPureTask:      isPureTask,
 	}
 

@@ -186,6 +186,8 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"RecordWorkerHeartbeat":                 {},
 		"ListWorkers":                           {},
 		"UpdateTaskQueueConfig":                 {},
+		"FetchWorkerConfig":                     {},
+		"UpdateWorkerConfig":                    {},
 	}, apis)
 }
 

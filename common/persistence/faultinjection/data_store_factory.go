@@ -11,6 +11,7 @@ type (
 		fiConfig    *config.FaultInjection
 
 		taskStore          persistence.TaskStore
+		fairTaskStore      persistence.TaskStore
 		shardStore         persistence.ShardStore
 		metadataStore      persistence.MetadataStore
 		executionStore     persistence.ExecutionStore
@@ -51,6 +52,24 @@ func (d *FaultInjectionDataStoreFactory) NewTaskStore() (persistence.TaskStore, 
 		}
 	}
 	return d.taskStore, nil
+}
+
+func (d *FaultInjectionDataStoreFactory) NewFairTaskStore() (persistence.TaskStore, error) {
+	if d.fairTaskStore == nil {
+		baseStore, err := d.baseFactory.NewFairTaskStore()
+		if err != nil {
+			return nil, err
+		}
+		if storeConfig, ok := d.fiConfig.Targets.DataStores[config.TaskStoreName]; ok && len(storeConfig.Methods) > 0 {
+			d.fairTaskStore = newFaultInjectionTaskStore(
+				baseStore,
+				newStoreFaultGenerator(&storeConfig),
+			)
+		} else {
+			d.fairTaskStore = baseStore
+		}
+	}
+	return d.fairTaskStore, nil
 }
 
 func (d *FaultInjectionDataStoreFactory) NewShardStore() (persistence.ShardStore, error) {

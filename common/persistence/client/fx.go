@@ -1,9 +1,11 @@
 package client
 
 import (
+	"errors"
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -61,6 +63,7 @@ var Module = fx.Options(
 	fx.Provide(managerProvider(Factory.NewClusterMetadataManager)),
 	fx.Provide(managerProvider(Factory.NewMetadataManager)),
 	fx.Provide(managerProvider(Factory.NewTaskManager)),
+	fx.Provide(managerProvider(Factory.NewFairTaskManager)),
 	fx.Provide(managerProvider(Factory.NewNamespaceReplicationQueue)),
 	fx.Provide(managerProvider(Factory.NewShardManager)),
 	fx.Provide(managerProvider(Factory.NewExecutionManager)),
@@ -161,7 +164,6 @@ func DataStoreFactoryProvider(
 	metricsHandler metrics.Handler,
 	tracerProvider trace.TracerProvider,
 ) persistence.DataStoreFactory {
-
 	var dataStoreFactory persistence.DataStoreFactory
 	defaultStoreCfg := cfg.DataStores[cfg.DefaultStore]
 	switch {
@@ -195,6 +197,11 @@ func managerProvider[T persistence.Closeable](newManagerFn func(Factory) (T, err
 	return func(f Factory, lc fx.Lifecycle) (T, error) {
 		manager, err := newManagerFn(f) // passing receiver (Factory) as first argument.
 		if err != nil {
+			var unimpl *serviceerror.Unimplemented
+			if errors.As(err, &unimpl) {
+				// allow factories to return Unimplemented, and turn into nil so that fx init doesn't fail.
+				err = nil
+			}
 			var nilT T
 			return nilT, err
 		}

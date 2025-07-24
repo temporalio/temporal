@@ -52,25 +52,26 @@ func TestCurrentCounterAndGauge(t *testing.T) {
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		require.Equal(collect, int64(1), dd.CurrentSuspected())
-	}, time.Second, time.Millisecond)
 
-	snapshot := capture.Snapshot()
-	current := snapshot[metrics.DDCurrentSuspectedDeadlocks.Name()]
-	counter := snapshot[metrics.DDSuspectedDeadlocks.Name()]
-	require.Len(t, current, 1)
-	require.Equal(t, 1.0, current[0].Value)
-	require.Len(t, counter, 1)
-	require.Equal(t, int64(1), counter[0].Value)
+		snapshot := capture.Snapshot()
+		current := snapshot[metrics.DDCurrentSuspectedDeadlocks.Name()]
+		counter := snapshot[metrics.DDSuspectedDeadlocks.Name()]
+		require.Len(collect, current, 1)
+		require.Equal(collect, 1.0, current[0].Value)
+		require.Len(collect, counter, 1)
+		require.Equal(collect, int64(1), counter[0].Value)
+	}, 2*time.Second, time.Millisecond)
 
 	close(b.done)
+
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		require.Equal(collect, int64(0), dd.CurrentSuspected())
-	}, time.Second, time.Millisecond)
 
-	snapshot = capture.Snapshot()
-	current = snapshot[metrics.DDCurrentSuspectedDeadlocks.Name()]
-	counter = snapshot[metrics.DDSuspectedDeadlocks.Name()]
-	require.Len(t, current, 2)
-	require.Equal(t, 0.0, current[1].Value)
-	require.Len(t, counter, 1)
+		snapshot := capture.Snapshot()
+		current := snapshot[metrics.DDCurrentSuspectedDeadlocks.Name()]
+		counter := snapshot[metrics.DDSuspectedDeadlocks.Name()]
+		require.Len(collect, current, 2)
+		require.Equal(collect, 0.0, current[1].Value)
+		require.Len(collect, counter, 1)
+	}, 2*time.Second, time.Millisecond)
 }
