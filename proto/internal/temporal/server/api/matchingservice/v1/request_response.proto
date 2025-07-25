@@ -616,6 +616,5 @@ message DescribeWorkerRequest {
 }
 
 message DescribeWorkerResponse {
-    temporal.api.worker.v1.WorkerInfo workers_info = 1;
+    temporal.api.worker.v1.WorkerInfo worker_info = 1;
 }
-
