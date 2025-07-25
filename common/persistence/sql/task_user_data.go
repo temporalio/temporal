@@ -5,7 +5,6 @@ import (
 	"database/sql"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -13,15 +12,7 @@ import (
 )
 
 type userDataStore struct {
-	UserDB sqlplugin.DB
-	logger log.Logger
-}
-
-func newUserDataStore(db sqlplugin.DB, logger log.Logger) *userDataStore {
-	return &userDataStore{
-		UserDB: db,
-		logger: logger,
-	}
+	SqlStore
 }
 
 func (uds *userDataStore) GetTaskQueueUserData(ctx context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.InternalGetTaskQueueUserDataResponse, error) {
@@ -29,7 +20,7 @@ func (uds *userDataStore) GetTaskQueueUserData(ctx context.Context, request *per
 	if err != nil {
 		return nil, serviceerror.NewInternalf("failed to parse namespace ID as UUID: %v", err)
 	}
-	response, err := uds.UserDB.GetTaskQueueUserData(ctx, &sqlplugin.GetTaskQueueUserDataRequest{
+	response, err := uds.Db.GetTaskQueueUserData(ctx, &sqlplugin.GetTaskQueueUserDataRequest{
 		NamespaceID:   namespaceID,
 		TaskQueueName: request.TaskQueue,
 	})
@@ -60,7 +51,7 @@ func (uds *userDataStore) UpdateTaskQueueUserData(ctx context.Context, request *
 				Version:       update.Version,
 			})
 			// note these are in a transaction: if one fails the others will be rolled back
-			if uds.UserDB.IsDupEntryError(err) {
+			if uds.Db.IsDupEntryError(err) {
 				err = &persistence.ConditionFailedError{Msg: err.Error()}
 			}
 			if persistence.IsConflictErr(err) && update.Conflicting != nil {
@@ -116,7 +107,7 @@ func (uds *userDataStore) ListTaskQueueUserDataEntries(ctx context.Context, requ
 		lastQueueName = token.LastTaskQueueName
 	}
 
-	rows, err := uds.UserDB.ListTaskQueueUserDataEntries(ctx, &sqlplugin.ListTaskQueueUserDataEntriesRequest{
+	rows, err := uds.Db.ListTaskQueueUserDataEntries(ctx, &sqlplugin.ListTaskQueueUserDataEntriesRequest{
 		NamespaceID:       namespaceID,
 		LastTaskQueueName: lastQueueName,
 		Limit:             request.PageSize,
@@ -151,7 +142,7 @@ func (uds *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p
 	if err != nil {
 		return nil, serviceerror.NewInternal(err.Error())
 	}
-	return uds.UserDB.GetTaskQueuesByBuildId(ctx, &sqlplugin.GetTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
+	return uds.Db.GetTaskQueuesByBuildId(ctx, &sqlplugin.GetTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
 }
 
 func (uds *userDataStore) CountTaskQueuesByBuildId(ctx context.Context, request *persistence.CountTaskQueuesByBuildIdRequest) (int, error) {
@@ -159,11 +150,11 @@ func (uds *userDataStore) CountTaskQueuesByBuildId(ctx context.Context, request 
 	if err != nil {
 		return 0, serviceerror.NewInternal(err.Error())
 	}
-	return uds.UserDB.CountTaskQueuesByBuildId(ctx, &sqlplugin.CountTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
+	return uds.Db.CountTaskQueuesByBuildId(ctx, &sqlplugin.CountTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
 }
 
 func (uds *userDataStore) txExecute(ctx context.Context, operation string, f func(tx sqlplugin.Tx) error) error {
-	tx, err := uds.UserDB.BeginTx(ctx)
+	tx, err := uds.Db.BeginTx(ctx)
 	if err != nil {
 		return serviceerror.NewUnavailablef("%s failed. Failed to start transaction. Error: %v", operation, err)
 	}

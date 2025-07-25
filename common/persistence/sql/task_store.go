@@ -27,9 +27,15 @@ func newTaskPersistence(
 	logger log.Logger,
 	enableFairness bool,
 ) (persistence.TaskStore, error) {
-	userDataStore := newUserDataStore(db, logger)
-	if enableFairness {
-		return newTaskManagerV2(db, userDataStore, taskScanPartitions, logger)
+	store := SqlStore{
+		Db:     db,
+		logger: logger,
 	}
-	return newTaskManagerV1(db, userDataStore, taskScanPartitions, logger)
+	userDataStore := userDataStore{SqlStore: store}
+	taskQueueStore := taskQueueStore{SqlStore: store, taskScanPartitions: uint32(taskScanPartitions)}
+	if enableFairness {
+		taskQueueStore.version = sqlplugin.MatchingTaskVersion2
+		return newTaskManagerV2(db, userDataStore, taskQueueStore, logger)
+	}
+	return newTaskManagerV1(db, userDataStore, taskQueueStore, logger)
 }

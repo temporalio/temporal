@@ -31,7 +31,7 @@ type (
 		PageSize          *int
 	}
 
-	// MatchingTaskV2 is the SQL persistence interface for matching fairness tasks
+	// MatchingTaskV2 is the SQL persistence interface for v2 matching tasks, which support fairness.
 	MatchingTaskV2 interface {
 		// InsertIntoTasksV2 inserts one or more rows into tasks_v2 table for matching fairness
 		InsertIntoTasksV2(ctx context.Context, rows []TasksRowV2) (sql.Result, error)

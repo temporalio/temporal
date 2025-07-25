@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	taskQueueCreatePart = `INTO task_queues(range_hash, task_queue_id, range_id, data, data_encoding) ` +
+	taskQueueCreatePart = `INTO task_queues (range_hash, task_queue_id, range_id, data, data_encoding) ` +
 		`VALUES (:range_hash, :task_queue_id, :range_id, :data, :data_encoding)`
 
 	// (default range ID: initialRangeID == 1)
@@ -24,7 +24,7 @@ const (
 	task_queue_id = :task_queue_id
 	`
 
-	listTaskQueueRowSelect = `SELECT range_hash, task_queue_id, range_id, data, data_encoding from task_queues `
+	listTaskQueueRowSelect = `SELECT range_hash, task_queue_id, range_id, data, data_encoding FROM task_queues `
 
 	listTaskQueueWithHashRangeQry = listTaskQueueRowSelect +
 		`WHERE range_hash >= $1 AND range_hash <= $2 AND task_queue_id > $3 ORDER BY task_queue_id ASC LIMIT $4`
