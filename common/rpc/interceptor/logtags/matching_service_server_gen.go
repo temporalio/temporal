@@ -55,6 +55,10 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 		return nil
 	case *matchingservice.DescribeVersionedTaskQueuesResponse:
 		return nil
+	case *matchingservice.DescribeWorkerRequest:
+		return nil
+	case *matchingservice.DescribeWorkerResponse:
+		return nil
 	case *matchingservice.DispatchNexusTaskRequest:
 		return nil
 	case *matchingservice.DispatchNexusTaskResponse:
