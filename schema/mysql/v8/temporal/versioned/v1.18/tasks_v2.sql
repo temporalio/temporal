@@ -1,4 +1,3 @@
-
 -- Stores activity or workflow tasks
 -- Used for fairness scheduling. (pass, task_id) are monotonically increasing.
 CREATE TABLE tasks_v2 (
