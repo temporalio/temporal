@@ -421,7 +421,7 @@ func ValidateBatchOperation(params *batchspb.BatchOperation) error {
 		return nil
 	case *workflowservicepb.StartBatchOperationRequest_ResetActivitiesOperation:
 		if op.ResetActivitiesOperation.GetActivity() == nil && !op.ResetActivitiesOperation.GetMatchAll() {
-			return errors.New("must provide ActivityType or MatchAll")
+			return serviceerror.NewInvalidArgument("must provide ActivityType or MatchAll")
 		}
 
 		switch a := op.ResetActivitiesOperation.GetActivity().(type) {

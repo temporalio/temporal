@@ -4504,71 +4504,39 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	}
 
 	input := &batchspb.BatchOperation{
-		Query: request.GetVisibilityQuery(),
-	}
-
-	if err := batcher.ValidateBatchOperation(input); err != nil {
-		return nil, err
+		Query:     request.GetVisibilityQuery(),
+		Reason:    request.GetReason(),
+		Namespace: request.GetNamespace(),
+		Input: &batchspb.BatchOperationInput{
+			Request: request,
+		},
+		WorkflowExecutions: request.GetExecutions(),
+		Rps:                float64(request.GetMaxOperationsPerSecond()),
 	}
 
 	var identity string
 	switch op := request.Operation.(type) {
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 		input.BatchType = batcher.BatchTypeTerminate
-		input.Input.Request.Operation = &workflowservice.StartBatchOperationRequest_TerminationOperation{
-			TerminationOperation: &batchpb.BatchOperationTermination{
-				Identity: op.TerminationOperation.GetIdentity(),
-			},
-		}
 		identity = op.TerminationOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		input.BatchType = batcher.BatchTypeSignal
-		input.Input.Request.Operation = &workflowservice.StartBatchOperationRequest_SignalOperation{
-			SignalOperation: &batchpb.BatchOperationSignal{
-				Identity: op.SignalOperation.GetIdentity(),
-			},
-		}
 		identity = op.SignalOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
 		input.BatchType = batcher.BatchTypeCancel
-		input.Input.Request.Operation = &workflowservice.StartBatchOperationRequest_CancellationOperation{
-			CancellationOperation: &batchpb.BatchOperationCancellation{
-				Identity: op.CancellationOperation.GetIdentity(),
-			},
-		}
 		identity = op.CancellationOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_DeletionOperation:
 		input.BatchType = batcher.BatchTypeDelete
-		input.Input.Request.Operation = &workflowservice.StartBatchOperationRequest_DeletionOperation{
-			DeletionOperation: &batchpb.BatchOperationDeletion{
-				Identity: op.DeletionOperation.GetIdentity(),
-			},
-		}
 		identity = op.DeletionOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_ResetOperation:
 		input.BatchType = batcher.BatchTypeReset
 		identity = op.ResetOperation.GetIdentity()
-		input.Input.Request.Operation = &workflowservice.StartBatchOperationRequest_ResetOperation{
-			ResetOperation: &batchpb.BatchOperationReset{
-				Identity: op.ResetOperation.GetIdentity(),
-			},
-		}
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 		input.BatchType = batcher.BatchTypeUpdateOptions
 		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
-		input.Input.Request.Operation = &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
-			UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
-				Identity: op.UpdateWorkflowOptionsOperation.GetIdentity(),
-			},
-		}
 	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
 		input.BatchType = batcher.BatchTypeUnpauseActivities
 		identity = op.UnpauseActivitiesOperation.GetIdentity()
-		input.Input.Request.Operation = &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
-			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
-				Identity: op.UnpauseActivitiesOperation.GetIdentity(),
-			},
-		}
 
 		switch a := op.UnpauseActivitiesOperation.GetActivity().(type) {
 		case *batchpb.BatchOperationUnpauseActivities_Type:
@@ -4581,28 +4549,16 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 		input.BatchType = batcher.BatchTypeResetActivities
 		identity = op.ResetActivitiesOperation.GetIdentity()
-		input.Input.Request.Operation = &workflowservice.StartBatchOperationRequest_ResetActivitiesOperation{
-			ResetActivitiesOperation: &batchpb.BatchOperationResetActivities{
-				Identity: op.ResetActivitiesOperation.GetIdentity(),
-			},
-		}
 	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
 		input.BatchType = batcher.BatchTypeUpdateActivitiesOptions
 		identity = op.UpdateActivityOptionsOperation.GetIdentity()
-		input.Input.Request.Operation = &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
-			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
-				Identity: op.UpdateActivityOptionsOperation.GetIdentity(),
-			},
-		}
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
 
-	input.Namespace = request.GetNamespace()
-	input.Query = request.GetVisibilityQuery()
-	input.WorkflowExecutions = request.GetExecutions()
-	input.Reason = request.GetReason()
-	input.Rps = float64(request.GetMaxOperationsPerSecond())
+	if err := batcher.ValidateBatchOperation(input); err != nil {
+		return nil, err
+	}
 
 	inputPayload, err := payloads.Encode(input)
 	if err != nil {
