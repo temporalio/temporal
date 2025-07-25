@@ -16,7 +16,7 @@ const (
 		`AND (pass, task_id) >= ($3, $4) ` +
 		`ORDER BY pass, task_id`
 
-	getTaskV2QryWithLimit = getTaskV2Qry + ` LIMIT $6`
+	getTaskV2QryWithLimit = getTaskV2Qry + ` LIMIT $5`
 
 	createTaskV2Qry = `INSERT INTO ` +
 		`tasks_v2 ( range_hash,  task_queue_id,  task_id,       pass,  data,  data_encoding) ` +
