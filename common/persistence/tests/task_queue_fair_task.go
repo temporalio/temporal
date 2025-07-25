@@ -37,8 +37,8 @@ func NewTaskQueueFairTaskSuite(
 	t *testing.T,
 	taskManager p.TaskStore,
 	logger log.Logger,
-) *TaskQueueTaskSuite {
-	return &TaskQueueTaskSuite{
+) *TaskQueueFairTaskSuite {
+	return &TaskQueueFairTaskSuite{
 		Assertions: require.New(t),
 		taskManager: p.NewTaskManager(
 			taskManager,

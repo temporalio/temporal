@@ -238,7 +238,7 @@ func TestCassandraTaskQueueTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestCassandraFairTaskQueueTaskSuite(t *testing.T) {
+func TestCassandraTaskQueueFairTaskSuite(t *testing.T) {
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
 
