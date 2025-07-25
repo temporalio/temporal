@@ -36,25 +36,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/archiver/s3store/mocks"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/util"
-	"go.uber.org/mock/gomock"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -74,7 +73,7 @@ var testBranchToken = []byte{1, 2, 3}
 type historyArchiverSuite struct {
 	*require.Assertions
 	suite.Suite
-	s3cli              *mocks.MockS3API
+	s3cli              *Mocks3Client
 	container          *archiver.HistoryBootstrapContainer
 	testArchivalURI    archiver.URI
 	historyBatchesV1   []*archiverspb.HistoryBlob
@@ -103,15 +102,15 @@ func (s *historyArchiverSuite) SetupTest() {
 	}
 
 	s.controller = gomock.NewController(s.T())
-	s.s3cli = mocks.NewMockS3API(s.controller)
+	s.s3cli = NewMocks3Client(s.controller)
 	setupFsEmulation(s.s3cli)
 	s.setupHistoryDirectory()
 }
 
-func setupFsEmulation(s3cli *mocks.MockS3API) {
+func setupFsEmulation(s3cli *Mocks3Client) {
 	fs := make(map[string][]byte)
 
-	putObjectFn := func(_ aws.Context, input *s3.PutObjectInput, _ ...request.Option) (*s3.PutObjectOutput, error) {
+	putObjectFn := func(_ context.Context, input *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
 		buf := new(bytes.Buffer)
 		if _, err := buf.ReadFrom(input.Body); err != nil {
 			return nil, err
@@ -120,9 +119,9 @@ func setupFsEmulation(s3cli *mocks.MockS3API) {
 		return &s3.PutObjectOutput{}, nil
 	}
 
-	s3cli.EXPECT().ListObjectsV2WithContext(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, input *s3.ListObjectsV2Input, opts ...request.Option) (*s3.ListObjectsV2Output, error) {
-			objects := make([]*s3.Object, 0)
+	s3cli.EXPECT().ListObjectsV2(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, input *s3.ListObjectsV2Input, optFns ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
+			objects := make([]types.Object, 0)
 			commonPrefixMap := map[string]bool{}
 			for k := range fs {
 				if strings.HasPrefix(k, *input.Bucket+*input.Prefix) {
@@ -130,7 +129,7 @@ func setupFsEmulation(s3cli *mocks.MockS3API) {
 					keyWithoutPrefix := key[len(*input.Prefix):]
 					index := strings.Index(keyWithoutPrefix, "/")
 					if index == -1 || input.Delimiter == nil {
-						objects = append(objects, &s3.Object{
+						objects = append(objects, types.Object{
 							Key: aws.String(key),
 						})
 					} else {
@@ -138,9 +137,9 @@ func setupFsEmulation(s3cli *mocks.MockS3API) {
 					}
 				}
 			}
-			commonPrefixes := make([]*s3.CommonPrefix, 0)
+			commonPrefixes := make([]types.CommonPrefix, 0)
 			for k := range commonPrefixMap {
-				commonPrefixes = append(commonPrefixes, &s3.CommonPrefix{
+				commonPrefixes = append(commonPrefixes, types.CommonPrefix{
 					Prefix: aws.String(k),
 				})
 			}
@@ -149,7 +148,7 @@ func setupFsEmulation(s3cli *mocks.MockS3API) {
 				return *objects[i].Key < *objects[j].Key
 			})
 			maxKeys := 1000
-			if input.MaxKeys != nil {
+			if input.MaxKeys != nil && *input.MaxKeys != 0 {
 				maxKeys = int(*input.MaxKeys)
 			}
 			start := 0
@@ -194,27 +193,27 @@ func setupFsEmulation(s3cli *mocks.MockS3API) {
 			return &s3.ListObjectsV2Output{
 				CommonPrefixes:        commonPrefixes,
 				Contents:              objects,
-				IsTruncated:           &isTruncated,
+				IsTruncated:           aws.Bool(isTruncated),
 				NextContinuationToken: nextContinuationToken,
 			}, nil
 		}).AnyTimes()
-	s3cli.EXPECT().PutObjectWithContext(gomock.Any(), gomock.Any()).DoAndReturn(putObjectFn).AnyTimes()
+	s3cli.EXPECT().PutObject(gomock.Any(), gomock.Any()).DoAndReturn(putObjectFn).AnyTimes()
 
-	s3cli.EXPECT().HeadObjectWithContext(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx aws.Context, input *s3.HeadObjectInput, options ...request.Option) (*s3.HeadObjectOutput, error) {
+	s3cli.EXPECT().HeadObject(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, input *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
 			_, ok := fs[*input.Bucket+*input.Key]
 			if !ok {
-				return nil, awserr.New("NotFound", "", nil)
+				return nil, &types.NoSuchKey{}
 			}
 
 			return &s3.HeadObjectOutput{}, nil
 		}).AnyTimes()
 
-	s3cli.EXPECT().GetObjectWithContext(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx aws.Context, input *s3.GetObjectInput, options ...request.Option) (*s3.GetObjectOutput, error) {
+	s3cli.EXPECT().GetObject(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, input *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 			_, ok := fs[*input.Bucket+*input.Key]
 			if !ok {
-				return nil, awserr.New(s3.ErrCodeNoSuchKey, "", nil)
+				return nil, &types.NoSuchKey{}
 			}
 
 			return &s3.GetObjectOutput{
@@ -246,10 +245,10 @@ func (s *historyArchiverSuite) TestValidateURI() {
 		},
 	}
 
-	s.s3cli.EXPECT().HeadBucketWithContext(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx aws.Context, input *s3.HeadBucketInput, options ...request.Option) (*s3.HeadBucketOutput, error) {
+	s.s3cli.EXPECT().HeadBucket(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, input *s3.HeadBucketInput, optFns ...func(*s3.Options)) (*s3.HeadBucketOutput, error) {
 			if *input.Bucket != s.testArchivalURI.Hostname() {
-				return nil, awserr.New("NotFound", "", nil)
+				return nil, &types.NoSuchBucket{}
 			}
 
 			return &s3.HeadBucketOutput{}, nil
@@ -776,7 +775,7 @@ func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*a
 		data, err := encoder.Encode(batch)
 		s.Require().NoError(err)
 		key := constructHistoryKey("", testNamespaceID, testWorkflowID, testRunID, version, i)
-		_, err = s.s3cli.PutObjectWithContext(context.Background(), &s3.PutObjectInput{
+		_, err = s.s3cli.PutObject(context.Background(), &s3.PutObjectInput{
 			Bucket: aws.String(testBucket),
 			Key:    aws.String(key),
 			Body:   bytes.NewReader(data),
@@ -786,7 +785,7 @@ func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*a
 }
 
 func (s *historyArchiverSuite) assertKeyExists(key string) {
-	_, err := s.s3cli.GetObjectWithContext(context.Background(), &s3.GetObjectInput{
+	_, err := s.s3cli.GetObject(context.Background(), &s3.GetObjectInput{
 		Bucket: aws.String(testBucket),
 		Key:    aws.String(key),
 	})

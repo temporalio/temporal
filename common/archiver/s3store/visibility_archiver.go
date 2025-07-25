@@ -29,10 +29,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	archiverspb "go.temporal.io/server/api/archiver/v1"
@@ -47,7 +46,7 @@ import (
 type (
 	visibilityArchiver struct {
 		container   *archiver.VisibilityBootstrapContainer
-		s3cli       s3iface.S3API
+		s3cli       s3Client
 		queryParser QueryParser
 	}
 
@@ -85,19 +84,19 @@ func NewVisibilityArchiver(
 func newVisibilityArchiver(
 	container *archiver.VisibilityBootstrapContainer,
 	config *config.S3Archiver) (*visibilityArchiver, error) {
-	s3Config := &aws.Config{
-		Endpoint:         config.Endpoint,
-		Region:           aws.String(config.Region),
-		S3ForcePathStyle: aws.Bool(config.S3ForcePathStyle),
-		LogLevel:         (*aws.LogLevelType)(&config.LogLevel),
-	}
-	sess, err := session.NewSession(s3Config)
+	cfg, err := awsconfig.LoadDefaultConfig(context.TODO(), awsconfig.WithRegion(config.Region))
 	if err != nil {
 		return nil, err
 	}
+	s3cli := s3.NewFromConfig(cfg, func(options *s3.Options) {
+		if config.Endpoint != nil {
+			options.EndpointResolver = s3.EndpointResolverFromURL(*config.Endpoint)
+		}
+		options.UsePathStyle = config.S3ForcePathStyle
+	})
 	return &visibilityArchiver{
 		container:   container,
-		s3cli:       s3.New(sess),
+		s3cli:       s3cli,
 		queryParser: NewQueryParser(),
 	}, nil
 }
@@ -329,10 +328,10 @@ func (v *visibilityArchiver) queryPrefix(
 	if request.nextPageToken != nil {
 		token = deserializeQueryVisibilityToken(request.nextPageToken)
 	}
-	results, err := v.s3cli.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{
+	results, err := v.s3cli.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket:            aws.String(uri.Hostname()),
 		Prefix:            aws.String(prefix),
-		MaxKeys:           aws.Int64(int64(request.pageSize)),
+		MaxKeys:           aws.Int32(int32(request.pageSize)),
 		ContinuationToken: token,
 	})
 	if err != nil {
@@ -346,7 +345,7 @@ func (v *visibilityArchiver) queryPrefix(
 	}
 
 	response := &archiver.QueryVisibilityResponse{}
-	if *results.IsTruncated {
+	if results.IsTruncated != nil && *results.IsTruncated {
 		response.NextPageToken = serializeQueryVisibilityToken(*results.NextContinuationToken)
 	}
 	for _, item := range results.Contents {

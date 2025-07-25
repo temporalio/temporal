@@ -30,16 +30,17 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"go.temporal.io/api/serviceerror"
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
@@ -70,7 +71,7 @@ var (
 type (
 	historyArchiver struct {
 		container *archiver.HistoryBootstrapContainer
-		s3cli     s3iface.S3API
+		s3cli     s3Client
 		// only set in test code
 		historyIterator archiver.HistoryIterator
 	}
@@ -104,20 +105,21 @@ func newHistoryArchiver(
 	if len(config.Region) == 0 {
 		return nil, errEmptyAwsRegion
 	}
-	s3Config := &aws.Config{
-		Endpoint:         config.Endpoint,
-		Region:           aws.String(config.Region),
-		S3ForcePathStyle: aws.Bool(config.S3ForcePathStyle),
-		LogLevel:         (*aws.LogLevelType)(&config.LogLevel),
-	}
-	sess, err := session.NewSession(s3Config)
+
+	cfg, err := awsconfig.LoadDefaultConfig(context.TODO(), awsconfig.WithRegion(config.Region))
 	if err != nil {
 		return nil, err
 	}
+	s3cli := s3.NewFromConfig(cfg, func(options *s3.Options) {
+		if config.Endpoint != nil {
+			options.EndpointResolver = s3.EndpointResolverFromURL(*config.Endpoint)
+		}
+		options.UsePathStyle = config.S3ForcePathStyle
+	})
 
 	return &historyArchiver{
 		container:       container,
-		s3cli:           s3.New(sess),
+		s3cli:           s3cli,
 		historyIterator: historyIterator,
 	}, nil
 }
@@ -365,13 +367,14 @@ func (h *historyArchiver) getHighestVersion(ctx context.Context, URI archiver.UR
 	ctx, cancel := ensureContextTimeout(ctx)
 	defer cancel()
 	var prefix = constructHistoryKeyPrefix(URI.Path(), request.NamespaceID, request.WorkflowID, request.RunID) + "/"
-	results, err := h.s3cli.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{
+	results, err := h.s3cli.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket:    aws.String(URI.Hostname()),
 		Prefix:    aws.String(prefix),
 		Delimiter: aws.String("/"),
 	})
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == s3.ErrCodeNoSuchBucket {
+		var noSuchBucket *types.NoSuchBucket
+		if errors.As(err, &noSuchBucket) {
 			return nil, serviceerror.NewInvalidArgument(errBucketNotExists.Error())
 		}
 		return nil, err
@@ -398,23 +401,29 @@ func isRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if aerr, ok := err.(awserr.Error); ok {
-		return isStatusCodeRetryable(aerr) || request.IsErrorRetryable(aerr) || request.IsErrorThrottle(aerr)
-	}
-	return false
-}
-
-func isStatusCodeRetryable(err error) bool {
-	if aerr, ok := err.(awserr.Error); ok {
-		if rerr, ok := err.(awserr.RequestFailure); ok {
-			if rerr.StatusCode() == 429 {
-				return true
-			}
-			if rerr.StatusCode() >= 500 && rerr.StatusCode() != 501 {
-				return true
-			}
+	
+	// Check for HTTP status code-based retryability
+	var responseError *smithyhttp.ResponseError
+	if errors.As(err, &responseError) {
+		statusCode := responseError.HTTPStatusCode()
+		// Retry on 429 (throttling) and 5xx errors (except 501)
+		if statusCode == http.StatusTooManyRequests || (statusCode >= 500 && statusCode != 501) {
+			return true
 		}
-		return isStatusCodeRetryable(aerr.OrigErr())
 	}
+	
+	// Check for specific AWS error types that are retryable
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.ErrorCode() {
+		// Throttling-related errors: AWS is rate-limiting requests
+		case "Throttling", "ThrottlingException", "RequestThrottled":
+			return true
+		// Server-side errors: AWS services experiencing internal issues
+		case "InternalError", "ServiceUnavailable", "RequestTimeout":
+			return true
+		}
+	}
+	
 	return false
 }

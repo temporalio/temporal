@@ -22,6 +22,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../../LICENSE -package "$GOPACKAGE" -destination s3api.go github.com/aws/aws-sdk-go/service/s3/s3iface S3API
+package s3store
 
-package mocks
+import (
+	"context"
+
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+)
+
+//go:generate mockgen -copyright_file=../../../LICENSE -destination=s3_client_mock.go -package=s3store -source=s3_client.go
+type s3Client interface {
+	HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
+	PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
+	ListObjectsV2(ctx context.Context, params *s3.ListObjectsV2Input, optFns ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
+	GetObject(ctx context.Context, s *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+	HeadBucket(ctx context.Context, s *s3.HeadBucketInput, optFns ...func(*s3.Options)) (*s3.HeadBucketOutput, error)
+}

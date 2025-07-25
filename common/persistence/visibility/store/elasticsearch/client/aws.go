@@ -25,14 +25,15 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	elasticaws "github.com/olivere/elastic/v7/aws/v4"
 )
 
@@ -48,30 +49,27 @@ func NewAwsHttpClient(config ESAWSRequestSigningConfig) (*http.Client, error) {
 		}
 	}
 
-	var awsCredentials *credentials.Credentials
+	ctx := context.Background()
+	var credentialsProvider aws.CredentialsProvider
 
 	switch strings.ToLower(config.CredentialProvider) {
 	case "static":
-		awsCredentials = credentials.NewStaticCredentials(
+		credentialsProvider = credentials.NewStaticCredentialsProvider(
 			config.Static.AccessKeyID,
 			config.Static.SecretAccessKey,
 			config.Static.Token,
 		)
-	case "environment":
-		awsCredentials = credentials.NewEnvCredentials()
-	case "aws-sdk-default":
-		awsSession, err := session.NewSession(&aws.Config{
-			Region: &config.Region,
-		})
-
+	case "environment", "aws-sdk-default":
+		cfg, err := awsconfig.LoadDefaultConfig(ctx,
+			awsconfig.WithRegion(config.Region),
+		)
 		if err != nil {
 			return nil, err
 		}
-
-		awsCredentials = awsSession.Config.Credentials
+		credentialsProvider = cfg.Credentials
 	default:
-		return nil, fmt.Errorf("unknown AWS credential provider specified: %+v. Accepted options are 'static', 'environment' or 'session'", config.CredentialProvider)
+		return nil, fmt.Errorf("unknown AWS credential provider specified: %+v. Accepted options are 'static', 'environment' or 'aws-sdk-default'", config.CredentialProvider)
 	}
 
-	return elasticaws.NewV4SigningClient(awsCredentials, config.Region), nil
+	return elasticaws.NewV4SigningClient(credentialsProvider, config.Region), nil
 }
