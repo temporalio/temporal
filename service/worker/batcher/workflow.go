@@ -10,7 +10,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	workflowservicepb "go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	batchspb "go.temporal.io/server/api/batch/v1"
@@ -360,6 +360,7 @@ func validateParams(params BatchParams) error {
 	}
 }
 
+// nolint:revive,cognitive-complexity
 func ValidateBatchOperation(params *batchspb.BatchOperation) error {
 	if params.BatchType == "" ||
 		params.Reason == "" ||
@@ -373,12 +374,12 @@ func ValidateBatchOperation(params *batchspb.BatchOperation) error {
 	}
 
 	switch op := params.Input.Request.Operation.(type) {
-	case *workflowservicepb.StartBatchOperationRequest_SignalOperation:
+	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		if op.SignalOperation.GetSignal() == "" {
 			return errors.New("must provide signal name")
 		}
 		return nil
-	case *workflowservicepb.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
+	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 		if op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions() == nil {
 			return errors.New("must provide UpdateOptions")
 		}
@@ -386,11 +387,11 @@ func ValidateBatchOperation(params *batchspb.BatchOperation) error {
 			return errors.New("must provide UpdateMask")
 		}
 		return worker_versioning.ValidateVersioningOverride(op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions().GetVersioningOverride())
-	case *workflowservicepb.StartBatchOperationRequest_CancellationOperation,
-		*workflowservicepb.StartBatchOperationRequest_TerminationOperation,
-		*workflowservicepb.StartBatchOperationRequest_DeletionOperation:
+	case *workflowservice.StartBatchOperationRequest_CancellationOperation,
+		*workflowservice.StartBatchOperationRequest_TerminationOperation,
+		*workflowservice.StartBatchOperationRequest_DeletionOperation:
 		return nil
-	case *workflowservicepb.StartBatchOperationRequest_ResetOperation:
+	case *workflowservice.StartBatchOperationRequest_ResetOperation:
 		if op.ResetOperation.Options != nil {
 			if op.ResetOperation.Options.Target == nil {
 				return serviceerror.NewInvalidArgument("batch reset missing target")
@@ -401,7 +402,7 @@ func ValidateBatchOperation(params *batchspb.BatchOperation) error {
 				return serviceerror.NewInvalidArgumentf("unknown batch reset type %v", resetType)
 			}
 		}
-	case *workflowservicepb.StartBatchOperationRequest_UnpauseActivitiesOperation:
+	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
 		if op.UnpauseActivitiesOperation == nil {
 			return serviceerror.NewInvalidArgument("unpause activities operation is not set")
 		}
@@ -419,7 +420,7 @@ func ValidateBatchOperation(params *batchspb.BatchOperation) error {
 			}
 		}
 		return nil
-	case *workflowservicepb.StartBatchOperationRequest_ResetActivitiesOperation:
+	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 		if op.ResetActivitiesOperation.GetActivity() == nil && !op.ResetActivitiesOperation.GetMatchAll() {
 			return serviceerror.NewInvalidArgument("must provide ActivityType or MatchAll")
 		}
@@ -435,7 +436,7 @@ func ValidateBatchOperation(params *batchspb.BatchOperation) error {
 			}
 		}
 		return nil
-	case *workflowservicepb.StartBatchOperationRequest_UpdateActivityOptionsOperation:
+	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
 		if op.UpdateActivityOptionsOperation == nil {
 			return serviceerror.NewInvalidArgument("update activity options operation is not set")
 		}

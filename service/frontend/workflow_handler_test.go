@@ -126,6 +126,7 @@ func (s *WorkflowHandlerSuite) TearDownSuite() {
 
 func (s *WorkflowHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.testNamespace = "test-namespace"
 	s.testNamespaceID = "e4f90ec0-1313-45be-9877-8aa41f72a45a"
@@ -2199,6 +2200,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
 	inputString := "unit test"
+	jobId := uuid.NewString()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
@@ -2209,6 +2211,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 		Query:     inputString,
 		Input: &batchspb.BatchOperationInput{
 			Request: &workflowservice.StartBatchOperationRequest{
+				Namespace:       testNamespace.String(),
+				VisibilityQuery: inputString,
+				JobId:           jobId,
+				Reason:          inputString,
 				Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 					TerminationOperation: &batchpb.BatchOperationTermination{
 						Identity: inputString,
@@ -2241,7 +2247,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
 	request := &workflowservice.StartBatchOperationRequest{
 		Namespace: testNamespace.String(),
-		JobId:     uuid.NewString(),
+		JobId:     jobId,
 		Reason:    inputString,
 		Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 			TerminationOperation: &batchpb.BatchOperationTermination{
@@ -2259,6 +2265,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
 	inputString := "unit test"
+	jobId := uuid.NewString()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
@@ -2269,6 +2276,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 		Query:     inputString,
 		Input: &batchspb.BatchOperationInput{
 			Request: &workflowservice.StartBatchOperationRequest{
+				Namespace:       testNamespace.String(),
+				VisibilityQuery: inputString,
+				JobId:           jobId,
+				Reason:          inputString,
 				Operation: &workflowservice.StartBatchOperationRequest_CancellationOperation{
 					CancellationOperation: &batchpb.BatchOperationCancellation{
 						Identity: inputString,
@@ -2301,7 +2312,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
 	request := &workflowservice.StartBatchOperationRequest{
 		Namespace: testNamespace.String(),
-		JobId:     uuid.NewString(),
+		JobId:     jobId,
 		Reason:    inputString,
 		Operation: &workflowservice.StartBatchOperationRequest_CancellationOperation{
 			CancellationOperation: &batchpb.BatchOperationCancellation{
@@ -2320,6 +2331,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 	namespaceID := namespace.ID(uuid.NewString())
 	inputString := "unit test"
 	signalName := "signal name"
+	jobId := uuid.NewString()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	signalPayloads := payloads.EncodeString(signalName)
@@ -2330,6 +2342,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 		BatchType: batcher.BatchTypeSignal,
 		Input: &batchspb.BatchOperationInput{
 			Request: &workflowservice.StartBatchOperationRequest{
+				Namespace:       testNamespace.String(),
+				VisibilityQuery: inputString,
+				JobId:           jobId,
+				Reason:          inputString,
 				Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
 					SignalOperation: &batchpb.BatchOperationSignal{
 						Signal:   signalName,
@@ -2364,7 +2380,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
 	request := &workflowservice.StartBatchOperationRequest{
 		Namespace: testNamespace.String(),
-		JobId:     uuid.NewString(),
+		JobId:     jobId,
 		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
 			SignalOperation: &batchpb.BatchOperationSignal{
 				Signal:   signalName,
@@ -2392,6 +2408,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 	reason := "reason"
 	identity := "identity"
 	signalName := "signal name"
+	jobId := uuid.NewString()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	signalPayloads := payloads.EncodeString(signalName)
@@ -2402,6 +2419,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 		BatchType:          batcher.BatchTypeSignal,
 		Input: &batchspb.BatchOperationInput{
 			Request: &workflowservice.StartBatchOperationRequest{
+				Namespace:  testNamespace.String(),
+				JobId:      jobId,
+				Reason:     reason,
+				Executions: executions,
 				Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
 					SignalOperation: &batchpb.BatchOperationSignal{
 						Signal:   signalName,
@@ -2436,7 +2457,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
 	request := &workflowservice.StartBatchOperationRequest{
 		Namespace: testNamespace.String(),
-		JobId:     uuid.NewString(),
+		JobId:     jobId,
 		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
 			SignalOperation: &batchpb.BatchOperationSignal{
 				Signal:   signalName,
@@ -2463,6 +2484,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 	}
 	reason := "reason"
 	identity := "identity"
+	jobId := uuid.NewString()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	params := &batchspb.BatchOperation{
@@ -2472,6 +2494,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 		BatchType:          batcher.BatchTypeReset,
 		Input: &batchspb.BatchOperationInput{
 			Request: &workflowservice.StartBatchOperationRequest{
+				Namespace:  testNamespace.String(),
+				JobId:      jobId,
+				Reason:     reason,
+				Executions: executions,
 				Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
 					ResetOperation: &batchpb.BatchOperationReset{
 						Identity:         identity,
@@ -2506,7 +2532,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
 	request := &workflowservice.StartBatchOperationRequest{
 		Namespace: testNamespace.String(),
-		JobId:     uuid.NewString(),
+		JobId:     jobId,
 		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
 			ResetOperation: &batchpb.BatchOperationReset{
 				ResetType:        enumspb.RESET_TYPE_LAST_WORKFLOW_TASK,

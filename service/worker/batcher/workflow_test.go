@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	workflowservicepb "go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/testsuite"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.uber.org/mock/gomock"
@@ -94,8 +94,8 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 	}).Once()
 	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{
 		Input: &batchspb.BatchOperationInput{
-			Request: &workflowservicepb.StartBatchOperationRequest{
-				Operation: &workflowservicepb.StartBatchOperationRequest_TerminationOperation{
+			Request: &workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 					TerminationOperation: &batchpb.BatchOperationTermination{},
 				},
 			},
@@ -158,8 +158,8 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 	}).Once()
 	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{
 		Input: &batchspb.BatchOperationInput{
-			Request: &workflowservicepb.StartBatchOperationRequest{
-				Operation: &workflowservicepb.StartBatchOperationRequest_TerminationOperation{
+			Request: &workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 					TerminationOperation: &batchpb.BatchOperationTermination{},
 				},
 			},

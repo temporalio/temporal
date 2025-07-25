@@ -4592,8 +4592,6 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		Priority:                 &commonpb.Priority{}, // ie default priority
 	}
 
-	wh.logger.Info(fmt.Sprintf("This is a StartWorkflowExecutionRequest: %+v", startReq))
-
 	_, err = wh.historyClient.StartWorkflowExecution(
 		ctx,
 		common.CreateHistoryStartWorkflowRequest(
