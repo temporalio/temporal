@@ -12,12 +12,12 @@ type (
 	rateLimitManager struct {
 		mu sync.Mutex
 
-		effectiveRPS    *float64                // Min of api/worker set RPS and system defaults. Always reflects the overall task queue RPS.
+		effectiveRPS    float64                 // Min of api/worker set RPS and system defaults. Always reflects the overall task queue RPS.
 		rateLimitSource enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
 		userDataManager userDataManager         // User data manager to fetch user data for task queue configurations.
 		workerRPS       *float64                // RPS set by worker at the time of polling, if available.
 		apiConfigRPS    *float64                // RPS set via API, if available.
-		systemRPS       *float64                // min of partition level dispatch rates times the number of read partitions.
+		systemRPS       float64                 // Min of partition level dispatch rates times the number of read partitions.
 		config          *taskQueueConfig        // Dynamic configuration for task queues set by system.
 		taskQueueType   enumspb.TaskQueueType   // Task queue type
 
@@ -48,12 +48,6 @@ func newRateLimitManager(userDataManager userDataManager,
 		r.dynamicRateBurst,
 		config.RateLimiterRefreshInterval,
 	)
-	// Overall system rate limit will be the min of the two configs that are partition wise times the number of partions.
-	systemRPS := min(
-		config.AdminNamespaceTaskQueueToPartitionDispatchRate(),
-		config.AdminNamespaceToPartitionDispatchRate(),
-	) * r.getNumberOfReadPartitions()
-	r.systemRPS = &(systemRPS)
 	r.computeEffectiveRPSAndSource()
 	return r
 }
@@ -80,20 +74,25 @@ func (r *rateLimitManager) computeEffectiveRPSAndSource() {
 func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 
 	var (
-		effectiveRPS    *float64
+		effectiveRPS    float64
 		rateLimitSource enumspb.RateLimitSource
 	)
-
+	// Overall system rate limit will be the min of the two configs that are partition wise times the number of partions.
+	systemRPS := min(
+		r.config.AdminNamespaceTaskQueueToPartitionDispatchRate(),
+		r.config.AdminNamespaceToPartitionDispatchRate(),
+	) * r.getNumberOfReadPartitions()
+	r.systemRPS = systemRPS
 	switch {
 	case r.apiConfigRPS != nil:
-		effectiveRPS = r.apiConfigRPS
+		effectiveRPS = *r.apiConfigRPS
 		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_API
 	case r.workerRPS != nil:
-		effectiveRPS = r.workerRPS
+		effectiveRPS = *r.workerRPS
 		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_WORKER
 	}
 
-	if effectiveRPS != nil && *effectiveRPS < *r.systemRPS {
+	if effectiveRPS < r.systemRPS {
 		r.effectiveRPS = effectiveRPS
 		r.rateLimitSource = rateLimitSource
 	} else {
@@ -123,7 +122,7 @@ func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
 // Return the effective RPS and its source together.
 // The source can be API, worker or system default.
 // It defaults to the system dynamic config.
-func (r *rateLimitManager) GetEffectiveRPSAndSource() (*float64, enumspb.RateLimitSource) {
+func (r *rateLimitManager) GetEffectiveRPSAndSource() (float64, enumspb.RateLimitSource) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.computeEffectiveRPSAndSourceLocked()
@@ -164,10 +163,6 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 	r.apiConfigRPS = &val
 }
 
-func (r *rateLimitManager) getEffectiveRateLimitPartitionWiseLocked() float64 {
-	return (*r.effectiveRPS) / r.getNumberOfReadPartitions()
-}
-
 // updateRatelimitLocked checks and updates the rate limit if changed.
 func (r *rateLimitManager) updateRatelimitLocked() {
 	// Always check for api configured rate limits before any update to the rate limits.
@@ -175,11 +170,11 @@ func (r *rateLimitManager) updateRatelimitLocked() {
 	oldRPS := r.effectiveRPS
 	r.computeEffectiveRPSAndSourceLocked()
 	newRPS := r.effectiveRPS
-	if *oldRPS == *newRPS {
+	if oldRPS == newRPS {
 		// No update required
 		return
 	}
-	effectiveRPSPartitionWise := r.getEffectiveRateLimitPartitionWiseLocked()
+	effectiveRPSPartitionWise := r.effectiveRPS / r.getNumberOfReadPartitions()
 	burst := int(math.Ceil(effectiveRPSPartitionWise))
 	burst = max(burst, r.config.MinTaskThrottlingBurstSize())
 	r.dynamicRateBurst.SetRPS(effectiveRPSPartitionWise)
