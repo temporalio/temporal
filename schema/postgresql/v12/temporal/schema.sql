@@ -88,8 +88,8 @@ CREATE TABLE tasks (
 CREATE TABLE tasks_v2 (
   range_hash BIGINT NOT NULL,
   task_queue_id BYTEA NOT NULL,
-  task_id BIGINT NOT NULL,
   pass BIGINT NOT NULL, -- pass for tasks (see stride scheduling algorithm for fairness)
+  task_id BIGINT NOT NULL,
   --
   data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
