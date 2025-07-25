@@ -14,19 +14,13 @@ const (
 		`WHERE range_hash = ? ` +
 		`AND task_queue_id = ? ` +
 		`AND (pass, task_id) >= (?, ?) ` +
-		`ORDER BY pass, task_id `
+		`ORDER BY pass, task_id`
 
-	getTaskV2QryWithLimit = `SELECT task_id, data, data_encoding ` +
-		`FROM tasks_v2 ` +
-		`WHERE range_hash = ? ` +
-		`AND task_queue_id = ? ` +
-		`AND (pass, task_id) >= (?, ?) ` +
-		`ORDER BY pass, task_id ` +
-		`LIMIT ?`
+	getTaskV2QryWithLimit = getTaskV2Qry + ` LIMIT ?`
 
 	createTaskV2Qry = `INSERT INTO ` +
-		`tasks_v2(range_hash, task_queue_id, task_id, pass, data, data_encoding) ` +
-		`VALUES(:range_hash, :task_queue_id, :task_id, :pass, :data, :data_encoding)`
+		`tasks_v2 ( range_hash,  task_queue_id,  task_id,       pass,  data,  data_encoding) ` +
+		`VALUES   (:range_hash, :task_queue_id, :task_id, :task_pass, :data, :data_encoding)`
 
 	rangeDeleteTaskV2Qry = `DELETE FROM tasks_v2 ` +
 		`WHERE range_hash = ? ` +

@@ -32,7 +32,11 @@ func newTaskPersistence(
 		logger: logger,
 	}
 	userDataStore := userDataStore{SqlStore: store}
-	taskQueueStore := taskQueueStore{SqlStore: store, taskScanPartitions: uint32(taskScanPartitions)}
+	taskQueueStore := taskQueueStore{
+		SqlStore:           store,
+		version:            sqlplugin.MatchingTaskVersion1,
+		taskScanPartitions: uint32(taskScanPartitions),
+	}
 	if enableFairness {
 		taskQueueStore.version = sqlplugin.MatchingTaskVersion2
 		return newTaskManagerV2(db, userDataStore, taskQueueStore, logger)

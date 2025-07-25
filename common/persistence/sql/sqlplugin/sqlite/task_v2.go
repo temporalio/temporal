@@ -9,40 +9,20 @@ import (
 )
 
 const (
-	getTaskMinMaxQryV2 = `SELECT task_id, data, data_encoding ` +
+	getTaskV2Qry = `SELECT task_id, data, data_encoding ` +
 		`FROM tasks_v2 ` +
 		`WHERE range_hash = ? ` +
 		`AND task_queue_id = ? ` +
 		`AND (pass, task_id) >= (?, ?) ` +
-		`AND task_id < ? ` +
-		`ORDER BY pass, task_id ` +
-		`LIMIT ?`
+		`ORDER BY pass, task_id`
 
-	getFairnessTaskQry = `SELECT task_id, data, data_encoding ` +
-		`FROM tasks_v2 ` +
-		`WHERE range_hash = ? ` +
-		`AND task_queue_id = ? ` +
-		`AND (pass, task_id) >= (?, ?) ` +
-		`ORDER BY pass, task_id `
-
-	getFairnessTaskQryWithLimit = `SELECT task_id, data, data_encoding ` +
-		`FROM tasks_v2 ` +
-		`WHERE range_hash = ? ` +
-		`AND task_queue_id = ? ` +
-		`AND (pass, task_id) >= (?, ?) ` +
-		`ORDER BY pass, task_id ` +
-		`LIMIT ?`
+	getTaskV2QryWithLimit = getTaskV2Qry + ` LIMIT ?`
 
 	createTaskQryV2 = `INSERT INTO ` +
-		`tasks_v2(range_hash, task_queue_id, task_id, pass, data, data_encoding) ` +
-		`VALUES(:range_hash, :task_queue_id, :task_id, :pass, :data, :data_encoding)`
+		`tasks_v2 ( range_hash,  task_queue_id,  task_id,       pass,  data,  data_encoding) ` +
+		`VALUES   (:range_hash, :task_queue_id, :task_id, :task_pass, :data, :data_encoding)`
 
-	rangeDeleteTaskQryV2 = `DELETE FROM tasks_v2 ` +
-		`WHERE range_hash = ? AND task_queue_id = ? AND task_id IN (SELECT task_id FROM
-		 tasks_v2 WHERE range_hash = ? AND task_queue_id = ? AND task_id < ? ` +
-		`ORDER BY task_queue_id,task_id LIMIT ? ) `
-
-	rangeDeleteFairnessTaskQry = `DELETE FROM tasks_v2 ` +
+	rangeDeleteTaskV2Qry = `DELETE FROM tasks_v2 ` +
 		`WHERE range_hash = ? ` +
 		`AND task_queue_id = ? ` +
 		`AND (pass, task_id) < (?, ?) `
@@ -72,7 +52,7 @@ func (mdb *db) SelectFromTasksV2(
 	switch {
 	case filter.PageSize != nil:
 		err = mdb.conn.SelectContext(ctx,
-			&rows, getFairnessTaskQryWithLimit,
+			&rows, getTaskV2QryWithLimit,
 			filter.RangeHash,
 			filter.TaskQueueID,
 			filter.InclusiveMinLevel.TaskPass,
@@ -81,7 +61,7 @@ func (mdb *db) SelectFromTasksV2(
 		)
 	default:
 		err = mdb.conn.SelectContext(ctx,
-			&rows, getFairnessTaskQry,
+			&rows, getTaskV2Qry,
 			filter.RangeHash,
 			filter.TaskQueueID,
 			filter.InclusiveMinLevel.TaskPass,
@@ -103,7 +83,7 @@ func (mdb *db) DeleteFromTasksV2(
 		return nil, serviceerror.NewInternal("missing ExclusiveMaxTaskLevel")
 	}
 	return mdb.conn.ExecContext(ctx,
-		rangeDeleteFairnessTaskQry,
+		rangeDeleteTaskV2Qry,
 		filter.RangeHash,
 		filter.TaskQueueID,
 		filter.ExclusiveMaxLevel.TaskPass,

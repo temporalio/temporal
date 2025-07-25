@@ -9,26 +9,20 @@ import (
 )
 
 const (
-	getFairnessTaskQry = `SELECT task_id, data, data_encoding ` +
+	getTaskV2Qry = `SELECT task_id, data, data_encoding ` +
 		`FROM tasks_v2 ` +
 		`WHERE range_hash = $1 ` +
 		`AND task_queue_id = $2 ` +
 		`AND (pass, task_id) >= ($3, $4) ` +
-		`ORDER BY pass, task_id `
+		`ORDER BY pass, task_id`
 
-	getFairnessTaskQryWithLimit = `SELECT task_id, data, data_encoding ` +
-		`FROM tasks_v2 ` +
-		`WHERE range_hash = $1 ` +
-		`AND task_queue_id = $2 ` +
-		`AND (pass, task_id) >= ($3, $4) ` +
-		`ORDER BY pass, task_id ` +
-		`LIMIT $6`
+	getTaskV2QryWithLimit = getTaskV2Qry + ` LIMIT $6`
 
-	createTaskQryV2 = `INSERT INTO ` +
-		`tasks_v2(range_hash, task_queue_id, task_id, pass, data, data_encoding) ` +
-		`VALUES(:range_hash, :task_queue_id, :task_id, :pass, :data, :data_encoding)`
+	createTaskV2Qry = `INSERT INTO ` +
+		`tasks_v2 ( range_hash,  task_queue_id,  task_id,       pass,  data,  data_encoding) ` +
+		`VALUES   (:range_hash, :task_queue_id, :task_id, :task_pass, :data, :data_encoding)`
 
-	rangeDeleteFairnessTaskQry = `DELETE FROM tasks_v2 ` +
+	rangeDeleteTaskV2Qry = `DELETE FROM tasks_v2 ` +
 		`WHERE range_hash = $1 ` +
 		`AND task_queue_id = $2 ` +
 		`AND (pass, task_id) < ($3, $4)`
@@ -40,7 +34,7 @@ func (pdb *db) InsertIntoTasksV2(
 	rows []sqlplugin.TasksRowV2,
 ) (sql.Result, error) {
 	return pdb.NamedExecContext(ctx,
-		createTaskQryV2,
+		createTaskV2Qry,
 		rows,
 	)
 }
@@ -59,7 +53,7 @@ func (pdb *db) SelectFromTasksV2(
 	case filter.PageSize != nil:
 		err = pdb.SelectContext(ctx,
 			&rows,
-			getFairnessTaskQryWithLimit,
+			getTaskV2QryWithLimit,
 			filter.RangeHash,
 			filter.TaskQueueID,
 			filter.InclusiveMinLevel.TaskPass,
@@ -69,7 +63,7 @@ func (pdb *db) SelectFromTasksV2(
 	default:
 		err = pdb.SelectContext(ctx,
 			&rows,
-			getFairnessTaskQry,
+			getTaskV2Qry,
 			filter.RangeHash,
 			filter.TaskQueueID,
 			filter.InclusiveMinLevel.TaskPass,
@@ -88,7 +82,7 @@ func (pdb *db) DeleteFromTasksV2(
 		return nil, serviceerror.NewInternal("missing ExclusiveMaxTaskLevel")
 	}
 	return pdb.ExecContext(ctx,
-		rangeDeleteFairnessTaskQry,
+		rangeDeleteTaskV2Qry,
 		filter.RangeHash,
 		filter.TaskQueueID,
 		filter.ExclusiveMaxLevel.TaskPass,
