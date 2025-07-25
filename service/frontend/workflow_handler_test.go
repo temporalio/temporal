@@ -2207,9 +2207,13 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 		Reason:    inputString,
 		BatchType: batcher.BatchTypeTerminate,
 		Query:     inputString,
-		Operation: &batchspb.BatchOperation_TerminationOperation{
-			TerminationOperation: &batchpb.BatchOperationTermination{
-				Identity: inputString,
+		Input: &batchspb.BatchOperationInput{
+			Request: &workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
+					TerminationOperation: &batchpb.BatchOperationTermination{
+						Identity: inputString,
+					},
+				},
 			},
 		},
 	}
@@ -2263,9 +2267,13 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 		Reason:    inputString,
 		BatchType: batcher.BatchTypeCancel,
 		Query:     inputString,
-		Operation: &batchspb.BatchOperation_CancellationOperation{
-			CancellationOperation: &batchpb.BatchOperationCancellation{
-				Identity: inputString,
+		Input: &batchspb.BatchOperationInput{
+			Request: &workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_CancellationOperation{
+					CancellationOperation: &batchpb.BatchOperationCancellation{
+						Identity: inputString,
+					},
+				},
 			},
 		},
 	}
@@ -2320,11 +2328,15 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 		Query:     inputString,
 		Reason:    inputString,
 		BatchType: batcher.BatchTypeSignal,
-		Operation: &batchspb.BatchOperation_SignalOperation{
-			SignalOperation: &batchpb.BatchOperationSignal{
-				Signal:   signalName,
-				Input:    signalPayloads,
-				Identity: inputString,
+		Input: &batchspb.BatchOperationInput{
+			Request: &workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+					SignalOperation: &batchpb.BatchOperationSignal{
+						Signal:   signalName,
+						Input:    signalPayloads,
+						Identity: inputString,
+					},
+				},
 			},
 		},
 	}
@@ -2388,11 +2400,15 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 		WorkflowExecutions: executions,
 		Reason:             reason,
 		BatchType:          batcher.BatchTypeSignal,
-		Operation: &batchspb.BatchOperation_SignalOperation{
-			SignalOperation: &batchpb.BatchOperationSignal{
-				Signal:   signalName,
-				Input:    signalPayloads,
-				Identity: identity,
+		Input: &batchspb.BatchOperationInput{
+			Request: &workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+					SignalOperation: &batchpb.BatchOperationSignal{
+						Signal:   signalName,
+						Input:    signalPayloads,
+						Identity: identity,
+					},
+				},
 			},
 		},
 	}
@@ -2454,11 +2470,15 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 		WorkflowExecutions: executions,
 		Reason:             reason,
 		BatchType:          batcher.BatchTypeReset,
-		Operation: &batchspb.BatchOperation_ResetOperation{
-			ResetOperation: &batchpb.BatchOperationReset{
-				Identity:         identity,
-				ResetType:        enumspb.RESET_TYPE_LAST_WORKFLOW_TASK,
-				ResetReapplyType: enumspb.RESET_REAPPLY_TYPE_NONE,
+		Input: &batchspb.BatchOperationInput{
+			Request: &workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+					ResetOperation: &batchpb.BatchOperationReset{
+						Identity:         identity,
+						ResetType:        enumspb.RESET_TYPE_LAST_WORKFLOW_TASK,
+						ResetReapplyType: enumspb.RESET_REAPPLY_TYPE_NONE,
+					},
+				},
 			},
 		},
 	}
@@ -2550,9 +2570,9 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			s.NoError(err)
 
 			// Verify that PostResetOperations slice has the correct length and no nil values
-			s.Len(batchParams.Operation.(*batchspb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations, len(postResetOps))
+			s.Len(batchParams.Input.Request.Operation.(*workflowservice.StartBatchOperationRequest_ResetOperation).ResetOperation.PostResetOperations, len(postResetOps))
 
-			for i, encoded := range batchParams.Operation.(*batchspb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations {
+			for i, encoded := range batchParams.Input.Request.Operation.(*workflowservice.StartBatchOperationRequest_ResetOperation).ResetOperation.PostResetOperations {
 				s.ProtoEqual(postResetOps[i], encoded)
 			}
 
@@ -2608,7 +2628,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			var batchParams batchspb.BatchOperation
 			err := payloads.Decode(request.StartRequest.Input, &batchParams)
 			s.NoError(err)
-			s.Len(batchParams.Operation.(*batchspb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations, 0)
+			s.Len(batchParams.Input.Request.Operation.(*workflowservice.StartBatchOperationRequest_ResetOperation).ResetOperation.PostResetOperations, 0)
 
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},

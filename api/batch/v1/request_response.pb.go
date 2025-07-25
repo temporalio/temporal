@@ -11,8 +11,8 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
-	v11 "go.temporal.io/api/batch/v1"
 	v1 "go.temporal.io/api/common/v1"
+	v11 "go.temporal.io/api/workflowservice/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
@@ -30,27 +30,16 @@ type BatchOperation struct {
 	// The namespace of the batch operation.
 	Namespace string `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// The query to perform.
-	Query              string                  `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
-	WorkflowExecutions []*v1.WorkflowExecution `protobuf:"bytes,3,rep,name=workflow_executions,json=workflowExecutions,proto3" json:"workflow_executions,omitempty"`
-	Reason             string                  `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
-	// Types that are valid to be assigned to Operation:
-	//
-	//	*BatchOperation_TerminationOperation
-	//	*BatchOperation_CancellationOperation
-	//	*BatchOperation_SignalOperation
-	//	*BatchOperation_DeletionOperation
-	//	*BatchOperation_ResetOperation
-	//	*BatchOperation_UpdateWorkflowExecutionOptionsOperation
-	//	*BatchOperation_UnpauseActivitiesOperation
-	//	*BatchOperation_UpdateActivityOptionsOperation
-	//	*BatchOperation_ResetActivitiesOperation
-	Operation                isBatchOperation_Operation `protobuf_oneof:"operation"`
-	Rps                      float64                    `protobuf:"fixed64,14,opt,name=rps,proto3" json:"rps,omitempty"`
-	Concurrency              int64                      `protobuf:"varint,15,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
-	AttemptsOnRetryableError int64                      `protobuf:"varint,16,opt,name=attempts_on_retryable_error,json=attemptsOnRetryableError,proto3" json:"attempts_on_retryable_error,omitempty"`
-	ActivityHeartbeatTimeout *durationpb.Duration       `protobuf:"bytes,17,opt,name=activity_heartbeat_timeout,json=activityHeartbeatTimeout,proto3" json:"activity_heartbeat_timeout,omitempty"`
-	NonRetryableErrors       []string                   `protobuf:"bytes,18,rep,name=non_retryable_errors,json=nonRetryableErrors,proto3" json:"non_retryable_errors,omitempty"`
-	BatchType                string                     `protobuf:"bytes,19,opt,name=batch_type,json=batchType,proto3" json:"batch_type,omitempty"`
+	Query                    string                  `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
+	WorkflowExecutions       []*v1.WorkflowExecution `protobuf:"bytes,3,rep,name=workflow_executions,json=workflowExecutions,proto3" json:"workflow_executions,omitempty"`
+	Reason                   string                  `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	Input                    *BatchOperationInput    `protobuf:"bytes,5,opt,name=input,proto3" json:"input,omitempty"`
+	Rps                      float64                 `protobuf:"fixed64,6,opt,name=rps,proto3" json:"rps,omitempty"`
+	Concurrency              int64                   `protobuf:"varint,7,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
+	AttemptsOnRetryableError int64                   `protobuf:"varint,8,opt,name=attempts_on_retryable_error,json=attemptsOnRetryableError,proto3" json:"attempts_on_retryable_error,omitempty"`
+	ActivityHeartbeatTimeout *durationpb.Duration    `protobuf:"bytes,9,opt,name=activity_heartbeat_timeout,json=activityHeartbeatTimeout,proto3" json:"activity_heartbeat_timeout,omitempty"`
+	NonRetryableErrors       []string                `protobuf:"bytes,10,rep,name=non_retryable_errors,json=nonRetryableErrors,proto3" json:"non_retryable_errors,omitempty"`
+	BatchType                string                  `protobuf:"bytes,11,opt,name=batch_type,json=batchType,proto3" json:"batch_type,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
@@ -113,90 +102,9 @@ func (x *BatchOperation) GetReason() string {
 	return ""
 }
 
-func (x *BatchOperation) GetOperation() isBatchOperation_Operation {
+func (x *BatchOperation) GetInput() *BatchOperationInput {
 	if x != nil {
-		return x.Operation
-	}
-	return nil
-}
-
-func (x *BatchOperation) GetTerminationOperation() *v11.BatchOperationTermination {
-	if x != nil {
-		if x, ok := x.Operation.(*BatchOperation_TerminationOperation); ok {
-			return x.TerminationOperation
-		}
-	}
-	return nil
-}
-
-func (x *BatchOperation) GetCancellationOperation() *v11.BatchOperationCancellation {
-	if x != nil {
-		if x, ok := x.Operation.(*BatchOperation_CancellationOperation); ok {
-			return x.CancellationOperation
-		}
-	}
-	return nil
-}
-
-func (x *BatchOperation) GetSignalOperation() *v11.BatchOperationSignal {
-	if x != nil {
-		if x, ok := x.Operation.(*BatchOperation_SignalOperation); ok {
-			return x.SignalOperation
-		}
-	}
-	return nil
-}
-
-func (x *BatchOperation) GetDeletionOperation() *v11.BatchOperationDeletion {
-	if x != nil {
-		if x, ok := x.Operation.(*BatchOperation_DeletionOperation); ok {
-			return x.DeletionOperation
-		}
-	}
-	return nil
-}
-
-func (x *BatchOperation) GetResetOperation() *v11.BatchOperationReset {
-	if x != nil {
-		if x, ok := x.Operation.(*BatchOperation_ResetOperation); ok {
-			return x.ResetOperation
-		}
-	}
-	return nil
-}
-
-func (x *BatchOperation) GetUpdateWorkflowExecutionOptionsOperation() *v11.BatchOperationUpdateWorkflowExecutionOptions {
-	if x != nil {
-		if x, ok := x.Operation.(*BatchOperation_UpdateWorkflowExecutionOptionsOperation); ok {
-			return x.UpdateWorkflowExecutionOptionsOperation
-		}
-	}
-	return nil
-}
-
-func (x *BatchOperation) GetUnpauseActivitiesOperation() *v11.BatchOperationUnpauseActivities {
-	if x != nil {
-		if x, ok := x.Operation.(*BatchOperation_UnpauseActivitiesOperation); ok {
-			return x.UnpauseActivitiesOperation
-		}
-	}
-	return nil
-}
-
-func (x *BatchOperation) GetUpdateActivityOptionsOperation() *v11.BatchOperationUpdateActivityOptions {
-	if x != nil {
-		if x, ok := x.Operation.(*BatchOperation_UpdateActivityOptionsOperation); ok {
-			return x.UpdateActivityOptionsOperation
-		}
-	}
-	return nil
-}
-
-func (x *BatchOperation) GetResetActivitiesOperation() *v11.BatchOperationResetActivities {
-	if x != nil {
-		if x, ok := x.Operation.(*BatchOperation_ResetActivitiesOperation); ok {
-			return x.ResetActivitiesOperation
-		}
+		return x.Input
 	}
 	return nil
 }
@@ -243,92 +151,80 @@ func (x *BatchOperation) GetBatchType() string {
 	return ""
 }
 
-type isBatchOperation_Operation interface {
-	isBatchOperation_Operation()
+type BatchOperationInput struct {
+	state         protoimpl.MessageState          `protogen:"open.v1"`
+	NamespaceId   string                          `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	Request       *v11.StartBatchOperationRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-type BatchOperation_TerminationOperation struct {
-	TerminationOperation *v11.BatchOperationTermination `protobuf:"bytes,5,opt,name=termination_operation,json=terminationOperation,proto3,oneof"`
+func (x *BatchOperationInput) Reset() {
+	*x = BatchOperationInput{}
+	mi := &file_temporal_server_api_batch_v1_request_response_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
-type BatchOperation_CancellationOperation struct {
-	CancellationOperation *v11.BatchOperationCancellation `protobuf:"bytes,6,opt,name=cancellation_operation,json=cancellationOperation,proto3,oneof"`
+func (x *BatchOperationInput) String() string {
+	return protoimpl.X.MessageStringOf(x)
 }
 
-type BatchOperation_SignalOperation struct {
-	SignalOperation *v11.BatchOperationSignal `protobuf:"bytes,7,opt,name=signal_operation,json=signalOperation,proto3,oneof"`
+func (*BatchOperationInput) ProtoMessage() {}
+
+func (x *BatchOperationInput) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_batch_v1_request_response_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
 }
 
-type BatchOperation_DeletionOperation struct {
-	DeletionOperation *v11.BatchOperationDeletion `protobuf:"bytes,8,opt,name=deletion_operation,json=deletionOperation,proto3,oneof"`
+// Deprecated: Use BatchOperationInput.ProtoReflect.Descriptor instead.
+func (*BatchOperationInput) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_batch_v1_request_response_proto_rawDescGZIP(), []int{1}
 }
 
-type BatchOperation_ResetOperation struct {
-	ResetOperation *v11.BatchOperationReset `protobuf:"bytes,9,opt,name=reset_operation,json=resetOperation,proto3,oneof"`
+func (x *BatchOperationInput) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
 }
 
-type BatchOperation_UpdateWorkflowExecutionOptionsOperation struct {
-	UpdateWorkflowExecutionOptionsOperation *v11.BatchOperationUpdateWorkflowExecutionOptions `protobuf:"bytes,10,opt,name=update_workflow_execution_options_operation,json=updateWorkflowExecutionOptionsOperation,proto3,oneof"`
+func (x *BatchOperationInput) GetRequest() *v11.StartBatchOperationRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
 }
-
-type BatchOperation_UnpauseActivitiesOperation struct {
-	UnpauseActivitiesOperation *v11.BatchOperationUnpauseActivities `protobuf:"bytes,11,opt,name=unpause_activities_operation,json=unpauseActivitiesOperation,proto3,oneof"`
-}
-
-type BatchOperation_UpdateActivityOptionsOperation struct {
-	UpdateActivityOptionsOperation *v11.BatchOperationUpdateActivityOptions `protobuf:"bytes,12,opt,name=update_activity_options_operation,json=updateActivityOptionsOperation,proto3,oneof"`
-}
-
-type BatchOperation_ResetActivitiesOperation struct {
-	ResetActivitiesOperation *v11.BatchOperationResetActivities `protobuf:"bytes,13,opt,name=reset_activities_operation,json=resetActivitiesOperation,proto3,oneof"`
-}
-
-func (*BatchOperation_TerminationOperation) isBatchOperation_Operation() {}
-
-func (*BatchOperation_CancellationOperation) isBatchOperation_Operation() {}
-
-func (*BatchOperation_SignalOperation) isBatchOperation_Operation() {}
-
-func (*BatchOperation_DeletionOperation) isBatchOperation_Operation() {}
-
-func (*BatchOperation_ResetOperation) isBatchOperation_Operation() {}
-
-func (*BatchOperation_UpdateWorkflowExecutionOptionsOperation) isBatchOperation_Operation() {}
-
-func (*BatchOperation_UnpauseActivitiesOperation) isBatchOperation_Operation() {}
-
-func (*BatchOperation_UpdateActivityOptionsOperation) isBatchOperation_Operation() {}
-
-func (*BatchOperation_ResetActivitiesOperation) isBatchOperation_Operation() {}
 
 var File_temporal_server_api_batch_v1_request_response_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_batch_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"3temporal/server/api/batch/v1/request_response.proto\x12\x1ctemporal.server.api.batch.v1\x1a\x1egoogle/protobuf/duration.proto\x1a#temporal/api/batch/v1/message.proto\x1a$temporal/api/common/v1/message.proto\"\xea\v\n" +
+	"3temporal/server/api/batch/v1/request_response.proto\x12\x1ctemporal.server.api.batch.v1\x1a\x1egoogle/protobuf/duration.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a$temporal/api/common/v1/message.proto\"\x9e\x04\n" +
 	"\x0eBatchOperation\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x14\n" +
 	"\x05query\x18\x02 \x01(\tR\x05query\x12Z\n" +
 	"\x13workflow_executions\x18\x03 \x03(\v2).temporal.api.common.v1.WorkflowExecutionR\x12workflowExecutions\x12\x16\n" +
-	"\x06reason\x18\x04 \x01(\tR\x06reason\x12g\n" +
-	"\x15termination_operation\x18\x05 \x01(\v20.temporal.api.batch.v1.BatchOperationTerminationH\x00R\x14terminationOperation\x12j\n" +
-	"\x16cancellation_operation\x18\x06 \x01(\v21.temporal.api.batch.v1.BatchOperationCancellationH\x00R\x15cancellationOperation\x12X\n" +
-	"\x10signal_operation\x18\a \x01(\v2+.temporal.api.batch.v1.BatchOperationSignalH\x00R\x0fsignalOperation\x12^\n" +
-	"\x12deletion_operation\x18\b \x01(\v2-.temporal.api.batch.v1.BatchOperationDeletionH\x00R\x11deletionOperation\x12U\n" +
-	"\x0freset_operation\x18\t \x01(\v2*.temporal.api.batch.v1.BatchOperationResetH\x00R\x0eresetOperation\x12\xa3\x01\n" +
-	"+update_workflow_execution_options_operation\x18\n" +
-	" \x01(\v2C.temporal.api.batch.v1.BatchOperationUpdateWorkflowExecutionOptionsH\x00R'updateWorkflowExecutionOptionsOperation\x12z\n" +
-	"\x1cunpause_activities_operation\x18\v \x01(\v26.temporal.api.batch.v1.BatchOperationUnpauseActivitiesH\x00R\x1aunpauseActivitiesOperation\x12\x87\x01\n" +
-	"!update_activity_options_operation\x18\f \x01(\v2:.temporal.api.batch.v1.BatchOperationUpdateActivityOptionsH\x00R\x1eupdateActivityOptionsOperation\x12t\n" +
-	"\x1areset_activities_operation\x18\r \x01(\v24.temporal.api.batch.v1.BatchOperationResetActivitiesH\x00R\x18resetActivitiesOperation\x12\x10\n" +
-	"\x03rps\x18\x0e \x01(\x01R\x03rps\x12 \n" +
-	"\vconcurrency\x18\x0f \x01(\x03R\vconcurrency\x12=\n" +
-	"\x1battempts_on_retryable_error\x18\x10 \x01(\x03R\x18attemptsOnRetryableError\x12W\n" +
-	"\x1aactivity_heartbeat_timeout\x18\x11 \x01(\v2\x19.google.protobuf.DurationR\x18activityHeartbeatTimeout\x120\n" +
-	"\x14non_retryable_errors\x18\x12 \x03(\tR\x12nonRetryableErrors\x12\x1d\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\x12G\n" +
+	"\x05input\x18\x05 \x01(\v21.temporal.server.api.batch.v1.BatchOperationInputR\x05input\x12\x10\n" +
+	"\x03rps\x18\x06 \x01(\x01R\x03rps\x12 \n" +
+	"\vconcurrency\x18\a \x01(\x03R\vconcurrency\x12=\n" +
+	"\x1battempts_on_retryable_error\x18\b \x01(\x03R\x18attemptsOnRetryableError\x12W\n" +
+	"\x1aactivity_heartbeat_timeout\x18\t \x01(\v2\x19.google.protobuf.DurationR\x18activityHeartbeatTimeout\x120\n" +
+	"\x14non_retryable_errors\x18\n" +
+	" \x03(\tR\x12nonRetryableErrors\x12\x1d\n" +
 	"\n" +
-	"batch_type\x18\x13 \x01(\tR\tbatchTypeB\v\n" +
-	"\toperationB*Z(go.temporal.io/server/api/batch/v1;batchb\x06proto3"
+	"batch_type\x18\v \x01(\tR\tbatchType\"\x8f\x01\n" +
+	"\x13BatchOperationInput\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12U\n" +
+	"\arequest\x18\x02 \x01(\v2;.temporal.api.workflowservice.v1.StartBatchOperationRequestR\arequestB*Z(go.temporal.io/server/api/batch/v1;batchb\x06proto3"
 
 var (
 	file_temporal_server_api_batch_v1_request_response_proto_rawDescOnce sync.Once
@@ -342,38 +238,24 @@ func file_temporal_server_api_batch_v1_request_response_proto_rawDescGZIP() []by
 	return file_temporal_server_api_batch_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_api_batch_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_temporal_server_api_batch_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_temporal_server_api_batch_v1_request_response_proto_goTypes = []any{
-	(*BatchOperation)(nil),                                   // 0: temporal.server.api.batch.v1.BatchOperation
-	(*v1.WorkflowExecution)(nil),                             // 1: temporal.api.common.v1.WorkflowExecution
-	(*v11.BatchOperationTermination)(nil),                    // 2: temporal.api.batch.v1.BatchOperationTermination
-	(*v11.BatchOperationCancellation)(nil),                   // 3: temporal.api.batch.v1.BatchOperationCancellation
-	(*v11.BatchOperationSignal)(nil),                         // 4: temporal.api.batch.v1.BatchOperationSignal
-	(*v11.BatchOperationDeletion)(nil),                       // 5: temporal.api.batch.v1.BatchOperationDeletion
-	(*v11.BatchOperationReset)(nil),                          // 6: temporal.api.batch.v1.BatchOperationReset
-	(*v11.BatchOperationUpdateWorkflowExecutionOptions)(nil), // 7: temporal.api.batch.v1.BatchOperationUpdateWorkflowExecutionOptions
-	(*v11.BatchOperationUnpauseActivities)(nil),              // 8: temporal.api.batch.v1.BatchOperationUnpauseActivities
-	(*v11.BatchOperationUpdateActivityOptions)(nil),          // 9: temporal.api.batch.v1.BatchOperationUpdateActivityOptions
-	(*v11.BatchOperationResetActivities)(nil),                // 10: temporal.api.batch.v1.BatchOperationResetActivities
-	(*durationpb.Duration)(nil),                              // 11: google.protobuf.Duration
+	(*BatchOperation)(nil),                 // 0: temporal.server.api.batch.v1.BatchOperation
+	(*BatchOperationInput)(nil),            // 1: temporal.server.api.batch.v1.BatchOperationInput
+	(*v1.WorkflowExecution)(nil),           // 2: temporal.api.common.v1.WorkflowExecution
+	(*durationpb.Duration)(nil),            // 3: google.protobuf.Duration
+	(*v11.StartBatchOperationRequest)(nil), // 4: temporal.api.workflowservice.v1.StartBatchOperationRequest
 }
 var file_temporal_server_api_batch_v1_request_response_proto_depIdxs = []int32{
-	1,  // 0: temporal.server.api.batch.v1.BatchOperation.workflow_executions:type_name -> temporal.api.common.v1.WorkflowExecution
-	2,  // 1: temporal.server.api.batch.v1.BatchOperation.termination_operation:type_name -> temporal.api.batch.v1.BatchOperationTermination
-	3,  // 2: temporal.server.api.batch.v1.BatchOperation.cancellation_operation:type_name -> temporal.api.batch.v1.BatchOperationCancellation
-	4,  // 3: temporal.server.api.batch.v1.BatchOperation.signal_operation:type_name -> temporal.api.batch.v1.BatchOperationSignal
-	5,  // 4: temporal.server.api.batch.v1.BatchOperation.deletion_operation:type_name -> temporal.api.batch.v1.BatchOperationDeletion
-	6,  // 5: temporal.server.api.batch.v1.BatchOperation.reset_operation:type_name -> temporal.api.batch.v1.BatchOperationReset
-	7,  // 6: temporal.server.api.batch.v1.BatchOperation.update_workflow_execution_options_operation:type_name -> temporal.api.batch.v1.BatchOperationUpdateWorkflowExecutionOptions
-	8,  // 7: temporal.server.api.batch.v1.BatchOperation.unpause_activities_operation:type_name -> temporal.api.batch.v1.BatchOperationUnpauseActivities
-	9,  // 8: temporal.server.api.batch.v1.BatchOperation.update_activity_options_operation:type_name -> temporal.api.batch.v1.BatchOperationUpdateActivityOptions
-	10, // 9: temporal.server.api.batch.v1.BatchOperation.reset_activities_operation:type_name -> temporal.api.batch.v1.BatchOperationResetActivities
-	11, // 10: temporal.server.api.batch.v1.BatchOperation.activity_heartbeat_timeout:type_name -> google.protobuf.Duration
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	2, // 0: temporal.server.api.batch.v1.BatchOperation.workflow_executions:type_name -> temporal.api.common.v1.WorkflowExecution
+	1, // 1: temporal.server.api.batch.v1.BatchOperation.input:type_name -> temporal.server.api.batch.v1.BatchOperationInput
+	3, // 2: temporal.server.api.batch.v1.BatchOperation.activity_heartbeat_timeout:type_name -> google.protobuf.Duration
+	4, // 3: temporal.server.api.batch.v1.BatchOperationInput.request:type_name -> temporal.api.workflowservice.v1.StartBatchOperationRequest
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_batch_v1_request_response_proto_init() }
@@ -381,24 +263,13 @@ func file_temporal_server_api_batch_v1_request_response_proto_init() {
 	if File_temporal_server_api_batch_v1_request_response_proto != nil {
 		return
 	}
-	file_temporal_server_api_batch_v1_request_response_proto_msgTypes[0].OneofWrappers = []any{
-		(*BatchOperation_TerminationOperation)(nil),
-		(*BatchOperation_CancellationOperation)(nil),
-		(*BatchOperation_SignalOperation)(nil),
-		(*BatchOperation_DeletionOperation)(nil),
-		(*BatchOperation_ResetOperation)(nil),
-		(*BatchOperation_UpdateWorkflowExecutionOptionsOperation)(nil),
-		(*BatchOperation_UnpauseActivitiesOperation)(nil),
-		(*BatchOperation_UpdateActivityOptionsOperation)(nil),
-		(*BatchOperation_ResetActivitiesOperation)(nil),
-	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_batch_v1_request_response_proto_rawDesc), len(file_temporal_server_api_batch_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

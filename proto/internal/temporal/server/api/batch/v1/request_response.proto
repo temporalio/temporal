@@ -5,7 +5,7 @@ option go_package = "go.temporal.io/server/api/batch/v1;batch";
 
 import "google/protobuf/duration.proto";
 
-import "temporal/api/batch/v1/message.proto";
+import "temporal/api/workflowservice/v1/request_response.proto";
 import "temporal/api/common/v1/message.proto";
 
 message BatchOperation {
@@ -19,27 +19,22 @@ message BatchOperation {
 
   string reason = 4;
 
-  oneof operation {
-    temporal.api.batch.v1.BatchOperationTermination termination_operation = 5;
-    temporal.api.batch.v1.BatchOperationCancellation cancellation_operation = 6;
-    temporal.api.batch.v1.BatchOperationSignal signal_operation = 7;
-    temporal.api.batch.v1.BatchOperationDeletion deletion_operation = 8;
-    temporal.api.batch.v1.BatchOperationReset reset_operation = 9;
-    temporal.api.batch.v1.BatchOperationUpdateWorkflowExecutionOptions update_workflow_execution_options_operation = 10;
-    temporal.api.batch.v1.BatchOperationUnpauseActivities unpause_activities_operation = 11;
-    temporal.api.batch.v1.BatchOperationUpdateActivityOptions update_activity_options_operation = 12;
-    temporal.api.batch.v1.BatchOperationResetActivities reset_activities_operation = 13;
-  }
+  BatchOperationInput input = 5;
 
-  double rps = 14;
+  double rps = 6;
 
-  int64 concurrency = 15;
+  int64 concurrency = 7;
 
-  int64 attempts_on_retryable_error = 16;
+  int64 attempts_on_retryable_error = 8;
 
-  google.protobuf.Duration activity_heartbeat_timeout = 17;
+  google.protobuf.Duration activity_heartbeat_timeout = 9;
 
-  repeated string non_retryable_errors = 18;
+  repeated string non_retryable_errors = 10;
 
-  string batch_type = 19;
+  string batch_type = 11;
+}
+
+message BatchOperationInput { 
+  string namespace_id = 1; 
+  temporal.api.workflowservice.v1.StartBatchOperationRequest request = 2;
 }
