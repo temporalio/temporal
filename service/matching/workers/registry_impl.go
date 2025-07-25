@@ -128,7 +128,7 @@ func (b *bucket) getWorkerHeartbeat(nsID namespace.ID, workerInstanceKey string)
 
 	e, exists := mp[workerInstanceKey]
 	if !exists {
-		return nil, serviceerror.NewNamespaceNotFound(workerInstanceKey)
+		return nil, serviceerror.NewNotFoundf("Worker %s not found", workerInstanceKey)
 	}
 
 	return e.hb, nil

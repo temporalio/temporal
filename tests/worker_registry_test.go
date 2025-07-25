@@ -58,7 +58,8 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorker() {
 		WorkerInstanceKey: "worker1",
 	})
 	s.Error(err)
-	s.ErrorAs(err, &notFound)
+	var namespaceNotFound *serviceerror.NamespaceNotFound
+	s.ErrorAs(err, &namespaceNotFound)
 
 	resp, err := s.FrontendClient().DescribeWorker(ctx, &workflowservice.DescribeWorkerRequest{
 		Namespace:         s.Namespace().String(),
