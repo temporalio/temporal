@@ -39,97 +39,16 @@ const (
 
 	lockTaskQueueQry = `SELECT range_id FROM task_queues ` +
 		`WHERE range_hash=$1 AND task_queue_id=$2 FOR UPDATE`
-	// *** Task_Queues Table Above ***
-
-	// *** Tasks Below ***
-	getTaskMinMaxQry = `SELECT task_id, data, data_encoding ` +
-		`FROM tasks ` +
-		`WHERE range_hash = $1 AND task_queue_id=$2 AND task_id >= $3 AND task_id < $4 ` +
-		`ORDER BY task_id LIMIT $5`
-
-	getTaskMinQry = `SELECT task_id, data, data_encoding ` +
-		`FROM tasks ` +
-		`WHERE range_hash = $1 AND task_queue_id = $2 AND task_id >= $3 ORDER BY task_id LIMIT $4`
-
-	createTaskQry = `INSERT INTO ` +
-		`tasks(range_hash, task_queue_id, task_id, data, data_encoding) ` +
-		`VALUES(:range_hash, :task_queue_id, :task_id, :data, :data_encoding)`
-
-	rangeDeleteTaskQry = `DELETE FROM tasks ` +
-		`WHERE range_hash = $1 AND task_queue_id = $2 AND task_id IN (SELECT task_id FROM
-		 tasks WHERE range_hash = $1 AND task_queue_id = $2 AND task_id < $3 ` +
-		`ORDER BY task_queue_id,task_id LIMIT $4 )`
 )
-
-// InsertIntoTasks inserts one or more rows into tasks table
-func (pdb *db) InsertIntoTasks(
-	ctx context.Context,
-	rows []sqlplugin.TasksRow,
-) (sql.Result, error) {
-	return pdb.NamedExecContext(ctx,
-		createTaskQry,
-		rows,
-	)
-}
-
-// SelectFromTasks reads one or more rows from tasks table
-func (pdb *db) SelectFromTasks(
-	ctx context.Context,
-	filter sqlplugin.TasksFilter,
-) ([]sqlplugin.TasksRow, error) {
-	var err error
-	var rows []sqlplugin.TasksRow
-	switch {
-	case filter.ExclusiveMaxTaskID != nil:
-		err = pdb.SelectContext(ctx,
-			&rows,
-			getTaskMinMaxQry,
-			filter.RangeHash,
-			filter.TaskQueueID,
-			*filter.InclusiveMinTaskID,
-			*filter.ExclusiveMaxTaskID,
-			*filter.PageSize,
-		)
-	default:
-		err = pdb.SelectContext(ctx,
-			&rows,
-			getTaskMinQry,
-			filter.RangeHash,
-			filter.TaskQueueID,
-			*filter.InclusiveMinTaskID,
-			*filter.PageSize,
-		)
-	}
-	return rows, err
-}
-
-// DeleteFromTasks deletes multiple rows from tasks table
-func (pdb *db) DeleteFromTasks(
-	ctx context.Context,
-	filter sqlplugin.TasksFilter,
-) (sql.Result, error) {
-	if filter.ExclusiveMaxTaskID == nil {
-		return nil, serviceerror.NewInternal("missing ExclusiveMaxTaskID parameter")
-	}
-	if filter.Limit == nil || *filter.Limit == 0 {
-		return nil, serviceerror.NewInternal("missing limit parameter")
-	}
-	return pdb.ExecContext(ctx,
-		rangeDeleteTaskQry,
-		filter.RangeHash,
-		filter.TaskQueueID,
-		*filter.ExclusiveMaxTaskID,
-		*filter.Limit,
-	)
-}
 
 // InsertIntoTaskQueues inserts one or more rows into task_queues table
 func (pdb *db) InsertIntoTaskQueues(
 	ctx context.Context,
 	row *sqlplugin.TaskQueuesRow,
+	v sqlplugin.MatchingTaskVersion,
 ) (sql.Result, error) {
 	return pdb.NamedExecContext(ctx,
-		createTaskQueueQry,
+		sqlplugin.SwitchTaskQueuesTable(createTaskQueueQry, v),
 		row,
 	)
 }
@@ -138,9 +57,10 @@ func (pdb *db) InsertIntoTaskQueues(
 func (pdb *db) UpdateTaskQueues(
 	ctx context.Context,
 	row *sqlplugin.TaskQueuesRow,
+	v sqlplugin.MatchingTaskVersion,
 ) (sql.Result, error) {
 	return pdb.NamedExecContext(ctx,
-		updateTaskQueueQry,
+		sqlplugin.SwitchTaskQueuesTable(updateTaskQueueQry, v),
 		row,
 	)
 }
@@ -149,20 +69,21 @@ func (pdb *db) UpdateTaskQueues(
 func (pdb *db) SelectFromTaskQueues(
 	ctx context.Context,
 	filter sqlplugin.TaskQueuesFilter,
+	v sqlplugin.MatchingTaskVersion,
 ) ([]sqlplugin.TaskQueuesRow, error) {
 	switch {
 	case filter.TaskQueueID != nil:
 		if filter.RangeHashLessThanEqualTo != 0 || filter.RangeHashGreaterThanEqualTo != 0 {
 			return nil, serviceerror.NewInternal("shardID range not supported for specific selection")
 		}
-		return pdb.selectFromTaskQueues(ctx, filter)
+		return pdb.selectFromTaskQueues(ctx, filter, v)
 	case filter.RangeHashLessThanEqualTo != 0 && filter.PageSize != nil:
 		if filter.RangeHashLessThanEqualTo < filter.RangeHashGreaterThanEqualTo {
 			return nil, serviceerror.NewInternal("range of hashes bound is invalid")
 		}
-		return pdb.rangeSelectFromTaskQueues(ctx, filter)
+		return pdb.rangeSelectFromTaskQueues(ctx, filter, v)
 	case filter.TaskQueueIDGreaterThan != nil && filter.PageSize != nil:
-		return pdb.rangeSelectFromTaskQueues(ctx, filter)
+		return pdb.rangeSelectFromTaskQueues(ctx, filter, v)
 	default:
 		return nil, serviceerror.NewInternal("invalid set of query filter params")
 	}
@@ -171,12 +92,13 @@ func (pdb *db) SelectFromTaskQueues(
 func (pdb *db) selectFromTaskQueues(
 	ctx context.Context,
 	filter sqlplugin.TaskQueuesFilter,
+	v sqlplugin.MatchingTaskVersion,
 ) ([]sqlplugin.TaskQueuesRow, error) {
 	var err error
 	var row sqlplugin.TaskQueuesRow
 	err = pdb.GetContext(ctx,
 		&row,
-		getTaskQueueQry,
+		sqlplugin.SwitchTaskQueuesTable(getTaskQueueQry, v),
 		filter.RangeHash,
 		filter.TaskQueueID,
 	)
@@ -189,13 +111,14 @@ func (pdb *db) selectFromTaskQueues(
 func (pdb *db) rangeSelectFromTaskQueues(
 	ctx context.Context,
 	filter sqlplugin.TaskQueuesFilter,
+	v sqlplugin.MatchingTaskVersion,
 ) ([]sqlplugin.TaskQueuesRow, error) {
 	var err error
 	var rows []sqlplugin.TaskQueuesRow
 	if filter.RangeHashLessThanEqualTo > 0 {
 		err = pdb.SelectContext(ctx,
 			&rows,
-			listTaskQueueWithHashRangeQry,
+			sqlplugin.SwitchTaskQueuesTable(listTaskQueueWithHashRangeQry, v),
 			filter.RangeHashGreaterThanEqualTo,
 			filter.RangeHashLessThanEqualTo,
 			filter.TaskQueueIDGreaterThan,
@@ -204,7 +127,7 @@ func (pdb *db) rangeSelectFromTaskQueues(
 	} else {
 		err = pdb.SelectContext(ctx,
 			&rows,
-			listTaskQueueQry,
+			sqlplugin.SwitchTaskQueuesTable(listTaskQueueQry, v),
 			filter.RangeHash,
 			filter.TaskQueueIDGreaterThan,
 			*filter.PageSize,
@@ -221,9 +144,10 @@ func (pdb *db) rangeSelectFromTaskQueues(
 func (pdb *db) DeleteFromTaskQueues(
 	ctx context.Context,
 	filter sqlplugin.TaskQueuesFilter,
+	v sqlplugin.MatchingTaskVersion,
 ) (sql.Result, error) {
 	return pdb.ExecContext(ctx,
-		deleteTaskQueueQry,
+		sqlplugin.SwitchTaskQueuesTable(deleteTaskQueueQry, v),
 		filter.RangeHash,
 		filter.TaskQueueID,
 		*filter.RangeID,
@@ -234,11 +158,12 @@ func (pdb *db) DeleteFromTaskQueues(
 func (pdb *db) LockTaskQueues(
 	ctx context.Context,
 	filter sqlplugin.TaskQueuesFilter,
+	v sqlplugin.MatchingTaskVersion,
 ) (int64, error) {
 	var rangeID int64
 	err := pdb.GetContext(ctx,
 		&rangeID,
-		lockTaskQueueQry,
+		sqlplugin.SwitchTaskQueuesTable(lockTaskQueueQry, v),
 		filter.RangeHash,
 		filter.TaskQueueID,
 	)

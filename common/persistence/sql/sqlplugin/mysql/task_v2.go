@@ -49,6 +49,9 @@ func (mdb *db) SelectFromTasksV2(
 	ctx context.Context,
 	filter sqlplugin.TasksFilterV2,
 ) ([]sqlplugin.TasksRowV2, error) {
+	if filter.InclusiveMinLevel == nil {
+		return nil, serviceerror.NewInternal("missing InclusiveMinLevel")
+	}
 	var err error
 	var rows []sqlplugin.TasksRowV2
 	switch {
@@ -82,7 +85,7 @@ func (mdb *db) DeleteFromTasksV2(
 	filter sqlplugin.TasksFilterV2,
 ) (sql.Result, error) {
 	if filter.ExclusiveMaxLevel == nil {
-		return nil, serviceerror.NewInternal("missing ExclusiveMaxTaskID parameter")
+		return nil, serviceerror.NewInternal("missing ExclusiveMaxTaskLevel")
 	}
 	return mdb.ExecContext(ctx,
 		rangeDeleteTaskV2Qry,
