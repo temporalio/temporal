@@ -86,6 +86,7 @@ func (m *sqlTaskManagerV1) CreateTasks(
 			tqHash,
 			tqId,
 			request.RangeID,
+			sqlplugin.MatchingTaskVersion1,
 		); err != nil {
 			return err
 		}
@@ -187,11 +188,12 @@ func lockTaskQueue(
 	tqHash uint32,
 	tqId []byte,
 	oldRangeID int64,
+	v sqlplugin.MatchingTaskVersion,
 ) error {
 	rangeID, err := tx.LockTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
-	}, sqlplugin.MatchingTaskVersion1)
+	}, v)
 	switch err {
 	case nil:
 		if rangeID != oldRangeID {

@@ -100,6 +100,7 @@ func (m *taskQueueStore) UpdateTaskQueue(
 			tqHash,
 			tqId,
 			request.PrevRangeID,
+			m.version,
 		); err != nil {
 			return err
 		}

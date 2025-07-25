@@ -2,8 +2,6 @@ package sql
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
 	"math"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -80,11 +78,12 @@ func (m *sqlTaskManagerV2) CreateTasks(
 		}
 		// Lock task queue before committing.
 		tqId, tqHash := idAndHash(persistence.SubqueueZero)
-		if err := lockTaskQueueV2(ctx,
+		if err := lockTaskQueue(ctx,
 			tx,
 			tqHash,
 			tqId,
 			request.RangeID,
+			sqlplugin.MatchingTaskVersion2,
 		); err != nil {
 			return err
 		}
@@ -190,32 +189,4 @@ func (m *sqlTaskManagerV2) CompleteTasksLessThan(
 		return 0, serviceerror.NewUnavailablef("rowsAffected returned error: %v", err)
 	}
 	return int(nRows), nil
-}
-
-func lockTaskQueueV2(
-	ctx context.Context,
-	tx sqlplugin.Tx,
-	tqHash uint32,
-	tqId []byte,
-	oldRangeID int64,
-) error {
-	rangeID, err := tx.LockTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
-		RangeHash:   tqHash,
-		TaskQueueID: tqId,
-	}, sqlplugin.MatchingTaskVersion2)
-	switch err {
-	case nil:
-		if rangeID != oldRangeID {
-			return &persistence.ConditionFailedError{
-				Msg: fmt.Sprintf("Task queue range ID was %v when it was should have been %v", rangeID, oldRangeID),
-			}
-		}
-		return nil
-
-	case sql.ErrNoRows:
-		return &persistence.ConditionFailedError{Msg: "Task queue does not exists"}
-
-	default:
-		return serviceerror.NewUnavailablef("Failed to lock task queue. Error: %v", err)
-	}
 }
