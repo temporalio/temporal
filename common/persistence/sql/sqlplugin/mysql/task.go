@@ -55,9 +55,6 @@ const (
 		`tasks(range_hash, task_queue_id, task_id, data, data_encoding) ` +
 		`VALUES(:range_hash, :task_queue_id, :task_id, :data, :data_encoding)`
 
-	// deleteTaskQry = `DELETE FROM tasks ` +
-	// 	`WHERE range_hash = ? AND task_queue_id = ? AND task_id = ?`
-
 	rangeDeleteTaskQry = `DELETE FROM tasks ` +
 		`WHERE range_hash = ? AND task_queue_id = ? AND task_id < ? ` +
 		`ORDER BY task_queue_id,task_id LIMIT ?`

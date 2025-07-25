@@ -302,7 +302,7 @@ func (m *sqlTaskManagerV2) CreateTasks(
 			RangeHash:    tqHash,
 			TaskQueueID:  tqId,
 			TaskID:       v.TaskId,
-			Pass:         v.TaskPass,
+			TaskPass:     v.TaskPass,
 			Data:         v.Task.Data,
 			DataEncoding: v.Task.EncodingType.String(),
 		}
@@ -359,7 +359,7 @@ func (m *sqlTaskManagerV2) GetTasks(
 	rows, err := m.Db.SelectFromTasksV2(ctx, sqlplugin.TasksFilterV2{
 		RangeHash:          tqHash,
 		TaskQueueID:        tqId,
-		Pass:               inclusiveMinPass,
+		InclusiveMinPass:   inclusiveMinPass,
 		InclusiveMinTaskID: &inclusiveMinTaskID,
 		ExclusiveMaxTaskID: &exclusiveMaxTaskID,
 		PageSize:           &request.PageSize,
@@ -404,7 +404,7 @@ func (m *sqlTaskManagerV2) CompleteTasksLessThan(
 		TaskQueueID:        tqId,
 		ExclusiveMaxTaskID: &request.ExclusiveMaxTaskID,
 		Limit:              &request.Limit,
-		Pass:               request.ExclusiveMaxPass,
+		InclusiveMinPass:   request.ExclusiveMaxPass,
 	})
 	if err != nil {
 		return 0, serviceerror.NewUnavailable(err.Error())

@@ -70,7 +70,7 @@ func (f *Factory) NewTaskStore() (p.TaskStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newTaskPersistence(conn, f.cfg.TaskScanPartitions, f.logger, false) // false indicates no fairness
+	return newTaskPersistence(conn, f.cfg.TaskScanPartitions, f.logger, false)
 }
 
 // NewFairTaskStore returns a new task store
@@ -79,7 +79,7 @@ func (f *Factory) NewFairTaskStore() (p.TaskStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newTaskPersistence(conn, f.cfg.TaskScanPartitions, f.logger, true) // true indicates fairness
+	return newTaskPersistence(conn, f.cfg.TaskScanPartitions, f.logger, true)
 }
 
 // NewShardStore returns a new shard store

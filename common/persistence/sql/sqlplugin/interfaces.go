@@ -46,7 +46,6 @@ type (
 		MatchingTask
 		MatchingTaskV2
 		MatchingTaskQueue
-		MatchingTaskQueueV2
 		MatchingTaskQueueUserData
 
 		NexusEndpoints

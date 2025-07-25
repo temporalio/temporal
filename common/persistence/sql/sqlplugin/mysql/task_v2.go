@@ -27,7 +27,7 @@ const (
 	listTaskQueueRowSelectV2 = `SELECT range_hash, task_queue_id, range_id, data, data_encoding from task_queues_v2 `
 
 	listTaskQueueWithHashRangeQryV2 = listTaskQueueRowSelectV2 +
-		`WHERE range_hash >= ? AND range_hash <= ? AND task_queue_id > ? AND pass > ? ORDER BY task_queue_id ASC LIMIT ?`
+		`WHERE range_hash >= ? AND range_hash <= ? AND task_queue_id > ? ORDER BY task_queue_id ASC LIMIT ?`
 
 	listTaskQueueQryV2 = listTaskQueueRowSelect +
 		`WHERE range_hash = ? AND task_queue_id > ? ORDER BY task_queue_id ASC LIMIT ?`
@@ -90,7 +90,7 @@ func (mdb *db) SelectFromTasksV2(
 			&rows, getFairnessTaskQryWithLimit,
 			filter.RangeHash,
 			filter.TaskQueueID,
-			filter.Pass,
+			filter.InclusiveMinPass,
 			*filter.InclusiveMinTaskID,
 			*filter.PageSize,
 		)
@@ -99,7 +99,7 @@ func (mdb *db) SelectFromTasksV2(
 			&rows, getFairnessTaskQry,
 			filter.RangeHash,
 			filter.TaskQueueID,
-			filter.Pass,
+			filter.InclusiveMinPass,
 			*filter.InclusiveMinTaskID,
 		)
 	}
@@ -121,7 +121,7 @@ func (mdb *db) DeleteFromTasksV2(
 		rangeDeleteFairnessTaskQry,
 		filter.RangeHash,
 		filter.TaskQueueID,
-		filter.Pass,
+		filter.InclusiveMinPass,
 		filter.ExclusiveMaxTaskID,
 	)
 }

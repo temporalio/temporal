@@ -90,7 +90,7 @@ func (pdb *db) SelectFromTasksV2(
 			getFairnessTaskQryWithLimit,
 			filter.RangeHash,
 			filter.TaskQueueID,
-			filter.Pass,
+			filter.InclusiveMinPass,
 			*filter.InclusiveMinTaskID,
 			*filter.PageSize,
 		)
@@ -100,7 +100,7 @@ func (pdb *db) SelectFromTasksV2(
 			getFairnessTaskQry,
 			filter.RangeHash,
 			filter.TaskQueueID,
-			filter.Pass,
+			filter.InclusiveMinPass,
 			*filter.InclusiveMinTaskID,
 		)
 	}
@@ -119,7 +119,7 @@ func (pdb *db) DeleteFromTasksV2(
 		rangeDeleteFairnessTaskQry,
 		filter.RangeHash,
 		filter.TaskQueueID,
-		filter.Pass,
+		filter.InclusiveMinPass,
 		*filter.ExclusiveMaxTaskID,
 	)
 }

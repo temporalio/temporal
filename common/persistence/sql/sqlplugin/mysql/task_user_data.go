@@ -71,12 +71,6 @@ func (mdb *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.U
 	return nil
 }
 
-func (mdb *db) ListTaskQueueUserDataEntries(ctx context.Context, request *sqlplugin.ListTaskQueueUserDataEntriesRequest) ([]sqlplugin.TaskQueueUserDataEntry, error) {
-	var rows []sqlplugin.TaskQueueUserDataEntry
-	err := mdb.SelectContext(ctx, &rows, listTaskQueueUserDataQry, request.NamespaceID, request.LastTaskQueueName, request.Limit)
-	return rows, err
-}
-
 func (mdb *db) AddToBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.AddToBuildIdToTaskQueueMapping) error {
 	query := addBuildIdToTaskQueueMappingQry
 	var params []any
@@ -105,6 +99,12 @@ func (mdb *db) RemoveFromBuildIdToTaskQueueMapping(ctx context.Context, request 
 
 	_, err := mdb.ExecContext(ctx, query, params...)
 	return err
+}
+
+func (mdb *db) ListTaskQueueUserDataEntries(ctx context.Context, request *sqlplugin.ListTaskQueueUserDataEntriesRequest) ([]sqlplugin.TaskQueueUserDataEntry, error) {
+	var rows []sqlplugin.TaskQueueUserDataEntry
+	err := mdb.SelectContext(ctx, &rows, listTaskQueueUserDataQry, request.NamespaceID, request.LastTaskQueueName, request.Limit)
+	return rows, err
 }
 
 func (mdb *db) GetTaskQueuesByBuildId(ctx context.Context, request *sqlplugin.GetTaskQueuesByBuildIdRequest) ([]string, error) {

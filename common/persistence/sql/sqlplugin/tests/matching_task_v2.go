@@ -134,7 +134,7 @@ func (s *matchingTaskSuiteV2) TestInsertSelect_SingleV2() {
 	filter := sqlplugin.TasksFilterV2{
 		RangeHash:          testMatchingTaskRangeHashV2,
 		TaskQueueID:        queueID,
-		Pass:               0, // pass for tasks (see stride scheduling algorithm for fairness)
+		InclusiveMinPass:   0, // pass for tasks (see stride scheduling algorithm for fairness)
 		InclusiveMinTaskID: inclusiveMinTaskID,
 		ExclusiveMaxTaskID: exclusiveMaxTaskID,
 		PageSize:           pageSize,
@@ -168,7 +168,7 @@ func (s *matchingTaskSuiteV2) TestInsertSelect_MultipleV2() {
 	filter := sqlplugin.TasksFilterV2{
 		RangeHash:          testMatchingTaskRangeHashV2,
 		TaskQueueID:        queueID,
-		Pass:               0, // pass for tasks (see stride scheduling algorithm for fairness)
+		InclusiveMinPass:   0, // pass for tasks (see stride scheduling algorithm for fairness)
 		InclusiveMinTaskID: inclusiveMinTaskID,
 		ExclusiveMaxTaskID: exclusiveMaxTaskID,
 		PageSize:           pageSize,
@@ -261,7 +261,7 @@ func (s *matchingTaskSuiteV2) newRandomTasksRowV2(
 		RangeHash:    testMatchingTaskRangeHashV2,
 		TaskQueueID:  queueID,
 		TaskID:       taskID,
-		Pass:         0,
+		TaskPass:     0,
 		Data:         shuffle.Bytes(testMatchingTaskTaskDataV2),
 		DataEncoding: testMatchingTaskEncodingV2,
 	}
