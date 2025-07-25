@@ -2456,6 +2456,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 		BatchType:          batcher.BatchTypeReset,
 		Operation: &batchspb.BatchOperation_ResetOperation{
 			ResetOperation: &batchpb.BatchOperationReset{
+				Identity:         identity,
 				ResetType:        enumspb.RESET_TYPE_LAST_WORKFLOW_TASK,
 				ResetReapplyType: enumspb.RESET_REAPPLY_TYPE_NONE,
 			},
@@ -2551,17 +2552,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			// Verify that PostResetOperations slice has the correct length and no nil values
 			s.Len(batchParams.Operation.(*batchspb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations, len(postResetOps))
 
-			// Ensure no nil values exist in the slice
 			for i, encoded := range batchParams.Operation.(*batchspb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations {
-				// s.NotNil(encoded, "PostResetOperations[%d] should not be nil", i)
-				// s.Greater(len(encoded), 0, "PostResetOperations[%d] should not be empty", i)
-
-				// // Verify we can unmarshal back to the original operation
-				// var decodedOp workflowpb.PostResetOperation
-				// err := decodedOp.Unmarshal(encoded)
-				// s.NoError(err, "Should be able to unmarshal PostResetOperations[%d]", i)
-
-				// Verify the content matches the original
 				s.ProtoEqual(postResetOps[i], encoded)
 			}
 
