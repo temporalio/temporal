@@ -4,13 +4,10 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"encoding/binary"
 	"fmt"
 	"math"
 
-	"github.com/dgryski/go-farm"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -42,7 +39,7 @@ func (m *sqlTaskManagerV2) CreateTaskQueue(
 	if err != nil {
 		return serviceerror.NewInternal(err.Error())
 	}
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, persistence.SubqueueZero)
+	tqId, tqHash := taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, persistence.SubqueueZero)
 
 	row := sqlplugin.TaskQueuesRowV2{
 		RangeHash:    tqHash,
@@ -69,7 +66,7 @@ func (m *sqlTaskManagerV2) GetTaskQueue(
 	if err != nil {
 		return nil, serviceerror.NewInternal(err.Error())
 	}
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, persistence.SubqueueZero)
+	tqId, tqHash := taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, persistence.SubqueueZero)
 	rows, err := m.Db.SelectFromTaskQueuesV2(ctx, sqlplugin.TaskQueuesFilterV2{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
@@ -107,7 +104,7 @@ func (m *sqlTaskManagerV2) UpdateTaskQueue(
 		return nil, serviceerror.NewInternal(err.Error())
 	}
 
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, persistence.SubqueueZero)
+	tqId, tqHash := taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, persistence.SubqueueZero)
 	var resp *persistence.UpdateTaskQueueResponse
 	err = m.SqlStore.txExecute(ctx, "UpdateTaskQueue", func(tx sqlplugin.Tx) error {
 		if err := lockTaskQueueV2(ctx,
@@ -251,7 +248,7 @@ func (m *sqlTaskManagerV2) DeleteTaskQueue(
 	if err != nil {
 		return serviceerror.NewUnavailable(err.Error())
 	}
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType, persistence.SubqueueZero)
+	tqId, tqHash := taskQueueIdAndHash(nidBytes, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType, persistence.SubqueueZero)
 	result, err := m.Db.DeleteFromTaskQueuesV2(ctx, sqlplugin.TaskQueuesFilterV2{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
@@ -290,7 +287,7 @@ func (m *sqlTaskManagerV2) CreateTasks(
 		if pair, ok := cache[subqueue]; ok {
 			return pair.id, pair.hash
 		}
-		id, hash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, subqueue)
+		id, hash := taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, subqueue)
 		cache[subqueue] = pair{id: id, hash: hash}
 		return id, hash
 	}
@@ -344,25 +341,29 @@ func (m *sqlTaskManagerV2) GetTasks(
 		return nil, serviceerror.NewUnavailable(err.Error())
 	}
 
-	inclusiveMinTaskID := request.InclusiveMinTaskID
-	exclusiveMaxTaskID := request.ExclusiveMaxTaskID
-	inclusiveMinPass := request.InclusiveMinPass
+	inclusiveMinLevel := sqlplugin.FairLevel{
+		TaskPass: request.InclusiveMinPass,
+		TaskID:   request.InclusiveMinTaskID,
+	}
 	if len(request.NextPageToken) != 0 {
 		token, err := deserializePageTokenJson[matchingTaskPageToken](request.NextPageToken)
 		if err != nil {
 			return nil, err
+		} else if token.TaskPass < 1 {
+			return nil, serviceerror.NewInternal("invalid token: missing TaskPass")
 		}
-		inclusiveMinTaskID = token.TaskID
+		inclusiveMinLevel = sqlplugin.FairLevel{
+			TaskPass: token.TaskPass,
+			TaskID:   token.TaskID,
+		}
 	}
 
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, request.Subqueue)
+	tqId, tqHash := taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, request.Subqueue)
 	rows, err := m.Db.SelectFromTasksV2(ctx, sqlplugin.TasksFilterV2{
-		RangeHash:          tqHash,
-		TaskQueueID:        tqId,
-		InclusiveMinPass:   inclusiveMinPass,
-		InclusiveMinTaskID: &inclusiveMinTaskID,
-		ExclusiveMaxTaskID: &exclusiveMaxTaskID,
-		PageSize:           &request.PageSize,
+		RangeHash:         tqHash,
+		TaskQueueID:       tqId,
+		InclusiveMinLevel: &inclusiveMinLevel,
+		PageSize:          &request.PageSize,
 	})
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef("GetTasks operation failed. Failed to get rows. Error: %v", err)
@@ -375,16 +376,14 @@ func (m *sqlTaskManagerV2) GetTasks(
 		response.Tasks[i] = persistence.NewDataBlob(v.Data, v.DataEncoding)
 	}
 	if len(rows) == request.PageSize {
-		nextTaskID := rows[len(rows)-1].TaskID + 1
-		if nextTaskID < exclusiveMaxTaskID {
-			token, err := serializePageTokenJson(&matchingTaskPageToken{
-				TaskID: nextTaskID,
-			})
-			if err != nil {
-				return nil, err
-			}
-			response.NextPageToken = token
+		token, err := serializePageTokenJson(&matchingTaskPageToken{
+			TaskPass: rows[len(rows)-1].TaskPass,
+			TaskID:   rows[len(rows)-1].TaskID + 1,
+		})
+		if err != nil {
+			return nil, err
 		}
+		response.NextPageToken = token
 	}
 
 	return response, nil
@@ -394,17 +393,25 @@ func (m *sqlTaskManagerV2) CompleteTasksLessThan(
 	ctx context.Context,
 	request *persistence.CompleteTasksLessThanRequest,
 ) (int, error) {
+	// Require starting from pass 1.
+	if request.ExclusiveMaxPass < 1 {
+		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on fair queue")
+	}
+
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
 		return 0, serviceerror.NewUnavailable(err.Error())
 	}
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueueName, request.TaskType, request.Subqueue)
+	tqId, tqHash := taskQueueIdAndHash(nidBytes, request.TaskQueueName, request.TaskType, request.Subqueue)
+	exclusiveMaxLevel := sqlplugin.FairLevel{
+		TaskPass: request.ExclusiveMaxPass,
+		TaskID:   request.ExclusiveMaxTaskID,
+	}
 	result, err := m.Db.DeleteFromTasksV2(ctx, sqlplugin.TasksFilterV2{
-		RangeHash:          tqHash,
-		TaskQueueID:        tqId,
-		ExclusiveMaxTaskID: &request.ExclusiveMaxTaskID,
-		Limit:              &request.Limit,
-		InclusiveMinPass:   request.ExclusiveMaxPass,
+		RangeHash:         tqHash,
+		TaskQueueID:       tqId,
+		ExclusiveMaxLevel: &exclusiveMaxLevel,
+		Limit:             &request.Limit,
 	})
 	if err != nil {
 		return 0, serviceerror.NewUnavailable(err.Error())
@@ -414,43 +421,6 @@ func (m *sqlTaskManagerV2) CompleteTasksLessThan(
 		return 0, serviceerror.NewUnavailablef("rowsAffected returned error: %v", err)
 	}
 	return int(nRows), nil
-}
-
-// Returns the persistence task queue id and a uint32 hash for a task queue.
-func (m *sqlTaskManagerV2) taskQueueIdAndHash(
-	namespaceID primitives.UUID,
-	taskQueueName string,
-	taskType enumspb.TaskQueueType,
-	subqueue int,
-) ([]byte, uint32) {
-	id := m.taskQueueId(namespaceID, taskQueueName, taskType, subqueue)
-	return id, farm.Fingerprint32(id)
-}
-
-func (m *sqlTaskManagerV2) taskQueueId(
-	namespaceID primitives.UUID,
-	taskQueueName string,
-	taskType enumspb.TaskQueueType,
-	subqueue int,
-) []byte {
-	idBytes := make([]byte, 0, 16+len(taskQueueName)+1+binary.MaxVarintLen16)
-	idBytes = append(idBytes, namespaceID...)
-	idBytes = append(idBytes, []byte(taskQueueName)...)
-
-	// To ensure that different names+types+subqueue ids never collide, we mark types
-	// containing subqueues with an extra high bit, and then append the subqueue id. There are
-	// only a few task queue types (currently 3), so the high bits are free. (If we have more
-	// fields to append, we can use the next lower bit to mark the presence of that one, etc..)
-	const hasSubqueue = 0x80
-
-	if subqueue > 0 {
-		idBytes = append(idBytes, uint8(taskType)|hasSubqueue)
-		idBytes = binary.AppendUvarint(idBytes, uint64(subqueue))
-	} else {
-		idBytes = append(idBytes, uint8(taskType))
-	}
-
-	return idBytes
 }
 
 func lockTaskQueueV2(

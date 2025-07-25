@@ -12,7 +12,8 @@ type taskQueuePageToken struct {
 }
 
 type matchingTaskPageToken struct {
-	TaskID int64
+	TaskPass int64 `json:",omitempty"`
+	TaskID   int64
 }
 
 type userDataListNextPageToken struct {
