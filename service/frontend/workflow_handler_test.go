@@ -28,7 +28,6 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	batchspb "go.temporal.io/server/api/batch/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -2202,7 +2201,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	params := &batchspb.BatchOperation{
+	params := &batcher.BatchParams{
 		Namespace: testNamespace.String(),
 		Reason:    inputString,
 		BatchType: batcher.BatchTypeTerminate,
@@ -2218,7 +2217,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
+			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
@@ -2253,7 +2252,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	params := &batchspb.BatchOperation{
+	params := &batcher.BatchParams{
 		Namespace: testNamespace.String(),
 		Reason:    inputString,
 		BatchType: batcher.BatchTypeCancel,
@@ -2269,7 +2268,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
+			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
@@ -2305,17 +2304,14 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	signalPayloads := payloads.EncodeString(signalName)
-	params := &batchspb.BatchOperation{
+	params := &batcher.BatchParams{
 		Namespace: testNamespace.String(),
 		Query:     inputString,
 		Reason:    inputString,
 		BatchType: batcher.BatchTypeSignal,
-		Operation: &batchspb.BatchOperation_SignalOperation{
-			SignalOperation: &batchpb.BatchOperationSignal{
-				Signal:   signalName,
-				Input:    signalPayloads,
-				Identity: inputString,
-			},
+		SignalParams: batcher.SignalParams{
+			SignalName: signalName,
+			Input:      signalPayloads,
 		},
 	}
 	inputPayload, err := payloads.Encode(params)
@@ -2328,7 +2324,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
+			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
@@ -2373,17 +2369,14 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	signalPayloads := payloads.EncodeString(signalName)
-	params := &batchspb.BatchOperation{
-		Namespace:          testNamespace.String(),
-		WorkflowExecutions: executions,
-		Reason:             reason,
-		BatchType:          batcher.BatchTypeSignal,
-		Operation: &batchspb.BatchOperation_SignalOperation{
-			SignalOperation: &batchpb.BatchOperationSignal{
-				Signal:   signalName,
-				Input:    signalPayloads,
-				Identity: identity,
-			},
+	params := &batcher.BatchParams{
+		Namespace:  testNamespace.String(),
+		Executions: executions,
+		Reason:     reason,
+		BatchType:  batcher.BatchTypeSignal,
+		SignalParams: batcher.SignalParams{
+			SignalName: signalName,
+			Input:      signalPayloads,
 		},
 	}
 	inputPayload, err := payloads.Encode(params)
@@ -2396,7 +2389,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
+			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(identity, request.StartRequest.Identity)
@@ -2439,17 +2432,14 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 	identity := "identity"
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	params := &batchspb.BatchOperation{
-		Namespace:          testNamespace.String(),
-		WorkflowExecutions: executions,
-		Reason:             reason,
-		BatchType:          batcher.BatchTypeReset,
-		Operation: &batchspb.BatchOperation_ResetOperation{
-			ResetOperation: &batchpb.BatchOperationReset{
-				ResetType:        enumspb.RESET_TYPE_LAST_WORKFLOW_TASK,
-				ResetReapplyType: enumspb.RESET_REAPPLY_TYPE_NONE,
-				Identity:         identity,
-			},
+	params := &batcher.BatchParams{
+		Namespace:  testNamespace.String(),
+		Executions: executions,
+		Reason:     reason,
+		BatchType:  batcher.BatchTypeReset,
+		ResetParams: batcher.ResetParams{
+			ResetType:        enumspb.RESET_TYPE_LAST_WORKFLOW_TASK,
+			ResetReapplyType: enumspb.RESET_REAPPLY_TYPE_NONE,
 		},
 	}
 	inputPayload, err := payloads.Encode(params)
@@ -2462,7 +2452,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
+			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(identity, request.StartRequest.Identity)
@@ -2526,7 +2516,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
+			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(identity, request.StartRequest.Identity)
@@ -2535,25 +2525,25 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			s.Equal(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
 
 			// Decode the input and verify PostResetOperations are correctly set
-			var batchParams batchspb.BatchOperation
+			var batchParams batcher.BatchParams
 			err := payloads.Decode(request.StartRequest.Input, &batchParams)
 			s.NoError(err)
 
 			// Verify that PostResetOperations slice has the correct length and no nil values
-			s.Len(batchParams.Operation.(*batchspb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations, len(postResetOps))
+			s.Len(batchParams.ResetParams.PostResetOperations, len(postResetOps))
 
 			// Ensure no nil values exist in the slice
-			for i, postResetOperation := range batchParams.Operation.(*batchspb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations {
-				s.NotNil(postResetOperation, "PostResetOperations[%d] should not be nil", i)
-				// s.Greater(len(encoded), 0, "PostResetOperations[%d] should not be empty", i)
+			for i, encoded := range batchParams.ResetParams.PostResetOperations {
+				s.NotNil(encoded, "PostResetOperations[%d] should not be nil", i)
+				s.Greater(len(encoded), 0, "PostResetOperations[%d] should not be empty", i)
 
-				// // Verify we can unmarshal back to the original operation
-				// var decodedOp workflowpb.PostResetOperation
-				// err := decodedOp.Unmarshal(encoded)
-				// s.NoError(err, "Should be able to unmarshal PostResetOperations[%d]", i)
+				// Verify we can unmarshal back to the original operation
+				var decodedOp workflowpb.PostResetOperation
+				err := decodedOp.Unmarshal(encoded)
+				s.NoError(err, "Should be able to unmarshal PostResetOperations[%d]", i)
 
 				// Verify the content matches the original
-				s.ProtoEqual(postResetOps[i], postResetOperation)
+				s.ProtoEqual(postResetOps[i], &decodedOp)
 			}
 
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
@@ -2605,13 +2595,13 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			// Decode the input and verify PostResetOperations slice is properly initialized
-			var batchParams batchspb.BatchOperation
+			var batchParams batcher.BatchParams
 			err := payloads.Decode(request.StartRequest.Input, &batchParams)
 			s.NoError(err)
 
 			// When PostResetOperations is empty, the slice should be empty, not nil
-			s.NotNil(batchParams.Operation.(*batchspb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations)
-			s.Len(batchParams.Operation.(*batchspb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations, 0)
+			s.NotNil(batchParams.ResetParams.PostResetOperations)
+			s.Len(batchParams.ResetParams.PostResetOperations, 0)
 
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
