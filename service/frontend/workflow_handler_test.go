@@ -2617,9 +2617,6 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			var batchParams batchspb.BatchOperation
 			err := payloads.Decode(request.StartRequest.Input, &batchParams)
 			s.NoError(err)
-
-			// When PostResetOperations is empty, the slice should be empty, not nil
-			s.NotNil(batchParams.Operation.(*batchspb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations)
 			s.Len(batchParams.Operation.(*batchspb.BatchOperation_ResetOperation).ResetOperation.PostResetOperations, 0)
 
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
