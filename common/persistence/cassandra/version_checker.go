@@ -21,11 +21,7 @@ func VerifyCompatibleVersion(
 	r resolver.ServiceResolver,
 	logger log.Logger,
 ) error {
-
-	if err := checkMainKeyspace(cfg, r, logger); err != nil {
-		return err
-	}
-	return nil
+	return checkMainKeyspace(cfg, r, logger)
 }
 
 func checkMainKeyspace(
@@ -35,13 +31,13 @@ func checkMainKeyspace(
 ) error {
 	ds, ok := cfg.DataStores[cfg.DefaultStore]
 	if ok && ds.Cassandra != nil {
-		return CheckCompatibleVersion(*ds.Cassandra, r, cassandraschema.Version, logger)
+		return checkCompatibleVersion(*ds.Cassandra, r, cassandraschema.Version, logger)
 	}
 	return nil
 }
 
-// CheckCompatibleVersion check the version compatibility
-func CheckCompatibleVersion(
+// checkCompatibleVersion check the version compatibility
+func checkCompatibleVersion(
 	cfg config.Cassandra,
 	r resolver.ServiceResolver,
 	expectedVersion string,

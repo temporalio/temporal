@@ -830,16 +830,16 @@ func ServerLifetimeHooks(
 }
 
 func verifyPersistenceCompatibleVersion(
-	config config.Persistence,
+	cfg config.Persistence,
 	persistenceServiceResolver resolver.ServiceResolver,
 	logger log.Logger,
 ) error {
 	// cassandra schema version validation
-	if err := cassandra.VerifyCompatibleVersion(config, persistenceServiceResolver, logger); err != nil {
+	if err := cassandra.VerifyCompatibleVersion(cfg, persistenceServiceResolver, logger); err != nil {
 		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
 	}
 	// sql schema version validation
-	if err := sql.VerifyCompatibleVersion(config, persistenceServiceResolver, logger); err != nil {
+	if err := sql.VerifyCompatibleVersion(cfg, persistenceServiceResolver, logger); err != nil {
 		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
 	}
 	return nil
