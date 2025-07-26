@@ -1,6 +1,6 @@
 {
   "CurrVersion": "0.9",
-  "MinCompatibleVersion": "1.0",
+  "MinCompatibleVersion": "0.1",
   "Description": "Add new chasm_node_maps table",
   "SchemaUpdateCqlFiles": [
     "add_chasm_node_maps.sql"

@@ -112,6 +112,19 @@ func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueSuite() {
 	suite.Run(p.T(), s)
 }
 
+func (p *PostgreSQLSuite) TestPostgreSQLFairTaskQueueSuite() {
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	defer tearDown()
+
+	taskQueueStore, err := testData.Factory.NewFairTaskStore()
+	if err != nil {
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+
+	s := NewTaskQueueSuite(p.T(), taskQueueStore, testData.Logger) // same suite, different store
+	suite.Run(p.T(), s)
+}
+
 func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueTaskSuite() {
 	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
 	defer tearDown()
@@ -122,6 +135,19 @@ func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueTaskSuite() {
 	}
 
 	s := NewTaskQueueTaskSuite(p.T(), taskQueueStore, testData.Logger)
+	suite.Run(p.T(), s)
+}
+
+func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueFairTaskSuite() {
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	defer tearDown()
+
+	taskQueueStore, err := testData.Factory.NewFairTaskStore()
+	if err != nil {
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+
+	s := NewTaskQueueFairTaskSuite(p.T(), taskQueueStore, testData.Logger)
 	suite.Run(p.T(), s)
 }
 
@@ -245,6 +271,23 @@ func (p *PostgreSQLSuite) TestPostgreSQLMatchingTaskSuite() {
 	suite.Run(p.T(), s)
 }
 
+func (p *PostgreSQLSuite) TestPostgreSQLMatchingTaskV2Suite() {
+	cfg := NewPostgreSQLConfig(p.pluginName)
+	SetupPostgreSQLDatabase(p.T(), cfg)
+	SetupPostgreSQLSchema(p.T(), cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(p.T(), cfg)
+	}()
+
+	s := sqltests.NewMatchingTaskV2Suite(p.T(), store)
+	suite.Run(p.T(), s)
+}
+
 func (p *PostgreSQLSuite) TestPostgreSQLMatchingTaskQueueSuite() {
 	cfg := NewPostgreSQLConfig(p.pluginName)
 	SetupPostgreSQLDatabase(p.T(), cfg)
@@ -258,7 +301,24 @@ func (p *PostgreSQLSuite) TestPostgreSQLMatchingTaskQueueSuite() {
 		TearDownPostgreSQLDatabase(p.T(), cfg)
 	}()
 
-	s := sqltests.NewMatchingTaskQueueSuite(p.T(), store)
+	s := sqltests.NewMatchingTaskQueueSuite(p.T(), store, sqlplugin.MatchingTaskVersion1)
+	suite.Run(p.T(), s)
+}
+
+func (p *PostgreSQLSuite) TestPostgreSQLMatchingFairTaskQueueSuite() {
+	cfg := NewPostgreSQLConfig(p.pluginName)
+	SetupPostgreSQLDatabase(p.T(), cfg)
+	SetupPostgreSQLSchema(p.T(), cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(p.T(), cfg)
+	}()
+
+	s := sqltests.NewMatchingTaskQueueSuite(p.T(), store, sqlplugin.MatchingTaskVersion2)
 	suite.Run(p.T(), s)
 }
 
