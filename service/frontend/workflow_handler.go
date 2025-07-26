@@ -2968,16 +2968,16 @@ func (wh *WorkflowHandler) GetClusterInfo(ctx context.Context, _ *workflowservic
 	}
 
 	return &workflowservice.GetClusterInfoResponse{
-		SupportedClients:  headers.SupportedClients,
-		ServerVersion:     headers.ServerVersion,
-		ClusterId:         metadata.ClusterId,
-		VersionInfo:       metadata.VersionInfo,
-		ClusterName:       metadata.ClusterName,
-		HistoryShardCount: metadata.HistoryShardCount,
-		PersistenceStore:  wh.persistenceExecutionName,
-		VisibilityStore:   strings.Join(wh.visibilityMgr.GetStoreNames(), ","),
+		SupportedClients:         headers.SupportedClients,
+		ServerVersion:            headers.ServerVersion,
+		ClusterId:                metadata.ClusterId,
+		VersionInfo:              metadata.VersionInfo,
+		ClusterName:              metadata.ClusterName,
+		HistoryShardCount:        metadata.HistoryShardCount,
+		PersistenceStore:         wh.persistenceExecutionName,
+		VisibilityStore:          strings.Join(wh.visibilityMgr.GetStoreNames(), ","),
 		FailoverVersionIncrement: metadata.FailoverVersionIncrement,
-		InitialFailoverVersion: metadata.InitialFailoverVersion,
+		InitialFailoverVersion:   metadata.InitialFailoverVersion,
 	}, nil
 }
 
