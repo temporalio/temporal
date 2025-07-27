@@ -66,16 +66,6 @@ type (
 	}
 )
 
-// NewHistoryArchiver creates a new archiver.HistoryArchiver based on s3
-func NewHistoryArchiver(
-	executionManager persistence.ExecutionManager,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-	config *config.S3Archiver,
-) (archiver.HistoryArchiver, error) {
-	return newHistoryArchiver(executionManager, logger, metricsHandler, config, nil)
-}
-
 func newHistoryArchiver(
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
