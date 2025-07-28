@@ -6049,15 +6049,15 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 func (wh *WorkflowHandler) FetchWorkerConfig(_ context.Context, request *workflowservice.FetchWorkerConfigRequest,
 ) (*workflowservice.FetchWorkerConfigResponse, error) {
 	if !wh.config.WorkerCommandsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("FetchWorkerConfig command is not supported")
+		return nil, serviceerror.NewUnimplemented("FetchWorkerConfig command is not enabled.")
 	}
-	return nil, serviceerror.NewUnimplemented("FetchWorkerConfig command is not supported")
+	return nil, serviceerror.NewUnimplemented("FetchWorkerConfig command is not enabled.")
 }
 
 func (wh *WorkflowHandler) UpdateWorkerConfig(_ context.Context, request *workflowservice.UpdateWorkerConfigRequest,
 ) (*workflowservice.UpdateWorkerConfigResponse, error) {
 	if !wh.config.WorkerCommandsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("UpdateWorkerConfig command is not supported")
+		return nil, serviceerror.NewUnimplemented("UpdateWorkerConfig command is not enabled.")
 	}
 	if request == nil {
 		return nil, errRequestNotSet
@@ -6072,5 +6072,30 @@ func (wh *WorkflowHandler) UpdateWorkerConfig(_ context.Context, request *workfl
 		return nil, err
 	}
 
-	return nil, serviceerror.NewUnimplemented("UpdateWorkerConfig command is not supported")
+	return nil, serviceerror.NewUnimplemented("UpdateWorkerConfig command is not enabled.")
+}
+
+func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflowservice.DescribeWorkerRequest,
+) (*workflowservice.DescribeWorkerResponse, error) {
+	if !wh.config.ListWorkersEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("DescribeWorker command is not enabled.")
+	}
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := wh.matchingClient.DescribeWorker(ctx, &matchingservice.DescribeWorkerRequest{
+		NamespaceId: namespaceID.String(),
+		Request:     request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DescribeWorkerResponse{
+		WorkerInfo: resp.GetWorkerInfo(),
+	}, nil
 }

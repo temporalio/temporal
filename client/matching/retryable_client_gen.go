@@ -161,6 +161,21 @@ func (c *retryableClient) DescribeVersionedTaskQueues(
 	return resp, err
 }
 
+func (c *retryableClient) DescribeWorker(
+	ctx context.Context,
+	request *matchingservice.DescribeWorkerRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.DescribeWorkerResponse, error) {
+	var resp *matchingservice.DescribeWorkerResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeWorker(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DispatchNexusTask(
 	ctx context.Context,
 	request *matchingservice.DispatchNexusTaskRequest,
