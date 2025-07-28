@@ -380,6 +380,81 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 	assert.Equal(t, int64(3), reg.tableVersion)
 }
 
+func TestRetryOnAbortedError(t *testing.T) {
+	t.Parallel()
+
+	testEntry := newEndpointEntry(t.Name())
+	mocks := newTestMocks(t)
+
+	// Reduce retry wait time for faster test
+	mocks.config.refreshMinWait = dynamicconfig.GetDurationPropertyFn(time.Millisecond)
+
+	// First loadEndpoints attempt:
+	// - Matching client returns aborted error
+	// - Falls back to persistence which also fails
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
+		NextPageToken:         nil,
+		PageSize:              int32(100),
+		LastKnownTableVersion: int64(0),
+		Wait:                  false,
+	}).Return(nil, serviceerror.NewAborted("test aborted error")).Times(1)
+
+	// Fallback to persistence also fails, causing the entire loadEndpoints to fail and retry
+	mocks.persistence.EXPECT().ListNexusEndpoints(gomock.Any(), &persistence.ListNexusEndpointsRequest{
+		NextPageToken:         nil,
+		PageSize:              100,
+		LastKnownTableVersion: int64(0),
+	}).Return(nil, serviceerror.NewUnavailable("persistence error")).Times(1)
+
+	// Second loadEndpoints attempt (retry):
+	// - Matching client returns aborted error again
+	// - Falls back to persistence which succeeds this time
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
+		NextPageToken:         nil,
+		PageSize:              int32(100),
+		LastKnownTableVersion: int64(0),
+		Wait:                  false,
+	}).Return(nil, serviceerror.NewAborted("test aborted error")).Times(1)
+
+	// Fallback to persistence succeeds
+	mocks.persistence.EXPECT().ListNexusEndpoints(gomock.Any(), &persistence.ListNexusEndpointsRequest{
+		NextPageToken:         nil,
+		PageSize:              100,
+		LastKnownTableVersion: int64(0),
+	}).Return(&persistence.ListNexusEndpointsResponse{
+		Entries:       []*persistencespb.NexusEndpointEntry{testEntry},
+		TableVersion:  1,
+		NextPageToken: nil,
+	}, nil).Times(1)
+
+	// Long poll mock after successful initialization
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
+		PageSize:              int32(100),
+		LastKnownTableVersion: int64(1),
+		Wait:                  true,
+	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
+		time.Sleep(20 * time.Millisecond)
+		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
+	}).AnyTimes()
+
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+	reg.StartLifecycle()
+	defer reg.StopLifecycle()
+
+	// Verify that the registry eventually loads the data after retry
+	endpoint, err := reg.GetByID(context.Background(), testEntry.Id)
+	require.NoError(t, err)
+	protoassert.ProtoEqual(t, testEntry, endpoint)
+
+	endpoint, err = reg.GetByName(context.Background(), "ignored", testEntry.Endpoint.Spec.Name)
+	require.NoError(t, err)
+	protoassert.ProtoEqual(t, testEntry, endpoint)
+
+	reg.dataLock.RLock()
+	defer reg.dataLock.RUnlock()
+	assert.Equal(t, int64(1), reg.tableVersion)
+}
+
 func newTestMocks(t *testing.T) *testMocks {
 	ctrl := gomock.NewController(t)
 	testConfig := NewEndpointRegistryConfig(dynamicconfig.NewNoopCollection())
