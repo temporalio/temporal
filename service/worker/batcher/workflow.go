@@ -397,7 +397,7 @@ func ValidateBatchOperation(params *batchspb.BatchOperation) error {
 				return serviceerror.NewInvalidArgument("batch reset missing target")
 			}
 		} else {
-			// nolint:deprecated
+			//nolint:staticcheck // SA1019: GetResetType is deprecated but still needed for backward compatibility
 			resetType := op.ResetOperation.GetResetType()
 			if _, ok := enumspb.ResetType_name[int32(resetType)]; !ok || resetType == enumspb.RESET_TYPE_UNSPECIFIED {
 				return serviceerror.NewInvalidArgumentf("unknown batch reset type %v", resetType)
