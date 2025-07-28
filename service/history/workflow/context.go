@@ -137,6 +137,9 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 				return
 			}
 			lastItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+			if err != nil {
+				return
+			}
 			if lastItem.EventId+1 != mu.GetNextEventID() {
 				c.logger.Error("Next event ID does not match the last item in version history",
 					tag.WorkflowNamespace(c.workflowKey.NamespaceID),
@@ -144,7 +147,6 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 					tag.WorkflowRunID(c.workflowKey.RunID),
 				)
 				metrics.CorruptedVersionHistory.With(c.metricsHandler).Record(1)
-				return
 			}
 		}
 	}()
