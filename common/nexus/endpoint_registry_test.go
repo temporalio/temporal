@@ -433,7 +433,6 @@ func TestRetryOnAbortedError(t *testing.T) {
 		LastKnownTableVersion: int64(1),
 		Wait:                  true,
 	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
-		time.Sleep(20 * time.Millisecond)
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).AnyTimes()
 
