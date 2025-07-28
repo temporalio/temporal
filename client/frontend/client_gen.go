@@ -249,6 +249,26 @@ func (c *clientImpl) GetDeploymentReachability(
 	return c.client.GetDeploymentReachability(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetNexusOperationInfo(
+	ctx context.Context,
+	request *workflowservice.GetNexusOperationInfoRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetNexusOperationInfoResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetNexusOperationInfo(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetNexusOperationResult(
+	ctx context.Context,
+	request *workflowservice.GetNexusOperationResultRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetNexusOperationResultResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetNexusOperationResult(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetSearchAttributes(
 	ctx context.Context,
 	request *workflowservice.GetSearchAttributesRequest,
@@ -559,6 +579,16 @@ func (c *clientImpl) RegisterNamespace(
 	return c.client.RegisterNamespace(ctx, request, opts...)
 }
 
+func (c *clientImpl) RequestCancelNexusOperation(
+	ctx context.Context,
+	request *workflowservice.RequestCancelNexusOperationRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RequestCancelNexusOperationResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.RequestCancelNexusOperation(ctx, request, opts...)
+}
+
 func (c *clientImpl) RequestCancelWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.RequestCancelWorkflowExecutionRequest,
@@ -787,6 +817,16 @@ func (c *clientImpl) StartBatchOperation(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.StartBatchOperation(ctx, request, opts...)
+}
+
+func (c *clientImpl) StartNexusOperation(
+	ctx context.Context,
+	request *workflowservice.StartNexusOperationRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.StartNexusOperationResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.StartNexusOperation(ctx, request, opts...)
 }
 
 func (c *clientImpl) StartWorkflowExecution(

@@ -186,6 +186,8 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetMembershipMonitor(),
 		healthInterceptor,
 		scheduler.NewSpecBuilder(),
+		nil,
+		s.mockResource.GetClientBean(),
 		true,
 	)
 }
