@@ -66,7 +66,7 @@ func (w *priTaskWriter) Start() {
 }
 
 func (w *priTaskWriter) appendTask(
-	subqueue int,
+	subqueue subqueueKey,
 	taskInfo *persistencespb.TaskInfo,
 ) error {
 	select {

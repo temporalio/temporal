@@ -26,7 +26,7 @@ import (
 type (
 	fairTaskReader struct {
 		backlogMgr *fairBacklogManagerImpl
-		subqueue   int
+		subqueue   subqueueKey
 		logger     log.Logger
 
 		lock sync.Mutex
@@ -70,7 +70,7 @@ const (
 
 func newFairTaskReader(
 	backlogMgr *fairBacklogManagerImpl,
-	subqueue int,
+	subqueue subqueueKey,
 	initialAckLevel fairLevel,
 ) *fairTaskReader {
 	return &fairTaskReader{

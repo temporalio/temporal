@@ -21,7 +21,7 @@ type (
 	writeTaskRequest struct {
 		taskInfo   *persistencespb.TaskInfo
 		responseCh chan<- error
-		subqueue   int // for priTaskWriter only
+		subqueue   subqueueKey // for priTaskWriter only
 		fairLevel      // filled in by taskWriterLoop
 	}
 
