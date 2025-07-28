@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -127,7 +128,26 @@ func (c *ContextImpl) LoadExecutionStats(ctx context.Context, shardContext histo
 	return c.MutableState.GetExecutionInfo().ExecutionStats, nil
 }
 
-func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext historyi.ShardContext) (historyi.MutableState, error) {
+func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext historyi.ShardContext) (mu historyi.MutableState, _ error) {
+	defer func() {
+		if mu != nil {
+			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mu.GetExecutionInfo().VersionHistories)
+			if err != nil {
+				c.logger.Error("Failed to get current version history", tag.Error(err))
+				return
+			}
+			lastItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+			if lastItem.EventId+1 != mu.GetNextEventID() {
+				c.logger.Error("Next event ID does not match the last item in version history",
+					tag.WorkflowNamespace(c.workflowKey.NamespaceID),
+					tag.WorkflowID(c.workflowKey.WorkflowID),
+					tag.WorkflowRunID(c.workflowKey.RunID),
+				)
+				metrics.CorruptedVersionHistory.With(c.metricsHandler).Record(1)
+				return
+			}
+		}
+	}()
 	namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
 		namespace.ID(c.workflowKey.NamespaceID),
 	)
