@@ -32,9 +32,9 @@ type (
 		taskWriter *fairTaskWriter
 
 		subqueueLock        sync.Mutex
-		subqueues           []*fairTaskReader // subqueue index -> fairTaskReader
-		subqueuesByPriority map[priorityKey]subqueueKey     // priority key -> subqueue index
-		priorityBySubqueue  map[subqueueKey]priorityKey     // subqueue index -> priority key
+		subqueues           []*fairTaskReader           // subqueue index -> fairTaskReader
+		subqueuesByPriority map[priorityKey]subqueueKey // priority key -> subqueue index
+		priorityBySubqueue  map[subqueueKey]priorityKey // subqueue index -> priority key
 
 		logger           log.Logger
 		throttledLogger  log.ThrottledLogger
@@ -152,20 +152,21 @@ func (c *fairBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.
 	// TODO(pri): This assumes that subqueues never shrinks, and priority/fairness index of
 	// existing subqueues never changes. If we change that, this logic will need to change.
 	for i := range subqueues {
+		subqueueKey := subqueueKey(i)
 		if i >= len(c.subqueues) {
-			r := newFairTaskReader(c, subqueueKey(i), fairLevelFromProto(subqueues[i].FairAckLevel))
+			r := newFairTaskReader(c, subqueueKey, fairLevelFromProto(subqueues[i].FairAckLevel))
 			r.Start()
 			c.subqueues = append(c.subqueues, r)
 		}
-		c.subqueuesByPriority[priorityKey(subqueues[i].Key.Priority)] = subqueueKey(i)
-		c.priorityBySubqueue[subqueueKey(i)] = priorityKey(subqueues[i].Key.Priority)
+		c.subqueuesByPriority[priorityKey(subqueues[i].Key.Priority)] = subqueueKey
+		c.priorityBySubqueue[subqueueKey] = priorityKey(subqueues[i].Key.Priority)
 	}
 }
 
 func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) subqueueKey {
 	levels := c.config.PriorityLevels()
 	if priority == 0 {
-		priority = priorityKey(defaultPriorityLevel(int32(levels)))
+		priority = defaultPriorityLevel(int32(levels))
 	}
 	if priority < 1 {
 		// this should have been rejected much earlier, but just clip it here
@@ -189,9 +190,9 @@ func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) su
 	})
 	if err != nil {
 		c.signalIfFatal(err)
-		// If we failed to write the metadata update, just use 0. If err was a fatal error
-		// (most likely case), the subsequent call to SpoolTask will fail.
-		return subqueueKey(0)
+		// If we failed to write the metadata update, just use subqueueZero.
+		// If err was a fatal error (most likely case), the subsequent call to SpoolTask will fail.
+		return subqueueZero
 	}
 
 	c.loadSubqueuesLocked(subqueues)
@@ -203,7 +204,7 @@ func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) su
 	}
 
 	// But if something went wrong, return zero.
-	return subqueueKey(0)
+	return subqueueZero
 }
 
 func (c *fairBacklogManagerImpl) periodicSync() {
@@ -274,9 +275,11 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 	result := make(map[int32]*taskqueuepb.TaskQueueStats)
 	backlogCounts := c.db.getApproximateBacklogCountsBySubqueue()
 	for subqueueKey, priorityKey := range c.priorityBySubqueue {
+		pk := int32(priorityKey)
+
 		// Note that there could be more than one subqueue for the same priority.
-		if _, ok := result[int32(priorityKey)]; !ok {
-			result[int32(priorityKey)] = &taskqueuepb.TaskQueueStats{
+		if _, ok := result[pk]; !ok {
+			result[pk] = &taskqueuepb.TaskQueueStats{
 				// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
 				// be more appropriate in the future.
 				ApproximateBacklogAge: durationpb.New(0),
@@ -284,14 +287,14 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 		}
 
 		// Add backlog counts together across all subqueues for the same priority.
-		result[int32(priorityKey)].ApproximateBacklogCount += backlogCounts[subqueueKey]
+		result[pk].ApproximateBacklogCount += backlogCounts[subqueueKey]
 
 		// Find greatest backlog age for across all subqueues for the same priority.
 		oldestBacklogTime := c.subqueues[int(subqueueKey)].getOldestBacklogTime()
 		if !oldestBacklogTime.IsZero() {
 			oldestBacklogAge := time.Since(oldestBacklogTime)
-			if oldestBacklogAge > result[int32(priorityKey)].ApproximateBacklogAge.AsDuration() {
-				result[int32(priorityKey)].ApproximateBacklogAge = durationpb.New(oldestBacklogAge)
+			if oldestBacklogAge > result[pk].ApproximateBacklogAge.AsDuration() {
+				result[pk].ApproximateBacklogAge = durationpb.New(oldestBacklogAge)
 			}
 		}
 	}

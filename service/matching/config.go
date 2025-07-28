@@ -441,6 +441,6 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 	}
 }
 
-func defaultPriorityLevel(priorityLevels int32) int32 {
-	return (priorityLevels + 1) / 2
+func defaultPriorityLevel(priorityLevels int32) priorityKey {
+	return priorityKey(priorityLevels+1) / 2
 }

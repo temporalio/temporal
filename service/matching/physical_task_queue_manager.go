@@ -142,7 +142,7 @@ func newPhysicalTaskQueueManager(
 		return config.PollerScalingDecisionsPerSecond() * 1e6
 	}
 	pqMgr := &physicalTaskQueueManagerImpl{
-		defaultPriorityKey:       priorityKey(defaultPriorityLevel(config.PriorityLevels())),
+		defaultPriorityKey:       defaultPriorityLevel(config.PriorityLevels()),
 		status:                   common.DaemonStatusInitialized,
 		partitionMgr:             partitionMgr,
 		queue:                    queue,

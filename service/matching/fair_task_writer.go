@@ -29,8 +29,8 @@ type (
 
 		// state:
 		taskIDBlock        taskIDBlock
-		currentTaskIDBlock taskIDBlock             // copy of taskIDBlock for safe concurrent access via getCurrentTaskIDBlock()
-		counters           map[subqueueKey]counter.Counter // subqueue -> Counter. only used in taskWriterLoop.
+		currentTaskIDBlock taskIDBlock                     // copy of taskIDBlock for safe concurrent access via getCurrentTaskIDBlock()
+		counters           map[subqueueKey]counter.Counter // only used in taskWriterLoop.
 	}
 )
 

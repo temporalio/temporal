@@ -22,7 +22,7 @@ type (
 		taskInfo   *persistencespb.TaskInfo
 		responseCh chan<- error
 		subqueue   subqueueKey // for priTaskWriter only
-		fairLevel      // filled in by taskWriterLoop
+		fairLevel              // filled in by taskWriterLoop
 	}
 
 	taskIDBlock struct {
