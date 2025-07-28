@@ -2151,8 +2151,9 @@ func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(
 	resp, err := adh.historyClient.GenerateLastHistoryReplicationTasks(
 		ctx,
 		&historyservice.GenerateLastHistoryReplicationTasksRequest{
-			NamespaceId: namespaceEntry.ID().String(),
-			Execution:   request.Execution,
+			NamespaceId:    namespaceEntry.ID().String(),
+			Execution:      request.Execution,
+			TargetClusters: request.TargetClusters,
 		},
 	)
 	if err != nil {

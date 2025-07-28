@@ -100,3 +100,20 @@ type CircuitBreakerSettings struct {
 	// Timeout: Period of open state before changing to half-open state (default 60s).`
 	Timeout time.Duration
 }
+
+type CacheBackgroundEvictSettings struct {
+	// Enabled controls whether background purging of expired entries is active. To enable,
+	// this must be set to true at process start, but can be dynamically set to false to
+	// stop scanning entries.
+	Enabled bool
+	// LoopInterval is the frequency that a background goroutine scans for expired entries.
+	LoopInterval time.Duration
+	// MaxEntryPerCall is the max number of entries that are scanned while the cache is locked.
+	MaxEntryPerCall int
+}
+
+var DefaultHistoryCacheBackgroundEvictSettings = CacheBackgroundEvictSettings{
+	Enabled:         false,
+	LoopInterval:    1 * time.Minute,
+	MaxEntryPerCall: 1024,
+}

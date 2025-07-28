@@ -170,6 +170,26 @@ func (c *clientImpl) DescribeVersionedTaskQueues(
 	return client.DescribeVersionedTaskQueues(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeWorker(
+	ctx context.Context,
+	request *matchingservice.DescribeWorkerRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.DescribeWorkerResponse, error) {
+
+	p, err := tqid.NormalPartitionFromRpcName("not-applicable", request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.DescribeWorker(ctx, request, opts...)
+}
+
 func (c *clientImpl) DispatchNexusTask(
 	ctx context.Context,
 	request *matchingservice.DispatchNexusTaskRequest,

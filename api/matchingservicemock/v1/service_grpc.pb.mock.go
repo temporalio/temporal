@@ -242,6 +242,26 @@ func (mr *MockMatchingServiceClientMockRecorder) DescribeVersionedTaskQueues(ctx
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeVersionedTaskQueues", reflect.TypeOf((*MockMatchingServiceClient)(nil).DescribeVersionedTaskQueues), varargs...)
 }
 
+// DescribeWorker mocks base method.
+func (m *MockMatchingServiceClient) DescribeWorker(ctx context.Context, in *matchingservice.DescribeWorkerRequest, opts ...grpc.CallOption) (*matchingservice.DescribeWorkerResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeWorker", varargs...)
+	ret0, _ := ret[0].(*matchingservice.DescribeWorkerResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeWorker indicates an expected call of DescribeWorker.
+func (mr *MockMatchingServiceClientMockRecorder) DescribeWorker(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorker", reflect.TypeOf((*MockMatchingServiceClient)(nil).DescribeWorker), varargs...)
+}
+
 // DispatchNexusTask mocks base method.
 func (m *MockMatchingServiceClient) DispatchNexusTask(ctx context.Context, in *matchingservice.DispatchNexusTaskRequest, opts ...grpc.CallOption) (*matchingservice.DispatchNexusTaskResponse, error) {
 	m.ctrl.T.Helper()
@@ -934,6 +954,21 @@ func (m *MockMatchingServiceServer) DescribeVersionedTaskQueues(arg0 context.Con
 func (mr *MockMatchingServiceServerMockRecorder) DescribeVersionedTaskQueues(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeVersionedTaskQueues", reflect.TypeOf((*MockMatchingServiceServer)(nil).DescribeVersionedTaskQueues), arg0, arg1)
+}
+
+// DescribeWorker mocks base method.
+func (m *MockMatchingServiceServer) DescribeWorker(arg0 context.Context, arg1 *matchingservice.DescribeWorkerRequest) (*matchingservice.DescribeWorkerResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeWorker", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.DescribeWorkerResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeWorker indicates an expected call of DescribeWorker.
+func (mr *MockMatchingServiceServerMockRecorder) DescribeWorker(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorker", reflect.TypeOf((*MockMatchingServiceServer)(nil).DescribeWorker), arg0, arg1)
 }
 
 // DispatchNexusTask mocks base method.

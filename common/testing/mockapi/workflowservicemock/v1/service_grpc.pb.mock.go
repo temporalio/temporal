@@ -322,6 +322,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) DescribeTaskQueue(ctx, in any, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueue", reflect.TypeOf((*MockWorkflowServiceClient)(nil).DescribeTaskQueue), varargs...)
 }
 
+// DescribeWorker mocks base method.
+func (m *MockWorkflowServiceClient) DescribeWorker(ctx context.Context, in *workflowservice.DescribeWorkerRequest, opts ...grpc.CallOption) (*workflowservice.DescribeWorkerResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeWorker", varargs...)
+	ret0, _ := ret[0].(*workflowservice.DescribeWorkerResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeWorker indicates an expected call of DescribeWorker.
+func (mr *MockWorkflowServiceClientMockRecorder) DescribeWorker(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorker", reflect.TypeOf((*MockWorkflowServiceClient)(nil).DescribeWorker), varargs...)
+}
+
 // DescribeWorkerDeployment mocks base method.
 func (m *MockWorkflowServiceClient) DescribeWorkerDeployment(ctx context.Context, in *workflowservice.DescribeWorkerDeploymentRequest, opts ...grpc.CallOption) (*workflowservice.DescribeWorkerDeploymentResponse, error) {
 	m.ctrl.T.Helper()

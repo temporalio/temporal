@@ -4873,11 +4873,12 @@ func (x *SyncWorkflowStateResponse) GetVersionedTransitionArtifact() *v15.Versio
 }
 
 type GenerateLastHistoryReplicationTasksRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Execution     *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Namespace      string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Execution      *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
+	TargetClusters []string               `protobuf:"bytes,3,rep,name=target_clusters,json=targetClusters,proto3" json:"target_clusters,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GenerateLastHistoryReplicationTasksRequest) Reset() {
@@ -4920,6 +4921,13 @@ func (x *GenerateLastHistoryReplicationTasksRequest) GetNamespace() string {
 func (x *GenerateLastHistoryReplicationTasksRequest) GetExecution() *v1.WorkflowExecution {
 	if x != nil {
 		return x.Execution
+	}
+	return nil
+}
+
+func (x *GenerateLastHistoryReplicationTasksRequest) GetTargetClusters() []string {
+	if x != nil {
+		return x.TargetClusters
 	}
 	return nil
 }
@@ -5713,10 +5721,11 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x11version_histories\x18\x04 \x01(\v20.temporal.server.api.history.v1.VersionHistoriesR\x10versionHistories\x12*\n" +
 	"\x11target_cluster_id\x18\x05 \x01(\x05R\x0ftargetClusterId\"\xb9\x01\n" +
 	"\x19SyncWorkflowStateResponse\x12\x83\x01\n" +
-	"\x1dversioned_transition_artifact\x18\x05 \x01(\v2?.temporal.server.api.replication.v1.VersionedTransitionArtifactR\x1bversionedTransitionArtifactJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05\"\x93\x01\n" +
+	"\x1dversioned_transition_artifact\x18\x05 \x01(\v2?.temporal.server.api.replication.v1.VersionedTransitionArtifactR\x1bversionedTransitionArtifactJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05\"\xbc\x01\n" +
 	"*GenerateLastHistoryReplicationTasksRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12G\n" +
-	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\"\x8a\x01\n" +
+	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12'\n" +
+	"\x0ftarget_clusters\x18\x03 \x03(\tR\x0etargetClusters\"\x8a\x01\n" +
 	"+GenerateLastHistoryReplicationTasksResponse\x124\n" +
 	"\x16state_transition_count\x18\x01 \x01(\x03R\x14stateTransitionCount\x12%\n" +
 	"\x0ehistory_length\x18\x02 \x01(\x03R\rhistoryLength\"\xfc\x01\n" +

@@ -184,5 +184,11 @@ service MatchingService {
     //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
     // (-- api-linter: core::0134::request-resource-required=disabled
     //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
-    rpc UpdateTaskQueueConfig (UpdateTaskQueueConfigRequest) returns (UpdateTaskQueueConfigResponse) {}  
+    rpc UpdateTaskQueueConfig (UpdateTaskQueueConfigRequest) returns (UpdateTaskQueueConfigResponse) {}
+
+    // DescribeWorker retrieves a worker information in the specified namespace that match the provided instance key.
+    // Returns an error if the namespace or worker doesn't exist.
+    rpc DescribeWorker (DescribeWorkerRequest) returns (DescribeWorkerResponse) {}
+
 }
+

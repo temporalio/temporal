@@ -476,11 +476,14 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 		lock.Lock()
 		defer lock.Unlock()
 		e := tasks.PushBack(t)
-		t.removeFromMatcher = func() {
+		if !t.setRemoveFunc(func() {
 			lock.Lock()
 			defer lock.Unlock()
 			tasks.Remove(e)
 			log("buf evict %s -> %d\n", t.fairLevel(), tasks.Len())
+		}) {
+			tasks.Remove(e)
+			return nil
 		}
 		log("buf add %s -> %d\n", t.fairLevel(), tasks.Len())
 		return nil

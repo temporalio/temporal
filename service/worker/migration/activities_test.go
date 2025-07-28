@@ -13,11 +13,14 @@ import (
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -43,6 +46,7 @@ type activitiesSuite struct {
 	mockClientBean                *client.MockBean
 
 	mockFrontendClient *workflowservicemock.MockWorkflowServiceClient
+	mockAdminClient    *adminservicemock.MockAdminServiceClient
 	mockHistoryClient  *historyservicemock.MockHistoryServiceClient
 	mockRemoteClient   *workflowservicemock.MockWorkflowServiceClient
 
@@ -101,6 +105,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.mockClientBean = client.NewMockBean(s.controller)
 
 	s.mockFrontendClient = workflowservicemock.NewMockWorkflowServiceClient(s.controller)
+	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.mockRemoteClient = workflowservicemock.NewMockWorkflowServiceClient(s.controller)
 
@@ -116,16 +121,18 @@ func (s *activitiesSuite) SetupTest() {
 		Return(&testNamespace, nil).AnyTimes()
 
 	s.a = &activities{
-		namespaceRegistry:              s.mockNamespaceRegistry,
-		namespaceReplicationQueue:      s.mockNamespaceReplicationQueue,
-		clientFactory:                  s.mockClientFactory,
-		clientBean:                     s.mockClientBean,
-		taskManager:                    s.mockTaskManager,
-		frontendClient:                 s.mockFrontendClient,
-		historyClient:                  s.mockHistoryClient,
-		logger:                         log.NewCLILogger(),
-		metricsHandler:                 s.mockMetricsHandler,
-		forceReplicationMetricsHandler: s.mockMetricsHandler,
+		namespaceRegistry:                s.mockNamespaceRegistry,
+		namespaceReplicationQueue:        s.mockNamespaceReplicationQueue,
+		clientFactory:                    s.mockClientFactory,
+		clientBean:                       s.mockClientBean,
+		taskManager:                      s.mockTaskManager,
+		frontendClient:                   s.mockFrontendClient,
+		adminClient:                      s.mockAdminClient,
+		historyClient:                    s.mockHistoryClient,
+		logger:                           log.NewCLILogger(),
+		metricsHandler:                   s.mockMetricsHandler,
+		forceReplicationMetricsHandler:   s.mockMetricsHandler,
+		generateMigrationTaskViaFrontend: dynamicconfig.GetBoolPropertyFn(false),
 	}
 }
 
@@ -649,6 +656,37 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Failed() {
 	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
 	// Only the generation of 1st execution suceeded.
 	s.Equal(0, lastHeartBeat)
+}
+
+func (s *activitiesSuite) TestGenerateReplicationTasks_Success_ViaFrontend() {
+	env, iceptor := s.initEnv()
+	s.a.generateMigrationTaskViaFrontend = dynamicconfig.GetBoolPropertyFn(true)
+
+	request := generateReplicationTasksRequest{
+		NamespaceID:      mockedNamespaceID,
+		RPS:              10,
+		GetParentInfoRPS: 10,
+		Executions:       []*commonpb.WorkflowExecution{execution1, execution2},
+		TargetClusters:   []string{remoteCluster},
+	}
+
+	// Test startIndex logic, and it should be 1 when running the activity.
+	env.SetHeartbeatDetails(0)
+
+	we := request.Executions[1]
+	s.mockAdminClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), protomock.Eq(&adminservice.GenerateLastHistoryReplicationTasksRequest{
+		Namespace:      mockedNamespace,
+		Execution:      we,
+		TargetClusters: []string{remoteCluster},
+	})).Return(&adminservice.GenerateLastHistoryReplicationTasksResponse{}, nil).Times(1)
+
+	_, err := env.ExecuteActivity(s.a.GenerateReplicationTasks, &request)
+	s.NoError(err)
+
+	s.Len(iceptor.generateReplicationRecordedHeartbeats, 1)
+	lastIdx := len(iceptor.generateReplicationRecordedHeartbeats) - 1
+	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
+	s.Equal(1, lastHeartBeat)
 }
 
 func (s *activitiesSuite) TestCountWorkflows() {

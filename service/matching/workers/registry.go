@@ -9,5 +9,6 @@ type (
 	Registry interface {
 		RecordWorkerHeartbeats(nsID namespace.ID, workerHeartbeat []*workerpb.WorkerHeartbeat)
 		ListWorkers(nsID namespace.ID, queue string, nextPageToken []byte) ([]*workerpb.WorkerHeartbeat, error)
+		DescribeWorker(nsID namespace.ID, workerInstanceKey string) (*workerpb.WorkerHeartbeat, error)
 	}
 )

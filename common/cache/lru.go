@@ -2,12 +2,15 @@ package cache
 
 import (
 	"container/list"
+	"context"
 	"sync"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -27,18 +30,20 @@ const emptyEntrySize = 0
 // lru is a concurrent fixed size cache that evicts elements in lru order
 type (
 	lru struct {
-		mut            sync.Mutex
-		byAccess       *list.List
-		byKey          map[interface{}]*list.Element
-		maxSize        int
-		currSize       int
-		pinnedSize     int
-		onPut          func(val any)
-		onEvict        func(val any)
-		ttl            time.Duration
-		pin            bool
-		timeSource     clock.TimeSource
-		metricsHandler metrics.Handler
+		mut             sync.Mutex
+		byAccess        *list.List
+		byKey           map[interface{}]*list.Element
+		maxSize         int
+		currSize        int
+		pinnedSize      int
+		onPut           func(val any)
+		onEvict         func(val any)
+		ttl             time.Duration
+		pin             bool
+		timeSource      clock.TimeSource
+		metricsHandler  metrics.Handler
+		backgroundEvict dynamicconfig.TypedPropertyFn[dynamicconfig.CacheBackgroundEvictSettings]
+		loops           goro.Group
 	}
 
 	iteratorImpl struct {
@@ -129,16 +134,24 @@ func (entry *entryImpl) CreateTime() time.Time {
 }
 
 // New creates a new cache with the given options
-func New(maxSize int, opts *Options) Cache {
+func New(maxSize int, opts *Options) StoppableCache {
 	return NewWithMetrics(maxSize, opts, metrics.NoopMetricsHandler)
 }
 
 // NewWithMetrics creates a new cache that will emit capacity and ttl metrics.
 // handler should be tagged with metrics.CacheTypeTag.
-func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler) Cache {
+func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler) StoppableCache {
 	if opts == nil {
 		opts = &Options{}
 	}
+	if opts.BackgroundEvict == nil {
+		opts.BackgroundEvict = func() dynamicconfig.CacheBackgroundEvictSettings {
+			return dynamicconfig.CacheBackgroundEvictSettings{
+				Enabled: false,
+			}
+		}
+	}
+
 	timeSource := opts.TimeSource
 	if timeSource == nil {
 		timeSource = clock.NewRealTimeSource()
@@ -146,23 +159,28 @@ func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler) Cache {
 
 	metrics.CacheSize.With(handler).Record(float64(maxSize))
 	metrics.CacheTtl.With(handler).Record(opts.TTL)
-	return &lru{
-		byAccess:       list.New(),
-		byKey:          make(map[interface{}]*list.Element),
-		ttl:            opts.TTL,
-		maxSize:        maxSize,
-		currSize:       0,
-		pin:            opts.Pin,
-		onPut:          opts.OnPut,
-		onEvict:        opts.OnEvict,
-		timeSource:     timeSource,
-		metricsHandler: handler,
+	c := &lru{
+		byAccess:        list.New(),
+		byKey:           make(map[interface{}]*list.Element),
+		ttl:             opts.TTL,
+		maxSize:         maxSize,
+		currSize:        0,
+		pin:             opts.Pin,
+		onPut:           opts.OnPut,
+		onEvict:         opts.OnEvict,
+		timeSource:      timeSource,
+		metricsHandler:  handler,
+		backgroundEvict: opts.BackgroundEvict,
 	}
+	if c.backgroundEvict().Enabled {
+		c.loops.Go(c.bgEvictLoop)
+	}
+	return c
 }
 
 // NewLRU creates a new LRU cache of the given size, setting initial capacity
 // to the max size
-func NewLRU(maxSize int, handler metrics.Handler) Cache {
+func NewLRU(maxSize int, handler metrics.Handler) StoppableCache {
 	return New(maxSize, nil)
 }
 
@@ -181,13 +199,13 @@ func (c *lru) Get(key interface{}) interface{} {
 
 	entry := element.Value.(*entryImpl)
 
-	metrics.CacheEntryAgeOnGet.With(c.metricsHandler).Record(c.timeSource.Now().UTC().Sub(entry.createTime))
-
 	if c.isEntryExpired(entry, c.timeSource.Now().UTC()) {
 		// Entry has expired
 		c.deleteInternal(element)
 		return nil
 	}
+
+	metrics.CacheEntryAgeOnGet.With(c.metricsHandler).Record(c.timeSource.Now().UTC().Sub(entry.createTime))
 
 	c.updateEntryRefCount(entry)
 	c.byAccess.MoveToFront(element)
@@ -422,5 +440,56 @@ func (c *lru) updateEntryRefCount(entry *entryImpl) {
 			c.pinnedSize += entry.Size()
 			metrics.CachePinnedUsage.With(c.metricsHandler).Record(float64(c.pinnedSize))
 		}
+	}
+}
+
+func (c *lru) Stop() {
+	c.loops.Cancel()
+}
+
+func (c *lru) bgEvictLoop(ctx context.Context) error {
+	ch, t := c.timeSource.NewTimer(c.backgroundEvict().LoopInterval)
+	for {
+		select {
+		case <-ch:
+			settings := c.backgroundEvict()
+			if settings.Enabled {
+				c.bgEvict(settings)
+			}
+			t.Reset(settings.LoopInterval)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+func (c *lru) bgEvict(settings dynamicconfig.CacheBackgroundEvictSettings) {
+	now := c.timeSource.Now().UTC()
+
+	// Limit each iteration to scanning MaxEntryPerCall entries, to avoid holding the cache lock for too long.
+	evictToMax := func() (again bool) {
+		c.mut.Lock()
+		defer c.mut.Unlock()
+
+		element := c.byAccess.Back()
+		if settings.MaxEntryPerCall <= 0 {
+			return false
+		}
+		for n := 0; n < settings.MaxEntryPerCall; n++ {
+			if element == nil {
+				return false
+			}
+			elementPrev := element.Prev()
+			entry := element.Value.(*entryImpl) // nolint:revive
+			if !c.isEntryExpired(entry, now) {
+				return false
+			}
+			c.deleteInternal(element)
+			element = elementPrev
+		}
+		return element != nil
+	}
+
+	for evictToMax() {
 	}
 }

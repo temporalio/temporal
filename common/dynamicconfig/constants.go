@@ -1400,6 +1400,11 @@ will wait on workflow lock acquisition. Requires service restart to take effect.
 		`HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
 HistoryCacheSizeBasedLimit is set to true.`,
 	)
+	HistoryCacheBackgroundEvict = NewGlobalTypedSetting(
+		"history.cacheBackgroundEvict",
+		DefaultHistoryCacheBackgroundEvictSettings,
+		`HistoryCacheBackgroundEvict configures background processing to purge expired entries from the history cache.`,
+	)
 	EnableWorkflowExecutionTimeoutTimer = NewGlobalBoolSetting(
 		"history.enableWorkflowExecutionTimeoutTimer",
 		true,
@@ -2697,6 +2702,11 @@ settings for controlling remote activity concurrency for delete namespace workfl
 Valid fields: MaxConcurrentActivityExecutionSize, TaskQueueActivitiesPerSecond,
 WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 `,
+	)
+	WorkerGenerateMigrationTaskViaFrontend = NewGlobalBoolSetting(
+		"worker.generateMigrationTaskViaFrontend",
+		false,
+		`WorkerGenerateMigrationTaskViaFrontend controls whether to generate migration tasks via frontend admin service.`,
 	)
 	MaxUserMetadataSummarySize = NewNamespaceIntSetting(
 		"limit.userMetadataSummarySize",

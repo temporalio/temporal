@@ -261,7 +261,7 @@ func (tm *priTaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier ba
 }
 
 func (tm *priTaskMatcher) forwardPolls() {
-	forwarderTask := &internalTask{isPollForwarder: true}
+	forwarderTask := newPollForwarderTask()
 	ctxs := []context.Context{tm.tqCtx}
 	for {
 		res := tm.data.EnqueueTaskAndWait(ctxs, forwarderTask)
@@ -437,7 +437,9 @@ func (tm *priTaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask
 }
 
 func (tm *priTaskMatcher) AddTask(task *internalTask) {
-	task.removeFromMatcher = func() { tm.data.RemoveTask(task) }
+	if !task.setRemoveFunc(func() { tm.data.RemoveTask(task) }) {
+		return // handle race where task is evicted from reader before being added
+	}
 	tm.data.EnqueueTaskNoWait(task)
 }
 

@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/fx"
@@ -114,6 +115,23 @@ func (b *bucket) filterWorkers(
 		}
 	}
 	return out
+}
+
+func (b *bucket) getWorkerHeartbeat(nsID namespace.ID, workerInstanceKey string) (*workerpb.WorkerHeartbeat, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	mp, ok := b.namespaces[nsID]
+	if !ok {
+		return nil, serviceerror.NewNamespaceNotFound(nsID.String())
+	}
+
+	e, exists := mp[workerInstanceKey]
+	if !exists {
+		return nil, serviceerror.NewNotFoundf("Worker %s not found", workerInstanceKey)
+	}
+
+	return e.hb, nil
 }
 
 // evictByTTL removes entries older than expireBefore from this bucket.
@@ -224,7 +242,6 @@ func (m *registryImpl) filterWorkers(
 		return nil
 	}
 	return b.filterWorkers(nsID, predicate)
-
 }
 
 // evictLoop periodically triggers TTL and capacity-based eviction.
@@ -289,17 +306,26 @@ func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, workerHeartbeat
 }
 
 func (m *registryImpl) ListWorkers(nsID namespace.ID, query string, _ []byte) ([]*workerpb.WorkerHeartbeat, error) {
-	predicate := func(_ *workerpb.WorkerHeartbeat) bool { return true }
-	if query != "" {
-		queryEngine, err := newWorkerQueryEngine(nsID.String(), query)
-		if err != nil {
-			return nil, err
-		}
+	if query == "" {
+		return m.filterWorkers(nsID, func(_ *workerpb.WorkerHeartbeat) bool { return true }), nil
+	}
 
-		predicate = func(heartbeat *workerpb.WorkerHeartbeat) bool {
-			result, err := queryEngine.EvaluateWorker(heartbeat)
-			return err == nil && result
-		}
+	queryEngine, err := newWorkerQueryEngine(nsID.String(), query)
+	if err != nil {
+		return nil, err
+	}
+
+	predicate := func(heartbeat *workerpb.WorkerHeartbeat) bool {
+		result, err := queryEngine.EvaluateWorker(heartbeat)
+		return err == nil && result
 	}
 	return m.filterWorkers(nsID, predicate), nil
+}
+
+func (m *registryImpl) DescribeWorker(nsID namespace.ID, workerInstanceKey string) (*workerpb.WorkerHeartbeat, error) {
+	b := m.getBucket(nsID)
+	if b == nil {
+		return nil, serviceerror.NewNotFoundf("namespace not found: %s", nsID.String())
+	}
+	return b.getWorkerHeartbeat(nsID, workerInstanceKey)
 }
