@@ -1212,7 +1212,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId_UseDeprecatedBuildId() {
 
 func (s *ClientMiscTestSuite) testBatchResetByBuildId(useVersioning bool, useDeprecatedBuildId bool) {
 	tv := testvars.New(s.T())
-	tq := testcore.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr("testBatchResetByBuildId") // harcoding because the full test name was too long for sql
 	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv.WithBuildIDNumber(2)
 	tv3 := tv.WithBuildIDNumber(3)
@@ -1427,5 +1427,5 @@ func (s *ClientMiscTestSuite) setCurrentDeployment(tv *testvars.TestVars) {
 		}
 		s.NoError(err)
 		return err == nil
-	}, 60*time.Second, 500*time.Millisecond)
+	}, 45*time.Second, 500*time.Millisecond)
 }
