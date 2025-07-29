@@ -25,7 +25,8 @@ const (
 	rangeDeleteTaskV2Qry = `DELETE FROM tasks_v2 ` +
 		`WHERE range_hash = ? ` +
 		`AND task_queue_id = ? ` +
-		`AND (pass, task_id) < (?, ?) `
+		`AND (pass, task_id) < (?, ?) ` +
+		`ORDER BY task_queue_id,pass,task_id LIMIT ?`
 )
 
 func (mdb *db) InsertIntoTasksV2(
@@ -81,11 +82,15 @@ func (mdb *db) DeleteFromTasksV2(
 	if filter.ExclusiveMaxLevel == nil {
 		return nil, serviceerror.NewInternal("missing ExclusiveMaxTaskLevel")
 	}
+	if filter.Limit == nil || *filter.Limit == 0 {
+		return nil, serviceerror.NewInternal("missing limit parameter")
+	}
 	return mdb.ExecContext(ctx,
 		rangeDeleteTaskV2Qry,
 		filter.RangeHash,
 		filter.TaskQueueID,
 		filter.ExclusiveMaxLevel.TaskPass,
 		filter.ExclusiveMaxLevel.TaskID,
+		*filter.Limit,
 	)
 }
