@@ -1191,9 +1191,8 @@ func (pm *taskQueuePartitionManagerImpl) userDataChanged() {
 		go vq.UserDataChanged()
 	}
 	pm.versionedQueuesLock.RUnlock()
-
-	// Do this one in this goroutine.
-	pm.defaultQueue.UserDataChanged()
 	// Update rateLimits if any change is userData.
 	pm.rateLimitManager.UserDataChanged()
+	// Do this one in this goroutine.
+	pm.defaultQueue.UserDataChanged()
 }

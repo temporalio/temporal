@@ -376,7 +376,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	}
 
 	// If the priority matcher is enabled, use the rate limiter defined in the priority matcher.
-	c.priMatcher.rateLimitManager.InjectWorkerRPSForPriorityTaskMatcher((pollMetadata))
+	c.priMatcher.rateLimitManager.InjectWorkerRPSForPriorityTaskMatcher(pollMetadata)
 
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
 		return c.matcher.PollForQuery(ctx, pollMetadata)
