@@ -6,16 +6,16 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/olivere/elastic/v7"
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/sqlquery"
 )
 
 type (
 	ExprConverter interface {
-		Convert(expr sqlparser.Expr) (elastic.Query, error)
+		Convert(expr sqlparser.Expr) (client.Query, error)
 	}
 
 	Converter struct {
@@ -59,8 +59,8 @@ type (
 	notSupportedExprConverter struct{}
 
 	QueryParams struct {
-		Query   elastic.Query
-		Sorter  []elastic.Sorter
+		Query   client.Query
+		Sorter  []client.Sorter
 		GroupBy []string
 	}
 )
@@ -211,11 +211,13 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (*QueryParams, error) {
 		if err != nil {
 			return nil, wrapConverterError("unable to convert filter expression", err)
 		}
-		// Result must be BoolQuery.
-		if _, isBoolQuery := query.(*elastic.BoolQuery); !isBoolQuery {
-			query = elastic.NewBoolQuery().Filter(query)
+		// Result must be BoolQuery. Since we use our interface-based approach,
+		// we'll wrap non-bool queries in a bool filter query.
+		if boolQuery, ok := query.(*client.V8BoolQuery); ok {
+			queryParams.Query = boolQuery
+		} else {
+			queryParams.Query = client.NewV8BoolQuery().Filter(query)
 		}
-		queryParams.Query = query
 	}
 
 	if len(sel.GroupBy) > 1 {
@@ -234,9 +236,11 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (*QueryParams, error) {
 		if err != nil {
 			return nil, wrapConverterError("unable to convert 'order by' column name", err)
 		}
-		fieldSort := elastic.NewFieldSort(colName)
+		fieldSort := client.NewV8FieldSort(colName)
 		if orderByExpr.Direction == sqlparser.DescScr {
 			fieldSort = fieldSort.Desc()
+		} else {
+			fieldSort = fieldSort.Asc()
 		}
 		queryParams.Sorter = append(queryParams.Sorter, fieldSort)
 	}
@@ -251,7 +255,7 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (*QueryParams, error) {
 	return queryParams, nil
 }
 
-func (w *WhereConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
+func (w *WhereConverter) Convert(expr sqlparser.Expr) (client.Query, error) {
 	if expr == nil {
 		return nil, errors.New("cannot be nil")
 	}
@@ -280,7 +284,7 @@ func (w *WhereConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
 	}
 }
 
-func (a *andConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
+func (a *andConverter) Convert(expr sqlparser.Expr) (client.Query, error) {
 	andExpr, ok := expr.(*sqlparser.AndExpr)
 	if !ok {
 		return nil, NewConverterError("%v is not an 'and' expression", sqlparser.String(expr))
@@ -297,23 +301,12 @@ func (a *andConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
 		return nil, err
 	}
 
-	// If left or right is a BoolQuery built from AndExpr then reuse it w/o creating new BoolQuery.
-	lqBool, isLQBool := leftQuery.(*elastic.BoolQuery)
-	_, isLEAnd := leftExpr.(*sqlparser.AndExpr)
-	if isLQBool && isLEAnd {
-		return lqBool.Filter(rightQuery), nil
-	}
-
-	rqBool, isRQBool := rightQuery.(*elastic.BoolQuery)
-	_, isREAnd := rightExpr.(*sqlparser.AndExpr)
-	if isRQBool && isREAnd {
-		return rqBool.Filter(leftQuery), nil
-	}
-
-	return elastic.NewBoolQuery().Filter(leftQuery, rightQuery), nil
+	// For simplicity with our interface-based approach,
+	// we'll always create a new BoolQuery with filters
+	return client.NewV8BoolQuery().Filter(leftQuery, rightQuery), nil
 }
 
-func (o *orConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
+func (o *orConverter) Convert(expr sqlparser.Expr) (client.Query, error) {
 	orExpr, ok := expr.(*sqlparser.OrExpr)
 	if !ok {
 		return nil, NewConverterError("%v is not an 'or' expression", sqlparser.String(expr))
@@ -330,23 +323,12 @@ func (o *orConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
 		return nil, err
 	}
 
-	// If left or right is a BoolQuery built from OrExpr then reuse it w/o creating new BoolQuery.
-	lqBool, isLQBool := leftQuery.(*elastic.BoolQuery)
-	_, isLEOr := leftExpr.(*sqlparser.OrExpr)
-	if isLQBool && isLEOr {
-		return lqBool.Should(rightQuery), nil
-	}
-
-	rqBool, isRQBool := rightQuery.(*elastic.BoolQuery)
-	_, isREOr := rightExpr.(*sqlparser.OrExpr)
-	if isRQBool && isREOr {
-		return rqBool.Should(leftQuery), nil
-	}
-
-	return elastic.NewBoolQuery().Should(leftQuery, rightQuery), nil
+	// For simplicity with our interface-based approach,
+	// we'll always create a new BoolQuery with should clauses
+	return client.NewV8BoolQuery().Should(leftQuery, rightQuery), nil
 }
 
-func (r *rangeCondConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
+func (r *rangeCondConverter) Convert(expr sqlparser.Expr) (client.Query, error) {
 	rangeCond, ok := expr.(*sqlparser.RangeCond)
 	if !ok {
 		return nil, NewConverterError("%v is not a range condition", sqlparser.String(expr))
@@ -373,22 +355,22 @@ func (r *rangeCondConverter) Convert(expr sqlparser.Expr) (elastic.Query, error)
 	fromValue = values[0]
 	toValue = values[1]
 
-	var query elastic.Query
+	var query client.Query
 	switch rangeCond.Operator {
 	case "between":
-		query = elastic.NewRangeQuery(colName).Gte(fromValue).Lte(toValue)
+		query = client.NewV8RangeQuery(colName).Gte(fromValue).Lte(toValue)
 	case "not between":
 		if !r.notBetweenSupported {
 			return nil, NewConverterError("%s: 'not between' expression", NotSupportedErrMessage)
 		}
-		query = elastic.NewBoolQuery().MustNot(elastic.NewRangeQuery(colName).Gte(fromValue).Lte(toValue))
+		query = client.NewV8BoolQuery().MustNot(client.NewV8RangeQuery(colName).Gte(fromValue).Lte(toValue))
 	default:
 		return nil, NewConverterError("%s: range condition operator must be 'between' or 'not between'", InvalidExpressionErrMessage)
 	}
 	return query, nil
 }
 
-func (i *isConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
+func (i *isConverter) Convert(expr sqlparser.Expr) (client.Query, error) {
 	isExpr, ok := expr.(*sqlparser.IsExpr)
 	if !ok {
 		return nil, NewConverterError("%v is not an 'is' expression", sqlparser.String(expr))
@@ -399,12 +381,12 @@ func (i *isConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
 		return nil, wrapConverterError("unable to convert left part of 'is' expression", err)
 	}
 
-	var query elastic.Query
+	var query client.Query
 	switch isExpr.Operator {
 	case "is null":
-		query = elastic.NewBoolQuery().MustNot(elastic.NewExistsQuery(colName))
+		query = client.NewV8BoolQuery().MustNot(client.NewV8ExistsQuery(colName))
 	case "is not null":
-		query = elastic.NewExistsQuery(colName)
+		query = client.NewV8ExistsQuery(colName)
 	default:
 		return nil, NewConverterError("%s: 'is' operator can be used with 'null' and 'not null' only", InvalidExpressionErrMessage)
 	}
@@ -412,7 +394,7 @@ func (i *isConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
 	return query, nil
 }
 
-func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
+func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (client.Query, error) {
 	comparisonExpr, ok := expr.(*sqlparser.ComparisonExpr)
 	if !ok {
 		return nil, NewConverterError("%v is not a comparison expression", sqlparser.String(expr))
@@ -454,46 +436,46 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 		return nil, err
 	}
 
-	var query elastic.Query
+	var query client.Query
 	switch comparisonExpr.Operator {
 	case sqlparser.GreaterEqualStr:
-		query = elastic.NewRangeQuery(colName).Gte(colValues[0])
+		query = client.NewV8RangeQuery(colName).Gte(colValues[0])
 	case sqlparser.LessEqualStr:
-		query = elastic.NewRangeQuery(colName).Lte(colValues[0])
+		query = client.NewV8RangeQuery(colName).Lte(colValues[0])
 	case sqlparser.GreaterThanStr:
-		query = elastic.NewRangeQuery(colName).Gt(colValues[0])
+		query = client.NewV8RangeQuery(colName).Gt(colValues[0])
 	case sqlparser.LessThanStr:
-		query = elastic.NewRangeQuery(colName).Lt(colValues[0])
+		query = client.NewV8RangeQuery(colName).Lt(colValues[0])
 	case sqlparser.EqualStr:
-		// Not elastic.NewTermQuery to support partial word match for String custom search attributes.
+		// Not client.NewV8TermQuery to support partial word match for String custom search attributes.
 		if tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD || tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST {
-			query = elastic.NewTermQuery(colName, colValues[0])
+			query = client.NewV8TermQuery(colName, colValues[0])
 		} else {
-			query = elastic.NewMatchQuery(colName, colValues[0])
+			query = client.NewV8MatchQuery(colName, colValues[0])
 		}
 	case sqlparser.NotEqualStr:
-		// Not elastic.NewTermQuery to support partial word match for String custom search attributes.
+		// Not client.NewV8TermQuery to support partial word match for String custom search attributes.
 		if tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD || tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST {
-			query = elastic.NewBoolQuery().MustNot(elastic.NewTermQuery(colName, colValues[0]))
+			query = client.NewV8BoolQuery().MustNot(client.NewV8TermQuery(colName, colValues[0]))
 		} else {
-			query = elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(colName, colValues[0]))
+			query = client.NewV8BoolQuery().MustNot(client.NewV8MatchQuery(colName, colValues[0]))
 		}
 	case sqlparser.InStr:
-		query = elastic.NewTermsQuery(colName, colValues...)
+		query = client.NewV8TermsQuery(colName, colValues...)
 	case sqlparser.NotInStr:
-		query = elastic.NewBoolQuery().MustNot(elastic.NewTermsQuery(colName, colValues...))
+		query = client.NewV8BoolQuery().MustNot(client.NewV8TermsQuery(colName, colValues...))
 	case sqlparser.StartsWithStr:
 		v, ok := colValues[0].(string)
 		if !ok {
 			return nil, NewConverterError("right-hand side of '%v' must be a string", comparisonExpr.Operator)
 		}
-		query = elastic.NewPrefixQuery(colName, v)
+		query = client.NewV8PrefixQuery(colName, v)
 	case sqlparser.NotStartsWithStr:
 		v, ok := colValues[0].(string)
 		if !ok {
 			return nil, NewConverterError("right-hand side of '%v' must be a string", comparisonExpr.Operator)
 		}
-		query = elastic.NewBoolQuery().MustNot(elastic.NewPrefixQuery(colName, v))
+		query = client.NewV8BoolQuery().MustNot(client.NewV8PrefixQuery(colName, v))
 	}
 
 	return query, nil
@@ -538,7 +520,7 @@ func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 	}
 }
 
-func (n *notSupportedExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
+func (n *notSupportedExprConverter) Convert(expr sqlparser.Expr) (client.Query, error) {
 	return nil, NewConverterError("%s: expression of type %T", NotSupportedErrMessage, expr)
 }
 

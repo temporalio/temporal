@@ -46,7 +46,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) future.Future[bool] {
 			s.Equal("2208~111", visibilityTaskKey)
 
-			body := bulkRequest.Doc
+			body := bulkRequest.Document
 
 			s.Equal(request.NamespaceID, body[searchattribute.NamespaceID])
 			s.Equal(request.WorkflowID, body[searchattribute.WorkflowID])
@@ -90,7 +90,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) future.Future[bool] {
 			s.Equal("0~0", visibilityTaskKey)
 
-			body := bulkRequest.Doc
+			body := bulkRequest.Document
 
 			_, ok := body[searchattribute.Memo]
 			s.False(ok)
@@ -140,7 +140,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) future.Future[bool] {
 			s.Equal("2208~111", visibilityTaskKey)
 
-			body := bulkRequest.Doc
+			body := bulkRequest.Document
 
 			s.Equal(request.NamespaceID, body[searchattribute.NamespaceID])
 			s.Equal(request.WorkflowID, body[searchattribute.WorkflowID])
@@ -180,7 +180,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) future.Future[bool] {
 			s.Equal("0~0", visibilityTaskKey)
 
-			body := bulkRequest.Doc
+			body := bulkRequest.Document
 
 			_, ok := body[searchattribute.Memo]
 			s.False(ok)

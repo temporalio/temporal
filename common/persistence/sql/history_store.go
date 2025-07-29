@@ -28,6 +28,12 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 	branchInfo := request.BranchInfo
 	node := request.Node
 
+	if node.NodeID < p.GetBeginNodeID(branchInfo) {
+		return &p.InvalidPersistenceRequestError{
+			Msg: "cannot append to ancestors' nodes",
+		}
+	}
+
 	treeIDBytes, err := primitives.ParseUUID(branchInfo.GetTreeId())
 	if err != nil {
 		return err
@@ -305,6 +311,23 @@ func (m *sqlExecutionStore) ForkHistoryBranch(
 	treeIDBytes, err := primitives.ParseUUID(forkB.GetTreeId())
 	if err != nil {
 		return err
+	}
+
+	// Check if branch already exists to prevent race conditions
+	// This is needed because upsert operations (REPLACE INTO for SQLite, ON DUPLICATE KEY UPDATE for MySQL)
+	// don't return errors for duplicates, which can lead to concurrency issues
+	existingRows, err := m.Db.SelectFromHistoryTree(ctx, sqlplugin.HistoryTreeSelectFilter{
+		TreeID:  treeIDBytes,
+		ShardID: request.ShardID,
+	})
+	if err != nil && err != sql.ErrNoRows {
+		return serviceerror.NewUnavailablef("ForkHistoryBranch: failed to check existing branch: %v", err)
+	}
+	// Check if the specific branch already exists
+	for _, row := range existingRows {
+		if row.BranchID.String() == request.NewBranchID {
+			return serviceerror.NewFailedPreconditionf("ForkHistoryBranch: branch %s already exists", request.NewBranchID)
+		}
 	}
 
 	row := &sqlplugin.HistoryTreeRow{
