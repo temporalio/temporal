@@ -222,8 +222,10 @@ type (
 	}
 
 	taskDetail struct {
+		// the workflow execution to process
 		execution *commonpb.WorkflowExecution
-		attempts  int
+		// the number of attempts to process the workflow execution
+		attempts int
 		// passing along the current heartbeat details to make heartbeat within a task so that it won't timeout
 		hbd HeartBeatDetails
 	}
