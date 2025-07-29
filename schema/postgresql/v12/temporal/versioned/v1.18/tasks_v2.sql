@@ -1,12 +1,12 @@
 -- Stores activity or workflow tasks
 -- Used for fairness scheduling. (pass, task_id) are monotonically increasing.
 CREATE TABLE tasks_v2 (
-  range_hash INT UNSIGNED NOT NULL,
-  task_queue_id VARBINARY(272) NOT NULL,
+  range_hash BIGINT NOT NULL,
+  task_queue_id BYTEA NOT NULL,
   pass BIGINT NOT NULL, -- pass for tasks (see stride scheduling algorithm for fairness)
   task_id BIGINT NOT NULL,
   --
-  data MEDIUMBLOB NOT NULL,
+  data BYTEA NOT NULL,
   data_encoding VARCHAR(16) NOT NULL,
   PRIMARY KEY (range_hash, task_queue_id, pass, task_id)
 );

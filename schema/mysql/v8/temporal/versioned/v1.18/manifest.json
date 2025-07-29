@@ -4,5 +4,5 @@
   "Description": "Adds tasks_v2 table for fairness tasks",
   "SchemaUpdateCqlFiles": [
     "tasks_v2.sql"
-]
+  ]
 }
