@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -46,7 +47,16 @@ func (s *MatcherDataSuite) SetupTest() {
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 	s.ts = clock.NewEventTimeSource().Update(time.Now())
 	s.ts.UseAsyncTimers(true)
-	s.md = newMatcherData(cfg, logger, s.ts, true)
+	userData := &persistencespb.TaskQueueUserData{}
+	setRPSForTaskQueueUserData(userData, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 10.0)
+	mockUDM := &mockUserDataManager{
+		data: &persistencespb.VersionedTaskQueueUserData{
+			Data:    userData,
+			Version: 1,
+		},
+	}
+	rateLimitManager := newRateLimitManager(mockUDM, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	s.md = newMatcherData(cfg, logger, s.ts, true, rateLimitManager)
 }
 
 func (s *MatcherDataSuite) now() time.Time {
@@ -310,9 +320,38 @@ func (s *MatcherDataSuite) TestTaskForward() {
 	s.ErrorIs(fres.forwardErr, someError)
 }
 
+// Sets both QueueRateLimit and FairnessKeysRateLimitDefault for the given task queue type
+func setRPSForTaskQueueUserData(
+	userData *persistencespb.TaskQueueUserData,
+	taskQueueType enumspb.TaskQueueType,
+	rps float32,
+) {
+	if userData.PerType == nil {
+		userData.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
+	}
+
+	key := int32(taskQueueType)
+	if userData.PerType[key] == nil {
+		userData.PerType[key] = &persistencespb.TaskQueueTypeUserData{}
+	}
+
+	tqTypeData := userData.PerType[key]
+	if tqTypeData.Config == nil {
+		tqTypeData.Config = &taskqueuepb.TaskQueueConfig{}
+	}
+
+	rateLimit := &taskqueuepb.RateLimit{RequestsPerSecond: rps}
+	rateLimitConfig := &taskqueuepb.RateLimitConfig{RateLimit: rateLimit}
+
+	tqTypeData.Config.QueueRateLimit = rateLimitConfig
+	tqTypeData.Config.FairnessKeysRateLimitDefault = rateLimitConfig
+}
+
 func (s *MatcherDataSuite) TestRateLimitedBacklog() {
+	s.md.rateLimitManager.mu.Lock()
+	defer s.md.rateLimitManager.mu.Unlock()
 	// 10 tasks/sec with burst of 3
-	s.md.UpdateRateLimit(10, 300*time.Millisecond)
+	s.md.rateLimitManager.UpdateSimpleRateLimitLocked(300 * time.Millisecond)
 
 	// register some backlog with old tasks
 	for i := range 100 {
@@ -351,8 +390,9 @@ func (s *MatcherDataSuite) TestRateLimitedBacklog() {
 
 func (s *MatcherDataSuite) TestPerKeyRateLimit() {
 	// 10 tasks/key/sec with burst of 3
-	s.md.UpdatePerKeyRateLimit(10, 300*time.Millisecond)
-
+	s.md.rateLimitManager.mu.Lock()
+	defer s.md.rateLimitManager.mu.Unlock()
+	s.md.rateLimitManager.UpdatePerKeySimpleRateLimitLocked(300 * time.Millisecond)
 	// register some backlog with three keys
 	keys := []string{"key1", "key2", "key3"}
 	for i := range 300 {
@@ -656,7 +696,8 @@ func FuzzMatcherData(f *testing.F) {
 		ts := clock.NewEventTimeSource()
 		ts.UseAsyncTimers(true)
 		logger := log.NewNoopLogger()
-		md := newMatcherData(cfg, logger, ts, true)
+		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+		md := newMatcherData(cfg, logger, ts, true, rateLimitManager)
 
 		next := func() int {
 			if len(tape) == 0 {

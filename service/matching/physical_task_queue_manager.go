@@ -224,6 +224,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.taskValidator,
 			pqMgr.logger,
 			newFairMetricsHandler(taggedMetricsHandler),
+			partitionMgr.rateLimitManager,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
@@ -265,6 +266,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.taskValidator,
 			pqMgr.logger,
 			newPriMetricsHandler(taggedMetricsHandler),
+			partitionMgr.rateLimitManager,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
@@ -374,12 +376,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	}
 
 	// If the priority matcher is enabled, use the rate limiter defined in the priority matcher.
-	// TODO(pri): remove this once we have a way to set the partition-scoped rate limiter for the priority matcher.
-	if rps := pollMetadata.taskQueueMetadata.GetMaxTasksPerSecond(); rps != nil {
-		if c.priMatcher != nil {
-			c.priMatcher.UpdateRatelimit(rps.Value)
-		}
-	}
+	c.priMatcher.rateLimitManager.InjectWorkerRPSForPriorityTaskMatcher((pollMetadata))
 
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
 		return c.matcher.PollForQuery(ctx, pollMetadata)
