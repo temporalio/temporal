@@ -491,7 +491,7 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 		if p.GetVersion() == nil {
 			return serviceerror.NewInvalidArgument("must provide version if override is pinned.")
 		}
-		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
+		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED && override.GetBehavior() != enumspb.VERSIONING_BEHAVIOR_PINNED {
 			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
 		return nil
