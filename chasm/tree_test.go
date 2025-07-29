@@ -1583,7 +1583,7 @@ func (s *nodeSuite) TestSerializeDeserializeTask() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
-	expectedBlob, err := serialization.ProtoEncodeBlob(payload, enumspb.ENCODING_TYPE_PROTO3)
+	expectedBlob, err := serialization.ProtoEncode(payload)
 	s.NoError(err)
 
 	testCases := []struct {
@@ -1757,7 +1757,7 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
-	taskBlob, err := serialization.ProtoEncodeBlob(payload, enumspb.ENCODING_TYPE_PROTO3)
+	taskBlob, err := serialization.ProtoEncode(payload)
 	s.NoError(err)
 
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
@@ -2257,7 +2257,7 @@ func (s *nodeSuite) TestEachPureTask() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
-	taskBlob, err := serialization.ProtoEncodeBlob(payload, enumspb.ENCODING_TYPE_PROTO3)
+	taskBlob, err := serialization.ProtoEncode(payload)
 	s.NoError(err)
 
 	// Set up a tree with expired and unexpired pure tasks.

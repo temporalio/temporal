@@ -360,7 +360,7 @@ func (s *ContextImpl) GetQueueState(
 	}
 	// need to make a deep copy, in case UpdateReplicationQueueReaderState does a partial update
 	blob, _ := serialization.QueueStateToBlob(queueState)
-	queueState, _ = serialization.QueueStateFromBlob(blob.Data, blob.EncodingType.String())
+	queueState, _ = serialization.QueueStateFromBlob(blob)
 	return queueState, ok
 }
 
@@ -2161,7 +2161,7 @@ func copyShardInfo(shardInfo *persistencespb.ShardInfo) *persistencespb.ShardInf
 	queueStates := make(map[int32]*persistencespb.QueueState, len(shardInfo.QueueStates))
 	for k, v := range shardInfo.QueueStates {
 		blob, _ := serialization.QueueStateToBlob(v)
-		queueState, _ := serialization.QueueStateFromBlob(blob.Data, blob.EncodingType.String())
+		queueState, _ := serialization.QueueStateFromBlob(blob)
 		queueStates[k] = queueState
 	}
 
