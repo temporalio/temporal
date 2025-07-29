@@ -68,79 +68,41 @@ func (v *Visibility) LifecycleState(_ Context) LifecycleState {
 func (v *Visibility) GetSearchAttributes(
 	chasmContext Context,
 ) (map[string]*common.Payload, error) {
-	sa := make(map[string]*common.Payload, len(v.SA))
-	for key, field := range v.SA {
-		value, err := field.Get(chasmContext)
-		if err != nil {
-			return nil, err
-		}
-		sa[key] = value
-	}
-	return sa, nil
+	return v.getPayloadMap(chasmContext, v.SA)
 }
 
-func (v *Visibility) UpdateSearchAttributes(
+func (v *Visibility) UpsertSearchAttributes(
 	mutableContext MutableContext,
 	updates map[string]any,
 ) error {
-	for key, value := range updates {
-		p, err := payload.Encode(value)
-		if err != nil {
-			return err
-		}
-		v.SA[key] = NewDataField(mutableContext, p)
-	}
-	v.GenerateTask(mutableContext)
-	return nil
+	return v.updatePayloadMap(mutableContext, &v.SA, updates)
 }
 
 func (v *Visibility) RemoveSearchAttributes(
 	mutableContext MutableContext,
 	keys ...string,
 ) {
-	for _, key := range keys {
-		delete(v.SA, key)
-	}
-	v.GenerateTask(mutableContext)
+	v.removeFromPayloadMap(mutableContext, v.SA, keys)
 }
 
 func (v *Visibility) GetMemo(
 	chasmContext Context,
 ) (map[string]*common.Payload, error) {
-	memo := make(map[string]*common.Payload, len(v.Memo))
-	for key, field := range v.Memo {
-		value, err := field.Get(chasmContext)
-		if err != nil {
-			return nil, err
-		}
-		memo[key] = value
-	}
-	return memo, nil
+	return v.getPayloadMap(chasmContext, v.Memo)
 }
 
-func (v *Visibility) UpdateMemo(
+func (v *Visibility) UpsertMemo(
 	mutableContext MutableContext,
 	updates map[string]any,
 ) error {
-	for key, value := range updates {
-		p, err := payload.Encode(value)
-		if err != nil {
-			return err
-		}
-		v.Memo[key] = NewDataField(mutableContext, p)
-	}
-	v.GenerateTask(mutableContext)
-	return nil
+	return v.updatePayloadMap(mutableContext, &v.Memo, updates)
 }
 
 func (v *Visibility) RemoveMemo(
 	mutableContext MutableContext,
 	keys ...string,
 ) {
-	for _, key := range keys {
-		delete(v.Memo, key)
-	}
-	v.GenerateTask(mutableContext)
+	v.removeFromPayloadMap(mutableContext, v.Memo, keys)
 }
 
 func (v *Visibility) GenerateTask(
@@ -154,22 +116,66 @@ func (v *Visibility) GenerateTask(
 	)
 }
 
+func (v *Visibility) getPayloadMap(
+	chasmContext Context,
+	m Map[string, *common.Payload],
+) (map[string]*common.Payload, error) {
+	result := make(map[string]*common.Payload, len(m))
+	for key, field := range m {
+		value, err := field.Get(chasmContext)
+		if err != nil {
+			return nil, err
+		}
+		result[key] = value
+	}
+	return result, nil
+}
+
+func (v *Visibility) updatePayloadMap(
+	mutableContext MutableContext,
+	m *Map[string, *common.Payload],
+	updates map[string]any,
+) error {
+	if len(updates) != 0 && *m == nil {
+		*m = make(Map[string, *common.Payload], len(updates))
+	}
+	for key, value := range updates {
+		p, err := payload.Encode(value)
+		if err != nil {
+			return err
+		}
+		(*m)[key] = NewDataField(mutableContext, p)
+	}
+	v.GenerateTask(mutableContext)
+	return nil
+}
+
+func (v *Visibility) removeFromPayloadMap(
+	mutableContext MutableContext,
+	m Map[string, *common.Payload],
+	keys []string,
+) {
+	for _, key := range keys {
+		delete(m, key)
+	}
+	v.GenerateTask(mutableContext)
+}
+
 func GetSearchAttribute[T any](
 	chasmContext Context,
 	visibility *Visibility,
 	key string,
 ) (T, error) {
-	return decodePayloadValueFromMap[T](chasmContext, visibility.SA, key)
+	return getVisibilityPayloadValue[T](chasmContext, visibility.SA, key)
 }
 
-func UpdateSearchAttribute[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
+func UpsertSearchAttribute[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
 	chasmContext MutableContext,
 	visibility *Visibility,
 	name string,
 	value T,
 ) {
-	p, _ := payload.Encode(value)
-	visibility.SA[name] = NewDataField(chasmContext, p)
+	upsertVisibilityPayload(chasmContext, &visibility.SA, visibility, name, value)
 }
 
 func GetMemo[T any](
@@ -177,20 +183,34 @@ func GetMemo[T any](
 	visibility *Visibility,
 	key string,
 ) (T, error) {
-	return decodePayloadValueFromMap[T](chasmContext, visibility.Memo, key)
+	return getVisibilityPayloadValue[T](chasmContext, visibility.Memo, key)
 }
 
-func UpdateMemo[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
+func UpsertMemo[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
 	chasmContext MutableContext,
 	visibility *Visibility,
 	name string,
 	value T,
 ) {
-	p, _ := payload.Encode(value)
-	visibility.Memo[name] = NewDataField(chasmContext, p)
+	upsertVisibilityPayload(chasmContext, &visibility.Memo, visibility, name, value)
 }
 
-func decodePayloadValueFromMap[T any](
+func upsertVisibilityPayload[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
+	chasmContext MutableContext,
+	m *Map[string, *common.Payload],
+	visibility *Visibility,
+	name string,
+	value T,
+) {
+	p, _ := payload.Encode(value)
+	if *m == nil {
+		*m = make(Map[string, *common.Payload])
+	}
+	(*m)[name] = NewDataField(chasmContext, p)
+	visibility.GenerateTask(chasmContext)
+}
+
+func getVisibilityPayloadValue[T any](
 	chasmContext Context,
 	payloadMap Map[string, *common.Payload],
 	key string,
