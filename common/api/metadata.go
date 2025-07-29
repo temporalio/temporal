@@ -164,7 +164,7 @@ var (
 		"StartNexusOperation":                   {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"RequestCancelNexusOperation":           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"GetNexusOperationInfo":                 {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"GetNexusOperationResult":               {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
+		"GetNexusOperationResult":               {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingCapable},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
 		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},

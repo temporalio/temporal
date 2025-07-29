@@ -5602,7 +5602,7 @@ func (wh *WorkflowHandler) resolveNexusDispatchTarget(ctx context.Context, reque
 			}
 			return targetNS, &taskqueuepb.TaskQueue{Name: v.Worker.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, nil
 		default:
-			return nil, nil, serviceerror.NewInvalidArgument("invalid endpoint target")
+			return nil, nil, serviceerror.NewInvalidArgument("endpoint target must be a worker")
 		}
 	}
 
