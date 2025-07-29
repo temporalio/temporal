@@ -186,7 +186,6 @@ func newPhysicalTaskQueueManager(
 			pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
 		})
 	}
-
 	if fairness {
 		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagFairness)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagFairness)
@@ -376,7 +375,9 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	}
 
 	// If the priority matcher is enabled, use the rate limiter defined in the priority matcher.
-	c.priMatcher.rateLimitManager.InjectWorkerRPSForPriorityTaskMatcher(pollMetadata)
+	if c.priMatcher != nil {
+		c.priMatcher.rateLimitManager.InjectWorkerRPSForPriorityTaskMatcher(pollMetadata)
+	}
 
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
 		return c.matcher.PollForQuery(ctx, pollMetadata)

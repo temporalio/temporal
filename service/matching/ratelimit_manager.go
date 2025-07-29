@@ -140,7 +140,7 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_WORKER
 	}
 
-	if effectiveRPS < r.systemRPS {
+	if rateLimitSource != enumspb.RATE_LIMIT_SOURCE_UNSPECIFIED && effectiveRPS < r.systemRPS {
 		r.effectiveRPS = effectiveRPS
 		r.rateLimitSource = rateLimitSource
 	} else {
