@@ -63,6 +63,7 @@ type batchWorkerProcessor func(
 )
 
 // processWorkflowsWithProactiveFetching handles the core logic for both batch activity functions
+// nolint:revive,cognitive-complexity
 func (a *activities) processWorkflowsWithProactiveFetching(
 	ctx context.Context,
 	config batchProcessorConfig,
