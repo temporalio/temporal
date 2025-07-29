@@ -58,7 +58,6 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -110,6 +109,7 @@ type (
 	matchingEngineImpl struct {
 		status                        int32
 		taskManager                   persistence.TaskManager
+		fairTaskManager               persistence.FairTaskManager
 		historyClient                 resource.HistoryClient
 		matchingRawClient             resource.MatchingRawClient
 		deploymentStoreClient         deployment.DeploymentStoreClient
@@ -192,6 +192,7 @@ var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed im
 // NewEngine creates an instance of matching engine
 func NewEngine(
 	taskManager persistence.TaskManager,
+	fairTaskManager persistence.FairTaskManager,
 	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
 	deploymentStoreClient deployment.DeploymentStoreClient, // [wv-cleanup-pre-release]
@@ -216,6 +217,7 @@ func NewEngine(
 	e := &matchingEngineImpl{
 		status:                        common.DaemonStatusInitialized,
 		taskManager:                   taskManager,
+		fairTaskManager:               fairTaskManager,
 		historyClient:                 historyClient,
 		matchingRawClient:             matchingRawClient,
 		deploymentStoreClient:         deploymentStoreClient,
@@ -1206,7 +1208,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 								partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
 								mergedStats = &taskqueuepb.TaskQueueStats{
 									ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
-									ApproximateBacklogAge:   largerBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
+									ApproximateBacklogAge:   oldestBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
 									TasksAddRate:            totalStats.TasksAddRate + partitionStats.TasksAddRate,
 									TasksDispatchRate:       totalStats.TasksDispatchRate + partitionStats.TasksDispatchRate,
 								}
@@ -1299,9 +1301,12 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		cacheKey := "dtq_default:" + strings.Join(buildIds, ",")
 		if ts := pm.GetCache(cacheKey); ts != nil {
 			//revive:disable-next-line:unchecked-type-assertion
-			descrResp.DescResponse.Stats = ts.(*taskqueuepb.TaskQueueStats)
+			cachedResp := ts.(*workflowservice.DescribeTaskQueueResponse)
+			descrResp.DescResponse.Stats = cachedResp.Stats
+			descrResp.DescResponse.StatsByPriorityKey = cachedResp.StatsByPriorityKey
 		} else {
 			taskQueueStats := &taskqueuepb.TaskQueueStats{}
+			taskQueueStatsByPriority := make(map[int32]*taskqueuepb.TaskQueueStats)
 
 			// No version was requested, so we need to query all versions.
 			if len(buildIds) == 0 {
@@ -1340,16 +1345,31 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					return nil, err
 				}
 				for _, vii := range partitionResp.VersionsInfoInternal {
-					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
-					taskQueueStats.ApproximateBacklogCount += partitionStats.ApproximateBacklogCount
-					taskQueueStats.ApproximateBacklogAge = largerBacklogAge(taskQueueStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge)
-					taskQueueStats.TasksAddRate += partitionStats.TasksAddRate
-					taskQueueStats.TasksDispatchRate += partitionStats.TasksDispatchRate
+					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey
+					for pri, priorityStats := range partitionStats {
+						if _, ok := taskQueueStatsByPriority[pri]; !ok {
+							taskQueueStatsByPriority[pri] = &taskqueuepb.TaskQueueStats{}
+						}
+						mergeStats(taskQueueStats, priorityStats)
+						mergeStats(taskQueueStatsByPriority[pri], priorityStats)
+					}
 				}
 			}
-			pm.PutCache(cacheKey, taskQueueStats)
+			pm.PutCache(cacheKey, &workflowservice.DescribeTaskQueueResponse{
+				Stats:              taskQueueStats,
+				StatsByPriorityKey: taskQueueStatsByPriority,
+			})
 			descrResp.DescResponse.Stats = taskQueueStats
+			descrResp.DescResponse.StatsByPriorityKey = taskQueueStatsByPriority
 		}
+	}
+
+	if req.GetReportConfig() {
+		userData, _, err := pm.GetUserDataManager().GetUserData()
+		if err != nil {
+			return nil, err
+		}
+		descrResp.DescResponse.Config = userData.GetData().GetPerType()[int32(req.GetTaskQueueType())].GetConfig()
 	}
 
 	return descrResp, nil
@@ -1395,9 +1415,10 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 		}
 		resp.VersionTaskQueues = append(resp.VersionTaskQueues,
 			&matchingservice.DescribeVersionedTaskQueuesResponse_VersionTaskQueue{
-				Name:  tq.Name,
-				Type:  tq.Type,
-				Stats: tqResp.DescResponse.Stats,
+				Name:               tq.Name,
+				Type:               tq.Type,
+				Stats:              tqResp.DescResponse.Stats,
+				StatsByPriorityKey: tqResp.DescResponse.StatsByPriorityKey,
 			})
 	}
 
@@ -2921,10 +2942,103 @@ func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
 	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
 }
 
-// largerBacklogAge returns the larger BacklogAge
-func largerBacklogAge(rootBacklogAge *durationpb.Duration, currentPartitionAge *durationpb.Duration) *durationpb.Duration {
-	if rootBacklogAge.AsDuration() > currentPartitionAge.AsDuration() {
-		return rootBacklogAge
+func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, updateTime *timestamppb.Timestamp, updateIdentity string) *taskqueuepb.RateLimitConfig {
+	var rateLimit *taskqueuepb.RateLimit
+	if r := update.GetRateLimit(); r != nil {
+		rateLimit = &taskqueuepb.RateLimit{RequestsPerSecond: r.RequestsPerSecond}
 	}
-	return currentPartitionAge
+	return &taskqueuepb.RateLimitConfig{
+		RateLimit: rateLimit,
+		Metadata: &taskqueuepb.ConfigMetadata{
+			Reason:         update.GetReason(),
+			UpdateTime:     updateTime,
+			UpdateIdentity: updateIdentity,
+		},
+	}
+}
+
+func prepareTaskQueueUserData(
+	tqud *persistencespb.TaskQueueUserData,
+	taskQueueType enumspb.TaskQueueType,
+) *persistencespb.TaskQueueUserData {
+	data := common.CloneProto(tqud)
+	if data == nil {
+		data = &persistencespb.TaskQueueUserData{}
+	}
+	if data.PerType == nil {
+		data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
+	}
+	tqType := int32(taskQueueType)
+	if data.PerType[tqType] == nil {
+		data.PerType[tqType] = &persistencespb.TaskQueueTypeUserData{}
+	}
+	if data.PerType[tqType].Config == nil {
+		data.PerType[tqType].Config = &taskqueuepb.TaskQueueConfig{}
+	}
+	return data
+}
+
+func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+	taskQueueFamily, err := tqid.NewTaskQueueFamily(request.NamespaceId, request.UpdateTaskqueueConfig.GetTaskQueue())
+	if err != nil {
+		return nil, err
+	}
+	taskQueueType := request.UpdateTaskqueueConfig.GetTaskQueueType()
+	// Get the partition manager for the root workflow partition of the task queue family.
+	// Configuration updates are applied here and eventually propagate,
+	// to all partitions and associated activity task queues of the same task queue family.
+	tqm, _, err := e.getTaskQueuePartitionManager(ctx,
+		taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(),
+		true, loadCauseOtherWrite)
+	if err != nil {
+		return nil, err
+	}
+	if request.GetUpdateTaskqueueConfig() == nil {
+		tqud, _, err := tqm.GetUserDataManager().GetUserData()
+		if err != nil {
+			return nil, err
+		}
+		// If no update is requested, return the current config.
+		return &matchingservice.UpdateTaskQueueConfigResponse{
+			UpdatedTaskqueueConfig: tqud.GetData().GetPerType()[int32(taskQueueType)].GetConfig(),
+		}, nil
+	}
+	updateOptions := UserDataUpdateOptions{Source: "UpdateTaskQueueConfig"}
+	_, err = tqm.GetUserDataManager().UpdateUserData(ctx, updateOptions,
+		func(tqud *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+			data := prepareTaskQueueUserData(tqud, taskQueueType)
+			// Update timestamp from hlc clock
+			existingClock := data.Clock
+			if existingClock == nil {
+				existingClock = hlc.Zero(e.clusterMeta.GetClusterID())
+			}
+			now := hlc.Next(existingClock, e.timeSource)
+			protoTs := hlc.ProtoTimestamp(now)
+			// Update relevant config fields
+			cfg := data.PerType[int32(taskQueueType)].Config
+			updateTaskQueueConfig := request.GetUpdateTaskqueueConfig()
+			updateIdentity := updateTaskQueueConfig.GetIdentity()
+			// Queue Rate Limit
+			if qrl := updateTaskQueueConfig.GetUpdateQueueRateLimit(); qrl != nil {
+				cfg.QueueRateLimit = buildRateLimitConfig(qrl, protoTs, updateIdentity)
+			}
+			// Fairness Queue Rate Limit
+			if fkrl := updateTaskQueueConfig.GetUpdateFairnessKeyRateLimitDefault(); fkrl != nil {
+				cfg.FairnessKeysRateLimitDefault = buildRateLimitConfig(fkrl, protoTs, updateIdentity)
+			}
+			// Update the clock on TaskQueueUserData to enforce LWW on config updates
+			data.Clock = now
+			return data, true, nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	userData, _, err := tqm.GetUserDataManager().GetUserData()
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.UpdateTaskQueueConfigResponse{
+		UpdatedTaskqueueConfig: userData.GetData().GetPerType()[int32(taskQueueType)].GetConfig(),
+	}, nil
 }

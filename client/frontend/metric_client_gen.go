@@ -205,6 +205,20 @@ func (c *metricClient) DescribeTaskQueue(
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *metricClient) DescribeWorker(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkerRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.DescribeWorkerResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientDescribeWorker")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeWorker(ctx, request, opts...)
+}
+
 func (c *metricClient) DescribeWorkerDeployment(
 	ctx context.Context,
 	request *workflowservice.DescribeWorkerDeploymentRequest,
@@ -273,6 +287,20 @@ func (c *metricClient) ExecuteMultiOperation(
 	}()
 
 	return c.client.ExecuteMultiOperation(ctx, request, opts...)
+}
+
+func (c *metricClient) FetchWorkerConfig(
+	ctx context.Context,
+	request *workflowservice.FetchWorkerConfigRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.FetchWorkerConfigResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientFetchWorkerConfig")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.FetchWorkerConfig(ctx, request, opts...)
 }
 
 func (c *metricClient) GetClusterInfo(
@@ -1185,6 +1213,20 @@ func (c *metricClient) UpdateSchedule(
 	return c.client.UpdateSchedule(ctx, request, opts...)
 }
 
+func (c *metricClient) UpdateTaskQueueConfig(
+	ctx context.Context,
+	request *workflowservice.UpdateTaskQueueConfigRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.UpdateTaskQueueConfigResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientUpdateTaskQueueConfig")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateTaskQueueConfig(ctx, request, opts...)
+}
+
 func (c *metricClient) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkerBuildIdCompatibilityRequest,
@@ -1197,6 +1239,20 @@ func (c *metricClient) UpdateWorkerBuildIdCompatibility(
 	}()
 
 	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+}
+
+func (c *metricClient) UpdateWorkerConfig(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerConfigRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.UpdateWorkerConfigResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientUpdateWorkerConfig")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateWorkerConfig(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateWorkerDeploymentVersionMetadata(

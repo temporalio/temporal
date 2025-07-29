@@ -71,6 +71,7 @@ type (
 		Factory                   client.Factory
 		ExecutionManager          persistence.ExecutionManager
 		TaskMgr                   persistence.TaskManager
+		FairTaskMgr               persistence.FairTaskManager
 		ClusterMetadataManager    persistence.ClusterMetadataManager
 		MetadataManager           persistence.MetadataManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
@@ -215,6 +216,11 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
+
+	s.FairTaskMgr, err = factory.NewFairTaskManager()
+	// TODO: re-enable error check after FairTaskManager is implemented for sql
+	// s.fatalOnError("NewFairTaskManager", err)
+	_ = err
 
 	s.ClusterMetadataManager, err = factory.NewClusterMetadataManager()
 	s.fatalOnError("NewClusterMetadataManager", err)

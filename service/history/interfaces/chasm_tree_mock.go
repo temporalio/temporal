@@ -72,10 +72,10 @@ func (mr *MockChasmTreeMockRecorder) ApplySnapshot(arg0 any) *gomock.Call {
 }
 
 // Archetype mocks base method.
-func (m *MockChasmTree) Archetype() string {
+func (m *MockChasmTree) Archetype() chasm.Archetype {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Archetype")
-	ret0, _ := ret[0].(string)
+	ret0, _ := ret[0].(chasm.Archetype)
 	return ret0
 }
 

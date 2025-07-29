@@ -60,6 +60,7 @@ func TestDLQWriter_ErrGetNamespaceName(t *testing.T) {
 		"target-cluster",
 		tasks.GetShardIDForTask(task, 100),
 		task,
+		true,
 	)
 	require.NoError(t, err)
 	require.Len(t, queueWriter.EnqueueTaskRequests, 1)
@@ -76,8 +77,10 @@ func TestDLQWriter_ErrGetNamespaceName(t *testing.T) {
 	counter, ok := recordings[0].Value.(int64)
 	assert.True(t, ok)
 	assert.Equal(t, int64(1), counter)
-	assert.Len(t, recordings[0].Tags, 1)
+	assert.Len(t, recordings[0].Tags, 2)
 	assert.Equal(t, "transfer", recordings[0].Tags[metrics.TaskCategoryTagName])
+	namespaceStateTag := metrics.NamespaceStateTag(metrics.ActiveNamespaceStateTagValue)
+	assert.Equal(t, metrics.ActiveNamespaceStateTagValue, recordings[0].Tags[namespaceStateTag.Key()])
 }
 
 func TestDLQWriter_Ok(t *testing.T) {
@@ -104,6 +107,7 @@ func TestDLQWriter_Ok(t *testing.T) {
 		"target-cluster",
 		tasks.GetShardIDForTask(task, 100),
 		task,
+		true,
 	)
 	require.NoError(t, err)
 	require.Len(t, queueWriter.EnqueueTaskRequests, 1)
@@ -119,6 +123,8 @@ func TestDLQWriter_Ok(t *testing.T) {
 	counter, ok := recordings[0].Value.(int64)
 	assert.True(t, ok)
 	assert.Equal(t, int64(1), counter)
-	assert.Len(t, recordings[0].Tags, 1)
+	assert.Len(t, recordings[0].Tags, 2)
 	assert.Equal(t, "transfer", recordings[0].Tags[metrics.TaskCategoryTagName])
+	namespaceStateTag := metrics.NamespaceStateTag("active")
+	assert.Equal(t, "active", recordings[0].Tags[namespaceStateTag.Key()])
 }

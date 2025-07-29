@@ -149,6 +149,16 @@ func (c *clientImpl) DescribeTaskQueue(
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeWorker(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkerRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeWorkerResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeWorker(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeWorkerDeployment(
 	ctx context.Context,
 	request *workflowservice.DescribeWorkerDeploymentRequest,
@@ -197,6 +207,16 @@ func (c *clientImpl) ExecuteMultiOperation(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.ExecuteMultiOperation(ctx, request, opts...)
+}
+
+func (c *clientImpl) FetchWorkerConfig(
+	ctx context.Context,
+	request *workflowservice.FetchWorkerConfigRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.FetchWorkerConfigResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.FetchWorkerConfig(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetClusterInfo(
@@ -849,6 +869,16 @@ func (c *clientImpl) UpdateSchedule(
 	return c.client.UpdateSchedule(ctx, request, opts...)
 }
 
+func (c *clientImpl) UpdateTaskQueueConfig(
+	ctx context.Context,
+	request *workflowservice.UpdateTaskQueueConfigRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateTaskQueueConfigResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateTaskQueueConfig(ctx, request, opts...)
+}
+
 func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkerBuildIdCompatibilityRequest,
@@ -857,6 +887,16 @@ func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateWorkerConfig(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerConfigRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerConfigResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateWorkerConfig(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateWorkerDeploymentVersionMetadata(

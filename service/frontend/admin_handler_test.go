@@ -153,6 +153,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockVisibilityMgr,
 		s.mockResource.GetLogger(),
 		s.mockResource.GetTaskManager(),
+		s.mockResource.GetTaskManager(),
 		s.mockResource.GetExecutionManager(),
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetMetadataManager(),

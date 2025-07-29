@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	persistencesql "go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/primitives"
@@ -106,7 +107,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		},
 		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(primitives.DefaultTransactionSizeLimit),
 	}
-	s.NoError(persistencesql.VerifyCompatibleVersion(cfg, resolver.NewNoopResolver()))
+	s.NoError(persistencesql.VerifyCompatibleVersion(cfg, resolver.NewNoopResolver(), log.NewNoopLogger()))
 }
 
 func (s *VersionTestSuite) createDatabase(database string) func() {

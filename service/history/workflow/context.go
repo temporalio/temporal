@@ -31,6 +31,7 @@ import (
 type (
 	ContextImpl struct {
 		workflowKey     definition.WorkflowKey
+		archetype       chasm.Archetype
 		logger          log.Logger
 		throttledLogger log.ThrottledLogger
 		metricsHandler  metrics.Handler
@@ -60,6 +61,7 @@ func NewContext(
 	}
 	return &ContextImpl{
 		workflowKey:     workflowKey,
+		archetype:       chasm.ArchetypeAny,
 		logger:          log.NewLazyLogger(logger, tags),
 		throttledLogger: log.NewLazyLogger(throttledLogger, tags),
 		metricsHandler:  metricsHandler.WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
@@ -113,6 +115,10 @@ func (c *ContextImpl) GetNamespace(shardContext historyi.ShardContext) namespace
 	return namespaceEntry.Name()
 }
 
+func (c *ContextImpl) SetArchetype(archetype chasm.Archetype) {
+	c.archetype = archetype
+}
+
 func (c *ContextImpl) LoadExecutionStats(ctx context.Context, shardContext historyi.ShardContext) (*persistencespb.ExecutionStats, error) {
 	_, err := c.LoadMutableState(ctx, shardContext)
 	if err != nil {
@@ -158,6 +164,19 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 		// returned by NewMutableStateFromDB().
 		// Thus causing NPE (e.g. when calling c.Clear()) or other unexpected behavior.
 		c.MutableState = mutableState
+	}
+
+	if actualArchetype := c.MutableState.ChasmTree().Archetype(); c.archetype != chasm.ArchetypeAny && c.archetype != actualArchetype {
+		c.logger.Warn("Potential ID conflict across different archetypes",
+			tag.Archetype(c.archetype.String()),
+			tag.NewStringTag("actual-archetype", actualArchetype.String()),
+		)
+		return nil, serviceerror.NewNotFoundf(
+			"CHASM Archetype missmatch for %v, expected: %s, actual: %s",
+			c.workflowKey,
+			c.archetype,
+			actualArchetype,
+		)
 	}
 
 	flushBeforeReady, err := c.MutableState.StartTransaction(namespaceEntry)
@@ -1132,33 +1151,27 @@ func emitStateTransitionCount(
 	)
 }
 
-const (
-	namespaceStateActive  = "active"
-	namespaceStatePassive = "passive"
-	namespaceStateUnknown = "_unknown_"
-)
-
 func namespaceState(
 	clusterMetadata cluster.Metadata,
 	mutableStateCurrentVersion *int64,
 ) string {
 
 	if mutableStateCurrentVersion == nil {
-		return namespaceStateUnknown
+		return metrics.UnknownNamespaceStateTagValue
 	}
 
 	// default value, need to special handle
 	if *mutableStateCurrentVersion == 0 {
-		return namespaceStateActive
+		return metrics.ActiveNamespaceStateTagValue
 	}
 
 	if clusterMetadata.IsVersionFromSameCluster(
 		clusterMetadata.GetClusterID(),
 		*mutableStateCurrentVersion,
 	) {
-		return namespaceStateActive
+		return metrics.ActiveNamespaceStateTagValue
 	}
-	return namespaceStatePassive
+	return metrics.PassiveNamespaceStateTagValue
 }
 
 func MutableStateFailoverVersion(

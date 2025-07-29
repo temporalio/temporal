@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 )
 
 // A Cache is a generalized interface to a cache.  See cache.LRU for a specific
@@ -34,6 +35,13 @@ type Cache interface {
 	Size() int
 }
 
+type StoppableCache interface {
+	Cache
+
+	// Stop halts any background processing, and should be called when the cache will no longer be used.
+	Stop()
+}
+
 // Options control the behavior of the cache.
 type Options struct {
 	// TTL controls the time-to-live for a given cache entry.  Cache entries that
@@ -49,6 +57,9 @@ type Options struct {
 	OnPut func(val any)
 
 	OnEvict func(val any)
+
+	// BackgroundEvict configures background scanning for expired entries.
+	BackgroundEvict func() dynamicconfig.CacheBackgroundEvictSettings
 }
 
 // SimpleOptions provides options that can be used to configure SimpleCache.

@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -41,6 +42,8 @@ type (
 	// internalTask represents an activity, workflow, query or started (received from another host).
 	// this struct is more like a union and only one of [ query, event, forwarded ] is
 	// non-nil for any given task
+	// TODO(pri): after deprecating classic matcher, we can consolidate backlogCountHint, recycleToken,
+	// and removeFromMatcher into a single *physicalTaskQueueManager field.
 	internalTask struct {
 		event            *genericTaskInfo // non-nil for activity or workflow task that's locally generated
 		query            *queryTaskInfo   // non-nil for a query task that's locally sync matched
@@ -61,6 +64,7 @@ type (
 		// it should adjust its poller count
 		pollerScalingDecision *taskqueuepb.PollerScalingDecision
 		recycleToken          func(*internalTask)
+		removeFromMatcher     atomic.Pointer[func()]
 
 		// These fields are for use by matcherData:
 		waitableMatchResult
@@ -78,6 +82,12 @@ type (
 		forwardErr error
 		startErr   error
 	}
+)
+
+var (
+	// sentinel values for task.removeFromMatcher
+	removeFuncNotAddedYet = func() {}
+	removeFuncEvicted     = func() {}
 )
 
 func (res taskResponse) err() error {
@@ -162,6 +172,10 @@ func newInternalNexusTask(
 
 func newInternalStartedTask(info *startedTaskInfo) *internalTask {
 	return &internalTask{started: info}
+}
+
+func newPollForwarderTask() *internalTask {
+	return &internalTask{isPollForwarder: true}
 }
 
 // hasEmptyResponse is true if a task contains an empty response for the appropriate TaskInfo
@@ -263,7 +277,29 @@ func (task *internalTask) getPriority() *commonpb.Priority {
 	return nil
 }
 
-// finish marks a task as finished. Should be called after a poller picks up a task
+func (task *internalTask) fairLevel() fairLevel {
+	return fairLevelFromAllocatedTask(task.event.AllocatedTaskInfo)
+}
+
+// resetMatcherState must be called before adding or re-adding a backlog task to priMatcher.
+func (task *internalTask) resetMatcherState() {
+	task.removeFromMatcher.Store(&removeFuncNotAddedYet)
+}
+
+// setRemoveFunc sets the function to remove the task from the matcher.
+// It returns true if the task is still valid and the function was set,
+// false if the task was evicted already and should not be added.
+func (task *internalTask) setRemoveFunc(remove func()) bool {
+	return task.removeFromMatcher.CompareAndSwap(&removeFuncNotAddedYet, &remove)
+}
+
+// setEvicted marks the task as evicted. If it was added to a matcher it will be removed.
+func (task *internalTask) setEvicted() {
+	remove := task.removeFromMatcher.Swap(&removeFuncEvicted)
+	(*remove)()
+}
+
+// finish marks a task as finished. Must be called after a poller picks up a task
 // and marks it as started. If the task is unable to marked as started, then this
 // method should be called with a non-nil error argument.
 //
@@ -276,7 +312,7 @@ func (task *internalTask) finish(err error, wasValid bool) {
 	task.finishInternal(res, wasValid)
 }
 
-// finishForward should be called after forwarding a task.
+// finishForward must be called after forwarding a task.
 func (task *internalTask) finishForward(forwardRes any, forwardErr error, wasValid bool) {
 	res := taskResponse{forwarded: true, forwardRes: forwardRes, forwardErr: forwardErr}
 	task.finishInternal(res, wasValid)
