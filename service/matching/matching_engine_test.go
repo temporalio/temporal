@@ -1014,6 +1014,10 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	dbq := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
 
+	// Set the admin namespace and task queue dispatch rates to 25000.0 to enforce the override of the dynamic config.
+	mgr.GetRateLimitManager().adminNsRate = 25000.0
+	mgr.GetRateLimitManager().adminTqRate = 25000.0
+
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()
 
