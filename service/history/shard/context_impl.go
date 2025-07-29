@@ -1019,7 +1019,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							WorkflowKey:                    key,
 							VisibilityTimestamp:            s.timeSource.Now(),
 							CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
-							CloseTime:                      workflowCloseTime,
 						},
 					},
 				}
