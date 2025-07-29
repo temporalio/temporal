@@ -20,6 +20,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -226,6 +227,11 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	if !ok {
 		release(nil) // release(nil) so that the mutable state is not unloaded from cache
 		return consts.ErrActivityTaskNotFound
+	}
+
+	if ai.Stamp != task.Stamp || ai.Paused {
+		release(nil)                    // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrStaleReference // drop the task
 	}
 
 	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), ai.Version, task.Version, task)
@@ -505,37 +511,42 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	}
 	attributes := initiatedEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
 
-	targetNamespaceEntry, err := t.registry.GetNamespaceByID(namespace.ID(task.TargetNamespaceID))
+	var targetNamespaceName namespace.Name
+	var targetNamespaceID namespace.ID
+	targetNamespaceEntry, err := t.targetNamespaceEntryHelper(
+		namespace.ID(attributes.NamespaceId),
+		namespace.Name(attributes.Namespace),
+	)
 	if err != nil {
-		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
-			return err
-		}
-		// It is possible that target namespace got deleted. Record failure.
-		t.logger.Debug("Target namespace is not found.", tag.WorkflowNamespaceID(task.TargetNamespaceID))
-		err = t.requestCancelExternalExecutionFailed(
+		return err
+	}
+
+	if targetNamespaceEntry == nil {
+		return t.requestCancelExternalExecutionFailed(
 			ctx,
 			task,
 			weContext,
-			namespace.Name(task.TargetNamespaceID), // Use ID as namespace name because namespace is already deleted and name is used only for history.
-			namespace.ID(task.TargetNamespaceID),
-			task.TargetWorkflowID,
-			task.TargetRunID,
+			namespace.Name(attributes.Namespace),
+			namespace.ID(attributes.NamespaceId),
+			attributes.GetWorkflowExecution().GetWorkflowId(),
+			attributes.GetWorkflowExecution().GetRunId(),
 			enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND)
-		return err
 	}
-	targetNamespaceName := targetNamespaceEntry.Name()
+
+	targetNamespaceID = targetNamespaceEntry.ID()
+	targetNamespaceName = targetNamespaceEntry.Name()
 
 	// handle workflow cancel itself
-	if task.NamespaceID == task.TargetNamespaceID && task.WorkflowID == task.TargetWorkflowID {
+	if task.NamespaceID == targetNamespaceID.String() && task.WorkflowID == attributes.GetWorkflowExecution().GetWorkflowId() {
 		// it does not matter if the run ID is a mismatch
 		err = t.requestCancelExternalExecutionFailed(
 			ctx,
 			task,
 			weContext,
 			targetNamespaceName,
-			namespace.ID(task.TargetNamespaceID),
-			task.TargetWorkflowID,
-			task.TargetRunID,
+			targetNamespaceID,
+			attributes.GetWorkflowExecution().GetWorkflowId(),
+			attributes.GetWorkflowExecution().GetRunId(),
 			enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND)
 		return err
 	}
@@ -544,6 +555,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		ctx,
 		task,
 		targetNamespaceName,
+		targetNamespaceID,
 		requestCancelInfo,
 		attributes,
 	); err != nil {
@@ -570,9 +582,9 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 			task,
 			weContext,
 			targetNamespaceName,
-			namespace.ID(task.TargetNamespaceID),
-			task.TargetWorkflowID,
-			task.TargetRunID,
+			targetNamespaceID,
+			attributes.GetWorkflowExecution().GetWorkflowId(),
+			attributes.GetWorkflowExecution().GetRunId(),
 			failedCause,
 		)
 	}
@@ -583,9 +595,9 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		task,
 		weContext,
 		targetNamespaceName,
-		namespace.ID(task.TargetNamespaceID),
-		task.TargetWorkflowID,
-		task.TargetRunID,
+		targetNamespaceID,
+		attributes.GetWorkflowExecution().GetWorkflowId(),
+		attributes.GetWorkflowExecution().GetRunId(),
 	)
 }
 
@@ -634,38 +646,44 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	}
 	attributes := initiatedEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 
-	targetNamespaceEntry, err := t.registry.GetNamespaceByID(namespace.ID(task.TargetNamespaceID))
+	var targetNamespaceName namespace.Name
+	var targetNamespaceID namespace.ID
+	targetNamespaceEntry, err := t.targetNamespaceEntryHelper(
+		namespace.ID(attributes.NamespaceId),
+		namespace.Name(attributes.Namespace),
+	)
 	if err != nil {
-		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
-			return err
-		}
-		// It is possible that target namespace got deleted. Record failure.
-		t.logger.Debug("Target namespace is not found.", tag.WorkflowNamespaceID(task.TargetNamespaceID))
+		return err
+	}
+
+	if targetNamespaceEntry == nil {
 		return t.signalExternalExecutionFailed(
 			ctx,
 			task,
 			weContext,
-			namespace.Name(task.TargetNamespaceID), // Use ID as namespace name because namespace is already deleted and name is used only for history.
-			namespace.ID(task.TargetNamespaceID),
-			task.TargetWorkflowID,
-			task.TargetRunID,
+			namespace.Name(attributes.Namespace),
+			namespace.ID(attributes.NamespaceId),
+			attributes.GetWorkflowExecution().GetWorkflowId(),
+			attributes.GetWorkflowExecution().GetRunId(),
 			attributes.Control,
 			enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND,
 		)
 	}
-	targetNamespaceName := targetNamespaceEntry.Name()
+
+	targetNamespaceID = targetNamespaceEntry.ID()
+	targetNamespaceName = targetNamespaceEntry.Name()
 
 	// handle workflow signal itself
-	if task.NamespaceID == task.TargetNamespaceID && task.WorkflowID == task.TargetWorkflowID {
+	if task.NamespaceID == targetNamespaceID.String() && task.WorkflowID == attributes.GetWorkflowExecution().GetWorkflowId() {
 		// it does not matter if the run ID is a mismatch
 		return t.signalExternalExecutionFailed(
 			ctx,
 			task,
 			weContext,
 			targetNamespaceName,
-			namespace.ID(task.TargetNamespaceID),
-			task.TargetWorkflowID,
-			task.TargetRunID,
+			targetNamespaceID,
+			attributes.GetWorkflowExecution().GetWorkflowId(),
+			attributes.GetWorkflowExecution().GetRunId(),
 			attributes.Control,
 			enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND,
 		)
@@ -675,6 +693,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		ctx,
 		task,
 		targetNamespaceName,
+		targetNamespaceID,
 		signalInfo,
 		attributes,
 	); err != nil {
@@ -703,9 +722,9 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			task,
 			weContext,
 			targetNamespaceName,
-			namespace.ID(task.TargetNamespaceID),
-			task.TargetWorkflowID,
-			task.TargetRunID,
+			targetNamespaceID,
+			attributes.GetWorkflowExecution().GetWorkflowId(),
+			attributes.GetWorkflowExecution().GetRunId(),
 			attributes.Control,
 			failedCause,
 		)
@@ -716,9 +735,9 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		task,
 		weContext,
 		targetNamespaceName,
-		namespace.ID(task.TargetNamespaceID),
-		task.TargetWorkflowID,
-		task.TargetRunID,
+		targetNamespaceID,
+		attributes.GetWorkflowExecution().GetWorkflowId(),
+		attributes.GetWorkflowExecution().GetRunId(),
 		attributes.Control,
 	)
 	if err != nil {
@@ -732,12 +751,9 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	release(retError)
 	// remove signalRequestedID from target workflow, after Signal detail is removed from source workflow
 	_, err = t.historyRawClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
-		NamespaceId: task.TargetNamespaceID,
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: task.TargetWorkflowID,
-			RunId:      task.TargetRunID,
-		},
-		RequestId: signalRequestID,
+		NamespaceId:       targetNamespaceID.String(),
+		WorkflowExecution: attributes.GetWorkflowExecution(),
+		RequestId:         signalRequestID,
 	})
 	return err
 }
@@ -773,6 +789,21 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	if err != nil {
 		return err
 	}
+
+	var targetNamespaceName namespace.Name
+	var targetNamespaceID namespace.ID
+	targetNamespaceEntry, err := t.targetNamespaceEntryHelper(
+		namespace.ID(childInfo.NamespaceId),
+		namespace.Name(childInfo.Namespace),
+	)
+	if err != nil {
+		return err
+	}
+	if targetNamespaceEntry != nil {
+		targetNamespaceID = targetNamespaceEntry.ID()
+		targetNamespaceName = targetNamespaceEntry.Name()
+	}
+	// Continue processing if targetNamespaceEntry is nil, we may need to record start failure below.
 
 	// workflow running or not, child started or not, parent close policy is abandon or not
 	// 8 cases in total
@@ -821,7 +852,12 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		if err != nil {
 			return err
 		}
-		return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, parentClock, childClock)
+
+		if targetNamespaceEntry == nil {
+			return serviceerror.NewNamespaceNotFound(childInfo.Namespace)
+		}
+
+		return t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), childExecution, parentClock, childClock)
 	}
 
 	// remaining 2 cases:
@@ -844,24 +880,14 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		parentNamespaceName = namespaceEntry.Name()
 	}
 
-	var targetNamespaceName namespace.Name
-	var targetNamespaceEntry *namespace.Namespace
-	if targetNamespaceEntry, err = t.registry.GetNamespaceByID(namespace.ID(task.TargetNamespaceID)); err != nil {
-		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
-			return err
-		}
-		// It is possible that target namespace got deleted. Record failure.
-		t.logger.Debug("Target namespace is not found.", tag.WorkflowNamespaceID(task.TargetNamespaceID))
-		err = t.recordStartChildExecutionFailed(
+	if targetNamespaceEntry == nil {
+		return t.recordStartChildExecutionFailed(
 			ctx,
 			task,
 			weContext,
 			attributes,
 			enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND,
 		)
-		return err
-	} else {
-		targetNamespaceName = targetNamespaceEntry.Name()
 	}
 
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
@@ -946,7 +972,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			if err != nil {
 				return err
 			}
-			return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, parentClock, childClock)
+			return t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), childExecution, parentClock, childClock)
 		}
 		// now if there was no child found after reset then it could mean one of the following.
 		// 1. The parent never got a chance to start the child. So we should go ahead and start one (below)
@@ -973,6 +999,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		task,
 		parentNamespaceName,
 		targetNamespaceName,
+		namespace.ID(targetNamespaceID),
 		childInfo.CreateRequestId,
 		attributes,
 		sourceVersionStamp,
@@ -1037,8 +1064,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	if err != nil {
 		return err
 	}
-	return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, &commonpb.WorkflowExecution{
-		WorkflowId: task.TargetWorkflowID,
+	return t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), &commonpb.WorkflowExecution{
+		WorkflowId: childInfo.StartedWorkflowId,
 		RunId:      childRunID,
 	}, parentClock, childClock)
 }
@@ -1092,6 +1119,7 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 		t.shardContext,
 		t.cache,
 		wfKey,
+		chasmworkflow.Archetype,
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -1207,6 +1235,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			t.shardContext,
 			t.cache,
 			definition.NewWorkflowKey(task.NamespaceID, task.WorkflowID, resetPoint.GetRunId()),
+			chasmworkflow.Archetype,
 			locks.PriorityLow,
 		)
 		if err != nil {
@@ -1258,7 +1287,7 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 
 			_, err := mutableState.AddChildWorkflowExecutionStartedEvent(
 				&commonpb.WorkflowExecution{
-					WorkflowId: task.TargetWorkflowID,
+					WorkflowId: ci.StartedWorkflowId,
 					RunId:      runID,
 				},
 				initiatedAttributes.WorkflowType,
@@ -1479,18 +1508,16 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecution(
 	ctx context.Context,
 	task *tasks.CancelExecutionTask,
 	targetNamespace namespace.Name,
+	targetNamespaceID namespace.ID,
 	requestCancelInfo *persistencespb.RequestCancelInfo,
 	attributes *historypb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes,
 ) error {
 	request := &historyservice.RequestCancelWorkflowExecutionRequest{
-		NamespaceId: task.TargetNamespaceID,
+		NamespaceId: targetNamespaceID.String(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
-			Namespace: targetNamespace.String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: task.TargetWorkflowID,
-				RunId:      task.TargetRunID,
-			},
-			Identity: consts.IdentityHistoryService,
+			Namespace:         targetNamespace.String(),
+			WorkflowExecution: attributes.GetWorkflowExecution(),
+			Identity:          consts.IdentityHistoryService,
 			// Use the same request ID to dedupe RequestCancelWorkflowExecution calls
 			RequestId: requestCancelInfo.GetCancelRequestId(),
 			Reason:    attributes.Reason,
@@ -1500,7 +1527,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecution(
 			WorkflowId: task.WorkflowID,
 			RunId:      task.RunID,
 		},
-		ChildWorkflowOnly: task.TargetChildWorkflowOnly,
+		ChildWorkflowOnly: attributes.GetChildWorkflowOnly(),
 	}
 
 	_, err := t.historyRawClient.RequestCancelWorkflowExecution(ctx, request)
@@ -1511,20 +1538,18 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecution(
 	ctx context.Context,
 	task *tasks.SignalExecutionTask,
 	targetNamespace namespace.Name,
+	targetNamespaceID namespace.ID,
 	signalInfo *persistencespb.SignalInfo,
 	attributes *historypb.SignalExternalWorkflowExecutionInitiatedEventAttributes,
 ) error {
 	request := &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceId: task.TargetNamespaceID,
+		NamespaceId: targetNamespaceID.String(),
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace: targetNamespace.String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: task.TargetWorkflowID,
-				RunId:      task.TargetRunID,
-			},
-			Identity:   consts.IdentityHistoryService,
-			SignalName: attributes.SignalName,
-			Input:      attributes.Input,
+			Namespace:         targetNamespace.String(),
+			WorkflowExecution: attributes.GetWorkflowExecution(),
+			Identity:          consts.IdentityHistoryService,
+			SignalName:        attributes.SignalName,
+			Input:             attributes.Input,
 			// Use same request ID to deduplicate SignalWorkflowExecution calls
 			RequestId: signalInfo.GetRequestId(),
 			Control:   attributes.Control,
@@ -1534,7 +1559,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecution(
 			WorkflowId: task.WorkflowID,
 			RunId:      task.RunID,
 		},
-		ChildWorkflowOnly: task.TargetChildWorkflowOnly,
+		ChildWorkflowOnly: attributes.GetChildWorkflowOnly(),
 	}
 
 	_, err := t.historyRawClient.SignalWorkflowExecution(ctx, request)
@@ -1546,6 +1571,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	task *tasks.StartChildExecutionTask,
 	namespace namespace.Name,
 	targetNamespace namespace.Name,
+	targetNamespaceID namespace.ID,
 	childRequestID string,
 	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 	sourceVersionStamp *commonpb.WorkerVersionStamp,
@@ -1581,7 +1607,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	}
 
 	request := common.CreateHistoryStartWorkflowRequest(
-		task.TargetNamespaceID,
+		targetNamespaceID.String(),
 		startRequest,
 		&workflowspb.ParentExecutionInfo{
 			NamespaceId: task.NamespaceID,
@@ -1852,6 +1878,39 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy))
 	}
+}
+
+func (t *transferQueueActiveTaskExecutor) targetNamespaceEntryHelper(
+	targetNamespaceID namespace.ID,
+	targetNamespaceName namespace.Name, // fallback if targetNamespaceID is not available.
+) (*namespace.Namespace, error) {
+	if targetNamespaceID == "" {
+		// This is for backward compatibility.
+		// Old mutable state / event may not have the target namespace ID set.
+
+		targetNamespaceEntry, err := t.registry.GetNamespace(targetNamespaceName)
+		if err != nil {
+			if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
+				return nil, err
+			}
+
+			t.logger.Debug("Target namespace is not found.", tag.WorkflowNamespace(targetNamespaceName.String()))
+			return nil, nil
+		}
+
+		return targetNamespaceEntry, nil
+	}
+
+	targetNamespaceEntry, err := t.registry.GetNamespaceByID(targetNamespaceID)
+	if err != nil {
+		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
+			return nil, err
+		}
+
+		t.logger.Debug("Target namespace is not found.", tag.WorkflowNamespaceID(targetNamespaceID.String()))
+		return nil, nil
+	}
+	return targetNamespaceEntry, nil
 }
 
 func copyChildWorkflowInfos(

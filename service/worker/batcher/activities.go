@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -25,6 +26,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 const (
@@ -339,7 +341,7 @@ func startTaskProcessor(
 								WorkflowId: workflowID,
 								RunId:      runID,
 							},
-							Identity:       "batch unpause",
+							Identity:       batchParams.UnpauseActivitiesParams.Identity,
 							Activity:       &workflowservice.UnpauseActivityRequest_Type{Type: batchParams.UnpauseActivitiesParams.ActivityType},
 							ResetAttempts:  !batchParams.UnpauseActivitiesParams.ResetAttempts,
 							ResetHeartbeat: batchParams.UnpauseActivitiesParams.ResetHeartbeat,
@@ -366,10 +368,81 @@ func startTaskProcessor(
 								RunId:      runID,
 							},
 							WorkflowExecutionOptions: batchParams.UpdateOptionsParams.WorkflowExecutionOptions,
-							UpdateMask:               batchParams.UpdateOptionsParams.UpdateMask,
+							UpdateMask:               &fieldmaskpb.FieldMask{Paths: batchParams.UpdateOptionsParams.UpdateMask.Paths},
 						})
 						return err
 					})
+
+			case BatchTypeResetActivities:
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						resetRequest := &workflowservice.ResetActivityRequest{
+							Namespace: batchParams.Namespace,
+							Execution: &commonpb.WorkflowExecution{
+								WorkflowId: workflowID,
+								RunId:      runID,
+							},
+							Identity:               batchParams.ResetActivitiesParams.Identity,
+							Activity:               &workflowservice.ResetActivityRequest_Type{Type: batchParams.ResetActivitiesParams.ActivityType},
+							ResetHeartbeat:         batchParams.ResetActivitiesParams.ResetHeartbeat,
+							Jitter:                 durationpb.New(batchParams.ResetActivitiesParams.Jitter),
+							KeepPaused:             batchParams.ResetActivitiesParams.KeepPaused,
+							RestoreOriginalOptions: batchParams.ResetActivitiesParams.RestoreOriginalOptions,
+						}
+
+						if batchParams.ResetActivitiesParams.MatchAll {
+							resetRequest.Activity = &workflowservice.ResetActivityRequest_MatchAll{MatchAll: true}
+						} else {
+							resetRequest.Activity = &workflowservice.ResetActivityRequest_Type{Type: batchParams.ResetActivitiesParams.ActivityType}
+						}
+
+						_, err = frontendClient.ResetActivity(ctx, resetRequest)
+						return err
+					})
+			case BatchTypeUpdateActivitiesOptions:
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						updateRequest := &workflowservice.UpdateActivityOptionsRequest{
+							Namespace: batchParams.Namespace,
+							Execution: &commonpb.WorkflowExecution{
+								WorkflowId: workflowID,
+								RunId:      runID,
+							},
+							Activity:        &workflowservice.UpdateActivityOptionsRequest_Type{Type: batchParams.UpdateActivitiesOptionsParams.ActivityType},
+							UpdateMask:      &fieldmaskpb.FieldMask{Paths: batchParams.UpdateActivitiesOptionsParams.UpdateMask.Paths},
+							RestoreOriginal: batchParams.UpdateActivitiesOptionsParams.RestoreOriginal,
+							Identity:        batchParams.UpdateActivitiesOptionsParams.Identity,
+						}
+
+						if ao := batchParams.UpdateActivitiesOptionsParams.ActivityOptions; ao != nil {
+							updateRequest.ActivityOptions = &activitypb.ActivityOptions{
+								ScheduleToStartTimeout: durationpb.New(ao.ScheduleToStartTimeout),
+								ScheduleToCloseTimeout: durationpb.New(ao.ScheduleToCloseTime),
+								StartToCloseTimeout:    durationpb.New(ao.StartToCloseTimeout),
+								HeartbeatTimeout:       durationpb.New(ao.HeartbeatTimeout),
+							}
+
+							if rp := ao.RetryPolicy; rp != nil {
+								updateRequest.ActivityOptions.RetryPolicy = &commonpb.RetryPolicy{
+									InitialInterval:        durationpb.New(rp.InitialInterval),
+									BackoffCoefficient:     rp.BackoffCoefficient,
+									MaximumInterval:        durationpb.New(rp.MaximumInterval),
+									MaximumAttempts:        rp.MaximumAttempts,
+									NonRetryableErrorTypes: rp.NonRetryableErrorTypes,
+								}
+							}
+						}
+
+						if batchParams.UpdateActivitiesOptionsParams.MatchAll {
+							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_MatchAll{MatchAll: true}
+						} else {
+							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Type{Type: batchParams.UpdateActivitiesOptionsParams.ActivityType}
+						}
+
+						_, err = frontendClient.UpdateActivityOptions(ctx, updateRequest)
+						return err
+					})
+				// QUESTION seankane (2025-07-18): why do we not have a default case and return an error? @yuri/@chetan
 			}
 			if err != nil {
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)

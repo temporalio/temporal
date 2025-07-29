@@ -53,7 +53,6 @@ var (
 		dynamicconfig.SendRawHistoryBetweenInternalServices.Key(): true,
 
 		dynamicconfig.RetentionTimerJitterDuration.Key():        time.Second,
-		dynamicconfig.EnableEagerWorkflowStart.Key():            true,
 		dynamicconfig.FrontendEnableExecuteMultiOperation.Key(): true,
 		dynamicconfig.EnableTransitionHistory.Key():             true,
 

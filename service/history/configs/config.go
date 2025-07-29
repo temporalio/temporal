@@ -54,6 +54,7 @@ type Config struct {
 	HistoryHostLevelCacheMaxSizeBytes     dynamicconfig.IntPropertyFn
 	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
 	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
+	HistoryCacheBackgroundEvict           dynamicconfig.TypedPropertyFn[dynamicconfig.CacheBackgroundEvictSettings]
 	EnableNexus                           dynamicconfig.BoolPropertyFn
 	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
 	EnableUpdateWorkflowModeIgnoreCurrent dynamicconfig.BoolPropertyFn
@@ -414,6 +415,7 @@ func NewConfig(
 		HistoryHostLevelCacheMaxSizeBytes:     dynamicconfig.HistoryCacheHostLevelMaxSizeBytes.Get(dc),
 		HistoryCacheTTL:                       dynamicconfig.HistoryCacheTTL.Get(dc),
 		HistoryCacheNonUserContextLockTimeout: dynamicconfig.HistoryCacheNonUserContextLockTimeout.Get(dc),
+		HistoryCacheBackgroundEvict:           dynamicconfig.HistoryCacheBackgroundEvict.Get(dc),
 		EnableNexus:                           dynamicconfig.EnableNexus.Get(dc),
 		EnableWorkflowExecutionTimeoutTimer:   dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
 		EnableUpdateWorkflowModeIgnoreCurrent: dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),

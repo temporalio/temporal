@@ -166,19 +166,19 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		return serverOptionsProvider{}, err
 	}
 
-	persistenceConfig := so.config.Persistence
-	err = verifyPersistenceCompatibleVersion(persistenceConfig, so.persistenceServiceResolver)
-	if err != nil {
-		return serverOptionsProvider{}, err
-	}
-
-	stopChan := make(chan interface{})
-
 	// Logger
 	logger := so.logger
 	if logger == nil {
 		logger = log.NewZapLogger(log.BuildZapLogger(so.config.Log))
 	}
+
+	persistenceConfig := so.config.Persistence
+	err = verifyPersistenceCompatibleVersion(persistenceConfig, so.persistenceServiceResolver, logger)
+	if err != nil {
+		return serverOptionsProvider{}, err
+	}
+
+	stopChan := make(chan interface{})
 
 	// ClientFactoryProvider
 	clientFactoryProvider := so.clientFactoryProvider
@@ -829,13 +829,17 @@ func ServerLifetimeHooks(
 	lc.Append(fx.StartStopHook(svr.Start, svr.Stop))
 }
 
-func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceServiceResolver resolver.ServiceResolver) error {
+func verifyPersistenceCompatibleVersion(
+	cfg config.Persistence,
+	persistenceServiceResolver resolver.ServiceResolver,
+	logger log.Logger,
+) error {
 	// cassandra schema version validation
-	if err := cassandra.VerifyCompatibleVersion(config, persistenceServiceResolver); err != nil {
+	if err := cassandra.VerifyCompatibleVersion(cfg, persistenceServiceResolver, logger); err != nil {
 		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
 	}
 	// sql schema version validation
-	if err := sql.VerifyCompatibleVersion(config, persistenceServiceResolver); err != nil {
+	if err := sql.VerifyCompatibleVersion(cfg, persistenceServiceResolver, logger); err != nil {
 		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
 	}
 	return nil

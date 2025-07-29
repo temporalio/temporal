@@ -19,21 +19,19 @@ import (
 func VerifyCompatibleVersion(
 	cfg config.Persistence,
 	r resolver.ServiceResolver,
+	logger log.Logger,
 ) error {
-
-	if err := checkMainKeyspace(cfg, r); err != nil {
-		return err
-	}
-	return nil
+	return checkMainKeyspace(cfg, r, logger)
 }
 
 func checkMainKeyspace(
 	cfg config.Persistence,
 	r resolver.ServiceResolver,
+	logger log.Logger,
 ) error {
 	ds, ok := cfg.DataStores[cfg.DefaultStore]
 	if ok && ds.Cassandra != nil {
-		return CheckCompatibleVersion(*ds.Cassandra, r, cassandraschema.Version)
+		return CheckCompatibleVersion(*ds.Cassandra, r, cassandraschema.Version, logger)
 	}
 	return nil
 }
@@ -43,13 +41,14 @@ func CheckCompatibleVersion(
 	cfg config.Cassandra,
 	r resolver.ServiceResolver,
 	expectedVersion string,
+	logger log.Logger,
 ) error {
 
 	session, err := commongocql.NewSession(
 		func() (*gocql.ClusterConfig, error) {
 			return commongocql.NewCassandraCluster(cfg, r)
 		},
-		log.NewNoopLogger(),
+		logger,
 		metrics.NoopMetricsHandler,
 	)
 	if err != nil {

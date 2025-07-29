@@ -410,7 +410,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		memo,
 		searchattributes,
 	)
-	requestBase.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision] = payload.EncodeString(tree.Archetype())
+	requestBase.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision] = payload.EncodeString(tree.Archetype().String())
 
 	if mutableState.IsWorkflowExecutionRunning() {
 		release(nil)

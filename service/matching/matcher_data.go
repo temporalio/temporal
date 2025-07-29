@@ -8,6 +8,7 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/softassert"
@@ -15,6 +16,14 @@ import (
 )
 
 const invalidHeapIndex = -13 // use unusual value to stand out in panics
+
+// maxTokens is the maximum number of tokens we might consume at a time for simpleLimiter. This
+// is used to update ready times after a rate is changed from very low (or zero) to higher: we
+// may have set a ready time far in the future and need to clip it to something reasonable so
+// we can dispatch again.
+//
+// Currently we only use 1 token at a time.
+const maxTokens = 1
 
 type pollerPQ struct {
 	heap []*waitingPoller
@@ -75,8 +84,21 @@ type taskPQ struct {
 	// versioning redirection.
 	ages backlogAgeTracker
 
-	// rate limiter for overall queue
-	wholeQueueLimiter simpleLimiter
+	// Rate limiter for overall queue
+	wholeQueueLimit simpleLimiterParams
+	wholeQueueReady simpleLimiter
+
+	// Rate limiter for individual fairness keys.
+	//
+	// Note that we currently have only one limit for all keys, which is scaled by the key's
+	// weight. If we do this, we can assume that all keys are either at or below their rate
+	// limit at the same time, so that if the head of the queue is at its limit, then the rest
+	// must also be, and so we don't have to "skip over" the head of the queue due to rate
+	// limits. This isn't true in situations where weights have changed in between writing and
+	// reading. We'll handle that situation better in the future.
+	perKeyLimit     simpleLimiterParams
+	perKeyOverrides fairnessWeightOverrides // TODO(fairness): get this from config
+	perKeyReady     cache.Cache
 }
 
 func (t *taskPQ) Add(task *internalTask) {
@@ -87,16 +109,22 @@ func (t *taskPQ) Remove(task *internalTask) {
 	heap.Remove(t, task.matchHeapIndex)
 }
 
-func (t *taskPQ) readyTimeForTask(task *internalTask) int64 {
+func (t *taskPQ) readyTimeForTask(task *internalTask) simpleLimiter {
 	// TODO(pri): after we have task-specific ready time, we can re-enable this
 	// if task.isForwarded() {
 	// 	// don't count any rate limit for forwarded tasks, it was counted on the child
 	// 	return 0
 	// }
-	return max(
-		t.wholeQueueLimiter.ready,
-		// TODO(pri): add more times here, e.g. fairness key limit, per-task backoff
-	)
+	ready := t.wholeQueueReady
+
+	if t.perKeyLimit.limited() {
+		key := task.getPriority().GetFairnessKey()
+		if v := t.perKeyReady.Get(key); v != nil {
+			ready = max(ready, v.(simpleLimiter))
+		}
+	}
+
+	return ready
 }
 
 func (t *taskPQ) consumeTokens(now int64, task *internalTask, tokens int64) {
@@ -105,7 +133,20 @@ func (t *taskPQ) consumeTokens(now int64, task *internalTask, tokens int64) {
 		return
 	}
 
-	t.wholeQueueLimiter.consume(now, tokens)
+	t.wholeQueueReady = t.wholeQueueReady.consume(t.wholeQueueLimit, now, tokens)
+
+	if t.perKeyLimit.limited() {
+		pri := task.getPriority()
+		key := pri.GetFairnessKey()
+		weight := getEffectiveWeight(t.perKeyOverrides, pri)
+		p := t.perKeyLimit
+		p.interval = time.Duration(float32(p.interval) / weight) // scale by weight
+		var sl simpleLimiter
+		if v := t.perKeyReady.Get(key); v != nil {
+			sl = v.(simpleLimiter) // nolint:revive
+		}
+		t.perKeyReady.Put(key, sl.consume(p, now, tokens))
+	}
 }
 
 // implements heap.Interface
@@ -153,14 +194,14 @@ func (t *taskPQ) Less(i int, j int) bool {
 
 	// Note: sync match tasks have a fixed negative id.
 	// Query tasks will get 0 here.
-	var aid, bid int64
+	var alevel, blevel fairLevel
 	if a.event != nil && a.event.AllocatedTaskInfo != nil {
-		aid = a.event.AllocatedTaskInfo.TaskId
+		alevel = fairLevelFromAllocatedTask(a.event.AllocatedTaskInfo)
 	}
 	if b.event != nil && b.event.AllocatedTaskInfo != nil {
-		bid = b.event.AllocatedTaskInfo.TaskId
+		blevel = fairLevelFromAllocatedTask(b.event.AllocatedTaskInfo)
 	}
-	return aid < bid
+	return alevel.less(blevel)
 }
 
 // implements heap.Interface, do not call directly
@@ -243,7 +284,8 @@ func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock
 		timeSource: timeSource,
 		canForward: canForward,
 		tasks: taskPQ{
-			ages: newBacklogAgeTracker(),
+			ages:        newBacklogAgeTracker(),
+			perKeyReady: cache.New(config.FairnessKeyRateLimitCacheSize(), nil),
 		},
 	}
 }
@@ -252,7 +294,42 @@ func (d *matcherData) UpdateRateLimit(rate float64, burstDuration time.Duration)
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	d.tasks.wholeQueueLimiter.set(rate, burstDuration)
+	d.tasks.wholeQueueLimit = makeSimpleLimiterParams(rate, burstDuration)
+
+	// Clip to handle the case where we have increased from a zero or very low limit and had
+	// ready times in the far future.
+	now := d.timeSource.Now().UnixNano()
+	d.tasks.wholeQueueReady = d.tasks.wholeQueueReady.clip(d.tasks.wholeQueueLimit, now, maxTokens)
+}
+
+func (d *matcherData) UpdatePerKeyRateLimit(rate float64, burstDuration time.Duration) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	d.tasks.perKeyLimit = makeSimpleLimiterParams(rate, burstDuration)
+
+	// Clip to handle the case where we have increased from a zero or very low limit and had
+	// ready times in the far future.
+	var updates map[string]simpleLimiter
+	now := d.timeSource.Now().UnixNano()
+	it := d.tasks.perKeyReady.Iterator()
+	for it.HasNext() {
+		e := it.Next()
+		sl := e.Value().(simpleLimiter) //nolint:revive
+		if clipped := sl.clip(d.tasks.perKeyLimit, now, maxTokens); clipped != sl {
+			if updates == nil {
+				updates = make(map[string]simpleLimiter)
+			}
+			updates[e.Key().(string)] = clipped
+		}
+	}
+	it.Close()
+
+	// This messes up the LRU order, but we can't avoid that here without adding new
+	// functionality to Cache.
+	for key, clipped := range updates {
+		d.tasks.perKeyReady.Put(key, clipped)
+	}
 }
 
 func (d *matcherData) EnqueueTaskNoWait(task *internalTask) {
@@ -262,6 +339,15 @@ func (d *matcherData) EnqueueTaskNoWait(task *internalTask) {
 	task.initMatch(d)
 	d.tasks.Add(task)
 	d.findAndWakeMatches()
+}
+
+func (d *matcherData) RemoveTask(task *internalTask) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	if task.matchHeapIndex >= 0 {
+		d.tasks.Remove(task)
+	}
 }
 
 func (d *matcherData) EnqueueTaskAndWait(ctxs []context.Context, task *internalTask) *matchResult {
@@ -464,8 +550,8 @@ func (d *matcherData) findAndWakeMatches() {
 		}
 
 		// check ready time
-		delay := d.tasks.readyTimeForTask(task) - now
-		d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, time.Duration(delay))
+		delay := d.tasks.readyTimeForTask(task).delay(now)
+		d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, delay)
 		if delay > 0 {
 			return // not ready yet, timer will call match later
 		}
@@ -588,23 +674,42 @@ func (rt *resettableTimer) unset() {
 
 // simple limiter
 
-// simpleLimiter implements a "GCRA" limiter. The owner should read the `ready` field directly
-// and compare to the current time to decide if a task is allowed.
-type simpleLimiter struct {
-	// parameters:
-	interval time.Duration // ideal task spacing interval
+// simpleLimiter and simpleLimiterParams implement a "GCRA" limiter.
+// A simpleLimiter is "ready" if its value is <= now (as unix nanos).
+type simpleLimiter int64 // ready time as unix nanos
+
+type simpleLimiterParams struct {
+	interval time.Duration // ideal task spacing interval, or 0 for no limit (infinite), or -1 for zero limit
 	burst    time.Duration // burst duration
-
-	// state:
-	ready int64 // unix nanos
 }
 
-func (s *simpleLimiter) set(rate float64, burstDuration time.Duration) {
-	s.interval = time.Duration(float64(time.Second) / rate)
-	s.burst = burstDuration
+const maxBurst = time.Minute
+const simpleLimiterNever = simpleLimiter(7 << 60) // this is in the year 2225
+
+func makeSimpleLimiterParams(rate float64, burstDuration time.Duration) simpleLimiterParams {
+	// 1e-9 would make interval overflow int64
+	if rate <= 1e-9 {
+		return simpleLimiterParams{
+			interval: time.Duration(-1),
+		}
+	}
+	return simpleLimiterParams{
+		interval: time.Duration(float64(time.Second) / rate),
+		burst:    min(burstDuration, maxBurst),
+	}
 }
 
-func (s *simpleLimiter) consume(now int64, tokens int64) {
+func (p simpleLimiterParams) never() bool   { return p.interval < 0 }
+func (p simpleLimiterParams) limited() bool { return p.interval > 0 }
+
+// delay returns the time until the limiter is ready.
+// If the return value is <= 0 then the limiter can go now.
+func (ready simpleLimiter) delay(now int64) time.Duration {
+	return time.Duration(int64(ready) - now)
+}
+
+// consume updates ready based on the current time and number of new tokens consumed.
+func (ready simpleLimiter) consume(p simpleLimiterParams, now int64, tokens int64) simpleLimiter {
 	// This is a slight variation of the normal GCRA: instead of tracking the end of the
 	// allowed interval (the theoretical arrival time), ready tracks the beginning of it, and
 	// the end is ready + burst. To find the next ready time:
@@ -620,5 +725,20 @@ func (s *simpleLimiter) consume(now int64, tokens int64) {
 	//
 	// Alternatively, if now is > ready by more than burst, then we end up subtracting the full
 	// burst from now and adding one interval.
-	s.ready = max(now, s.ready+s.burst.Nanoseconds()) - s.burst.Nanoseconds() + tokens*s.interval.Nanoseconds()
+	if p.never() {
+		return simpleLimiterNever
+	}
+	clippedReady := max(now, int64(ready)+p.burst.Nanoseconds()) - p.burst.Nanoseconds()
+	return simpleLimiter(clippedReady + tokens*p.interval.Nanoseconds())
+}
+
+// clip updates ready to an allowable range based on the given parameters.
+func (ready simpleLimiter) clip(p simpleLimiterParams, now int64, maxTokens int64) simpleLimiter {
+	if p.never() {
+		return simpleLimiterNever
+	}
+	// If ready was set very far in the future (e.g. because the rate was zero), then we can
+	// clip it back to now + maxTokens*interval + burst.
+	maxDelay := maxTokens*p.interval.Nanoseconds() + p.burst.Nanoseconds()
+	return min(ready, simpleLimiter(now+maxDelay))
 }

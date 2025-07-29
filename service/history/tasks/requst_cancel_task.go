@@ -12,11 +12,15 @@ var _ Task = (*CancelExecutionTask)(nil)
 type (
 	CancelExecutionTask struct {
 		definition.WorkflowKey
-		VisibilityTimestamp     time.Time
-		TaskID                  int64
-		TargetNamespaceID       string
-		TargetWorkflowID        string
-		TargetRunID             string
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		// Deprecated: the TargetNamespaceID from event instead.
+		TargetNamespaceID string
+		// Deprecated: the TargetWorkflowID from event instead.
+		TargetWorkflowID string
+		// Deprecated: the TargetRunID from event instead.
+		TargetRunID string
+		// Deprecated: the TargetChildWorkflowOnly from event instead.
 		TargetChildWorkflowOnly bool
 		InitiatedEventID        int64
 		Version                 int64

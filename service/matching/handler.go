@@ -52,6 +52,7 @@ type (
 		Logger                        log.Logger
 		ThrottledLogger               log.Logger
 		TaskManager                   persistence.TaskManager
+		FairTaskManager               persistence.FairTaskManager
 		HistoryClient                 resource.HistoryClient
 		MatchingRawClient             resource.MatchingRawClient
 		DeploymentStoreClient         deployment.DeploymentStoreClient
@@ -91,6 +92,7 @@ func NewHandler(
 		throttledLogger: params.ThrottledLogger,
 		engine: NewEngine(
 			params.TaskManager,
+			params.FairTaskManager,
 			params.HistoryClient,
 			params.MatchingRawClient, // Use non retry client inside matching
 			params.DeploymentStoreClient,
@@ -598,4 +600,20 @@ func (h *Handler) UpdateTaskQueueConfig(
 	ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest,
 ) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
 	return h.engine.UpdateTaskQueueConfig(ctx, request)
+}
+
+func (h *Handler) DescribeWorker(
+	_ context.Context, request *matchingservice.DescribeWorkerRequest,
+) (*matchingservice.DescribeWorkerResponse, error) {
+	nsID := namespace.ID(request.GetNamespaceId())
+	hb, err := h.workersRegistry.DescribeWorker(
+		nsID, request.Request.GetWorkerInstanceKey())
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.DescribeWorkerResponse{
+		WorkerInfo: &workerpb.WorkerInfo{
+			WorkerHeartbeat: hb,
+		},
+	}, nil
 }

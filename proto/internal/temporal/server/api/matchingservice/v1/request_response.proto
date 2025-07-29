@@ -210,6 +210,9 @@ message DescribeVersionedTaskQueuesResponse {
         string name = 1;
         temporal.api.enums.v1.TaskQueueType type = 2;
         temporal.api.taskqueue.v1.TaskQueueStats stats = 3;
+        // (-- api-linter: core::0140::prepositions=disabled
+        //     aip.dev/not-precedent: "by" is used to clarify the key. --)
+        map<int32, temporal.api.taskqueue.v1.TaskQueueStats> stats_by_priority_key = 4;
     }
 }
 
@@ -605,4 +608,13 @@ message UpdateTaskQueueConfigRequest {
 
 message UpdateTaskQueueConfigResponse {
     temporal.api.taskqueue.v1.TaskQueueConfig updated_taskqueue_config = 1;
+}
+
+message DescribeWorkerRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.DescribeWorkerRequest request = 2;
+}
+
+message DescribeWorkerResponse {
+    temporal.api.worker.v1.WorkerInfo worker_info = 1;
 }

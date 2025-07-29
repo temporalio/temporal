@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/service/matching/counter"
 )
 
 var (
@@ -189,8 +190,8 @@ config as the other services.`,
 	)
 	EnableEagerWorkflowStart = NewNamespaceBoolSetting(
 		"system.enableEagerWorkflowStart",
-		false,
-		`EnableEagerWorkflowStart toggles "eager workflow start" - returning the first workflow task inline in the
+		true,
+		`Toggles "eager workflow start" - returning the first workflow task inline in the
 response to a StartWorkflowExecution request and skipping the trip through matching.`,
 	)
 	NamespaceCacheRefreshInterval = NewGlobalDurationSetting(
@@ -1287,6 +1288,11 @@ second per poller by one physical queue manager`,
 		false,
 		`Use priority-enabled TaskMatcher`,
 	)
+	MatchingEnableFairness = NewTaskQueueBoolSetting(
+		"matching.enableFairness",
+		false,
+		`Enable fairness for task dispatching. Implies matching.useNewMatcher.`,
+	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(
 		"matching.priorityLevels",
 		5,
@@ -1296,6 +1302,16 @@ second per poller by one physical queue manager`,
 		"matching.backlogTaskForwardTimeout",
 		60*time.Second,
 		`Timeout for forwarded backlog task (requires new matcher)`,
+	)
+	MatchingFairnessCounter = NewTaskQueueTypedSetting(
+		"matching.fairnessCounter",
+		counter.DefaultCounterParams,
+		`Configuration for counter used in matching fairness.`,
+	)
+	MatchingFairnessKeyRateLimitCacheSize = NewTaskQueueIntSetting(
+		"matching.fairnessKeyRateLimitCacheSize",
+		2000,
+		"Cache size for fairness key rate limits.",
 	)
 
 	// keys for history
@@ -1383,6 +1399,11 @@ will wait on workflow lock acquisition. Requires service restart to take effect.
 		256000*4*1024,
 		`HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
 HistoryCacheSizeBasedLimit is set to true.`,
+	)
+	HistoryCacheBackgroundEvict = NewGlobalTypedSetting(
+		"history.cacheBackgroundEvict",
+		DefaultHistoryCacheBackgroundEvictSettings,
+		`HistoryCacheBackgroundEvict configures background processing to purge expired entries from the history cache.`,
 	)
 	EnableWorkflowExecutionTimeoutTimer = NewGlobalBoolSetting(
 		"history.enableWorkflowExecutionTimeoutTimer",
@@ -2682,6 +2703,11 @@ Valid fields: MaxConcurrentActivityExecutionSize, TaskQueueActivitiesPerSecond,
 WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 `,
 	)
+	WorkerGenerateMigrationTaskViaFrontend = NewGlobalBoolSetting(
+		"worker.generateMigrationTaskViaFrontend",
+		false,
+		`WorkerGenerateMigrationTaskViaFrontend controls whether to generate migration tasks via frontend admin service.`,
+	)
 	MaxUserMetadataSummarySize = NewNamespaceIntSetting(
 		"limit.userMetadataSummarySize",
 		400,
@@ -2727,5 +2753,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.ListWorkersEnabled",
 		false,
 		`ListWorkersEnabled is a "feature enable" flag. It allows clients to get workers heartbeat information.`,
+	)
+
+	WorkerCommandsEnabled = NewNamespaceBoolSetting(
+		"frontend.WorkerCommandsEnabled",
+		false,
+		`WorkerCommandsEnabled is a "feature enable" flag. It allows clients to send commands to the workers.`,
 	)
 )

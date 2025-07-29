@@ -1463,6 +1463,7 @@ func (d *ClientImpl) getTaskQueueDetails(
 		for i, tq := range tqOutputs {
 			if tqRespTQ, ok := tqRespMap[tqKey(tq.Name, tq.Type)]; ok {
 				tqOutputs[i].Stats = tqRespTQ.Stats
+				tqOutputs[i].StatsByPriorityKey = tqRespTQ.StatsByPriorityKey
 				continue
 			}
 			// This *should* never happen, but in case it does, we should error instead of returning partial results.

@@ -3285,6 +3285,7 @@ type GetTaskQueueTasksRequest struct {
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	TaskQueueType v16.TaskQueueType      `protobuf:"varint,3,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
+	MinPass       int64                  `protobuf:"varint,9,opt,name=min_pass,json=minPass,proto3" json:"min_pass,omitempty"`
 	MinTaskId     int64                  `protobuf:"varint,4,opt,name=min_task_id,json=minTaskId,proto3" json:"min_task_id,omitempty"`
 	MaxTaskId     int64                  `protobuf:"varint,5,opt,name=max_task_id,json=maxTaskId,proto3" json:"max_task_id,omitempty"`
 	BatchSize     int32                  `protobuf:"varint,6,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
@@ -3343,6 +3344,13 @@ func (x *GetTaskQueueTasksRequest) GetTaskQueueType() v16.TaskQueueType {
 		return x.TaskQueueType
 	}
 	return v16.TaskQueueType(0)
+}
+
+func (x *GetTaskQueueTasksRequest) GetMinPass() int64 {
+	if x != nil {
+		return x.MinPass
+	}
+	return 0
 }
 
 func (x *GetTaskQueueTasksRequest) GetMinTaskId() int64 {
@@ -4865,11 +4873,12 @@ func (x *SyncWorkflowStateResponse) GetVersionedTransitionArtifact() *v15.Versio
 }
 
 type GenerateLastHistoryReplicationTasksRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Execution     *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Namespace      string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Execution      *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
+	TargetClusters []string               `protobuf:"bytes,3,rep,name=target_clusters,json=targetClusters,proto3" json:"target_clusters,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GenerateLastHistoryReplicationTasksRequest) Reset() {
@@ -4912,6 +4921,13 @@ func (x *GenerateLastHistoryReplicationTasksRequest) GetNamespace() string {
 func (x *GenerateLastHistoryReplicationTasksRequest) GetExecution() *v1.WorkflowExecution {
 	if x != nil {
 		return x.Execution
+	}
+	return nil
+}
+
+func (x *GenerateLastHistoryReplicationTasksRequest) GetTargetClusters() []string {
+	if x != nil {
+		return x.TargetClusters
 	}
 	return nil
 }
@@ -5593,12 +5609,13 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"endEventId\x12\x1f\n" +
 	"\vend_version\x18\b \x01(\x03R\n" +
 	"endVersion\" \n" +
-	"\x1eResendReplicationTasksResponse\"\xc8\x02\n" +
+	"\x1eResendReplicationTasksResponse\"\xe3\x02\n" +
 	"\x18GetTaskQueueTasksRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1d\n" +
 	"\n" +
 	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12L\n" +
-	"\x0ftask_queue_type\x18\x03 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12\x1e\n" +
+	"\x0ftask_queue_type\x18\x03 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12\x19\n" +
+	"\bmin_pass\x18\t \x01(\x03R\aminPass\x12\x1e\n" +
 	"\vmin_task_id\x18\x04 \x01(\x03R\tminTaskId\x12\x1e\n" +
 	"\vmax_task_id\x18\x05 \x01(\x03R\tmaxTaskId\x12\x1d\n" +
 	"\n" +
@@ -5704,10 +5721,11 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x11version_histories\x18\x04 \x01(\v20.temporal.server.api.history.v1.VersionHistoriesR\x10versionHistories\x12*\n" +
 	"\x11target_cluster_id\x18\x05 \x01(\x05R\x0ftargetClusterId\"\xb9\x01\n" +
 	"\x19SyncWorkflowStateResponse\x12\x83\x01\n" +
-	"\x1dversioned_transition_artifact\x18\x05 \x01(\v2?.temporal.server.api.replication.v1.VersionedTransitionArtifactR\x1bversionedTransitionArtifactJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05\"\x93\x01\n" +
+	"\x1dversioned_transition_artifact\x18\x05 \x01(\v2?.temporal.server.api.replication.v1.VersionedTransitionArtifactR\x1bversionedTransitionArtifactJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05\"\xbc\x01\n" +
 	"*GenerateLastHistoryReplicationTasksRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12G\n" +
-	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\"\x8a\x01\n" +
+	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12'\n" +
+	"\x0ftarget_clusters\x18\x03 \x03(\tR\x0etargetClusters\"\x8a\x01\n" +
 	"+GenerateLastHistoryReplicationTasksResponse\x124\n" +
 	"\x16state_transition_count\x18\x01 \x01(\x03R\x14stateTransitionCount\x12%\n" +
 	"\x0ehistory_length\x18\x02 \x01(\x03R\rhistoryLength\"\xfc\x01\n" +
