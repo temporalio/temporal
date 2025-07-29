@@ -36,6 +36,7 @@ func (uds *userDataStore) GetTaskQueueUserData(ctx context.Context, request *per
 	}, nil
 }
 
+// nolint:revive,cognitive-complexity // moving old code
 func (uds *userDataStore) UpdateTaskQueueUserData(ctx context.Context, request *persistence.InternalUpdateTaskQueueUserDataRequest) error {
 	namespaceID, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {

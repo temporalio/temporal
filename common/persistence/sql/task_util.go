@@ -28,6 +28,7 @@ func getPartitionBoundaryStart(partition uint32, totalPartitions uint32) uint32 
 	return uint32((float32(partition) / float32(totalPartitions)) * math.MaxUint32)
 }
 
+// nolint:revive,confusing-results // moving old code
 func getBoundariesForPartition(partition uint32, totalPartitions uint32) (uint32, uint32) {
 	endBoundary := getPartitionBoundaryStart(partition+1, totalPartitions)
 

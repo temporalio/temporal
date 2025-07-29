@@ -68,7 +68,7 @@ func SwitchTaskQueuesTable(baseQuery string, v MatchingTaskVersion) string {
 		return "_invalid_version_"
 	}
 	if v2query, ok := switchTaskQueuesTableV2Cache.Load(baseQuery); ok {
-		return v2query.(string)
+		return v2query.(string) // nolint:revive
 	}
 	v2query := strings.ReplaceAll(baseQuery, " task_queues ", " task_queues_v2 ")
 	switchTaskQueuesTableV2Cache.Store(baseQuery, v2query)
