@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/history/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/worker_versioning"
 	"log"
 	"time"
 
@@ -64,8 +68,13 @@ func main() {
 	dHandle := deploymentClient.GetHandle(deploymentName)
 
 	// Update version metadata
+	buildId := "1.0"
+	v1 := &deploymentspb.WorkerDeploymentVersion{
+		DeploymentName: deploymentName,
+		BuildId:        buildId,
+	}
 	_, err = dHandle.UpdateVersionMetadata(context.Background(), client.WorkerDeploymentUpdateVersionMetadataOptions{
-		Version: deploymentName + ".1.0",
+		Version: worker_versioning.WorkerDeploymentVersionToStringV32(v1),
 		MetadataUpdate: client.WorkerDeploymentMetadataUpdate{
 			UpsertEntries: map[string]interface{}{
 				"key": "value",
@@ -75,15 +84,17 @@ func main() {
 	if err != nil {
 		log.Fatalln("Unable to update version metadata", err)
 	}
+	saveHistories(c, deploymentName, buildId)
 
 	// Set ramping version to 1.0
 	_, err = dHandle.SetRampingVersion(context.Background(), client.WorkerDeploymentSetRampingVersionOptions{
-		Version: deploymentName + ".1.0",
+		Version: worker_versioning.WorkerDeploymentVersionToStringV32(v1),
 	})
 	if err != nil {
 		log.Fatalln("Unable to set ramping version", err)
 	}
-	verifyDeployment(dHandle, "__unversioned__", deploymentName+".1.0", client.WorkerDeploymentVersionDrainageStatusUnspecified)
+	verifyDeployment(dHandle, "__unversioned__", worker_versioning.WorkerDeploymentVersionToStringV31(v1), client.WorkerDeploymentVersionDrainageStatusUnspecified)
+	saveHistories(c, deploymentName, buildId)
 
 	// Unset the ramping version
 	_, err = dHandle.SetRampingVersion(context.Background(), client.WorkerDeploymentSetRampingVersionOptions{
@@ -93,16 +104,17 @@ func main() {
 		log.Fatalln("Unable to unset ramping version", err)
 	}
 	verifyDeployment(dHandle, "__unversioned__", "", client.WorkerDeploymentVersionDrainageStatusDraining)
+	saveHistories(c, deploymentName, buildId)
 
 	// Set current version to 1.0
 	_, err = dHandle.SetCurrentVersion(context.Background(), client.WorkerDeploymentSetCurrentVersionOptions{
-		Version:                 deploymentName + ".1.0",
+		Version:                 worker_versioning.WorkerDeploymentVersionToStringV32(v1),
 		IgnoreMissingTaskQueues: true,
 	})
 	if err != nil {
 		log.Fatalln("Unable to set current version", err)
 	}
-	verifyDeployment(dHandle, deploymentName+".1.0", "", client.WorkerDeploymentVersionDrainageStatusUnspecified)
+	verifyDeployment(dHandle, worker_versioning.WorkerDeploymentVersionToStringV31(v1), "", client.WorkerDeploymentVersionDrainageStatusUnspecified)
 
 	// Ramp the "__unversioned__" version
 	_, err = dHandle.SetRampingVersion(context.Background(), client.WorkerDeploymentSetRampingVersionOptions{
@@ -149,6 +161,42 @@ func main() {
 		log.Fatalln("Unable to delete deployment", err)
 	}
 
+}
+
+func saveHistories(c client.Client, deploymentName, buildId string) {
+	deploymentWFEvents := c.GetWorkflowHistory(
+		context.Background(),
+		worker_versioning.GenerateDeploymentWorkflowID(deploymentName),
+		"",
+		false,
+		enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+	)
+	deploymentWFHistory := make([]*history.HistoryEvent, 0)
+	for deploymentWFEvents.HasNext() {
+		event, err := deploymentWFEvents.Next()
+		if err != nil {
+			panic(err)
+		}
+		deploymentWFHistory = append(deploymentWFHistory, event)
+	}
+	// TODO: write history to json file
+
+	versionWFHistory := make([]*history.HistoryEvent, 0)
+	versionWFEvents := c.GetWorkflowHistory(
+		context.Background(),
+		worker_versioning.GenerateVersionWorkflowID(deploymentName, buildId),
+		"",
+		false,
+		enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+	)
+	for versionWFEvents.HasNext() {
+		event, err := versionWFEvents.Next()
+		if err != nil {
+			panic(err)
+		}
+		versionWFHistory = append(versionWFHistory, event)
+	}
+	// TODO: write history to json file
 }
 
 //nolint:revive
