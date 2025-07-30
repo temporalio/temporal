@@ -243,6 +243,10 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		return err
 	}
 
+	wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
+	if err != nil {
+		return err
+	}
 	wfExecutionDuration, err := mutableState.GetWorkflowExecutionDuration(ctx)
 	if err != nil {
 		return err
@@ -262,6 +266,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		ctx,
 		&manager.RecordWorkflowExecutionClosedRequest{
 			VisibilityRequestBase: requestBase,
+			CloseTime:             wfCloseTime,
 			ExecutionDuration:     wfExecutionDuration,
 			HistoryLength:         historyLength,
 			HistorySizeBytes:      historySizeBytes,
