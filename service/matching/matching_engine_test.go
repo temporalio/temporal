@@ -1014,6 +1014,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	dbq := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
 
+	mgr.GetRateLimitManager().adminNsRate = 25000.0
+	mgr.GetRateLimitManager().adminTqRate = 25000.0
+
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()
 
