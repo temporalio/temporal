@@ -363,17 +363,17 @@ func validateParams(params BatchParams) error {
 // nolint:revive,cognitive-complexity
 func ValidateBatchOperation(params *batchspb.BatchOperation) error {
 	if params.BatchType == "" ||
-		params.Reason == "" ||
-		params.Namespace == "" ||
-		(params.Query == "" && len(params.WorkflowExecutions) == 0) {
+		params.Request.Reason == "" ||
+		params.Request.Namespace == "" ||
+		(params.Request.VisibilityQuery == "" && len(params.Request.Executions) == 0) {
 		return errors.New("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
 	}
 
-	if len(params.Query) > 0 && len(params.WorkflowExecutions) > 0 {
+	if len(params.Request.VisibilityQuery) > 0 && len(params.Request.Executions) > 0 {
 		return errors.New("batch query and executions are mutually exclusive")
 	}
 
-	switch op := params.Input.Request.Operation.(type) {
+	switch op := params.Request.Operation.(type) {
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		if op.SignalOperation.GetSignal() == "" {
 			return errors.New("must provide signal name")
@@ -460,7 +460,7 @@ func ValidateBatchOperation(params *batchspb.BatchOperation) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("not supported batch type: %v", params.Input.Request.Operation)
+		return fmt.Errorf("not supported batch type: %v", params.Request.Operation)
 	}
 	return nil
 }

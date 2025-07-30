@@ -4503,15 +4503,20 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, err
 	}
 
+	// input := &batchspb.BatchOperation{
+	// 	Query:     request.GetVisibilityQuery(),
+	// 	Reason:    request.GetReason(),
+	// 	Namespace: request.GetNamespace(),
+	// 	Input: &batchspb.BatchOperationInput{
+	// 		Request: request,
+	// 	},
+	// 	WorkflowExecutions: request.GetExecutions(),
+	// 	Rps:                float64(request.GetMaxOperationsPerSecond()),
+	// }
 	input := &batchspb.BatchOperation{
-		Query:     request.GetVisibilityQuery(),
-		Reason:    request.GetReason(),
-		Namespace: request.GetNamespace(),
-		Input: &batchspb.BatchOperationInput{
-			Request: request,
-		},
-		WorkflowExecutions: request.GetExecutions(),
-		Rps:                float64(request.GetMaxOperationsPerSecond()),
+		Request:     request,
+		NamespaceId: namespaceID.String(),
+		Rps:         float64(request.GetMaxOperationsPerSecond()),
 	}
 
 	var identity string
@@ -4541,10 +4546,10 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		switch a := op.UnpauseActivitiesOperation.GetActivity().(type) {
 		case *batchpb.BatchOperationUnpauseActivities_Type:
 			unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, a.Type)
-			input.Query = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, unpauseCause)
+			input.Request.VisibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, unpauseCause)
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
 			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", searchattribute.TemporalPauseInfo)
-			input.Query = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
+			input.Request.VisibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
 		}
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 		input.BatchType = batcher.BatchTypeResetActivities

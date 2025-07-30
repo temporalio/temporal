@@ -93,16 +93,14 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 		}, memo)
 	}).Once()
 	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{
-		Input: &batchspb.BatchOperationInput{
-			Request: &workflowservice.StartBatchOperationRequest{
-				Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
-					TerminationOperation: &batchpb.BatchOperationTermination{},
-				},
+		Request: &workflowservice.StartBatchOperationRequest{
+			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
+				TerminationOperation: &batchpb.BatchOperationTermination{},
 			},
+			Namespace:       "test-namespace",
+			Reason:          "test-reason",
+			VisibilityQuery: "test-query",
 		},
-		Namespace: "test-namespace",
-		Query:     "test-query",
-		Reason:    "test-reason",
 		BatchType: BatchTypeTerminate,
 	})
 	err := s.env.GetWorkflowError()
@@ -157,22 +155,20 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 		}, memo)
 	}).Once()
 	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{
-		Input: &batchspb.BatchOperationInput{
-			Request: &workflowservice.StartBatchOperationRequest{
-				Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
-					TerminationOperation: &batchpb.BatchOperationTermination{},
+		Request: &workflowservice.StartBatchOperationRequest{
+			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
+				TerminationOperation: &batchpb.BatchOperationTermination{},
+			},
+			Executions: []*commonpb.WorkflowExecution{
+				{
+					WorkflowId: uuid.New(),
+					RunId:      uuid.New(),
 				},
 			},
-		},
-		Namespace: "test-namespace",
-		WorkflowExecutions: []*commonpb.WorkflowExecution{
-			{
-				WorkflowId: uuid.New(),
-				RunId:      uuid.New(),
-			},
+			Reason:    "test-reason",
+			Namespace: "test-namespace",
 		},
 		BatchType: BatchTypeTerminate,
-		Reason:    "test-reason",
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)
