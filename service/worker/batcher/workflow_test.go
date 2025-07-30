@@ -29,6 +29,7 @@ func (s *batcherSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
 	s.env.RegisterWorkflow(BatchWorkflow)
+	s.env.RegisterWorkflow(BatchWorkflowProtobuf)
 }
 
 func (s *batcherSuite) TearDownTest() {
@@ -94,6 +95,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 	}).Once()
 	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
 		Request: &workflowservice.StartBatchOperationRequest{
+			JobId: uuid.New(),
 			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 				TerminationOperation: &batchpb.BatchOperationTermination{},
 			},
@@ -156,6 +158,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 	}).Once()
 	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
 		Request: &workflowservice.StartBatchOperationRequest{
+			JobId: uuid.New(),
 			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 				TerminationOperation: &batchpb.BatchOperationTermination{},
 			},
