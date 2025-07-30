@@ -59,8 +59,6 @@ func main() {
 	// Wait for the workers to register the version.
 	time.Sleep(5 * time.Second)
 
-	w1.Stop()
-
 	// Testing various worker-deployment API's
 	deploymentClient := c.WorkerDeploymentClient()
 	dHandle := deploymentClient.GetHandle(deploymentName)
