@@ -181,13 +181,13 @@ func (c *priBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.S
 func (c *priBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) subqueueKey {
 	levels := c.config.PriorityLevels()
 	if priority == 0 {
-		priority = defaultPriorityLevel(int32(levels))
+		priority = defaultPriorityLevel(levels)
 	}
 	if priority < 1 {
 		// this should have been rejected much earlier, but just clip it here
 		priority = 1
-	} else if priority > priorityKey(levels) {
-		priority = priorityKey(levels)
+	} else if priority > levels {
+		priority = levels
 	}
 
 	c.subqueueLock.Lock()
@@ -288,7 +288,7 @@ func (c *priBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.
 		result[pk].ApproximateBacklogCount += backlogCounts[subqueueKey]
 
 		// Find greatest backlog age for across all subqueues for the same priority.
-		oldestBacklogTime := c.subqueues[int(subqueueKey)].getOldestBacklogTime()
+		oldestBacklogTime := c.subqueues[subqueueKey].getOldestBacklogTime()
 		if !oldestBacklogTime.IsZero() {
 			oldestBacklogAge := time.Since(oldestBacklogTime)
 			if oldestBacklogAge > result[pk].ApproximateBacklogAge.AsDuration() {
@@ -341,7 +341,7 @@ func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQue
 			},
 			LoadedTasks:             int64(r.getLoadedTasks()),
 			MaxReadLevel:            c.db.GetMaxReadLevel(subqueueKey(i)),
-			ApproximateBacklogCount: backlogCountsBySubqueue[subqueueKey(i)],
+			ApproximateBacklogCount: backlogCountsBySubqueue[i],
 		}
 	}
 	return status
