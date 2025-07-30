@@ -2,7 +2,6 @@ package history
 
 import (
 	"context"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -315,10 +314,6 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		WorkflowID:  task.WorkflowID,
 		RunID:       task.RunID,
 		TaskID:      task.TaskID,
-	}
-
-	if task.CloseTime.After(time.Unix(0, 0)) {
-		request.CloseTime = &task.CloseTime
 	}
 
 	if t.ensureCloseBeforeDelete() {
