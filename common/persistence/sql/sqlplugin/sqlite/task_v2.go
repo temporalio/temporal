@@ -18,13 +18,13 @@ const (
 
 	getTaskV2QryWithLimit = getTaskV2Qry + ` LIMIT ?`
 
-	createTaskQryV2 = `INSERT INTO ` +
+	createTaskV2Qry = `INSERT INTO ` +
 		`tasks_v2 ( range_hash,  task_queue_id,  task_id,       pass,  data,  data_encoding) ` +
 		`VALUES   (:range_hash, :task_queue_id, :task_id, :task_pass, :data, :data_encoding)`
 
 	rangeDeleteTaskV2Qry = `DELETE FROM tasks_v2 ` +
-		`WHERE range_hash = ? AND task_queue_id = ? AND task_id IN (SELECT task_id FROM
-		 tasks WHERE range_hash = ? AND task_queue_id = ? AND (pass, task_id) < (?, ?) ` +
+		`WHERE range_hash = ? AND task_queue_id = ? AND task_id IN (SELECT task_id FROM ` +
+		`tasks_v2 WHERE range_hash = ? AND task_queue_id = ? AND (pass, task_id) < (?, ?) ` +
 		`ORDER BY task_queue_id, pass, task_id LIMIT ? ) `
 )
 
@@ -34,7 +34,7 @@ func (mdb *db) InsertIntoTasksV2(
 	rows []sqlplugin.TasksRowV2,
 ) (sql.Result, error) {
 	return mdb.conn.NamedExecContext(ctx,
-		createTaskQryV2,
+		createTaskV2Qry,
 		rows,
 	)
 }
@@ -87,6 +87,8 @@ func (mdb *db) DeleteFromTasksV2(
 	}
 	return mdb.conn.ExecContext(ctx,
 		rangeDeleteTaskV2Qry,
+		filter.RangeHash,
+		filter.TaskQueueID,
 		filter.RangeHash,
 		filter.TaskQueueID,
 		filter.ExclusiveMaxLevel.TaskPass,

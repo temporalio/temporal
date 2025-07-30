@@ -20,7 +20,7 @@ type userDataListNextPageToken struct {
 	LastTaskQueueName string
 }
 
-// newTaskPersistence creates a new instance of TaskManager
+// newTaskPersistence creates a new instance of TaskStore
 func newTaskPersistence(
 	db sqlplugin.DB,
 	taskScanPartitions int,
