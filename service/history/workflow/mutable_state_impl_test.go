@@ -1279,7 +1279,10 @@ func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
 	s.True(minBackoff == backoff)
 
 	// set start time to be 3s ago
-	s.mutableState.executionState.StartTime = timestamppb.New(time.Now().Add(-time.Second * 3))
+	startTime := timestamppb.New(time.Now().Add(-time.Second * 3))
+	s.mutableState.executionInfo.StartTime = startTime
+	s.mutableState.executionInfo.ExecutionTime = startTime
+	s.mutableState.executionState.StartTime = startTime
 	// with no backoff, verify min backoff is in [0, 2s]
 	minBackoff = s.mutableState.ContinueAsNewMinBackoff(nil).AsDuration()
 	s.NotNil(minBackoff)
@@ -1292,7 +1295,10 @@ func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
 	s.True(minBackoff == backoff)
 
 	// set start time to be 5s ago
-	s.mutableState.executionState.StartTime = timestamppb.New(time.Now().Add(-time.Second * 5))
+	startTime = timestamppb.New(time.Now().Add(-time.Second * 5))
+	s.mutableState.executionInfo.StartTime = startTime
+	s.mutableState.executionInfo.ExecutionTime = startTime
+	s.mutableState.executionState.StartTime = startTime
 	// with no backoff, verify backoff unchanged (no backoff needed)
 	minBackoff = s.mutableState.ContinueAsNewMinBackoff(nil).AsDuration()
 	s.Zero(minBackoff)

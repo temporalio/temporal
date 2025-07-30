@@ -296,9 +296,9 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		RunId: s.runID,
 	}
 	s.mockMutableState.EXPECT().UpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING).
-		DoAndReturn(func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error {
+		DoAndReturn(func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error) {
 			executionState.State, executionState.Status = state, status
-			return nil
+			return true, nil
 		}).AnyTimes()
 
 	nDCWorkflow := NewWorkflow(

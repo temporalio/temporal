@@ -123,7 +123,7 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 			resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
 				PageSize:  10,
-				Query:     visQuery,
+				Query:     visQuery + " AND ExecutionStatus = 'Completed'",
 			})
 			s.NoError(err)
 			if len(resp.Executions) != 1 {
