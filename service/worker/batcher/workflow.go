@@ -268,7 +268,7 @@ func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDeta
 }
 
 // BatchWorkflowProtobuf is the workflow that runs a batch job of resetting workflows.
-func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOperation) (HeartBeatDetails, error) {
+func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
 	if batchParams == nil {
 		return HeartBeatDetails{}, errors.New("batchParams is nil")
 	}
@@ -361,7 +361,7 @@ func validateParams(params BatchParams) error {
 }
 
 // nolint:revive,cognitive-complexity
-func ValidateBatchOperation(params *batchspb.BatchOperation) error {
+func ValidateBatchOperation(params *batchspb.BatchOperationInput) error {
 	if params.BatchType == "" ||
 		params.Request.Reason == "" ||
 		params.Request.Namespace == "" ||
@@ -369,8 +369,23 @@ func ValidateBatchOperation(params *batchspb.BatchOperation) error {
 		return errors.New("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
 	}
 
-	if len(params.Request.VisibilityQuery) > 0 && len(params.Request.Executions) > 0 {
+	if len(params.Request.GetJobId()) == 0 {
+		return serviceerror.NewInvalidArgument("JobId is not set on request.")
+	}
+	if len(params.Request.Namespace) == 0 {
+		return serviceerror.NewInvalidArgument("Namespace is not set on request.")
+	}
+	if len(params.Request.VisibilityQuery) == 0 && len(params.Request.Executions) == 0 {
+		return serviceerror.NewInvalidArgument("VisibilityQuery or Executions must be set on request.")
+	}
+	if len(params.Request.VisibilityQuery) != 0 && len(params.Request.Executions) != 0 {
 		return errors.New("batch query and executions are mutually exclusive")
+	}
+	if len(params.Request.Reason) == 0 {
+		return serviceerror.NewInvalidArgument("Reason is not set on request.")
+	}
+	if params.Request.Operation == nil {
+		return serviceerror.NewInvalidArgument("Batch operation is not set on request.")
 	}
 
 	switch op := params.Request.Operation.(type) {
@@ -481,7 +496,7 @@ func setDefaultParams(params BatchParams) BatchParams {
 	return params
 }
 
-func setDefaultParamsProtobuf(params *batchspb.BatchOperation) *batchspb.BatchOperation {
+func setDefaultParamsProtobuf(params *batchspb.BatchOperationInput) *batchspb.BatchOperationInput {
 	if params.GetAttemptsOnRetryableError() <= 1 {
 		params.AttemptsOnRetryableError = defaultAttemptsOnRetryableError
 	}

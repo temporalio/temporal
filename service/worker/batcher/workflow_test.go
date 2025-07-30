@@ -44,7 +44,7 @@ func (s *batcherSuite) TestBatchWorkflow_MissingParams() {
 }
 
 func (s *batcherSuite) TestBatchWorkflow_MissingParams_Protobuf() {
-	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{})
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{})
 	err := s.env.GetWorkflowError()
 	s.Require().Error(err)
 	s.Contains(err.Error(), "must provide required parameters")
@@ -92,7 +92,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 			},
 		}, memo)
 	}).Once()
-	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
 		Request: &workflowservice.StartBatchOperationRequest{
 			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 				TerminationOperation: &batchpb.BatchOperationTermination{},
@@ -154,7 +154,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 			},
 		}, memo)
 	}).Once()
-	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
 		Request: &workflowservice.StartBatchOperationRequest{
 			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 				TerminationOperation: &batchpb.BatchOperationTermination{},

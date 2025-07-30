@@ -24,7 +24,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type BatchOperation struct {
+type BatchOperationInput struct {
 	state                    protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId              string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	Rps                      float64                `protobuf:"fixed64,2,opt,name=rps,proto3" json:"rps,omitempty"`
@@ -39,20 +39,20 @@ type BatchOperation struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *BatchOperation) Reset() {
-	*x = BatchOperation{}
+func (x *BatchOperationInput) Reset() {
+	*x = BatchOperationInput{}
 	mi := &file_temporal_server_api_batch_v1_request_response_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BatchOperation) String() string {
+func (x *BatchOperationInput) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BatchOperation) ProtoMessage() {}
+func (*BatchOperationInput) ProtoMessage() {}
 
-func (x *BatchOperation) ProtoReflect() protoreflect.Message {
+func (x *BatchOperationInput) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_batch_v1_request_response_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -64,61 +64,61 @@ func (x *BatchOperation) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BatchOperation.ProtoReflect.Descriptor instead.
-func (*BatchOperation) Descriptor() ([]byte, []int) {
+// Deprecated: Use BatchOperationInput.ProtoReflect.Descriptor instead.
+func (*BatchOperationInput) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_batch_v1_request_response_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *BatchOperation) GetNamespaceId() string {
+func (x *BatchOperationInput) GetNamespaceId() string {
 	if x != nil {
 		return x.NamespaceId
 	}
 	return ""
 }
 
-func (x *BatchOperation) GetRps() float64 {
+func (x *BatchOperationInput) GetRps() float64 {
 	if x != nil {
 		return x.Rps
 	}
 	return 0
 }
 
-func (x *BatchOperation) GetConcurrency() int64 {
+func (x *BatchOperationInput) GetConcurrency() int64 {
 	if x != nil {
 		return x.Concurrency
 	}
 	return 0
 }
 
-func (x *BatchOperation) GetAttemptsOnRetryableError() int64 {
+func (x *BatchOperationInput) GetAttemptsOnRetryableError() int64 {
 	if x != nil {
 		return x.AttemptsOnRetryableError
 	}
 	return 0
 }
 
-func (x *BatchOperation) GetActivityHeartbeatTimeout() *durationpb.Duration {
+func (x *BatchOperationInput) GetActivityHeartbeatTimeout() *durationpb.Duration {
 	if x != nil {
 		return x.ActivityHeartbeatTimeout
 	}
 	return nil
 }
 
-func (x *BatchOperation) GetNonRetryableErrors() []string {
+func (x *BatchOperationInput) GetNonRetryableErrors() []string {
 	if x != nil {
 		return x.NonRetryableErrors
 	}
 	return nil
 }
 
-func (x *BatchOperation) GetBatchType() string {
+func (x *BatchOperationInput) GetBatchType() string {
 	if x != nil {
 		return x.BatchType
 	}
 	return ""
 }
 
-func (x *BatchOperation) GetRequest() *v1.StartBatchOperationRequest {
+func (x *BatchOperationInput) GetRequest() *v1.StartBatchOperationRequest {
 	if x != nil {
 		return x.Request
 	}
@@ -129,8 +129,8 @@ var File_temporal_server_api_batch_v1_request_response_proto protoreflect.FileDe
 
 const file_temporal_server_api_batch_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"3temporal/server/api/batch/v1/request_response.proto\x12\x1ctemporal.server.api.batch.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a\x1egoogle/protobuf/duration.proto\"\xa7\x03\n" +
-	"\x0eBatchOperation\x12!\n" +
+	"3temporal/server/api/batch/v1/request_response.proto\x12\x1ctemporal.server.api.batch.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a\x1egoogle/protobuf/duration.proto\"\xac\x03\n" +
+	"\x13BatchOperationInput\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x10\n" +
 	"\x03rps\x18\x02 \x01(\x01R\x03rps\x12 \n" +
 	"\vconcurrency\x18\x03 \x01(\x03R\vconcurrency\x12=\n" +
@@ -155,13 +155,13 @@ func file_temporal_server_api_batch_v1_request_response_proto_rawDescGZIP() []by
 
 var file_temporal_server_api_batch_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_temporal_server_api_batch_v1_request_response_proto_goTypes = []any{
-	(*BatchOperation)(nil),                // 0: temporal.server.api.batch.v1.BatchOperation
+	(*BatchOperationInput)(nil),           // 0: temporal.server.api.batch.v1.BatchOperationInput
 	(*durationpb.Duration)(nil),           // 1: google.protobuf.Duration
 	(*v1.StartBatchOperationRequest)(nil), // 2: temporal.api.workflowservice.v1.StartBatchOperationRequest
 }
 var file_temporal_server_api_batch_v1_request_response_proto_depIdxs = []int32{
-	1, // 0: temporal.server.api.batch.v1.BatchOperation.activity_heartbeat_timeout:type_name -> google.protobuf.Duration
-	2, // 1: temporal.server.api.batch.v1.BatchOperation.request:type_name -> temporal.api.workflowservice.v1.StartBatchOperationRequest
+	1, // 0: temporal.server.api.batch.v1.BatchOperationInput.activity_heartbeat_timeout:type_name -> google.protobuf.Duration
+	2, // 1: temporal.server.api.batch.v1.BatchOperationInput.request:type_name -> temporal.api.workflowservice.v1.StartBatchOperationRequest
 	2, // [2:2] is the sub-list for method output_type
 	2, // [2:2] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name

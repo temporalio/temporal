@@ -4505,7 +4505,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, err
 	}
 
-	input := &batchspb.BatchOperation{
+	input := &batchspb.BatchOperationInput{
 		Request:     request,
 		NamespaceId: namespaceID.String(),
 		Rps:         float64(request.GetMaxOperationsPerSecond()),

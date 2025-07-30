@@ -2204,7 +2204,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	params := &batchspb.BatchOperation{
+	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
 		BatchType:   batcher.BatchTypeTerminate,
 		Request: &workflowservice.StartBatchOperationRequest{
@@ -2265,7 +2265,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	params := &batchspb.BatchOperation{
+	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
 		BatchType:   batcher.BatchTypeCancel,
 		Request: &workflowservice.StartBatchOperationRequest{
@@ -2327,7 +2327,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	signalPayloads := payloads.EncodeString(signalName)
-	params := &batchspb.BatchOperation{
+	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
 		BatchType:   batcher.BatchTypeSignal,
 		Request: &workflowservice.StartBatchOperationRequest{
@@ -2400,22 +2400,23 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	signalPayloads := payloads.EncodeString(signalName)
-	params := &batchspb.BatchOperation{
-		NamespaceId: namespaceID.String(),
-		BatchType:   batcher.BatchTypeSignal,
-		Request: &workflowservice.StartBatchOperationRequest{
-			Namespace:  testNamespace.String(),
-			JobId:      jobId,
-			Reason:     reason,
-			Executions: executions,
-			Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
-				SignalOperation: &batchpb.BatchOperationSignal{
-					Signal:   signalName,
-					Input:    signalPayloads,
-					Identity: identity,
-				},
+	request := &workflowservice.StartBatchOperationRequest{
+		Namespace:  testNamespace.String(),
+		JobId:      jobId,
+		Reason:     reason,
+		Executions: executions,
+		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+			SignalOperation: &batchpb.BatchOperationSignal{
+				Signal:   signalName,
+				Input:    signalPayloads,
+				Identity: identity,
 			},
 		},
+	}
+	params := &batchspb.BatchOperationInput{
+		NamespaceId: namespaceID.String(),
+		BatchType:   batcher.BatchTypeSignal,
+		Request:     request,
 	}
 	inputPayload, err := payloads.Encode(params)
 	s.NoError(err)
@@ -2439,19 +2440,6 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 		},
 	)
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
-	request := &workflowservice.StartBatchOperationRequest{
-		Namespace: testNamespace.String(),
-		JobId:     jobId,
-		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
-			SignalOperation: &batchpb.BatchOperationSignal{
-				Signal:   signalName,
-				Input:    signalPayloads,
-				Identity: identity,
-			},
-		},
-		Reason:     reason,
-		Executions: executions,
-	}
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
@@ -2471,7 +2459,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 	jobId := uuid.NewString()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	params := &batchspb.BatchOperation{
+	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
 		BatchType:   batcher.BatchTypeReset,
 		Request: &workflowservice.StartBatchOperationRequest{
@@ -2571,7 +2559,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			s.ProtoEqual(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
 
 			// Decode the input and verify PostResetOperations are correctly set
-			var batchParams batchspb.BatchOperation
+			var batchParams batchspb.BatchOperationInput
 			err := payloads.Decode(request.StartRequest.Input, &batchParams)
 			s.NoError(err)
 
@@ -2631,7 +2619,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			// Decode the input and verify PostResetOperations slice is properly initialized
-			var batchParams batchspb.BatchOperation
+			var batchParams batchspb.BatchOperationInput
 			err := payloads.Decode(request.StartRequest.Input, &batchParams)
 			s.NoError(err)
 			s.Len(batchParams.Request.Operation.(*workflowservice.StartBatchOperationRequest_ResetOperation).ResetOperation.PostResetOperations, 0)

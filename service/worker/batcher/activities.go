@@ -209,7 +209,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 
 // BatchActivityWithProtobuf is an activity for processing batch operations using protobuf as the input type.
 // nolint:revive,cognitive-complexity
-func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams *batchspb.BatchOperation) (HeartBeatDetails, error) {
+func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
 	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceIDTag(batchParams.NamespaceId))
@@ -221,7 +221,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	}
 
 	sdkClient := a.ClientFactory.NewClient(sdkclient.Options{
-		Namespace:     batchParams.NamespaceId,
+		Namespace:     a.namespace.String(),
 		DataConverter: sdk.PreferProtoDataConverter,
 	})
 	startOver := true
@@ -233,31 +233,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		}
 	}
 
-	var batchType string
-	switch batchParams.Request.Operation.(type) {
-	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
-		batchType = BatchTypeTerminate
-	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
-		batchType = BatchTypeCancel
-	case *workflowservice.StartBatchOperationRequest_SignalOperation:
-		batchType = BatchTypeSignal
-	case *workflowservice.StartBatchOperationRequest_DeletionOperation:
-		batchType = BatchTypeDelete
-	case *workflowservice.StartBatchOperationRequest_ResetOperation:
-		batchType = BatchTypeReset
-	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
-		batchType = BatchTypeUnpauseActivities
-	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
-		batchType = BatchTypeUpdateOptions
-	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
-		batchType = BatchTypeResetActivities
-	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
-		batchType = BatchTypeUpdateActivitiesOptions
-	default:
-		return HeartBeatDetails{}, serviceerror.NewInvalidArgument("invalid batch operation type")
-	}
-
-	adjustedQuery := a.adjustQuery(batchParams.Request.VisibilityQuery, batchType)
+	adjustedQuery := a.adjustQuery(batchParams.Request.VisibilityQuery, batchParams.BatchType)
 
 	if startOver {
 		estimateCount := int64(len(batchParams.Request.Executions))
@@ -281,7 +257,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	taskCh := make(chan taskDetail, pageSize)
 	respCh := make(chan error, pageSize)
 	for i := 0; i < a.getOperationConcurrency(int(batchParams.Concurrency)); i++ {
-		go startTaskProcessorProtobuf(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
+		go startTaskProcessorProtobuf(ctx, batchParams, a.namespace.String(), taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
 	}
 
 	for {
@@ -623,7 +599,8 @@ func startTaskProcessor(
 // nolint:revive,cognitive-complexity
 func startTaskProcessorProtobuf(
 	ctx context.Context,
-	batchOperation *batchspb.BatchOperation,
+	batchOperation *batchspb.BatchOperationInput,
+	namespace string,
 	taskCh chan taskDetail,
 	respCh chan error,
 	limiter *rate.Limiter,
@@ -657,7 +634,7 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						_, err := frontendClient.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-							Namespace: batchOperation.Request.Namespace,
+							Namespace: namespace,
 							WorkflowExecution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -672,7 +649,7 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						_, err := frontendClient.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
-							Namespace: batchOperation.Request.Namespace,
+							Namespace: namespace,
 							WorkflowExecution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -696,7 +673,7 @@ func startTaskProcessorProtobuf(
 							// Using ResetOptions
 							// Note: getResetEventIDByOptions may modify workflowExecution.RunId, if reset should be to a prior run
 							//nolint:staticcheck // SA1019: worker versioning v0.31
-							eventId, err = getResetEventIDByOptions(ctx, operation.ResetOperation.Options, batchOperation.Request.Namespace, workflowExecution, frontendClient, logger)
+							eventId, err = getResetEventIDByOptions(ctx, operation.ResetOperation.Options, namespace, workflowExecution, frontendClient, logger)
 							//nolint:staticcheck // SA1019: worker versioning v0.31
 							resetReapplyType = operation.ResetOperation.Options.ResetReapplyType
 							//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -712,7 +689,7 @@ func startTaskProcessorProtobuf(
 							return err
 						}
 						_, err = frontendClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-							Namespace:                 batchOperation.Request.Namespace,
+							Namespace:                 namespace,
 							WorkflowExecution:         workflowExecution,
 							Reason:                    batchOperation.Request.Reason,
 							RequestId:                 uuid.New(),
@@ -728,7 +705,7 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						unpauseRequest := &workflowservice.UnpauseActivityRequest{
-							Namespace: batchOperation.Request.Namespace,
+							Namespace: namespace,
 							Execution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -757,7 +734,7 @@ func startTaskProcessorProtobuf(
 					func(workflowID, runID string) error {
 						var err error
 						_, err = frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-							Namespace: batchOperation.Request.Namespace,
+							Namespace: namespace,
 							WorkflowExecution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -767,12 +744,11 @@ func startTaskProcessorProtobuf(
 						})
 						return err
 					})
-
 			case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						resetRequest := &workflowservice.ResetActivityRequest{
-							Namespace: batchOperation.Request.Namespace,
+							Namespace: namespace,
 							Execution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -798,7 +774,7 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						updateRequest := &workflowservice.UpdateActivityOptionsRequest{
-							Namespace: batchOperation.Request.Namespace,
+							Namespace: namespace,
 							Execution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,

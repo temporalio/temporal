@@ -6,7 +6,7 @@ option go_package = "go.temporal.io/server/api/batch/v1;batch";
 import "temporal/api/workflowservice/v1/request_response.proto";
 import "google/protobuf/duration.proto";
 
-message BatchOperation { 
+message BatchOperationInput { 
   string namespace_id = 1; 
 
   double rps = 2;
