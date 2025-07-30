@@ -2,9 +2,9 @@
   "events": [
     {
       "eventId": "1",
-      "eventTime": "2025-07-30T22:09:28.774826Z",
+      "eventTime": "2025-07-30T22:26:06.682384Z",
       "eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_STARTED",
-      "taskId": "1057285",
+      "taskId": "1058511",
       "workflowExecutionStartedEventAttributes": {
         "workflowType": {
           "name": "temporal-sys-worker-deployment-workflow"
@@ -20,16 +20,16 @@
                 "encoding": "YmluYXJ5L3Byb3RvYnVm",
                 "messageType": "dGVtcG9yYWwuc2VydmVyLmFwaS5kZXBsb3ltZW50LnYxLldvcmtlckRlcGxveW1lbnRXb3JrZmxvd0FyZ3M="
               },
-              "data": "CgdkZWZhdWx0EiQ0ZTgxZTUwNi0wNmE3LTQ1ZmItYTcxZS01NmI2OGVmNGRhZTAaA2ZvbyJaCgwImLCqxAYQ4PWT8QESEQoPX191bnZlcnNpb25lZF9fGiQKB2Zvby4xLjASGQoHZm9vLjEuMBIMCJiwqsQGEOD1k/EBUAEiDwEAAAAO4ByPGB4k+uD//zAZ"
+              "data": "CgdkZWZhdWx0EiQxNTliNjRmNS1hYmFkLTQ5OGQtOGUxZC1hMzIxMjY2NzRiMGIaA2ZvbyLvAQoLCPO3qsQGENCgvHUSOwoPX191bnZlcnNpb25lZF9fIgwI+7eqxAYQkKrSuQEqDAj7t6rEBhCQqtK5ATIMCPu3qsQGEJCq0rkBGm4KB2Zvby4xLjASYwoHZm9vLjEuMBILCPO3qsQGEOj/4XkYASIeCAESDAj7t6rEBhCQqtK5ARoMCPu3qsQGEJCq0rkBKgwI+7eqxAYQkKrSuQFCCwj3t6rEBhDAhalMSgwI+7eqxAYQkKrSuQFQBCIPAQAAAA7gHJL7FzSVEP//KiAzMjMzNUBTaGl2YW1zLU1hY0Jvb2stUHJvLmxvY2FsQDAZ"
             }
           ]
         },
         "workflowRunTimeout": "0s",
         "workflowTaskTimeout": "10s",
-        "continuedExecutionRunId": "01985d62-1a6c-73c0-a5e5-95487bbf1ca7",
+        "continuedExecutionRunId": "33acc212-0b71-4081-9c50-c7726d6d76a0",
         "initiator": "CONTINUE_AS_NEW_INITIATOR_WORKFLOW",
-        "originalExecutionRunId": "7c40ac52-95eb-477a-85d6-14417ca6cd50",
-        "firstExecutionRunId": "01985d62-1a6c-73c0-a5e5-95487bbf1ca7",
+        "originalExecutionRunId": "0b0890f7-0f8c-4306-94ee-32b0867b2624",
+        "firstExecutionRunId": "01985d71-29e2-7dc3-b58f-665bbb4fb503",
         "attempt": 1,
         "memo": {
           "fields": {
@@ -38,7 +38,7 @@
                 "encoding": "anNvbi9wcm90b2J1Zg==",
                 "messageType": "dGVtcG9yYWwuc2VydmVyLmFwaS5kZXBsb3ltZW50LnYxLldvcmtlckRlcGxveW1lbnRXb3JrZmxvd01lbW8="
               },
-              "data": "eyJkZXBsb3ltZW50TmFtZSI6ImZvbyIsICJjcmVhdGVUaW1lIjoiMjAyNS0wNy0zMFQyMjowOToyOC41MDU3NDBaIiwgInJvdXRpbmdDb25maWciOnsiY3VycmVudFZlcnNpb24iOiJfX3VudmVyc2lvbmVkX18ifSwgImxhdGVzdFZlcnNpb25TdW1tYXJ5Ijp7InZlcnNpb24iOiJmb28uMS4wIiwgInN0YXR1cyI6IldPUktFUl9ERVBMT1lNRU5UX1ZFUlNJT05fU1RBVFVTX0lOQUNUSVZFIiwgImRlcGxveW1lbnRWZXJzaW9uIjp7ImJ1aWxkSWQiOiIxLjAiLCAiZGVwbG95bWVudE5hbWUiOiJmb28ifSwgImNyZWF0ZVRpbWUiOiIyMDI1LTA3LTMwVDIyOjA5OjI4LjUwNTc0MFoifX0="
+              "data": "eyJkZXBsb3ltZW50TmFtZSI6ImZvbyIsICJjcmVhdGVUaW1lIjoiMjAyNS0wNy0zMFQyMjoyNTo1NS4yNDYzNTRaIiwgInJvdXRpbmdDb25maWciOnsiY3VycmVudFZlcnNpb24iOiJfX3VudmVyc2lvbmVkX18iLCAiY3VycmVudFZlcnNpb25DaGFuZ2VkVGltZSI6IjIwMjUtMDctMzBUMjI6MjY6MDMuMzg5MzIyWiIsICJyYW1waW5nVmVyc2lvbkNoYW5nZWRUaW1lIjoiMjAyNS0wNy0zMFQyMjoyNjowMy4zODkzMjJaIiwgInJhbXBpbmdWZXJzaW9uUGVyY2VudGFnZUNoYW5nZWRUaW1lIjoiMjAyNS0wNy0zMFQyMjoyNjowMy4zODkzMjJaIn0sICJsYXRlc3RWZXJzaW9uU3VtbWFyeSI6eyJ2ZXJzaW9uIjoiZm9vLjEuMCIsICJzdGF0dXMiOiJXT1JLRVJfREVQTE9ZTUVOVF9WRVJTSU9OX1NUQVRVU19EUkFJTklORyIsICJkZXBsb3ltZW50VmVyc2lvbiI6eyJidWlsZElkIjoiMS4wIiwgImRlcGxveW1lbnROYW1lIjoiZm9vIn0sICJjcmVhdGVUaW1lIjoiMjAyNS0wNy0zMFQyMjoyNTo1NS4yNTUzNjFaIiwgImRyYWluYWdlSW5mbyI6eyJzdGF0dXMiOiJWRVJTSU9OX0RSQUlOQUdFX1NUQVRVU19EUkFJTklORyIsICJsYXN0Q2hhbmdlZFRpbWUiOiIyMDI1LTA3LTMwVDIyOjI2OjAzLjM4OTMyMloiLCAibGFzdENoZWNrZWRUaW1lIjoiMjAyNS0wNy0zMFQyMjoyNjowMy4zODkzMjJaIn0sICJyb3V0aW5nVXBkYXRlVGltZSI6IjIwMjUtMDctMzBUMjI6MjY6MDMuMzg5MzIyWiIsICJmaXJzdEFjdGl2YXRpb25UaW1lIjoiMjAyNS0wNy0zMFQyMjoyNTo1OS4xNjAwNTZaIiwgImxhc3REZWFjdGl2YXRpb25UaW1lIjoiMjAyNS0wNy0zMFQyMjoyNjowMy4zODkzMjJaIn19"
             }
           }
         },
@@ -57,10 +57,10 @@
           "points": [
             {
               "buildId": "6fc29ed4e5080e2940253b3e7fe05cc8",
-              "runId": "01985d62-1a6c-73c0-a5e5-95487bbf1ca7",
+              "runId": "01985d71-29e2-7dc3-b58f-665bbb4fb503",
               "firstWorkflowTaskCompletedId": "4",
-              "createTime": "2025-07-30T22:09:28.510645Z",
-              "expireTime": "2025-08-02T22:09:28.774826Z",
+              "createTime": "2025-07-30T22:25:55.251474Z",
+              "expireTime": "2025-08-02T22:25:56.101071Z",
               "resettable": true
             }
           ]
@@ -71,9 +71,9 @@
     },
     {
       "eventId": "2",
-      "eventTime": "2025-07-30T22:09:28.774857Z",
+      "eventTime": "2025-07-30T22:26:06.682427Z",
       "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
-      "taskId": "1057286",
+      "taskId": "1058512",
       "workflowTaskScheduledEventAttributes": {
         "taskQueue": {
           "name": "temporal-sys-per-ns-tq",
@@ -85,14 +85,14 @@
     },
     {
       "eventId": "3",
-      "eventTime": "2025-07-30T22:09:28.777089Z",
+      "eventTime": "2025-07-30T22:26:06.685808Z",
       "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
-      "taskId": "1057295",
+      "taskId": "1058519",
       "workflowTaskStartedEventAttributes": {
         "scheduledEventId": "2",
         "identity": "temporal-system@Shivams-MacBook-Pro.local@default",
-        "requestId": "e078da49-3984-4fd7-951e-65abd1411e09",
-        "historySizeBytes": "1268",
+        "requestId": "3debf026-c843-4abb-91f0-c0eb80269f12",
+        "historySizeBytes": "1921",
         "workerVersion": {
           "buildId": "6fc29ed4e5080e2940253b3e7fe05cc8"
         }
@@ -100,9 +100,9 @@
     },
     {
       "eventId": "4",
-      "eventTime": "2025-07-30T22:09:28.778641Z",
+      "eventTime": "2025-07-30T22:26:06.687359Z",
       "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
-      "taskId": "1057299",
+      "taskId": "1058523",
       "workflowTaskCompletedEventAttributes": {
         "scheduledEventId": "2",
         "startedEventId": "3",
