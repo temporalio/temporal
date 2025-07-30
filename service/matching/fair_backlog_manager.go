@@ -32,9 +32,9 @@ type (
 		taskWriter *fairTaskWriter
 
 		subqueueLock        sync.Mutex
-		subqueues           []*fairTaskReader           // subqueue index -> fairTaskReader
-		subqueuesByPriority map[priorityKey]subqueueKey // priority key -> subqueue index
-		priorityBySubqueue  map[subqueueKey]priorityKey // subqueue index -> priority key
+		subqueues           []*fairTaskReader // subqueue index -> fairTaskReader
+		subqueuesByPriority map[priorityKey]subqueueKey
+		priorityBySubqueue  map[subqueueKey]priorityKey
 
 		logger           log.Logger
 		throttledLogger  log.ThrottledLogger
