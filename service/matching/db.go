@@ -426,7 +426,7 @@ func (db *taskQueueDB) CreateTasks(
 	}
 
 	for sq, update := range updates {
-		db.subqueues[int(sq)].ApproximateBacklogCount += int64(len(update.tasks))
+		db.subqueues[sq].ApproximateBacklogCount += int64(len(update.tasks))
 	}
 
 	resp, err := db.store.CreateTasks(
@@ -444,7 +444,7 @@ func (db *taskQueueDB) CreateTasks(
 	// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up.
 	// Do this even if the write fails, we won't reuse the task ids.
 	for sq, update := range updates {
-		db.subqueues[int(sq)].maxReadLevel = update.maxReadLevelAfter
+		db.subqueues[sq].maxReadLevel = update.maxReadLevelAfter
 	}
 
 	if err == nil {
@@ -456,7 +456,7 @@ func (db *taskQueueDB) CreateTasks(
 		// tasks definitely were not created, restore the counter. For other errors tasks may or may not be created.
 		// In those cases we keep the count incremented, hence it may be an overestimate.
 		for i, update := range updates {
-			db.subqueues[int(i)].ApproximateBacklogCount -= int64(len(update.tasks))
+			db.subqueues[i].ApproximateBacklogCount -= int64(len(update.tasks))
 		}
 	}
 	return createTasksResponse{bySubqueue: updates}, err
@@ -491,7 +491,7 @@ func (db *taskQueueDB) CreateFairTasks(
 	}
 
 	for sq, tasks := range newTasks {
-		db.subqueues[int(sq)].ApproximateBacklogCount += int64(len(tasks))
+		db.subqueues[sq].ApproximateBacklogCount += int64(len(tasks))
 	}
 
 	// Unlike in CreateTasks, we can set the persisted FairMaxReadLevel before persisting.
@@ -499,7 +499,7 @@ func (db *taskQueueDB) CreateFairTasks(
 	// the FairMaxReadLevel will be more up-to-date. The max read level is not used by
 	// fairTaskReader, so there's no correctness issue with doing this.
 	for sq, level := range newMaxLevel {
-		db.subqueues[int(sq)].FairMaxReadLevel = fairLevelFromProto(db.subqueues[int(sq)].FairMaxReadLevel).max(level).toProto()
+		db.subqueues[sq].FairMaxReadLevel = fairLevelFromProto(db.subqueues[sq].FairMaxReadLevel).max(level).toProto()
 	}
 
 	resp, err := db.store.CreateTasks(
@@ -523,7 +523,7 @@ func (db *taskQueueDB) CreateFairTasks(
 		// In those cases we keep the count incremented, hence it may be an overestimate.
 		// Don't bother restoring MaxReadLevel, it's okay if that's too high.
 		for i, tasks := range newTasks {
-			db.subqueues[int(i)].ApproximateBacklogCount -= int64(len(tasks))
+			db.subqueues[i].ApproximateBacklogCount -= int64(len(tasks))
 		}
 	}
 	return newTasks, err
