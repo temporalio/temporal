@@ -591,7 +591,8 @@ func (ms *MutableStateImpl) mustInitHSM() {
 }
 
 func (ms *MutableStateImpl) IsWorkflow() bool {
-	return ms.chasmTree.Archetype() == chasmworkflow.Archetype
+	archetype := ms.chasmTree.Archetype()
+	return archetype == chasmworkflow.Archetype || archetype == ""
 }
 
 func (ms *MutableStateImpl) HSM() *hsm.Node {

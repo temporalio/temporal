@@ -29,7 +29,7 @@ type Context interface {
 type MutableContext interface {
 	Context
 
-	AddTask(Component, TaskAttributes, any) error
+	AddTask(Component, TaskAttributes, any)
 
 	// Add more methods here for other storage commands/primitives.
 	// e.g. HistoryEvent
@@ -99,6 +99,6 @@ func (c *MutableContextImpl) AddTask(
 	component Component,
 	attributes TaskAttributes,
 	payload any,
-) error {
-	return c.root.AddTask(component, attributes, payload)
+) {
+	c.root.AddTask(component, attributes, payload)
 }

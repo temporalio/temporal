@@ -1946,26 +1946,24 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	s.testLibrary.mockSideEffectTaskValidator.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	testComponent := c.(*TestComponent)
-	err = mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSideEffectTask{
+	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSideEffectTask{
 		Data: []byte("some-random-data"),
 	})
-	s.NoError(err)
 
 	// Add an invalid outbound side effect task.
 	// the invalid task should not be created.
 	s.testLibrary.mockOutboundSideEffectTaskValidator.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
-	err = mutableContext.AddTask(
+	mutableContext.AddTask(
 		testComponent,
 		TaskAttributes{Destination: "destination"},
 		TestOutboundSideEffectTask{},
 	)
-	s.NoError(err)
 
 	// Add a valid pure task.
 	s.testLibrary.mockPureTaskValidator.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
-	err = mutableContext.AddTask(
+	mutableContext.AddTask(
 		testComponent,
 		TaskAttributes{ScheduledTime: s.timeSource.Now()},
 		&TestPureTask{
@@ -1974,13 +1972,12 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 			},
 		},
 	)
-	s.NoError(err)
 
 	// Add an invalid pure task.
 	// the invalid task should not be created.
 	s.testLibrary.mockPureTaskValidator.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
-	err = mutableContext.AddTask(
+	mutableContext.AddTask(
 		testComponent,
 		TaskAttributes{ScheduledTime: s.timeSource.Now()},
 		&TestPureTask{
@@ -1989,17 +1986,15 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 			},
 		},
 	)
-	s.NoError(err)
 
 	// Add a valid side effect task to a sub-component.
 	s.testLibrary.mockSideEffectTaskValidator.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	subComponent2, err := testComponent.SubComponent2.Get(mutableContext)
 	s.NoError(err)
-	err = mutableContext.AddTask(subComponent2, TaskAttributes{}, &TestSideEffectTask{
+	mutableContext.AddTask(subComponent2, TaskAttributes{}, &TestSideEffectTask{
 		Data: []byte("some-random-data"),
 	})
-	s.NoError(err)
 
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{
 		NamespaceID: "ns-id",

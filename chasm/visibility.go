@@ -3,7 +3,7 @@ package chasm
 import (
 	"context"
 
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/payload"
 )
@@ -43,8 +43,8 @@ type Visibility struct {
 
 	Data *persistencespb.ChasmVisibilityData
 
-	SA   Map[string, *common.Payload]
-	Memo Map[string, *common.Payload]
+	SA   Map[string, *commonpb.Payload]
+	Memo Map[string, *commonpb.Payload]
 
 	// TODO: Add CATMemo here for Memo added by the Components
 }
@@ -67,7 +67,7 @@ func (v *Visibility) LifecycleState(_ Context) LifecycleState {
 
 func (v *Visibility) GetSearchAttributes(
 	chasmContext Context,
-) (map[string]*common.Payload, error) {
+) (map[string]*commonpb.Payload, error) {
 	return v.getPayloadMap(chasmContext, v.SA)
 }
 
@@ -87,7 +87,7 @@ func (v *Visibility) RemoveSearchAttributes(
 
 func (v *Visibility) GetMemo(
 	chasmContext Context,
-) (map[string]*common.Payload, error) {
+) (map[string]*commonpb.Payload, error) {
 	return v.getPayloadMap(chasmContext, v.Memo)
 }
 
@@ -118,9 +118,9 @@ func (v *Visibility) GenerateTask(
 
 func (v *Visibility) getPayloadMap(
 	chasmContext Context,
-	m Map[string, *common.Payload],
-) (map[string]*common.Payload, error) {
-	result := make(map[string]*common.Payload, len(m))
+	m Map[string, *commonpb.Payload],
+) (map[string]*commonpb.Payload, error) {
+	result := make(map[string]*commonpb.Payload, len(m))
 	for key, field := range m {
 		value, err := field.Get(chasmContext)
 		if err != nil {
@@ -133,11 +133,11 @@ func (v *Visibility) getPayloadMap(
 
 func (v *Visibility) updatePayloadMap(
 	mutableContext MutableContext,
-	m *Map[string, *common.Payload],
+	m *Map[string, *commonpb.Payload],
 	updates map[string]any,
 ) error {
 	if len(updates) != 0 && *m == nil {
-		*m = make(Map[string, *common.Payload], len(updates))
+		*m = make(Map[string, *commonpb.Payload], len(updates))
 	}
 	for key, value := range updates {
 		p, err := payload.Encode(value)
@@ -152,7 +152,7 @@ func (v *Visibility) updatePayloadMap(
 
 func (v *Visibility) removeFromPayloadMap(
 	mutableContext MutableContext,
-	m Map[string, *common.Payload],
+	m Map[string, *commonpb.Payload],
 	keys []string,
 ) {
 	for _, key := range keys {
@@ -197,14 +197,14 @@ func UpsertMemo[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte]
 
 func upsertVisibilityPayload[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
 	chasmContext MutableContext,
-	m *Map[string, *common.Payload],
+	m *Map[string, *commonpb.Payload],
 	visibility *Visibility,
 	name string,
 	value T,
 ) {
 	p, _ := payload.Encode(value)
 	if *m == nil {
-		*m = make(Map[string, *common.Payload])
+		*m = make(Map[string, *commonpb.Payload])
 	}
 	(*m)[name] = NewDataField(chasmContext, p)
 	visibility.GenerateTask(chasmContext)
@@ -212,7 +212,7 @@ func upsertVisibilityPayload[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float
 
 func getVisibilityPayloadValue[T any](
 	chasmContext Context,
-	payloadMap Map[string, *common.Payload],
+	payloadMap Map[string, *commonpb.Payload],
 	key string,
 ) (T, error) {
 	var value T
@@ -245,5 +245,6 @@ func (v *visibilityTaskExecutor) Execute(
 	_ TaskAttributes,
 	_ *persistencespb.ChasmVisibilityTaskData,
 ) error {
+	//nolint:forbidigo
 	panic("chasm visibilityTaskExecutor should not be called directly")
 }

@@ -72,16 +72,14 @@ func (s *PayloadStore) AddPayload(
 			s.State.ExpirationTimes = make(map[string]*timestamppb.Timestamp)
 		}
 		s.State.ExpirationTimes[request.PayloadKey] = timestamppb.New(expirationTime)
-		if err := mutableContext.AddTask(
+		mutableContext.AddTask(
 			s,
 			chasm.TaskAttributes{ScheduledTime: expirationTime},
 			// You can switch between TestPayloadTTLPureTask & TestPayloadTTLSideEffectTask
 			&persistencespb.TestPayloadTTLPureTask{
 				PayloadKey: request.PayloadKey,
 			},
-		); err != nil {
-			return nil, err
-		}
+		)
 	}
 
 	return s.Describe(mutableContext, DescribePayloadStoreRequest{})

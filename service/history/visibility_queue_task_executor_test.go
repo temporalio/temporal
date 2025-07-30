@@ -609,7 +609,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_RunningExecution
 			s.True(ok)
 
 			var actualArchetype string
-			payload.Decode(v, &actualArchetype)
+			err := payload.Decode(v, &actualArchetype)
+			s.NoError(err)
 			s.Equal(archetype, actualArchetype)
 			return nil
 		},
@@ -649,7 +650,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_ClosedExecution(
 			s.True(ok)
 
 			var actualArchetype string
-			payload.Decode(v, &actualArchetype)
+			err := payload.Decode(v, &actualArchetype)
+			s.NoError(err)
 			s.Equal(archetype, actualArchetype)
 			return nil
 		},

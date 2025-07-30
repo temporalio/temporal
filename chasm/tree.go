@@ -1140,12 +1140,11 @@ func (n *Node) AddTask(
 	component Component,
 	taskAttributes TaskAttributes,
 	task any,
-) error {
+) {
 	n.nodeBase.newTasks[component] = append(n.nodeBase.newTasks[component], taskWithAttributes{
 		task:       task,
 		attributes: taskAttributes,
 	})
-	return nil
 }
 
 // CloseTransaction is used by MutableState to close the transaction and

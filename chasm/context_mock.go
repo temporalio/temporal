@@ -140,11 +140,9 @@ func (m *MockMutableContext) EXPECT() *MockMutableContextMockRecorder {
 }
 
 // AddTask mocks base method.
-func (m *MockMutableContext) AddTask(arg0 Component, arg1 TaskAttributes, arg2 any) error {
+func (m *MockMutableContext) AddTask(arg0 Component, arg1 TaskAttributes, arg2 any) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddTask", arg0, arg1, arg2)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "AddTask", arg0, arg1, arg2)
 }
 
 // AddTask indicates an expected call of AddTask.

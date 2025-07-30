@@ -2,12 +2,13 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/workflow/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests"
@@ -61,8 +62,6 @@ func (s *ChasmTestSuite) TestNewPayloadStore() {
 	s.NoError(err)
 }
 
-// TODO: More tests here...
-
 func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	tv := testvars.New(s.T())
 
@@ -80,13 +79,15 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	)
 	s.NoError(err)
 
-	var visRecord *workflow.WorkflowExecutionInfo
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = 'tests.payloadStore' AND WorkflowId = '%s'", storeID)
+
+	var visRecord *workflowpb.WorkflowExecutionInfo
 	s.Eventually(
 		func() bool {
 			resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
 				PageSize:  10,
-				Query:     "TemporalNamespaceDivision = 'tests.payloadStore'",
+				Query:     visQuery,
 			})
 			s.NoError(err)
 			if len(resp.Executions) != 1 {
@@ -101,7 +102,7 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	)
 	s.Equal(storeID, visRecord.Execution.WorkflowId)
 	s.Equal(createResp.RunID, visRecord.Execution.RunId)
-	s.Equal(enums.WORKFLOW_EXECUTION_STATUS_RUNNING, visRecord.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, visRecord.Status)
 	s.NotEmpty(visRecord.StartTime)
 	s.NotEmpty(visRecord.ExecutionTime)
 	s.Empty(visRecord.StateTransitionCount)
@@ -122,7 +123,7 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 			resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
 				PageSize:  10,
-				Query:     "TemporalNamespaceDivision = 'tests.payloadStore'",
+				Query:     visQuery,
 			})
 			s.NoError(err)
 			if len(resp.Executions) != 1 {
@@ -135,9 +136,11 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
-	s.Equal(enums.WORKFLOW_EXECUTION_STATUS_COMPLETED, visRecord.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, visRecord.Status)
 	s.Equal(int64(2), visRecord.StateTransitionCount)
 	s.NotEmpty(visRecord.CloseTime)
 	s.NotEmpty(visRecord.ExecutionDuration)
 	s.Empty(visRecord.HistoryLength)
 }
+
+// TODO: More tests here...
