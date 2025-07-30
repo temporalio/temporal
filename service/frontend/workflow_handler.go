@@ -4503,16 +4503,6 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, err
 	}
 
-	// input := &batchspb.BatchOperation{
-	// 	Query:     request.GetVisibilityQuery(),
-	// 	Reason:    request.GetReason(),
-	// 	Namespace: request.GetNamespace(),
-	// 	Input: &batchspb.BatchOperationInput{
-	// 		Request: request,
-	// 	},
-	// 	WorkflowExecutions: request.GetExecutions(),
-	// 	Rps:                float64(request.GetMaxOperationsPerSecond()),
-	// }
 	input := &batchspb.BatchOperation{
 		Request:     request,
 		NamespaceId: namespaceID.String(),
