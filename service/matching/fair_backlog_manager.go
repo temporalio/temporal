@@ -33,8 +33,8 @@ type (
 
 		subqueueLock        sync.Mutex
 		subqueues           []*fairTaskReader // subqueue index -> fairTaskReader
-		subqueuesByPriority map[priorityKey]subqueueKey
-		priorityBySubqueue  map[subqueueKey]priorityKey
+		subqueuesByPriority map[priorityKey]subqueueIndex
+		priorityBySubqueue  map[subqueueIndex]priorityKey
 
 		logger           log.Logger
 		throttledLogger  log.ThrottledLogger
@@ -69,8 +69,8 @@ func newFairBacklogManager(
 		config:              config,
 		tqCtx:               tqCtx,
 		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler),
-		subqueuesByPriority: make(map[priorityKey]subqueueKey),
-		priorityBySubqueue:  make(map[subqueueKey]priorityKey),
+		subqueuesByPriority: make(map[priorityKey]subqueueIndex),
+		priorityBySubqueue:  make(map[subqueueIndex]priorityKey),
 		matchingClient:      matchingClient,
 		metricsHandler:      metricsHandler,
 		logger:              logger,
@@ -117,7 +117,7 @@ func (c *fairBacklogManagerImpl) Stop() {
 	for i, r := range c.subqueues {
 		_, ackLevel := r.getLevels()
 		// oldestTime can be time.Time{} here since countDelta is 0
-		c.db.updateFairAckLevel(subqueueKey(i), ackLevel, 0, -1, time.Time{})
+		c.db.updateFairAckLevel(subqueueIndex(i), ackLevel, 0, -1, time.Time{})
 	}
 	c.subqueueLock.Unlock()
 
@@ -152,18 +152,18 @@ func (c *fairBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.
 	// TODO(pri): This assumes that subqueues never shrinks, and priority/fairness index of
 	// existing subqueues never changes. If we change that, this logic will need to change.
 	for i := range subqueues {
-		subqueueKey := subqueueKey(i)
+		subqueueIdx := subqueueIndex(i)
 		if i >= len(c.subqueues) {
-			r := newFairTaskReader(c, subqueueKey, fairLevelFromProto(subqueues[i].FairAckLevel))
+			r := newFairTaskReader(c, subqueueIdx, fairLevelFromProto(subqueues[i].FairAckLevel))
 			r.Start()
 			c.subqueues = append(c.subqueues, r)
 		}
-		c.subqueuesByPriority[priorityKey(subqueues[i].Key.Priority)] = subqueueKey
-		c.priorityBySubqueue[subqueueKey] = priorityKey(subqueues[i].Key.Priority)
+		c.subqueuesByPriority[priorityKey(subqueues[i].Key.Priority)] = subqueueIdx
+		c.priorityBySubqueue[subqueueIdx] = priorityKey(subqueues[i].Key.Priority)
 	}
 }
 
-func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) subqueueKey {
+func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) subqueueIndex {
 	levels := c.config.PriorityLevels()
 	if priority == 0 {
 		priority = defaultPriorityLevel(levels)
@@ -274,7 +274,7 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 
 	result := make(map[int32]*taskqueuepb.TaskQueueStats)
 	backlogCounts := c.db.getApproximateBacklogCountsBySubqueue()
-	for subqueueKey, priorityKey := range c.priorityBySubqueue {
+	for subqueueIdx, priorityKey := range c.priorityBySubqueue {
 		pk := int32(priorityKey)
 
 		// Note that there could be more than one subqueue for the same priority.
@@ -287,10 +287,10 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 		}
 
 		// Add backlog counts together across all subqueues for the same priority.
-		result[pk].ApproximateBacklogCount += backlogCounts[subqueueKey]
+		result[pk].ApproximateBacklogCount += backlogCounts[subqueueIdx]
 
 		// Find greatest backlog age for across all subqueues for the same priority.
-		oldestBacklogTime := c.subqueues[subqueueKey].getOldestBacklogTime()
+		oldestBacklogTime := c.subqueues[subqueueIdx].getOldestBacklogTime()
 		if !oldestBacklogTime.IsZero() {
 			oldestBacklogAge := time.Since(oldestBacklogTime)
 			if oldestBacklogAge > result[pk].ApproximateBacklogAge.AsDuration() {
@@ -334,7 +334,7 @@ func (c *fairBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQu
 	status := make([]*taskqueuespb.InternalTaskQueueStatus, len(c.subqueues))
 	for i, r := range c.subqueues {
 		readLevel, ackLevel := r.getLevels()
-		count, maxReadLevel := c.db.getApproximateBacklogCountAndMaxReadLevel(subqueueKey(i))
+		count, maxReadLevel := c.db.getApproximateBacklogCountAndMaxReadLevel(subqueueIndex(i))
 		status[i] = &taskqueuespb.InternalTaskQueueStatus{
 			FairReadLevel: readLevel.toProto(),
 			FairAckLevel:  ackLevel.toProto(),

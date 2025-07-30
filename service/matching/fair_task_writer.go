@@ -29,8 +29,8 @@ type (
 
 		// state:
 		taskIDBlock        taskIDBlock
-		currentTaskIDBlock taskIDBlock                     // copy of taskIDBlock for safe concurrent access via getCurrentTaskIDBlock()
-		counters           map[subqueueKey]counter.Counter // only used in taskWriterLoop.
+		currentTaskIDBlock taskIDBlock                       // copy of taskIDBlock for safe concurrent access via getCurrentTaskIDBlock()
+		counters           map[subqueueIndex]counter.Counter // only used in taskWriterLoop.
 	}
 )
 
@@ -47,7 +47,7 @@ func newFairTaskWriter(
 		appendCh:       make(chan *writeTaskRequest, backlogMgr.config.OutstandingTaskAppendsThreshold()),
 
 		taskIDBlock: noTaskIDs,
-		counters:    make(map[subqueueKey]counter.Counter),
+		counters:    make(map[subqueueIndex]counter.Counter),
 	}
 }
 
@@ -57,7 +57,7 @@ func (w *fairTaskWriter) Start() {
 }
 
 func (w *fairTaskWriter) appendTask(
-	subqueue subqueueKey,
+	subqueue subqueueIndex,
 	taskInfo *persistencespb.TaskInfo,
 ) error {
 	select {

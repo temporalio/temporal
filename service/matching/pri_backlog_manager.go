@@ -52,8 +52,8 @@ type (
 
 		subqueueLock        sync.Mutex
 		subqueues           []*priTaskReader // subqueue index -> fairTaskReader
-		subqueuesByPriority map[priorityKey]subqueueKey
-		priorityBySubqueue  map[subqueueKey]priorityKey
+		subqueuesByPriority map[priorityKey]subqueueIndex
+		priorityBySubqueue  map[subqueueIndex]priorityKey
 
 		logger           log.Logger
 		throttledLogger  log.ThrottledLogger
@@ -85,8 +85,8 @@ func newPriBacklogManager(
 		config:              config,
 		tqCtx:               tqCtx,
 		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler),
-		subqueuesByPriority: make(map[priorityKey]subqueueKey),
-		priorityBySubqueue:  make(map[subqueueKey]priorityKey),
+		subqueuesByPriority: make(map[priorityKey]subqueueIndex),
+		priorityBySubqueue:  make(map[subqueueIndex]priorityKey),
 		matchingClient:      matchingClient,
 		metricsHandler:      metricsHandler,
 		logger:              logger,
@@ -133,7 +133,7 @@ func (c *priBacklogManagerImpl) Stop() {
 	for i, r := range c.subqueues {
 		_, ackLevel := r.getLevels()
 		// oldestTime can be time.Time{} here since countDelta is 0
-		c.db.updateAckLevelAndBacklogStats(subqueueKey(i), ackLevel, 0, time.Time{})
+		c.db.updateAckLevelAndBacklogStats(subqueueIndex(i), ackLevel, 0, time.Time{})
 	}
 	c.subqueueLock.Unlock()
 
@@ -169,16 +169,16 @@ func (c *priBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.S
 	// existing subqueues never changes. If we change that, this logic will need to change.
 	for i := range subqueues {
 		if i >= len(c.subqueues) {
-			r := newPriTaskReader(c, subqueueKey(i), subqueues[i].AckLevel)
+			r := newPriTaskReader(c, subqueueIndex(i), subqueues[i].AckLevel)
 			r.Start()
 			c.subqueues = append(c.subqueues, r)
 		}
-		c.subqueuesByPriority[priorityKey(subqueues[i].Key.Priority)] = subqueueKey(i)
-		c.priorityBySubqueue[subqueueKey(i)] = priorityKey(subqueues[i].Key.Priority)
+		c.subqueuesByPriority[priorityKey(subqueues[i].Key.Priority)] = subqueueIndex(i)
+		c.priorityBySubqueue[subqueueIndex(i)] = priorityKey(subqueues[i].Key.Priority)
 	}
 }
 
-func (c *priBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) subqueueKey {
+func (c *priBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) subqueueIndex {
 	levels := c.config.PriorityLevels()
 	if priority == 0 {
 		priority = defaultPriorityLevel(levels)
@@ -272,7 +272,7 @@ func (c *priBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.
 
 	result := make(map[int32]*taskqueuepb.TaskQueueStats)
 	backlogCounts := c.db.getApproximateBacklogCountsBySubqueue()
-	for subqueueKey, priorityKey := range c.priorityBySubqueue {
+	for subqueueIdx, priorityKey := range c.priorityBySubqueue {
 		pk := int32(priorityKey)
 
 		// Note that there could be more than one subqueue for the same priority.
@@ -285,10 +285,10 @@ func (c *priBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.
 		}
 
 		// Add backlog counts together across all subqueues for the same priority.
-		result[pk].ApproximateBacklogCount += backlogCounts[subqueueKey]
+		result[pk].ApproximateBacklogCount += backlogCounts[subqueueIdx]
 
 		// Find greatest backlog age for across all subqueues for the same priority.
-		oldestBacklogTime := c.subqueues[subqueueKey].getOldestBacklogTime()
+		oldestBacklogTime := c.subqueues[subqueueIdx].getOldestBacklogTime()
 		if !oldestBacklogTime.IsZero() {
 			oldestBacklogAge := time.Since(oldestBacklogTime)
 			if oldestBacklogAge > result[pk].ApproximateBacklogAge.AsDuration() {
@@ -340,7 +340,7 @@ func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQue
 				EndId:   currentTaskIDBlock.end,
 			},
 			LoadedTasks:             int64(r.getLoadedTasks()),
-			MaxReadLevel:            c.db.GetMaxReadLevel(subqueueKey(i)),
+			MaxReadLevel:            c.db.GetMaxReadLevel(subqueueIndex(i)),
 			ApproximateBacklogCount: backlogCountsBySubqueue[i],
 		}
 	}
