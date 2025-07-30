@@ -122,7 +122,7 @@ func (r *rateLimitManager) computeEffectiveRPSAndSource() {
 func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 
 	var (
-		effectiveRPS    float64 = math.Inf(1)
+		effectiveRPS    = math.Inf(1)
 		rateLimitSource enumspb.RateLimitSource
 	)
 	// Overall system rate limit will be the min of the two configs that are partition wise times the number of partions.
@@ -210,7 +210,6 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 	queueRateLimit := config.GetQueueRateLimit()
 	if queueRateLimit.GetRateLimit() == nil {
 		r.apiConfigRPS = nil
-		return
 	} else {
 		val := float64(queueRateLimit.GetRateLimit().GetRequestsPerSecond())
 		r.apiConfigRPS = &val
@@ -332,6 +331,12 @@ func (r *rateLimitManager) readyTimeForTask(task *internalTask) simpleLimiter {
 }
 
 func (r *rateLimitManager) consumeTokens(now int64, task *internalTask, tokens int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.consumeTokensLocked(now, task, tokens)
+}
+
+func (r *rateLimitManager) consumeTokensLocked(now int64, task *internalTask, tokens int64) {
 	if task.isForwarded() {
 		// don't count any rate limit for forwarded tasks, it was counted on the child
 		return
