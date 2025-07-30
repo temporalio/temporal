@@ -122,7 +122,7 @@ func (r *rateLimitManager) computeEffectiveRPSAndSource() {
 func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 
 	var (
-		effectiveRPS    float64
+		effectiveRPS    float64 = math.Inf(1)
 		rateLimitSource enumspb.RateLimitSource
 	)
 	// Overall system rate limit will be the min of the two configs that are partition wise times the number of partions.
@@ -140,31 +140,13 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_WORKER
 	}
 
-	if rateLimitSource != enumspb.RATE_LIMIT_SOURCE_UNSPECIFIED && effectiveRPS < r.systemRPS {
+	if effectiveRPS < r.systemRPS {
 		r.effectiveRPS = effectiveRPS
 		r.rateLimitSource = rateLimitSource
 	} else {
 		r.effectiveRPS = r.systemRPS
 		r.rateLimitSource = enumspb.RATE_LIMIT_SOURCE_SYSTEM
 	}
-}
-
-// Lazy injection of poll metadata.
-// Internally call UpdateRateLimit to share the same mutex.
-func (r *rateLimitManager) InjectWorkerRPSForPriorityTaskMatcher(meta *pollMetadata) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	var rps *float64
-	if meta != nil && meta.taskQueueMetadata != nil {
-		if workerRPS := meta.taskQueueMetadata.GetMaxTasksPerSecond(); workerRPS != nil {
-			value := workerRPS.GetValue()
-			rps = &value
-		}
-	}
-	r.workerRPS = rps
-	// updateRatelimitLocked includes internal logic to determine if an update is needed,
-	// so calling it unconditionally is safe and avoids redundant updates.
-	r.UpdateSimpleRateLimitLocked(defaultBurstDuration)
 }
 
 // Lazy injection of poll metadata.
@@ -183,6 +165,7 @@ func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
 	// updateRatelimitLocked includes internal logic to determine if an update is needed,
 	// so calling it unconditionally is safe and avoids redundant updates.
 	r.updateRatelimitLocked()
+	r.updateSimpleRateLimitLocked(defaultBurstDuration)
 }
 
 // Return the effective RPS and its source together.
@@ -206,10 +189,10 @@ func (r *rateLimitManager) UserDataChanged() {
 	defer r.mu.Unlock()
 	// Immediately recompute and apply rate limit if necessary.
 	r.updateRatelimitLocked()
-	r.UpdateSimpleRateLimitLocked(defaultBurstDuration)
+	r.updateSimpleRateLimitLocked(defaultBurstDuration)
 	// UpdateTaskQueueConfig api is the single source for fairness per-key rate limit defaults.
 	// Fairness per-key rate limits are only updated upon updates to `fairnessKeyRateLimitDefault`.
-	r.UpdatePerKeySimpleRateLimitLocked(defaultBurstDuration)
+	r.updatePerKeySimpleRateLimitLocked(defaultBurstDuration)
 }
 
 // trySetRPSFromUserDataLocked sets the apiConfigRPS from user data.
@@ -266,7 +249,7 @@ func (r *rateLimitManager) updateRatelimitLocked() {
 }
 
 // UpdateSimpleRateLimit updates the overall queue rate limits for the simpleRateLimiter implementation
-func (r *rateLimitManager) UpdateSimpleRateLimitLocked(burstDuration time.Duration) {
+func (r *rateLimitManager) updateSimpleRateLimitLocked(burstDuration time.Duration) {
 	r.trySetRPSFromUserDataLocked()
 	r.computeEffectiveRPSAndSourceLocked()
 	newRPS := r.effectiveRPS
@@ -281,7 +264,7 @@ func (r *rateLimitManager) UpdateSimpleRateLimitLocked(burstDuration time.Durati
 }
 
 // UpdatePerKeySimpleRateLimit updates the per-key rate limit for the simpleRateLimit implementation
-func (r *rateLimitManager) UpdatePerKeySimpleRateLimitLocked(burstDuration time.Duration) {
+func (r *rateLimitManager) updatePerKeySimpleRateLimitLocked(burstDuration time.Duration) {
 	r.trySetRPSFromUserDataLocked()
 	if r.fairnessRPS == nil {
 		return

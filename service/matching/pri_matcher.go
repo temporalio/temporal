@@ -102,7 +102,6 @@ func newPriTaskMatcher(
 		dynamicRate:      defaultTaskDispatchRPS,
 		rateLimitManager: rateLimitManager,
 	}
-	tm.setLimitLocked()
 
 	return tm
 }
@@ -476,36 +475,10 @@ func (tm *priTaskMatcher) ReprocessAllTasks() {
 	}
 }
 
-// UpdateRatelimit updates the task dispatch rate
-func (tm *priTaskMatcher) UpdateRatelimit(rps float64) {
-	tm.limiterLock.Lock()
-	defer tm.limiterLock.Unlock()
-	tm.dynamicRate = rps
-	tm.setLimitLocked()
-}
-
-func (tm *priTaskMatcher) setAdminNsRate(rps float64) {
-	tm.limiterLock.Lock()
-	defer tm.limiterLock.Unlock()
-	tm.adminNsRate = rps
-	tm.setLimitLocked()
-}
-
-func (tm *priTaskMatcher) setAdminTqRate(rps float64) {
-	tm.limiterLock.Lock()
-	defer tm.limiterLock.Unlock()
-	tm.adminTqRate = rps
-	tm.setLimitLocked()
-}
-
-func (tm *priTaskMatcher) setLimitLocked() {
-	tm.rateLimitManager.UpdateSimpleRateLimitLocked(defaultBurstDuration)
-}
-
 // Rate returns the current dynamic rate setting
 func (tm *priTaskMatcher) Rate() float64 {
-	tm.limiterLock.Lock()
-	defer tm.limiterLock.Unlock()
+	tm.rateLimitManager.mu.Lock()
+	defer tm.rateLimitManager.mu.Unlock()
 	return tm.rateLimitManager.effectiveRPS
 }
 

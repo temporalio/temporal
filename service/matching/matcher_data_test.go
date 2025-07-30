@@ -351,7 +351,7 @@ func (s *MatcherDataSuite) TestRateLimitedBacklog() {
 	s.md.rateLimitManager.mu.Lock()
 	defer s.md.rateLimitManager.mu.Unlock()
 	// 10 tasks/sec with burst of 3
-	s.md.rateLimitManager.UpdateSimpleRateLimitLocked(300 * time.Millisecond)
+	s.md.rateLimitManager.updateSimpleRateLimitLocked(300 * time.Millisecond)
 
 	// register some backlog with old tasks
 	for i := range 100 {
@@ -392,7 +392,7 @@ func (s *MatcherDataSuite) TestPerKeyRateLimit() {
 	// 10 tasks/key/sec with burst of 3
 	s.md.rateLimitManager.mu.Lock()
 	defer s.md.rateLimitManager.mu.Unlock()
-	s.md.rateLimitManager.UpdatePerKeySimpleRateLimitLocked(300 * time.Millisecond)
+	s.md.rateLimitManager.updatePerKeySimpleRateLimitLocked(300 * time.Millisecond)
 	// register some backlog with three keys
 	keys := []string{"key1", "key2", "key3"}
 	for i := range 300 {
