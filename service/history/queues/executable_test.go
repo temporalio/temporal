@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/consts"
@@ -748,6 +749,40 @@ func (s *executableSuite) TestHandleErr_NamespaceNotActiveError() {
 	err := serviceerror.NewNamespaceNotActive("", "", "")
 
 	s.Equal(err, s.newTestExecutable().HandleErr(err))
+}
+
+func (s *executableSuite) TestHandleErr_ShardOwnershipLost() {
+	testCases := []struct {
+		name  string
+		error error
+	}{
+		{
+			name:  "serviceerrors.ShardOwnershipLost",
+			error: serviceerrors.NewShardOwnershipLost("host1", "host2"),
+		},
+		{
+			name:  "serviceerrors.Aborted",
+			error: serviceerror.NewAborted("test aborted error"),
+		},
+		{
+			name: "persistence.ShardOwnershipLostError",
+			error: &persistence.ShardOwnershipLostError{
+				ShardID: 1,
+				Msg:     "test shard ownership lost",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			executable := s.newTestExecutable()
+
+			// HandleErr should return the error as-is for retryable shard ownership lost errors
+			err := executable.HandleErr(tc.error)
+			s.Error(err)
+			s.Equal(tc.error, err)
+		})
+	}
 }
 
 func (s *executableSuite) TestHandleErr_RandomErr() {
