@@ -779,17 +779,11 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 
 	// unset ramping version if it was set to current version
 	if d.State.RoutingConfig.CurrentVersion == d.State.RoutingConfig.RampingVersion {
-		fmt.Printf("ramping version was %s\n", d.State.RoutingConfig.RampingVersion)
-		fmt.Printf("ramping version changed time was %s\n", d.State.RoutingConfig.RampingVersionChangedTime)
-		fmt.Printf("ramping version percentage was %d\n", d.State.RoutingConfig.RampingVersionPercentage)
-		fmt.Printf("ramping version percentage changed time was %s\n", d.State.RoutingConfig.RampingVersionPercentageChangedTime)
-
 		d.State.RoutingConfig.RampingVersion = ""
 		d.State.RoutingConfig.RampingDeploymentVersion = nil
 		d.State.RoutingConfig.RampingVersionPercentage = 0
 		d.State.RoutingConfig.RampingVersionChangedTime = updateTime           // since ramp was removed
 		d.State.RoutingConfig.RampingVersionPercentageChangedTime = updateTime // since ramp was removed
-
 	}
 
 	// update memo
