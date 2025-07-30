@@ -39,6 +39,7 @@ type (
 		controller                         *gomock.Controller
 		visibilityStore                    *VisibilityStore
 		mockESClient                       *client.MockClient
+		mockGoESClient                     *client.MockElasticClient
 		mockProcessor                      *MockProcessor
 		mockMetricsHandler                 *metrics.MockHandler
 		mockSearchAttributesMapperProvider *searchattribute.MockMapperProvider
@@ -115,9 +116,11 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
+	s.mockGoESClient = client.NewMockElasticClient(s.controller)
 	s.mockSearchAttributesMapperProvider = searchattribute.NewMockMapperProvider(s.controller)
 	s.visibilityStore = &VisibilityStore{
 		esClient:                       s.mockESClient,
+		goESClient:                     s.mockGoESClient,
 		index:                          testIndex,
 		searchAttributesProvider:       searchattribute.NewTestProvider(),
 		searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
@@ -1569,8 +1572,8 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 }
 
 func (s *ESVisibilitySuite) TestGetWorkflowExecution() {
-	s.mockESClient.EXPECT().Get(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, index string, docID string) (*elastic.GetResult, error) {
+	s.mockGoESClient.EXPECT().GetDocument(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
+		func(ctx context.Context, index string, docID string) (*client.GetResult, error) {
 			s.Equal(testIndex, index)
 			s.Equal(testWorkflowID+delimiter+testRunID, docID)
 			data := map[string]interface{}{
@@ -1583,8 +1586,8 @@ func (s *ESVisibilitySuite) TestGetWorkflowExecution() {
 				"WorkflowId":           testWorkflowID,
 				"WorkflowType":         "basic.stressWorkflowExecute",
 			}
-			source, _ := json.Marshal(data)
-			return &elastic.GetResult{Found: true, Source: source}, nil
+			source := data
+			return &client.GetResult{Found: true, Source_: source, Id_: docID}, nil
 		})
 
 	request := &manager.GetWorkflowExecutionRequest{
@@ -1597,8 +1600,8 @@ func (s *ESVisibilitySuite) TestGetWorkflowExecution() {
 	s.NoError(err)
 
 	// test unavailable error
-	s.mockESClient.EXPECT().Get(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, index string, docID string) (*elastic.GetResult, error) {
+	s.mockGoESClient.EXPECT().GetDocument(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
+		func(ctx context.Context, index string, docID string) (*client.GetResult, error) {
 			s.Equal(testIndex, index)
 			s.Equal(testWorkflowID+delimiter+testRunID, docID)
 			return nil, errTestESSearch

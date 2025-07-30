@@ -33,3 +33,13 @@ func NewFunctionalTestsClient(config *Config, logger log.Logger) (IntegrationTes
 		return nil, fmt.Errorf("not supported Elasticsearch version: %v", config.Version)
 	}
 }
+
+// NewGoElasticsearchClient creates a new Elasticsearch client using the official go-elasticsearch library
+func NewGoElasticsearchClient(config *Config, httpClient *http.Client, logger log.Logger) (ElasticClient, error) {
+	switch config.Version {
+	case "v7", "go-elasticsearch":
+		return newGoESClient(config, httpClient, logger)
+	default:
+		return nil, fmt.Errorf("not supported Elasticsearch version: %v", config.Version)
+	}
+}
