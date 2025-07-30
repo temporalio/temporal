@@ -47,7 +47,7 @@ func Invoke(
 		response.CacheMutableState = msb.CloneToProto()
 	}
 
-	if !req.GetSkipForceReload() {
+	if req.GetSkipForceReload() {
 		return response, nil
 	}
 

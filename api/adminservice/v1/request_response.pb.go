@@ -308,10 +308,11 @@ func (x *DescribeMutableStateRequest) GetSkipForceReload() bool {
 }
 
 type DescribeMutableStateResponse struct {
-	state                protoimpl.MessageState    `protogen:"open.v1"`
-	ShardId              string                    `protobuf:"bytes,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	HistoryAddr          string                    `protobuf:"bytes,2,opt,name=history_addr,json=historyAddr,proto3" json:"history_addr,omitempty"`
-	CacheMutableState    *v12.WorkflowMutableState `protobuf:"bytes,3,opt,name=cache_mutable_state,json=cacheMutableState,proto3" json:"cache_mutable_state,omitempty"`
+	state             protoimpl.MessageState    `protogen:"open.v1"`
+	ShardId           string                    `protobuf:"bytes,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
+	HistoryAddr       string                    `protobuf:"bytes,2,opt,name=history_addr,json=historyAddr,proto3" json:"history_addr,omitempty"`
+	CacheMutableState *v12.WorkflowMutableState `protobuf:"bytes,3,opt,name=cache_mutable_state,json=cacheMutableState,proto3" json:"cache_mutable_state,omitempty"`
+	// database_mutable_state is only populated when skip_force_reload is false.
 	DatabaseMutableState *v12.WorkflowMutableState `protobuf:"bytes,4,opt,name=database_mutable_state,json=databaseMutableState,proto3" json:"database_mutable_state,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
