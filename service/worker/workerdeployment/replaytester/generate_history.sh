@@ -1,4 +1,16 @@
-#!/bin/bash
+#!/usr/bin/env bash
+#
+# Consider running this script to generate a new history for TestReplays
+# whenever there's some change to the worker-deployment or worker-deployment-version workflow.
+# To use it, run a local server (any backend) and ensure the following dynamic configs are enabled 
+# in the dynamic config file (config/dynamicconfig/development-sql.yaml):
+#
+# system.enableDeploymentVersions=true
+# matching.PollerHistoryTTL=1s
+#
+# Then run this script.
+#
+# Note: this requires temporal cli >= 0.12 and sdk >= v1.33.0
 
 deploymentName="foo"
 version="1.0"
