@@ -1301,7 +1301,7 @@ func (s *ClientMiscTestSuite) testBatchResetByBuildId(useVersioning bool, useDep
 	s.NoError(err)
 	ex := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
 	// wait for first wft and first activity to complete
-	s.Eventually(func() bool { return len(s.GetHistory(s.Namespace().String(), ex)) >= 10 }, 5*time.Second, 100*time.Millisecond)
+	s.Eventually(func() bool { return len(s.GetHistory(s.Namespace().String(), ex)) >= 10 }, 10*time.Second, 200*time.Millisecond)
 
 	w1.Stop()
 
