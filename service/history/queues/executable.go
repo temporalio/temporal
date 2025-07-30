@@ -476,16 +476,6 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 		return true, consts.ErrNamespaceHandover
 	}
 
-	// Check for serviceerror.Aborted (shard ownership lost, etc.)
-	if _, ok := err.(*serviceerror.Aborted); ok {
-		return true, err
-	}
-
-	// Check for shard ownership lost errors
-	if shard.IsShardOwnershipLostError(err) {
-		return true, err
-	}
-
 	return false, nil
 }
 
