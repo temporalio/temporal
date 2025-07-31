@@ -942,7 +942,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	key definition.WorkflowKey,
 	branchToken []byte,
 	closeVisibilityTaskId int64,
-	workflowCloseTime time.Time,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) (retErr error) {
 	// DeleteWorkflowExecution is a 4 stages process (order is very important and should not be changed):
@@ -1019,7 +1018,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							WorkflowKey:                    key,
 							VisibilityTimestamp:            s.timeSource.Now(),
 							CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
-							CloseTime:                      workflowCloseTime,
 						},
 					},
 				}
