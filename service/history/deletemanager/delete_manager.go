@@ -152,6 +152,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		},
 		currentBranchToken,
 		executionInfo.GetCloseVisibilityTaskId(),
+		executionInfo.GetCloseTime().AsTime(),
 		stage,
 	); err != nil {
 		return err
