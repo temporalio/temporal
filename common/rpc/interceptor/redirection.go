@@ -134,6 +134,11 @@ var (
 		"UpdateTaskQueueConfig": func() any { return &workflowservice.UpdateTaskQueueConfigResponse{} },
 		"FetchWorkerConfig":     func() any { return &workflowservice.FetchWorkerConfigResponse{} },
 		"UpdateWorkerConfig":    func() any { return &workflowservice.UpdateWorkerConfigResponse{} },
+
+		"StartNexusOperation":         func() any { return &workflowservice.StartNexusOperationResponse{} },
+		"RequestCancelNexusOperation": func() any { return &workflowservice.RequestCancelNexusOperationResponse{} },
+		"GetNexusOperationInfo":       func() any { return &workflowservice.GetNexusOperationInfoResponse{} },
+		"GetNexusOperationResult":     func() any { return &workflowservice.GetNexusOperationResultResponse{} },
 	}
 )
 

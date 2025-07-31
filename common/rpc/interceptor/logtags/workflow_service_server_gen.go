@@ -111,6 +111,14 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.GetDeploymentReachabilityResponse:
 		return nil
+	case *workflowservice.GetNexusOperationInfoRequest:
+		return nil
+	case *workflowservice.GetNexusOperationInfoResponse:
+		return nil
+	case *workflowservice.GetNexusOperationResultRequest:
+		return nil
+	case *workflowservice.GetNexusOperationResultResponse:
+		return nil
 	case *workflowservice.GetSearchAttributesRequest:
 		return nil
 	case *workflowservice.GetSearchAttributesResponse:
@@ -262,6 +270,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.RegisterNamespaceResponse:
 		return nil
+	case *workflowservice.RequestCancelNexusOperationRequest:
+		return nil
+	case *workflowservice.RequestCancelNexusOperationResponse:
+		return nil
 	case *workflowservice.RequestCancelWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
@@ -383,6 +395,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.StartBatchOperationRequest:
 		return nil
 	case *workflowservice.StartBatchOperationResponse:
+		return nil
+	case *workflowservice.StartNexusOperationRequest:
+		return nil
+	case *workflowservice.StartNexusOperationResponse:
 		return nil
 	case *workflowservice.StartWorkflowExecutionRequest:
 		return []tag.Tag{

@@ -47,8 +47,12 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation": 1,
 
 		// Dispatching a Nexus task is a potentially long running RPC, it's classified in the same bucket as QueryWorkflow.
-		DispatchNexusTaskByNamespaceAndTaskQueueAPIName: 1,
-		DispatchNexusTaskByEndpointAPIName:              1,
+		DispatchNexusTaskByNamespaceAndTaskQueueAPIName:                                1,
+		DispatchNexusTaskByEndpointAPIName:                                             1,
+		"/temporal.api.workflowservice.v1.WorkflowService/StartNexusOperation":         1,
+		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelNexusOperation": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetNexusOperationInfo":       1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetNexusOperationResult":     1,
 	}
 
 	// APIToPriority determines common API priorities.
@@ -73,6 +77,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/StartBatchOperation":              1,
 		DispatchNexusTaskByNamespaceAndTaskQueueAPIName:                                     1,
 		DispatchNexusTaskByEndpointAPIName:                                                  1,
+		"/temporal.api.workflowservice.v1.WorkflowService/StartNexusOperation":              1,
 
 		// P1: Progress APIs for reporting heartbeats and task completions.
 		// Rejecting them could result in more load to retry the workflow/activity/nexus tasks.
@@ -113,6 +118,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowRules":                     2,
 		"/temporal.api.workflowservice.v1.WorkflowService/TriggerWorkflowRule":                   2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateTaskQueueConfig":                 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelNexusOperation":           2,
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":       3,
@@ -129,6 +135,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion": 3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":        3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":           3,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetNexusOperationInfo":           3,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetNexusOperationResult":         3,
 
 		// P3: Progress APIs for reporting cancellations and failures.
 		// They are relatively low priority as the tasks need to be retried anyway.
