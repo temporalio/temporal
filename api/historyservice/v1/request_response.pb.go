@@ -4943,9 +4943,11 @@ func (x *DescribeMutableStateRequest) GetSkipForceReload() bool {
 }
 
 type DescribeMutableStateResponse struct {
-	state             protoimpl.MessageState    `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// CacheMutableState is only available when mutable state is in cache.
 	CacheMutableState *v19.WorkflowMutableState `protobuf:"bytes,1,opt,name=cache_mutable_state,json=cacheMutableState,proto3" json:"cache_mutable_state,omitempty"`
-	// database_mutable_state is only populated when skip_force_reload is false.
+	// DatabaseMutableState is always available,
+	// but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
 	DatabaseMutableState *v19.WorkflowMutableState `protobuf:"bytes,2,opt,name=database_mutable_state,json=databaseMutableState,proto3" json:"database_mutable_state,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache

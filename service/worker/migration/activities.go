@@ -665,7 +665,7 @@ func (a *activities) checkSkipWorkflowExecution(
 
 	// Zombie workflow should be a transient state. However, if there is Zombie workflow on the source cluster,
 	// it is skipped to avoid such workflow being processed on the target cluster.
-	if resp.GetCacheMutableState().GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+	if resp.GetDatabaseMutableState().GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.EncounterZombieWorkflowCount.Name()).Record(1)
 		a.logger.Info("createReplicationTasks skip Zombie workflow", tags...)
 		return verifyResult{
@@ -675,7 +675,7 @@ func (a *activities) checkSkipWorkflowExecution(
 	}
 
 	// Skip verifying workflow which has already passed retention time.
-	if closeTime := resp.GetCacheMutableState().GetExecutionInfo().GetCloseTime(); closeTime != nil && ns != nil && ns.Retention() > 0 {
+	if closeTime := resp.GetDatabaseMutableState().GetExecutionInfo().GetCloseTime(); closeTime != nil && ns != nil && ns.Retention() > 0 {
 		deleteTime := closeTime.AsTime().Add(ns.Retention())
 		if deleteTime.Before(time.Now()) {
 			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.EncounterPassRetentionWorkflowCount.Name()).Record(1)

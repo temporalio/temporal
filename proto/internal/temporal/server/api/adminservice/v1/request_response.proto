@@ -60,8 +60,10 @@ message DescribeMutableStateRequest {
 message DescribeMutableStateResponse {
   string shard_id = 1;
   string history_addr = 2;
+  // CacheMutableState is only available when mutable state is in cache.
   temporal.server.api.persistence.v1.WorkflowMutableState cache_mutable_state = 3;
-  // database_mutable_state is only populated when skip_force_reload is false.
+  // DatabaseMutableState is always available, 
+  // but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
   temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 4;
 }
 

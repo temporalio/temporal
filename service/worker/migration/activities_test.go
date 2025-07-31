@@ -74,7 +74,7 @@ var (
 	}
 
 	completeState = &historyservice.DescribeMutableStateResponse{
-		CacheMutableState: &persistencespb.WorkflowMutableState{
+		DatabaseMutableState: &persistencespb.WorkflowMutableState{
 			ExecutionState: &persistencespb.WorkflowExecutionState{
 				State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			},
@@ -82,7 +82,7 @@ var (
 	}
 
 	zombieState = &historyservice.DescribeMutableStateResponse{
-		CacheMutableState: &persistencespb.WorkflowMutableState{
+		DatabaseMutableState: &persistencespb.WorkflowMutableState{
 			ExecutionState: &persistencespb.WorkflowExecutionState{
 				State: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 			},
@@ -583,7 +583,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 			Execution:       execution1,
 			SkipForceReload: true,
 		})).Return(&historyservice.DescribeMutableStateResponse{
-			CacheMutableState: &persistencespb.WorkflowMutableState{
+			DatabaseMutableState: &persistencespb.WorkflowMutableState{
 				ExecutionState: &persistencespb.WorkflowExecutionState{
 					State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				},
