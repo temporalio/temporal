@@ -7,9 +7,9 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"go.temporal.io/server/service/matching/counter"
 )
 
@@ -1516,7 +1516,7 @@ for cached shard ownership entries after a membership update.`,
 	)
 	ShardIOTimeout = NewGlobalDurationSetting(
 		"history.shardIOTimeout",
-		5*time.Second*debug.TimeoutMultiplier,
+		5*time.Second*debugtimeout.Multiplier,
 		`ShardIOTimeout sets the timeout for persistence operations in the shard context`,
 	)
 	StandbyClusterDelay = NewGlobalDurationSetting(

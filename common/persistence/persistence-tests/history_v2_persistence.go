@@ -13,8 +13,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -66,7 +66,7 @@ func (s *HistoryV2PersistenceSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 
-	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
+	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debugtimeout.Multiplier)
 }
 
 // TearDownTest implementation

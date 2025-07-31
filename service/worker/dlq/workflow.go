@@ -16,10 +16,10 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -156,13 +156,6 @@ const (
 	deleteTasksActivityName      = "dlq-delete-tasks-activity"
 	readTasksActivityName        = "dlq-read-tasks-activity"
 	reEnqueueTasksActivityName   = "dlq-re-enqueue-tasks-activity"
-
-	// deleteTasksActivityTimeout is long because all tasks are deleted in a single go. This only applies when using the
-	// purge workflow, not when the delete activity is used in the merge workflow.
-	deleteTasksActivityTimeout = 5 * time.Minute * debug.TimeoutMultiplier
-	// mergeTasksActivityTimeout controls the timeout of all activities used in the merge workflow. It is relatively
-	// short because we're only processing a single batch of tasks at a time.
-	mergeTasksActivityTimeout = 15 * time.Second * debug.TimeoutMultiplier
 )
 
 var (
@@ -189,6 +182,13 @@ var (
 		BackoffCoefficient: 1.2,
 		MaximumAttempts:    10,
 	}
+
+	// deleteTasksActivityTimeout is long because all tasks are deleted in a single go. This only applies when using the
+	// purge workflow, not when the delete activity is used in the merge workflow.
+	deleteTasksActivityTimeout = 5 * time.Minute * debugtimeout.Multiplier
+	// mergeTasksActivityTimeout controls the timeout of all activities used in the merge workflow. It is relatively
+	// short because we're only processing a single batch of tasks at a time.
+	mergeTasksActivityTimeout = 15 * time.Second * debugtimeout.Multiplier
 )
 
 func newComponent(params workerComponentParams) workercommon.WorkerComponent {

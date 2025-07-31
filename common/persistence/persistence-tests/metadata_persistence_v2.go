@@ -16,10 +16,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -47,7 +47,7 @@ func (m *MetadataPersistenceSuiteV2) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	m.Assertions = require.New(m.T())
 	m.ProtoAssertions = protorequire.New(m.T())
-	m.ctx, m.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
+	m.ctx, m.cancel = context.WithTimeout(context.Background(), 30*time.Second*debugtimeout.Multiplier)
 
 	// cleanup the namespace created
 	var token []byte

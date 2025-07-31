@@ -15,9 +15,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"go.temporal.io/server/common/testing/testvars"
 )
 
@@ -662,7 +662,7 @@ func newOptions(
 
 func newContext(opts *options) (context.Context, context.CancelFunc) {
 	if opts.ctx != nil {
-		return rpc.NewContextFromParentWithTimeoutAndVersionHeaders(opts.ctx, opts.timeout*debug.TimeoutMultiplier)
+		return rpc.NewContextFromParentWithTimeoutAndVersionHeaders(opts.ctx, opts.timeout*debugtimeout.Multiplier)
 	}
-	return rpc.NewContextWithTimeoutAndVersionHeaders(opts.timeout * debug.TimeoutMultiplier)
+	return rpc.NewContextWithTimeoutAndVersionHeaders(opts.timeout * debugtimeout.Multiplier)
 }

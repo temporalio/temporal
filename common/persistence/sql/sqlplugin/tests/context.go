@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/testing/debugtimeout"
 )
 
-const (
-	executionTimeout  = 2 * time.Second * debug.TimeoutMultiplier
-	visibilityTimeout = 4 * time.Second * debug.TimeoutMultiplier
+var (
+	executionTimeout  = 2 * time.Second * debugtimeout.Multiplier
+	visibilityTimeout = 4 * time.Second * debugtimeout.Multiplier
 )
 
 func newExecutionContext() context.Context {

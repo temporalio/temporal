@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -26,6 +25,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
 )
@@ -106,7 +106,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 
-	esProcessorAckTimeout := dynamicconfig.GetDurationPropertyFn(1 * time.Minute * debug.TimeoutMultiplier)
+	esProcessorAckTimeout := dynamicconfig.GetDurationPropertyFn(1 * time.Minute * debugtimeout.Multiplier)
 	visibilityDisableOrderByClause := dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 	visibilityEnableManualPagination := dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 
@@ -1764,7 +1764,7 @@ func (s *ESVisibilitySuite) TestProcessPageToken() {
 				searchAttributesProvider:       searchattribute.NewTestProvider(),
 				searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
 				processor:                      s.mockProcessor,
-				processorAckTimeout:            dynamicconfig.GetDurationPropertyFn(1 * time.Minute * debug.TimeoutMultiplier),
+				processorAckTimeout:            dynamicconfig.GetDurationPropertyFn(1 * time.Minute * debugtimeout.Multiplier),
 				disableOrderByClause:           dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 				enableManualPagination:         dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.manualPagination),
 				metricsHandler:                 s.mockMetricsHandler,
