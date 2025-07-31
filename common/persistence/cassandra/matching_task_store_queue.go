@@ -30,11 +30,11 @@ func switchTasksTable(baseQuery string, v matchingTaskVersion) string {
 	if v == matchingTaskVersion2 {
 		return baseQuery
 	} else if v != matchingTaskVersion1 {
-		panic("invalid task schema version")
+		panic("invalid task schema version") // nolint:forbidigo // hardcoded constants
 	}
 
 	if v1query, ok := switchTasksTableV1Cache.Load(baseQuery); ok {
-		return v1query.(string)
+		return v1query.(string) // nolint:revive
 	}
 
 	v1query := strings.ReplaceAll(baseQuery, " tasks_v2 ", " tasks ")

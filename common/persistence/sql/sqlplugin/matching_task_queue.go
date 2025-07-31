@@ -65,7 +65,7 @@ func SwitchTaskQueuesTable(baseQuery string, v MatchingTaskVersion) string {
 	if v == MatchingTaskVersion2 {
 		return baseQuery
 	} else if v != MatchingTaskVersion1 {
-		panic("invalid task schema version")
+		panic("invalid task schema version") // nolint:forbidigo // hardcoded constants
 	}
 	if v1query, ok := switchTaskQueuesTableV1Cache.Load(baseQuery); ok {
 		return v1query.(string) // nolint:revive
