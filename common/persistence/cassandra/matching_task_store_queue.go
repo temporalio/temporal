@@ -72,6 +72,7 @@ const (
 		`AND task_queue_name = ? ` +
 		`AND task_queue_type = ? ` +
 		`AND type = ? ` +
+		`AND pass = 0 ` +
 		`AND task_id = ? ` +
 		`IF range_id = ?`
 

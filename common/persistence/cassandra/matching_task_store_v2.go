@@ -85,8 +85,7 @@ func (d *matchingTaskStoreV2) CreateTasks(
 	}
 
 	// The following query is used to ensure that range_id didn't change
-	updateQueryStr := switchTasksTable(templateUpdateTaskQueueQuery, cassandraTaskVersion2)
-	batch.Query(updateQueryStr,
+	batch.Query(switchTasksTable(templateUpdateTaskQueueQuery, cassandraTaskVersion2),
 		request.RangeID,
 		request.TaskQueueInfo.Data,
 		request.TaskQueueInfo.EncodingType.String(),
