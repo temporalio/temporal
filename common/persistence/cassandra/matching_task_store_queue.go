@@ -15,21 +15,21 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-// cassandraTaskVersion represents the task schema version
-type cassandraTaskVersion int
+// matchingTaskVersion represents the task schema version
+type matchingTaskVersion int
 
 const (
-	cassandraTaskVersion1 cassandraTaskVersion = 1
-	cassandraTaskVersion2 cassandraTaskVersion = 2
+	matchingTaskVersion1 matchingTaskVersion = 1
+	matchingTaskVersion2 matchingTaskVersion = 2
 )
 
 var switchTasksTableV1Cache sync.Map
 
 // switchTasksTable switches table names from tasks to tasks_v2 and modifies queries for v2 schema
-func switchTasksTable(baseQuery string, v cassandraTaskVersion) string {
-	if v == cassandraTaskVersion2 {
+func switchTasksTable(baseQuery string, v matchingTaskVersion) string {
+	if v == matchingTaskVersion2 {
 		return baseQuery
-	} else if v != cassandraTaskVersion1 {
+	} else if v != matchingTaskVersion1 {
 		panic("invalid task schema version")
 	}
 
@@ -105,7 +105,7 @@ const (
 // taskQueueStore handles unified task queue operations for both v1 and v2
 type taskQueueStore struct {
 	Session gocql.Session
-	version cassandraTaskVersion
+	version matchingTaskVersion
 }
 
 func (d *taskQueueStore) CreateTaskQueue(
@@ -173,7 +173,7 @@ func (d *taskQueueStore) UpdateTaskQueue(
 	var applied bool
 	previous := make(map[string]interface{})
 
-	if d.version == cassandraTaskVersion1 && request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
+	if d.version == matchingTaskVersion1 && request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// V1 TTL logic - only applies to V1
 		if request.ExpiryTime == nil {
 			return nil, serviceerror.NewInternal("ExpiryTime cannot be nil for sticky task queue")

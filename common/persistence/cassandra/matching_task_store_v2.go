@@ -54,7 +54,7 @@ func newMatchingTaskStoreV2(
 	return &matchingTaskStoreV2{
 		Session:        session,
 		userDataStore:  userDataStore{Session: session},
-		taskQueueStore: taskQueueStore{Session: session, version: cassandraTaskVersion2},
+		taskQueueStore: taskQueueStore{Session: session, version: matchingTaskVersion2},
 	}
 }
 
@@ -85,7 +85,7 @@ func (d *matchingTaskStoreV2) CreateTasks(
 	}
 
 	// The following query is used to ensure that range_id didn't change
-	batch.Query(switchTasksTable(templateUpdateTaskQueueQuery, cassandraTaskVersion2),
+	batch.Query(switchTasksTable(templateUpdateTaskQueueQuery, matchingTaskVersion2),
 		request.RangeID,
 		request.TaskQueueInfo.Data,
 		request.TaskQueueInfo.EncodingType.String(),
