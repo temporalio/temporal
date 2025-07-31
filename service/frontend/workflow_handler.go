@@ -100,7 +100,9 @@ const (
 	errTooManyDeleteVersionRequests     = "Too many DeleteWorkerDeploymentVersion requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
 	errTooManyVersionMetadataRequests   = "Too many UpdateWorkerDeploymentVersionMetadata requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
 
-	maxReasonLength = 1000 // Maximum length for the reason field in RateLimitUpdate configurations.
+	maxReasonLength              = 1000 // Maximum length for the reason field in RateLimitUpdate configurations.
+	defaultUserTerminateReason   = "terminated by user via frontend"
+	defaultUserTerminateIdentity = "frontend-service"
 )
 
 type (
@@ -2147,6 +2149,14 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 		return nil, err
 	}
 
+	// Set default values for user-initiated terminate requests to help distinguish from system-initiated ones
+	if request.GetReason() == "" {
+		request.Reason = defaultUserTerminateReason
+	}
+	if request.GetIdentity() == "" {
+		request.Identity = defaultUserTerminateIdentity
+	}
+
 	_, err = wh.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 		NamespaceId:      namespaceID.String(),
 		TerminateRequest: request,
@@ -2968,14 +2978,16 @@ func (wh *WorkflowHandler) GetClusterInfo(ctx context.Context, _ *workflowservic
 	}
 
 	return &workflowservice.GetClusterInfoResponse{
-		SupportedClients:  headers.SupportedClients,
-		ServerVersion:     headers.ServerVersion,
-		ClusterId:         metadata.ClusterId,
-		VersionInfo:       metadata.VersionInfo,
-		ClusterName:       metadata.ClusterName,
-		HistoryShardCount: metadata.HistoryShardCount,
-		PersistenceStore:  wh.persistenceExecutionName,
-		VisibilityStore:   strings.Join(wh.visibilityMgr.GetStoreNames(), ","),
+		SupportedClients:         headers.SupportedClients,
+		ServerVersion:            headers.ServerVersion,
+		ClusterId:                metadata.ClusterId,
+		VersionInfo:              metadata.VersionInfo,
+		ClusterName:              metadata.ClusterName,
+		HistoryShardCount:        metadata.HistoryShardCount,
+		PersistenceStore:         wh.persistenceExecutionName,
+		VisibilityStore:          strings.Join(wh.visibilityMgr.GetStoreNames(), ","),
+		FailoverVersionIncrement: metadata.FailoverVersionIncrement,
+		InitialFailoverVersion:   metadata.InitialFailoverVersion,
 	}, nil
 }
 

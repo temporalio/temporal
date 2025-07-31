@@ -196,7 +196,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 		workflowKey,
 		branchToken,
 		0,
-		time.Time{},
 		&stage,
 	)
 
@@ -221,7 +220,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		workflowKey,
 		branchToken,
 		0,
-		time.Time{},
 		&stage,
 	)
 	s.NoError(err)
@@ -235,7 +233,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		workflowKey,
 		branchToken,
 		0,
-		time.Time{},
 		&stage,
 	)
 	s.NoError(err)
@@ -248,7 +245,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		workflowKey,
 		branchToken,
 		0,
-		time.Time{},
 		&stage,
 	)
 	s.NoError(err)
@@ -272,7 +268,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		workflowKey,
 		branchToken,
 		0,
-		time.Time{},
 		&stage,
 	)
 	s.Error(err)
@@ -285,7 +280,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		workflowKey,
 		branchToken,
 		0,
-		time.Time{},
 		&stage,
 	)
 	s.Error(err)
@@ -298,7 +292,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		workflowKey,
 		branchToken,
 		0,
-		time.Time{},
 		&stage,
 	)
 	s.Error(err)
@@ -310,7 +303,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		workflowKey,
 		branchToken,
 		0,
-		time.Time{},
 		&stage,
 	)
 	s.NoError(err)
@@ -333,7 +325,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		workflowKey,
 		branchToken,
 		0,
-		time.Time{},
 		&stage,
 	)
 	s.Error(err)
@@ -348,7 +339,6 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		workflowKey,
 		branchToken,
 		0,
-		time.Time{},
 		&stage,
 	)
 	s.Error(err)

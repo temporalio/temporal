@@ -1067,6 +1067,78 @@ func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Failed_InvalidLink
 	s.ErrorContains(err, "link exceeds allowed size of 4000")
 }
 
+func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Succeed_WithDefaultReasonAndIdentity() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.NewString())
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(testNamespace).Return(namespaceID, nil)
+	s.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *historyservice.TerminateWorkflowExecutionRequest,
+			_ ...grpc.CallOption,
+		) (*historyservice.TerminateWorkflowExecutionResponse, error) {
+			s.Equal(namespaceID.String(), request.NamespaceId)
+			s.Equal("workflow-id", request.TerminateRequest.WorkflowExecution.GetWorkflowId())
+			// Verify that default values are set when reason and identity are empty
+			s.Equal(defaultUserTerminateReason, request.TerminateRequest.GetReason())
+			s.Equal(defaultUserTerminateIdentity, request.TerminateRequest.GetIdentity())
+			return &historyservice.TerminateWorkflowExecutionResponse{}, nil
+		},
+	)
+
+	req := &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: "test-namespace",
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflow-id",
+		},
+	}
+
+	_, err := wh.TerminateWorkflowExecution(context.Background(), req)
+	s.NoError(err)
+}
+
+func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Succeed_WithCustomReasonAndIdentity() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.NewString())
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(testNamespace).Return(namespaceID, nil)
+	reason := "reason"
+	identity := "identity"
+	s.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *historyservice.TerminateWorkflowExecutionRequest,
+			_ ...grpc.CallOption,
+		) (*historyservice.TerminateWorkflowExecutionResponse, error) {
+			s.Equal(namespaceID.String(), request.NamespaceId)
+			s.Equal("workflow-id", request.TerminateRequest.WorkflowExecution.GetWorkflowId())
+			// Verify that custom values are preserved and not overwritten by defaults
+			s.Equal(reason, request.TerminateRequest.GetReason())
+			s.Equal(identity, request.TerminateRequest.GetIdentity())
+			return &historyservice.TerminateWorkflowExecutionResponse{}, nil
+		},
+	)
+
+	req := &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: "test-namespace",
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflow-id",
+		},
+		Reason:   reason,
+		Identity: identity,
+	}
+
+	_, err := wh.TerminateWorkflowExecution(context.Background(), req)
+	s.NoError(err)
+}
+
 func (s *WorkflowHandlerSuite) TestRequestCancelWorkflowExecution_Failed_InvalidLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
