@@ -165,16 +165,17 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 		25*time.Second, 20*time.Second, 200*time.Second, nil, "identity")
 
 	// zombie state should be treated as open
-	s.NoError(ms.UpdateWorkflowStateStatus(
+	_, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-	))
+	)
+	s.NoError(err)
 
 	wfMs := workflow.TestCloneToProto(ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
-	err := Invoke(context.Background(), request, s.workflowConsistencyChecker)
+	err = Invoke(context.Background(), request, s.workflowConsistencyChecker)
 	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 }
 

@@ -2019,7 +2019,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 			gomock.Any(),
 			gomock.Any(),
 			gomock.Any(),
-			gomock.Any(),
 		).Times(1).Return(taskValue, err)
 	}
 

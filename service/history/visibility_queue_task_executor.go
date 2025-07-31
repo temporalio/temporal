@@ -7,14 +7,17 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -102,6 +105,8 @@ func (t *visibilityQueueTaskExecutor) Execute(
 		err = t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionVisibilityTask:
 		err = t.processDeleteExecution(ctx, task)
+	case *tasks.ChasmTask:
+		err = t.processChasmTask(ctx, task)
 	default:
 		err = errUnknownVisibilityTask
 	}
@@ -151,7 +156,13 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 		return err
 	}
 
-	requestBase := t.getVisibilityRequestBase(task, namespaceEntry, mutableState)
+	requestBase := t.getVisibilityRequestBase(
+		task,
+		namespaceEntry,
+		mutableState,
+		mutableState.GetExecutionInfo().Memo,
+		mutableState.GetExecutionInfo().SearchAttributes,
+	)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
@@ -193,7 +204,13 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 		return nil
 	}
 
-	requestBase := t.getVisibilityRequestBase(task, namespaceEntry, mutableState)
+	requestBase := t.getVisibilityRequestBase(
+		task,
+		namespaceEntry,
+		mutableState,
+		mutableState.GetExecutionInfo().Memo,
+		mutableState.GetExecutionInfo().SearchAttributes,
+	)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
@@ -244,36 +261,24 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		return err
 	}
 
-	wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
+	requestBase := t.getVisibilityRequestBase(
+		task,
+		namespaceEntry,
+		mutableState,
+		mutableState.GetExecutionInfo().Memo,
+		mutableState.GetExecutionInfo().SearchAttributes,
+	)
+	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState)
 	if err != nil {
 		return err
 	}
-	wfExecutionDuration, err := mutableState.GetWorkflowExecutionDuration(ctx)
-	if err != nil {
-		return err
-	}
-	historyLength := mutableState.GetNextEventID() - 1
-	executionInfo := mutableState.GetExecutionInfo()
-	stateTransitionCount := executionInfo.GetStateTransitionCount()
-	historySizeBytes := executionInfo.GetExecutionStats().GetHistorySize()
-	requestBase := t.getVisibilityRequestBase(task, namespaceEntry, mutableState)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
-	err = t.visibilityMgr.RecordWorkflowExecutionClosed(
-		ctx,
-		&manager.RecordWorkflowExecutionClosedRequest{
-			VisibilityRequestBase: requestBase,
-			CloseTime:             wfCloseTime,
-			ExecutionDuration:     wfExecutionDuration,
-			HistoryLength:         historyLength,
-			HistorySizeBytes:      historySizeBytes,
-			StateTransitionCount:  stateTransitionCount,
-		},
-	)
+	err = t.visibilityMgr.RecordWorkflowExecutionClosed(ctx, closedRequest)
 	if err != nil {
 		return err
 	}
@@ -335,17 +340,110 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 	return t.visibilityMgr.DeleteWorkflowExecution(ctx, request)
 }
 
+func (t *visibilityQueueTaskExecutor) processChasmTask(
+	ctx context.Context,
+	task *tasks.ChasmTask,
+) (retError error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := weContext.LoadMutableState(ctx, t.shardContext)
+	if err != nil {
+		return err
+	}
+	if mutableState == nil {
+		return errNoChasmMutableState
+	}
+
+	valid, err := validateChasmSideEffectTask(ctx, mutableState, task)
+	if err != nil || valid == nil {
+		return err
+	}
+
+	tree := mutableState.ChasmTree()
+	if tree == nil {
+		return errNoChasmTree
+	}
+	chasmNode, ok := tree.(*chasm.Node)
+	if !ok {
+		return serviceerror.NewInternalf(
+			"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
+			tree,
+			&chasm.Node{},
+		)
+	}
+
+	visTaskContext := chasm.NewContext(ctx, chasmNode)
+	component, err := tree.ComponentByPath(visTaskContext, task.Info.Path)
+	if err != nil {
+		return err
+	}
+	visComponent, ok := component.(*chasm.Visibility)
+	if !ok {
+		return serviceerror.NewInternalf("expected visibility component, but got %T", visComponent)
+	}
+
+	searchattributes, err := visComponent.GetSearchAttributes(visTaskContext)
+	if err != nil {
+		return err
+	}
+	memo, err := visComponent.GetMemo(visTaskContext)
+	if err != nil {
+		return err
+	}
+
+	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().
+		GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+	if err != nil {
+		return err
+	}
+	requestBase := t.getVisibilityRequestBase(
+		task,
+		namespaceEntry,
+		mutableState,
+		memo,
+		searchattributes,
+	)
+	requestBase.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision] = payload.EncodeString(tree.Archetype().String())
+
+	if mutableState.IsWorkflowExecutionRunning() {
+		release(nil)
+		return t.visibilityMgr.UpsertWorkflowExecution(
+			ctx,
+			&manager.UpsertWorkflowExecutionRequest{
+				VisibilityRequestBase: requestBase,
+			},
+		)
+	}
+
+	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState)
+	if err != nil {
+		return err
+	}
+
+	release(nil)
+	return t.visibilityMgr.RecordWorkflowExecutionClosed(ctx, closedRequest)
+}
+
 func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 	task tasks.Task,
 	namespaceEntry *namespace.Namespace,
 	mutableState historyi.MutableState,
+	memoMap map[string]*commonpb.Payload,
+	searchAttributesMap map[string]*commonpb.Payload,
 ) *manager.VisibilityRequestBase {
 	var (
 		executionInfo    = mutableState.GetExecutionInfo()
 		startTime        = timestamp.TimeValue(mutableState.GetExecutionState().GetStartTime())
 		executionTime    = timestamp.TimeValue(executionInfo.GetExecutionTime())
-		visibilityMemo   = getWorkflowMemo(copyMapPayload(executionInfo.Memo))
-		searchAttributes = getSearchAttributes(copyMapPayload(executionInfo.SearchAttributes))
+		visibilityMemo   = getWorkflowMemo(copyMapPayload(memoMap))
+		searchAttributes = getSearchAttributes(copyMapPayload(searchAttributesMap))
 	)
 
 	var parentExecution *commonpb.WorkflowExecution
@@ -381,6 +479,33 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 			RunId:      executionInfo.RootRunId,
 		},
 	}
+}
+
+func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(
+	ctx context.Context,
+	base *manager.VisibilityRequestBase,
+	mutableState historyi.MutableState,
+) (*manager.RecordWorkflowExecutionClosedRequest, error) {
+	wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	wfExecutionDuration, err := mutableState.GetWorkflowExecutionDuration(ctx)
+	if err != nil {
+		return nil, err
+	}
+	historyLength := mutableState.GetNextEventID() - 1
+	executionInfo := mutableState.GetExecutionInfo()
+	stateTransitionCount := executionInfo.GetStateTransitionCount()
+	historySizeBytes := executionInfo.GetExecutionStats().GetHistorySize()
+	return &manager.RecordWorkflowExecutionClosedRequest{
+		VisibilityRequestBase: base,
+		CloseTime:             wfCloseTime,
+		ExecutionDuration:     wfExecutionDuration,
+		HistoryLength:         historyLength,
+		HistorySizeBytes:      historySizeBytes,
+		StateTransitionCount:  stateTransitionCount,
+	}, nil
 }
 
 func (t *visibilityQueueTaskExecutor) isCloseExecutionVisibilityTaskPending(task *tasks.DeleteExecutionVisibilityTask) bool {
