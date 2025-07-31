@@ -7,6 +7,8 @@
 #
 # system.enableDeploymentVersions=true
 # matching.PollerHistoryTTL=1s
+# matching.wv.VersionDrainageStatusVisibilityGracePeriod=5s
+# matching.wv.VersionDrainageStatusRefreshInterval=5s
 #
 # Then run this script.
 #
@@ -18,8 +20,8 @@ version="1.0"
 # Expected workflow counts - users can override these if their changes are expected to generate more workflows which will be true when a breaking change to 
 # these worfklows is introduced.
 # These values are used by the replay tester to validate that your workflow changes haven't accidentally created additional executions.
-EXPECTED_DEPLOYMENT_WORKFLOWS=${EXPECTED_DEPLOYMENT_WORKFLOWS:-8}
-EXPECTED_VERSION_WORKFLOWS=${EXPECTED_VERSION_WORKFLOWS:-10}
+EXPECTED_DEPLOYMENT_WORKFLOWS=${EXPECTED_DEPLOYMENT_WORKFLOWS:-12}
+EXPECTED_VERSION_WORKFLOWS=${EXPECTED_VERSION_WORKFLOWS:-14}
 
 echo "📋 Expected workflow counts:"
 echo "   Deployment workflows: $EXPECTED_DEPLOYMENT_WORKFLOWS"

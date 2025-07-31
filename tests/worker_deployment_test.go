@@ -2021,6 +2021,8 @@ func (s *WorkerDeploymentSuite) verifyTaskQueueVersioningInfo(ctx context.Contex
 
 // This test shall first rollback a drained version to a current version. After that, it shall deploy a new version
 // which shall further drain this current version.
+// Note: This test reproduces a bug we saw in production where the drainage status was not being properly cleared when a draining version
+// is reactivated and then re-deactivated
 func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
 
