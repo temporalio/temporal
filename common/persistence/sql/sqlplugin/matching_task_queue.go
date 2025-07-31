@@ -59,18 +59,18 @@ const (
 	MatchingTaskVersion2 MatchingTaskVersion = 2
 )
 
-var switchTaskQueuesTableV2Cache sync.Map
+var switchTaskQueuesTableV1Cache sync.Map
 
 func SwitchTaskQueuesTable(baseQuery string, v MatchingTaskVersion) string {
-	if v == MatchingTaskVersion1 {
+	if v == MatchingTaskVersion2 {
 		return baseQuery
-	} else if v != MatchingTaskVersion2 {
-		return "_invalid_version_"
+	} else if v != MatchingTaskVersion1 {
+		panic("invalid task schema version")
 	}
-	if v2query, ok := switchTaskQueuesTableV2Cache.Load(baseQuery); ok {
-		return v2query.(string) // nolint:revive
+	if v1query, ok := switchTaskQueuesTableV1Cache.Load(baseQuery); ok {
+		return v1query.(string) // nolint:revive
 	}
-	v2query := strings.ReplaceAll(baseQuery, " task_queues ", " task_queues_v2 ")
-	switchTaskQueuesTableV2Cache.Store(baseQuery, v2query)
-	return v2query
+	v1query := strings.ReplaceAll(baseQuery, " task_queues_v2 ", " task_queues ")
+	switchTaskQueuesTableV1Cache.Store(baseQuery, v1query)
+	return v1query
 }

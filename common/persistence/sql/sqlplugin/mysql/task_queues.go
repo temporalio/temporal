@@ -9,13 +9,13 @@ import (
 )
 
 const (
-	taskQueueCreatePart = `INTO task_queues (range_hash, task_queue_id, range_id, data, data_encoding) ` +
+	taskQueueCreatePart = `INTO task_queues_v2 (range_hash, task_queue_id, range_id, data, data_encoding) ` +
 		`VALUES (:range_hash, :task_queue_id, :range_id, :data, :data_encoding)`
 
 	// (default range ID: initialRangeID == 1)
 	createTaskQueueQry = `INSERT ` + taskQueueCreatePart
 
-	updateTaskQueueQry = `UPDATE task_queues SET
+	updateTaskQueueQry = `UPDATE task_queues_v2 SET
 	range_id = :range_id,
 	data = :data,
 	data_encoding = :data_encoding
@@ -24,7 +24,7 @@ const (
 	task_queue_id = :task_queue_id
 	`
 
-	listTaskQueueRowSelect = `SELECT range_hash, task_queue_id, range_id, data, data_encoding FROM task_queues `
+	listTaskQueueRowSelect = `SELECT range_hash, task_queue_id, range_id, data, data_encoding FROM task_queues_v2 `
 
 	listTaskQueueWithHashRangeQry = listTaskQueueRowSelect +
 		`WHERE range_hash >= ? AND range_hash <= ? AND task_queue_id > ? ORDER BY task_queue_id ASC LIMIT ?`
@@ -35,13 +35,13 @@ const (
 	getTaskQueueQry = listTaskQueueRowSelect +
 		`WHERE range_hash = ? AND task_queue_id = ?`
 
-	deleteTaskQueueQry = `DELETE FROM task_queues WHERE range_hash=? AND task_queue_id=? AND range_id=?`
+	deleteTaskQueueQry = `DELETE FROM task_queues_v2 WHERE range_hash=? AND task_queue_id=? AND range_id=?`
 
-	lockTaskQueueQry = `SELECT range_id FROM task_queues ` +
+	lockTaskQueueQry = `SELECT range_id FROM task_queues_v2 ` +
 		`WHERE range_hash = ? AND task_queue_id = ? FOR UPDATE`
 )
 
-// InsertIntoTaskQueues inserts one or more rows into task_queues table
+// InsertIntoTaskQueues inserts one or more rows into task_queues[_v2] table
 func (mdb *db) InsertIntoTaskQueues(
 	ctx context.Context,
 	row *sqlplugin.TaskQueuesRow,
@@ -53,7 +53,7 @@ func (mdb *db) InsertIntoTaskQueues(
 	)
 }
 
-// UpdateTaskQueues updates a row in task_queues table
+// UpdateTaskQueues updates a row in task_queues[_v2] table
 func (mdb *db) UpdateTaskQueues(
 	ctx context.Context,
 	row *sqlplugin.TaskQueuesRow,
@@ -65,7 +65,7 @@ func (mdb *db) UpdateTaskQueues(
 	)
 }
 
-// SelectFromTaskQueues reads one or more rows from task_queues table
+// SelectFromTaskQueues reads one or more rows from task_queues[_v2] table
 func (mdb *db) SelectFromTaskQueues(
 	ctx context.Context,
 	filter sqlplugin.TaskQueuesFilter,
@@ -140,7 +140,7 @@ func (mdb *db) rangeSelectFromTaskQueues(
 	return rows, nil
 }
 
-// DeleteFromTaskQueues deletes a row from task_queues table
+// DeleteFromTaskQueues deletes a row from task_queues[_v2] table
 func (mdb *db) DeleteFromTaskQueues(
 	ctx context.Context,
 	filter sqlplugin.TaskQueuesFilter,
@@ -154,7 +154,7 @@ func (mdb *db) DeleteFromTaskQueues(
 	)
 }
 
-// LockTaskQueues locks a row in task_queues table
+// LockTaskQueues locks a row in task_queues[_v2] table
 func (mdb *db) LockTaskQueues(
 	ctx context.Context,
 	filter sqlplugin.TaskQueuesFilter,
