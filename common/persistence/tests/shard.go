@@ -8,10 +8,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"go.temporal.io/server/common/testing/protorequire"
 )
 
@@ -57,7 +57,7 @@ func (s *ShardSuite) TearDownSuite() {
 func (s *ShardSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
-	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
+	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), 30*time.Second*debugtimeout.Multiplier)
 
 	s.ShardID++
 }

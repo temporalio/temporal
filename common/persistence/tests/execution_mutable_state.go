@@ -19,12 +19,12 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/proto"
 )
@@ -86,7 +86,7 @@ func (s *ExecutionMutableStateSuite) TearDownSuite() {
 
 func (s *ExecutionMutableStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
+	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), 30*time.Second*debugtimeout.Multiplier)
 
 	s.ShardID++
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{

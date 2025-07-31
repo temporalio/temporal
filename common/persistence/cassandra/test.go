@@ -8,7 +8,6 @@ import (
 	"github.com/gocql/gocql"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -17,6 +16,7 @@ import (
 	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testutils"
 )
@@ -56,7 +56,7 @@ func NewTestCluster(keyspace, username, password, host string, port int, schemaD
 		Hosts:          host,
 		Port:           port,
 		MaxConns:       2,
-		ConnectTimeout: 30 * time.Second * debug.TimeoutMultiplier,
+		ConnectTimeout: 30 * time.Second * debugtimeout.Multiplier,
 		Keyspace:       keyspace,
 	}
 	result.faultInjection = faultInjection

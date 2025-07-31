@@ -13,13 +13,13 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -28,9 +28,9 @@ var (
 	_ historyservice.HistoryServiceClient = (*clientImpl)(nil)
 )
 
-const (
+var (
 	// DefaultTimeout is the default timeout used to make calls
-	DefaultTimeout = time.Second * 30 * debug.TimeoutMultiplier
+	DefaultTimeout = time.Second * 30 * debugtimeout.Multiplier
 )
 
 type clientImpl struct {

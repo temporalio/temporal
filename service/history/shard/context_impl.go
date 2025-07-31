@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/finalizer"
@@ -46,6 +45,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -188,13 +188,14 @@ var (
 
 	// errInvalidTransition is an internal error used for acquireShard and transition
 	errInvalidTransition = errors.New("invalid state transition request")
+
+	minContextTimeout = 2 * time.Second * debugtimeout.Multiplier
 )
 
 const (
 	logWarnImmediateTaskLag = 3000000 // 3 million
 	logWarnScheduledTaskLag = time.Duration(30 * time.Minute)
 	historySizeLogThreshold = 10 * 1024 * 1024
-	minContextTimeout       = 2 * time.Second * debug.TimeoutMultiplier
 )
 
 func (s *ContextImpl) String() string {

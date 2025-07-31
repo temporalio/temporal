@@ -11,21 +11,21 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
 )
 
 var _ matchingservice.MatchingServiceClient = (*clientImpl)(nil)
 
-const (
+var (
 	// DefaultTimeout is the max timeout for regular calls
-	DefaultTimeout = time.Minute * debug.TimeoutMultiplier
+	DefaultTimeout = time.Minute * debugtimeout.Multiplier
 	// DefaultLongPollTimeout is the max timeout for long poll calls
-	DefaultLongPollTimeout = time.Minute * 5 * debug.TimeoutMultiplier
+	DefaultLongPollTimeout = time.Minute * 5 * debugtimeout.Multiplier
 )
 
 type clientImpl struct {

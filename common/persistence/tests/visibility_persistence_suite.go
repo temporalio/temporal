@@ -11,7 +11,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -24,6 +23,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"go.uber.org/mock/gomock"
 )
 
@@ -92,7 +92,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 func (s *VisibilityPersistenceSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
+	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debugtimeout.Multiplier)
 }
 
 func (s *VisibilityPersistenceSuite) TearDownTest() {

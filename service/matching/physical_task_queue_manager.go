@@ -20,12 +20,12 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching/counter"
@@ -41,13 +41,15 @@ const (
 	// Fake Task ID to wrap a task for syncmatch
 	syncMatchTaskId = -137
 
-	ioTimeout = 5 * time.Second * debug.TimeoutMultiplier
-
 	// Threshold for counting a AddTask call as a no recent poller call
 	noPollerThreshold = time.Minute * 2
 
 	// We avoid retrying failed deployment registration for this period.
 	deploymentRegisterErrorBackoff = 5 * time.Second
+)
+
+var (
+	ioTimeout = 5 * time.Second * debugtimeout.Multiplier
 )
 
 type (

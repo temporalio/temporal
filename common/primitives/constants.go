@@ -3,17 +3,12 @@ package primitives
 import (
 	"time"
 
-	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/testing/debugtimeout"
 )
 
 const (
 	// DefaultTransactionSizeLimit is the largest allowed transaction size to persistence
 	DefaultTransactionSizeLimit = 4 * 1024 * 1024
-)
-
-const (
-	// DefaultWorkflowTaskTimeout sets the Default Workflow Task timeout for a Workflow
-	DefaultWorkflowTaskTimeout = 10 * time.Second * debug.TimeoutMultiplier
 )
 
 const (
@@ -29,4 +24,9 @@ const (
 
 const (
 	ScheduleWorkflowIDPrefix = "temporal-sys-scheduler:"
+)
+
+var (
+	// DefaultWorkflowTaskTimeout sets the Default Workflow Task timeout for a Workflow
+	DefaultWorkflowTaskTimeout = 10 * time.Second * debugtimeout.Multiplier
 )

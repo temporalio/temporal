@@ -12,7 +12,6 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -21,6 +20,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -33,12 +33,12 @@ import (
 )
 
 const (
-	taskTimeout          = time.Second * 10 * debug.TimeoutMultiplier
 	taskHistoryOpTimeout = 20 * time.Second
 )
 
 var (
 	errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
+	taskTimeout            = time.Second * 10 * debugtimeout.Multiplier
 )
 
 type (

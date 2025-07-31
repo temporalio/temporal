@@ -16,9 +16,9 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -166,7 +166,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 			s.shouldSkip.Store(true)
 			s.skippedTasks = make(chan tasks.Task)
 			ctx := context.Background()
-			timeout := 5 * debug.TimeoutMultiplier * time.Second
+			timeout := 5 * debugtimeout.Multiplier * time.Second
 			ctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 			run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{

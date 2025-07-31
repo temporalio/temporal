@@ -8,7 +8,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -17,6 +16,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -29,8 +29,6 @@ const (
 	// task alert & action
 	nonDefaultReaderMaxPendingTaskCoefficient = 0.8
 
-	queueIOTimeout = 5 * time.Second * debug.TimeoutMultiplier
-
 	// Force creating new slice every forceNewSliceDuration
 	// so that the last slice in the default reader won't grow
 	// infinitely.
@@ -42,6 +40,10 @@ const (
 	// slice. If there's only one slice, we may unload all tasks for a
 	// given namespace.
 	forceNewSliceDuration = 5 * time.Minute
+)
+
+var (
+	queueIOTimeout = 5 * time.Second * debugtimeout.Multiplier
 )
 
 type (

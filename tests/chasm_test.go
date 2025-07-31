@@ -8,14 +8,14 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
-const (
-	chasmTestTimeout = 10 * time.Second * debug.TimeoutMultiplier
+var (
+	chasmTestTimeout = 10 * time.Second * debugtimeout.Multiplier
 )
 
 type ChasmTestSuite struct {

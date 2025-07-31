@@ -12,10 +12,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/testing/debugtimeout"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -63,7 +63,7 @@ func (s *TaskQueueSuite) TearDownSuite() {
 
 func (s *TaskQueueSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
+	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debugtimeout.Multiplier)
 
 	s.stickyTTL = time.Second * 10
 	s.namespaceID = uuid.New().String()

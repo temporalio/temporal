@@ -10,9 +10,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	versionpb "go.temporal.io/api/version/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/debugtimeout"
 )
 
 type (
@@ -36,7 +36,7 @@ func (s *ClusterMetadataManagerSuite) SetupSuite() {
 func (s *ClusterMetadataManagerSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
+	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debugtimeout.Multiplier)
 }
 
 // TearDownTest implementation

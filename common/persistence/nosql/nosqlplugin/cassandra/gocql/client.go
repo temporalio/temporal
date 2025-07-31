@@ -13,9 +13,9 @@ import (
 	"github.com/gocql/gocql"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/translator"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/testing/debugtimeout"
 )
 
 func NewCassandraCluster(
@@ -128,7 +128,7 @@ func ConfigureCassandraCluster(cfg config.Cassandra, cluster *gocql.ClusterConfi
 		cluster.NumConns = cfg.MaxConns
 	}
 
-	cluster.ConnectTimeout = 10 * time.Second * debug.TimeoutMultiplier
+	cluster.ConnectTimeout = 10 * time.Second * debugtimeout.Multiplier
 	if cfg.ConnectTimeout > 0 {
 		cluster.ConnectTimeout = cfg.ConnectTimeout
 	}
