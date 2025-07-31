@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -2558,6 +2559,22 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	mockEngine := NewMockEngine(s.controller)
 	ctx := NewEngineContext(context.Background(), mockEngine)
 
+	chasmContext := NewMutableContext(ctx, root)
+	var backendValidtionFnCalled bool
+	// This won't be called until access time.
+	dummyValidationFn := func(_ NodeBackend, _ Context, _ Component) error {
+		backendValidtionFnCalled = true
+		return nil
+	}
+	expectValidate := func(valid bool, validationErr error) {
+		backendValidtionFnCalled = false
+		s.testLibrary.mockSideEffectTaskValidator.EXPECT().Validate(
+			gomock.Any(),
+			gomock.Any(),
+			gomock.Any(),
+			gomock.Any(),
+		).Return(valid, validationErr).Times(1)
+	}
 	expectExecute := func(result error) {
 		s.testLibrary.mockSideEffectTaskExecutor.EXPECT().
 			Execute(
@@ -2565,23 +2582,47 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 				gomock.Any(),
 				gomock.Eq(taskAttributes),
 				gomock.Any(),
-			).Return(result).Times(1)
-	}
-	// This won't be called until access time.
-	dummyValidationFn := func(_ NodeBackend, _ Context, _ Component) error {
-		return nil
+			).DoAndReturn(
+			func(_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestSideEffectTask) error {
+				s.NotNil(ref.validationFn)
+
+				// Accessing the Component should trigger the validationFn.
+				_, err := root.Component(chasmContext, ref)
+				if err != nil {
+					return err
+				}
+				return result
+			}).Times(1)
 	}
 
 	// Succeed task execution.
+	expectValidate(true, nil)
 	expectExecute(nil)
 	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskAttributes, taskInfo, dummyValidationFn)
 	s.NoError(err)
+	s.True(backendValidtionFnCalled)
+
+	// Invalid task.
+	expectValidate(false, nil)
+	expectExecute(nil)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskAttributes, taskInfo, dummyValidationFn)
+	s.Error(err)
+	s.IsType(&serviceerror.NotFound{}, err)
+
+	// Failed to validate task.
+	validationErr := errors.New("validation error")
+	expectValidate(false, validationErr)
+	expectExecute(nil)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskAttributes, taskInfo, dummyValidationFn)
+	s.ErrorIs(validationErr, err)
 
 	// Fail task execution.
-	expectedErr := errors.New("dummy error")
-	expectExecute(expectedErr)
+	expectValidate(true, nil)
+	executionErr := errors.New("execution error")
+	expectExecute(executionErr)
 	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskAttributes, taskInfo, dummyValidationFn)
-	s.ErrorIs(expectedErr, err)
+	s.ErrorIs(executionErr, err)
+	s.True(backendValidtionFnCalled)
 }
 
 func (s *nodeSuite) TestValidateSideEffectTask() {

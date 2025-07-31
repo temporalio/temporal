@@ -5,7 +5,6 @@ package chasm
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"iter"
 	"reflect"
@@ -36,9 +35,9 @@ var (
 )
 
 var (
-	errAccessCheckFailed    = serviceerror.NewNotFound("access check failed, CHASM tree is closed for writes")
-	errComponentNotFound    = serviceerror.NewNotFound("component not found")
-	errTaskValidationFailed = errors.New("task validation failed")
+	errAccessCheckFailed = serviceerror.NewNotFound("access check failed, CHASM tree is closed for writes")
+	errComponentNotFound = serviceerror.NewNotFound("component not found")
+	errTaskNotValid      = serviceerror.NewNotFound("task is no longer valid")
 )
 
 type valueState uint8
@@ -2492,8 +2491,7 @@ func makeValidationFn(
 
 		// Handle bool result.
 		if !result[0].Bool() {
-			// TODO: this should be not-found error
-			return errTaskValidationFailed
+			return errTaskNotValid
 		}
 
 		return nil
