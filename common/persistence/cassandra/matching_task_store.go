@@ -16,9 +16,9 @@ func NewMatchingTaskStore(
 	enableFairness bool,
 ) p.TaskStore {
 	if enableFairness {
-		return newMatchingTaskStoreV2(session, logger)
+		return newMatchingTaskStoreV2(session)
 	}
-	return newMatchingTaskStoreV1(session, logger)
+	return newMatchingTaskStoreV1(session)
 }
 
 // We steal some upper bits of the "row type" field to hold a subqueue index.

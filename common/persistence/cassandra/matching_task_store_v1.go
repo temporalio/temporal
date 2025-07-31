@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
@@ -44,11 +43,10 @@ type matchingTaskStoreV1 struct {
 
 func newMatchingTaskStoreV1(
 	session gocql.Session,
-	logger log.Logger,
 ) *matchingTaskStoreV1 {
 	return &matchingTaskStoreV1{
 		Session:        session,
-		userDataStore:  userDataStore{Session: session, Logger: logger},
+		userDataStore:  userDataStore{Session: session},
 		taskQueueStore: taskQueueStore{Session: session, version: cassandraTaskVersion1},
 	}
 }
