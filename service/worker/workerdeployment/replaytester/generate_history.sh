@@ -76,7 +76,6 @@ download_workflow_chain() {
                 -w "$workflow_id" \
                 -r "$run_id" \
                 --output json | \
-                tee "$run_dir/replay_${workflow_name}_run_${run_id}.json" | \
                 gzip -9c > "$run_dir/replay_${workflow_name}_run_${run_id}.json.gz"
             
             ((run_index++))
