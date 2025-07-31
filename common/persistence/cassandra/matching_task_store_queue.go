@@ -15,147 +15,106 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-// CassandraTaskVersion represents the task schema version
-type CassandraTaskVersion int
+// cassandraTaskVersion represents the task schema version
+type cassandraTaskVersion int
 
 const (
-	CassandraTaskVersion1 CassandraTaskVersion = 1
-	CassandraTaskVersion2 CassandraTaskVersion = 2
+	cassandraTaskVersion1 cassandraTaskVersion = 1
+	cassandraTaskVersion2 cassandraTaskVersion = 2
 )
 
-var switchTasksTableV2Cache sync.Map
+var switchTasksTableV1Cache sync.Map
 
-// SwitchTasksTable switches table names from tasks to tasks_v2 and modifies queries for v2 schema
-func SwitchTasksTable(baseQuery string, v CassandraTaskVersion) string {
-	if v == CassandraTaskVersion1 {
+// switchTasksTable switches table names from tasks to tasks_v2 and modifies queries for v2 schema
+func switchTasksTable(baseQuery string, v cassandraTaskVersion) string {
+	if v == cassandraTaskVersion2 {
 		return baseQuery
-	} else if v != CassandraTaskVersion2 {
-		return "_invalid_version_"
+	} else if v != cassandraTaskVersion1 {
+		panic("invalid task schema version")
 	}
 
-	if v2query, ok := switchTasksTableV2Cache.Load(baseQuery); ok {
-		return v2query.(string)
+	if v1query, ok := switchTasksTableV1Cache.Load(baseQuery); ok {
+		return v1query.(string)
 	}
 
-	// Replace table name
-	v2query := strings.ReplaceAll(baseQuery, " tasks ", " tasks_v2 ")
+	v1query := strings.ReplaceAll(baseQuery, " tasks_v2 ", " tasks ")
+	v1query = strings.ReplaceAll(v1query, "AND pass = 0 ", "")
+	v1query = strings.ReplaceAll(v1query, "type, pass, task_id", "type, task_id")
+	v1query = strings.ReplaceAll(v1query, "?, 0, ?", "?, ?")
 
-	// Handle INSERT queries - need to add pass column
-	if strings.Contains(v2query, "INSERT INTO tasks_v2") {
-		// For task queue inserts, add pass column with value 0
-		if strings.Contains(v2query, "type, task_id") {
-			v2query = strings.ReplaceAll(v2query, "type, task_id", "type, pass, task_id")
-			// Add pass = 0 parameter in VALUES
-			v2query = strings.ReplaceAll(v2query, "?, ?, ?, ?, ?, ?, ?, ?", "?, ?, ?, ?, 0, ?, ?, ?, ?")
-		}
-	}
-
-	// Handle WHERE clauses - add pass = 0 condition for task queue operations
-	if strings.Contains(v2query, "type = ?") && !strings.Contains(v2query, "pass") {
-		// For task queue operations, we need to add "and pass = 0" after "type = ?"
-		v2query = strings.ReplaceAll(v2query, "and type = ?", "and type = ? and pass = 0")
-		// Handle UPDATE WHERE clauses that have different ordering
-		if strings.Contains(v2query, "WHERE") && !strings.Contains(v2query, "and pass = 0") {
-			// Look for patterns like "and type = ? and task_id"
-			v2query = strings.ReplaceAll(v2query, "and type = ? and task_id", "and type = ? and pass = 0 and task_id")
-			// Handle end of WHERE clause
-			if strings.Contains(v2query, "type = ? IF") {
-				v2query = strings.ReplaceAll(v2query, "type = ? IF", "type = ? and pass = 0 IF")
-			}
-		}
-	}
-
-	switchTasksTableV2Cache.Store(baseQuery, v2query)
-	return v2query
+	switchTasksTableV1Cache.Store(baseQuery, v1query)
+	return v1query
 }
 
-// Task queue management queries (these will be unified)
+// Task queue management queries, written for v2 (rewritten for v1 by switchTasksTable)
 const (
 	templateGetTaskQueueQuery = `SELECT ` +
 		`range_id, ` +
 		`task_queue, ` +
 		`task_queue_encoding ` +
-		`FROM tasks ` +
+		`FROM tasks_v2 ` +
 		`WHERE namespace_id = ? ` +
-		`and task_queue_name = ? ` +
-		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and task_id = ?`
+		`AND task_queue_name = ? ` +
+		`AND task_queue_type = ? ` +
+		`AND type = ? ` +
+		`AND pass = 0 ` +
+		`AND task_id = ?`
 
-	templateInsertTaskQueueQuery = `INSERT INTO tasks (` +
-		`namespace_id, ` +
-		`task_queue_name, ` +
-		`task_queue_type, ` +
-		`type, ` +
-		`task_id, ` +
-		`range_id, ` +
-		`task_queue, ` +
-		`task_queue_encoding ` +
-		`) VALUES (?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
+	templateInsertTaskQueueQuery = `INSERT INTO tasks_v2 ` +
+		`(namespace_id, task_queue_name, task_queue_type, type, pass, task_id, range_id, task_queue, task_queue_encoding) ` +
+		`VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?) IF NOT EXISTS`
 
-	templateUpdateTaskQueueQuery = `UPDATE tasks SET ` +
+	templateUpdateTaskQueueQuery = `UPDATE tasks_v2 SET ` +
 		`range_id = ?, ` +
 		`task_queue = ?, ` +
 		`task_queue_encoding = ? ` +
-		`WHERE namespace_id = ? ` +
-		`and task_queue_name = ? ` +
-		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and task_id = ? ` +
-		`IF range_id = ?`
-
-	templateUpdateTaskQueueQueryWithTTLPart1 = `INSERT INTO tasks (` +
-		`namespace_id, ` +
-		`task_queue_name, ` +
-		`task_queue_type, ` +
-		`type, ` +
-		`task_id ` +
-		`) VALUES (?, ?, ?, ?, ?) USING TTL ?`
-
-	templateUpdateTaskQueueQueryWithTTLPart2 = `UPDATE tasks USING TTL ? SET ` +
-		`range_id = ?, ` +
-		`task_queue = ?, ` +
-		`task_queue_encoding = ? ` +
-		`WHERE namespace_id = ? ` +
-		`and task_queue_name = ? ` +
-		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and task_id = ? ` +
-		`IF range_id = ?`
-
-	templateDeleteTaskQueueQuery = `DELETE FROM tasks ` +
 		`WHERE namespace_id = ? ` +
 		`AND task_queue_name = ? ` +
 		`AND task_queue_type = ? ` +
 		`AND type = ? ` +
 		`AND task_id = ? ` +
 		`IF range_id = ?`
+
+	templateUpdateTaskQueueQueryWithTTLPart1 = `INSERT INTO tasks_v2 ` +
+		`(namespace_id, task_queue_name, task_queue_type, type, pass, task_id) ` +
+		`VALUES (?, ?, ?, ?, 0, ?) USING TTL ?`
+
+	templateUpdateTaskQueueQueryWithTTLPart2 = `UPDATE tasks_v2 USING TTL ? SET ` +
+		`range_id = ?, ` +
+		`task_queue = ?, ` +
+		`task_queue_encoding = ? ` +
+		`WHERE namespace_id = ? ` +
+		`AND task_queue_name = ? ` +
+		`AND task_queue_type = ? ` +
+		`AND type = ? ` +
+		`AND pass = 0 ` +
+		`AND task_id = ? ` +
+		`IF range_id = ?`
+
+	templateDeleteTaskQueueQuery = `DELETE FROM tasks_v2 ` +
+		`WHERE namespace_id = ? ` +
+		`AND task_queue_name = ? ` +
+		`AND task_queue_type = ? ` +
+		`AND type = ? ` +
+		`AND pass = 0 ` +
+		`AND task_id = ? ` +
+		`IF range_id = ?`
 )
 
 // taskQueueStore handles unified task queue operations for both v1 and v2
 type taskQueueStore struct {
-	userDataStore
-	version CassandraTaskVersion
-}
-
-func newTaskQueueStore(
-	userDataStore userDataStore,
-	version CassandraTaskVersion,
-) *taskQueueStore {
-	return &taskQueueStore{
-		userDataStore: userDataStore,
-		version:       version,
-	}
+	Session gocql.Session
+	version cassandraTaskVersion
 }
 
 func (d *taskQueueStore) CreateTaskQueue(
 	ctx context.Context,
 	request *p.InternalCreateTaskQueueRequest,
 ) error {
-	queryStr := SwitchTasksTable(templateInsertTaskQueueQuery, d.version)
+	queryStr := switchTasksTable(templateInsertTaskQueueQuery, d.version)
 
 	var query gocql.Query
-	if d.version == CassandraTaskVersion1 {
+	if d.version == cassandraTaskVersion1 {
 		query = d.Session.Query(queryStr,
 			request.NamespaceID,
 			request.TaskQueue,
@@ -202,8 +161,7 @@ func (d *taskQueueStore) GetTaskQueue(
 	ctx context.Context,
 	request *p.InternalGetTaskQueueRequest,
 ) (*p.InternalGetTaskQueueResponse, error) {
-	queryStr := SwitchTasksTable(templateGetTaskQueueQuery, d.version)
-	query := d.Session.Query(queryStr,
+	query := d.Session.Query(switchTasksTable(templateGetTaskQueueQuery, d.version),
 		request.NamespaceID,
 		request.TaskQueue,
 		request.TaskType,
@@ -232,7 +190,7 @@ func (d *taskQueueStore) UpdateTaskQueue(
 	var applied bool
 	previous := make(map[string]interface{})
 
-	if d.version == CassandraTaskVersion1 && request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
+	if d.version == cassandraTaskVersion1 && request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// V1 TTL logic - only applies to V1
 		if request.ExpiryTime == nil {
 			return nil, serviceerror.NewInternal("ExpiryTime cannot be nil for sticky task queue")
@@ -243,8 +201,7 @@ func (d *taskQueueStore) UpdateTaskQueue(
 		}
 		batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
-		queryStr1 := SwitchTasksTable(templateUpdateTaskQueueQueryWithTTLPart1, d.version)
-		batch.Query(queryStr1,
+		batch.Query(switchTasksTable(templateUpdateTaskQueueQueryWithTTLPart1, d.version),
 			request.NamespaceID,
 			request.TaskQueue,
 			request.TaskType,
@@ -253,8 +210,7 @@ func (d *taskQueueStore) UpdateTaskQueue(
 			expiryTTL,
 		)
 
-		queryStr2 := SwitchTasksTable(templateUpdateTaskQueueQueryWithTTLPart2, d.version)
-		batch.Query(queryStr2,
+		batch.Query(switchTasksTable(templateUpdateTaskQueueQueryWithTTLPart2, d.version),
 			expiryTTL,
 			request.RangeID,
 			request.TaskQueueInfo.Data,
@@ -269,8 +225,7 @@ func (d *taskQueueStore) UpdateTaskQueue(
 		applied, _, err = d.Session.MapExecuteBatchCAS(batch, previous)
 	} else {
 		// Regular update logic for both V1 and V2
-		queryStr := SwitchTasksTable(templateUpdateTaskQueueQuery, d.version)
-		query := d.Session.Query(queryStr,
+		query := d.Session.Query(switchTasksTable(templateUpdateTaskQueueQuery, d.version),
 			request.RangeID,
 			request.TaskQueueInfo.Data,
 			request.TaskQueueInfo.EncodingType.String(),
@@ -314,8 +269,7 @@ func (d *taskQueueStore) DeleteTaskQueue(
 	ctx context.Context,
 	request *p.DeleteTaskQueueRequest,
 ) error {
-	queryStr := SwitchTasksTable(templateDeleteTaskQueueQuery, d.version)
-	query := d.Session.Query(queryStr,
+	query := d.Session.Query(switchTasksTable(templateDeleteTaskQueueQuery, d.version),
 		request.TaskQueue.NamespaceID,
 		request.TaskQueue.TaskQueueName,
 		request.TaskQueue.TaskQueueType,

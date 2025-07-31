@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
@@ -43,16 +44,19 @@ const (
 // matchingTaskStoreV2 is a fork of matchingTaskStoreV1 that uses a new task schema.
 // Task queue operations are now unified with V1 through query rewriting.
 type matchingTaskStoreV2 struct {
+	Session gocql.Session
 	userDataStore
-	*taskQueueStore
+	taskQueueStore
 }
 
 func newMatchingTaskStoreV2(
-	userDataStore userDataStore,
+	session gocql.Session,
+	logger log.Logger,
 ) *matchingTaskStoreV2 {
 	return &matchingTaskStoreV2{
-		userDataStore:  userDataStore,
-		taskQueueStore: newTaskQueueStore(userDataStore, CassandraTaskVersion2),
+		Session:        session,
+		userDataStore:  userDataStore{Session: session, Logger: logger},
+		taskQueueStore: taskQueueStore{Session: session, version: cassandraTaskVersion2},
 	}
 }
 
@@ -83,7 +87,7 @@ func (d *matchingTaskStoreV2) CreateTasks(
 	}
 
 	// The following query is used to ensure that range_id didn't change
-	updateQueryStr := SwitchTasksTable(templateUpdateTaskQueueQuery, CassandraTaskVersion2)
+	updateQueryStr := switchTasksTable(templateUpdateTaskQueueQuery, cassandraTaskVersion2)
 	batch.Query(updateQueryStr,
 		request.RangeID,
 		request.TaskQueueInfo.Data,

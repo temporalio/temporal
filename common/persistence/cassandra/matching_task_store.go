@@ -15,11 +15,10 @@ func NewMatchingTaskStore(
 	logger log.Logger,
 	enableFairness bool,
 ) p.TaskStore {
-	userDataStore := userDataStore{Session: session, Logger: logger}
 	if enableFairness {
-		return newMatchingTaskStoreV2(userDataStore)
+		return newMatchingTaskStoreV2(session, logger)
 	}
-	return newMatchingTaskStoreV1(userDataStore)
+	return newMatchingTaskStoreV1(session, logger)
 }
 
 // We steal some upper bits of the "row type" field to hold a subqueue index.
