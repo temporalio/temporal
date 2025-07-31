@@ -38,7 +38,7 @@ func switchTasksTable(baseQuery string, v cassandraTaskVersion) string {
 	}
 
 	v1query := strings.ReplaceAll(baseQuery, " tasks_v2 ", " tasks ")
-	v1query = strings.ReplaceAll(v1query, "AND pass = 0 ", "")
+	v1query = strings.ReplaceAll(v1query, " AND pass = 0 ", " ")
 	v1query = strings.ReplaceAll(v1query, "type, pass, task_id", "type, task_id")
 	v1query = strings.ReplaceAll(v1query, "?, 0, ?", "?, ?")
 
@@ -111,34 +111,16 @@ func (d *taskQueueStore) CreateTaskQueue(
 	ctx context.Context,
 	request *p.InternalCreateTaskQueueRequest,
 ) error {
-	queryStr := switchTasksTable(templateInsertTaskQueueQuery, d.version)
-
-	var query gocql.Query
-	if d.version == cassandraTaskVersion1 {
-		query = d.Session.Query(queryStr,
-			request.NamespaceID,
-			request.TaskQueue,
-			request.TaskType,
-			rowTypeTaskQueue,
-			taskQueueTaskID,
-			request.RangeID,
-			request.TaskQueueInfo.Data,
-			request.TaskQueueInfo.EncodingType.String(),
-		).WithContext(ctx)
-	} else {
-		// For v2, the query rewriting adds pass column, so we need the extra parameter
-		query = d.Session.Query(queryStr,
-			request.NamespaceID,
-			request.TaskQueue,
-			request.TaskType,
-			rowTypeTaskQueue,
-			0, // pass = 0 for task queue metadata
-			taskQueueTaskID,
-			request.RangeID,
-			request.TaskQueueInfo.Data,
-			request.TaskQueueInfo.EncodingType.String(),
-		).WithContext(ctx)
-	}
+	query := d.Session.Query(switchTasksTable(templateInsertTaskQueueQuery, d.version),
+		request.NamespaceID,
+		request.TaskQueue,
+		request.TaskType,
+		rowTypeTaskQueue,
+		taskQueueTaskID,
+		request.RangeID,
+		request.TaskQueueInfo.Data,
+		request.TaskQueueInfo.EncodingType.String(),
+	).WithContext(ctx)
 
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
