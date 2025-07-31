@@ -1,0 +1,214 @@
+{
+  "events": [
+    {
+      "eventId": "1",
+      "eventTime": "2025-07-31T17:20:37.308867Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_STARTED",
+      "taskId": "1048936",
+      "workflowExecutionStartedEventAttributes": {
+        "workflowType": {
+          "name": "temporal-sys-worker-deployment-version-workflow"
+        },
+        "taskQueue": {
+          "name": "temporal-sys-per-ns-tq",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "input": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "YmluYXJ5L3Byb3RvYnVm",
+                "messageType": "dGVtcG9yYWwuc2VydmVyLmFwaS5kZXBsb3ltZW50LnYxLldvcmtlckRlcGxveW1lbnRWZXJzaW9uV29ya2Zsb3dBcmdz"
+              },
+              "data": "CgdkZWZhdWx0EiRhMmZiZGUyYy1lYzNlLTQxZTQtOGM3ZS0xNmM1NDA3MmMzNTUaXgoKCgNmb28SAzEuMBIMCOTLrsQGELjZqIwDOgBIAVIdCg1oZWxsby13b3JsZC0yEgwKBAgCEgAKBAgBEgBSGwoLaGVsbG8td29ybGQSDAoECAISAAoECAESAFgZcAE="
+            }
+          ]
+        },
+        "workflowRunTimeout": "0s",
+        "workflowTaskTimeout": "10s",
+        "continuedExecutionRunId": "329a3ea1-db7c-41b5-84ea-3216b7bd43d0",
+        "initiator": "CONTINUE_AS_NEW_INITIATOR_WORKFLOW",
+        "originalExecutionRunId": "646ed28e-58bc-4710-a8f0-5413923e1a0a",
+        "firstExecutionRunId": "01986180-05df-7ef0-8562-e262bc5354f6",
+        "attempt": 1,
+        "firstWorkflowTaskBackoff": "3.523013s",
+        "searchAttributes": {
+          "indexedFields": {
+            "TemporalNamespaceDivision": {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg==",
+                "type": "S2V5d29yZA=="
+              },
+              "data": "IlRlbXBvcmFsV29ya2VyRGVwbG95bWVudCI="
+            }
+          }
+        },
+        "prevAutoResetPoints": {
+          "points": [
+            {
+              "buildId": "cc320494c6caa67c8706eddc6520e70e",
+              "runId": "01986180-05df-7ef0-8562-e262bc5354f6",
+              "firstWorkflowTaskCompletedId": "4",
+              "createTime": "2025-07-31T17:20:36.834307Z",
+              "expireTime": "2025-08-03T17:20:36.947183Z",
+              "resettable": true
+            }
+          ]
+        },
+        "header": {},
+        "workflowId": "temporal-sys-worker-deployment-version:foo:1.0"
+      }
+    },
+    {
+      "eventId": "2",
+      "eventTime": "2025-07-31T17:20:40.754964Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+      "taskId": "1048980",
+      "workflowTaskScheduledEventAttributes": {
+        "taskQueue": {
+          "name": "temporal-sys-per-ns-tq",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "startToCloseTimeout": "10s",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "3",
+      "eventTime": "2025-07-31T17:20:40.755719Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+      "taskId": "1048981",
+      "workflowTaskStartedEventAttributes": {
+        "scheduledEventId": "2",
+        "identity": "temporal-system@Shivams-MacBook-Pro.local@default",
+        "requestId": "0d89f4b3-d2a3-4b09-b395-55e3fe5e1de3",
+        "historySizeBytes": "775",
+        "workerVersion": {
+          "buildId": "cc320494c6caa67c8706eddc6520e70e"
+        }
+      }
+    },
+    {
+      "eventId": "4",
+      "eventTime": "2025-07-31T17:20:40.758004Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+      "taskId": "1048982",
+      "workflowTaskCompletedEventAttributes": {
+        "scheduledEventId": "2",
+        "startedEventId": "3",
+        "identity": "temporal-system@Shivams-MacBook-Pro.local@default",
+        "workerVersion": {
+          "buildId": "cc320494c6caa67c8706eddc6520e70e"
+        },
+        "sdkMetadata": {
+          "langUsedFlags": [
+            3,
+            4
+          ],
+          "sdkName": "temporal-go",
+          "sdkVersion": "1.34.0"
+        },
+        "meteringMetadata": {}
+      }
+    },
+    {
+      "eventId": "5",
+      "eventTime": "2025-07-31T17:20:40.758062Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED",
+      "taskId": "1048983",
+      "workflowExecutionUpdateAcceptedEventAttributes": {
+        "protocolInstanceId": "faa2c19a-4f6b-4748-9611-2881814ceab7",
+        "acceptedRequestMessageId": "faa2c19a-4f6b-4748-9611-2881814ceab7/request",
+        "acceptedRequestSequencingEventId": "2",
+        "acceptedRequest": {
+          "meta": {
+            "updateId": "faa2c19a-4f6b-4748-9611-2881814ceab7",
+            "identity": "e3dedbb3-9d1c-4fe4-a3f1-21235091a8d5"
+          },
+          "input": {
+            "name": "update-version-metadata",
+            "args": {
+              "payloads": [
+                {
+                  "metadata": {
+                    "encoding": "YmluYXJ5L3Byb3RvYnVm",
+                    "messageType": "dGVtcG9yYWwuc2VydmVyLmFwaS5kZXBsb3ltZW50LnYxLlVwZGF0ZVZlcnNpb25NZXRhZGF0YUFyZ3M="
+                  },
+                  "data": "CigKA2tleRIhChYKCGVuY29kaW5nEgpqc29uL3BsYWluEgcidmFsdWUiGiRlM2RlZGJiMy05ZDFjLTRmZTQtYTNmMS0yMTIzNTA5MWE4ZDU="
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "eventId": "6",
+      "eventTime": "2025-07-31T17:20:40.758100Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED",
+      "taskId": "1048984",
+      "workflowExecutionUpdateCompletedEventAttributes": {
+        "meta": {
+          "updateId": "faa2c19a-4f6b-4748-9611-2881814ceab7"
+        },
+        "acceptedEventId": "5",
+        "outcome": {
+          "success": {
+            "payloads": [
+              {
+                "metadata": {
+                  "encoding": "YmluYXJ5L3Byb3RvYnVm",
+                  "messageType": "dGVtcG9yYWwuc2VydmVyLmFwaS5kZXBsb3ltZW50LnYxLlVwZGF0ZVZlcnNpb25NZXRhZGF0YVJlc3BvbnNl"
+                },
+                "data": "CioKKAoDa2V5EiEKFgoIZW5jb2RpbmcSCmpzb24vcGxhaW4SByJ2YWx1ZSI="
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "eventId": "7",
+      "eventTime": "2025-07-31T17:20:40.758171Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW",
+      "taskId": "1048985",
+      "workflowExecutionContinuedAsNewEventAttributes": {
+        "newExecutionRunId": "244bd8b2-bc9d-420b-8fff-83fc9f78c1ba",
+        "workflowType": {
+          "name": "temporal-sys-worker-deployment-version-workflow"
+        },
+        "taskQueue": {
+          "name": "temporal-sys-per-ns-tq",
+          "kind": "TASK_QUEUE_KIND_NORMAL"
+        },
+        "input": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "YmluYXJ5L3Byb3RvYnVm",
+                "messageType": "dGVtcG9yYWwuc2VydmVyLmFwaS5kZXBsb3ltZW50LnYxLldvcmtlckRlcGxveW1lbnRWZXJzaW9uV29ya2Zsb3dBcmdz"
+              },
+              "data": "CgdkZWZhdWx0EiRhMmZiZGUyYy1lYzNlLTQxZTQtOGM3ZS0xNmM1NDA3MmMzNTUaigEKCgoDZm9vEgMxLjASDAjky67EBhC42aiMAzoAQioKKAoDa2V5EiEKFgoIZW5jb2RpbmcSCmpzb24vcGxhaW4SByJ2YWx1ZSJIAVIdCg1oZWxsby13b3JsZC0yEgwKBAgCEgAKBAgBEgBSGwoLaGVsbG8td29ybGQSDAoECAISAAoECAESAFgZcAE="
+            }
+          ]
+        },
+        "workflowRunTimeout": "0s",
+        "workflowTaskTimeout": "10s",
+        "workflowTaskCompletedEventId": "4",
+        "header": {},
+        "searchAttributes": {
+          "indexedFields": {
+            "TemporalNamespaceDivision": {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg==",
+                "type": "S2V5d29yZA=="
+              },
+              "data": "IlRlbXBvcmFsV29ya2VyRGVwbG95bWVudCI="
+            }
+          }
+        },
+        "inheritBuildId": true
+      }
+    }
+  ]
+}

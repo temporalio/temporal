@@ -1,10 +1,13 @@
 package replaytester
 
 import (
+	"bufio"
 	"compress/gzip"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -76,19 +79,108 @@ func testRunDirectory(t *testing.T, replayer worker.WorkflowReplayer, logger *lo
 
 	fmt.Printf("  Found %d workflow histories to replay\n", len(files))
 
+	// Validate that workflow counts match expected values
+	validateWorkflowCounts(t, files, runDir)
+
+	// Validate that histories replay successfully
 	for _, filename := range files {
 		t.Run(filepath.Base(filename), func(t *testing.T) {
-			logger.Info("Replaying", "file", filename)
-			f, err := os.Open(filename)
-			require.NoError(t, err)
-			r, err := gzip.NewReader(f)
-			require.NoError(t, err)
-			history, err := client.HistoryFromJSON(r, client.HistoryJSONOptions{})
-			require.NoError(t, err)
-			err = replayer.ReplayWorkflowHistory(logger, history)
-			require.NoError(t, err)
-			_ = r.Close()
-			_ = f.Close()
+			replayWorkflowHistory(t, replayer, logger, filename)
 		})
 	}
+}
+
+// replayWorkflowHistory replays a single workflow history file and validates it
+func replayWorkflowHistory(t *testing.T, replayer worker.WorkflowReplayer, logger *log.SdkLogger, filename string) {
+	logger.Info("Replaying", "file", filename)
+	f, err := os.Open(filename)
+	require.NoError(t, err)
+	r, err := gzip.NewReader(f)
+	require.NoError(t, err)
+	history, err := client.HistoryFromJSON(r, client.HistoryJSONOptions{})
+	require.NoError(t, err)
+	err = replayer.ReplayWorkflowHistory(logger, history)
+	require.NoError(t, err)
+	_ = r.Close()
+	_ = f.Close()
+}
+
+// readExpectedCounts reads expected workflow counts from the expected_counts.txt file
+func readExpectedCounts(runDir string) (deploymentCount, versionCount int, err error) {
+	expectedCountsFile := filepath.Join(runDir, "expected_counts.txt")
+
+	file, err := os.Open(expectedCountsFile)
+	if err != nil {
+		// File doesn't exist - this might be an older test data directory
+		return 0, 0, fmt.Errorf("expected_counts.txt not found in %s: %w", runDir, err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "#") || line == "" {
+			continue // Skip comments and empty lines
+		}
+
+		if strings.HasPrefix(line, "EXPECTED_DEPLOYMENT_WORKFLOWS=") {
+			value := strings.TrimPrefix(line, "EXPECTED_DEPLOYMENT_WORKFLOWS=")
+			deploymentCount, err = strconv.Atoi(value)
+			if err != nil {
+				return 0, 0, fmt.Errorf("invalid deployment count: %w", err)
+			}
+		} else if strings.HasPrefix(line, "EXPECTED_VERSION_WORKFLOWS=") {
+			value := strings.TrimPrefix(line, "EXPECTED_VERSION_WORKFLOWS=")
+			versionCount, err = strconv.Atoi(value)
+			if err != nil {
+				return 0, 0, fmt.Errorf("invalid version count: %w", err)
+			}
+		}
+	}
+
+	return deploymentCount, versionCount, scanner.Err()
+}
+
+// validateWorkflowCounts ensures the number of deployment and version workflows matches expectations
+func validateWorkflowCounts(t *testing.T, files []string, runDir string) {
+	// Read expected counts from file
+	expectedDeploymentCount, expectedVersionCount, err := readExpectedCounts(runDir)
+	if err != nil {
+		// For backwards compatibility, skip validation if expected_counts.txt doesn't exist
+		fmt.Printf("  ⚠️  Skipping workflow count validation since expected_counts.txt doesn't exist for this test data directory; this is expected for older test data directories: %v\n", err)
+		return
+	}
+
+	// Count actual workflows
+	actualDeploymentCount := 0
+	actualVersionCount := 0
+
+	for _, file := range files {
+		filename := filepath.Base(file)
+		// Only count .gz files since those are the ones used for replay testing
+		if !strings.HasSuffix(filename, ".json.gz") {
+			continue
+		}
+
+		if strings.Contains(filename, "replay_worker_deployment_wf_run_") {
+			actualDeploymentCount++
+		} else if strings.Contains(filename, "replay_worker_deployment_version_wf_run_") {
+			actualVersionCount++
+		}
+	}
+
+	fmt.Printf("  Workflow counts - Expected: Deployment=%d, Version=%d | Actual: Deployment=%d, Version=%d\n",
+		expectedDeploymentCount, expectedVersionCount, actualDeploymentCount, actualVersionCount)
+
+	require.Equal(t, expectedDeploymentCount, actualDeploymentCount,
+		"Deployment workflow count mismatch in %s. Expected %d, got %d. "+
+			"This could mean your changes caused additional workflow executions. "+
+			"If this is expected, regenerate test data with: EXPECTED_DEPLOYMENT_WORKFLOWS=%d ./generate_history.sh",
+		runDir, expectedDeploymentCount, actualDeploymentCount, actualDeploymentCount)
+
+	require.Equal(t, expectedVersionCount, actualVersionCount,
+		"Version workflow count mismatch in %s. Expected %d, got %d. "+
+			"This could mean your changes caused additional workflow executions. "+
+			"If this is expected, regenerate test data with: EXPECTED_VERSION_WORKFLOWS=%d ./generate_history.sh",
+		runDir, expectedVersionCount, actualVersionCount, actualVersionCount)
 }
