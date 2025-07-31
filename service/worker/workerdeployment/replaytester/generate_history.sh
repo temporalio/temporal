@@ -30,8 +30,7 @@ download_workflow_chain() {
     local workflow_id=$1
     local workflow_name=$2
     local workflow_type=$3
-    local timestamp=$4
-    local run_dir=$5
+    local run_dir=$4
     
     echo "📥 Downloading all executions for: $workflow_id"
     
@@ -43,7 +42,11 @@ download_workflow_chain() {
         jq -r '.[] | .execution.runId')
     
     # Count how many we found
-    run_count=$(echo "$run_ids" | wc -l | tr -d ' ')
+    if [ -z "$run_ids" ]; then
+        run_count=0
+    else
+        run_count=$(echo "$run_ids" | wc -l | tr -d ' ')
+    fi
     echo "   Found $run_count executions"
     
     if [ "$run_count" -eq 0 ]; then
@@ -82,8 +85,8 @@ mkdir -p "$run_dir"
 echo "📁 Creating run directory: $run_dir"
 
 # Download all executions for both workflow types
-download_workflow_chain "temporal-sys-worker-deployment:$deploymentName" "worker_deployment_wf" "temporal-sys-worker-deployment-workflow" "$now" "$run_dir"
-download_workflow_chain "temporal-sys-worker-deployment-version:$deploymentName:$version" "worker_deployment_version_wf" "temporal-sys-worker-deployment-version-workflow" "$now" "$run_dir"
+download_workflow_chain "temporal-sys-worker-deployment:$deploymentName" "worker_deployment_wf" "temporal-sys-worker-deployment-workflow" "$run_dir"
+download_workflow_chain "temporal-sys-worker-deployment-version:$deploymentName:$version" "worker_deployment_version_wf" "temporal-sys-worker-deployment-version-workflow" "$run_dir"
 
 echo ""
 echo "🎉 Complete! All workflow execution histories downloaded to $run_dir"
@@ -92,9 +95,8 @@ echo "📊 Summary for this run:"
 echo "   📂 Run directory: $run_dir"
 
 # Count files by workflow type
-deployment_files=$(ls -1 "$run_dir"/replay_worker_deployment_wf_*.json.gz 2>/dev/null | wc -l | tr -d ' ')
-version_files=$(ls -1 "$run_dir"/replay_worker_deployment_version_wf_*.json.gz 2>/dev/null | wc -l | tr -d ' ')
-total_files=$(ls -1 "$run_dir"/replay_*.json.gz 2>/dev/null | wc -l | tr -d ' ')
+deployment_files=$(find "$run_dir" -name "replay_worker_deployment_wf_*.json.gz" 2>/dev/null | wc -l | tr -d ' ')
+version_files=$(find "$run_dir" -name "replay_worker_deployment_version_wf_*.json.gz" 2>/dev/null | wc -l | tr -d ' ')
 
 echo "   Worker Deployment workflows: $deployment_files executions"
 echo "   Worker Version workflows: $version_files executions"
