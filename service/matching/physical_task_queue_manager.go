@@ -224,6 +224,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.taskValidator,
 			pqMgr.logger,
 			newFairMetricsHandler(taggedMetricsHandler),
+			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
@@ -265,6 +266,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.taskValidator,
 			pqMgr.logger,
 			newPriMetricsHandler(taggedMetricsHandler),
+			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
@@ -447,6 +449,10 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 		var invalidTaskTag = getInvalidTaskTag(task)
 		c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
 		// Don't try to set read level here because it may have been advanced already.
+
+		// Stay alive as long as we're invalidating tasks
+		c.MarkAlive()
+
 		return nil
 	}
 	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue)
