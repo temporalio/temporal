@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	// TODO: add a test for this constant
 	visibilityComponentFqType = "core.vis"
 	visibilityTaskFqType      = "core.visTask"
 )
 
+// CoreLibrary contains built-in components maintained as part of the CHASM framework.
 type CoreLibrary struct {
 	UnimplementedLibrary
 }

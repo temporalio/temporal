@@ -48,6 +48,18 @@ func (s *visibilitySuite) initAssertions() {
 	s.Assertions = require.New(s.T())
 }
 
+func (s *visibilitySuite) TestComponentFqType() {
+	rc, ok := s.registry.ComponentFor(&Visibility{})
+	s.True(ok)
+	s.Equal(visibilityComponentFqType, rc.FqType())
+}
+
+func (s *visibilitySuite) TestTaskFqType() {
+	rc, ok := s.registry.TaskFor(&persistencespb.ChasmVisibilityTaskData{})
+	s.True(ok)
+	s.Equal(visibilityTaskFqType, rc.FqType())
+}
+
 func (s *visibilitySuite) TestLifeCycleState() {
 	s.Equal(LifecycleStateRunning, s.visibility.LifecycleState(s.mockChasmContext))
 }

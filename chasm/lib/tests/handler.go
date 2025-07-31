@@ -80,7 +80,8 @@ func NewPayloadStoreHandler(
 			BusinessID:  request.StoreID,
 		},
 		func(mutableContext chasm.MutableContext, _ any) (*PayloadStore, any, error) {
-			return NewPayloadStore(mutableContext), nil, nil
+			store, err := NewPayloadStore(mutableContext)
+			return store, nil, err
 		},
 		nil,
 	)

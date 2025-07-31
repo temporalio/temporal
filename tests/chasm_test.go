@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -108,6 +109,19 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	s.Empty(visRecord.StateTransitionCount)
 	s.Empty(visRecord.CloseTime)
 	s.Empty(visRecord.HistoryLength)
+
+	var intVal int
+	p, ok := visRecord.Memo.Fields[tests.TotalCountMemoFieldName]
+	s.True(ok)
+	s.NoError(payload.Decode(p, &intVal))
+	s.Equal(0, intVal)
+	p, ok = visRecord.Memo.Fields[tests.TotalSizeMemoFieldName]
+	s.True(ok)
+	s.NoError(payload.Decode(p, &intVal))
+	s.Equal(0, intVal)
+	var strVal string
+	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields[tests.TestKeywordSAFieldName], &strVal))
+	s.Equal(tests.TestKeywordSAFieldValue, strVal)
 
 	_, err = tests.ClosePayloadStoreHandler(
 		engineContext,
