@@ -176,15 +176,21 @@ func (s *PrioritySuite) TestSubqueue_Migration() {
 	}
 
 	processActivity := func() {
-		_, err := s.TaskPoller().PollAndHandleActivityTask(
-			tv,
-			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-				nothing, err := payloads.Encode()
-				s.NoError(err)
-				return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
-			},
-			taskpoller.WithContext(ctx),
-		)
+		var err error
+		for range 10 {
+			_, err = s.TaskPoller().PollAndHandleActivityTask(
+				tv,
+				func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+					nothing, err := payloads.Encode()
+					s.NoError(err)
+					return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
+				},
+				taskpoller.WithContext(ctx),
+			)
+			if err == nil {
+				return
+			}
+		}
 		s.NoError(err)
 	}
 
