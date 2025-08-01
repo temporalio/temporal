@@ -323,7 +323,7 @@ func (s *rescheudulerSuite) TestPriorityAndNamespaceOrdering() {
 
 	// Create tasks with mixed priorities and namespaces in random insertion order
 	taskIDs := []string{
-		"preempt_ns_b", "high_ns_c", "low_ns_d", 
+		"preempt_ns_b", "high_ns_c", "low_ns_d",
 		"preempt_ns_a", "high_ns_a", "low_ns_b",
 	}
 
@@ -344,7 +344,7 @@ func (s *rescheudulerSuite) TestPriorityAndNamespaceOrdering() {
 	// 1. Priority order: High -> Low -> Preemptable
 	// 2. Within same priority: NamespaceID alphabetical order
 	expected := []string{
-		"high_ns_a",    // Priority: High, NamespaceID: "namespace_a" 
+		"high_ns_a",    // Priority: High, NamespaceID: "namespace_a"
 		"high_ns_c",    // Priority: High, NamespaceID: "namespace_c"
 		"low_ns_b",     // Priority: Low, NamespaceID: "namespace_b"
 		"low_ns_d",     // Priority: Low, NamespaceID: "namespace_d"
