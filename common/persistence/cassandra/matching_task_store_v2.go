@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"strings"
 
 	"go.temporal.io/api/serviceerror"
 	p "go.temporal.io/server/common/persistence"
@@ -39,192 +38,24 @@ const (
 		`AND task_queue_type = ? ` +
 		`AND type = ? ` +
 		`and (pass, task_id) < (?, ?)`
-
-	templateGetTaskQueueQuery_v2 = `SELECT ` +
-		`range_id, ` +
-		`task_queue, ` +
-		`task_queue_encoding ` +
-		`FROM tasks_v2 ` +
-		`WHERE namespace_id = ? ` +
-		`and task_queue_name = ? ` +
-		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and pass = 0 ` +
-		`and task_id = ?`
-
-	templateInsertTaskQueueQuery_v2 = `INSERT INTO tasks_v2 (` +
-		`namespace_id, ` +
-		`task_queue_name, ` +
-		`task_queue_type, ` +
-		`type, ` +
-		`pass, ` +
-		`task_id, ` +
-		`range_id, ` +
-		`task_queue, ` +
-		`task_queue_encoding ` +
-		`) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?) IF NOT EXISTS`
-
-	templateUpdateTaskQueueQuery_v2 = `UPDATE tasks_v2 SET ` +
-		`range_id = ?, ` +
-		`task_queue = ?, ` +
-		`task_queue_encoding = ? ` +
-		`WHERE namespace_id = ? ` +
-		`and task_queue_name = ? ` +
-		`and task_queue_type = ? ` +
-		`and pass = 0 ` +
-		`and type = ? ` +
-		`and task_id = ? ` +
-		`IF range_id = ?`
-
-	templateDeleteTaskQueueQuery_v2 = `DELETE FROM tasks_v2 ` +
-		`WHERE namespace_id = ? ` +
-		`AND task_queue_name = ? ` +
-		`AND task_queue_type = ? ` +
-		`AND type = ? ` +
-		`and pass = 0 ` +
-		`AND task_id = ? ` +
-		`IF range_id = ?`
 )
 
 // matchingTaskStoreV2 is a fork of matchingTaskStoreV1 that uses a new task schema.
-// All methods and queries were duplicated (even if they didn't change) to reduce the shared code.
-// Eventually, the original matchingTaskStoreV1 will be removed.
+// Task queue operations are now unified with V1 through query rewriting.
 type matchingTaskStoreV2 struct {
+	Session gocql.Session
 	userDataStore
+	taskQueueStore
 }
 
 func newMatchingTaskStoreV2(
-	userDataStore userDataStore,
+	session gocql.Session,
 ) *matchingTaskStoreV2 {
-	return &matchingTaskStoreV2{userDataStore: userDataStore}
-}
-
-func (d *matchingTaskStoreV2) CreateTaskQueue(
-	ctx context.Context,
-	request *p.InternalCreateTaskQueueRequest,
-) error {
-	query := d.Session.Query(templateInsertTaskQueueQuery_v2,
-		request.NamespaceID,
-		request.TaskQueue,
-		request.TaskType,
-		rowTypeTaskQueue,
-		taskQueueTaskID,
-		request.RangeID,
-		request.TaskQueueInfo.Data,
-		request.TaskQueueInfo.EncodingType.String(),
-	).WithContext(ctx)
-
-	previous := make(map[string]interface{})
-	applied, err := query.MapScanCAS(previous)
-	if err != nil {
-		return gocql.ConvertError("CreateTaskQueue", err)
+	return &matchingTaskStoreV2{
+		Session:        session,
+		userDataStore:  userDataStore{Session: session},
+		taskQueueStore: taskQueueStore{Session: session, version: matchingTaskVersion2},
 	}
-
-	if !applied {
-		previousRangeID := previous["range_id"]
-		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("CreateTaskQueue: TaskQueue:%v, TaskQueueType:%v, PreviousRangeID:%v",
-				request.TaskQueue, request.TaskType, previousRangeID),
-		}
-	}
-
-	return nil
-}
-
-func (d *matchingTaskStoreV2) GetTaskQueue(
-	ctx context.Context,
-	request *p.InternalGetTaskQueueRequest,
-) (*p.InternalGetTaskQueueResponse, error) {
-	query := d.Session.Query(templateGetTaskQueueQuery_v2,
-		request.NamespaceID,
-		request.TaskQueue,
-		request.TaskType,
-		rowTypeTaskQueue,
-		taskQueueTaskID,
-	).WithContext(ctx)
-
-	var rangeID int64
-	var tlBytes []byte
-	var tlEncoding string
-	if err := query.Scan(&rangeID, &tlBytes, &tlEncoding); err != nil {
-		return nil, gocql.ConvertError("GetTaskQueue", err)
-	}
-
-	return &p.InternalGetTaskQueueResponse{
-		RangeID:       rangeID,
-		TaskQueueInfo: p.NewDataBlob(tlBytes, tlEncoding),
-	}, nil
-}
-
-// UpdateTaskQueue update task queue
-func (d *matchingTaskStoreV2) UpdateTaskQueue(
-	ctx context.Context,
-	request *p.InternalUpdateTaskQueueRequest,
-) (*p.UpdateTaskQueueResponse, error) {
-	previous := make(map[string]interface{})
-	query := d.Session.Query(templateUpdateTaskQueueQuery_v2,
-		request.RangeID,
-		request.TaskQueueInfo.Data,
-		request.TaskQueueInfo.EncodingType.String(),
-		request.NamespaceID,
-		request.TaskQueue,
-		request.TaskType,
-		rowTypeTaskQueue,
-		taskQueueTaskID,
-		request.PrevRangeID,
-	).WithContext(ctx)
-	applied, err := query.MapScanCAS(previous)
-
-	if err != nil {
-		return nil, gocql.ConvertError("UpdateTaskQueue", err)
-	}
-
-	if !applied {
-		var columns []string
-		for k, v := range previous {
-			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
-		}
-
-		return nil, &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to update task queue. name: %v, type: %v, rangeID: %v, columns: (%v)",
-				request.TaskQueue, request.TaskType, request.RangeID, strings.Join(columns, ",")),
-		}
-	}
-
-	return &p.UpdateTaskQueueResponse{}, nil
-}
-
-func (d *matchingTaskStoreV2) ListTaskQueue(
-	_ context.Context,
-	_ *p.ListTaskQueueRequest,
-) (*p.InternalListTaskQueueResponse, error) {
-	return nil, serviceerror.NewUnavailable("unsupported operation")
-}
-
-func (d *matchingTaskStoreV2) DeleteTaskQueue(
-	ctx context.Context,
-	request *p.DeleteTaskQueueRequest,
-) error {
-	query := d.Session.Query(
-		templateDeleteTaskQueueQuery_v2,
-		request.TaskQueue.NamespaceID,
-		request.TaskQueue.TaskQueueName,
-		request.TaskQueue.TaskQueueType,
-		rowTypeTaskQueue,
-		taskQueueTaskID,
-		request.RangeID,
-	).WithContext(ctx)
-	previous := make(map[string]interface{})
-	applied, err := query.MapScanCAS(previous)
-	if err != nil {
-		return gocql.ConvertError("DeleteTaskQueue", err)
-	}
-	if !applied {
-		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("DeleteTaskQueue operation failed: expected_range_id=%v but found %+v", request.RangeID, previous),
-		}
-	}
-	return nil
 }
 
 // CreateTasks add tasks
@@ -254,7 +85,7 @@ func (d *matchingTaskStoreV2) CreateTasks(
 	}
 
 	// The following query is used to ensure that range_id didn't change
-	batch.Query(templateUpdateTaskQueueQuery_v2,
+	batch.Query(switchTasksTable(templateUpdateTaskQueueQuery, matchingTaskVersion2),
 		request.RangeID,
 		request.TaskQueueInfo.Data,
 		request.TaskQueueInfo.EncodingType.String(),
