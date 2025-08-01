@@ -3439,11 +3439,12 @@ func (mr *MockMutableStateMockRecorder) UpdateUserTimerTaskStatus(timerId, statu
 }
 
 // UpdateWorkflowStateStatus mocks base method.
-func (m *MockMutableState) UpdateWorkflowStateStatus(state enums0.WorkflowExecutionState, status enums.WorkflowExecutionStatus) error {
+func (m *MockMutableState) UpdateWorkflowStateStatus(state enums0.WorkflowExecutionState, status enums.WorkflowExecutionStatus) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateWorkflowStateStatus", state, status)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // UpdateWorkflowStateStatus indicates an expected call of UpdateWorkflowStateStatus.
