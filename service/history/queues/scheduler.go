@@ -3,6 +3,7 @@
 package queues
 
 import (
+	"github.com/google/btree"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -256,4 +257,13 @@ func (s *rateLimitedSchedulerImpl) Stop() {
 
 func (s *rateLimitedSchedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
 	return s.baseScheduler.TaskChannelKeyFn()
+}
+
+// Less implements btree.Item interface for TaskChannelKey
+func (t TaskChannelKey) Less(than btree.Item) bool {
+	otherKey := than.(TaskChannelKey)
+	if t.Priority == otherKey.Priority {
+		return t.NamespaceID < otherKey.NamespaceID
+	}
+	return t.Priority < otherKey.Priority
 }

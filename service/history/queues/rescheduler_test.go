@@ -11,8 +11,9 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/tasks"
 	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/tasks"
+	htasks "go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 )
 
@@ -212,7 +213,7 @@ func (s *rescheudulerSuite) TestForceReschedule_ImmediateTask() {
 		mockTask := NewMockExecutable(s.controller)
 		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).AnyTimes()
 		mockTask.EXPECT().SetScheduledTime(gomock.Any()).AnyTimes()
-		mockTask.EXPECT().GetKey().Return(tasks.NewImmediateKey(int64(i))).AnyTimes()
+		mockTask.EXPECT().GetKey().Return(htasks.NewImmediateKey(int64(i))).AnyTimes()
 		s.rescheduler.Add(
 			mockTask,
 			now.Add(time.Minute+time.Duration(rand.Int63n(time.Minute.Nanoseconds()))),
@@ -243,7 +244,7 @@ func (s *rescheudulerSuite) TestForceReschedule_ScheduledTask() {
 	retryingTask := NewMockExecutable(s.controller)
 	retryingTask.EXPECT().State().Return(ctasks.TaskStatePending).AnyTimes()
 	retryingTask.EXPECT().SetScheduledTime(gomock.Any()).AnyTimes()
-	retryingTask.EXPECT().GetKey().Return(tasks.NewKey(now.Add(-time.Minute), int64(1))).AnyTimes()
+	retryingTask.EXPECT().GetKey().Return(htasks.NewKey(now.Add(-time.Minute), int64(1))).AnyTimes()
 	s.rescheduler.Add(
 		retryingTask,
 		now.Add(time.Minute),
@@ -254,7 +255,7 @@ func (s *rescheudulerSuite) TestForceReschedule_ScheduledTask() {
 	futureTask := NewMockExecutable(s.controller)
 	futureTask.EXPECT().State().Return(ctasks.TaskStatePending).AnyTimes()
 	futureTask.EXPECT().SetScheduledTime(gomock.Any()).AnyTimes()
-	futureTask.EXPECT().GetKey().Return(tasks.NewKey(futureTaskTimestamp, int64(2))).AnyTimes()
+	futureTask.EXPECT().GetKey().Return(htasks.NewKey(futureTaskTimestamp, int64(2))).AnyTimes()
 	s.rescheduler.Add(
 		futureTask,
 		futureTaskTimestamp,
@@ -268,4 +269,89 @@ func (s *rescheudulerSuite) TestForceReschedule_ScheduledTask() {
 	s.rescheduler.Reschedule(namespaceID)
 	taskWG.Wait()
 	s.Equal(1, s.rescheduler.Len())
+}
+
+func (s *rescheudulerSuite) TestPriorityAndNamespaceOrdering() {
+	// Test that tasks are processed in priority order first, then by NamespaceID within same priority
+	now := time.Now()
+	s.timeSource.Update(now)
+
+	// Track the order in which tasks are submitted
+	var submittedTasks []string
+	var mu sync.Mutex
+
+	// Map executables to their task IDs for identification
+	taskMap := make(map[Executable]string)
+
+	// Create a custom scheduler that records submission order
+	mockScheduler := NewMockScheduler(s.controller)
+	mockScheduler.EXPECT().TaskChannelKeyFn().Return(
+		func(executable Executable) TaskChannelKey {
+			taskID := taskMap[executable]
+			switch taskID {
+			case "high_ns_a":
+				return TaskChannelKey{NamespaceID: "namespace_a", Priority: tasks.PriorityHigh}
+			case "high_ns_c":
+				return TaskChannelKey{NamespaceID: "namespace_c", Priority: tasks.PriorityHigh}
+			case "low_ns_b":
+				return TaskChannelKey{NamespaceID: "namespace_b", Priority: tasks.PriorityLow}
+			case "low_ns_d":
+				return TaskChannelKey{NamespaceID: "namespace_d", Priority: tasks.PriorityLow}
+			case "preempt_ns_a":
+				return TaskChannelKey{NamespaceID: "namespace_a", Priority: tasks.PriorityPreemptable}
+			case "preempt_ns_b":
+				return TaskChannelKey{NamespaceID: "namespace_b", Priority: tasks.PriorityPreemptable}
+			}
+			return TaskChannelKey{NamespaceID: "default", Priority: tasks.PriorityLow}
+		},
+	).AnyTimes()
+
+	mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(executable Executable) bool {
+		taskID := taskMap[executable]
+		mu.Lock()
+		submittedTasks = append(submittedTasks, taskID)
+		mu.Unlock()
+		return true
+	}).AnyTimes()
+
+	rescheduler := NewRescheduler(
+		mockScheduler,
+		s.timeSource,
+		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
+	)
+
+	// Create tasks with mixed priorities and namespaces in random insertion order
+	taskIDs := []string{
+		"preempt_ns_b", "high_ns_c", "low_ns_d", 
+		"preempt_ns_a", "high_ns_a", "low_ns_b",
+	}
+
+	// Add tasks in random order to ensure we're testing sorting, not insertion order
+	for _, taskID := range taskIDs {
+		mockTask := NewMockExecutable(s.controller)
+		taskMap[mockTask] = taskID
+		mockTask.EXPECT().SetScheduledTime(gomock.Any()).Times(1)
+		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).Times(1)
+
+		rescheduler.Add(mockTask, now.Add(-time.Second)) // All tasks ready to be processed
+	}
+
+	// Process all tasks
+	rescheduler.reschedule()
+
+	// Verify tasks were processed in correct order:
+	// 1. Priority order: High -> Low -> Preemptable
+	// 2. Within same priority: NamespaceID alphabetical order
+	expected := []string{
+		"high_ns_a",    // Priority: High, NamespaceID: "namespace_a" 
+		"high_ns_c",    // Priority: High, NamespaceID: "namespace_c"
+		"low_ns_b",     // Priority: Low, NamespaceID: "namespace_b"
+		"low_ns_d",     // Priority: Low, NamespaceID: "namespace_d"
+		"preempt_ns_a", // Priority: Preemptable, NamespaceID: "namespace_a"
+		"preempt_ns_b", // Priority: Preemptable, NamespaceID: "namespace_b"
+	}
+
+	s.Equal(expected, submittedTasks, "Tasks should be processed in priority order (high to low) and then by NamespaceID alphabetical order within each priority")
+	s.Equal(0, rescheduler.Len(), "All tasks should be processed")
 }
