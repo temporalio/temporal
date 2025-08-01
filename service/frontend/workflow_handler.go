@@ -4598,8 +4598,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			if len(a.Type) == 0 {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
-			escapedActivityType := sqlparser.String(sqlparser.NewStrVal([]byte(a.Type)))
-			unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, escapedActivityType)
+			searchValue := fmt.Sprintf("property:activityType=%s", a.Type)
+			escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
+			unpauseCause := fmt.Sprintf("%s = %s", searchattribute.TemporalPauseInfo, escapedSearchValue)
 			visibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, unpauseCause)
 			unpauseActivitiesParams.ActivityType = a.Type
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
