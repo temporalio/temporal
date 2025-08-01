@@ -343,7 +343,7 @@ func (s *activitiesSuite) TestAdjustQuery() {
 		s.Run(testRun.name, func() {
 			a := activities{}
 			batchParams := BatchParams{Query: testRun.query, BatchType: testRun.batchType}
-			adjustedQuery := a.adjustQuery(batchParams)
+			adjustedQuery := a.adjustQuery(batchParams.Query, batchParams.BatchType)
 			s.Equal(testRun.expectedResult, adjustedQuery)
 		})
 	}

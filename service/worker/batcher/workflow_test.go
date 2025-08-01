@@ -6,8 +6,11 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/testsuite"
+	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.uber.org/mock/gomock"
 )
 
@@ -40,6 +43,13 @@ func (s *batcherSuite) TestBatchWorkflow_MissingParams() {
 	s.Contains(err.Error(), "must provide required parameters")
 }
 
+func (s *batcherSuite) TestBatchWorkflow_MissingParams_Protobuf() {
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{})
+	err := s.env.GetWorkflowError()
+	s.Require().Error(err)
+	s.Contains(err.Error(), "must provide required parameters")
+}
+
 func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query() {
 	var ac *activities
 	s.env.OnActivity(ac.BatchActivity, mock.Anything, mock.Anything).Return(HeartBeatDetails{
@@ -61,6 +71,39 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query() {
 		Reason:    "test-reason",
 		Namespace: "test-namespace",
 		Query:     "test-query",
+	})
+	err := s.env.GetWorkflowError()
+	s.Require().NoError(err)
+}
+
+func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
+	var ac *activities
+	s.env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).Return(HeartBeatDetails{
+		SuccessCount: 42,
+		ErrorCount:   27,
+	}, nil)
+	s.env.OnUpsertMemo(mock.Anything).Run(func(args mock.Arguments) {
+		memo, ok := args.Get(0).(map[string]interface{})
+		s.Require().True(ok)
+		s.Equal(map[string]interface{}{
+			"batch_operation_stats": BatchOperationStats{
+				NumSuccess: 42,
+				NumFailure: 27,
+			},
+		}, memo)
+	}).Once()
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{
+		Input: &batchspb.BatchOperationInput{
+			Request: &workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
+					TerminationOperation: &batchpb.BatchOperationTermination{},
+				},
+			},
+		},
+		Namespace: "test-namespace",
+		Query:     "test-query",
+		Reason:    "test-reason",
+		BatchType: BatchTypeTerminate,
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)
@@ -92,6 +135,44 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions() {
 				RunId:      uuid.New(),
 			},
 		},
+	})
+	err := s.env.GetWorkflowError()
+	s.Require().NoError(err)
+}
+
+func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
+	var ac *activities
+	s.env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).Return(HeartBeatDetails{
+		SuccessCount: 42,
+		ErrorCount:   27,
+	}, nil)
+	s.env.OnUpsertMemo(mock.Anything).Run(func(args mock.Arguments) {
+		memo, ok := args.Get(0).(map[string]interface{})
+		s.Require().True(ok)
+		s.Equal(map[string]interface{}{
+			"batch_operation_stats": BatchOperationStats{
+				NumSuccess: 42,
+				NumFailure: 27,
+			},
+		}, memo)
+	}).Once()
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{
+		Input: &batchspb.BatchOperationInput{
+			Request: &workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
+					TerminationOperation: &batchpb.BatchOperationTermination{},
+				},
+			},
+		},
+		Namespace: "test-namespace",
+		WorkflowExecutions: []*commonpb.WorkflowExecution{
+			{
+				WorkflowId: uuid.New(),
+				RunId:      uuid.New(),
+			},
+		},
+		BatchType: BatchTypeTerminate,
+		Reason:    "test-reason",
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)
