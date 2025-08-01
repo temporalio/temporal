@@ -518,12 +518,12 @@ func (s *queueBaseSuite) QueueStateEqual(
 	// ser/de so to equal will not take timezone into consideration
 	thisBlob, err := serialization.QueueStateToBlob(this)
 	s.NoError(err)
-	this, err = serialization.QueueStateFromBlob(thisBlob.Data, thisBlob.EncodingType.String())
+	this, err = serialization.QueueStateFromBlob(thisBlob)
 	s.NoError(err)
 
 	thatBlob, err := serialization.QueueStateToBlob(that)
 	s.NoError(err)
-	that, err = serialization.QueueStateFromBlob(thatBlob.Data, thatBlob.EncodingType.String())
+	that, err = serialization.QueueStateFromBlob(thatBlob)
 	s.NoError(err)
 
 	s.Equal(this, that)
