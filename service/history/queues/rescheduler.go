@@ -91,7 +91,7 @@ func NewRescheduler(
 		taskChannelKeyFn: scheduler.TaskChannelKeyFn(),
 
 		pqMap:    make(map[TaskChannelKey]collection.Queue[rescheduledExecuable]),
-		keyBTree: btree.New(2), // Degree 2 (minimum degree for B-tree)
+		keyBTree: btree.New(2),
 	}
 }
 
@@ -153,7 +153,7 @@ func (r *reschedulerImpl) Reschedule(
 	r.keyBTree.Ascend(func(item btree.Item) bool {
 		key := item.(TaskChannelKey)
 		if key.NamespaceID != namespaceID {
-			return true // continue iteration
+			return true
 		}
 
 		pq := r.pqMap[key]
@@ -171,7 +171,7 @@ func (r *reschedulerImpl) Reschedule(
 			items = append(items, rescheduled)
 		}
 		r.pqMap[key] = r.newPriorityQueue(items)
-		return true // continue iteration
+		return true
 	})
 
 	// then update timer gate to trigger the actual reschedule
@@ -230,7 +230,7 @@ func (r *reschedulerImpl) reschedule() {
 
 			if rescheduleTime := rescheduled.rescheduleTime; now.Before(rescheduleTime) {
 				r.timerGate.Update(rescheduleTime)
-				break // Go to the next task channel
+				break
 			}
 
 			executable := rescheduled.executable
@@ -250,7 +250,7 @@ func (r *reschedulerImpl) reschedule() {
 			pq.Remove()
 			r.numExecutables--
 		}
-		return true // continue iteration
+		return true
 	})
 }
 
