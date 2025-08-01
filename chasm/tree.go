@@ -1553,11 +1553,7 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask() error {
 // cannot be persisted after transaction close.
 func (n *Node) resolveDeferredPointers() error {
 	for _, node := range n.andAllChildren() {
-		if node.value == nil {
-			continue
-		}
-
-		if node.fieldType() != fieldTypeComponent {
+		if node.value == nil || node.fieldType() != fieldTypeComponent {
 			continue
 		}
 
@@ -1571,7 +1567,7 @@ func (n *Node) resolveDeferredPointers() error {
 			}
 
 			internalV := field.val.FieldByName(internalFieldName)
-			internal := internalV.Interface().(fieldInternal)
+			internal, _ := internalV.Interface().(fieldInternal) //nolint:revive
 
 			if internal.fieldType() == fieldTypeDeferredPointer && internal.value() != nil {
 				// Must resolve the deferred pointer or fail the transaction.
