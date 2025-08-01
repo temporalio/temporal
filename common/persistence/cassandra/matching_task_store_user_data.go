@@ -13,10 +13,6 @@ const (
 	// Not much of a need to make this configurable, we're just reading some strings
 	listTaskQueueNamesByBuildIdPageSize = 100
 
-	// Row types for table tasks. Lower bit only: see rowTypeTaskInSubqueue for more details.
-	rowTypeTask = iota
-	rowTypeTaskQueue
-
 	templateUpdateTaskQueueUserDataQuery = `UPDATE task_queue_user_data SET
 		data = ?,
 		data_encoding = ?,
