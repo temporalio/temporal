@@ -16,7 +16,6 @@ import (
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -273,13 +272,13 @@ func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOper
 		return HeartBeatDetails{}, errors.New("batchParams is nil")
 	}
 
-	batchParams = setDefaultParamsProtobuf(batchParams)
-	err := ValidateBatchOperation(batchParams)
+	// batchParams = setDefaultParamsProtobuf(batchParams)
+	err := ValidateBatchOperation(batchParams.Request)
 	if err != nil {
 		return HeartBeatDetails{}, err
 	}
 
-	batchActivityOptions.HeartbeatTimeout = batchParams.GetActivityHeartbeatTimeout().AsDuration()
+	batchActivityOptions.HeartbeatTimeout = defaultActivityHeartBeatTimeout
 	opt := workflow.WithActivityOptions(ctx, batchActivityOptions)
 	var result HeartBeatDetails
 	var ac *activities
@@ -361,34 +360,34 @@ func validateParams(params BatchParams) error {
 }
 
 // nolint:revive,cognitive-complexity
-func ValidateBatchOperation(params *batchspb.BatchOperationInput) error {
-	if params.BatchType == "" ||
-		params.Request.Reason == "" ||
-		params.Request.Namespace == "" ||
-		(params.Request.VisibilityQuery == "" && len(params.Request.Executions) == 0) {
+func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) error {
+	if params.GetOperation() == nil ||
+		params.GetReason() == "" ||
+		params.GetNamespace() == "" ||
+		(params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0) {
 		return errors.New("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
 	}
 
-	if len(params.Request.GetJobId()) == 0 {
+	if len(params.GetJobId()) == 0 {
 		return serviceerror.NewInvalidArgument("JobId is not set on request.")
 	}
-	if len(params.Request.Namespace) == 0 {
+	if len(params.GetNamespace()) == 0 {
 		return serviceerror.NewInvalidArgument("Namespace is not set on request.")
 	}
-	if len(params.Request.VisibilityQuery) == 0 && len(params.Request.Executions) == 0 {
+	if len(params.GetVisibilityQuery()) == 0 && len(params.GetExecutions()) == 0 {
 		return serviceerror.NewInvalidArgument("VisibilityQuery or Executions must be set on request.")
 	}
-	if len(params.Request.VisibilityQuery) != 0 && len(params.Request.Executions) != 0 {
+	if len(params.GetVisibilityQuery()) != 0 && len(params.GetExecutions()) != 0 {
 		return errors.New("batch query and executions are mutually exclusive")
 	}
-	if len(params.Request.Reason) == 0 {
+	if len(params.GetReason()) == 0 {
 		return serviceerror.NewInvalidArgument("Reason is not set on request.")
 	}
-	if params.Request.Operation == nil {
+	if params.GetOperation() == nil {
 		return serviceerror.NewInvalidArgument("Batch operation is not set on request.")
 	}
 
-	switch op := params.Request.Operation.(type) {
+	switch op := params.GetOperation().(type) {
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		if op.SignalOperation.GetSignal() == "" {
 			return errors.New("must provide signal name")
@@ -475,7 +474,7 @@ func ValidateBatchOperation(params *batchspb.BatchOperationInput) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("not supported batch type: %v", params.Request.Operation)
+		return fmt.Errorf("not supported batch type: %v", params.GetOperation())
 	}
 	return nil
 }
@@ -496,14 +495,14 @@ func setDefaultParams(params BatchParams) BatchParams {
 	return params
 }
 
-func setDefaultParamsProtobuf(params *batchspb.BatchOperationInput) *batchspb.BatchOperationInput {
-	if params.GetAttemptsOnRetryableError() <= 1 {
-		params.AttemptsOnRetryableError = defaultAttemptsOnRetryableError
-	}
-	if params.GetActivityHeartbeatTimeout().AsDuration() <= 0 {
-		params.ActivityHeartbeatTimeout = &durationpb.Duration{
-			Seconds: int64(defaultActivityHeartBeatTimeout / time.Second),
-		}
-	}
-	return params
-}
+// func setDefaultParamsProtobuf(params *batchspb.BatchOperationInput) *batchspb.BatchOperationInput {
+// 	if params.GetAttemptsOnRetryableError() <= 1 {
+// 		params.AttemptsOnRetryableError = defaultAttemptsOnRetryableError
+// 	}
+// 	if params.GetActivityHeartbeatTimeout().AsDuration() <= 0 {
+// 		params.ActivityHeartbeatTimeout = &durationpb.Duration{
+// 			Seconds: int64(defaultActivityHeartBeatTimeout / time.Second),
+// 		}
+// 	}
+// 	return params
+// }

@@ -233,7 +233,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		}
 	}
 
-	adjustedQuery := a.adjustQuery(batchParams.Request.VisibilityQuery, batchParams.BatchType)
+	adjustedQuery := a.adjustQueryBatchTypeEnum(batchParams.Request.VisibilityQuery, batchParams.BatchType)
 
 	if startOver {
 		estimateCount := int64(len(batchParams.Request.Executions))
@@ -250,13 +250,13 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		}
 		hbd.TotalEstimate = estimateCount
 	}
-	rps := a.getOperationRPS(batchParams.Rps)
+	rps := a.getOperationRPS(float64(batchParams.Request.GetMaxOperationsPerSecond()))
 	rateLimit := rate.Limit(rps)
 	burstLimit := int(math.Ceil(rps)) // should never be zero because everything would be rejected
 	rateLimiter := rate.NewLimiter(rateLimit, burstLimit)
 	taskCh := make(chan taskDetail, pageSize)
 	respCh := make(chan error, pageSize)
-	for i := 0; i < a.getOperationConcurrency(int(batchParams.Concurrency)); i++ {
+	for i := 0; i < a.getOperationConcurrency(0); i++ {
 		go startTaskProcessorProtobuf(ctx, batchParams, a.namespace.String(), taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
 	}
 
@@ -347,6 +347,20 @@ func (a *activities) adjustQuery(query, batchType string) string {
 
 	switch batchType {
 	case BatchTypeTerminate, BatchTypeSignal, BatchTypeCancel, BatchTypeUpdateOptions, BatchTypeUnpauseActivities:
+		return fmt.Sprintf("(%s) AND (%s)", query, statusRunningQueryFilter)
+	default:
+		return query
+	}
+}
+
+func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.BatchOperationType) string {
+	if len(query) == 0 {
+		// don't add anything if query is empty
+		return query
+	}
+
+	switch batchType {
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE, enumspb.BATCH_OPERATION_TYPE_SIGNAL, enumspb.BATCH_OPERATION_TYPE_CANCEL, enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY:
 		return fmt.Sprintf("(%s) AND (%s)", query, statusRunningQueryFilter)
 	default:
 		return query
@@ -796,20 +810,20 @@ func startTaskProcessorProtobuf(
 						return err
 					})
 			default:
-				err = errors.New("unknown batch type: " + batchOperation.BatchType)
+				err = errors.New(fmt.Sprintf("unknown batch type: %v", batchOperation.BatchType))
 			}
 			if err != nil {
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
 
 				nonRetryable := false
-				for _, errType := range batchOperation.NonRetryableErrors {
-					if errType == err.Error() {
-						nonRetryable = true
-						break
-					}
-				}
-				if nonRetryable || task.attempts > int(batchOperation.AttemptsOnRetryableError) {
+				// for _, errType := range batchOperation.NonRetryableErrors {
+				// 	if errType == err.Error() {
+				// 		nonRetryable = true
+				// 		break
+				// 	}
+				// }
+				if nonRetryable || task.attempts > int(defaultAttemptsOnRetryableError) {
 					respCh <- err
 				} else {
 					// put back to the channel if less than attemptsOnError

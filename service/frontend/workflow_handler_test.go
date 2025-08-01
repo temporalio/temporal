@@ -2206,7 +2206,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
-		BatchType:   batcher.BatchTypeTerminate,
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_TERMINATE,
 		Request: &workflowservice.StartBatchOperationRequest{
 			Namespace:       testNamespace.String(),
 			VisibilityQuery: inputString,
@@ -2267,7 +2267,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
-		BatchType:   batcher.BatchTypeCancel,
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_CANCEL,
 		Request: &workflowservice.StartBatchOperationRequest{
 			Namespace:       testNamespace.String(),
 			VisibilityQuery: inputString,
@@ -2329,7 +2329,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 	signalPayloads := payloads.EncodeString(signalName)
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
-		BatchType:   batcher.BatchTypeSignal,
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL,
 		Request: &workflowservice.StartBatchOperationRequest{
 			Namespace:       testNamespace.String(),
 			VisibilityQuery: inputString,
@@ -2415,7 +2415,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 	}
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
-		BatchType:   batcher.BatchTypeSignal,
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL,
 		Request:     request,
 	}
 	inputPayload, err := payloads.Encode(params)
@@ -2461,7 +2461,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 	wh := s.getWorkflowHandler(config)
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
-		BatchType:   batcher.BatchTypeReset,
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_RESET,
 		Request: &workflowservice.StartBatchOperationRequest{
 			Namespace:  testNamespace.String(),
 			JobId:      jobId,

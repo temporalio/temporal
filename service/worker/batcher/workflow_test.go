@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/testsuite"
 	batchspb "go.temporal.io/server/api/batch/v1"
@@ -103,7 +104,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 			Reason:          "test-reason",
 			VisibilityQuery: "test-query",
 		},
-		BatchType: BatchTypeTerminate,
+		BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE,
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)
@@ -171,7 +172,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 			Reason:    "test-reason",
 			Namespace: "test-namespace",
 		},
-		BatchType: BatchTypeTerminate,
+		BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE,
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/temporalio/sqlparser"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -4453,26 +4454,8 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, errRequestNotSet
 	}
 
-	if len(request.GetJobId()) == 0 {
-		return nil, errBatchJobIDNotSet
-	}
-	if len(request.Namespace) == 0 {
-		return nil, errNamespaceNotSet
-	}
-	if len(request.VisibilityQuery) == 0 && len(request.Executions) == 0 {
-		return nil, errBatchOpsWorkflowFilterNotSet
-	}
-	if len(request.VisibilityQuery) != 0 && len(request.Executions) != 0 {
-		return nil, errBatchOpsWorkflowFiltersNotAllowed
-	}
-	if len(request.Executions) > wh.config.MaxExecutionCountBatchOperation(request.Namespace) {
-		return nil, errBatchOpsMaxWorkflowExecutionCount
-	}
-	if len(request.Reason) == 0 {
-		return nil, errReasonNotSet
-	}
-	if request.Operation == nil {
-		return nil, errBatchOperationNotSet
+	if err := batcher.ValidateBatchOperation(request); err != nil {
+		return nil, err
 	}
 
 	if !wh.config.EnableBatcher(request.Namespace) {
@@ -4508,52 +4491,52 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	input := &batchspb.BatchOperationInput{
 		Request:     request,
 		NamespaceId: namespaceID.String(),
-		Rps:         float64(request.GetMaxOperationsPerSecond()),
 	}
 
 	var identity string
 	switch op := request.Operation.(type) {
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
-		input.BatchType = batcher.BatchTypeTerminate
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_TERMINATE
 		identity = op.TerminationOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
-		input.BatchType = batcher.BatchTypeSignal
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_SIGNAL
 		identity = op.SignalOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
-		input.BatchType = batcher.BatchTypeCancel
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_CANCEL
 		identity = op.CancellationOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_DeletionOperation:
-		input.BatchType = batcher.BatchTypeDelete
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_DELETE
 		identity = op.DeletionOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_ResetOperation:
-		input.BatchType = batcher.BatchTypeReset
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_RESET
 		identity = op.ResetOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
-		input.BatchType = batcher.BatchTypeUpdateOptions
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
 		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
-		input.BatchType = batcher.BatchTypeUnpauseActivities
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY
 		identity = op.UnpauseActivitiesOperation.GetIdentity()
 
 		switch a := op.UnpauseActivitiesOperation.GetActivity().(type) {
 		case *batchpb.BatchOperationUnpauseActivities_Type:
-			unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, a.Type)
+			escapedActivityType := sqlparser.String(sqlparser.NewStrVal([]byte(a.Type)))
+			unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, escapedActivityType)
 			input.Request.VisibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, unpauseCause)
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
 			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", searchattribute.TemporalPauseInfo)
 			input.Request.VisibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
 		}
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
-		input.BatchType = batcher.BatchTypeResetActivities
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY
 		identity = op.ResetActivitiesOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
-		input.BatchType = batcher.BatchTypeUpdateActivitiesOptions
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS
 		identity = op.UpdateActivityOptionsOperation.GetIdentity()
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
 
-	if err := batcher.ValidateBatchOperation(input); err != nil {
+	if err := batcher.ValidateBatchOperation(request); err != nil {
 		return nil, err
 	}
 
@@ -4564,7 +4547,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
-			batcher.BatchOperationTypeMemo: payload.EncodeString(input.BatchType),
+			batcher.BatchOperationTypeMemo: payload.EncodeString(snakeCaseBatchType(input.BatchType)),
 			batcher.BatchReasonMemo:        payload.EncodeString(request.GetReason()),
 		},
 	}
@@ -4603,6 +4586,23 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, err
 	}
 	return &workflowservice.StartBatchOperationResponse{}, nil
+}
+
+func snakeCaseBatchType(batchType enumspb.BatchOperationType) string {
+	switch batchType {
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE, enumspb.BATCH_OPERATION_TYPE_CANCEL, enumspb.BATCH_OPERATION_TYPE_SIGNAL, enumspb.BATCH_OPERATION_TYPE_DELETE, enumspb.BATCH_OPERATION_TYPE_RESET:
+		return strings.ToLower(batchType.String())
+	case enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS:
+		return "update_options"
+	case enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY:
+		return "unpause_activities"
+	case enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS:
+		return "update_activity_options"
+	case enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY:
+		return "reset_activities"
+	default:
+		return ""
+	}
 }
 
 func (wh *WorkflowHandler) StopBatchOperation(
