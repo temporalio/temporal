@@ -494,15 +494,3 @@ func setDefaultParams(params BatchParams) BatchParams {
 	}
 	return params
 }
-
-// func setDefaultParamsProtobuf(params *batchspb.BatchOperationInput) *batchspb.BatchOperationInput {
-// 	if params.GetAttemptsOnRetryableError() <= 1 {
-// 		params.AttemptsOnRetryableError = defaultAttemptsOnRetryableError
-// 	}
-// 	if params.GetActivityHeartbeatTimeout().AsDuration() <= 0 {
-// 		params.ActivityHeartbeatTimeout = &durationpb.Duration{
-// 			Seconds: int64(defaultActivityHeartBeatTimeout / time.Second),
-// 		}
-// 	}
-// 	return params
-// }

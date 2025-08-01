@@ -815,15 +815,7 @@ func startTaskProcessorProtobuf(
 			if err != nil {
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
-
-				nonRetryable := false
-				// for _, errType := range batchOperation.NonRetryableErrors {
-				// 	if errType == err.Error() {
-				// 		nonRetryable = true
-				// 		break
-				// 	}
-				// }
-				if nonRetryable || task.attempts > int(defaultAttemptsOnRetryableError) {
+				if task.attempts > int(defaultAttemptsOnRetryableError) {
 					respCh <- err
 				} else {
 					// put back to the channel if less than attemptsOnError
