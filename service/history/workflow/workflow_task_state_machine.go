@@ -69,7 +69,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 	// NOTE: for zombie workflow, should not change the state
 	state, _ := m.ms.GetWorkflowStateStatus()
 	if state != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		if err := m.ms.UpdateWorkflowStateStatus(
+		if _, err := m.ms.UpdateWorkflowStateStatus(
 			enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		); err != nil {

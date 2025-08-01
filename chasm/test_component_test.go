@@ -27,6 +27,8 @@ type (
 		SubComponents         Map[string, *TestSubComponent1]
 		PendingActivities     Map[int, *TestSubComponent1]
 		SubComponent11Pointer Field[*TestSubComponent11]
+
+		Visibility Field[*Visibility]
 	}
 
 	TestSubComponent1 struct {

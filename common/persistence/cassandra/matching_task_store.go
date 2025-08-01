@@ -15,12 +15,17 @@ func NewMatchingTaskStore(
 	logger log.Logger,
 	enableFairness bool,
 ) p.TaskStore {
-	userDataStore := userDataStore{Session: session, Logger: logger}
 	if enableFairness {
-		return newMatchingTaskStoreV2(userDataStore)
+		return newMatchingTaskStoreV2(session)
 	}
-	return newMatchingTaskStoreV1(userDataStore)
+	return newMatchingTaskStoreV1(session)
 }
+
+const (
+	// Row types for table tasks. Lower bit only: see rowTypeTaskInSubqueue for more details.
+	rowTypeTask      = 0
+	rowTypeTaskQueue = 1
+)
 
 // We steal some upper bits of the "row type" field to hold a subqueue index.
 // Subqueue 0 must be the same as rowTypeTask (before subqueues were introduced).
