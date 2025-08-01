@@ -4519,9 +4519,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 		switch a := op.UnpauseActivitiesOperation.GetActivity().(type) {
 		case *batchpb.BatchOperationUnpauseActivities_Type:
-			escapedActivityType := sqlparser.String(sqlparser.NewStrVal([]byte(a.Type)))
-			unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, escapedActivityType)
-			input.Request.VisibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, unpauseCause)
+			searchValue := fmt.Sprintf("property:activityType=%s", a.Type)
+			escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
+			input.Request.VisibilityQuery = fmt.Sprintf("%s = %s", searchattribute.TemporalPauseInfo, escapedSearchValue)
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
 			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", searchattribute.TemporalPauseInfo)
 			input.Request.VisibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
