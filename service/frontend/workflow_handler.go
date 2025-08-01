@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/temporalio/sqlparser"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -4584,6 +4585,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			updateOptionsParams.WorkflowExecutionOptions.VersioningOverride = deprecatedOverride
 		}
 	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
+		identity = op.UnpauseActivitiesOperation.GetIdentity()
 		operationType = batcher.BatchTypeUnpauseActivities
 		if op.UnpauseActivitiesOperation == nil {
 			return nil, serviceerror.NewInvalidArgument("unpause activities operation is not set")
@@ -4597,7 +4599,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			if len(a.Type) == 0 {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
-			unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, a.Type)
+			attrValue := fmt.Sprintf("property:activityType=%s", a.Type)
+			escapedAttrValue := sqlparser.String(sqlparser.NewStrVal([]byte(attrValue)))
+			unpauseCause := fmt.Sprintf("%s = %s", searchattribute.TemporalPauseInfo, escapedAttrValue)
 			visibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, unpauseCause)
 			unpauseActivitiesParams.ActivityType = a.Type
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
@@ -4614,6 +4618,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		unpauseActivitiesParams.Jitter = op.UnpauseActivitiesOperation.Jitter.AsDuration()
 		unpauseActivitiesParams.Identity = op.UnpauseActivitiesOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
+		identity = op.ResetActivitiesOperation.GetIdentity()
 		operationType = batcher.BatchTypeResetActivities
 		if op.ResetActivitiesOperation == nil {
 			return nil, serviceerror.NewInvalidArgument("reset activities operation is not set")
@@ -4642,6 +4647,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		resetActivitiesParams.RestoreOriginalOptions = op.ResetActivitiesOperation.RestoreOriginalOptions
 		resetActivitiesParams.Identity = op.ResetActivitiesOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
+		identity = op.UpdateActivityOptionsOperation.GetIdentity()
 		operationType = batcher.BatchTypeUpdateActivitiesOptions
 		if op.UpdateActivityOptionsOperation == nil {
 			return nil, serviceerror.NewInvalidArgument("update activity options operation is not set")
