@@ -21,6 +21,7 @@ require (
 	github.com/go-sql-driver/mysql v1.9.0
 	github.com/gocql/gocql v1.7.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
+	github.com/google/btree v1.1.3
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
@@ -79,8 +80,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.34.1
 )
-
-require github.com/google/btree v1.1.3
 
 require (
 	cel.dev/expr v0.20.0 // indirect
