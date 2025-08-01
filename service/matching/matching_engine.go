@@ -2391,11 +2391,11 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 	isOwner, ownershipLostCh, err := e.checkNexusEndpointsOwnership()
 	if err != nil {
 		e.logger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
-		return nil, serviceerror.NewFailedPreconditionf("cannot verify ownership of Nexus endpoints table: %v", err)
+		return nil, serviceerror.NewAbortedf("cannot verify ownership of Nexus endpoints table: %v", err)
 	}
 	if !isOwner {
 		e.logger.Error("Matching node doesn't think it's the Nexus endpoints table owner", tag.Error(err))
-		return nil, serviceerror.NewFailedPrecondition("matching node doesn't think it's the Nexus endpoints table owner")
+		return nil, serviceerror.NewAborted("matching node doesn't think it's the Nexus endpoints table owner")
 	}
 
 	if request.Wait {
@@ -2421,7 +2421,7 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 			// long-poll: wait for data to change/appear
 			select {
 			case <-ownershipLostCh:
-				return nil, serviceerror.NewFailedPrecondition("Nexus endpoints table ownership lost")
+				return nil, serviceerror.NewAborted("Nexus endpoints table ownership lost")
 			case <-ctx.Done():
 				return resp, nil
 			case <-tableVersionChanged:
@@ -2942,7 +2942,7 @@ func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
 	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
 }
 
-func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, updateTime *timestamppb.Timestamp) *taskqueuepb.RateLimitConfig {
+func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, updateTime *timestamppb.Timestamp, updateIdentity string) *taskqueuepb.RateLimitConfig {
 	var rateLimit *taskqueuepb.RateLimit
 	if r := update.GetRateLimit(); r != nil {
 		rateLimit = &taskqueuepb.RateLimit{RequestsPerSecond: r.RequestsPerSecond}
@@ -2950,8 +2950,9 @@ func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_R
 	return &taskqueuepb.RateLimitConfig{
 		RateLimit: rateLimit,
 		Metadata: &taskqueuepb.ConfigMetadata{
-			Reason:     update.GetReason(),
-			UpdateTime: updateTime,
+			Reason:         update.GetReason(),
+			UpdateTime:     updateTime,
+			UpdateIdentity: updateIdentity,
 		},
 	}
 }
@@ -3016,13 +3017,14 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request 
 			// Update relevant config fields
 			cfg := data.PerType[int32(taskQueueType)].Config
 			updateTaskQueueConfig := request.GetUpdateTaskqueueConfig()
+			updateIdentity := updateTaskQueueConfig.GetIdentity()
 			// Queue Rate Limit
 			if qrl := updateTaskQueueConfig.GetUpdateQueueRateLimit(); qrl != nil {
-				cfg.QueueRateLimit = buildRateLimitConfig(qrl, protoTs)
+				cfg.QueueRateLimit = buildRateLimitConfig(qrl, protoTs, updateIdentity)
 			}
 			// Fairness Queue Rate Limit
 			if fkrl := updateTaskQueueConfig.GetUpdateFairnessKeyRateLimitDefault(); fkrl != nil {
-				cfg.FairnessKeysRateLimitDefault = buildRateLimitConfig(fkrl, protoTs)
+				cfg.FairnessKeysRateLimitDefault = buildRateLimitConfig(fkrl, protoTs, updateIdentity)
 			}
 			// Update the clock on TaskQueueUserData to enforce LWW on config updates
 			data.Clock = now

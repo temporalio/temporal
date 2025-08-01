@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package temporal.server.api.persistence.v1;
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+
+message ChasmVisibilityData {
+    int64 transition_count = 1;
+}
+
+message ChasmVisibilityTaskData {
+    int64 transition_count = 1;
+}

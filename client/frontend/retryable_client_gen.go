@@ -221,6 +221,21 @@ func (c *retryableClient) DescribeTaskQueue(
 	return resp, err
 }
 
+func (c *retryableClient) DescribeWorker(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkerRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeWorkerResponse, error) {
+	var resp *workflowservice.DescribeWorkerResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeWorker(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DescribeWorkerDeployment(
 	ctx context.Context,
 	request *workflowservice.DescribeWorkerDeploymentRequest,

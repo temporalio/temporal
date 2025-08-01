@@ -44,6 +44,10 @@ const (
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
 	InvalidVisibilityURITagValue = "invalid_visibility_uri"
+
+	ActiveNamespaceStateTagValue  = "active"
+	PassiveNamespaceStateTagValue = "passive"
+	UnknownNamespaceStateTagValue = "unknown"
 )
 
 // Admin Client Operations
@@ -549,6 +553,7 @@ const (
 	TaskTypeVisibilityTaskUpsertExecution                 = "VisibilityTaskUpsertExecution"
 	TaskTypeVisibilityTaskCloseExecution                  = "VisibilityTaskCloseExecution"
 	TaskTypeVisibilityTaskDeleteExecution                 = "VisibilityTaskDeleteExecution"
+	TaskTypeVisibilityTaskUpsertChasmExecution            = "VisibilityTaskUpsertChasmExecution"
 	TaskTypeArchivalTaskArchiveExecution                  = "ArchivalTaskArchiveExecution"
 	TaskTypeTimerActiveTaskActivityTimeout                = "TimerActiveTaskActivityTimeout"
 	TaskTypeTimerActiveTaskWorkflowTaskTimeout            = "TimerActiveTaskWorkflowTaskTimeout"

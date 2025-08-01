@@ -6,7 +6,21 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+const (
+	TotalCountMemoFieldName = "TotalCount"
+	TotalSizeMemoFieldName  = "TotalSize"
+)
+
+// TODO: Register proper SA for TotalCount and TotalSize
+// For now, CHASM framework does NOT support Per-Component SearchAttributes
+// so just update a random existing pre-defined SA to make sure the logic works.
+const (
+	TestKeywordSAFieldName  = searchattribute.TemporalScheduledById
+	TestKeywordSAFieldValue = "test-keyword-value"
 )
 
 type (
@@ -15,18 +29,29 @@ type (
 
 		State *persistencespb.TestPayloadStore
 
-		Payloads chasm.Map[string, *commonpb.Payload]
+		Payloads   chasm.Map[string, *commonpb.Payload]
+		Visibility chasm.Field[*chasm.Visibility]
 	}
 )
 
-func NewPayloadStore() *PayloadStore {
-	return &PayloadStore{
+func NewPayloadStore(
+	mutableContext chasm.MutableContext,
+) (*PayloadStore, error) {
+	store := &PayloadStore{
 		State: &persistencespb.TestPayloadStore{
 			TotalCount:      0,
 			TotalSize:       0,
 			ExpirationTimes: make(map[string]*timestamppb.Timestamp),
 		},
+		Visibility: chasm.NewComponentField(
+			mutableContext,
+			chasm.NewVisibility(mutableContext),
+		),
 	}
+	if err := store.updateVisibility(mutableContext); err != nil {
+		return nil, err
+	}
+	return store, nil
 }
 
 func (s *PayloadStore) Describe(
@@ -65,16 +90,18 @@ func (s *PayloadStore) AddPayload(
 			s.State.ExpirationTimes = make(map[string]*timestamppb.Timestamp)
 		}
 		s.State.ExpirationTimes[request.PayloadKey] = timestamppb.New(expirationTime)
-		if err := mutableContext.AddTask(
+		mutableContext.AddTask(
 			s,
 			chasm.TaskAttributes{ScheduledTime: expirationTime},
 			// You can switch between TestPayloadTTLPureTask & TestPayloadTTLSideEffectTask
 			&persistencespb.TestPayloadTTLPureTask{
 				PayloadKey: request.PayloadKey,
 			},
-		); err != nil {
-			return nil, err
-		}
+		)
+	}
+
+	if err := s.updateVisibility(mutableContext); err != nil {
+		return nil, err
 	}
 
 	return s.Describe(mutableContext, DescribePayloadStoreRequest{})
@@ -107,6 +134,11 @@ func (s *PayloadStore) RemovePayload(
 	s.State.TotalSize -= int64(len(payload.Data))
 	delete(s.Payloads, key)
 	delete(s.State.ExpirationTimes, key)
+
+	if err := s.updateVisibility(mutableContext); err != nil {
+		return nil, err
+	}
+
 	return s.Describe(mutableContext, DescribePayloadStoreRequest{})
 }
 
@@ -117,4 +149,20 @@ func (s *PayloadStore) LifecycleState(
 		return chasm.LifecycleStateCompleted
 	}
 	return chasm.LifecycleStateRunning
+}
+
+func (s *PayloadStore) updateVisibility(
+	mutableContext chasm.MutableContext,
+) error {
+	visibility, err := s.Visibility.Get(mutableContext)
+	if err != nil {
+		return err
+	}
+	chasm.UpsertMemo(mutableContext, visibility, TotalCountMemoFieldName, s.State.TotalCount)
+	chasm.UpsertMemo(mutableContext, visibility, TotalSizeMemoFieldName, s.State.TotalSize)
+
+	// TODO: UpsertSearchAttribute as well when CHASM framework supports Per-Component SearchAttributes
+	// For now, we just update a random existing pre-defined SA to make sure the logic works.
+	chasm.UpsertSearchAttribute(mutableContext, visibility, TestKeywordSAFieldName, TestKeywordSAFieldValue)
+	return nil
 }

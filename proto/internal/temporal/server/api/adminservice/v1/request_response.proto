@@ -563,6 +563,7 @@ message SyncWorkflowStateResponse {
 message GenerateLastHistoryReplicationTasksRequest {
   string namespace = 1;
   temporal.api.common.v1.WorkflowExecution execution = 2;
+  repeated string target_clusters = 3;
 }
 
 message GenerateLastHistoryReplicationTasksResponse {

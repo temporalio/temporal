@@ -39,6 +39,7 @@ type priTaskMatcher struct {
 	metricsHandler metrics.Handler // namespace metric scope
 	logger         log.Logger
 	numPartitions  func() int // number of task queue partitions
+	markAlive      func()     // function to mark the physical task queue alive
 
 	limiterLock sync.Mutex
 	adminNsRate float64
@@ -97,6 +98,7 @@ func newPriTaskMatcher(
 	validator taskValidator,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	markAlive func(),
 ) *priTaskMatcher {
 	tm := &priTaskMatcher{
 		config:         config,
@@ -108,6 +110,7 @@ func newPriTaskMatcher(
 		fwdr:           fwdr,
 		validator:      validator,
 		numPartitions:  config.NumReadPartitions,
+		markAlive:      markAlive,
 		dynamicRate:    defaultTaskDispatchRPS,
 	}
 
@@ -191,6 +194,10 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) error {
 
 			// consider this task expired while processing.
 			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
+
+			// Stay alive as long as we're invalidating tasks
+			tm.markAlive()
+
 			return nil
 		}
 
@@ -249,6 +256,9 @@ func (tm *priTaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier ba
 			var invalidStageTag = getInvalidTaskTag(task)
 			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidStageTag)
 
+			// Stay alive as long as we're invalidating tasks
+			tm.markAlive()
+
 			retrier.Reset()
 		} else {
 			// Task was valid, put it back and slow down checking.
@@ -261,7 +271,7 @@ func (tm *priTaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier ba
 }
 
 func (tm *priTaskMatcher) forwardPolls() {
-	forwarderTask := &internalTask{isPollForwarder: true}
+	forwarderTask := newPollForwarderTask()
 	ctxs := []context.Context{tm.tqCtx}
 	for {
 		res := tm.data.EnqueueTaskAndWait(ctxs, forwarderTask)
@@ -437,7 +447,9 @@ func (tm *priTaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask
 }
 
 func (tm *priTaskMatcher) AddTask(task *internalTask) {
-	task.removeFromMatcher = func() { tm.data.RemoveTask(task) }
+	if !task.setRemoveFunc(func() { tm.data.RemoveTask(task) }) {
+		return // handle race where task is evicted from reader before being added
+	}
 	tm.data.EnqueueTaskNoWait(task)
 }
 

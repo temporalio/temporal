@@ -290,6 +290,7 @@ func (tr *priTaskReader) addNewTasks(tasks []*persistencespb.AllocatedTaskInfo) 
 }
 
 func (tr *priTaskReader) addTaskToMatcher(task *internalTask) {
+	task.resetMatcherState()
 	err := tr.backlogMgr.addSpooledTask(task)
 	if err == nil {
 		return

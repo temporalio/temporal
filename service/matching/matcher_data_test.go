@@ -396,7 +396,7 @@ func (s *MatcherDataSuite) TestOrder() {
 	t1 := s.newBacklogTaskWithPriority(1, 0, nil, &commonpb.Priority{PriorityKey: 1})
 	t2 := s.newBacklogTaskWithPriority(2, 0, nil, &commonpb.Priority{PriorityKey: 2})
 	t3 := s.newBacklogTaskWithPriority(3, 0, nil, &commonpb.Priority{PriorityKey: 3})
-	tf := &internalTask{isPollForwarder: true}
+	tf := newPollForwarderTask()
 
 	s.md.EnqueueTaskNoWait(t3)
 	s.md.EnqueueTaskNoWait(tf)
@@ -418,7 +418,7 @@ func (s *MatcherDataSuite) TestPollForwardSuccess() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, &internalTask{isPollForwarder: true})
+		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, newPollForwarderTask())
 		// task is woken up with poller to forward
 		s.NotNil(tres.poller)
 		// forward succeeded, pass back task
@@ -440,7 +440,7 @@ func (s *MatcherDataSuite) TestPollForwardFailed() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, &internalTask{isPollForwarder: true})
+		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, newPollForwarderTask())
 		// task is woken up with poller to forward
 		s.NotNil(tres.poller)
 		// there's a new task in the meantime
@@ -465,7 +465,7 @@ func (s *MatcherDataSuite) TestPollForwardFailedTimedOut() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, &internalTask{isPollForwarder: true})
+		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, newPollForwarderTask())
 		// task is woken up with poller to forward
 		s.NotNil(tres.poller)
 		// there's a new task in the meantime
@@ -734,7 +734,7 @@ func FuzzMatcherData(f *testing.F) {
 				sleepTime := randms(100)
 				go func() {
 					defer pollForwarders.Add(-1)
-					res := md.EnqueueTaskAndWait(nil, &internalTask{isPollForwarder: true})
+					res := md.EnqueueTaskAndWait(nil, newPollForwarderTask())
 					softassert.That(md.logger, res.ctxErr == nil && res.poller != nil, "")
 					ts.Sleep(sleepTime)
 					t := &persistencespb.TaskInfo{

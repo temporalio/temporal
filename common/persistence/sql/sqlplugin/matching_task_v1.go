@@ -26,7 +26,7 @@ type (
 		PageSize           *int
 	}
 
-	// MatchingTask is the SQL persistence interface for matching tasks
+	// MatchingTask is the SQL persistence interface for v1 matching tasks
 	MatchingTask interface {
 		InsertIntoTasks(ctx context.Context, rows []TasksRow) (sql.Result, error)
 		// SelectFromTasks retrieves one or more rows from the tasks table

@@ -20,7 +20,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.0.5
 	github.com/go-sql-driver/mysql v1.9.0
 	github.com/gocql/gocql v1.7.0
-	github.com/golang-jwt/jwt/v4 v4.5.1
+	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
@@ -60,7 +60,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.34.0
 	go.opentelemetry.io/otel/sdk/metric v1.34.0
 	go.opentelemetry.io/otel/trace v1.34.0
-	go.temporal.io/api v1.50.1-0.20250722201633-f0a07f68022f
+	go.temporal.io/api v1.51.1-0.20250725211336-3d6e39249ecf
 	go.temporal.io/sdk v1.34.0
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/fx v1.23.0

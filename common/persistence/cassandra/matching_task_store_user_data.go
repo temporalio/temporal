@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
@@ -13,10 +12,6 @@ import (
 const (
 	// Not much of a need to make this configurable, we're just reading some strings
 	listTaskQueueNamesByBuildIdPageSize = 100
-
-	// Row types for table tasks. Lower bit only: see rowTypeTaskInSubqueue for more details.
-	rowTypeTask = iota
-	rowTypeTaskQueue
 
 	templateUpdateTaskQueueUserDataQuery = `UPDATE task_queue_user_data SET
 		data = ?,
@@ -45,7 +40,6 @@ const (
 
 type userDataStore struct {
 	Session gocql.Session
-	Logger  log.Logger
 }
 
 func (d *userDataStore) GetTaskQueueUserData(

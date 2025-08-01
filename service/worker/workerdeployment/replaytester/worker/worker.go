@@ -125,6 +125,37 @@ func main() {
 	}
 	verifyDeployment(dHandle, "__unversioned__", "", client.WorkerDeploymentVersionDrainageStatusDraining)
 
+	// Simulating a scenario when a drained version is reactivated and then re-deactivated.
+
+	// Waiting for the version 1.0 to become drained.
+	time.Sleep(8 * time.Second)
+	// Make sure 1.0 is drained.
+	verifyDeployment(dHandle, "__unversioned__", "", client.WorkerDeploymentVersionDrainageStatusDrained)
+
+	// Rollback a drained version 1.0, so that it is the current version for this deployment
+	_, err = dHandle.SetCurrentVersion(context.Background(), client.WorkerDeploymentSetCurrentVersionOptions{
+		Version:                 deploymentName + ".1.0",
+		IgnoreMissingTaskQueues: true,
+	})
+	if err != nil {
+		log.Fatalln("Unable to set current version", err)
+	}
+
+	// Set current version to "__unversioned__" again so that version 1.0 can start draining. This replicates the
+	// scenario where a rolled back version is now draining.
+	_, err = dHandle.SetCurrentVersion(context.Background(), client.WorkerDeploymentSetCurrentVersionOptions{
+		Version:                 "__unversioned__",
+		IgnoreMissingTaskQueues: true,
+	})
+	if err != nil {
+		log.Fatalln("Unable to set current version", err)
+	}
+
+	// Waiting for the version 1.0 to become drained.
+	time.Sleep(8 * time.Second)
+	// Make sure 1.0 is drained.
+	verifyDeployment(dHandle, "__unversioned__", "", client.WorkerDeploymentVersionDrainageStatusDrained)
+
 	// Stopping both workers
 	w1.Stop()
 	w2.Stop()
