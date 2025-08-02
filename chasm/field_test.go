@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/mock/gomock"
 )
 
@@ -147,4 +148,193 @@ func (s *fieldSuite) newTestTree(
 		s.nodePathEncoder,
 		s.logger,
 	)
+}
+
+// setupBasicTree creates a minimal tree structure with root node and context.
+func (s *fieldSuite) setupBasicTree() (*Node, MutableContext, error) {
+	serializedNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{},
+				},
+			},
+		},
+	}
+
+	rootNode, err := s.newTestTree(serializedNodes)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ctx := NewMutableContext(context.Background(), rootNode)
+	return rootNode, ctx, nil
+}
+
+// setupComponentWithTree creates a basic component structure and attaches it to the tree.
+func (s *fieldSuite) setupComponentWithTree(rootComponent *TestComponent) (*Node, MutableContext, error) {
+	rootNode, ctx, err := s.setupBasicTree()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	rootNode.value = rootComponent
+	rootNode.valueState = valueStateNeedSerialize
+	return rootNode, ctx, nil
+}
+
+func (s *fieldSuite) TestDeferredPointerResolution() {
+	tv := testvars.New(s.T())
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).AnyTimes()
+	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
+
+	// Create component structure that will simulate NewEntity scenario.
+	sc11 := &TestSubComponent11{
+		SubComponent11Data: &protoMessageType{
+			CreateRequestId: "sub-component11-data",
+		},
+	}
+
+	sc1 := &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{
+			CreateRequestId: "sub-component1-data",
+		},
+	}
+
+	rootComponent := &TestComponent{
+		ComponentData: &protoMessageType{
+			CreateRequestId: "component-data",
+		},
+		SubComponent1: NewComponentField(nil, sc1),
+	}
+
+	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
+	s.NoError(err)
+
+	// Attempt ComponentPointerTo which should create deferred pointer.
+	rootComponent.SubComponent11Pointer, err = ComponentPointerTo(ctx, sc11)
+	s.NoError(err)
+
+	// Now add sc11 to the tree so it can be resolved during CloseTransaction.
+	sc1.SubComponent11 = NewComponentField(nil, sc11)
+
+	// Verify it's a deferred pointer storing the component directly.
+	s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
+	s.Equal(sc11, rootComponent.SubComponent11Pointer.Internal.v)
+
+	// CloseTransaction should resolve the deferred pointer.
+	mutations, err := rootNode.CloseTransaction()
+	s.NoError(err)
+	s.NotEmpty(mutations.UpdatedNodes)
+
+	// Verify the pointer was resolved to a regular pointer with path.
+	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
+	resolvedPath, ok := rootComponent.SubComponent11Pointer.Internal.v.([]string)
+	s.True(ok)
+	s.Equal([]string{"SubComponent1", "SubComponent11"}, resolvedPath)
+
+	// Verify we can get the component through the resolved pointer.
+	resolvedComponent, err := rootComponent.SubComponent11Pointer.Get(ctx)
+	s.NoError(err)
+	s.Equal(sc11, resolvedComponent)
+}
+
+func (s *fieldSuite) TestMixedPointerScenario() {
+	tv := testvars.New(s.T())
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).AnyTimes()
+	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
+
+	existingComponent := &TestSubComponent11{
+		SubComponent11Data: &protoMessageType{CreateRequestId: "existing-component"},
+	}
+
+	sc1 := &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{CreateRequestId: "sub-component1-data"},
+		SubComponent11:    NewComponentField(nil, existingComponent),
+	}
+
+	rootComponent := &TestComponent{
+		ComponentData: &protoMessageType{CreateRequestId: "component-data"},
+		SubComponent1: NewComponentField(nil, sc1),
+	}
+
+	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
+	s.NoError(err)
+
+	rootComponent.SubComponent11Pointer, err = ComponentPointerTo(ctx, existingComponent)
+	s.NoError(err)
+
+	// Close the transaction to resolve SubComponent11Pointer's field to existingComponent.
+	_, err = rootNode.CloseTransaction()
+	s.NoError(err)
+	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
+
+	// Now, add a new component and deferred pointer for it.
+	newComponent := &TestSubComponent11{
+		SubComponent11Data: &protoMessageType{CreateRequestId: "new-component"},
+	}
+
+	ctx2 := NewMutableContext(context.Background(), rootNode)
+	rootComponent.SubComponent11Pointer2, err = ComponentPointerTo(ctx2, newComponent)
+	s.NoError(err)
+
+	// Now add the component to the tree so it can be resolved during CloseTransaction.
+	sc1.SubComponent11_2 = NewComponentField(nil, newComponent)
+
+	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
+	s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer2.Internal.fieldType())
+
+	_, err = rootNode.CloseTransaction()
+	s.NoError(err)
+
+	// Ensure both pointers have been resolved.
+	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
+	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer2.Internal.fieldType())
+
+	resolved1, err := rootComponent.SubComponent11Pointer.Get(ctx2)
+	s.NoError(err)
+	s.Equal(existingComponent, resolved1)
+
+	resolved2, err := rootComponent.SubComponent11Pointer2.Get(ctx2)
+	s.NoError(err)
+	s.Equal(newComponent, resolved2)
+}
+
+func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
+	tv := testvars.New(s.T())
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).AnyTimes()
+	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
+
+	orphanComponent := &TestSubComponent11{
+		SubComponent11Data: &protoMessageType{
+			CreateRequestId: "orphan-component",
+		},
+	}
+
+	rootComponent := &TestComponent{
+		ComponentData: &protoMessageType{
+			CreateRequestId: "component-data",
+		},
+	}
+
+	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
+	s.NoError(err)
+
+	rootComponent.SubComponent11Pointer, err = ComponentPointerTo(ctx, orphanComponent)
+	s.NoError(err)
+	s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
+
+	_, err = rootNode.CloseTransaction()
+	s.Error(err)
+	s.Contains(err.Error(), "failed to resolve deferred pointer during transaction close")
 }

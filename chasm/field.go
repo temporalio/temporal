@@ -57,7 +57,11 @@ func ComponentPointerTo[C Component](
 ) (Field[C], error) {
 	path, err := ctx.componentNodePath(c)
 	if err != nil {
-		return NewEmptyField[C](), err
+		// If we can't resolve the path (e.g., during NewEntity transition),
+		// store the component directly for deferred resolution
+		return Field[C]{
+			Internal: newFieldInternalWithValue(fieldTypeDeferredPointer, c),
+		}, nil
 	}
 	return Field[C]{
 		Internal: newFieldInternalWithValue(fieldTypePointer, path),
@@ -124,6 +128,9 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 			}
 			nodeValue = referencedNode.value
 		}
+	case fieldTypeDeferredPointer:
+		// For deferred pointers, return the component directly stored in v
+		nodeValue = f.Internal.v
 	default:
 		return nilT, serviceerror.NewInternalf("unsupported field type: %v", f.Internal.fieldType())
 	}

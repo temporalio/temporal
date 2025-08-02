@@ -514,8 +514,8 @@ func (n *Node) initSerializedNode(ft fieldType) {
 				},
 			},
 		}
-	case fieldTypeUnspecified:
-		softassert.Fail(n.logger, "initSerializedNode can't be called with fieldTypeUnspecified")
+	case fieldTypeUnspecified, fieldTypeDeferredPointer:
+		softassert.Fail(n.logger, fmt.Sprintf("initSerializedNode can't be called with %v", ft))
 	}
 }
 
@@ -820,6 +820,10 @@ func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []stri
 		return
 	}
 	if internal.node == nil && internal.value() != nil {
+		// Skip deferred pointers.
+		if internal.fieldType() == fieldTypeDeferredPointer {
+			return
+		}
 		// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
 		childNode := newNode(n.nodeBase, n, fieldN)
 
@@ -829,7 +833,7 @@ func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []stri
 				err = serviceerror.NewInternalf("value must be of type []string for the field of pointer type: got %T", internal.value())
 				return
 			}
-		case fieldTypeData, fieldTypeComponent:
+		case fieldTypeData, fieldTypeComponent, fieldTypeDeferredPointer:
 			if err = assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
 				return
 			}
@@ -1155,6 +1159,10 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	// Both of them need to be returned and persisted.
 	maps.Copy(n.mutation.UpdatedNodes, n.systemMutation.UpdatedNodes)
 	maps.Copy(n.mutation.DeletedNodes, n.systemMutation.DeletedNodes)
+
+	if err := n.resolveDeferredPointers(); err != nil {
+		return NodesMutation{}, err
+	}
 
 	if err := n.syncSubComponents(); err != nil {
 		return NodesMutation{}, err
@@ -1537,6 +1545,47 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask() error {
 		return err
 	}
 	n.mutation.UpdatedNodes[encodedPath] = firstTaskNode.serializedNode
+	return nil
+}
+
+// resolveDeferredPointers resolves all deferred pointers in the tree.
+// Returns error if any deferred pointer cannot be resolved, as deferred pointers
+// cannot be persisted after transaction close.
+func (n *Node) resolveDeferredPointers() error {
+	for _, node := range n.andAllChildren() {
+		if node.value == nil || node.fieldType() != fieldTypeComponent {
+			continue
+		}
+
+		for field := range node.valueFields() {
+			if field.err != nil {
+				return field.err
+			}
+
+			if field.kind != fieldKindSubField {
+				continue
+			}
+
+			internalV := field.val.FieldByName(internalFieldName)
+			internal, _ := internalV.Interface().(fieldInternal) //nolint:revive
+
+			if internal.fieldType() == fieldTypeDeferredPointer && internal.value() != nil {
+				// Must resolve the deferred pointer or fail the transaction.
+				component, ok := internal.value().(Component)
+				if !ok {
+					return serviceerror.NewInternalf("deferred pointer contains non-Component value: %T", internal.value())
+				}
+				resolvedPath, err := n.componentNodePath(component)
+				if err != nil {
+					return serviceerror.NewInternalf("failed to resolve deferred pointer during transaction close: %v", err)
+				}
+
+				// Update the field to be a regular pointer
+				newInternal := newFieldInternalWithValue(fieldTypePointer, resolvedPath)
+				internalV.Set(reflect.ValueOf(newInternal))
+			}
+		}
+	}
 	return nil
 }
 
