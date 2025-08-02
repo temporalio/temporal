@@ -47,8 +47,11 @@ func Invoke(
 		response.CacheMutableState = msb.CloneToProto()
 	}
 
-	// clear mutable state to force reload from persistence. This API returns both cached and persisted version.
-	chasmLease.GetContext().Clear()
+	if !req.GetSkipForceReload() {
+		// Clear mutable state to force reload from persistence.
+		chasmLease.GetContext().Clear()
+	}
+
 	mutableState, err := chasmLease.GetContext().LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, err

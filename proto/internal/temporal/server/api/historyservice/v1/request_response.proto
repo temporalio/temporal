@@ -710,10 +710,14 @@ message DescribeMutableStateRequest {
 
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
+    bool skip_force_reload = 3;
 }
 
 message DescribeMutableStateResponse {
+    // CacheMutableState is only available when mutable state is in cache.
     temporal.server.api.persistence.v1.WorkflowMutableState cache_mutable_state = 1;
+    // DatabaseMutableState is always available, 
+    // but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
     temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 2;
 }
 
