@@ -12,12 +12,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	querypb "go.temporal.io/api/query/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
@@ -91,6 +93,7 @@ var (
 	// Tail room for context deadline to bail out from retry for long poll.
 	longPollTailRoom  = time.Second
 	errWaitForRefresh = serviceerror.NewDeadlineExceeded("waiting for schedule to refresh status of completed workflows")
+	sysWorkerService  = "sys-worker-service"
 )
 
 const (
@@ -6201,35 +6204,6 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	}, nil
 }
 
-func (wh *WorkflowHandler) FetchWorkerConfig(_ context.Context, request *workflowservice.FetchWorkerConfigRequest,
-) (*workflowservice.FetchWorkerConfigResponse, error) {
-	if !wh.config.WorkerCommandsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("FetchWorkerConfig command is not enabled.")
-	}
-	return nil, serviceerror.NewUnimplemented("FetchWorkerConfig command is not enabled.")
-}
-
-func (wh *WorkflowHandler) UpdateWorkerConfig(_ context.Context, request *workflowservice.UpdateWorkerConfigRequest,
-) (*workflowservice.UpdateWorkerConfigResponse, error) {
-	if !wh.config.WorkerCommandsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("UpdateWorkerConfig command is not enabled.")
-	}
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if request.GetWorkerConfig() == nil {
-		return nil, serviceerror.NewInvalidArgument("WorkerConfig is not set")
-	}
-
-	_, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
-	return nil, serviceerror.NewUnimplemented("UpdateWorkerConfig command is not enabled.")
-}
-
 func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflowservice.DescribeWorkerRequest,
 ) (*workflowservice.DescribeWorkerResponse, error) {
 	if !wh.config.ListWorkersEnabled(request.GetNamespace()) {
@@ -6253,4 +6227,245 @@ func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflow
 	return &workflowservice.DescribeWorkerResponse{
 		WorkerInfo: resp.GetWorkerInfo(),
 	}, nil
+}
+
+func (wh *WorkflowHandler) FetchWorkerConfig(
+	ctx context.Context, request *workflowservice.FetchWorkerConfigRequest,
+) (*workflowservice.FetchWorkerConfigResponse, error) {
+	if !wh.config.WorkerCommandsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("FetchWorkerConfig command is not enabled.")
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	workerInstanceKey := request.Selector.GetWorkerInstanceKey()
+	describeWorkersResponse, err := wh.matchingClient.DescribeWorker(ctx, &matchingservice.DescribeWorkerRequest{
+		NamespaceId: namespaceID.String(),
+		Request: &workflowservice.DescribeWorkerRequest{
+			Namespace:         request.GetNamespace(),
+			WorkerInstanceKey: workerInstanceKey,
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	workerInfo := describeWorkersResponse.GetWorkerInfo()
+	if workerInfo == nil {
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("Worker with key %s not found", workerInstanceKey))
+	}
+	workerTaskQueue := GetWorkerSysTaskQueue(request.GetNamespace(), workerInfo.WorkerHeartbeat.HostInfo.ProcessKey)
+
+	commandPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(&workerpb.FetchWorkerConfigRequestPayload{
+		WorkerInstanceKey: []string{workerInstanceKey},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	commandResult, err := wh.SendWorkerCommand(
+		ctx, request.GetNamespace(), workerTaskQueue, "FetchWorkerConfig", commandPayloads.Payloads[0],
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	responsePayload, err := getWorkerCommandResponsePayload[workerpb.UpdateWorkerConfigResponsePayload](commandResult, "UpdateWorkerConfig")
+	if err != nil {
+		return nil, err
+	}
+	if responsePayload.WorkerConfigs == nil || len(responsePayload.WorkerConfigs) == 0 {
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("[FetchWorkerConfig] worker config for key %s not found", workerInstanceKey))
+	}
+	workerConfigEntry := responsePayload.WorkerConfigs[0]
+	if workerConfigEntry == nil {
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("[FetchWorkerConfig] worker config for key %s is empty", workerInstanceKey))
+	}
+	return &workflowservice.FetchWorkerConfigResponse{
+		WorkerConfig: workerConfigEntry.WorkerConfig,
+	}, nil
+}
+
+func (wh *WorkflowHandler) UpdateWorkerConfig(
+	ctx context.Context, request *workflowservice.UpdateWorkerConfigRequest,
+) (*workflowservice.UpdateWorkerConfigResponse, error) {
+	if !wh.config.WorkerCommandsEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("UpdateWorkerConfig command is not enabled.")
+	}
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if request.GetWorkerConfig() == nil {
+		return nil, serviceerror.NewInvalidArgument("[UpdateWorkerConfig] workerConfig is not set")
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	workerInstanceKey := request.Selector.GetWorkerInstanceKey()
+	describeWorkersResponse, err := wh.matchingClient.DescribeWorker(ctx, &matchingservice.DescribeWorkerRequest{
+		NamespaceId: namespaceID.String(),
+		Request: &workflowservice.DescribeWorkerRequest{
+			Namespace:         request.GetNamespace(),
+			WorkerInstanceKey: workerInstanceKey,
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	workerInfo := describeWorkersResponse.GetWorkerInfo()
+	if workerInfo == nil {
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("UpdateWorkerConfig worker with key %s not found", workerInstanceKey))
+	}
+
+	workerTaskQueue := GetWorkerSysTaskQueue(request.GetNamespace(), workerInfo.WorkerHeartbeat.HostInfo.ProcessKey)
+	commandPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(&workerpb.UpdateWorkerConfigRequestPayload{
+		WorkerInstanceKey: []string{workerInstanceKey},
+		WorkerConfig:      request.WorkerConfig,
+		UpdateMask:        request.UpdateMask,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	commandResult, err := wh.SendWorkerCommand(
+		ctx, request.GetNamespace(), workerTaskQueue, "UpdateWorkerConfig", commandPayloads.Payloads[0],
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO - batch support
+	responsePayload, err := getWorkerCommandResponsePayload[workerpb.UpdateWorkerConfigResponsePayload](commandResult, "UpdateWorkerConfig")
+	if err != nil {
+		return nil, err
+	}
+
+	if responsePayload.WorkerConfigs == nil || len(responsePayload.WorkerConfigs) == 0 {
+		return nil, serviceerror.NewNotFoundf("[UpdateWorkerConfig] worker config for key %s not found", workerInstanceKey)
+	}
+	workerConfigEntry := responsePayload.WorkerConfigs[0]
+	if workerConfigEntry == nil {
+		return nil, serviceerror.NewNotFoundf("[UpdateWorkerConfig] worker config for key %s is empty", workerInstanceKey)
+	}
+	return &workflowservice.UpdateWorkerConfigResponse{
+		Response: &workflowservice.UpdateWorkerConfigResponse_WorkerConfig{
+			WorkerConfig: workerConfigEntry.WorkerConfig,
+		},
+	}, nil
+}
+
+func (wh *WorkflowHandler) SendWorkerCommand(
+	ctx context.Context,
+	namespaceName string,
+	taskQueue string,
+	operation string,
+	commandPayload *commonpb.Payload,
+) (result nexus.HandlerStartOperationResult[any], retErr error) {
+	defer log.CapturePanic(wh.logger, &retErr)
+
+	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(namespaceName))
+	if err != nil {
+		return nil, err
+	}
+
+	if commandPayload.Size() > wh.config.BlobSizeLimitError(namespaceName) {
+		wh.logger.Error(
+			"payload size exceeds error limit for worker command request",
+			tag.Operation(operation),
+			tag.WorkflowNamespace(namespaceName))
+		return nil, serviceerror.NewInternalf("input exceeds size limit. Command: %s", operation)
+	}
+
+	nexusRequest := &nexuspb.Request{
+		ScheduledTime: timestamppb.New(time.Now()),
+		Header: map[string]string{
+			//	// if header is nil - polling nexus tasks will panic inside matching service
+			"nexus-request-retryable": "false",
+		},
+
+		Variant: &nexuspb.Request_StartOperation{
+			StartOperation: &nexuspb.StartOperationRequest{
+				Service:   sysWorkerService,
+				Operation: operation,
+				RequestId: uuid.New(),
+				Payload:   commandPayload,
+			},
+		},
+	}
+
+	request := &matchingservice.DispatchNexusTaskRequest{
+		NamespaceId: namespaceId.String(),
+		TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Request:     nexusRequest,
+	}
+
+	response, err := wh.matchingClient.DispatchNexusTask(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	switch outcome := response.GetOutcome().(type) {
+	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
+		return nil, serviceerror.NewInternalf(
+			"operation error. Error type: %s. Failure: %s.",
+			outcome.HandlerError.GetErrorType(), outcome.HandlerError.GetFailure().GetMessage())
+
+	case *matchingservice.DispatchNexusTaskResponse_Response:
+		switch responseType := outcome.Response.GetStartOperation().GetVariant().(type) {
+		case *nexuspb.StartOperationResponse_SyncSuccess:
+			result = &nexus.HandlerStartOperationResultSync[any]{
+				Value: responseType.SyncSuccess.GetPayload(),
+			}
+			return result, nil
+
+		case *nexuspb.StartOperationResponse_AsyncSuccess:
+			token := responseType.AsyncSuccess.GetOperationToken()
+			return &nexus.HandlerStartOperationResultAsync{
+				OperationToken: token,
+			}, nil
+
+		case *nexuspb.StartOperationResponse_OperationError:
+			return nil, serviceerror.NewInternalf(
+				"operation error. State: %s. Failure: %s.",
+				responseType.OperationError.GetOperationState(),
+				responseType.OperationError.GetFailure().GetMessage())
+		}
+	}
+
+	return nil, serviceerror.NewInternal("empty outcome")
+}
+
+func getWorkerCommandResponsePayload[T any](result nexus.HandlerStartOperationResult[any], command string) (*T, error) {
+	switch rt := result.(type) {
+	case *nexus.HandlerStartOperationResultSync[any]:
+		if rt.Value == nil {
+			return nil, serviceerror.NewInternalf("[%s] returned empty result", command)
+		}
+		switch rtv := rt.Value.(type) {
+		case *commonpb.Payload:
+			var responsePayload T
+			if err := sdk.PreferProtoDataConverter.FromPayload(rtv, &responsePayload); err != nil {
+				return nil, serviceerror.NewInternalf("[%s] failed to decode Response Payload: %v", command, err)
+			}
+			return &responsePayload, nil
+		}
+		return nil, serviceerror.NewInternalf("[%s]. Unexpected result type.", command)
+	}
+	return nil, serviceerror.NewInternalf("[%s]. Unexpected result.", command)
+}
+
+func GetWorkerSysTaskQueue(namespaceName string, processKey string) string {
+	taskQueue := fmt.Sprintf("%s/%s/%s", primitives.WorkerSysTQ, namespaceName, processKey)
+	return taskQueue
 }

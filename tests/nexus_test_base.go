@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -17,6 +18,12 @@ import (
 
 type NexusTestBaseSuite struct {
 	testcore.FunctionalTestBase
+	serviceName string
+}
+
+func (s *NexusTestBaseSuite) SetupSuite() {
+	s.serviceName = "test-service"
+	s.FunctionalTestBase.SetupSuite()
 }
 
 func (s *NexusTestBaseSuite) mustToPayload(v any) *commonpb.Payload {
@@ -56,8 +63,8 @@ func (s *NexusTestBaseSuite) versionedNexusTaskPoller(ctx context.Context, taskQ
 	if err != nil {
 		panic(err)
 	}
-	if res.Request.GetStartOperation().GetService() != "test-service" && res.Request.GetCancelOperation().GetService() != "test-service" {
-		panic("expected service to be test-service")
+	if res.Request.GetStartOperation().GetService() != s.serviceName && res.Request.GetCancelOperation().GetService() != s.serviceName {
+		panic(fmt.Sprintf("expected service to be %s", s.serviceName))
 	}
 	response, handlerError := handler(res)
 	if handlerError != nil {
