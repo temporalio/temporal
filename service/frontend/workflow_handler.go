@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/temporalio/sqlparser"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -4597,7 +4598,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			if len(a.Type) == 0 {
 				return nil, serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
 			}
-			unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, a.Type)
+			searchValue := fmt.Sprintf("property:activityType=%s", a.Type)
+			escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
+			unpauseCause := fmt.Sprintf("%s = %s", searchattribute.TemporalPauseInfo, escapedSearchValue)
 			visibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, unpauseCause)
 			unpauseActivitiesParams.ActivityType = a.Type
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
