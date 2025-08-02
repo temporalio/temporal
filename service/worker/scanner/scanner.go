@@ -159,10 +159,12 @@ func (s *Scanner) Start() error {
 	}
 
 	var workerTaskQueueNames []string
-	if s.context.cfg.ExecutionsScannerEnabled() {
+	if s.context.cfg.Persistence.DefaultStoreType() != config.StoreTypeSQL && s.context.cfg.ExecutionsScannerEnabled() {
 		s.wg.Add(1)
 		go s.startWorkflowWithRetry(ctx, executionsScannerWFStartOptions, executionsScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, executionsScannerTaskQueueName)
+	} else if s.context.cfg.ExecutionsScannerEnabled() {
+		s.context.logger.Info("ExecutionsScanner is not supported for SQL store")
 	}
 
 	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL && s.context.cfg.TaskQueueScannerEnabled() {
