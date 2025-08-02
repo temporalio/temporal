@@ -60,7 +60,3 @@ func (r *ActivityRetryTimerTask) GetType() enumsspb.TaskType {
 func (r *ActivityRetryTimerTask) GetStamp() int32 {
 	return r.Stamp
 }
-
-func (r *ActivityRetryTimerTask) SetStamp(stamp int32) {
-	r.Stamp = stamp
-}

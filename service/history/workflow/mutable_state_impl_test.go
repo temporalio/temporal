@@ -762,6 +762,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 		workflowID,
 		runID,
 	)
+	curTaskStamp := s.mutableState.executionInfo.WorkflowTaskStamp
 
 	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
@@ -770,6 +771,8 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 	err = s.mutableState.StartDeploymentTransition(deployment)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+	s.Equal(curTaskStamp+1, s.mutableState.executionInfo.WorkflowTaskStamp,
+		"workflow task stamp must be incremented since pending tasks are rescheduled")
 
 	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		wft.ScheduledEventID,
@@ -1056,7 +1059,6 @@ func (s *mutableStateSuite) TestOverride_RedirectFails() {
 }
 
 func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
-	s.T().Skip("TODO (Shahab)")
 	tq := &taskqueuepb.TaskQueue{Name: "tq"}
 	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
@@ -1073,6 +1075,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 		},
 	)
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
+	s.Equal(int32(1), s.mutableState.executionInfo.WorkflowTaskStamp)
 
 	// assert that redirect fails - should be its own test
 	err = s.mutableState.StartDeploymentTransition(deployment2)
@@ -5123,8 +5126,6 @@ func (s *mutableStateSuite) TestHasRequestID() {
 }
 
 func (s *mutableStateSuite) TestHasRequestID_StateConsistency() {
-	s.SetupTest()
-
 	// Test that HasRequestID is consistent with AttachRequestID
 	requestID := "consistency-test-request-id"
 
@@ -5141,8 +5142,6 @@ func (s *mutableStateSuite) TestHasRequestID_StateConsistency() {
 }
 
 func (s *mutableStateSuite) TestHasRequestID_EmptyExecutionState() {
-	s.SetupTest()
-
 	// Ensure execution state has no request IDs initially
 	if s.mutableState.executionState.RequestIds == nil {
 		s.mutableState.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo)
