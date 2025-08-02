@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/temporalio/sqlparser"
 	activitypb "go.temporal.io/api/activity/v1"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -97,7 +98,9 @@ func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOp
 	activityTypeName := "ActivityFunc"
 	// Make sure the activity is in visibility
 	var listResp *workflowservice.ListWorkflowExecutionsResponse
-	unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, activityTypeName)
+	searchValue := fmt.Sprintf("property:activityType=%s", activityTypeName)
+	escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
+	unpauseCause := fmt.Sprintf("%s = %s", searchattribute.TemporalPauseInfo, escapedSearchValue)
 	query := fmt.Sprintf("(WorkflowType='%s' AND %s)", workflowTypeName, unpauseCause)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -121,7 +124,7 @@ func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOp
 					ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 				},
 				UpdateMask: &fieldmaskpb.FieldMask{
-					Paths: []string{"scheduleToCloseTimeout"},
+					Paths: []string{"schedule_to_close_timeout"},
 				},
 			},
 		},
