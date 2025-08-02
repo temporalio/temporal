@@ -2491,6 +2491,71 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 	s.NoError(err)
 }
 
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_Unpause_ActivityTypeIsEscaped() {
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.NewString())
+	reason := "reason"
+	identity := "identity"
+	// Note that TemporalNamespace isn't a real search attribute, but this is here to prove a point.
+	activityType := "sql-injection') OR TemporalNamespace STARTS_WITH '' OR (task-queue STARTS_WITH '"
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	var startWorkflowExecutionRequest *historyservice.StartWorkflowExecutionRequest
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *historyservice.StartWorkflowExecutionRequest,
+			_ ...grpc.CallOption,
+		) (*historyservice.StartWorkflowExecutionResponse, error) {
+			startWorkflowExecutionRequest = request
+			return &historyservice.StartWorkflowExecutionResponse{}, nil
+		},
+	)
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+	request := &workflowservice.StartBatchOperationRequest{
+		Namespace:       testNamespace.String(),
+		VisibilityQuery: "TaskQueue = 'task-queue'",
+		JobId:           uuid.NewString(),
+		Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
+			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
+				Identity: identity,
+				Activity: &batchpb.BatchOperationUnpauseActivities_Type{
+					Type: activityType,
+				},
+			},
+		},
+		Reason: reason,
+	}
+
+	_, err := wh.StartBatchOperation(context.Background(), request)
+	s.NoError(err)
+
+	s.Equal(namespaceID.String(), startWorkflowExecutionRequest.NamespaceId)
+	s.Equal(batcher.BatchWFTypeName, startWorkflowExecutionRequest.StartRequest.WorkflowType.Name)
+	s.Equal(primitives.PerNSWorkerTaskQueue, startWorkflowExecutionRequest.StartRequest.TaskQueue.Name)
+	s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, startWorkflowExecutionRequest.StartRequest.WorkflowIdReusePolicy)
+	s.Equal(identity, startWorkflowExecutionRequest.StartRequest.Identity)
+	s.ProtoEqual(payload.EncodeString(batcher.BatchTypeUnpauseActivities), startWorkflowExecutionRequest.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+	s.ProtoEqual(payload.EncodeString(reason), startWorkflowExecutionRequest.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
+	s.ProtoEqual(payload.EncodeString(identity), startWorkflowExecutionRequest.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+	expectedParams := &batcher.BatchParams{
+		Namespace: testNamespace.String(),
+		Reason:    reason,
+		Query:     "(TaskQueue = 'task-queue') AND (TemporalPauseInfo = 'property:activityType=sql-injection\\') OR TemporalNamespace STARTS_WITH \\'\\' OR (task-queue STARTS_WITH \\'')",
+		BatchType: batcher.BatchTypeUnpauseActivities,
+		UnpauseActivitiesParams: batcher.UnpauseActivitiesParams{
+			Identity:     identity,
+			ActivityType: activityType,
+		},
+	}
+	var actualParams batcher.BatchParams
+	payloads.Decode(startWorkflowExecutionRequest.StartRequest.Input, &actualParams)
+
+	s.Equal(expectedParams, &actualParams)
+}
+
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
