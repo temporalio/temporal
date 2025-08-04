@@ -378,6 +378,11 @@ message VisibilityTaskInfo {
     reserved 9;
     int64 close_visibility_task_id = 10;
     google.protobuf.Timestamp close_time = 11;
+
+    oneof task_details {
+        // If the task addresses a CHASM component, this field will be set.
+        ChasmTaskInfo chasm_task_info = 12;
+    }
 }
 
 // timer column

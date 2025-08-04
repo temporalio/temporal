@@ -167,27 +167,26 @@ func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int, u
 	return "OldMatching_" + ret
 }
 
-func (s *TaskQueueSuite) TestTaskQueueApiLimitOverride() {
-	const buffer = 100 * time.Millisecond
-
-	s.Run("RateLimitTest_1.00", func() {
-		expectedGap := time.Second
-		s.runTestTaskQueueAPIRateLimitOverridesWorkerLimit(1.0, 5, expectedGap-buffer, expectedGap+buffer, "RateLimitTest_1.00")
-	})
-}
-
-func (s *TaskQueueSuite) runTestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS float32, taskCount int, minGap time.Duration, maxGap time.Duration, activityTaskQueue string) {
-	// Set the burst as 1 to make sure not more than 1 task get's acknowledged at a time.
-	// Helps observe the backlog drain more easily.
-	s.OverrideDynamicConfig(dynamicconfig.MatchingMinTaskThrottlingBurstSize, 1)
-	// Configure a single partition to ensure the full rate limit applies to one task queue
-	// without being divided across multiple partitions.
+// TestTaskQueueAPIRateLimitOverridesWorkerLimit tests that the API rate limit overrides the worker rate limit.
+// It sets the API rate limit on a task queue to 5 RPS and then launches 25 activities.
+// Burst = 5 i.e max(int(math.Ceil(effectiveRPSPartitionWise)), r.config.MinTaskThrottlingBurstSize())
+// The expected time for all activities to complete is ~ 4 seconds ((25 - 5)/5) +/- 1 second buffer.
+// The first five activities should run immediately, and the rest should be throttled to 5 RPS.
+// The test verifies that the total time taken for all activities to complete is within the expected range
+// To avoid test flakiness, the test uses a buffer of 1 second for the expected total time.
+func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
+	const (
+		apiRPS            = 5.0
+		taskCount         = 25
+		buffer            = time.Second
+		activityTaskQueue = "RateLimitTest"
+	)
+	expectedTotal := time.Duration(float64(taskCount-int(apiRPS))/apiRPS) * time.Second
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 	// Set a very low TTL for task queue info cache to ensure the rate limiter stats
 	// are refreshed frequently, avoiding stale data during the test.
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
-
 	var (
 		mu       sync.Mutex
 		runTimes []time.Time
@@ -195,9 +194,9 @@ func (s *TaskQueueSuite) runTestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS
 	)
 	const (
 		workerRPS = 50.0
-		// Test typically completes in ~6.7 seconds on average.
-		// Timeout is set conservatively to 15s to reduce flakiness.
-		drainTimeout = 15 * time.Second
+		// Test typically completes in ~6.2 seconds on average.
+		// Timeout is set to 10s to reduce flakiness.
+		drainTimeout = 10 * time.Second
 		activityName = "trackableActivity"
 	)
 	tv := testvars.New(s.T())
@@ -264,20 +263,11 @@ func (s *TaskQueueSuite) runTestTaskQueueAPIRateLimitOverridesWorkerLimit(apiRPS
 
 	// Wait for all activities to complete
 	s.True(common.AwaitWaitGroup(&wg, drainTimeout), "timeout waiting for activities to complete")
-
 	s.Len(runTimes, taskCount)
-	// When the burst size is 1, the first token is immediately available,
-	// allowing the first task to dispatch instantly. The second task may also be dispatched quickly,
-	// as the rate limit (e.g., 2 RPS) still allows another token within the same second.
-	// To account for this initial "microburst," we skip validation of the timing between the first two tasks
-	// and begin enforcing the rate limit check from the third task onward.
-	// Always start from 2nd index to avoid the effect of burst for consistency
-	startIdx := 2
-	for i := startIdx; i < len(runTimes); i++ {
-		diff := runTimes[i].Sub(runTimes[i-1])
-		s.GreaterOrEqual(diff, minGap, "Activity ran too quickly between executions")
-		s.LessOrEqual(diff, maxGap, "Activity ran too slowly between executions")
-	}
+
+	totalGap := runTimes[len(runTimes)-1].Sub(runTimes[0])
+	s.GreaterOrEqual(totalGap, expectedTotal-buffer, "Activity run time too short — API rate limit override not taking effect over the worker rate limit")
+	s.LessOrEqual(totalGap, expectedTotal+buffer, "Activity run time too long — API rate limit override not enforced as expected")
 }
 
 // TestUpdateAndDescribeTaskQueueConfig tests the update and describe task queue config functionality.

@@ -553,6 +553,7 @@ const (
 	TaskTypeVisibilityTaskUpsertExecution                 = "VisibilityTaskUpsertExecution"
 	TaskTypeVisibilityTaskCloseExecution                  = "VisibilityTaskCloseExecution"
 	TaskTypeVisibilityTaskDeleteExecution                 = "VisibilityTaskDeleteExecution"
+	TaskTypeVisibilityTaskUpsertChasmExecution            = "VisibilityTaskUpsertChasmExecution"
 	TaskTypeArchivalTaskArchiveExecution                  = "ArchivalTaskArchiveExecution"
 	TaskTypeTimerActiveTaskActivityTimeout                = "TimerActiveTaskActivityTimeout"
 	TaskTypeTimerActiveTaskWorkflowTaskTimeout            = "TimerActiveTaskWorkflowTaskTimeout"

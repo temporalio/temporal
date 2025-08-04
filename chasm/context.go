@@ -1,3 +1,5 @@
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination context_mock.go
+
 package chasm
 
 import (
@@ -27,7 +29,7 @@ type Context interface {
 type MutableContext interface {
 	Context
 
-	AddTask(Component, TaskAttributes, any) error
+	AddTask(Component, TaskAttributes, any)
 
 	// Add more methods here for other storage commands/primitives.
 	// e.g. HistoryEvent
@@ -56,11 +58,11 @@ type MutableContextImpl struct {
 
 func NewContext(
 	ctx context.Context,
-	root *Node,
+	node *Node,
 ) *ContextImpl {
 	return &ContextImpl{
 		ctx:  ctx,
-		root: root,
+		root: node.root(),
 	}
 }
 
@@ -97,6 +99,6 @@ func (c *MutableContextImpl) AddTask(
 	component Component,
 	attributes TaskAttributes,
 	payload any,
-) error {
-	return c.root.AddTask(component, attributes, payload)
+) {
+	c.root.AddTask(component, attributes, payload)
 }

@@ -257,7 +257,7 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 	}, nil
 }
 
-func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context, isCan bool) {
+func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context) {
 	if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED {
 		now := timestamppb.New(workflow.Now(ctx))
 		d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{
@@ -543,7 +543,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING {
 		// Version deactivated from current/ramping
 		d.VersionState.LastDeactivationTime = args.RoutingUpdateTime
-		d.startDrainage(ctx, false)
+		d.startDrainage(ctx)
 	}
 
 	// started accepting new workflows
@@ -551,6 +551,15 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		if d.VersionState.FirstActivationTime == nil {
 			// First time this version is activated to current/ramping
 			d.VersionState.FirstActivationTime = args.RoutingUpdateTime
+		}
+
+		// Clear drainage information, if present, when a version gets activated.
+		// This handles the rollback scenario where a previously draining/drained version
+		// is reactivated and should have it's drainage information cleared.
+
+		v := workflow.GetVersion(ctx, "clear-drainage-on-activation", workflow.DefaultVersion, 0)
+		if v != workflow.DefaultVersion {
+			d.VersionState.DrainageInfo = nil
 		}
 	}
 

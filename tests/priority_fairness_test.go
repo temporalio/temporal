@@ -229,9 +229,6 @@ type FairnessSuite struct {
 
 func TestFairnessSuite(t *testing.T) {
 	t.Parallel()
-	if !testcore.UseCassandraPersistence() {
-		t.Skip("only on cassandra for now")
-	}
 	suite.Run(t, new(FairnessSuite))
 }
 

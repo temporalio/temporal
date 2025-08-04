@@ -40,14 +40,10 @@ func getWorkflowExecutionContextForTask(
 	case enumsspb.TASK_TYPE_CHASM,
 		enumsspb.TASK_TYPE_CHASM_PURE,
 		enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT, // retention timer
-		enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION:
+		enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
+		enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
 		// Those tasks work for all archetypes.
 		archetype = chasm.ArchetypeAny
-	default:
-		if task.GetCategory().ID() == tasks.CategoryIDVisibility {
-			// Visibility tasks work for all archetypes as well.
-			archetype = chasm.ArchetypeAny
-		}
 	}
 
 	return getWorkflowExecutionContext(

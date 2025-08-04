@@ -39,6 +39,7 @@ type priTaskMatcher struct {
 	metricsHandler metrics.Handler // namespace metric scope
 	logger         log.Logger
 	numPartitions  func() int // number of task queue partitions
+	markAlive      func()     // function to mark the physical task queue alive
 
 	limiterLock sync.Mutex
 	adminNsRate float64
@@ -88,6 +89,7 @@ func newPriTaskMatcher(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	rateLimitManager *rateLimitManager,
+	markAlive func(),
 ) *priTaskMatcher {
 	tm := &priTaskMatcher{
 		config:           config,
@@ -99,6 +101,7 @@ func newPriTaskMatcher(
 		fwdr:             fwdr,
 		validator:        validator,
 		numPartitions:    config.NumReadPartitions,
+		markAlive:        markAlive,
 		dynamicRate:      defaultTaskDispatchRPS,
 		rateLimitManager: rateLimitManager,
 	}
@@ -178,6 +181,10 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) error {
 
 			// consider this task expired while processing.
 			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
+
+			// Stay alive as long as we're invalidating tasks
+			tm.markAlive()
+
 			return nil
 		}
 
@@ -235,6 +242,9 @@ func (tm *priTaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier ba
 			task.finish(nil, false)
 			var invalidStageTag = getInvalidTaskTag(task)
 			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidStageTag)
+
+			// Stay alive as long as we're invalidating tasks
+			tm.markAlive()
 
 			retrier.Reset()
 		} else {

@@ -551,6 +551,12 @@ func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.Polle
 	for _, vq := range pm.versionedQueues {
 		info := vq.GetAllPollerInfo()
 		ret = append(ret, info...)
+
+		// We want DescribeTaskQueue to count for task queue liveness for all loaded versioned
+		// queues, and this is the most convenient place to mark liveness, since it's called by
+		// LegacyDescribeTaskQueue (and also getPhysicalQueuesForAdd, but that's versioning 1
+		// and will be removed soon).
+		vq.MarkAlive()
 	}
 	return ret
 }
@@ -623,7 +629,8 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 func (pm *taskQueuePartitionManagerImpl) Describe(
 	ctx context.Context,
 	buildIds map[string]bool,
-	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool,
+) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 
 	versions := make(map[PhysicalTaskQueueVersion]bool)
@@ -705,6 +712,8 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			bid = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(v.Deployment()))
 		}
 		versionsInfo[bid] = vInfo
+
+		physicalQueue.MarkAlive() // Count Describe for liveness
 	}
 
 	return &matchingservice.DescribeTaskQueuePartitionResponse{
@@ -1185,14 +1194,16 @@ func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.T
 }
 
 func (pm *taskQueuePartitionManagerImpl) userDataChanged() {
+	// Update rateLimits if any change is userData.
+	pm.rateLimitManager.UserDataChanged()
+
 	// Notify all queues so they can re-evaluate their backlog.
 	pm.versionedQueuesLock.RLock()
 	for _, vq := range pm.versionedQueues {
 		go vq.UserDataChanged()
 	}
 	pm.versionedQueuesLock.RUnlock()
-	// Update rateLimits if any change is userData.
-	pm.rateLimitManager.UserDataChanged()
+
 	// Do this one in this goroutine.
 	pm.defaultQueue.UserDataChanged()
 }
