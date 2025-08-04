@@ -131,9 +131,7 @@ func (tm *priTaskMatcher) Start() {
 	}
 }
 
-func (tm *priTaskMatcher) Stop() {
-	tm.rateLimitManager.Stop()
-}
+func (tm *priTaskMatcher) Stop() {}
 
 func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.Retrier) {
 	ctxs := []context.Context{tm.tqCtx}

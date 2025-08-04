@@ -184,7 +184,7 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 	wg *sync.WaitGroup,
 	apiRPS float64,
 	mu *sync.Mutex,
-) (context.Context, context.CancelFunc, worker.Worker, worker.Worker) {
+) (ctx context.Context, cancel context.CancelFunc, activityWorker worker.Worker, wfWorker worker.Worker) {
 	tv := testvars.New(s.T())
 	// Apply API rate limit on `activityTaskQueue`
 	_, err := s.FrontendClient().UpdateTaskQueueConfig(context.Background(), &workflowservice.UpdateTaskQueueConfigRequest{
@@ -220,10 +220,10 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 		return workflow.ExecuteActivity(ctx, activityName).Get(ctx, nil)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), drainTimeout)
+	ctx, cancel = context.WithTimeout(context.Background(), drainTimeout)
 
 	// Start the activity worker
-	activityWorker := worker.New(s.SdkClient(), activityTaskQueue, worker.Options{
+	activityWorker = worker.New(s.SdkClient(), activityTaskQueue, worker.Options{
 		// Setting rate limit at worker level
 		TaskQueueActivitiesPerSecond: workerRPS,
 	})
@@ -231,7 +231,7 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 	s.NoError(activityWorker.Start())
 
 	// Start the workflow worker
-	wfWorker := worker.New(s.SdkClient(), tv.TaskQueue().GetName(), worker.Options{})
+	wfWorker = worker.New(s.SdkClient(), tv.TaskQueue().GetName(), worker.Options{})
 	wfWorker.RegisterWorkflow(workflowFn)
 	s.NoError(wfWorker.Start())
 
