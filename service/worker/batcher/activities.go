@@ -251,9 +251,9 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		}
 		hbd.TotalEstimate = estimateCount
 	}
-	rps := a.getOperationRPS(batchParams.Rps)
+	rps := a.rps(a.namespace.String())
 	rateLimit := rate.Limit(rps)
-	burstLimit := int(math.Ceil(rps)) // should never be zero because everything would be rejected
+	burstLimit := rps // should never be zero because everything would be rejected
 	rateLimiter := rate.NewLimiter(rateLimit, burstLimit)
 	taskCh := make(chan taskDetail, pageSize)
 	respCh := make(chan error, pageSize)
@@ -407,22 +407,22 @@ func startTaskProcessor(
 			switch batchParams.BatchType {
 			case BatchTypeTerminate:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
-						return sdkClient.TerminateWorkflow(ctx, workflowID, runID, batchParams.Reason)
+					func(execution *commonpb.WorkflowExecution) error {
+						return sdkClient.TerminateWorkflow(ctx, execution.WorkflowId, execution.RunId, batchParams.Reason)
 					})
 			case BatchTypeCancel:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
-						return sdkClient.CancelWorkflow(ctx, workflowID, runID)
+					func(execution *commonpb.WorkflowExecution) error {
+						return sdkClient.CancelWorkflow(ctx, execution.WorkflowId, execution.RunId)
 					})
 			case BatchTypeSignal:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
+					func(execution *commonpb.WorkflowExecution) error {
 						_, err := frontendClient.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 							Namespace: batchParams.Namespace,
 							WorkflowExecution: &commonpb.WorkflowExecution{
-								WorkflowId: workflowID,
-								RunId:      runID,
+								WorkflowId: execution.WorkflowId,
+								RunId:      execution.RunId,
 							},
 							SignalName: batchParams.SignalParams.SignalName,
 							Input:      batchParams.SignalParams.Input,
@@ -431,22 +431,22 @@ func startTaskProcessor(
 					})
 			case BatchTypeDelete:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
+					func(execution *commonpb.WorkflowExecution) error {
 						_, err := frontendClient.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
 							Namespace: batchParams.Namespace,
 							WorkflowExecution: &commonpb.WorkflowExecution{
-								WorkflowId: workflowID,
-								RunId:      runID,
+								WorkflowId: execution.WorkflowId,
+								RunId:      execution.RunId,
 							},
 						})
 						return err
 					})
 			case BatchTypeReset:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
+					func(execution *commonpb.WorkflowExecution) error {
 						workflowExecution := &commonpb.WorkflowExecution{
-							WorkflowId: workflowID,
-							RunId:      runID,
+							WorkflowId: execution.WorkflowId,
+							RunId:      execution.RunId,
 						}
 						var eventId int64
 						var err error
@@ -480,12 +480,12 @@ func startTaskProcessor(
 					})
 			case BatchTypeUnpauseActivities:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
+					func(execution *commonpb.WorkflowExecution) error {
 						unpauseRequest := &workflowservice.UnpauseActivityRequest{
 							Namespace: batchParams.Namespace,
 							Execution: &commonpb.WorkflowExecution{
-								WorkflowId: workflowID,
-								RunId:      runID,
+								WorkflowId: execution.WorkflowId,
+								RunId:      execution.RunId,
 							},
 							Identity:       batchParams.UnpauseActivitiesParams.Identity,
 							Activity:       &workflowservice.UnpauseActivityRequest_Type{Type: batchParams.UnpauseActivitiesParams.ActivityType},
@@ -505,13 +505,13 @@ func startTaskProcessor(
 
 			case BatchTypeUpdateOptions:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
+					func(execution *commonpb.WorkflowExecution) error {
 						var err error
 						_, err = frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 							Namespace: batchParams.Namespace,
 							WorkflowExecution: &commonpb.WorkflowExecution{
-								WorkflowId: workflowID,
-								RunId:      runID,
+								WorkflowId: execution.WorkflowId,
+								RunId:      execution.RunId,
 							},
 							WorkflowExecutionOptions: batchParams.UpdateOptionsParams.WorkflowExecutionOptions,
 							UpdateMask:               &fieldmaskpb.FieldMask{Paths: batchParams.UpdateOptionsParams.UpdateMask.Paths},
@@ -521,12 +521,12 @@ func startTaskProcessor(
 
 			case BatchTypeResetActivities:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
+					func(execution *commonpb.WorkflowExecution) error {
 						resetRequest := &workflowservice.ResetActivityRequest{
 							Namespace: batchParams.Namespace,
 							Execution: &commonpb.WorkflowExecution{
-								WorkflowId: workflowID,
-								RunId:      runID,
+								WorkflowId: execution.WorkflowId,
+								RunId:      execution.RunId,
 							},
 							Identity:               batchParams.ResetActivitiesParams.Identity,
 							Activity:               &workflowservice.ResetActivityRequest_Type{Type: batchParams.ResetActivitiesParams.ActivityType},
@@ -547,12 +547,12 @@ func startTaskProcessor(
 					})
 			case BatchTypeUpdateActivitiesOptions:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
+					func(execution *commonpb.WorkflowExecution) error {
 						updateRequest := &workflowservice.UpdateActivityOptionsRequest{
 							Namespace: batchParams.Namespace,
 							Execution: &commonpb.WorkflowExecution{
-								WorkflowId: workflowID,
-								RunId:      runID,
+								WorkflowId: execution.WorkflowId,
+								RunId:      execution.RunId,
 							},
 							Activity:        &workflowservice.UpdateActivityOptionsRequest_Type{Type: batchParams.UpdateActivitiesOptionsParams.ActivityType},
 							UpdateMask:      &fieldmaskpb.FieldMask{Paths: batchParams.UpdateActivitiesOptionsParams.UpdateMask.Paths},
@@ -637,22 +637,22 @@ func startTaskProcessorProtobuf(
 			switch operation := batchOperation.Request.Operation.(type) {
 			case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
-						return sdkClient.TerminateWorkflow(ctx, workflowID, runID, batchOperation.Request.Reason)
+					func(execution *commonpb.WorkflowExecution) error {
+						return sdkClient.TerminateWorkflow(ctx, execution.WorkflowId, execution.RunId, batchOperation.Request.Reason)
 					})
 			case *workflowservice.StartBatchOperationRequest_CancellationOperation:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
-						return sdkClient.CancelWorkflow(ctx, workflowID, runID)
+					func(execution *commonpb.WorkflowExecution) error {
+						return sdkClient.CancelWorkflow(ctx, execution.WorkflowId, execution.RunId)
 					})
 			case *workflowservice.StartBatchOperationRequest_SignalOperation:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
+					func(execution *commonpb.WorkflowExecution) error {
 						_, err := frontendClient.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 							Namespace: namespace,
 							WorkflowExecution: &commonpb.WorkflowExecution{
-								WorkflowId: workflowID,
-								RunId:      runID,
+								WorkflowId: execution.WorkflowId,
+								RunId:      execution.RunId,
 							},
 							SignalName: operation.SignalOperation.GetSignal(),
 							Input:      operation.SignalOperation.GetInput(),
@@ -662,22 +662,22 @@ func startTaskProcessorProtobuf(
 					})
 			case *workflowservice.StartBatchOperationRequest_DeletionOperation:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
+					func(execution *commonpb.WorkflowExecution) error {
 						_, err := frontendClient.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
 							Namespace: namespace,
 							WorkflowExecution: &commonpb.WorkflowExecution{
-								WorkflowId: workflowID,
-								RunId:      runID,
+								WorkflowId: execution.WorkflowId,
+								RunId:      execution.RunId,
 							},
 						})
 						return err
 					})
 			case *workflowservice.StartBatchOperationRequest_ResetOperation:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
+					func(execution *commonpb.WorkflowExecution) error {
 						workflowExecution := &commonpb.WorkflowExecution{
-							WorkflowId: workflowID,
-							RunId:      runID,
+							WorkflowId: execution.WorkflowId,
+							RunId:      execution.RunId,
 						}
 						var eventId int64
 						var err error
@@ -718,15 +718,15 @@ func startTaskProcessorProtobuf(
 					})
 			case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
+					func(execution *commonpb.WorkflowExecution) error {
 						unpauseRequest := &workflowservice.UnpauseActivityRequest{
 							Namespace: namespace,
 							Execution: &commonpb.WorkflowExecution{
-								WorkflowId: workflowID,
-								RunId:      runID,
+								WorkflowId: execution.WorkflowId,
+								RunId:      execution.RunId,
 							},
 							Identity:       operation.UnpauseActivitiesOperation.Identity,
-							ResetAttempts:  !operation.UnpauseActivitiesOperation.ResetAttempts,
+							ResetAttempts:  operation.UnpauseActivitiesOperation.ResetAttempts,
 							ResetHeartbeat: operation.UnpauseActivitiesOperation.ResetHeartbeat,
 							Jitter:         operation.UnpauseActivitiesOperation.Jitter,
 						}
@@ -738,6 +738,8 @@ func startTaskProcessorProtobuf(
 							}
 						case *batchpb.BatchOperationUnpauseActivities_MatchAll:
 							unpauseRequest.Activity = &workflowservice.UnpauseActivityRequest_UnpauseAll{UnpauseAll: true}
+						default:
+							return errors.New(fmt.Sprintf("unknown activity type: %v", operation.UnpauseActivitiesOperation.GetActivity()))
 						}
 
 						_, err = frontendClient.UnpauseActivity(ctx, unpauseRequest)
@@ -746,13 +748,13 @@ func startTaskProcessorProtobuf(
 
 			case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
+					func(execution *commonpb.WorkflowExecution) error {
 						var err error
 						_, err = frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 							Namespace: namespace,
 							WorkflowExecution: &commonpb.WorkflowExecution{
-								WorkflowId: workflowID,
-								RunId:      runID,
+								WorkflowId: execution.WorkflowId,
+								RunId:      execution.RunId,
 							},
 							WorkflowExecutionOptions: operation.UpdateWorkflowOptionsOperation.WorkflowExecutionOptions,
 							UpdateMask:               &fieldmaskpb.FieldMask{Paths: operation.UpdateWorkflowOptionsOperation.UpdateMask.Paths},
@@ -761,12 +763,12 @@ func startTaskProcessorProtobuf(
 					})
 			case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
+					func(execution *commonpb.WorkflowExecution) error {
 						resetRequest := &workflowservice.ResetActivityRequest{
 							Namespace: namespace,
 							Execution: &commonpb.WorkflowExecution{
-								WorkflowId: workflowID,
-								RunId:      runID,
+								WorkflowId: execution.WorkflowId,
+								RunId:      execution.RunId,
 							},
 							Identity:               operation.ResetActivitiesOperation.Identity,
 							ResetHeartbeat:         operation.ResetActivitiesOperation.ResetHeartbeat,
@@ -780,6 +782,8 @@ func startTaskProcessorProtobuf(
 							resetRequest.Activity = &workflowservice.ResetActivityRequest_Type{Type: ao.Type}
 						case *batchpb.BatchOperationResetActivities_MatchAll:
 							resetRequest.Activity = &workflowservice.ResetActivityRequest_MatchAll{MatchAll: true}
+						default:
+							return errors.New(fmt.Sprintf("unknown activity type: %v", operation.ResetActivitiesOperation.GetActivity()))
 						}
 
 						_, err = frontendClient.ResetActivity(ctx, resetRequest)
@@ -787,12 +791,12 @@ func startTaskProcessorProtobuf(
 					})
 			case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
 				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
+					func(execution *commonpb.WorkflowExecution) error {
 						updateRequest := &workflowservice.UpdateActivityOptionsRequest{
 							Namespace: namespace,
 							Execution: &commonpb.WorkflowExecution{
-								WorkflowId: workflowID,
-								RunId:      runID,
+								WorkflowId: execution.WorkflowId,
+								RunId:      execution.RunId,
 							},
 							UpdateMask:      &fieldmaskpb.FieldMask{Paths: operation.UpdateActivityOptionsOperation.UpdateMask.Paths},
 							RestoreOriginal: operation.UpdateActivityOptionsOperation.RestoreOriginal,
@@ -804,6 +808,8 @@ func startTaskProcessorProtobuf(
 							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Type{Type: ao.Type}
 						case *batchpb.BatchOperationUpdateActivityOptions_MatchAll:
 							updateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_MatchAll{MatchAll: true}
+						default:
+							return errors.New(fmt.Sprintf("unknown activity type: %v", operation.UpdateActivityOptionsOperation.GetActivity()))
 						}
 
 						updateRequest.ActivityOptions = operation.UpdateActivityOptionsOperation.GetActivityOptions()
@@ -836,7 +842,7 @@ func processTask(
 	ctx context.Context,
 	limiter *rate.Limiter,
 	task taskDetail,
-	procFn func(string, string) error,
+	procFn func(*commonpb.WorkflowExecution) error,
 ) error {
 
 	err := limiter.Wait(ctx)
@@ -845,7 +851,7 @@ func processTask(
 	}
 	activity.RecordHeartbeat(ctx, task.hbd)
 
-	err = procFn(task.execution.GetWorkflowId(), task.execution.GetRunId())
+	err = procFn(task.execution)
 	if err != nil {
 		// NotFound means wf is not running or deleted
 		if !common.IsNotFoundError(err) {
