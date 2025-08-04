@@ -168,6 +168,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                    1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorker":                 1,
 
 		// APIs that rely on visibility
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         1,

@@ -601,3 +601,19 @@ func (h *Handler) UpdateTaskQueueConfig(
 ) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
 	return h.engine.UpdateTaskQueueConfig(ctx, request)
 }
+
+func (h *Handler) DescribeWorker(
+	_ context.Context, request *matchingservice.DescribeWorkerRequest,
+) (*matchingservice.DescribeWorkerResponse, error) {
+	nsID := namespace.ID(request.GetNamespaceId())
+	hb, err := h.workersRegistry.DescribeWorker(
+		nsID, request.Request.GetWorkerInstanceKey())
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.DescribeWorkerResponse{
+		WorkerInfo: &workerpb.WorkerInfo{
+			WorkerHeartbeat: hb,
+		},
+	}, nil
+}
