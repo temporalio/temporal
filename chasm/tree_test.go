@@ -471,9 +471,8 @@ func (s *nodeSuite) TestPointerAttributes() {
 		rootNode.valueState = valueStateNeedSerialize
 
 		ctx := NewMutableContext(context.Background(), rootNode)
-		rootComponent.SubComponent11Pointer, err = ComponentPointerTo(ctx, sc11)
-		s.NoError(err)
-		s.Equal([]string{"SubComponent1", "SubComponent11"}, rootComponent.SubComponent11Pointer.Internal.v)
+		rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, sc11)
+		s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.ft)
 
 		mutations, err := rootNode.CloseTransaction()
 		s.NoError(err)

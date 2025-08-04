@@ -40,10 +40,10 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 		for i := 0; i < valueT.Elem().NumField(); i++ {
 			fieldV := valueV.Elem().Field(i)
 			fieldT := fieldV.Type()
+			fieldN := fieldName(valueT.Elem().Field(i))
 			if fieldT == UnimplementedComponentT {
 				continue
 			}
-			fieldN := fieldName(valueT.Elem().Field(i))
 
 			var fieldErr error
 			fieldK := fieldKindUnspecified

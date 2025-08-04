@@ -502,7 +502,8 @@ func (n *Node) initSerializedNode(ft fieldType) {
 				},
 			},
 		}
-	case fieldTypePointer:
+	case fieldTypePointer, fieldTypeDeferredPointer:
+		// A deferred pointer will be resolved to a regular pointer before persistence.
 		n.serializedNode = &persistencespb.ChasmNode{
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition: &persistencespb.VersionedTransition{
@@ -514,7 +515,7 @@ func (n *Node) initSerializedNode(ft fieldType) {
 				},
 			},
 		}
-	case fieldTypeUnspecified, fieldTypeDeferredPointer:
+	case fieldTypeUnspecified:
 		softassert.Fail(n.logger, fmt.Sprintf("initSerializedNode can't be called with %v", ft))
 	}
 }
@@ -820,10 +821,6 @@ func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []stri
 		return
 	}
 	if internal.node == nil && internal.value() != nil {
-		// Skip deferred pointers.
-		if internal.fieldType() == fieldTypeDeferredPointer {
-			return
-		}
 		// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
 		childNode := newNode(n.nodeBase, n, fieldN)
 
@@ -833,10 +830,12 @@ func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []stri
 				err = serviceerror.NewInternalf("value must be of type []string for the field of pointer type: got %T", internal.value())
 				return
 			}
-		case fieldTypeData, fieldTypeComponent, fieldTypeDeferredPointer:
+		case fieldTypeData, fieldTypeComponent:
 			if err = assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
 				return
 			}
+		case fieldTypeDeferredPointer:
+			// TODO - validate deferred pointer format here
 		default:
 			err = serviceerror.NewInternalf("unexpected field type: %d", internal.fieldType())
 			return
@@ -1100,9 +1099,13 @@ func (n *Node) componentNodePath(
 		return nil, err
 	}
 
-	// It's uncessary to deserialize entire tree as calling this method means
+	// It's unnecessary to deserialize entire tree as calling this method means
 	// caller already have the deserialized value.
 	for path, node := range n.andAllChildren() {
+		if node.fieldType() != fieldTypeComponent {
+			continue
+		}
+
 		if node.value == component {
 			return path, nil
 		}
@@ -1120,9 +1123,13 @@ func (n *Node) dataNodePath(
 		return nil, err
 	}
 
-	// It's uncessary to deserialize entire tree as calling this method means
+	// It's unnecessary to deserialize entire tree as calling this method means
 	// caller already have the deserialized value.
 	for path, node := range n.andAllChildren() {
+		if node.fieldType() != fieldTypeData {
+			continue
+		}
+
 		if node.value == data {
 			return path, nil
 		}
@@ -1160,11 +1167,11 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	maps.Copy(n.mutation.UpdatedNodes, n.systemMutation.UpdatedNodes)
 	maps.Copy(n.mutation.DeletedNodes, n.systemMutation.DeletedNodes)
 
-	if err := n.resolveDeferredPointers(); err != nil {
+	if err := n.syncSubComponents(); err != nil {
 		return NodesMutation{}, err
 	}
 
-	if err := n.syncSubComponents(); err != nil {
+	if err := n.resolveDeferredPointers(); err != nil {
 		return NodesMutation{}, err
 	}
 
@@ -1571,17 +1578,26 @@ func (n *Node) resolveDeferredPointers() error {
 
 			if internal.fieldType() == fieldTypeDeferredPointer && internal.value() != nil {
 				// Must resolve the deferred pointer or fail the transaction.
-				component, ok := internal.value().(Component)
-				if !ok {
-					return serviceerror.NewInternalf("deferred pointer contains non-Component value: %T", internal.value())
+				var resolvedPath []string
+				var err error
+
+				switch value := internal.value().(type) {
+				case Component:
+					resolvedPath, err = n.componentNodePath(value)
+				case proto.Message:
+					resolvedPath, err = n.dataNodePath(value)
+				default:
+					err = serviceerror.NewInternalf("unable to create a deferred pointer for values of type: %T", value)
 				}
-				resolvedPath, err := n.componentNodePath(component)
 				if err != nil {
 					return serviceerror.NewInternalf("failed to resolve deferred pointer during transaction close: %v", err)
 				}
 
-				// Update the field to be a regular pointer
+				// Update the field to be a regular pointer, reusing the existing serializedNode,
+				// and update the serializedNode's value.
 				newInternal := newFieldInternalWithValue(fieldTypePointer, resolvedPath)
+				newInternal.node = internal.node
+				newInternal.node.value = resolvedPath
 				internalV.Set(reflect.ValueOf(newInternal))
 			}
 		}

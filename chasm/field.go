@@ -44,41 +44,28 @@ func NewComponentField[C Component](
 	}
 }
 
-// TODO: The Component|DataPointerTo() implementation below can't handle the case
-// where Pointer is created in the NewEntity transition, as the tree structure is
-// unknown to the framework yet.
-//
-// To handle that case, we have to store the Component value in the field when
-// the Pointer field is created and resolve the pointer at the end of the transition
-// i.e. when closing the transaction.
+// ComponentPointerTo returns a CHASM field populated with a pointer to the given
+// component. Pointers are resolved at the time the transaction is closed, and the
+// transaction will fail if any pointers cannot be resolved.
 func ComponentPointerTo[C Component](
 	ctx MutableContext,
 	c C,
-) (Field[C], error) {
-	path, err := ctx.componentNodePath(c)
-	if err != nil {
-		// If we can't resolve the path (e.g., during NewEntity transition),
-		// store the component directly for deferred resolution
-		return Field[C]{
-			Internal: newFieldInternalWithValue(fieldTypeDeferredPointer, c),
-		}, nil
-	}
+) Field[C] {
 	return Field[C]{
-		Internal: newFieldInternalWithValue(fieldTypePointer, path),
-	}, nil
+		Internal: newFieldInternalWithValue(fieldTypeDeferredPointer, c),
+	}
 }
 
+// DataPointerTo returns a CHASM field populated with a pointer to the given
+// message. Pointers are resolved at the time the transaction is closed, and the
+// transaction will fail if any pointers cannot be resolved.
 func DataPointerTo[D proto.Message](
 	ctx MutableContext,
 	d D,
-) (Field[D], error) {
-	path, err := ctx.dataNodePath(d)
-	if err != nil {
-		return NewEmptyField[D](), err
-	}
+) Field[D] {
 	return Field[D]{
-		Internal: newFieldInternalWithValue(fieldTypePointer, path),
-	}, nil
+		Internal: newFieldInternalWithValue(fieldTypeDeferredPointer, d),
+	}
 }
 
 func (f Field[T]) Get(chasmContext Context) (T, error) {

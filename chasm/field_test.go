@@ -193,9 +193,9 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
 
 	// Create component structure that will simulate NewEntity scenario.
-	sc11 := &TestSubComponent11{
-		SubComponent11Data: &protoMessageType{
-			CreateRequestId: "sub-component11-data",
+	sc2 := &TestSubComponent2{
+		SubComponent2Data: &protoMessageType{
+			CreateRequestId: "sub-component2-data",
 		},
 	}
 
@@ -216,15 +216,14 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 	s.NoError(err)
 
 	// Attempt ComponentPointerTo which should create deferred pointer.
-	rootComponent.SubComponent11Pointer, err = ComponentPointerTo(ctx, sc11)
-	s.NoError(err)
+	sc1.SubComponent2Pointer = ComponentPointerTo(ctx, sc2)
 
-	// Now add sc11 to the tree so it can be resolved during CloseTransaction.
-	sc1.SubComponent11 = NewComponentField(nil, sc11)
+	// Now add sc2 to the tree so it can be resolved during CloseTransaction.
+	rootComponent.SubComponent2 = NewComponentField(nil, sc2)
 
 	// Verify it's a deferred pointer storing the component directly.
-	s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
-	s.Equal(sc11, rootComponent.SubComponent11Pointer.Internal.v)
+	s.Equal(fieldTypeDeferredPointer, sc1.SubComponent2Pointer.Internal.fieldType())
+	s.Equal(sc2, sc1.SubComponent2Pointer.Internal.v)
 
 	// CloseTransaction should resolve the deferred pointer.
 	mutations, err := rootNode.CloseTransaction()
@@ -232,15 +231,15 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 	s.NotEmpty(mutations.UpdatedNodes)
 
 	// Verify the pointer was resolved to a regular pointer with path.
-	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
-	resolvedPath, ok := rootComponent.SubComponent11Pointer.Internal.v.([]string)
+	s.Equal(fieldTypePointer, sc1.SubComponent2Pointer.Internal.fieldType())
+	resolvedPath, ok := sc1.SubComponent2Pointer.Internal.v.([]string)
 	s.True(ok)
-	s.Equal([]string{"SubComponent1", "SubComponent11"}, resolvedPath)
+	s.Equal([]string{"SubComponent2"}, resolvedPath)
 
 	// Verify we can get the component through the resolved pointer.
-	resolvedComponent, err := rootComponent.SubComponent11Pointer.Get(ctx)
+	resolvedComponent, err := sc1.SubComponent2Pointer.Get(ctx)
 	s.NoError(err)
-	s.Equal(sc11, resolvedComponent)
+	s.Equal(sc2, resolvedComponent)
 }
 
 func (s *fieldSuite) TestMixedPointerScenario() {
@@ -268,8 +267,7 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
 	s.NoError(err)
 
-	rootComponent.SubComponent11Pointer, err = ComponentPointerTo(ctx, existingComponent)
-	s.NoError(err)
+	rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, existingComponent)
 
 	// Close the transaction to resolve SubComponent11Pointer's field to existingComponent.
 	_, err = rootNode.CloseTransaction()
@@ -282,8 +280,7 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	}
 
 	ctx2 := NewMutableContext(context.Background(), rootNode)
-	rootComponent.SubComponent11Pointer2, err = ComponentPointerTo(ctx2, newComponent)
-	s.NoError(err)
+	rootComponent.SubComponent11Pointer2 = ComponentPointerTo(ctx2, newComponent)
 
 	// Now add the component to the tree so it can be resolved during CloseTransaction.
 	sc1.SubComponent11_2 = NewComponentField(nil, newComponent)
@@ -330,8 +327,7 @@ func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
 	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
 	s.NoError(err)
 
-	rootComponent.SubComponent11Pointer, err = ComponentPointerTo(ctx, orphanComponent)
-	s.NoError(err)
+	rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, orphanComponent)
 	s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
 
 	_, err = rootNode.CloseTransaction()
