@@ -1185,6 +1185,9 @@ func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.T
 }
 
 func (pm *taskQueuePartitionManagerImpl) userDataChanged() {
+	// Update rateLimits if any change is userData.
+	pm.rateLimitManager.UserDataChanged()
+
 	// Notify all queues so they can re-evaluate their backlog.
 	pm.versionedQueuesLock.RLock()
 	for _, vq := range pm.versionedQueues {
@@ -1194,6 +1197,4 @@ func (pm *taskQueuePartitionManagerImpl) userDataChanged() {
 
 	// Do this one in this goroutine.
 	pm.defaultQueue.UserDataChanged()
-	// Update rateLimits if any change is userData.
-	pm.rateLimitManager.UserDataChanged()
 }
