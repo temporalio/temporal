@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"sync/atomic"
 	"time"
 
@@ -187,7 +188,8 @@ func newPhysicalTaskQueueManager(
 		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagFairness)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagFairness)
 
-		cntr := counter.NewMapCounter() // TODO(fairness): make this configurable
+		src := rand.NewPCG(rand.Uint64(), rand.Uint64())
+		cntr := counter.NewHybridCounter(config.FairnessCounter(), src)
 
 		pqMgr.backlogMgr = newFairBacklogManager(
 			tqCtx,
@@ -197,8 +199,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.logger,
 			pqMgr.throttledLogger,
 			e.matchingRawClient,
-			// TODO(fairness): use "fair_" prefix for metrics
-			newPriMetricsHandler(taggedMetricsHandler),
+			newFairMetricsHandler(taggedMetricsHandler),
 			cntr,
 		)
 		var fwdr *priForwarder
@@ -217,7 +218,7 @@ func newPhysicalTaskQueueManager(
 			fwdr,
 			pqMgr.taskValidator,
 			pqMgr.logger,
-			newPriMetricsHandler(taggedMetricsHandler),
+			newFairMetricsHandler(taggedMetricsHandler),
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
