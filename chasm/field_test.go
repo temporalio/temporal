@@ -242,6 +242,9 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 	s.Equal(sc2, resolvedComponent)
 }
 
+// TODO - test for data pointers
+// TODO - updated mixed pointer scenario
+
 func (s *fieldSuite) TestMixedPointerScenario() {
 	tv := testvars.New(s.T())
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
@@ -275,31 +278,31 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
 
 	// Now, add a new component and deferred pointer for it.
-	newComponent := &TestSubComponent11{
-		SubComponent11Data: &protoMessageType{CreateRequestId: "new-component"},
+	newComponent := &TestSubComponent2{
+		SubComponent2Data: &protoMessageType{CreateRequestId: "new-component"},
 	}
 
 	ctx2 := NewMutableContext(context.Background(), rootNode)
-	rootComponent.SubComponent11Pointer2 = ComponentPointerTo(ctx2, newComponent)
+	sc1.SubComponent2Pointer = ComponentPointerTo(ctx2, newComponent)
 
 	// Now add the component to the tree so it can be resolved during CloseTransaction.
-	sc1.SubComponent11_2 = NewComponentField(nil, newComponent)
+	rootComponent.SubComponent2 = NewComponentField(ctx, newComponent)
 
 	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
-	s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer2.Internal.fieldType())
+	s.Equal(fieldTypeDeferredPointer, sc1.SubComponent2Pointer.Internal.fieldType())
 
 	_, err = rootNode.CloseTransaction()
 	s.NoError(err)
 
 	// Ensure both pointers have been resolved.
 	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
-	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer2.Internal.fieldType())
+	s.Equal(fieldTypePointer, sc1.SubComponent2Pointer.Internal.fieldType())
 
 	resolved1, err := rootComponent.SubComponent11Pointer.Get(ctx2)
 	s.NoError(err)
 	s.Equal(existingComponent, resolved1)
 
-	resolved2, err := rootComponent.SubComponent11Pointer2.Get(ctx2)
+	resolved2, err := sc1.SubComponent2Pointer.Get(ctx2)
 	s.NoError(err)
 	s.Equal(newComponent, resolved2)
 }
