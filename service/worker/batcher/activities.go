@@ -163,8 +163,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 			tasksSentInIteration := 0
 
 			// First, send remaining tasks from current page
-			hasCapacity := activeWorkers < config.concurrency
-			for executionIndex < len(executions) && hasCapacity {
+			for executionIndex < len(executions) && activeWorkers < config.concurrency {
 				taskCh <- taskDetail{
 					execution:  executions[executionIndex],
 					attempts:   1,
@@ -180,7 +179,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 
 			// If current page is exhausted and we have capacity, fetch next page
 			pageExhausted := executionIndex >= len(executions)
-			if pageExhausted && hasMorePages && hasCapacity {
+			if pageExhausted && hasMorePages && activeWorkers < config.concurrency {
 				resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 					PageSize:      int32(pageSize),
 					NextPageToken: currentPageToken,
@@ -391,83 +390,32 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		}
 		hbd.TotalEstimate = estimateCount
 	}
-	rps := a.rps(a.namespace.String())
-	rateLimit := rate.Limit(rps)
-	burstLimit := rps // should never be zero because everything would be rejected
-	rateLimiter := rate.NewLimiter(rateLimit, burstLimit)
-	taskCh := make(chan taskDetail, pageSize)
-	respCh := make(chan taskResponse, pageSize)
-	for i := 0; i < a.getOperationConcurrency(int(batchParams.Concurrency)); i++ {
-		go startTaskProcessorProtobuf(ctx, batchParams, a.namespace.String(), taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
+
+	// Prepare configuration for shared processing function
+	config := batchProcessorConfig{
+		namespace:         batchParams.Request.Namespace,
+		adjustedQuery:     adjustedQuery,
+		rps:               float64(a.rps(batchParams.Request.Namespace)),
+		concurrency:       a.getOperationConcurrency(int(batchParams.Concurrency)),
+		initialPageToken:  hbd.PageToken,
+		initialExecutions: batchParams.Request.Executions,
 	}
 
-	for {
-		executions := batchParams.Request.Executions
-		pageToken := hbd.PageToken
-		if len(adjustedQuery) > 0 {
-			resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				PageSize:      int32(pageSize),
-				NextPageToken: pageToken,
-				Query:         adjustedQuery,
-			})
-			if err != nil {
-				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
-				logger.Error("Failed to list workflow executions", tag.Error(err))
-				return HeartBeatDetails{}, err
-			}
-			pageToken = resp.NextPageToken
-			for _, wf := range resp.Executions {
-				executions = append(executions, wf.Execution)
-			}
-		}
-
-		batchCount := len(executions)
-		if batchCount <= 0 {
-			break
-		}
-		// send all tasks
-		for _, wf := range executions {
-			taskCh <- taskDetail{
-				execution: wf,
-				attempts:  1,
-				hbd:       hbd,
-			}
-		}
-
-		succCount := 0
-		errCount := 0
-		// wait for counters indicate this batch is done
-	Loop:
-		for {
-			select {
-			case task := <-respCh:
-				if task.err == nil {
-					succCount++
-				} else {
-					errCount++
-				}
-				if succCount+errCount == batchCount {
-					break Loop
-				}
-			case <-ctx.Done():
-				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
-				logger.Error("Failed to complete batch operation", tag.Error(ctx.Err()))
-				return HeartBeatDetails{}, ctx.Err()
-			}
-		}
-
-		hbd.CurrentPage++
-		hbd.PageToken = pageToken
-		hbd.SuccessCount += succCount
-		hbd.ErrorCount += errCount
-		activity.RecordHeartbeat(ctx, hbd)
-
-		if len(hbd.PageToken) == 0 {
-			break
-		}
+	// Create a wrapper for the protobuf specific worker processor
+	workerProcessor := func(
+		ctx context.Context,
+		taskCh chan taskDetail,
+		respCh chan taskResponse,
+		rateLimiter *rate.Limiter,
+		sdkClient sdkclient.Client,
+		frontendClient workflowservice.WorkflowServiceClient,
+		metricsHandler metrics.Handler,
+		logger log.Logger,
+	) {
+		startTaskProcessorProtobuf(ctx, batchParams, batchParams.Request.Namespace, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
 	}
 
-	return hbd, nil
+	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, sdkClient, metricsHandler, logger, hbd)
 }
 
 func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
