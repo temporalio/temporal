@@ -9,19 +9,17 @@ import "google/protobuf/duration.proto";
 
 message BatchOperationInput { 
   string namespace_id = 1; 
+  
+  int64 concurrency = 2;
 
-  double rps = 2;
+  int64 attempts_on_retryable_error = 3;
 
-  int64 concurrency = 3;
+  google.protobuf.Duration activity_heartbeat_timeout = 4;
 
-  int64 attempts_on_retryable_error = 4;
+  repeated string non_retryable_errors = 5;
 
-  google.protobuf.Duration activity_heartbeat_timeout = 5;
-
-  repeated string non_retryable_errors = 6;
-
-  temporal.api.enums.v1.BatchOperationType batch_type = 7;
+  temporal.api.enums.v1.BatchOperationType batch_type = 6;
 
   // The request to start the batch operation.
-  temporal.api.workflowservice.v1.StartBatchOperationRequest request = 8;
+  temporal.api.workflowservice.v1.StartBatchOperationRequest request = 7;
 }

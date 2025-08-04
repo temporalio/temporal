@@ -28,14 +28,13 @@ const (
 type BatchOperationInput struct {
 	state                    protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId              string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Rps                      float64                `protobuf:"fixed64,2,opt,name=rps,proto3" json:"rps,omitempty"`
-	Concurrency              int64                  `protobuf:"varint,3,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
-	AttemptsOnRetryableError int64                  `protobuf:"varint,4,opt,name=attempts_on_retryable_error,json=attemptsOnRetryableError,proto3" json:"attempts_on_retryable_error,omitempty"`
-	ActivityHeartbeatTimeout *durationpb.Duration   `protobuf:"bytes,5,opt,name=activity_heartbeat_timeout,json=activityHeartbeatTimeout,proto3" json:"activity_heartbeat_timeout,omitempty"`
-	NonRetryableErrors       []string               `protobuf:"bytes,6,rep,name=non_retryable_errors,json=nonRetryableErrors,proto3" json:"non_retryable_errors,omitempty"`
-	BatchType                v1.BatchOperationType  `protobuf:"varint,7,opt,name=batch_type,json=batchType,proto3,enum=temporal.api.enums.v1.BatchOperationType" json:"batch_type,omitempty"`
+	Concurrency              int64                  `protobuf:"varint,2,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
+	AttemptsOnRetryableError int64                  `protobuf:"varint,3,opt,name=attempts_on_retryable_error,json=attemptsOnRetryableError,proto3" json:"attempts_on_retryable_error,omitempty"`
+	ActivityHeartbeatTimeout *durationpb.Duration   `protobuf:"bytes,4,opt,name=activity_heartbeat_timeout,json=activityHeartbeatTimeout,proto3" json:"activity_heartbeat_timeout,omitempty"`
+	NonRetryableErrors       []string               `protobuf:"bytes,5,rep,name=non_retryable_errors,json=nonRetryableErrors,proto3" json:"non_retryable_errors,omitempty"`
+	BatchType                v1.BatchOperationType  `protobuf:"varint,6,opt,name=batch_type,json=batchType,proto3,enum=temporal.api.enums.v1.BatchOperationType" json:"batch_type,omitempty"`
 	// The request to start the batch operation.
-	Request       *v11.StartBatchOperationRequest `protobuf:"bytes,8,opt,name=request,proto3" json:"request,omitempty"`
+	Request       *v11.StartBatchOperationRequest `protobuf:"bytes,7,opt,name=request,proto3" json:"request,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -75,13 +74,6 @@ func (x *BatchOperationInput) GetNamespaceId() string {
 		return x.NamespaceId
 	}
 	return ""
-}
-
-func (x *BatchOperationInput) GetRps() float64 {
-	if x != nil {
-		return x.Rps
-	}
-	return 0
 }
 
 func (x *BatchOperationInput) GetConcurrency() int64 {
@@ -130,17 +122,16 @@ var File_temporal_server_api_batch_v1_request_response_proto protoreflect.FileDe
 
 const file_temporal_server_api_batch_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"3temporal/server/api/batch/v1/request_response.proto\x12\x1ctemporal.server.api.batch.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a+temporal/api/enums/v1/batch_operation.proto\x1a\x1egoogle/protobuf/duration.proto\"\xd7\x03\n" +
+	"3temporal/server/api/batch/v1/request_response.proto\x12\x1ctemporal.server.api.batch.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a+temporal/api/enums/v1/batch_operation.proto\x1a\x1egoogle/protobuf/duration.proto\"\xc5\x03\n" +
 	"\x13BatchOperationInput\x12!\n" +
-	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x10\n" +
-	"\x03rps\x18\x02 \x01(\x01R\x03rps\x12 \n" +
-	"\vconcurrency\x18\x03 \x01(\x03R\vconcurrency\x12=\n" +
-	"\x1battempts_on_retryable_error\x18\x04 \x01(\x03R\x18attemptsOnRetryableError\x12W\n" +
-	"\x1aactivity_heartbeat_timeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x18activityHeartbeatTimeout\x120\n" +
-	"\x14non_retryable_errors\x18\x06 \x03(\tR\x12nonRetryableErrors\x12H\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12 \n" +
+	"\vconcurrency\x18\x02 \x01(\x03R\vconcurrency\x12=\n" +
+	"\x1battempts_on_retryable_error\x18\x03 \x01(\x03R\x18attemptsOnRetryableError\x12W\n" +
+	"\x1aactivity_heartbeat_timeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\x18activityHeartbeatTimeout\x120\n" +
+	"\x14non_retryable_errors\x18\x05 \x03(\tR\x12nonRetryableErrors\x12H\n" +
 	"\n" +
-	"batch_type\x18\a \x01(\x0e2).temporal.api.enums.v1.BatchOperationTypeR\tbatchType\x12U\n" +
-	"\arequest\x18\b \x01(\v2;.temporal.api.workflowservice.v1.StartBatchOperationRequestR\arequestB*Z(go.temporal.io/server/api/batch/v1;batchb\x06proto3"
+	"batch_type\x18\x06 \x01(\x0e2).temporal.api.enums.v1.BatchOperationTypeR\tbatchType\x12U\n" +
+	"\arequest\x18\a \x01(\v2;.temporal.api.workflowservice.v1.StartBatchOperationRequestR\arequestB*Z(go.temporal.io/server/api/batch/v1;batchb\x06proto3"
 
 var (
 	file_temporal_server_api_batch_v1_request_response_proto_rawDescOnce sync.Once

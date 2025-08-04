@@ -418,6 +418,9 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 		*workflowservice.StartBatchOperationRequest_DeletionOperation:
 		return nil
 	case *workflowservice.StartBatchOperationRequest_ResetOperation:
+		if op.ResetOperation == nil {
+			return serviceerror.NewInvalidArgument("reset operation is not set")
+		}
 		if op.ResetOperation.Options != nil {
 			if op.ResetOperation.Options.Target == nil {
 				return serviceerror.NewInvalidArgument("batch reset missing target")
@@ -448,6 +451,9 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 		}
 		return nil
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
+		if op.ResetActivitiesOperation == nil {
+			return serviceerror.NewInvalidArgument("reset activities operation is not set")
+		}
 		if op.ResetActivitiesOperation.GetActivity() == nil && !op.ResetActivitiesOperation.GetMatchAll() {
 			return serviceerror.NewInvalidArgument("must provide ActivityType or MatchAll")
 		}
