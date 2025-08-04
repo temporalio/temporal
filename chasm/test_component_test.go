@@ -40,6 +40,7 @@ type (
 		SubComponent11_2     Field[*TestSubComponent11]
 		SubData11            Field[*protoMessageType] // Random proto message.
 		SubComponent2Pointer Field[*TestSubComponent2]
+		DataPointer          Field[*protoMessageType]
 	}
 
 	TestSubComponent11 struct {

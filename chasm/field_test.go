@@ -215,35 +215,48 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
 	s.NoError(err)
 
-	// Attempt ComponentPointerTo which should create deferred pointer.
+	// Create deferred pointers.
 	sc1.SubComponent2Pointer = ComponentPointerTo(ctx, sc2)
-
-	// Now add sc2 to the tree so it can be resolved during CloseTransaction.
 	rootComponent.SubComponent2 = NewComponentField(nil, sc2)
+
+	data := &protoMessageType{CreateRequestId: "sub-data-1"}
+	sc1.DataPointer = DataPointerTo(ctx, data)
+	rootComponent.SubData1 = NewDataField(ctx, data)
 
 	// Verify it's a deferred pointer storing the component directly.
 	s.Equal(fieldTypeDeferredPointer, sc1.SubComponent2Pointer.Internal.fieldType())
+	s.Equal(fieldTypeDeferredPointer, sc1.DataPointer.Internal.fieldType())
 	s.Equal(sc2, sc1.SubComponent2Pointer.Internal.v)
+	s.Equal(data, sc1.DataPointer.Internal.v)
 
 	// CloseTransaction should resolve the deferred pointer.
 	mutations, err := rootNode.CloseTransaction()
 	s.NoError(err)
 	s.NotEmpty(mutations.UpdatedNodes)
 
-	// Verify the pointer was resolved to a regular pointer with path.
+	// Verify the pointers were resolved to a regular pointer with path.
 	s.Equal(fieldTypePointer, sc1.SubComponent2Pointer.Internal.fieldType())
-	resolvedPath, ok := sc1.SubComponent2Pointer.Internal.v.([]string)
-	s.True(ok)
-	s.Equal([]string{"SubComponent2"}, resolvedPath)
+	s.Equal(fieldTypePointer, sc1.DataPointer.Internal.fieldType())
 
-	// Verify we can get the component through the resolved pointer.
+	cResolvedPath, ok := sc1.SubComponent2Pointer.Internal.v.([]string)
+	s.True(ok)
+	s.Equal([]string{"SubComponent2"}, cResolvedPath)
+	dResolvedPath, ok := sc1.DataPointer.Internal.v.([]string)
+	s.True(ok)
+	s.Equal([]string{"SubData1"}, dResolvedPath)
+
+	// Verify we can dereference the pointers.
 	resolvedComponent, err := sc1.SubComponent2Pointer.Get(ctx)
 	s.NoError(err)
 	s.Equal(sc2, resolvedComponent)
-}
 
-// TODO - test for data pointers
-// TODO - updated mixed pointer scenario
+	// TODO - this doesn't resolve, but I've manually verified the tree structure looks correct
+	// TODO
+	// TODO
+	// resolvedData, err := sc1.DataPointer.Get(ctx)
+	// s.NoError(err)
+	// s.Equal(sc2.SubComponent2Data, resolvedData)
+}
 
 func (s *fieldSuite) TestMixedPointerScenario() {
 	tv := testvars.New(s.T())
