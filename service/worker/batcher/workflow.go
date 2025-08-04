@@ -16,6 +16,7 @@ import (
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -272,13 +273,13 @@ func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOper
 		return HeartBeatDetails{}, errors.New("batchParams is nil")
 	}
 
-	// batchParams = setDefaultParamsProtobuf(batchParams)
+	batchParams = setDefaultParamsProtobuf(batchParams)
 	err := ValidateBatchOperation(batchParams.Request)
 	if err != nil {
 		return HeartBeatDetails{}, err
 	}
 
-	batchActivityOptions.HeartbeatTimeout = defaultActivityHeartBeatTimeout
+	batchActivityOptions.HeartbeatTimeout = batchParams.ActivityHeartbeatTimeout.AsDuration()
 	opt := workflow.WithActivityOptions(ctx, batchActivityOptions)
 	var result HeartBeatDetails
 	var ac *activities
@@ -490,6 +491,18 @@ func setDefaultParams(params BatchParams) BatchParams {
 		params._nonRetryableErrors = make(map[string]struct{}, len(params.NonRetryableErrors))
 		for _, estr := range params.NonRetryableErrors {
 			params._nonRetryableErrors[estr] = struct{}{}
+		}
+	}
+	return params
+}
+
+func setDefaultParamsProtobuf(params *batchspb.BatchOperationInput) *batchspb.BatchOperationInput {
+	if params.GetAttemptsOnRetryableError() <= 1 {
+		params.AttemptsOnRetryableError = defaultAttemptsOnRetryableError
+	}
+	if params.GetActivityHeartbeatTimeout().AsDuration() <= 0 {
+		params.ActivityHeartbeatTimeout = &durationpb.Duration{
+			Seconds: int64(defaultActivityHeartBeatTimeout / time.Second),
 		}
 	}
 	return params

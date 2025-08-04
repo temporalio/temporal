@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -250,13 +251,13 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		}
 		hbd.TotalEstimate = estimateCount
 	}
-	rps := a.getOperationRPS(float64(batchParams.Request.GetMaxOperationsPerSecond()))
+	rps := a.getOperationRPS(batchParams.Rps)
 	rateLimit := rate.Limit(rps)
 	burstLimit := int(math.Ceil(rps)) // should never be zero because everything would be rejected
 	rateLimiter := rate.NewLimiter(rateLimit, burstLimit)
 	taskCh := make(chan taskDetail, pageSize)
 	respCh := make(chan error, pageSize)
-	for i := 0; i < a.getOperationConcurrency(0); i++ {
+	for i := 0; i < a.getOperationConcurrency(int(batchParams.Concurrency)); i++ {
 		go startTaskProcessorProtobuf(ctx, batchParams, a.namespace.String(), taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
 	}
 
@@ -815,7 +816,8 @@ func startTaskProcessorProtobuf(
 			if err != nil {
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
-				if task.attempts > int(defaultAttemptsOnRetryableError) {
+				nonRetryable := slices.Contains(batchOperation.NonRetryableErrors, err.Error())
+				if nonRetryable || task.attempts > int(batchOperation.AttemptsOnRetryableError) {
 					respCh <- err
 				} else {
 					// put back to the channel if less than attemptsOnError
