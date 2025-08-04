@@ -5,43 +5,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Marshal an object of type BatchOperation to the protobuf v3 wire format
-func (val *BatchOperation) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type BatchOperation from the protobuf v3 wire format
-func (val *BatchOperation) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *BatchOperation) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two BatchOperation values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *BatchOperation) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	var that1 *BatchOperation
-	switch t := that.(type) {
-	case *BatchOperation:
-		that1 = t
-	case BatchOperation:
-		that1 = &t
-	default:
-		return false
-	}
-
-	return proto.Equal(this, that1)
-}
-
 // Marshal an object of type BatchOperationInput to the protobuf v3 wire format
 func (val *BatchOperationInput) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

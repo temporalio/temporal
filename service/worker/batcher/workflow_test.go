@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/testsuite"
 	batchspb "go.temporal.io/server/api/batch/v1"
@@ -29,6 +30,7 @@ func (s *batcherSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
 	s.env.RegisterWorkflow(BatchWorkflow)
+	s.env.RegisterWorkflow(BatchWorkflowProtobuf)
 }
 
 func (s *batcherSuite) TearDownTest() {
@@ -44,7 +46,7 @@ func (s *batcherSuite) TestBatchWorkflow_MissingParams() {
 }
 
 func (s *batcherSuite) TestBatchWorkflow_MissingParams_Protobuf() {
-	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{})
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{})
 	err := s.env.GetWorkflowError()
 	s.Require().Error(err)
 	s.Contains(err.Error(), "must provide required parameters")
@@ -92,18 +94,17 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 			},
 		}, memo)
 	}).Once()
-	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{
-		Input: &batchspb.BatchOperationInput{
-			Request: &workflowservice.StartBatchOperationRequest{
-				Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
-					TerminationOperation: &batchpb.BatchOperationTermination{},
-				},
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
+		Request: &workflowservice.StartBatchOperationRequest{
+			JobId: uuid.New(),
+			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
+				TerminationOperation: &batchpb.BatchOperationTermination{},
 			},
+			Namespace:       "test-namespace",
+			Reason:          "test-reason",
+			VisibilityQuery: "test-query",
 		},
-		Namespace: "test-namespace",
-		Query:     "test-query",
-		Reason:    "test-reason",
-		BatchType: BatchTypeTerminate,
+		BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE,
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)
@@ -156,23 +157,22 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 			},
 		}, memo)
 	}).Once()
-	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperation{
-		Input: &batchspb.BatchOperationInput{
-			Request: &workflowservice.StartBatchOperationRequest{
-				Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
-					TerminationOperation: &batchpb.BatchOperationTermination{},
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
+		Request: &workflowservice.StartBatchOperationRequest{
+			JobId: uuid.New(),
+			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
+				TerminationOperation: &batchpb.BatchOperationTermination{},
+			},
+			Executions: []*commonpb.WorkflowExecution{
+				{
+					WorkflowId: uuid.New(),
+					RunId:      uuid.New(),
 				},
 			},
+			Reason:    "test-reason",
+			Namespace: "test-namespace",
 		},
-		Namespace: "test-namespace",
-		WorkflowExecutions: []*commonpb.WorkflowExecution{
-			{
-				WorkflowId: uuid.New(),
-				RunId:      uuid.New(),
-			},
-		},
-		BatchType: BatchTypeTerminate,
-		Reason:    "test-reason",
+		BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE,
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)

@@ -11,7 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
-	v1 "go.temporal.io/api/common/v1"
+	v1 "go.temporal.io/api/enums/v1"
 	v11 "go.temporal.io/api/workflowservice/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -25,143 +25,24 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type BatchOperation struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The namespace of the batch operation.
-	Namespace string `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	// The query to perform.
-	Query                    string                  `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
-	WorkflowExecutions       []*v1.WorkflowExecution `protobuf:"bytes,3,rep,name=workflow_executions,json=workflowExecutions,proto3" json:"workflow_executions,omitempty"`
-	Reason                   string                  `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
-	Input                    *BatchOperationInput    `protobuf:"bytes,5,opt,name=input,proto3" json:"input,omitempty"`
-	Rps                      float64                 `protobuf:"fixed64,6,opt,name=rps,proto3" json:"rps,omitempty"`
-	Concurrency              int64                   `protobuf:"varint,7,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
-	AttemptsOnRetryableError int64                   `protobuf:"varint,8,opt,name=attempts_on_retryable_error,json=attemptsOnRetryableError,proto3" json:"attempts_on_retryable_error,omitempty"`
-	ActivityHeartbeatTimeout *durationpb.Duration    `protobuf:"bytes,9,opt,name=activity_heartbeat_timeout,json=activityHeartbeatTimeout,proto3" json:"activity_heartbeat_timeout,omitempty"`
-	NonRetryableErrors       []string                `protobuf:"bytes,10,rep,name=non_retryable_errors,json=nonRetryableErrors,proto3" json:"non_retryable_errors,omitempty"`
-	BatchType                string                  `protobuf:"bytes,11,opt,name=batch_type,json=batchType,proto3" json:"batch_type,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
-}
-
-func (x *BatchOperation) Reset() {
-	*x = BatchOperation{}
-	mi := &file_temporal_server_api_batch_v1_request_response_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BatchOperation) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BatchOperation) ProtoMessage() {}
-
-func (x *BatchOperation) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_batch_v1_request_response_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BatchOperation.ProtoReflect.Descriptor instead.
-func (*BatchOperation) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_batch_v1_request_response_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *BatchOperation) GetNamespace() string {
-	if x != nil {
-		return x.Namespace
-	}
-	return ""
-}
-
-func (x *BatchOperation) GetQuery() string {
-	if x != nil {
-		return x.Query
-	}
-	return ""
-}
-
-func (x *BatchOperation) GetWorkflowExecutions() []*v1.WorkflowExecution {
-	if x != nil {
-		return x.WorkflowExecutions
-	}
-	return nil
-}
-
-func (x *BatchOperation) GetReason() string {
-	if x != nil {
-		return x.Reason
-	}
-	return ""
-}
-
-func (x *BatchOperation) GetInput() *BatchOperationInput {
-	if x != nil {
-		return x.Input
-	}
-	return nil
-}
-
-func (x *BatchOperation) GetRps() float64 {
-	if x != nil {
-		return x.Rps
-	}
-	return 0
-}
-
-func (x *BatchOperation) GetConcurrency() int64 {
-	if x != nil {
-		return x.Concurrency
-	}
-	return 0
-}
-
-func (x *BatchOperation) GetAttemptsOnRetryableError() int64 {
-	if x != nil {
-		return x.AttemptsOnRetryableError
-	}
-	return 0
-}
-
-func (x *BatchOperation) GetActivityHeartbeatTimeout() *durationpb.Duration {
-	if x != nil {
-		return x.ActivityHeartbeatTimeout
-	}
-	return nil
-}
-
-func (x *BatchOperation) GetNonRetryableErrors() []string {
-	if x != nil {
-		return x.NonRetryableErrors
-	}
-	return nil
-}
-
-func (x *BatchOperation) GetBatchType() string {
-	if x != nil {
-		return x.BatchType
-	}
-	return ""
-}
-
 type BatchOperationInput struct {
-	state         protoimpl.MessageState          `protogen:"open.v1"`
-	NamespaceId   string                          `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Request       *v11.StartBatchOperationRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceId              string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	Rps                      float64                `protobuf:"fixed64,2,opt,name=rps,proto3" json:"rps,omitempty"`
+	Concurrency              int64                  `protobuf:"varint,3,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
+	AttemptsOnRetryableError int64                  `protobuf:"varint,4,opt,name=attempts_on_retryable_error,json=attemptsOnRetryableError,proto3" json:"attempts_on_retryable_error,omitempty"`
+	ActivityHeartbeatTimeout *durationpb.Duration   `protobuf:"bytes,5,opt,name=activity_heartbeat_timeout,json=activityHeartbeatTimeout,proto3" json:"activity_heartbeat_timeout,omitempty"`
+	NonRetryableErrors       []string               `protobuf:"bytes,6,rep,name=non_retryable_errors,json=nonRetryableErrors,proto3" json:"non_retryable_errors,omitempty"`
+	BatchType                v1.BatchOperationType  `protobuf:"varint,7,opt,name=batch_type,json=batchType,proto3,enum=temporal.api.enums.v1.BatchOperationType" json:"batch_type,omitempty"`
+	// The request to start the batch operation.
+	Request       *v11.StartBatchOperationRequest `protobuf:"bytes,8,opt,name=request,proto3" json:"request,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BatchOperationInput) Reset() {
 	*x = BatchOperationInput{}
-	mi := &file_temporal_server_api_batch_v1_request_response_proto_msgTypes[1]
+	mi := &file_temporal_server_api_batch_v1_request_response_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -173,7 +54,7 @@ func (x *BatchOperationInput) String() string {
 func (*BatchOperationInput) ProtoMessage() {}
 
 func (x *BatchOperationInput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_batch_v1_request_response_proto_msgTypes[1]
+	mi := &file_temporal_server_api_batch_v1_request_response_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -186,7 +67,7 @@ func (x *BatchOperationInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BatchOperationInput.ProtoReflect.Descriptor instead.
 func (*BatchOperationInput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_batch_v1_request_response_proto_rawDescGZIP(), []int{1}
+	return file_temporal_server_api_batch_v1_request_response_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *BatchOperationInput) GetNamespaceId() string {
@@ -194,6 +75,48 @@ func (x *BatchOperationInput) GetNamespaceId() string {
 		return x.NamespaceId
 	}
 	return ""
+}
+
+func (x *BatchOperationInput) GetRps() float64 {
+	if x != nil {
+		return x.Rps
+	}
+	return 0
+}
+
+func (x *BatchOperationInput) GetConcurrency() int64 {
+	if x != nil {
+		return x.Concurrency
+	}
+	return 0
+}
+
+func (x *BatchOperationInput) GetAttemptsOnRetryableError() int64 {
+	if x != nil {
+		return x.AttemptsOnRetryableError
+	}
+	return 0
+}
+
+func (x *BatchOperationInput) GetActivityHeartbeatTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.ActivityHeartbeatTimeout
+	}
+	return nil
+}
+
+func (x *BatchOperationInput) GetNonRetryableErrors() []string {
+	if x != nil {
+		return x.NonRetryableErrors
+	}
+	return nil
+}
+
+func (x *BatchOperationInput) GetBatchType() v1.BatchOperationType {
+	if x != nil {
+		return x.BatchType
+	}
+	return v1.BatchOperationType(0)
 }
 
 func (x *BatchOperationInput) GetRequest() *v11.StartBatchOperationRequest {
@@ -207,24 +130,17 @@ var File_temporal_server_api_batch_v1_request_response_proto protoreflect.FileDe
 
 const file_temporal_server_api_batch_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"3temporal/server/api/batch/v1/request_response.proto\x12\x1ctemporal.server.api.batch.v1\x1a\x1egoogle/protobuf/duration.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a$temporal/api/common/v1/message.proto\"\x9e\x04\n" +
-	"\x0eBatchOperation\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x14\n" +
-	"\x05query\x18\x02 \x01(\tR\x05query\x12Z\n" +
-	"\x13workflow_executions\x18\x03 \x03(\v2).temporal.api.common.v1.WorkflowExecutionR\x12workflowExecutions\x12\x16\n" +
-	"\x06reason\x18\x04 \x01(\tR\x06reason\x12G\n" +
-	"\x05input\x18\x05 \x01(\v21.temporal.server.api.batch.v1.BatchOperationInputR\x05input\x12\x10\n" +
-	"\x03rps\x18\x06 \x01(\x01R\x03rps\x12 \n" +
-	"\vconcurrency\x18\a \x01(\x03R\vconcurrency\x12=\n" +
-	"\x1battempts_on_retryable_error\x18\b \x01(\x03R\x18attemptsOnRetryableError\x12W\n" +
-	"\x1aactivity_heartbeat_timeout\x18\t \x01(\v2\x19.google.protobuf.DurationR\x18activityHeartbeatTimeout\x120\n" +
-	"\x14non_retryable_errors\x18\n" +
-	" \x03(\tR\x12nonRetryableErrors\x12\x1d\n" +
-	"\n" +
-	"batch_type\x18\v \x01(\tR\tbatchType\"\x8f\x01\n" +
+	"3temporal/server/api/batch/v1/request_response.proto\x12\x1ctemporal.server.api.batch.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a+temporal/api/enums/v1/batch_operation.proto\x1a\x1egoogle/protobuf/duration.proto\"\xd7\x03\n" +
 	"\x13BatchOperationInput\x12!\n" +
-	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12U\n" +
-	"\arequest\x18\x02 \x01(\v2;.temporal.api.workflowservice.v1.StartBatchOperationRequestR\arequestB*Z(go.temporal.io/server/api/batch/v1;batchb\x06proto3"
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x10\n" +
+	"\x03rps\x18\x02 \x01(\x01R\x03rps\x12 \n" +
+	"\vconcurrency\x18\x03 \x01(\x03R\vconcurrency\x12=\n" +
+	"\x1battempts_on_retryable_error\x18\x04 \x01(\x03R\x18attemptsOnRetryableError\x12W\n" +
+	"\x1aactivity_heartbeat_timeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x18activityHeartbeatTimeout\x120\n" +
+	"\x14non_retryable_errors\x18\x06 \x03(\tR\x12nonRetryableErrors\x12H\n" +
+	"\n" +
+	"batch_type\x18\a \x01(\x0e2).temporal.api.enums.v1.BatchOperationTypeR\tbatchType\x12U\n" +
+	"\arequest\x18\b \x01(\v2;.temporal.api.workflowservice.v1.StartBatchOperationRequestR\arequestB*Z(go.temporal.io/server/api/batch/v1;batchb\x06proto3"
 
 var (
 	file_temporal_server_api_batch_v1_request_response_proto_rawDescOnce sync.Once
@@ -238,24 +154,22 @@ func file_temporal_server_api_batch_v1_request_response_proto_rawDescGZIP() []by
 	return file_temporal_server_api_batch_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_api_batch_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_temporal_server_api_batch_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_temporal_server_api_batch_v1_request_response_proto_goTypes = []any{
-	(*BatchOperation)(nil),                 // 0: temporal.server.api.batch.v1.BatchOperation
-	(*BatchOperationInput)(nil),            // 1: temporal.server.api.batch.v1.BatchOperationInput
-	(*v1.WorkflowExecution)(nil),           // 2: temporal.api.common.v1.WorkflowExecution
-	(*durationpb.Duration)(nil),            // 3: google.protobuf.Duration
-	(*v11.StartBatchOperationRequest)(nil), // 4: temporal.api.workflowservice.v1.StartBatchOperationRequest
+	(*BatchOperationInput)(nil),            // 0: temporal.server.api.batch.v1.BatchOperationInput
+	(*durationpb.Duration)(nil),            // 1: google.protobuf.Duration
+	(v1.BatchOperationType)(0),             // 2: temporal.api.enums.v1.BatchOperationType
+	(*v11.StartBatchOperationRequest)(nil), // 3: temporal.api.workflowservice.v1.StartBatchOperationRequest
 }
 var file_temporal_server_api_batch_v1_request_response_proto_depIdxs = []int32{
-	2, // 0: temporal.server.api.batch.v1.BatchOperation.workflow_executions:type_name -> temporal.api.common.v1.WorkflowExecution
-	1, // 1: temporal.server.api.batch.v1.BatchOperation.input:type_name -> temporal.server.api.batch.v1.BatchOperationInput
-	3, // 2: temporal.server.api.batch.v1.BatchOperation.activity_heartbeat_timeout:type_name -> google.protobuf.Duration
-	4, // 3: temporal.server.api.batch.v1.BatchOperationInput.request:type_name -> temporal.api.workflowservice.v1.StartBatchOperationRequest
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	1, // 0: temporal.server.api.batch.v1.BatchOperationInput.activity_heartbeat_timeout:type_name -> google.protobuf.Duration
+	2, // 1: temporal.server.api.batch.v1.BatchOperationInput.batch_type:type_name -> temporal.api.enums.v1.BatchOperationType
+	3, // 2: temporal.server.api.batch.v1.BatchOperationInput.request:type_name -> temporal.api.workflowservice.v1.StartBatchOperationRequest
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_batch_v1_request_response_proto_init() }
@@ -269,7 +183,7 @@ func file_temporal_server_api_batch_v1_request_response_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_batch_v1_request_response_proto_rawDesc), len(file_temporal_server_api_batch_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

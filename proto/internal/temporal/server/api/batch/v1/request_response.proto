@@ -3,38 +3,25 @@ syntax = "proto3";
 package temporal.server.api.batch.v1;
 option go_package = "go.temporal.io/server/api/batch/v1;batch";
 
-import "google/protobuf/duration.proto";
-
 import "temporal/api/workflowservice/v1/request_response.proto";
-import "temporal/api/common/v1/message.proto";
-
-message BatchOperation {
-  // The namespace of the batch operation.
-  string namespace = 1;
-
-  // The query to perform.
-  string query = 2;
-
-  repeated temporal.api.common.v1.WorkflowExecution workflow_executions = 3;
-
-  string reason = 4;
-
-  BatchOperationInput input = 5;
-
-  double rps = 6;
-
-  int64 concurrency = 7;
-
-  int64 attempts_on_retryable_error = 8;
-
-  google.protobuf.Duration activity_heartbeat_timeout = 9;
-
-  repeated string non_retryable_errors = 10;
-
-  string batch_type = 11;
-}
+import "temporal/api/enums/v1/batch_operation.proto";
+import "google/protobuf/duration.proto";
 
 message BatchOperationInput { 
   string namespace_id = 1; 
-  temporal.api.workflowservice.v1.StartBatchOperationRequest request = 2;
+
+  double rps = 2;
+
+  int64 concurrency = 3;
+
+  int64 attempts_on_retryable_error = 4;
+
+  google.protobuf.Duration activity_heartbeat_timeout = 5;
+
+  repeated string non_retryable_errors = 6;
+
+  temporal.api.enums.v1.BatchOperationType batch_type = 7;
+
+  // The request to start the batch operation.
+  temporal.api.workflowservice.v1.StartBatchOperationRequest request = 8;
 }

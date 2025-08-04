@@ -228,6 +228,15 @@ type (
 		attempts int
 		// passing along the current heartbeat details to make heartbeat within a task so that it won't timeout
 		hbd HeartBeatDetails
+		// the page number this task belongs to (for tracking page completion)
+		pageNumber int
+	}
+
+	taskResponse struct {
+		// the error result from processing the task (nil for success)
+		err error
+		// the page number the completed task belonged to
+		pageNumber int
 	}
 )
 
@@ -270,18 +279,18 @@ func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDeta
 }
 
 // BatchWorkflowProtobuf is the workflow that runs a batch job of resetting workflows.
-func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOperation) (HeartBeatDetails, error) {
+func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
 	if batchParams == nil {
 		return HeartBeatDetails{}, errors.New("batchParams is nil")
 	}
 
 	batchParams = setDefaultParamsProtobuf(batchParams)
-	err := ValidateBatchOperation(batchParams)
+	err := ValidateBatchOperation(batchParams.Request)
 	if err != nil {
 		return HeartBeatDetails{}, err
 	}
 
-	batchActivityOptions.HeartbeatTimeout = batchParams.GetActivityHeartbeatTimeout().AsDuration()
+	batchActivityOptions.HeartbeatTimeout = batchParams.ActivityHeartbeatTimeout.AsDuration()
 	opt := workflow.WithActivityOptions(ctx, batchActivityOptions)
 	var result HeartBeatDetails
 	var ac *activities
@@ -363,19 +372,34 @@ func validateParams(params BatchParams) error {
 }
 
 // nolint:revive,cognitive-complexity
-func ValidateBatchOperation(params *batchspb.BatchOperation) error {
-	if params.BatchType == "" ||
-		params.Reason == "" ||
-		params.Namespace == "" ||
-		(params.Query == "" && len(params.WorkflowExecutions) == 0) {
-		return errors.New("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
+func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) error {
+	if params.GetOperation() == nil ||
+		params.GetReason() == "" ||
+		params.GetNamespace() == "" ||
+		(params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0) {
+		return serviceerror.NewInvalidArgument("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
 	}
 
-	if len(params.Query) > 0 && len(params.WorkflowExecutions) > 0 {
+	if len(params.GetJobId()) == 0 {
+		return serviceerror.NewInvalidArgument("JobId is not set on request.")
+	}
+	if len(params.GetNamespace()) == 0 {
+		return serviceerror.NewInvalidArgument("Namespace is not set on request.")
+	}
+	if len(params.GetVisibilityQuery()) == 0 && len(params.GetExecutions()) == 0 {
+		return serviceerror.NewInvalidArgument("VisibilityQuery or Executions must be set on request.")
+	}
+	if len(params.GetVisibilityQuery()) != 0 && len(params.GetExecutions()) != 0 {
 		return errors.New("batch query and executions are mutually exclusive")
 	}
+	if len(params.GetReason()) == 0 {
+		return serviceerror.NewInvalidArgument("Reason is not set on request.")
+	}
+	if params.GetOperation() == nil {
+		return serviceerror.NewInvalidArgument("Batch operation is not set on request.")
+	}
 
-	switch op := params.Input.Request.Operation.(type) {
+	switch op := params.GetOperation().(type) {
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		if op.SignalOperation.GetSignal() == "" {
 			return errors.New("must provide signal name")
@@ -462,7 +486,7 @@ func ValidateBatchOperation(params *batchspb.BatchOperation) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("not supported batch type: %v", params.Input.Request.Operation)
+		return fmt.Errorf("not supported batch type: %v", params.GetOperation())
 	}
 	return nil
 }
@@ -483,7 +507,7 @@ func setDefaultParams(params BatchParams) BatchParams {
 	return params
 }
 
-func setDefaultParamsProtobuf(params *batchspb.BatchOperation) *batchspb.BatchOperation {
+func setDefaultParamsProtobuf(params *batchspb.BatchOperationInput) *batchspb.BatchOperationInput {
 	if params.GetAttemptsOnRetryableError() <= 1 {
 		params.AttemptsOnRetryableError = defaultAttemptsOnRetryableError
 	}

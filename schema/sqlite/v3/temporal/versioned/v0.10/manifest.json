@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.10",
+  "MinCompatibleVersion": "0.1",
+  "Description": "Adds tasks_v2 table for fairness tasks",
+  "SchemaUpdateCqlFiles": [
+    "tasks_v2.sql"
+  ]
+}

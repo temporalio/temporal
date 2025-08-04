@@ -179,7 +179,6 @@ func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(
 
 	shouldRetry, err := validateChasmSideEffectTask(
 		ctx,
-		e.shardContext.ChasmRegistry(),
 		ms,
 		task,
 	)

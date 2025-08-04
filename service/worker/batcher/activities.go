@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -54,7 +55,7 @@ type batchProcessorConfig struct {
 type batchWorkerProcessor func(
 	ctx context.Context,
 	taskCh chan taskDetail,
-	respCh chan error,
+	respCh chan taskResponse,
 	rateLimiter *rate.Limiter,
 	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
@@ -77,7 +78,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	burstLimit := int(math.Ceil(config.rps)) // should never be zero because everything would be rejected
 	rateLimiter := rate.NewLimiter(rateLimit, burstLimit)
 	taskCh := make(chan taskDetail, pageSize)
-	respCh := make(chan error, pageSize)
+	respCh := make(chan taskResponse, pageSize)
 
 	// Start worker processors
 	for i := 0; i < config.concurrency; i++ {
@@ -90,6 +91,10 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	totalTasksCompleted := 0
 	currentPageToken := config.initialPageToken
 	hasMorePages := true
+
+	// Track pending tasks per page for proper heartbeating
+	currentPageNumber := hbd.CurrentPage
+	pendingTasksPerPage := make(map[int]int)
 
 	// Initial page processing
 	executions := config.initialExecutions
@@ -119,12 +124,14 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 			break
 		}
 		taskCh <- taskDetail{
-			execution: wf,
-			attempts:  1,
-			hbd:       hbd,
+			execution:  wf,
+			attempts:   1,
+			hbd:        hbd,
+			pageNumber: currentPageNumber,
 		}
 		activeWorkers++
 		totalTasksSent++
+		pendingTasksPerPage[currentPageNumber]++
 	}
 
 	// Track remaining executions from current page
@@ -133,14 +140,23 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	// Main processing loop with proactive page fetching
 	for totalTasksCompleted < totalTasksSent || hasMorePages {
 		select {
-		case err := <-respCh:
+		case taskResult := <-respCh:
 			activeWorkers--
 			totalTasksCompleted++
 
-			if err == nil {
+			if taskResult.err == nil {
 				hbd.SuccessCount++
 			} else {
 				hbd.ErrorCount++
+			}
+
+			// Track page completion
+			pageNum := taskResult.pageNumber
+			pendingTasksPerPage[pageNum]--
+			if pendingTasksPerPage[pageNum] == 0 {
+				// Page is fully completed, record heartbeat
+				delete(pendingTasksPerPage, pageNum)
+				activity.RecordHeartbeat(ctx, hbd)
 			}
 
 			// Try to send more tasks from current page or fetch next page
@@ -150,14 +166,16 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 			hasCapacity := activeWorkers < config.concurrency
 			for executionIndex < len(executions) && hasCapacity {
 				taskCh <- taskDetail{
-					execution: executions[executionIndex],
-					attempts:  1,
-					hbd:       hbd,
+					execution:  executions[executionIndex],
+					attempts:   1,
+					hbd:        hbd,
+					pageNumber: currentPageNumber,
 				}
 				activeWorkers++
 				totalTasksSent++
 				executionIndex++
 				tasksSentInIteration++
+				pendingTasksPerPage[currentPageNumber]++
 			}
 
 			// If current page is exhausted and we have capacity, fetch next page
@@ -179,6 +197,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 				hbd.PageToken = resp.NextPageToken
 				currentPageToken = resp.NextPageToken
 				hasMorePages = len(currentPageToken) > 0
+				currentPageNumber = hbd.CurrentPage
 
 				// Reset executions for new page
 				executions = nil
@@ -190,18 +209,17 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 				// Send tasks from new page
 				for executionIndex < len(executions) && activeWorkers < config.concurrency {
 					taskCh <- taskDetail{
-						execution: executions[executionIndex],
-						attempts:  1,
-						hbd:       hbd,
+						execution:  executions[executionIndex],
+						attempts:   1,
+						hbd:        hbd,
+						pageNumber: currentPageNumber,
 					}
 					activeWorkers++
 					totalTasksSent++
 					executionIndex++
 					tasksSentInIteration++
+					pendingTasksPerPage[currentPageNumber]++
 				}
-
-				// Record heartbeat when crossing page boundaries
-				activity.RecordHeartbeat(ctx, hbd)
 			}
 
 		case <-ctx.Done():
@@ -226,6 +244,13 @@ func (a *activities) checkNamespace(namespace string) error {
 	// Ignore system namespace for backward compatibility.
 	// TODO: Remove the system namespace special handling after 1.19+
 	if namespace != a.namespace.String() && a.namespace.String() != primitives.SystemLocalNamespace {
+		return errNamespaceMismatch
+	}
+	return nil
+}
+
+func (a *activities) checkNamespaceID(namespaceID string) error {
+	if namespaceID != a.namespaceID.String() {
 		return errNamespaceMismatch
 	}
 	return nil
@@ -310,7 +335,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	workerProcessor := func(
 		ctx context.Context,
 		taskCh chan taskDetail,
-		respCh chan error,
+		respCh chan taskResponse,
 		rateLimiter *rate.Limiter,
 		sdkClient sdkclient.Client,
 		frontendClient workflowservice.WorkflowServiceClient,
@@ -325,19 +350,19 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 
 // BatchActivityWithProtobuf is an activity for processing batch operations using protobuf as the input type.
 // nolint:revive,cognitive-complexity
-func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams *batchspb.BatchOperation) (HeartBeatDetails, error) {
+func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
-	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceTag(batchParams.Namespace))
+	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceIDTag(batchParams.NamespaceId))
 
-	if err := a.checkNamespace(batchParams.Namespace); err != nil {
+	if err := a.checkNamespaceID(batchParams.NamespaceId); err != nil {
 		metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 		logger.Error("Failed to run batch operation due to namespace mismatch", tag.Error(err))
 		return hbd, err
 	}
 
 	sdkClient := a.ClientFactory.NewClient(sdkclient.Options{
-		Namespace:     batchParams.Namespace,
+		Namespace:     a.namespace.String(),
 		DataConverter: sdk.PreferProtoDataConverter,
 	})
 	startOver := true
@@ -349,10 +374,10 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		}
 	}
 
-	adjustedQuery := a.adjustQuery(batchParams.Query, batchParams.BatchType)
+	adjustedQuery := a.adjustQueryBatchTypeEnum(batchParams.Request.VisibilityQuery, batchParams.BatchType)
 
 	if startOver {
-		estimateCount := int64(len(batchParams.WorkflowExecutions))
+		estimateCount := int64(len(batchParams.Request.Executions))
 		if len(adjustedQuery) > 0 {
 			resp, err := sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 				Query: adjustedQuery,
@@ -369,26 +394,26 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 
 	// Prepare configuration for shared processing function
 	config := batchProcessorConfig{
-		namespace:         batchParams.Namespace,
+		namespace:         batchParams.Request.Namespace,
 		adjustedQuery:     adjustedQuery,
 		rps:               a.getOperationRPS(batchParams.Rps),
 		concurrency:       a.getOperationConcurrency(int(batchParams.Concurrency)),
 		initialPageToken:  hbd.PageToken,
-		initialExecutions: batchParams.WorkflowExecutions,
+		initialExecutions: batchParams.Request.Executions,
 	}
 
 	// Create a wrapper for the protobuf specific worker processor
 	workerProcessor := func(
 		ctx context.Context,
 		taskCh chan taskDetail,
-		respCh chan error,
+		respCh chan taskResponse,
 		rateLimiter *rate.Limiter,
 		sdkClient sdkclient.Client,
 		frontendClient workflowservice.WorkflowServiceClient,
 		metricsHandler metrics.Handler,
 		logger log.Logger,
 	) {
-		startTaskProcessorProtobuf(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
+		startTaskProcessorProtobuf(ctx, batchParams, batchParams.Request.Namespace, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
 	}
 
 	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, sdkClient, metricsHandler, logger, hbd)
@@ -418,6 +443,20 @@ func (a *activities) adjustQuery(query, batchType string) string {
 	}
 }
 
+func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.BatchOperationType) string {
+	if len(query) == 0 {
+		// don't add anything if query is empty
+		return query
+	}
+
+	switch batchType {
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE, enumspb.BATCH_OPERATION_TYPE_SIGNAL, enumspb.BATCH_OPERATION_TYPE_CANCEL, enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY:
+		return fmt.Sprintf("(%s) AND (%s)", query, statusRunningQueryFilter)
+	default:
+		return query
+	}
+}
+
 func (a *activities) getOperationRPS(requestedRPS float64) float64 {
 	maxRPS := float64(a.rps(a.namespace.String()))
 	if requestedRPS <= 0 || requestedRPS > maxRPS {
@@ -437,7 +476,7 @@ func startTaskProcessor(
 	ctx context.Context,
 	batchParams BatchParams,
 	taskCh chan taskDetail,
-	respCh chan error,
+	respCh chan taskResponse,
 	limiter *rate.Limiter,
 	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
@@ -647,7 +686,7 @@ func startTaskProcessor(
 
 				_, ok := batchParams._nonRetryableErrors[err.Error()]
 				if ok || task.attempts > batchParams.AttemptsOnRetryableError {
-					respCh <- err
+					respCh <- taskResponse{err: err, pageNumber: task.pageNumber}
 				} else {
 					// put back to the channel if less than attemptsOnError
 					task.attempts++
@@ -655,7 +694,7 @@ func startTaskProcessor(
 				}
 			} else {
 				metrics.BatcherProcessorSuccess.With(metricsHandler).Record(1)
-				respCh <- nil
+				respCh <- taskResponse{err: nil, pageNumber: task.pageNumber}
 			}
 		}
 	}
@@ -664,9 +703,10 @@ func startTaskProcessor(
 // nolint:revive,cognitive-complexity
 func startTaskProcessorProtobuf(
 	ctx context.Context,
-	batchOperation *batchspb.BatchOperation,
+	batchOperation *batchspb.BatchOperationInput,
+	namespace string,
 	taskCh chan taskDetail,
-	respCh chan error,
+	respCh chan taskResponse,
 	limiter *rate.Limiter,
 	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
@@ -683,11 +723,11 @@ func startTaskProcessorProtobuf(
 			}
 			var err error
 
-			switch operation := batchOperation.Input.Request.Operation.(type) {
+			switch operation := batchOperation.Request.Operation.(type) {
 			case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
-						return sdkClient.TerminateWorkflow(ctx, workflowID, runID, batchOperation.Reason)
+						return sdkClient.TerminateWorkflow(ctx, workflowID, runID, batchOperation.Request.Reason)
 					})
 			case *workflowservice.StartBatchOperationRequest_CancellationOperation:
 				err = processTask(ctx, limiter, task,
@@ -698,7 +738,7 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						_, err := frontendClient.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-							Namespace: batchOperation.Namespace,
+							Namespace: namespace,
 							WorkflowExecution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -713,7 +753,7 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						_, err := frontendClient.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
-							Namespace: batchOperation.Namespace,
+							Namespace: namespace,
 							WorkflowExecution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -737,7 +777,7 @@ func startTaskProcessorProtobuf(
 							// Using ResetOptions
 							// Note: getResetEventIDByOptions may modify workflowExecution.RunId, if reset should be to a prior run
 							//nolint:staticcheck // SA1019: worker versioning v0.31
-							eventId, err = getResetEventIDByOptions(ctx, operation.ResetOperation.Options, batchOperation.Namespace, workflowExecution, frontendClient, logger)
+							eventId, err = getResetEventIDByOptions(ctx, operation.ResetOperation.Options, namespace, workflowExecution, frontendClient, logger)
 							//nolint:staticcheck // SA1019: worker versioning v0.31
 							resetReapplyType = operation.ResetOperation.Options.ResetReapplyType
 							//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -745,7 +785,7 @@ func startTaskProcessorProtobuf(
 						} else {
 							// Old fields
 							//nolint:staticcheck // SA1019: worker versioning v0.31
-							eventId, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, batchOperation.Namespace, workflowExecution, frontendClient, logger)
+							eventId, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, batchOperation.Request.Namespace, workflowExecution, frontendClient, logger)
 							//nolint:staticcheck // SA1019: worker versioning v0.31
 							resetReapplyType = operation.ResetOperation.ResetReapplyType
 						}
@@ -753,9 +793,9 @@ func startTaskProcessorProtobuf(
 							return err
 						}
 						_, err = frontendClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-							Namespace:                 batchOperation.Namespace,
+							Namespace:                 namespace,
 							WorkflowExecution:         workflowExecution,
-							Reason:                    batchOperation.Reason,
+							Reason:                    batchOperation.Request.Reason,
 							RequestId:                 uuid.New(),
 							WorkflowTaskFinishEventId: eventId,
 							ResetReapplyType:          resetReapplyType,
@@ -769,7 +809,7 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						unpauseRequest := &workflowservice.UnpauseActivityRequest{
-							Namespace: batchOperation.Namespace,
+							Namespace: namespace,
 							Execution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -798,7 +838,7 @@ func startTaskProcessorProtobuf(
 					func(workflowID, runID string) error {
 						var err error
 						_, err = frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-							Namespace: batchOperation.Namespace,
+							Namespace: namespace,
 							WorkflowExecution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -808,12 +848,11 @@ func startTaskProcessorProtobuf(
 						})
 						return err
 					})
-
 			case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						resetRequest := &workflowservice.ResetActivityRequest{
-							Namespace: batchOperation.Namespace,
+							Namespace: namespace,
 							Execution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -839,7 +878,7 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						updateRequest := &workflowservice.UpdateActivityOptionsRequest{
-							Namespace: batchOperation.Namespace,
+							Namespace: namespace,
 							Execution: &commonpb.WorkflowExecution{
 								WorkflowId: workflowID,
 								RunId:      runID,
@@ -861,21 +900,14 @@ func startTaskProcessorProtobuf(
 						return err
 					})
 			default:
-				err = errors.New("unknown batch type: " + batchOperation.BatchType)
+				err = errors.New(fmt.Sprintf("unknown batch type: %v", batchOperation.BatchType))
 			}
 			if err != nil {
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
-
-				nonRetryable := false
-				for _, errType := range batchOperation.NonRetryableErrors {
-					if errType == err.Error() {
-						nonRetryable = true
-						break
-					}
-				}
+				nonRetryable := slices.Contains(batchOperation.NonRetryableErrors, err.Error())
 				if nonRetryable || task.attempts > int(batchOperation.AttemptsOnRetryableError) {
-					respCh <- err
+					respCh <- taskResponse{err: err, pageNumber: task.pageNumber}
 				} else {
 					// put back to the channel if less than attemptsOnError
 					task.attempts++
@@ -883,7 +915,7 @@ func startTaskProcessorProtobuf(
 				}
 			} else {
 				metrics.BatcherProcessorSuccess.With(metricsHandler).Record(1)
-				respCh <- nil
+				respCh <- taskResponse{err: nil, pageNumber: task.pageNumber}
 			}
 		}
 	}

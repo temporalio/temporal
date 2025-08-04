@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/temporalio/sqlparser"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -101,7 +102,9 @@ const (
 	errTooManyDeleteVersionRequests     = "Too many DeleteWorkerDeploymentVersion requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
 	errTooManyVersionMetadataRequests   = "Too many UpdateWorkerDeploymentVersionMetadata requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
 
-	maxReasonLength = 1000 // Maximum length for the reason field in RateLimitUpdate configurations.
+	maxReasonLength              = 1000 // Maximum length for the reason field in RateLimitUpdate configurations.
+	defaultUserTerminateReason   = "terminated by user via frontend"
+	defaultUserTerminateIdentity = "frontend-service"
 )
 
 type (
@@ -2148,6 +2151,14 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 		return nil, err
 	}
 
+	// Set default values for user-initiated terminate requests to help distinguish from system-initiated ones
+	if request.GetReason() == "" {
+		request.Reason = defaultUserTerminateReason
+	}
+	if request.GetIdentity() == "" {
+		request.Identity = defaultUserTerminateIdentity
+	}
+
 	_, err = wh.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 		NamespaceId:      namespaceID.String(),
 		TerminateRequest: request,
@@ -2969,14 +2980,16 @@ func (wh *WorkflowHandler) GetClusterInfo(ctx context.Context, _ *workflowservic
 	}
 
 	return &workflowservice.GetClusterInfoResponse{
-		SupportedClients:  headers.SupportedClients,
-		ServerVersion:     headers.ServerVersion,
-		ClusterId:         metadata.ClusterId,
-		VersionInfo:       metadata.VersionInfo,
-		ClusterName:       metadata.ClusterName,
-		HistoryShardCount: metadata.HistoryShardCount,
-		PersistenceStore:  wh.persistenceExecutionName,
-		VisibilityStore:   strings.Join(wh.visibilityMgr.GetStoreNames(), ","),
+		SupportedClients:         headers.SupportedClients,
+		ServerVersion:            headers.ServerVersion,
+		ClusterId:                metadata.ClusterId,
+		VersionInfo:              metadata.VersionInfo,
+		ClusterName:              metadata.ClusterName,
+		HistoryShardCount:        metadata.HistoryShardCount,
+		PersistenceStore:         wh.persistenceExecutionName,
+		VisibilityStore:          strings.Join(wh.visibilityMgr.GetStoreNames(), ","),
+		FailoverVersionIncrement: metadata.FailoverVersionIncrement,
+		InitialFailoverVersion:   metadata.InitialFailoverVersion,
 	}, nil
 }
 
@@ -4451,26 +4464,8 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, errRequestNotSet
 	}
 
-	if len(request.GetJobId()) == 0 {
-		return nil, errBatchJobIDNotSet
-	}
-	if len(request.Namespace) == 0 {
-		return nil, errNamespaceNotSet
-	}
-	if len(request.VisibilityQuery) == 0 && len(request.Executions) == 0 {
-		return nil, errBatchOpsWorkflowFilterNotSet
-	}
-	if len(request.VisibilityQuery) != 0 && len(request.Executions) != 0 {
-		return nil, errBatchOpsWorkflowFiltersNotAllowed
-	}
-	if len(request.Executions) > wh.config.MaxExecutionCountBatchOperation(request.Namespace) {
-		return nil, errBatchOpsMaxWorkflowExecutionCount
-	}
-	if len(request.Reason) == 0 {
-		return nil, errReasonNotSet
-	}
-	if request.Operation == nil {
-		return nil, errBatchOperationNotSet
+	if err := batcher.ValidateBatchOperation(request); err != nil {
+		return nil, err
 	}
 
 	if !wh.config.EnableBatcher(request.Namespace) {
@@ -4503,60 +4498,55 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, err
 	}
 
-	input := &batchspb.BatchOperation{
-		Query:     request.GetVisibilityQuery(),
-		Reason:    request.GetReason(),
-		Namespace: request.GetNamespace(),
-		Input: &batchspb.BatchOperationInput{
-			Request: request,
-		},
-		WorkflowExecutions: request.GetExecutions(),
-		Rps:                float64(request.GetMaxOperationsPerSecond()),
+	input := &batchspb.BatchOperationInput{
+		Request:     request,
+		NamespaceId: namespaceID.String(),
 	}
 
 	var identity string
 	switch op := request.Operation.(type) {
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
-		input.BatchType = batcher.BatchTypeTerminate
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_TERMINATE
 		identity = op.TerminationOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
-		input.BatchType = batcher.BatchTypeSignal
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_SIGNAL
 		identity = op.SignalOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
-		input.BatchType = batcher.BatchTypeCancel
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_CANCEL
 		identity = op.CancellationOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_DeletionOperation:
-		input.BatchType = batcher.BatchTypeDelete
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_DELETE
 		identity = op.DeletionOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_ResetOperation:
-		input.BatchType = batcher.BatchTypeReset
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_RESET
 		identity = op.ResetOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
-		input.BatchType = batcher.BatchTypeUpdateOptions
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
 		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
-		input.BatchType = batcher.BatchTypeUnpauseActivities
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY
 		identity = op.UnpauseActivitiesOperation.GetIdentity()
 
 		switch a := op.UnpauseActivitiesOperation.GetActivity().(type) {
 		case *batchpb.BatchOperationUnpauseActivities_Type:
-			unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, a.Type)
-			input.Query = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, unpauseCause)
+			searchValue := fmt.Sprintf("property:activityType=%s", a.Type)
+			escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
+			input.Request.VisibilityQuery = fmt.Sprintf("%s = %s", searchattribute.TemporalPauseInfo, escapedSearchValue)
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
 			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", searchattribute.TemporalPauseInfo)
-			input.Query = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
+			input.Request.VisibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
 		}
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
-		input.BatchType = batcher.BatchTypeResetActivities
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY
 		identity = op.ResetActivitiesOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
-		input.BatchType = batcher.BatchTypeUpdateActivitiesOptions
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS
 		identity = op.UpdateActivityOptionsOperation.GetIdentity()
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
 
-	if err := batcher.ValidateBatchOperation(input); err != nil {
+	if err := batcher.ValidateBatchOperation(request); err != nil {
 		return nil, err
 	}
 
@@ -4567,7 +4557,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
-			batcher.BatchOperationTypeMemo: payload.EncodeString(input.BatchType),
+			batcher.BatchOperationTypeMemo: payload.EncodeString(snakeCaseBatchType(input.BatchType)),
 			batcher.BatchReasonMemo:        payload.EncodeString(request.GetReason()),
 		},
 	}
@@ -4606,6 +4596,23 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, err
 	}
 	return &workflowservice.StartBatchOperationResponse{}, nil
+}
+
+func snakeCaseBatchType(batchType enumspb.BatchOperationType) string {
+	switch batchType {
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE, enumspb.BATCH_OPERATION_TYPE_CANCEL, enumspb.BATCH_OPERATION_TYPE_SIGNAL, enumspb.BATCH_OPERATION_TYPE_DELETE, enumspb.BATCH_OPERATION_TYPE_RESET:
+		return strings.ToLower(batchType.String())
+	case enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS:
+		return "update_options"
+	case enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY:
+		return "unpause_activities"
+	case enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS:
+		return "update_activity_options"
+	case enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY:
+		return "reset_activities"
+	default:
+		return ""
+	}
 }
 
 func (wh *WorkflowHandler) StopBatchOperation(
