@@ -365,7 +365,7 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 		params.GetReason() == "" ||
 		params.GetNamespace() == "" ||
 		(params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0) {
-		return errors.New("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
+		return serviceerror.NewInvalidArgument("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
 	}
 
 	if len(params.GetJobId()) == 0 {
