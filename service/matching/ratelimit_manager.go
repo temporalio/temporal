@@ -25,9 +25,10 @@ type (
 		config          *taskQueueConfig        // Dynamic configuration for task queues set by system.
 		taskQueueType   enumspb.TaskQueueType   // Task queue type
 
-		timeSource  clock.TimeSource
-		adminNsRate float64
-		adminTqRate float64
+		timeSource        clock.TimeSource
+		adminNsRate       float64
+		adminTqRate       float64
+		numReadPartitions int
 
 		// dynamicRate is the dynamic rate & burst for rate limiter
 		dynamicRateBurst quotas.MutableRateBurst
@@ -47,10 +48,10 @@ type (
 		// must also be, and so we don't have to "skip over" the head of the queue due to rate
 		// limits. This isn't true in situations where weights have changed in between writing and
 		// reading. We'll handle that situation better in the future.
-		perKeyLimit      simpleLimiterParams
-		perKeyReady      cache.Cache
-		perKeyOverrides  fairnessWeightOverrides // TODO(fairness): get this from config
-		cancel1, cancel2 func()
+		perKeyLimit               simpleLimiterParams
+		perKeyReady               cache.Cache
+		perKeyOverrides           fairnessWeightOverrides // TODO(fairness): get this from config
+		cancel1, cancel2, cancel3 func()
 	}
 )
 
@@ -84,6 +85,7 @@ func newRateLimitManager(userDataManager userDataManager,
 	// Overall system rate limit will be the min of the two configs that are partition wise times the number of partions.
 	r.adminNsRate, r.cancel1 = config.AdminNamespaceToPartitionRateSub(r.setAdminNsRate)
 	r.adminTqRate, r.cancel2 = config.AdminNamespaceTaskQueueToPartitionRateSub(r.setAdminTqRate)
+	r.numReadPartitions, r.cancel3 = config.NumReadPartitionsSub(r.setNumReadPartitions)
 	r.computeEffectiveRPSAndSource()
 	return r
 }
@@ -100,13 +102,15 @@ func (r *rateLimitManager) setAdminTqRate(rps float64) {
 	r.adminTqRate = rps
 }
 
-func (r *rateLimitManager) getNumberOfReadPartitions() float64 {
-	nPartitions := float64(r.config.NumReadPartitions())
-	if nPartitions <= 0 {
+func (r *rateLimitManager) setNumReadPartitions(val int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if val <= 0 {
 		// Defaulting to 1 partition if misconfigured
-		nPartitions = 1
+		r.numReadPartitions = 1
+	} else {
+		r.numReadPartitions = val
 	}
-	return nPartitions
 }
 
 func (r *rateLimitManager) computeEffectiveRPSAndSource() {
@@ -129,7 +133,7 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 	systemRPS := min(
 		r.adminNsRate,
 		r.adminTqRate,
-	) * r.getNumberOfReadPartitions()
+	) * float64(r.numReadPartitions)
 	r.systemRPS = systemRPS
 	switch {
 	case r.apiConfigRPS != nil:
@@ -227,17 +231,22 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 func (r *rateLimitManager) updateRatelimitLocked() {
 	// Always check for api configured rate limits before any update to the rate limits.
 	r.trySetRPSFromUserDataLocked()
-	oldRPS := r.effectiveRPS
+	oldRPS := r.effectiveRPS / float64(r.numReadPartitions)
 	r.computeEffectiveRPSAndSourceLocked()
-	newRPS := r.effectiveRPS
+	newRPS := r.effectiveRPS / float64(r.numReadPartitions)
 	if oldRPS == newRPS {
 		// No update required
 		return
 	}
-	effectiveRPSPartitionWise := r.effectiveRPS / r.getNumberOfReadPartitions()
-	burst := int(math.Ceil(effectiveRPSPartitionWise))
-	burst = max(burst, r.config.MinTaskThrottlingBurstSize())
-	r.dynamicRateBurst.SetRPS(effectiveRPSPartitionWise)
+	// If the effective RPS is zero, we set the burst to zero as well.
+	// This prevents any initial tasks from executing immediately.
+	// Allows pausing of the task queue but setting the RPS to zero.
+	var burst int
+	if newRPS != 0 {
+		// If the effective RPS is non-zero, we can set a burst based on the effective RPS.
+		burst = max(int(math.Ceil(newRPS)), r.config.MinTaskThrottlingBurstSize())
+	}
+	r.dynamicRateBurst.SetRPS(newRPS)
 	r.dynamicRateBurst.SetBurst(burst)
 	r.forceRefreshRateOnce.Do(func() {
 		// Dynamic rate limiter only refresh its rate every 1m. Before that initial 1m interval, it uses default rate
@@ -361,4 +370,5 @@ func (r *rateLimitManager) consumeTokensLocked(now int64, task *internalTask, to
 func (r *rateLimitManager) Stop() {
 	r.cancel1()
 	r.cancel2()
+	r.cancel3()
 }
