@@ -74,7 +74,7 @@ func (r *rateLimitManager) computeEffectiveRPSAndSource() {
 func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 
 	var (
-		effectiveRPS    float64
+		effectiveRPS    = math.Inf(1)
 		rateLimitSource enumspb.RateLimitSource
 	)
 	// Overall system rate limit will be the min of the two configs that are partition wise times the number of partions.
