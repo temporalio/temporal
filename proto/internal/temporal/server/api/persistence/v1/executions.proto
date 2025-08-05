@@ -821,9 +821,8 @@ message ResetChildInfo {
 }
 
 message WorkflowPauseInfo {
-    // Map of activity types that are to be paused.
-    // The key is the activity type and the value is the activity pause info.
-    repeated ActivityPauseInfo activity_pause_infos = 2;
+    // List of activities that are to be paused.
+    repeated ActivityPauseInfo activity_pause_infos = 1;
 }
 
 message ActivityPauseInfo {

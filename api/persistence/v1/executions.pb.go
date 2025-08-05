@@ -3828,9 +3828,8 @@ func (x *ResetChildInfo) GetShouldTerminateAndStart() bool {
 
 type WorkflowPauseInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Map of activity types that are to be paused.
-	// The key is the activity type and the value is the activity pause info.
-	ActivityPauseInfos []*ActivityPauseInfo `protobuf:"bytes,2,rep,name=activity_pause_infos,json=activityPauseInfos,proto3" json:"activity_pause_infos,omitempty"`
+	// List of activities that are to be paused.
+	ActivityPauseInfos []*ActivityPauseInfo `protobuf:"bytes,1,rep,name=activity_pause_infos,json=activityPauseInfos,proto3" json:"activity_pause_infos,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -4893,7 +4892,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x0eResetChildInfo\x12;\n" +
 	"\x1ashould_terminate_and_start\x18\x01 \x01(\bR\x17shouldTerminateAndStart\"|\n" +
 	"\x11WorkflowPauseInfo\x12g\n" +
-	"\x14activity_pause_infos\x18\x02 \x03(\v25.temporal.server.api.persistence.v1.ActivityPauseInfoR\x12activityPauseInfos\"\xc8\x01\n" +
+	"\x14activity_pause_infos\x18\x01 \x03(\v25.temporal.server.api.persistence.v1.ActivityPauseInfoR\x12activityPauseInfos\"\xc8\x01\n" +
 	"\x11ActivityPauseInfo\x12;\n" +
 	"\vupdate_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"updateTime\x12#\n" +
