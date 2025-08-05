@@ -867,11 +867,8 @@ func startTaskProcessorProtobuf(
 					func(execution *commonpb.WorkflowExecution) error {
 						var err error
 						_, err = frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-							Namespace: namespace,
-							WorkflowExecution: &commonpb.WorkflowExecution{
-								WorkflowId: execution.WorkflowId,
-								RunId:      execution.RunId,
-							},
+							Namespace:                namespace,
+							WorkflowExecution:        execution,
 							WorkflowExecutionOptions: operation.UpdateWorkflowOptionsOperation.WorkflowExecutionOptions,
 							UpdateMask:               &fieldmaskpb.FieldMask{Paths: operation.UpdateWorkflowOptionsOperation.UpdateMask.Paths},
 						})
@@ -881,11 +878,8 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
 						resetRequest := &workflowservice.ResetActivityRequest{
-							Namespace: namespace,
-							Execution: &commonpb.WorkflowExecution{
-								WorkflowId: execution.WorkflowId,
-								RunId:      execution.RunId,
-							},
+							Namespace:              namespace,
+							Execution:              execution,
 							Identity:               operation.ResetActivitiesOperation.Identity,
 							ResetHeartbeat:         operation.ResetActivitiesOperation.ResetHeartbeat,
 							Jitter:                 operation.ResetActivitiesOperation.Jitter,
@@ -909,11 +903,8 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
 						updateRequest := &workflowservice.UpdateActivityOptionsRequest{
-							Namespace: namespace,
-							Execution: &commonpb.WorkflowExecution{
-								WorkflowId: execution.WorkflowId,
-								RunId:      execution.RunId,
-							},
+							Namespace:       namespace,
+							Execution:       execution,
 							UpdateMask:      &fieldmaskpb.FieldMask{Paths: operation.UpdateActivityOptionsOperation.UpdateMask.Paths},
 							RestoreOriginal: operation.UpdateActivityOptionsOperation.RestoreOriginal,
 							Identity:        operation.UpdateActivityOptionsOperation.Identity,
