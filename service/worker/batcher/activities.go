@@ -62,49 +62,46 @@ type batchWorkerProcessor func(
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	getHeartbeatDetails func() HeartBeatDetails,
 )
 
-// Task represents a task to be processed (alias for taskDetail for consistency with pseudocode)
-type Task = taskDetail
-
-// Page represents a page of workflow executions to be processed
-type Page struct {
+// page represents a page of workflow executions to be processed
+type page struct {
 	executions     []*commonpb.WorkflowExecution
 	submittedCount int
 	successCount   int
 	errorCount     int
 	nextPageToken  []byte
 	pageNumber     int
-	prev, next     *Page
+	prev, next     *page
 }
 
 // hasNext returns true if there are more pages to fetch
-func (p *Page) hasNext() bool {
+func (p *page) hasNext() bool {
 	return len(p.nextPageToken) > 0
 }
 
 // allSubmitted returns true if all executions in this page have been submitted
-func (p *Page) allSubmitted() bool {
+func (p *page) allSubmitted() bool {
 	return p.submittedCount == len(p.executions)
 }
 
 // nextTask returns the next task to be submitted from this page
-func (p *Page) nextTask(hbd HeartBeatDetails) Task {
+func (p *page) nextTask() taskDetail {
 	if p.submittedCount >= len(p.executions) {
-		return Task{} // No more tasks in this page
+		return taskDetail{} // No more tasks in this page
 	}
 
-	task := Task{
-		execution:  p.executions[p.submittedCount],
-		attempts:   1,
-		hbd:        hbd,
-		pageNumber: p.pageNumber,
+	task := taskDetail{
+		execution: p.executions[p.submittedCount],
+		attempts:  1,
+		page:      p,
 	}
 	return task
 }
 
 // done returns true if this page and all previous pages are complete
-func (p *Page) done() bool {
+func (p *page) done() bool {
 	if p.prev != nil && !p.prev.done() {
 		return false
 	}
@@ -118,10 +115,10 @@ func fetchPage(
 	config batchProcessorConfig,
 	pageToken []byte,
 	pageNumber int,
-) (*Page, error) {
+) (*page, error) {
 	if len(config.adjustedQuery) == 0 {
 		// No query provided, return empty page
-		return &Page{
+		return &page{
 			executions:    []*commonpb.WorkflowExecution{},
 			nextPageToken: []byte{},
 			pageNumber:    pageNumber,
@@ -142,7 +139,7 @@ func fetchPage(
 		executions = append(executions, wf.Execution)
 	}
 
-	return &Page{
+	return &page{
 		executions:    executions,
 		nextPageToken: resp.NextPageToken,
 		pageNumber:    pageNumber,
@@ -169,16 +166,23 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	taskCh := make(chan taskDetail, concurrency)
 	respCh := make(chan taskResponse, concurrency)
 
+	// Thread-safe access to heartbeat details for concurrent updates
+	var hbdMutex sync.RWMutex
+
 	// Start worker processors
 	for range config.concurrency {
-		go startWorkerProcessor(ctx, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
+		go startWorkerProcessor(ctx, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger, func() HeartBeatDetails {
+			hbdMutex.RLock()
+			defer hbdMutex.RUnlock()
+			return hbd
+		})
 	}
 
-	// Initialize the first page from initial executions or fetch from query
-	var page *Page
+	// Initialize the first p from initial executions or fetch from query
+	var p *page
 	if len(config.initialExecutions) > 0 {
 		// Use initial executions
-		page = &Page{
+		p = &page{
 			executions:    config.initialExecutions,
 			nextPageToken: config.initialPageToken,
 			pageNumber:    hbd.CurrentPage,
@@ -186,7 +190,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	} else {
 		// Fetch page of executions if needed
 		var err error
-		page, err = fetchPage(ctx, sdkClient, config, config.initialPageToken, hbd.CurrentPage)
+		p, err = fetchPage(ctx, sdkClient, config, config.initialPageToken, hbd.CurrentPage)
 		if err != nil {
 			metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 			logger.Error("Failed to fetch initial page", tag.Error(err))
@@ -194,49 +198,36 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 		}
 	}
 
-	// Thread-safe access to heartbeat details for concurrent updates
-	var hbdMutex sync.RWMutex
-
 	// New event loop using Page-based pager
 	for {
 		// Check if we need to fetch next page
-		if page.hasNext() && page.allSubmitted() {
-			nextPage, err := fetchPage(ctx, sdkClient, config, page.nextPageToken, page.pageNumber+1)
+		if p.hasNext() && p.allSubmitted() {
+			nextPage, err := fetchPage(ctx, sdkClient, config, p.nextPageToken, p.pageNumber+1)
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to fetch next page", tag.Error(err))
 				return HeartBeatDetails{}, err
 			}
 			// Link pages
-			page.next = nextPage
-			nextPage.prev = page
-			page = nextPage
+			p.next = nextPage
+			nextPage.prev = p
+			p = nextPage
 
 			// Update heartbeat details for new page (thread-safe)
 			hbdMutex.Lock()
-			hbd.CurrentPage = page.pageNumber
-			hbd.PageToken = page.nextPageToken
+			hbd.CurrentPage = p.pageNumber
+			hbd.PageToken = p.nextPageToken
 			hbdMutex.Unlock()
 		}
 
 		select {
-		case taskCh <- func() Task {
-			hbdMutex.RLock()
-			task := page.nextTask(hbd)
-			hbdMutex.RUnlock()
-			return task
-		}():
+		case taskCh <- p.nextTask():
 			// Successfully submitted a task
-			page.submittedCount++
+			p.submittedCount++
 
 		case result := <-respCh:
 			// Handle task completion result
-			resultPage := page
-
-			// Find the page that this result belongs to by walking backwards
-			for resultPage != nil && resultPage.pageNumber != result.pageNumber {
-				resultPage = resultPage.prev
-			}
+			resultPage := result.page
 
 			if resultPage != nil {
 				// Update counts (thread-safe)
@@ -286,7 +277,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 		}
 
 		// Check if we're done
-		if page.done() && !page.hasNext() {
+		if p.done() && !p.hasNext() {
 			break
 		}
 	}
@@ -403,8 +394,9 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		frontendClient workflowservice.WorkflowServiceClient,
 		metricsHandler metrics.Handler,
 		logger log.Logger,
+		getHeartbeatDetails func() HeartBeatDetails,
 	) {
-		startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
+		startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger, getHeartbeatDetails)
 	}
 
 	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, sdkClient, metricsHandler, logger, hbd)
@@ -474,8 +466,9 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		frontendClient workflowservice.WorkflowServiceClient,
 		metricsHandler metrics.Handler,
 		logger log.Logger,
+		getHeartbeatDetails func() HeartBeatDetails,
 	) {
-		startTaskProcessorProtobuf(ctx, batchParams, batchParams.Request.Namespace, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
+		startTaskProcessorProtobuf(ctx, batchParams, batchParams.Request.Namespace, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger, getHeartbeatDetails)
 	}
 
 	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, sdkClient, metricsHandler, logger, hbd)
@@ -544,6 +537,7 @@ func startTaskProcessor(
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	getHeartbeatDetails func() HeartBeatDetails,
 ) {
 	for {
 		select {
@@ -560,12 +554,12 @@ func startTaskProcessor(
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
 						return sdkClient.TerminateWorkflow(ctx, execution.WorkflowId, execution.RunId, batchParams.Reason)
-					})
+					}, getHeartbeatDetails())
 			case BatchTypeCancel:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
 						return sdkClient.CancelWorkflow(ctx, execution.WorkflowId, execution.RunId)
-					})
+					}, getHeartbeatDetails())
 			case BatchTypeSignal:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -576,7 +570,7 @@ func startTaskProcessor(
 							Input:             batchParams.SignalParams.Input,
 						})
 						return err
-					})
+					}, getHeartbeatDetails())
 			case BatchTypeDelete:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -585,7 +579,7 @@ func startTaskProcessor(
 							WorkflowExecution: execution,
 						})
 						return err
-					})
+					}, getHeartbeatDetails())
 			case BatchTypeReset:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -618,7 +612,7 @@ func startTaskProcessor(
 							PostResetOperations:       batchParams.ResetParams.postResetOperations,
 						})
 						return err
-					})
+					}, getHeartbeatDetails())
 			case BatchTypeUnpauseActivities:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -639,7 +633,7 @@ func startTaskProcessor(
 						}
 						_, err = frontendClient.UnpauseActivity(ctx, unpauseRequest)
 						return err
-					})
+					}, getHeartbeatDetails())
 
 			case BatchTypeUpdateOptions:
 				err = processTask(ctx, limiter, task,
@@ -652,7 +646,7 @@ func startTaskProcessor(
 							UpdateMask:               &fieldmaskpb.FieldMask{Paths: batchParams.UpdateOptionsParams.UpdateMask.Paths},
 						})
 						return err
-					})
+					}, getHeartbeatDetails())
 
 			case BatchTypeResetActivities:
 				err = processTask(ctx, limiter, task,
@@ -676,7 +670,7 @@ func startTaskProcessor(
 
 						_, err = frontendClient.ResetActivity(ctx, resetRequest)
 						return err
-					})
+					}, getHeartbeatDetails())
 			case BatchTypeUpdateActivitiesOptions:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -716,7 +710,7 @@ func startTaskProcessor(
 
 						_, err = frontendClient.UpdateActivityOptions(ctx, updateRequest)
 						return err
-					})
+					}, getHeartbeatDetails())
 			default:
 				err = errors.New("unknown batch type: " + batchParams.BatchType)
 			}
@@ -726,7 +720,7 @@ func startTaskProcessor(
 
 				_, ok := batchParams._nonRetryableErrors[err.Error()]
 				if ok || task.attempts > batchParams.AttemptsOnRetryableError {
-					respCh <- taskResponse{err: err, pageNumber: task.pageNumber}
+					respCh <- taskResponse{err: err, page: task.page}
 				} else {
 					// put back to the channel if less than attemptsOnError
 					task.attempts++
@@ -734,7 +728,7 @@ func startTaskProcessor(
 				}
 			} else {
 				metrics.BatcherProcessorSuccess.With(metricsHandler).Record(1)
-				respCh <- taskResponse{err: nil, pageNumber: task.pageNumber}
+				respCh <- taskResponse{err: nil, page: task.page}
 			}
 		}
 	}
@@ -752,6 +746,7 @@ func startTaskProcessorProtobuf(
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	getHeartbeatDetails func() HeartBeatDetails,
 ) {
 	for {
 		select {
@@ -768,12 +763,12 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
 						return sdkClient.TerminateWorkflow(ctx, execution.WorkflowId, execution.RunId, batchOperation.Request.Reason)
-					})
+					}, getHeartbeatDetails())
 			case *workflowservice.StartBatchOperationRequest_CancellationOperation:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
 						return sdkClient.CancelWorkflow(ctx, execution.WorkflowId, execution.RunId)
-					})
+					}, getHeartbeatDetails())
 			case *workflowservice.StartBatchOperationRequest_SignalOperation:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -785,7 +780,7 @@ func startTaskProcessorProtobuf(
 							Identity:          operation.SignalOperation.GetIdentity(),
 						})
 						return err
-					})
+					}, getHeartbeatDetails())
 			case *workflowservice.StartBatchOperationRequest_DeletionOperation:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -794,7 +789,7 @@ func startTaskProcessorProtobuf(
 							WorkflowExecution: execution,
 						})
 						return err
-					})
+					}, getHeartbeatDetails())
 			case *workflowservice.StartBatchOperationRequest_ResetOperation:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -834,7 +829,7 @@ func startTaskProcessorProtobuf(
 							Identity:                  operation.ResetOperation.Identity,
 						})
 						return err
-					})
+					}, getHeartbeatDetails())
 			case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -860,7 +855,7 @@ func startTaskProcessorProtobuf(
 
 						_, err = frontendClient.UnpauseActivity(ctx, unpauseRequest)
 						return err
-					})
+					}, getHeartbeatDetails())
 
 			case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 				err = processTask(ctx, limiter, task,
@@ -873,7 +868,7 @@ func startTaskProcessorProtobuf(
 							UpdateMask:               &fieldmaskpb.FieldMask{Paths: operation.UpdateWorkflowOptionsOperation.UpdateMask.Paths},
 						})
 						return err
-					})
+					}, getHeartbeatDetails())
 			case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -898,7 +893,7 @@ func startTaskProcessorProtobuf(
 
 						_, err = frontendClient.ResetActivity(ctx, resetRequest)
 						return err
-					})
+					}, getHeartbeatDetails())
 			case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -922,7 +917,7 @@ func startTaskProcessorProtobuf(
 						updateRequest.ActivityOptions = operation.UpdateActivityOptionsOperation.GetActivityOptions()
 						_, err = frontendClient.UpdateActivityOptions(ctx, updateRequest)
 						return err
-					})
+					}, getHeartbeatDetails())
 			default:
 				err = errors.New(fmt.Sprintf("unknown batch type: %v", batchOperation.BatchType))
 			}
@@ -931,7 +926,7 @@ func startTaskProcessorProtobuf(
 				logger.Error("Failed to process batch operation task", tag.Error(err))
 				nonRetryable := slices.Contains(batchOperation.NonRetryableErrors, err.Error())
 				if nonRetryable || task.attempts > int(batchOperation.AttemptsOnRetryableError) {
-					respCh <- taskResponse{err: err, pageNumber: task.pageNumber}
+					respCh <- taskResponse{err: err, page: task.page}
 				} else {
 					// put back to the channel if less than attemptsOnError
 					task.attempts++
@@ -939,7 +934,7 @@ func startTaskProcessorProtobuf(
 				}
 			} else {
 				metrics.BatcherProcessorSuccess.With(metricsHandler).Record(1)
-				respCh <- taskResponse{err: nil, pageNumber: task.pageNumber}
+				respCh <- taskResponse{err: nil, page: task.page}
 			}
 		}
 	}
@@ -950,13 +945,14 @@ func processTask(
 	limiter *rate.Limiter,
 	task taskDetail,
 	procFn func(*commonpb.WorkflowExecution) error,
+	hbd HeartBeatDetails,
 ) error {
 
 	err := limiter.Wait(ctx)
 	if err != nil {
 		return err
 	}
-	activity.RecordHeartbeat(ctx, task.hbd)
+	activity.RecordHeartbeat(ctx, hbd)
 
 	err = procFn(task.execution)
 	if err != nil {
