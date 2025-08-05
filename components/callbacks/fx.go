@@ -60,6 +60,7 @@ func HTTPCallerProviderProvider(
 								"HTTPCallerProviderProvider unable to get FrontendHTTPClient for callback target cluster. Using default HTTP client.",
 								tag.SourceCluster(clusterMetadata.GetCurrentClusterName()),
 								tag.TargetCluster(clusterName),
+								tag.Error(err),
 							)
 							return client.Do(r)
 						}
