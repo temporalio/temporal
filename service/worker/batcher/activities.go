@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -63,6 +64,91 @@ type batchWorkerProcessor func(
 	logger log.Logger,
 )
 
+// Task represents a task to be processed (alias for taskDetail for consistency with pseudocode)
+type Task = taskDetail
+
+// Page represents a page of workflow executions to be processed
+type Page struct {
+	executions     []*commonpb.WorkflowExecution
+	submittedCount int
+	successCount   int
+	errorCount     int
+	nextPageToken  []byte
+	pageNumber     int
+	prev, next     *Page
+}
+
+// hasNext returns true if there are more pages to fetch
+func (p *Page) hasNext() bool {
+	return len(p.nextPageToken) > 0
+}
+
+// allSubmitted returns true if all executions in this page have been submitted
+func (p *Page) allSubmitted() bool {
+	return p.submittedCount == len(p.executions)
+}
+
+// nextTask returns the next task to be submitted from this page
+func (p *Page) nextTask(hbd HeartBeatDetails) Task {
+	if p.submittedCount >= len(p.executions) {
+		return Task{} // No more tasks in this page
+	}
+
+	task := Task{
+		execution:  p.executions[p.submittedCount],
+		attempts:   1,
+		hbd:        hbd,
+		pageNumber: p.pageNumber,
+	}
+	return task
+}
+
+// done returns true if this page and all previous pages are complete
+func (p *Page) done() bool {
+	if p.prev != nil && !p.prev.done() {
+		return false
+	}
+	return p.successCount+p.errorCount == len(p.executions)
+}
+
+// fetchPage fetches a new page of workflow executions
+func fetchPage(
+	ctx context.Context,
+	sdkClient sdkclient.Client,
+	config batchProcessorConfig,
+	pageToken []byte,
+	pageNumber int,
+) (*Page, error) {
+	if len(config.adjustedQuery) == 0 {
+		// No query provided, return empty page
+		return &Page{
+			executions:    []*commonpb.WorkflowExecution{},
+			nextPageToken: []byte{},
+			pageNumber:    pageNumber,
+		}, nil
+	}
+
+	resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		PageSize:      int32(pageSize),
+		NextPageToken: pageToken,
+		Query:         config.adjustedQuery,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	executions := make([]*commonpb.WorkflowExecution, 0, len(resp.Executions))
+	for _, wf := range resp.Executions {
+		executions = append(executions, wf.Execution)
+	}
+
+	return &Page{
+		executions:    executions,
+		nextPageToken: resp.NextPageToken,
+		pageNumber:    pageNumber,
+	}, nil
+}
+
 // processWorkflowsWithProactiveFetching handles the core logic for both batch activity functions
 // nolint:revive,cognitive-complexity
 func (a *activities) processWorkflowsWithProactiveFetching(
@@ -77,147 +163,119 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	rateLimit := rate.Limit(config.rps)
 	burstLimit := int(math.Ceil(config.rps)) // should never be zero because everything would be rejected
 	rateLimiter := rate.NewLimiter(rateLimit, burstLimit)
-	taskCh := make(chan taskDetail, pageSize)
-	respCh := make(chan taskResponse, pageSize)
+
+	concurrency := int(math.Max(1, float64(config.concurrency)))
+
+	taskCh := make(chan taskDetail, concurrency)
+	respCh := make(chan taskResponse, concurrency)
 
 	// Start worker processors
 	for range config.concurrency {
 		go startWorkerProcessor(ctx, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
 	}
 
-	// Track worker state for proactive page fetching
-	activeWorkers := 0
-	totalTasksSent := 0
-	totalTasksCompleted := 0
-	currentPageToken := config.initialPageToken
-	hasMorePages := true
-
-	// Track pending tasks per page for proper heartbeating
-	currentPageNumber := hbd.CurrentPage
-	pendingTasksPerPage := make(map[int]int)
-
-	// Initial page processing
-	executions := config.initialExecutions
-	if len(config.adjustedQuery) > 0 {
-		resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			PageSize:      int32(pageSize),
-			NextPageToken: currentPageToken,
-			Query:         config.adjustedQuery,
-		})
-		if err != nil {
-			metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
-			logger.Error("Failed to list workflow executions", tag.Error(err))
-			return HeartBeatDetails{}, err
-		}
-		currentPageToken = resp.NextPageToken
-		hasMorePages = len(currentPageToken) > 0
-		for _, wf := range resp.Executions {
-			executions = append(executions, wf.Execution)
+	// Initialize the first page from initial executions or fetch from query
+	var page *Page
+	if len(config.initialExecutions) > 0 {
+		// Use initial executions
+		page = &Page{
+			executions:    config.initialExecutions,
+			nextPageToken: config.initialPageToken,
+			pageNumber:    hbd.CurrentPage,
 		}
 	} else {
-		hasMorePages = false
+		// Fetch page of executions if needed
+		var err error
+		page, err = fetchPage(ctx, sdkClient, config, config.initialPageToken, hbd.CurrentPage)
+		if err != nil {
+			metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
+			logger.Error("Failed to fetch initial page", tag.Error(err))
+			return HeartBeatDetails{}, err
+		}
 	}
 
-	// Send initial tasks
-	for _, wf := range executions {
-		if activeWorkers >= config.concurrency {
-			break
-		}
-		taskCh <- taskDetail{
-			execution:  wf,
-			attempts:   1,
-			hbd:        hbd,
-			pageNumber: currentPageNumber,
-		}
-		activeWorkers++
-		totalTasksSent++
-		pendingTasksPerPage[currentPageNumber]++
-	}
+	// Thread-safe access to heartbeat details for concurrent updates
+	var hbdMutex sync.RWMutex
 
-	// Track remaining executions from current page
-	executionIndex := activeWorkers
+	// New event loop using Page-based pager
+	for {
+		// Check if we need to fetch next page
+		if page.hasNext() && page.allSubmitted() {
+			nextPage, err := fetchPage(ctx, sdkClient, config, page.nextPageToken, page.pageNumber+1)
+			if err != nil {
+				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
+				logger.Error("Failed to fetch next page", tag.Error(err))
+				return HeartBeatDetails{}, err
+			}
+			// Link pages
+			page.next = nextPage
+			nextPage.prev = page
+			page = nextPage
 
-	// Main processing loop with proactive page fetching
-	for totalTasksCompleted < totalTasksSent || hasMorePages {
+			// Update heartbeat details for new page (thread-safe)
+			hbdMutex.Lock()
+			hbd.CurrentPage = page.pageNumber
+			hbd.PageToken = page.nextPageToken
+			hbdMutex.Unlock()
+		}
+
 		select {
-		case taskResult := <-respCh:
-			activeWorkers--
-			totalTasksCompleted++
+		case taskCh <- func() Task {
+			hbdMutex.RLock()
+			task := page.nextTask(hbd)
+			hbdMutex.RUnlock()
+			return task
+		}():
+			// Successfully submitted a task
+			page.submittedCount++
 
-			if taskResult.err == nil {
-				hbd.SuccessCount++
-			} else {
-				hbd.ErrorCount++
+		case result := <-respCh:
+			// Handle task completion result
+			resultPage := page
+
+			// Find the page that this result belongs to by walking backwards
+			for resultPage != nil && resultPage.pageNumber != result.pageNumber {
+				resultPage = resultPage.prev
 			}
 
-			// Track page completion
-			pageNum := taskResult.pageNumber
-			pendingTasksPerPage[pageNum]--
-			if pendingTasksPerPage[pageNum] == 0 {
-				// Page is fully completed, record heartbeat
-				delete(pendingTasksPerPage, pageNum)
-				activity.RecordHeartbeat(ctx, hbd)
-			}
-
-			// Try to send more tasks from current page or fetch next page
-			tasksSentInIteration := 0
-
-			// First, send remaining tasks from current page
-			for executionIndex < len(executions) && activeWorkers < config.concurrency {
-				taskCh <- taskDetail{
-					execution:  executions[executionIndex],
-					attempts:   1,
-					hbd:        hbd,
-					pageNumber: currentPageNumber,
+			if resultPage != nil {
+				// Update counts (thread-safe)
+				hbdMutex.Lock()
+				if result.err == nil {
+					resultPage.successCount++
+					hbd.SuccessCount++
+				} else {
+					resultPage.errorCount++
+					hbd.ErrorCount++
 				}
-				activeWorkers++
-				totalTasksSent++
-				executionIndex++
-				tasksSentInIteration++
-				pendingTasksPerPage[currentPageNumber]++
-			}
+				hbdMutex.Unlock()
 
-			// If current page is exhausted and we have capacity, fetch next page
-			pageExhausted := executionIndex >= len(executions)
-			if pageExhausted && hasMorePages && activeWorkers < config.concurrency {
-				resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-					PageSize:      int32(pageSize),
-					NextPageToken: currentPageToken,
-					Query:         config.adjustedQuery,
-				})
-				if err != nil {
-					metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
-					logger.Error("Failed to list workflow executions", tag.Error(err))
-					return HeartBeatDetails{}, err
-				}
-
-				// Update page state
-				hbd.CurrentPage++
-				hbd.PageToken = resp.NextPageToken
-				currentPageToken = resp.NextPageToken
-				hasMorePages = len(currentPageToken) > 0
-				currentPageNumber = hbd.CurrentPage
-
-				// Reset executions for new page
-				executions = nil
-				for _, wf := range resp.Executions {
-					executions = append(executions, wf.Execution)
-				}
-				executionIndex = 0
-
-				// Send tasks from new page
-				for executionIndex < len(executions) && activeWorkers < config.concurrency {
-					taskCh <- taskDetail{
-						execution:  executions[executionIndex],
-						attempts:   1,
-						hbd:        hbd,
-						pageNumber: currentPageNumber,
+				// Update heartbeat details if this page and all previous pages are complete
+				if resultPage.successCount+resultPage.errorCount == len(resultPage.executions) {
+					allPrevComplete := true
+					for curr := resultPage.prev; curr != nil; curr = curr.prev {
+						if curr.successCount+curr.errorCount < len(curr.executions) {
+							allPrevComplete = false
+							break
+						}
 					}
-					activeWorkers++
-					totalTasksSent++
-					executionIndex++
-					tasksSentInIteration++
-					pendingTasksPerPage[currentPageNumber]++
+					if allPrevComplete {
+						// Send immediate heartbeat on page completion (original behavior)
+						hbdMutex.RLock()
+						activity.RecordHeartbeat(ctx, hbd)
+						hbdMutex.RUnlock()
+
+						// Delete all previous page pointers for completed pages to avoid scanning repeatedly
+						for curr := resultPage.prev; curr != nil; {
+							prev := curr.prev
+							curr.prev = nil
+							if prev != nil {
+								prev.next = nil
+							}
+							curr = prev
+						}
+						resultPage.prev = nil
+					}
 				}
 			}
 
@@ -225,6 +283,11 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 			metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 			logger.Error("Failed to complete batch operation", tag.Error(ctx.Err()))
 			return HeartBeatDetails{}, ctx.Err()
+		}
+
+		// Check if we're done
+		if page.done() && !page.hasNext() {
+			break
 		}
 	}
 
