@@ -218,7 +218,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		})
 	}
 
-	e.MetricsHandler = e.MetricsHandler.WithTags(
+	metricsHandler := e.MetricsHandler.WithTags(
 		metrics.NexusMethodTag("StartOperation"),
 		metrics.NamespaceTag(ns.Name().String()),
 		metrics.DestinationTag(endpoint.Endpoint.Spec.GetName()),
@@ -228,8 +228,8 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		metrics.NexusOperationTag(args.operation),
 	)
 
-	e.MetricsHandler.Counter(OutboundRequestCounter.Name()).Record(1)
-	e.MetricsHandler.Histogram(OutboundRequestLatency.Name(), metrics.Milliseconds).Record(time.Since(startTime).Milliseconds())
+	metricsHandler.Counter(OutboundRequestCounter.Name()).Record(1)
+	metricsHandler.Histogram(OutboundRequestLatency.Name(), metrics.Milliseconds).Record(time.Since(startTime).Milliseconds())
 
 	var result *nexus.ClientStartOperationResult[*commonpb.Payload]
 	if callErr == nil {
