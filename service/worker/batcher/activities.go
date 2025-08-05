@@ -166,7 +166,6 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	taskCh := make(chan task, concurrency)
 	respCh := make(chan taskResponse, concurrency)
 
-	// Thread-safe access to heartbeat details for concurrent updates
 	var hbdMutex sync.RWMutex
 
 	// Start worker processors
