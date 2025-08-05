@@ -55,7 +55,7 @@ type batchProcessorConfig struct {
 // batchWorkerProcessor defines the interface for different worker processor types
 type batchWorkerProcessor func(
 	ctx context.Context,
-	taskCh chan taskDetail,
+	taskCh chan task,
 	respCh chan taskResponse,
 	rateLimiter *rate.Limiter,
 	sdkClient sdkclient.Client,
@@ -87,12 +87,12 @@ func (p *page) allSubmitted() bool {
 }
 
 // nextTask returns the next task to be submitted from this page
-func (p *page) nextTask() taskDetail {
+func (p *page) nextTask() task {
 	if p.submittedCount >= len(p.executions) {
-		return taskDetail{} // No more tasks in this page
+		return task{} // No more tasks in this page
 	}
 
-	task := taskDetail{
+	task := task{
 		execution: p.executions[p.submittedCount],
 		attempts:  1,
 		page:      p,
@@ -163,7 +163,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 
 	concurrency := int(math.Max(1, float64(config.concurrency)))
 
-	taskCh := make(chan taskDetail, concurrency)
+	taskCh := make(chan task, concurrency)
 	respCh := make(chan taskResponse, concurrency)
 
 	// Thread-safe access to heartbeat details for concurrent updates
@@ -387,7 +387,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	// Create a wrapper for the batch params specific worker processor
 	workerProcessor := func(
 		ctx context.Context,
-		taskCh chan taskDetail,
+		taskCh chan task,
 		respCh chan taskResponse,
 		rateLimiter *rate.Limiter,
 		sdkClient sdkclient.Client,
@@ -459,7 +459,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	// Create a wrapper for the protobuf specific worker processor
 	workerProcessor := func(
 		ctx context.Context,
-		taskCh chan taskDetail,
+		taskCh chan task,
 		respCh chan taskResponse,
 		rateLimiter *rate.Limiter,
 		sdkClient sdkclient.Client,
@@ -530,7 +530,7 @@ func (a *activities) getOperationConcurrency(concurrency int) int {
 func startTaskProcessor(
 	ctx context.Context,
 	batchParams BatchParams,
-	taskCh chan taskDetail,
+	taskCh chan task,
 	respCh chan taskResponse,
 	limiter *rate.Limiter,
 	sdkClient sdkclient.Client,
@@ -739,7 +739,7 @@ func startTaskProcessorProtobuf(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
 	namespace string,
-	taskCh chan taskDetail,
+	taskCh chan task,
 	respCh chan taskResponse,
 	limiter *rate.Limiter,
 	sdkClient sdkclient.Client,
@@ -943,7 +943,7 @@ func startTaskProcessorProtobuf(
 func processTask(
 	ctx context.Context,
 	limiter *rate.Limiter,
-	task taskDetail,
+	task task,
 	procFn func(*commonpb.WorkflowExecution) error,
 	hbd HeartBeatDetails,
 ) error {

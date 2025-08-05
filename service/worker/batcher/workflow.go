@@ -221,7 +221,7 @@ type (
 		ErrorCount int
 	}
 
-	taskDetail struct {
+	task struct {
 		// the workflow execution to process
 		execution *commonpb.WorkflowExecution
 		// the number of attempts to process the workflow execution
