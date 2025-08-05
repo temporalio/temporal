@@ -9,6 +9,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -181,6 +182,43 @@ func nexusFailureMetadataToPayloads(failure nexus.Failure) (*commonpb.Payloads, 
 			},
 		},
 	}, err
+}
+
+func NexusHandlerErrorToProtoHandlerError(handlerErr *nexus.HandlerError) *nexuspb.HandlerError {
+	var nexusFailure nexus.Failure
+	failureErr, ok := handlerErr.Cause.(*nexus.FailureError)
+	if ok {
+		nexusFailure = failureErr.Failure
+	} else if handlerErr.Cause != nil {
+		nexusFailure = nexus.Failure{Message: handlerErr.Cause.Error()}
+	}
+
+	protoErr := &nexuspb.HandlerError{
+		ErrorType: string(handlerErr.Type),
+		Failure:   NexusFailureToProtoFailure(nexusFailure),
+	}
+	if handlerErr.Retryable() {
+		protoErr.RetryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE
+	} else {
+		protoErr.RetryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE
+	}
+
+	return protoErr
+}
+
+func NexusOpErrorToProtoOpError(opErr *nexus.OperationError) *nexuspb.UnsuccessfulOperationError {
+	var nexusFailure nexus.Failure
+	failureErr, ok := opErr.Cause.(*nexus.FailureError)
+	if ok {
+		nexusFailure = failureErr.Failure
+	} else if opErr.Cause != nil {
+		nexusFailure = nexus.Failure{Message: opErr.Cause.Error()}
+	}
+
+	return &nexuspb.UnsuccessfulOperationError{
+		OperationState: string(opErr.State),
+		Failure:        NexusFailureToProtoFailure(nexusFailure),
+	}
 }
 
 // ConvertGRPCError converts either a serviceerror or a gRPC status error into a Nexus HandlerError if possible.

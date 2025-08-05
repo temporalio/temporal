@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/api"
@@ -202,6 +203,11 @@ func (i *Redirection) Intercept(
 	if !i.RedirectionAllowed(ctx) {
 		return handler(ctx, req)
 	}
+	if isNexusEndpointTargetRequest(req) {
+		// Nexus requests targeting an endpoint are never forwarded here since the frontend handler will resolve
+		// the endpoint target to a URL and make an HTTP request and that request may be forwarded.
+		return handler(ctx, req)
+	}
 
 	methodName := api.MethodName(info.FullMethod)
 	if _, ok := localAPIResponses[methodName]; ok {
@@ -309,4 +315,18 @@ func (i *Redirection) RedirectionAllowed(
 		return true
 	}
 	return allowed
+}
+
+func isNexusEndpointTargetRequest(request any) bool {
+	t, ok := request.(interface {
+		GetTarget() *nexuspb.TaskDispatchTarget
+	})
+	if !ok {
+		return false
+	}
+	switch t.GetTarget().Variant.(type) {
+	case *nexuspb.TaskDispatchTarget_Endpoint:
+		return true
+	}
+	return false
 }

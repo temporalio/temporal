@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/components/nexusoperations"
 	nexusfrontend "go.temporal.io/server/components/nexusoperations/frontend"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
@@ -721,6 +722,7 @@ func HandlerProvider(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	endpointRegistry commonnexus.EndpointRegistry,
+	callerProvider nexusoperations.ClientProvider,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -748,7 +750,7 @@ func HandlerProvider(
 		healthInterceptor,
 		scheduleSpecBuilder,
 		endpointRegistry,
-		clientBean,
+		callerProvider,
 		httpEnabled(cfg, serviceName),
 	)
 	return wfHandler
