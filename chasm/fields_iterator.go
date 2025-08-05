@@ -32,6 +32,9 @@ type fieldInfo struct {
 	err  error
 }
 
+// fieldsOf iterates across all CHASM-managed fields of a struct. Other fields
+// are not yielded.
+//
 //nolint:revive // cognitive complexity 26 (> max enabled 25)
 func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 	valueT := valueV.Type()
@@ -64,7 +67,7 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 					case chasmMapTypePrefix:
 						fieldK = fieldKindSubMap
 					default:
-						fieldErr = serviceerror.NewInternalf("%s.%s: unsupported field type %s: must implement proto.Message, or be chasm.Field[T] or chasm.Map[T]", valueT, fieldN, fieldT)
+						continue // Skip non-CHASM fields.
 					}
 				}
 

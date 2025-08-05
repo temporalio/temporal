@@ -124,6 +124,7 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 				DataField *protoMessageType
 				SubField  Field[string]
 				SubMap    Map[string, int]
+				ignored   *struct{}
 			}{},
 			expectedKinds:  []fieldKind{fieldKindData, fieldKindSubField, fieldKindSubMap},
 			expectedNames:  []string{"DataField", "SubField", "SubMap"},
