@@ -821,30 +821,24 @@ message ResetChildInfo {
 }
 
 message WorkflowPauseInfo {
-    // The time when the workflow was paused.
-    google.protobuf.Timestamp update_time = 1;
-
-    // The identity of the actor that updated the pause info.
-    string identity = 2;
-
     // Map of activity types that are to be paused.
     // The key is the activity type and the value is the activity pause info.
-    map<string, ActivityPauseInfo> activity_pause_infos = 3;
-
-    // If true, all activities are paused.
-    bool pause_all_activities = 4;
+    repeated ActivityPauseInfo activity_pause_infos = 2;
 }
 
 message ActivityPauseInfo {
     // The time when the activity pause info was updated.
     google.protobuf.Timestamp update_time = 1;
 
-    // If true, the activity is paused.
-    bool is_paused = 2;
+    // The type of the activity.
+    string activity_type = 2;
 
-    // The identity of the actor that updated the activity pause info.
+    // The identity of the actor that paused the activity.
     string identity = 3;
 
+    // The id of the request that paused the activity.
+    string request_id = 4;
+
     // The reason for the pause.
-    string reason = 4;
+    string reason = 5;
 }
