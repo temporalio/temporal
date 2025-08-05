@@ -218,13 +218,18 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		})
 	}
 
-	methodTag := metrics.NexusMethodTag("StartOperation")
-	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
-	outcomeTag := metrics.OutcomeTag(startCallOutcomeTag(callCtx, rawResult, callErr))
-	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(ctx))
-	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
-	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
+	e.MetricsHandler = e.MetricsHandler.WithTags(
+		metrics.NexusMethodTag("StartOperation"),
+		metrics.NamespaceTag(ns.Name().String()),
+		metrics.DestinationTag(endpoint.Endpoint.Spec.GetName()),
+		metrics.OutcomeTag(startCallOutcomeTag(callCtx, rawResult, callErr)),
+		metrics.FailureSourceTag(failureSourceFromContext(ctx)),
+		metrics.NexusServiceTag(args.service),
+		metrics.NexusOperationTag(args.operation),
+	)
+
+	e.MetricsHandler.Counter(OutboundRequestCounter.Name()).Record(1)
+	e.MetricsHandler.Histogram(OutboundRequestLatency.Name(), metrics.Milliseconds).Record(time.Since(startTime).Milliseconds())
 
 	var result *nexus.ClientStartOperationResult[*commonpb.Payload]
 	if callErr == nil {

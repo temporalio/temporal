@@ -120,6 +120,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		requestStartTime: startTime,
 	}
 	ctx = rCtx.augmentContext(ctx, r.HTTPRequest.Header)
+	rCtx.enrichNexusOperationMetrics(r.HTTPRequest.Method, r.HTTPRequest.URL.Path)
 	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	if err := rCtx.interceptRequest(ctx, r); err != nil {
@@ -523,4 +524,12 @@ func (c *requestContext) shouldForwardRequest(ctx context.Context, header http.H
 		c.namespace.IsGlobalNamespace() &&
 		len(c.namespace.ClusterNames()) > 1 &&
 		c.Config.ForwardingEnabledForNamespace(c.namespace.Name().String())
+}
+
+// enrichNexusOperationMetrics enhances metrics with additional Nexus operation context.
+func (c *requestContext) enrichNexusOperationMetrics(service, operation string) {
+	c.metricsHandler = c.metricsHandler.WithTags(
+		metrics.NexusServiceTag(service),
+		metrics.NexusOperationTag(operation),
+	)
 }
