@@ -453,22 +453,25 @@ func TestProcessInvocationTask(t *testing.T) {
 
 			metricsHandler := metrics.NewMockHandler(ctrl)
 			if tc.expectedMetricOutcome != "" {
+				scopedHandler := metrics.NewMockHandler(ctrl)
 				counter := metrics.NewMockCounterIface(ctrl)
 				timer := metrics.NewMockTimerIface(ctrl)
-				metricsHandler.EXPECT().Counter(nexusoperations.OutboundRequestCounter.Name()).Return(counter)
-				counter.EXPECT().Record(int64(1),
+
+				// Expect WithTags call with all the required tags
+				metricsHandler.EXPECT().WithTags(
+					metrics.NexusMethodTag("StartOperation"),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
-					metrics.NexusMethodTag("StartOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome),
-					metrics.FailureSourceTag("_unknown_"))
-				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(timer)
-				timer.EXPECT().Record(gomock.Any(),
-					metrics.NamespaceTag("ns-name"),
-					metrics.DestinationTag("endpoint"),
-					metrics.NexusMethodTag("StartOperation"),
-					metrics.OutcomeTag(tc.expectedMetricOutcome),
-					metrics.FailureSourceTag("_unknown_"))
+					metrics.FailureSourceTag("_unknown_"),
+					metrics.NexusServiceTag("service"),
+					metrics.NexusOperationTag("operation")).Return(scopedHandler)
+
+				// Expect metrics calls on the scoped handler without additional tags
+				scopedHandler.EXPECT().Counter(nexusoperations.OutboundRequestCounter.Name()).Return(counter)
+				counter.EXPECT().Record(int64(1))
+				scopedHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(timer)
+				timer.EXPECT().Record(gomock.Any())
 			}
 
 			endpointReg := nexustest.FakeEndpointRegistry{

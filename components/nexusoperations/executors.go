@@ -229,7 +229,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	)
 
 	metricsHandler.Counter(OutboundRequestCounter.Name()).Record(1)
-	metricsHandler.Histogram(OutboundRequestLatency.Name(), metrics.Milliseconds).Record(time.Since(startTime).Milliseconds())
+	metricsHandler.Timer(OutboundRequestLatency.Name()).Record(time.Since(startTime))
 
 	var result *nexus.ClientStartOperationResult[*commonpb.Payload]
 	if callErr == nil {
