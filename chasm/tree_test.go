@@ -57,7 +57,8 @@ func (s *nodeSuite) SetupTest() {
 	s.nodeBackend = NewMockNodeBackend(s.controller)
 	s.testLibrary = newTestLibrary(s.controller)
 
-	s.registry = NewRegistry()
+	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	s.registry = NewRegistry(s.logger)
 	err := s.registry.Register(s.testLibrary)
 	s.NoError(err)
 	err = s.registry.Register(&CoreLibrary{})
@@ -65,7 +66,6 @@ func (s *nodeSuite) SetupTest() {
 
 	s.timeSource = clock.NewEventTimeSource()
 	s.nodePathEncoder = &testNodePathEncoder{}
-	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 }
 
 func (s *nodeSuite) SetupSubTest() {
