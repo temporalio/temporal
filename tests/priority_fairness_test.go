@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -176,9 +177,8 @@ func (s *PrioritySuite) TestSubqueue_Migration() {
 	}
 
 	processActivity := func() {
-		var err error
-		for range 10 {
-			_, err = s.TaskPoller().PollAndHandleActivityTask(
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			_, err := s.TaskPoller().PollAndHandleActivityTask(
 				tv,
 				func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 					nothing, err := payloads.Encode()
@@ -187,11 +187,8 @@ func (s *PrioritySuite) TestSubqueue_Migration() {
 				},
 				taskpoller.WithContext(ctx),
 			)
-			if err == nil {
-				return
-			}
-		}
-		s.NoError(err)
+			assert.NoError(c, err)
+		}, 5*time.Second, time.Millisecond)
 	}
 
 	s.T().Log("process first 100 activities")
