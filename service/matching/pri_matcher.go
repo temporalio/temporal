@@ -485,9 +485,7 @@ func (tm *priTaskMatcher) ReprocessAllTasks() {
 
 // Rate returns the current dynamic rate setting
 func (tm *priTaskMatcher) Rate() float64 {
-	tm.rateLimitManager.mu.Lock()
-	defer tm.rateLimitManager.mu.Unlock()
-	return tm.rateLimitManager.effectiveRPS
+	return tm.rateLimitManager.GetEffectiveRPS()
 }
 
 func (tm *priTaskMatcher) poll(

@@ -188,6 +188,12 @@ func (r *rateLimitManager) GetEffectiveRPSAndSource() (float64, enumspb.RateLimi
 	return r.effectiveRPS, r.rateLimitSource
 }
 
+func (r *rateLimitManager) GetEffectiveRPS() float64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.effectiveRPS
+}
+
 func (r *rateLimitManager) GetRateLimiter() quotas.RateLimiter {
 	return r.dynamicRateLimiter
 }
