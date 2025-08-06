@@ -75,6 +75,7 @@ type HandlerOptions struct {
 	RedirectionInterceptor               *interceptor.Redirection
 	ForwardingClients                    *cluster.FrontendHTTPClientCache
 	HTTPTraceProvider                    commonnexus.HTTPClientTraceProvider
+	MetricTagConfig                      *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
 }
 
 type completionHandler struct {
@@ -118,9 +119,10 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 			metrics.NamespaceTag(nsName),
 		),
 		requestStartTime: startTime,
+		metricTagConfig:  h.MetricTagConfig,
 	}
 	ctx = rCtx.augmentContext(ctx, r.HTTPRequest.Header)
-	rCtx.enrichNexusOperationMetrics(r.HTTPRequest.Method, r.HTTPRequest.URL.Path)
+	rCtx.enrichNexusOperationMetrics(r.HTTPRequest.Method, r.HTTPRequest.URL.Path, r.HTTPRequest.Header)
 	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	if err := rCtx.interceptRequest(ctx, r); err != nil {
@@ -348,6 +350,7 @@ type requestContext struct {
 	requestStartTime              time.Time
 	outcomeTag                    metrics.Tag
 	forwarded                     bool
+	metricTagConfig               *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
 }
 
 func (c *requestContext) augmentContext(ctx context.Context, header http.Header) context.Context {
@@ -526,10 +529,28 @@ func (c *requestContext) shouldForwardRequest(ctx context.Context, header http.H
 		c.Config.ForwardingEnabledForNamespace(c.namespace.Name().String())
 }
 
-// enrichNexusOperationMetrics enhances metrics with additional Nexus operation context.
-func (c *requestContext) enrichNexusOperationMetrics(service, operation string) {
-	c.metricsHandler = c.metricsHandler.WithTags(
-		metrics.NexusServiceTag(service),
-		metrics.NexusOperationTag(operation),
-	)
+// enrichNexusOperationMetrics enhances metrics with additional Nexus operation context based on configuration.
+func (c *requestContext) enrichNexusOperationMetrics(service, operation string, requestHeader http.Header) {
+	conf := c.metricTagConfig.Get()
+	if conf == nil {
+		return
+	}
+
+	var tags []metrics.Tag
+
+	if conf.IncludeServiceTag {
+		tags = append(tags, metrics.NexusServiceTag(service))
+	}
+
+	if conf.IncludeOperationTag {
+		tags = append(tags, metrics.NexusOperationTag(operation))
+	}
+
+	for _, mapping := range conf.HeaderTagMappings {
+		tags = append(tags, metrics.StringTag(mapping.TargetTag, requestHeader.Get(mapping.SourceHeader)))
+	}
+
+	if len(tags) > 0 {
+		c.metricsHandler = c.metricsHandler.WithTags(tags...)
+	}
 }
