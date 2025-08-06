@@ -324,9 +324,6 @@ func isNexusEndpointTargetRequest(request any) bool {
 	if !ok {
 		return false
 	}
-	switch t.GetTarget().Variant.(type) {
-	case *nexuspb.TaskDispatchTarget_Endpoint:
-		return true
-	}
-	return false
+	_, ok = t.GetTarget().Variant.(*nexuspb.TaskDispatchTarget_Endpoint)
+	return ok
 }

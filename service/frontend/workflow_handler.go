@@ -105,7 +105,7 @@ var (
 	errNexusUnexpectedOutcome = &nexuspb.HandlerError{
 		ErrorType:     string(nexus.HandlerErrorTypeInternal),
 		RetryBehavior: enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE,
-		Failure:       &nexuspb.Failure{Message: "unexpected outcome"},
+		Failure:       &nexuspb.Failure{Message: "invalid upstream response"},
 	}
 )
 
@@ -5212,20 +5212,35 @@ func (wh *WorkflowHandler) StartNexusOperation(ctx context.Context, request *wor
 	if err != nil {
 		return nil, err
 	}
+	sizeLimitError := wh.config.BlobSizeLimitError(ns.Name().String())
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(ns.Name().String())
+	if err := common.CheckEventBlobSizeLimit(
+		request.Payload.Size(),
+		sizeLimitWarn,
+		sizeLimitError,
+		request.Namespace,
+		"",
+		"",
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.throttledLogger,
+		tag.BlobSizeViolationOperation("StartNexusOperation"),
+	); err != nil {
+		return nil, err
+	}
 
 	switch t := request.GetTarget().GetVariant().(type) {
 	case *nexuspb.TaskDispatchTarget_Endpoint:
-		// forward via HTTP
-		return wh.forwardStartNexusOperation(ctx, ns, t.Endpoint, request)
+		// resolve endpoint to URL and invoke via HTTP
+		return wh.startNexusOperationByEndpoint(ctx, ns, t.Endpoint, request)
 	case *nexuspb.TaskDispatchTarget_TaskQueue:
-		// dispatch directly
-		return wh.dispatchStartNexusOperation(ctx, ns, t.TaskQueue, request)
+		// dispatch directly to matching
+		return wh.startNexusOperationByTaskQueue(ctx, ns, t.TaskQueue, request)
 	default:
 		return nil, errNexusUnsupportedDispatch
 	}
 }
 
-func (wh *WorkflowHandler) forwardStartNexusOperation(ctx context.Context, ns *namespace.Namespace, endpoint string, request *workflowservice.StartNexusOperationRequest) (*workflowservice.StartNexusOperationResponse, error) {
+func (wh *WorkflowHandler) startNexusOperationByEndpoint(ctx context.Context, ns *namespace.Namespace, endpoint string, request *workflowservice.StartNexusOperationRequest) (*workflowservice.StartNexusOperationResponse, error) {
 	endpointEntry, err := wh.endpointRegistry.GetByName(ctx, ns.ID(), endpoint)
 	if err != nil {
 		return nil, err
@@ -5301,23 +5316,7 @@ func (wh *WorkflowHandler) forwardStartNexusOperation(ctx context.Context, ns *n
 	}, nil
 }
 
-func (wh *WorkflowHandler) dispatchStartNexusOperation(ctx context.Context, ns *namespace.Namespace, taskQueue string, request *workflowservice.StartNexusOperationRequest) (*workflowservice.StartNexusOperationResponse, error) {
-	sizeLimitError := wh.config.BlobSizeLimitError(ns.Name().String())
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(ns.Name().String())
-	if err := common.CheckEventBlobSizeLimit(
-		request.Payload.Size(),
-		sizeLimitWarn,
-		sizeLimitError,
-		request.Namespace,
-		"",
-		"",
-		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
-		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("StartNexusOperation"),
-	); err != nil {
-		return nil, err
-	}
-
+func (wh *WorkflowHandler) startNexusOperationByTaskQueue(ctx context.Context, ns *namespace.Namespace, taskQueue string, request *workflowservice.StartNexusOperationRequest) (*workflowservice.StartNexusOperationResponse, error) {
 	matchingReq := &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: ns.ID().String(),
 		TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -5408,17 +5407,17 @@ func (wh *WorkflowHandler) RequestCancelNexusOperation(ctx context.Context, requ
 
 	switch t := request.GetTarget().GetVariant().(type) {
 	case *nexuspb.TaskDispatchTarget_Endpoint:
-		// forward via HTTP
-		return wh.forwardRequestCancelNexusOperation(ctx, ns, t.Endpoint, request)
+		// resolve endpoint to URL and invoke via HTTP
+		return wh.requestCancelNexusOperationByEndpoint(ctx, ns, t.Endpoint, request)
 	case *nexuspb.TaskDispatchTarget_TaskQueue:
-		// dispatch directly
-		return wh.dispatchRequestCancelNexusOperation(ctx, ns, t.TaskQueue, request)
+		// dispatch directly to matching
+		return wh.requestCancelNexusOperationByTaskQueue(ctx, ns, t.TaskQueue, request)
 	default:
 		return nil, errNexusUnsupportedDispatch
 	}
 }
 
-func (wh *WorkflowHandler) forwardRequestCancelNexusOperation(ctx context.Context, ns *namespace.Namespace, endpoint string, request *workflowservice.RequestCancelNexusOperationRequest) (*workflowservice.RequestCancelNexusOperationResponse, error) {
+func (wh *WorkflowHandler) requestCancelNexusOperationByEndpoint(ctx context.Context, ns *namespace.Namespace, endpoint string, request *workflowservice.RequestCancelNexusOperationRequest) (*workflowservice.RequestCancelNexusOperationResponse, error) {
 	endpointEntry, err := wh.endpointRegistry.GetByName(ctx, ns.ID(), endpoint)
 	if err != nil {
 		return nil, err
@@ -5449,7 +5448,7 @@ func (wh *WorkflowHandler) forwardRequestCancelNexusOperation(ctx context.Contex
 	return &workflowservice.RequestCancelNexusOperationResponse{}, nil
 }
 
-func (wh *WorkflowHandler) dispatchRequestCancelNexusOperation(ctx context.Context, ns *namespace.Namespace, taskQueue string, request *workflowservice.RequestCancelNexusOperationRequest) (*workflowservice.RequestCancelNexusOperationResponse, error) {
+func (wh *WorkflowHandler) requestCancelNexusOperationByTaskQueue(ctx context.Context, ns *namespace.Namespace, taskQueue string, request *workflowservice.RequestCancelNexusOperationRequest) (*workflowservice.RequestCancelNexusOperationResponse, error) {
 	matchingReq := &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: ns.ID().String(),
 		TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -5504,17 +5503,17 @@ func (wh *WorkflowHandler) GetNexusOperationInfo(ctx context.Context, request *w
 
 	switch t := request.GetTarget().GetVariant().(type) {
 	case *nexuspb.TaskDispatchTarget_Endpoint:
-		// forward via HTTP
-		return wh.forwardGetNexusOperationInfo(ctx, ns, t.Endpoint, request)
+		// resolve endpoint to URL and invoke via HTTP
+		return wh.getNexusOperationInfoByEndpoint(ctx, ns, t.Endpoint, request)
 	case *nexuspb.TaskDispatchTarget_TaskQueue:
-		// dispatch directly
-		return wh.dispatchGetNexusOperationInfo(ctx, ns, t.TaskQueue, request)
+		// dispatch directly to matching
+		return wh.getNexusOperationInfoByTaskQueue(ctx, ns, t.TaskQueue, request)
 	default:
 		return nil, errNexusUnsupportedDispatch
 	}
 }
 
-func (wh *WorkflowHandler) forwardGetNexusOperationInfo(ctx context.Context, ns *namespace.Namespace, endpoint string, request *workflowservice.GetNexusOperationInfoRequest) (*workflowservice.GetNexusOperationInfoResponse, error) {
+func (wh *WorkflowHandler) getNexusOperationInfoByEndpoint(ctx context.Context, ns *namespace.Namespace, endpoint string, request *workflowservice.GetNexusOperationInfoRequest) (*workflowservice.GetNexusOperationInfoResponse, error) {
 	endpointEntry, err := wh.endpointRegistry.GetByName(ctx, ns.ID(), endpoint)
 	if err != nil {
 		return nil, err
@@ -5554,7 +5553,7 @@ func (wh *WorkflowHandler) forwardGetNexusOperationInfo(ctx context.Context, ns 
 	}, nil
 }
 
-func (wh *WorkflowHandler) dispatchGetNexusOperationInfo(ctx context.Context, ns *namespace.Namespace, taskQueue string, request *workflowservice.GetNexusOperationInfoRequest) (*workflowservice.GetNexusOperationInfoResponse, error) {
+func (wh *WorkflowHandler) getNexusOperationInfoByTaskQueue(ctx context.Context, ns *namespace.Namespace, taskQueue string, request *workflowservice.GetNexusOperationInfoRequest) (*workflowservice.GetNexusOperationInfoResponse, error) {
 	matchingReq := &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: ns.ID().String(),
 		TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -5618,17 +5617,17 @@ func (wh *WorkflowHandler) GetNexusOperationResult(ctx context.Context, request 
 
 	switch t := request.GetTarget().GetVariant().(type) {
 	case *nexuspb.TaskDispatchTarget_Endpoint:
-		// forward via HTTP
-		return wh.forwardGetNexusOperationResult(ctx, ns, t.Endpoint, request)
+		// resolve endpoint to URL and invoke via HTTP
+		return wh.getNexusOperationResultByEndpoint(ctx, ns, t.Endpoint, request)
 	case *nexuspb.TaskDispatchTarget_TaskQueue:
-		// dispatch directly
-		return wh.dispatchGetNexusOperationResult(ctx, ns, t.TaskQueue, request)
+		// dispatch directly to matching
+		return wh.getNexusOperationResultByTaskQueue(ctx, ns, t.TaskQueue, request)
 	default:
 		return nil, errNexusUnsupportedDispatch
 	}
 }
 
-func (wh *WorkflowHandler) forwardGetNexusOperationResult(ctx context.Context, ns *namespace.Namespace, endpoint string, request *workflowservice.GetNexusOperationResultRequest) (*workflowservice.GetNexusOperationResultResponse, error) {
+func (wh *WorkflowHandler) getNexusOperationResultByEndpoint(ctx context.Context, ns *namespace.Namespace, endpoint string, request *workflowservice.GetNexusOperationResultRequest) (*workflowservice.GetNexusOperationResultResponse, error) {
 	endpointEntry, err := wh.endpointRegistry.GetByName(ctx, ns.ID(), endpoint)
 	if err != nil {
 		return nil, err
@@ -5694,7 +5693,7 @@ func (wh *WorkflowHandler) forwardGetNexusOperationResult(ctx context.Context, n
 	}, nil
 }
 
-func (wh *WorkflowHandler) dispatchGetNexusOperationResult(ctx context.Context, ns *namespace.Namespace, taskQueue string, request *workflowservice.GetNexusOperationResultRequest) (*workflowservice.GetNexusOperationResultResponse, error) {
+func (wh *WorkflowHandler) getNexusOperationResultByTaskQueue(ctx context.Context, ns *namespace.Namespace, taskQueue string, request *workflowservice.GetNexusOperationResultRequest) (*workflowservice.GetNexusOperationResultResponse, error) {
 	matchingReq := &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: ns.ID().String(),
 		TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},

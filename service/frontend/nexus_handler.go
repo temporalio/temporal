@@ -474,7 +474,7 @@ func (h *nexusHandler) StartOperation(
 
 	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
-	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
+	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid upstream response")
 }
 
 func parseLinks(links []*nexuspb.Link, logger log.Logger) []nexus.Link {
@@ -601,7 +601,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 
 	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
-	return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
+	return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid upstream response")
 }
 
 func (h *nexusHandler) forwardCancelOperation(
