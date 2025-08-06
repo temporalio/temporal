@@ -208,6 +208,9 @@ func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) su
 }
 
 func (c *fairBacklogManagerImpl) periodicSync() {
+	if c.WaitUntilInitialized(c.tqCtx) != nil {
+		return
+	}
 	for {
 		select {
 		case <-c.tqCtx.Done():

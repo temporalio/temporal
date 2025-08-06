@@ -223,6 +223,9 @@ func (c *priBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) sub
 }
 
 func (c *priBacklogManagerImpl) periodicSync() {
+	if c.WaitUntilInitialized(c.tqCtx) != nil {
+		return
+	}
 	for {
 		select {
 		case <-c.tqCtx.Done():
