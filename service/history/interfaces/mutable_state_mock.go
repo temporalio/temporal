@@ -3037,6 +3037,20 @@ func (mr *MockMutableStateMockRecorder) NextTransitionCount() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextTransitionCount", reflect.TypeOf((*MockMutableState)(nil).NextTransitionCount))
 }
 
+// PauseActivityByType mocks base method.
+func (m *MockMutableState) PauseActivityByType(activityType, identity, reason string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PauseActivityByType", activityType, identity, reason)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PauseActivityByType indicates an expected call of PauseActivityByType.
+func (mr *MockMutableStateMockRecorder) PauseActivityByType(activityType, identity, reason any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseActivityByType", reflect.TypeOf((*MockMutableState)(nil).PauseActivityByType), activityType, identity, reason)
+}
+
 // PopTasks mocks base method.
 func (m *MockMutableState) PopTasks() map[tasks.Category][]tasks.Task {
 	m.ctrl.T.Helper()
