@@ -211,7 +211,7 @@ func (r *rateLimitManager) UserDataChanged() {
 		r.updateSimpleRateLimitLocked(defaultBurstDuration)
 	}
 	if (r.fairnessKeyRateLimitDefault == nil && oldFairnessKeyRateLimitDefault != nil) ||
-		(r.fairnessKeyRateLimitDefault != nil && *oldFairnessKeyRateLimitDefault != *r.fairnessKeyRateLimitDefault) {
+		(r.fairnessKeyRateLimitDefault != nil && oldFairnessKeyRateLimitDefault != nil && *oldFairnessKeyRateLimitDefault != *r.fairnessKeyRateLimitDefault) {
 		r.updatePerKeySimpleRateLimitLocked(defaultBurstDuration)
 	}
 }
