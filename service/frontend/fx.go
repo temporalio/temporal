@@ -20,7 +20,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/nexus"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/components/nexusoperations"
 	nexusfrontend "go.temporal.io/server/components/nexusoperations/frontend"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
@@ -720,6 +721,8 @@ func HandlerProvider(
 	membershipMonitor membership.Monitor,
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
+	endpointRegistry commonnexus.EndpointRegistry,
+	callerProvider nexusoperations.ClientProvider,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -746,6 +749,8 @@ func HandlerProvider(
 		membershipMonitor,
 		healthInterceptor,
 		scheduleSpecBuilder,
+		endpointRegistry,
+		callerProvider,
 		httpEnabled(cfg, serviceName),
 	)
 	return wfHandler
@@ -759,7 +764,7 @@ func RegisterNexusHTTPHandler(
 	clusterMetadata cluster.Metadata,
 	clientCache *cluster.FrontendHTTPClientCache,
 	namespaceRegistry namespace.Registry,
-	endpointRegistry nexus.EndpointRegistry,
+	endpointRegistry commonnexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
@@ -769,7 +774,7 @@ func RegisterNexusHTTPHandler(
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
 	router *mux.Router,
-	httpTraceProvider nexus.HTTPClientTraceProvider,
+	httpTraceProvider commonnexus.HTTPClientTraceProvider,
 ) {
 	h := NewNexusHTTPHandler(
 		serviceConfig,
@@ -877,9 +882,9 @@ func NexusEndpointRegistryProvider(
 	dc *dynamicconfig.Collection,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-) nexus.EndpointRegistry {
-	registryConfig := nexus.NewEndpointRegistryConfig(dc)
-	return nexus.NewEndpointRegistry(
+) commonnexus.EndpointRegistry {
+	registryConfig := commonnexus.NewEndpointRegistryConfig(dc)
+	return commonnexus.NewEndpointRegistry(
 		registryConfig,
 		matchingClient,
 		nexusEndpointManager,
@@ -888,7 +893,7 @@ func NexusEndpointRegistryProvider(
 	)
 }
 
-func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry nexus.EndpointRegistry) {
+func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry commonnexus.EndpointRegistry) {
 	lc.Append(fx.StartStopHook(registry.StartLifecycle, registry.StopLifecycle))
 }
 

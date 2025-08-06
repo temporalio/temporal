@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/api"
@@ -134,6 +135,11 @@ var (
 		"UpdateTaskQueueConfig": func() any { return &workflowservice.UpdateTaskQueueConfigResponse{} },
 		"FetchWorkerConfig":     func() any { return &workflowservice.FetchWorkerConfigResponse{} },
 		"UpdateWorkerConfig":    func() any { return &workflowservice.UpdateWorkerConfigResponse{} },
+
+		"StartNexusOperation":         func() any { return &workflowservice.StartNexusOperationResponse{} },
+		"RequestCancelNexusOperation": func() any { return &workflowservice.RequestCancelNexusOperationResponse{} },
+		"GetNexusOperationInfo":       func() any { return &workflowservice.GetNexusOperationInfoResponse{} },
+		"GetNexusOperationResult":     func() any { return &workflowservice.GetNexusOperationResultResponse{} },
 	}
 )
 
@@ -195,6 +201,11 @@ func (i *Redirection) Intercept(
 		return handler(ctx, req)
 	}
 	if !i.RedirectionAllowed(ctx) {
+		return handler(ctx, req)
+	}
+	if isNexusEndpointTargetRequest(req) {
+		// Nexus requests targeting an endpoint are never forwarded here since the frontend handler will resolve
+		// the endpoint target to a URL and make an HTTP request and that request may be forwarded.
 		return handler(ctx, req)
 	}
 
@@ -304,4 +315,15 @@ func (i *Redirection) RedirectionAllowed(
 		return true
 	}
 	return allowed
+}
+
+func isNexusEndpointTargetRequest(request any) bool {
+	t, ok := request.(interface {
+		GetTarget() *nexuspb.TaskDispatchTarget
+	})
+	if !ok {
+		return false
+	}
+	_, ok = t.GetTarget().Variant.(*nexuspb.TaskDispatchTarget_Endpoint)
+	return ok
 }

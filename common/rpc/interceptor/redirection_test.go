@@ -189,6 +189,11 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"UpdateTaskQueueConfig":                 {},
 		"FetchWorkerConfig":                     {},
 		"UpdateWorkerConfig":                    {},
+
+		"StartNexusOperation":         {},
+		"RequestCancelNexusOperation": {},
+		"GetNexusOperationInfo":       {},
+		"GetNexusOperationResult":     {},
 	}, apis)
 }
 
