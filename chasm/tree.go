@@ -617,24 +617,29 @@ func (n *Node) serializeComponentNode() error {
 //     -- when a child is removed, all its children are removed too.
 //
 // All removed paths are added to mutation.DeletedNodes (which is shared between all nodes in the tree).
-func (n *Node) syncSubComponents() error {
+//
+// True is returned when CHASM must perform deferred pointer resolution.
+func (n *Node) syncSubComponents() (bool, error) {
 	if n.parent != nil {
-		return serviceerror.NewInternal("syncSubComponents must be called on root node")
+		return false, serviceerror.NewInternal("syncSubComponents must be called on root node")
 	}
 	// If node value is nil, then it means there are no subcomponents to sync.
 	if n.value == nil {
-		return nil
+		return false, nil
 	}
 	return n.syncSubComponentsInternal(rootPath)
 }
 
+// syncSubComponentsInternal syncs a subcomponent's fields, managing the
+// associated node lifecycles. True is returned when CHASM must perform deferred
+// pointer resolution.
 func (n *Node) syncSubComponentsInternal(
 	nodePath []string,
-) error {
+) (needsPointerResolution bool, err error) {
 	childrenToKeep := make(map[string]struct{})
 	for field := range n.valueFields() {
 		if field.err != nil {
-			return field.err
+			return false, field.err
 		}
 
 		switch field.kind {
@@ -643,9 +648,10 @@ func (n *Node) syncSubComponentsInternal(
 		case fieldKindData:
 			// Nothing to sync.
 		case fieldKindSubField:
-			keepChild, updatedFieldV, err := n.syncSubField(field.val, field.name, nodePath)
+			keepChild, updatedFieldV, needsResolve, err := n.syncSubField(field.val, field.name, nodePath)
+			needsPointerResolution = needsPointerResolution || needsResolve
 			if err != nil {
-				return err
+				return false, err
 			}
 			if updatedFieldV.IsValid() {
 				field.val.Set(updatedFieldV)
@@ -671,7 +677,7 @@ func (n *Node) syncSubComponentsInternal(
 			if field.val.Kind() != reflect.Map {
 				errMsg := fmt.Sprintf("CHASM map must be of map type: value of %s is not of a map type", n.nodeName)
 				softassert.Fail(n.logger, errMsg)
-				return serviceerror.NewInternal(errMsg)
+				return false, serviceerror.NewInternal(errMsg)
 			}
 
 			if len(field.val.MapKeys()) == 0 {
@@ -683,7 +689,7 @@ func (n *Node) syncSubComponentsInternal(
 			if mapValT.Kind() != reflect.Struct || genericTypePrefix(mapValT) != chasmFieldTypePrefix {
 				errMsg := fmt.Sprintf("CHASM map value must be of Field[T] type: %s collection value type is not Field[T] but %s", n.nodeName, mapValT)
 				softassert.Fail(n.logger, errMsg)
-				return serviceerror.NewInternal(errMsg)
+				return false, serviceerror.NewInternal(errMsg)
 			}
 
 			collectionItemsToKeep := make(map[string]struct{})
@@ -691,11 +697,12 @@ func (n *Node) syncSubComponentsInternal(
 				mapItemV := field.val.MapIndex(mapKeyV)
 				collectionKey, err := n.mapKeyToString(mapKeyV)
 				if err != nil {
-					return err
+					return false, err
 				}
-				keepItem, updatedMapItemV, err := collectionNode.syncSubField(mapItemV, collectionKey, append(nodePath, field.name))
+				keepItem, updatedMapItemV, needsResolve, err := collectionNode.syncSubField(mapItemV, collectionKey, append(nodePath, field.name))
+				needsPointerResolution = needsPointerResolution || needsResolve
 				if err != nil {
-					return err
+					return false, err
 				}
 				if updatedMapItemV.IsValid() {
 					// The only way to update item in the map is to set it back.
@@ -706,14 +713,14 @@ func (n *Node) syncSubComponentsInternal(
 				}
 			}
 			if err := collectionNode.deleteChildren(collectionItemsToKeep, append(nodePath, field.name)); err != nil {
-				return err
+				return false, err
 			}
 			childrenToKeep[field.name] = struct{}{}
 		}
 	}
 
-	err := n.deleteChildren(childrenToKeep, nodePath)
-	return err
+	err = n.deleteChildren(childrenToKeep, nodePath)
+	return needsPointerResolution, err
 }
 
 func (n *Node) mapKeyToString(keyV reflect.Value) (string, error) {
@@ -810,8 +817,19 @@ func (n *Node) stringToMapKey(nodeName string, key string, keyT reflect.Type) (r
 //   - updatedFieldV if fieldV needs to be updated with new value.
 //     If updatedFieldV is invalid, then fieldV doesn't need to be updated.
 //     NOTE: this function doesn't update fieldV because it might come from the map which is not addressable.
+//   - needsPointerResolution indicates if a new deferred pointer has been added,
+//     in which case CHASM needs to resolve it as part of the current transaction.
 //   - error.
-func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []string) (keepNode bool, updatedFieldV reflect.Value, err error) {
+func (n *Node) syncSubField(
+	fieldV reflect.Value,
+	fieldN string,
+	nodePath []string,
+) (
+	keepNode bool,
+	updatedFieldV reflect.Value,
+	needsPointerResolution bool,
+	err error,
+) {
 	internalV := fieldV.FieldByName(internalFieldName)
 	//nolint:revive // Internal field is guaranteed to be of type fieldInternal.
 	internal := internalV.Interface().(fieldInternal)
@@ -835,7 +853,8 @@ func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []stri
 				return
 			}
 		case fieldTypeDeferredPointer:
-			// TODO - validate deferred pointer format here
+			// No-op, validation happens when the pointer is resolved.
+			needsPointerResolution = true
 		default:
 			err = serviceerror.NewInternalf("unexpected field type: %d", internal.fieldType())
 			return
@@ -851,11 +870,12 @@ func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []stri
 		updatedFieldV.FieldByName(internalFieldName).Set(reflect.ValueOf(internal))
 	}
 	if internal.fieldType() == fieldTypeComponent && internal.value() != nil {
-		if err = internal.node.syncSubComponentsInternal(append(nodePath, fieldN)); err != nil {
+		needsPointerResolution, err = internal.node.syncSubComponentsInternal(append(nodePath, fieldN))
+		if err != nil {
 			return
 		}
 	}
-	return true, updatedFieldV, nil
+	return true, updatedFieldV, needsPointerResolution, nil
 }
 
 func (n *Node) deleteChildren(childrenToKeep map[string]struct{}, currentPath []string) error {
@@ -1093,12 +1113,6 @@ func (n *Node) Ref(
 func (n *Node) componentNodePath(
 	component Component,
 ) ([]string, error) {
-	// TODO: keep track of deserilized value and
-	// only invoke syncSubComponents() when there's no match for the component.
-	if err := n.syncSubComponents(); err != nil {
-		return nil, err
-	}
-
 	// It's unnecessary to deserialize entire tree as calling this method means
 	// caller already have the deserialized value.
 	for path, node := range n.andAllChildren() {
@@ -1117,12 +1131,6 @@ func (n *Node) componentNodePath(
 func (n *Node) dataNodePath(
 	data proto.Message,
 ) ([]string, error) {
-	// TODO: keep track of deserialized node value and
-	// only invoke syncSubComponents() when there's no match for the component.
-	if err := n.syncSubComponents(); err != nil {
-		return nil, err
-	}
-
 	// It's unnecessary to deserialize entire tree as calling this method means
 	// caller already have the deserialized value.
 	for path, node := range n.andAllChildren() {
@@ -1167,12 +1175,15 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	maps.Copy(n.mutation.UpdatedNodes, n.systemMutation.UpdatedNodes)
 	maps.Copy(n.mutation.DeletedNodes, n.systemMutation.DeletedNodes)
 
-	if err := n.syncSubComponents(); err != nil {
+	needsPointerResolution, err := n.syncSubComponents()
+	if err != nil {
 		return NodesMutation{}, err
 	}
 
-	if err := n.resolveDeferredPointers(); err != nil {
-		return NodesMutation{}, err
+	if needsPointerResolution {
+		if err := n.resolveDeferredPointers(); err != nil {
+			return NodesMutation{}, err
+		}
 	}
 
 	nextVersionedTransition := &persistencespb.VersionedTransition{

@@ -103,15 +103,17 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 		//nolint:revive // value is guaranteed to be of type []string.
 		path := f.Internal.value().([]string)
 		if referencedNode, found := f.Internal.node.root().findNode(path); found {
-			fieldT := reflect.TypeFor[T]()
-			if fieldT.AssignableTo(protoMessageT) {
-				if err := f.Internal.node.prepareDataValue(chasmContext, fieldT); err != nil {
-					return nilT, err
-				}
-			} else {
-				if err := referencedNode.prepareComponentValue(chasmContext); err != nil {
-					return nilT, err
-				}
+			var err error
+			switch referencedNode.fieldType() {
+			case fieldTypeComponent:
+				err = referencedNode.prepareComponentValue(chasmContext)
+			case fieldTypeData:
+				err = referencedNode.prepareDataValue(chasmContext, reflect.TypeFor[T]())
+			default:
+				err = serviceerror.NewInternalf("pointer field referenced an unhandled value: %v", referencedNode.fieldType())
+			}
+			if err != nil {
+				return nilT, err
 			}
 			nodeValue = referencedNode.value
 		}
