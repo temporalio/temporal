@@ -313,7 +313,7 @@ func (s *MatcherDataSuite) TestTaskForward() {
 
 func (s *MatcherDataSuite) TestRateLimitedBacklog() {
 	// Set Effective RPS to 40, so it is effectively 10 RPS per partition.
-	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(40.0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(10.0, enumspb.RATE_LIMIT_SOURCE_API)
 	s.md.rateLimitManager.UpdateSimpleRateLimit(300 * time.Millisecond)
 
 	// register some backlog with old tasks

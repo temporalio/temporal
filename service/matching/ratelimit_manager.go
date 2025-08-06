@@ -274,7 +274,7 @@ func (r *rateLimitManager) updateRatelimitLocked() {
 
 // UpdateSimpleRateLimit updates the overall queue rate limits for the simpleRateLimiter implementation
 func (r *rateLimitManager) updateSimpleRateLimitLocked(burstDuration time.Duration) {
-	newRPS := r.effectiveRPS / float64(r.numReadPartitions)
+	newRPS := r.effectiveRPS
 	// Always update the rate limit when called, even if RPS hasn't changed
 	// This ensures that the burst duration is properly applied
 	r.wholeQueueLimit = makeSimpleLimiterParams(newRPS, burstDuration)
