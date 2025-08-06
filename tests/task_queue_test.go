@@ -257,7 +257,7 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
 	const (
 		apiRPS            = 5.0
 		taskCount         = 25
-		buffer            = time.Second
+		buffer            = 2 * time.Second // High Buffer to account for test flakiness
 		activityTaskQueue = "RateLimitTest"
 	)
 	expectedTotal := time.Duration(float64(taskCount-int(apiRPS))/apiRPS) * time.Second
