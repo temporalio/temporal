@@ -54,6 +54,7 @@ type Config struct {
 	MaxOperationTokenLength       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PayloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	ForwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	MetricTagConfig               *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
 }
 
 type HandlerOptions struct {
@@ -75,7 +76,6 @@ type HandlerOptions struct {
 	RedirectionInterceptor               *interceptor.Redirection
 	ForwardingClients                    *cluster.FrontendHTTPClientCache
 	HTTPTraceProvider                    commonnexus.HTTPClientTraceProvider
-	MetricTagConfig                      *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
 }
 
 type completionHandler struct {
@@ -119,7 +119,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 			metrics.NamespaceTag(nsName),
 		),
 		requestStartTime: startTime,
-		metricTagConfig:  h.MetricTagConfig,
+		metricTagConfig:  h.Config.MetricTagConfig,
 	}
 	ctx = rCtx.augmentContext(ctx, r.HTTPRequest.Header)
 	rCtx.enrichNexusOperationMetrics(r.HTTPRequest.Method, r.HTTPRequest.URL.Path, r.HTTPRequest.Header)
