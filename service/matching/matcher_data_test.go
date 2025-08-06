@@ -55,7 +55,7 @@ func (s *MatcherDataSuite) SetupTest() {
 			Version: 1,
 		},
 	}
-	rateLimitManager := newRateLimitManager(mockUDM, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	rateLimitManager := newRateLimitManager(mockUDM, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY, false)
 	s.md = newMatcherData(cfg, logger, s.ts, true, rateLimitManager)
 }
 
@@ -326,30 +326,21 @@ func setRPSForTaskQueueUserData(
 	taskQueueType enumspb.TaskQueueType,
 	rps float32,
 ) {
-	if userData.PerType == nil {
-		userData.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
-	}
-
+	// Set user data to 10 tasks/key/sec with burst of 3
+	userData.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
 	key := int32(taskQueueType)
-	if userData.PerType[key] == nil {
-		userData.PerType[key] = &persistencespb.TaskQueueTypeUserData{}
-	}
-
+	userData.PerType[key] = &persistencespb.TaskQueueTypeUserData{}
 	tqTypeData := userData.PerType[key]
-	if tqTypeData.Config == nil {
-		tqTypeData.Config = &taskqueuepb.TaskQueueConfig{}
-	}
-
+	tqTypeData.Config = &taskqueuepb.TaskQueueConfig{}
 	rateLimit := &taskqueuepb.RateLimit{RequestsPerSecond: rps}
 	rateLimitConfig := &taskqueuepb.RateLimitConfig{RateLimit: rateLimit}
-
 	tqTypeData.Config.QueueRateLimit = rateLimitConfig
 	tqTypeData.Config.FairnessKeysRateLimitDefault = rateLimitConfig
 }
 
 func (s *MatcherDataSuite) TestRateLimitedBacklog() {
 	s.md.rateLimitManager.mu.Lock()
-	// 10 tasks/sec with burst of 3
+	s.md.rateLimitManager.trySetRPSFromUserDataLocked()
 	s.md.rateLimitManager.updateSimpleRateLimitLocked(300 * time.Millisecond)
 	s.md.rateLimitManager.mu.Unlock()
 
@@ -389,8 +380,8 @@ func (s *MatcherDataSuite) TestRateLimitedBacklog() {
 }
 
 func (s *MatcherDataSuite) TestPerKeyRateLimit() {
-	// 10 tasks/key/sec with burst of 3
 	s.md.rateLimitManager.mu.Lock()
+	s.md.rateLimitManager.trySetRPSFromUserDataLocked()
 	s.md.rateLimitManager.updatePerKeySimpleRateLimitLocked(300 * time.Millisecond)
 	s.md.rateLimitManager.mu.Unlock()
 	// register some backlog with three keys
@@ -696,7 +687,7 @@ func FuzzMatcherData(f *testing.F) {
 		ts := clock.NewEventTimeSource()
 		ts.UseAsyncTimers(true)
 		logger := log.NewNoopLogger()
-		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY, false)
 		md := newMatcherData(cfg, logger, ts, true, rateLimitManager)
 
 		next := func() int {
