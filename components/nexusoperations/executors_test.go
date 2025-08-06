@@ -753,20 +753,19 @@ func TestProcessCancelationTask(t *testing.T) {
 			if tc.expectedMetricOutcome != "" {
 				counter := metrics.NewMockCounterIface(ctrl)
 				timer := metrics.NewMockTimerIface(ctrl)
-				metricsHandler.EXPECT().Counter(nexusoperations.OutboundRequestCounter.Name()).Return(counter)
-				counter.EXPECT().Record(int64(1),
+				taggedHandler := metrics.NewMockHandler(ctrl)
+				metricsHandler.EXPECT().WithTags(
+					metrics.NexusMethodTag("CancelOperation"),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
-					metrics.NexusMethodTag("CancelOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome),
-					metrics.FailureSourceTag("_unknown_"))
-				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(timer)
-				timer.EXPECT().Record(gomock.Any(),
-					metrics.NamespaceTag("ns-name"),
-					metrics.DestinationTag("endpoint"),
-					metrics.NexusMethodTag("CancelOperation"),
-					metrics.OutcomeTag(tc.expectedMetricOutcome),
-					metrics.FailureSourceTag("_unknown_"))
+					metrics.FailureSourceTag("_unknown_"),
+					metrics.NexusServiceTag("service"),
+					metrics.NexusOperationTag("operation")).Return(taggedHandler)
+				taggedHandler.EXPECT().Counter(nexusoperations.OutboundRequestCounter.Name()).Return(counter)
+				counter.EXPECT().Record(int64(1))
+				taggedHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(timer)
+				timer.EXPECT().Record(gomock.Any())
 			}
 			endpointReg := nexustest.FakeEndpointRegistry{
 				OnGetByID: func(ctx context.Context, endpointID string) (*persistencespb.NexusEndpointEntry, error) {

@@ -585,13 +585,18 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 		callErr = handle.Cancel(callCtx, nexus.CancelOperationOptions{})
 	}
 
-	methodTag := metrics.NexusMethodTag("CancelOperation")
-	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
-	statusCodeTag := metrics.OutcomeTag(cancelCallOutcomeTag(callCtx, callErr))
-	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(ctx))
-	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
-	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
+	metricsHandler := e.MetricsHandler.WithTags(
+		metrics.NexusMethodTag("CancelOperation"),
+		metrics.NamespaceTag(ns.Name().String()),
+		metrics.DestinationTag(endpoint.Endpoint.Spec.GetName()),
+		metrics.OutcomeTag(cancelCallOutcomeTag(callCtx, callErr)),
+		metrics.FailureSourceTag(failureSourceFromContext(ctx)),
+		metrics.NexusServiceTag(args.service),
+		metrics.NexusOperationTag(args.operation),
+	)
+
+	metricsHandler.Counter(OutboundRequestCounter.Name()).Record(1)
+	metricsHandler.Timer(OutboundRequestLatency.Name()).Record(time.Since(startTime))
 
 	if callErr != nil {
 		e.Logger.Error("Nexus CancelOperation request failed", tag.Error(callErr))
