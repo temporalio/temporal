@@ -25,6 +25,10 @@ type (
 		config          *taskQueueConfig        // Dynamic configuration for task queues set by system.
 		taskQueueType   enumspb.TaskQueueType   // Task queue type
 
+		fairnessEnabled   bool // Whether fairness is enabled for this task queue.
+		newMatcherEnabled bool // Whether the new matcher is enabled for this task queue.
+		isSticky          bool // Whether this is a sticky task queue.
+
 		timeSource        clock.TimeSource
 		adminNsRate       float64
 		adminTqRate       float64
@@ -48,10 +52,11 @@ type (
 		// must also be, and so we don't have to "skip over" the head of the queue due to rate
 		// limits. This isn't true in situations where weights have changed in between writing and
 		// reading. We'll handle that situation better in the future.
-		perKeyLimit               simpleLimiterParams
-		perKeyReady               cache.Cache
-		perKeyOverrides           fairnessWeightOverrides // TODO(fairness): get this from config
-		cancel1, cancel2, cancel3 func()
+		perKeyLimit                            simpleLimiterParams
+		perKeyReady                            cache.Cache
+		perKeyOverrides                        fairnessWeightOverrides // TODO(fairness): get this from config
+		cancel1, cancel2, cancel3              func()
+		cancelFairnessSub, cancelNewMatcherSub func() // Cancel functions for dynamic config subscriptions
 	}
 )
 
@@ -66,6 +71,7 @@ const (
 func newRateLimitManager(userDataManager userDataManager,
 	config *taskQueueConfig,
 	taskQueueType enumspb.TaskQueueType,
+	isSticky bool,
 ) *rateLimitManager {
 	r := &rateLimitManager{
 		userDataManager: userDataManager,
@@ -73,6 +79,7 @@ func newRateLimitManager(userDataManager userDataManager,
 		taskQueueType:   taskQueueType,
 		perKeyReady:     cache.New(config.FairnessKeyRateLimitCacheSize(), nil),
 		timeSource:      clock.NewRealTimeSource(),
+		isSticky:        isSticky,
 	}
 	r.dynamicRateBurst = quotas.NewMutableRateBurst(
 		defaultTaskDispatchRPS,
@@ -86,6 +93,8 @@ func newRateLimitManager(userDataManager userDataManager,
 	r.adminNsRate, r.cancel1 = config.AdminNamespaceToPartitionRateSub(r.setAdminNsRate)
 	r.adminTqRate, r.cancel2 = config.AdminNamespaceTaskQueueToPartitionRateSub(r.setAdminTqRate)
 	r.numReadPartitions, r.cancel3 = config.NumReadPartitionsSub(r.setNumReadPartitions)
+	r.fairnessEnabled, r.cancelFairnessSub = config.EnableFairness(r.setFairnessEnabled)
+	r.newMatcherEnabled, r.cancelNewMatcherSub = config.NewMatcher(r.setNewMatcherEnabled)
 	r.computeEffectiveRPSAndSource()
 	return r
 }
@@ -111,6 +120,23 @@ func (r *rateLimitManager) setNumReadPartitions(val int) {
 	} else {
 		r.numReadPartitions = val
 	}
+}
+
+func (r *rateLimitManager) setFairnessEnabled(fairnessEnabled bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// If the task queue is sticky, fairness is disabled.
+	if r.isSticky {
+		r.fairnessEnabled = false
+		return
+	}
+	r.fairnessEnabled = fairnessEnabled
+}
+
+func (r *rateLimitManager) setNewMatcherEnabled(newMatcherEnabled bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.newMatcherEnabled = newMatcherEnabled
 }
 
 func (r *rateLimitManager) computeEffectiveRPSAndSource() {
@@ -166,10 +192,14 @@ func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
 		}
 	}
 	r.workerRPS = rps
+	// Always check for api configured rate limits before any update to the rate limits.
+	r.trySetRPSFromUserDataLocked()
 	// updateRatelimitLocked includes internal logic to determine if an update is needed,
 	// so calling it unconditionally is safe and avoids redundant updates.
 	r.updateRatelimitLocked()
-	r.updateSimpleRateLimitLocked(defaultBurstDuration)
+	if r.fairnessEnabled || r.newMatcherEnabled {
+		r.updateSimpleRateLimitLocked(defaultBurstDuration)
+	}
 }
 
 // Return the effective RPS and its source together.
@@ -191,12 +221,14 @@ func (r *rateLimitManager) GetRateLimiter() quotas.RateLimiter {
 func (r *rateLimitManager) UserDataChanged() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// Always check for api configured rate limits before any update to the rate limits.
+	r.trySetRPSFromUserDataLocked()
 	// Immediately recompute and apply rate limit if necessary.
 	r.updateRatelimitLocked()
-	r.updateSimpleRateLimitLocked(defaultBurstDuration)
-	// UpdateTaskQueueConfig api is the single source for fairness per-key rate limit defaults.
-	// Fairness per-key rate limits are only updated upon updates to `fairnessKeyRateLimitDefault`.
-	r.updatePerKeySimpleRateLimitLocked(defaultBurstDuration)
+	if r.fairnessEnabled || r.newMatcherEnabled {
+		r.updateSimpleRateLimitLocked(defaultBurstDuration)
+		r.updatePerKeySimpleRateLimitLocked(defaultBurstDuration)
+	}
 }
 
 // trySetRPSFromUserDataLocked sets the apiConfigRPS from user data.
@@ -229,8 +261,6 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 
 // updateRatelimitLocked checks and updates the rate limit if changed.
 func (r *rateLimitManager) updateRatelimitLocked() {
-	// Always check for api configured rate limits before any update to the rate limits.
-	r.trySetRPSFromUserDataLocked()
 	oldRPS := r.effectiveRPS / float64(r.numReadPartitions)
 	r.computeEffectiveRPSAndSourceLocked()
 	newRPS := r.effectiveRPS / float64(r.numReadPartitions)
@@ -258,7 +288,6 @@ func (r *rateLimitManager) updateRatelimitLocked() {
 
 // UpdateSimpleRateLimit updates the overall queue rate limits for the simpleRateLimiter implementation
 func (r *rateLimitManager) updateSimpleRateLimitLocked(burstDuration time.Duration) {
-	r.trySetRPSFromUserDataLocked()
 	r.computeEffectiveRPSAndSourceLocked()
 	newRPS := r.effectiveRPS
 	// Always update the rate limit when called, even if RPS hasn't changed
@@ -273,7 +302,6 @@ func (r *rateLimitManager) updateSimpleRateLimitLocked(burstDuration time.Durati
 
 // UpdatePerKeySimpleRateLimit updates the per-key rate limit for the simpleRateLimit implementation
 func (r *rateLimitManager) updatePerKeySimpleRateLimitLocked(burstDuration time.Duration) {
-	r.trySetRPSFromUserDataLocked()
 	if r.fairnessRPS == nil {
 		return
 	}
@@ -371,4 +399,6 @@ func (r *rateLimitManager) Stop() {
 	r.cancel1()
 	r.cancel2()
 	r.cancel3()
+	r.cancelFairnessSub()
+	r.cancelNewMatcherSub()
 }
