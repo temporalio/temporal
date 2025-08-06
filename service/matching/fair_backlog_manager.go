@@ -101,7 +101,6 @@ func (c *fairBacklogManagerImpl) signalIfFatal(err error) bool {
 
 func (c *fairBacklogManagerImpl) Start() {
 	c.taskWriter.Start()
-	go c.periodicSync()
 }
 
 func (c *fairBacklogManagerImpl) Stop() {
@@ -141,6 +140,7 @@ func (c *fairBacklogManagerImpl) initState(state taskQueueState, err error) {
 	defer c.subqueueLock.Unlock()
 
 	c.loadSubqueuesLocked(state.subqueues)
+	go c.periodicSync()
 }
 
 func (c *fairBacklogManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -208,9 +208,6 @@ func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) su
 }
 
 func (c *fairBacklogManagerImpl) periodicSync() {
-	if c.WaitUntilInitialized(c.tqCtx) != nil {
-		return
-	}
 	for {
 		select {
 		case <-c.tqCtx.Done():
