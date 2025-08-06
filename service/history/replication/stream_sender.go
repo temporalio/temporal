@@ -506,31 +506,36 @@ Loop:
 			return fmt.Errorf("streamSender unable to get next replication task: %w", err)
 		}
 
+		skipTask := false
 		if !s.shouldProcessTask(item) {
-			continue
+			skipTask = true
+		} else if priority != enumsspb.TASK_PRIORITY_UNSPECIFIED && // case: skip priority check. When priority is unspecified, send all tasks
+			priority != s.getTaskPriority(item) { // case: skip task with different priority than this loop
+			skipTask = true
 		}
 
-		skipCount++
-		// To avoid a situation: we are skipping a lot of tasks and never send any task, receiver side will not have updated high watermark,
-		// so it will not ACK back to sender, sender will not update the ACK level.
-		// i.e. in tiered stack, if no low priority task in queue, we should still send watermark info to receiver to let it update ACK level.
-		if skipCount > TaskMaxSkipCount {
-			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
-				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-					Messages: &replicationspb.WorkflowReplicationMessages{
-						ExclusiveHighWatermark:     item.GetTaskID(),
-						ExclusiveHighWatermarkTime: timestamppb.New(item.GetVisibilityTime()),
-						Priority:                   priority,
+		if skipTask {
+			skipCount++
+			// To avoid a situation: we are skipping a lot of tasks and never send any task, receiver side will not have updated high watermark,
+			// so it will not ACK back to sender, sender will not update the ACK level.
+			// i.e. in tiered stack, if no low priority task in queue, we should still send watermark info to receiver to let it update ACK level.
+			if skipCount > TaskMaxSkipCount {
+				if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
+					Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
+						Messages: &replicationspb.WorkflowReplicationMessages{
+							ExclusiveHighWatermark:     item.GetTaskID(),
+							ExclusiveHighWatermarkTime: timestamppb.New(item.GetVisibilityTime()),
+							Priority:                   priority,
+						},
 					},
-				},
-			}); err != nil {
-				return err
+				}); err != nil {
+					return err
+				}
+				skipCount = 0
 			}
-		}
-		if priority != enumsspb.TASK_PRIORITY_UNSPECIFIED && // case: skip priority check. When priority is unspecified, send all tasks
-			priority != s.getTaskPriority(item) { // case: skip task with different priority than this loop
 			continue Loop
 		}
+
 		metrics.ReplicationTaskLoadLatency.With(s.metrics).Record(
 			time.Since(item.GetVisibilityTime()),
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
