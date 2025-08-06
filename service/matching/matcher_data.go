@@ -452,9 +452,7 @@ func (d *matcherData) findAndWakeMatches() {
 		}
 
 		// check ready time
-		d.rateLimitManager.mu.Lock()
 		delay := d.rateLimitManager.readyTimeForTask(task).delay(now)
-		d.rateLimitManager.mu.Unlock()
 		d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, delay)
 		if delay > 0 {
 			return // not ready yet, timer will call match later

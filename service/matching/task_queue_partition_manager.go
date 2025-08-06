@@ -87,12 +87,10 @@ func newTaskQueuePartitionManager(
 	metricsHandler metrics.Handler,
 	userDataManager userDataManager,
 ) (*taskQueuePartitionManagerImpl, error) {
-	isSticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
 	rateLimitManager := newRateLimitManager(
 		userDataManager,
 		tqConfig,
-		partition.TaskQueue().TaskType(),
-		isSticky)
+		partition.TaskQueue().TaskType())
 	pm := &taskQueuePartitionManagerImpl{
 		engine:           e,
 		partition:        partition,

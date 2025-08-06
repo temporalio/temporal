@@ -384,8 +384,7 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 			return max(1, config.NumTaskqueueReadPartitions(ns.String(), taskQueueName, taskType))
 		},
 		NumReadPartitionsSub: func(cb func(int)) (int, func()) {
-			val, cancel := config.NumTaskqueueReadPartitionsSub(ns.String(), taskQueueName, taskType, cb)
-			return max(1, val), cancel
+			return config.NumTaskqueueReadPartitionsSub(ns.String(), taskQueueName, taskType, cb)
 		},
 		BreakdownMetricsByTaskQueue: func() bool {
 			return config.BreakdownMetricsByTaskQueue(ns.String(), taskQueueName, taskType)

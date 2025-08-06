@@ -15,19 +15,15 @@ type (
 	rateLimitManager struct {
 		mu sync.Mutex
 
-		effectiveRPS    float64                 // Min of api/worker set RPS and system defaults. Always reflects the overall task queue RPS.
-		rateLimitSource enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
-		userDataManager userDataManager         // User data manager to fetch user data for task queue configurations.
-		workerRPS       *float64                // RPS set by worker at the time of polling, if available.
-		apiConfigRPS    *float64                // RPS set via API, if available.
-		fairnessRPS     *float64                // fairnessKeyRateLimitDefault set via API, if available
-		systemRPS       float64                 // Min of partition level dispatch rates times the number of read partitions.
-		config          *taskQueueConfig        // Dynamic configuration for task queues set by system.
-		taskQueueType   enumspb.TaskQueueType   // Task queue type
-
-		fairnessEnabled   bool // Whether fairness is enabled for this task queue.
-		newMatcherEnabled bool // Whether the new matcher is enabled for this task queue.
-		isSticky          bool // Whether this is a sticky task queue.
+		effectiveRPS                float64                 // Min of api/worker set RPS and system defaults. Always reflects the overall task queue RPS.
+		rateLimitSource             enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
+		userDataManager             userDataManager         // User data manager to fetch user data for task queue configurations.
+		workerRPS                   *float64                // RPS set by worker at the time of polling, if available.
+		apiConfigRPS                *float64                // RPS set via API, if available.
+		fairnessKeyRateLimitDefault *float64                // fairnessKeyRateLimitDefault set via API, if available
+		systemRPS                   float64                 // Min of partition level dispatch rates times the number of read partitions.
+		config                      *taskQueueConfig        // Dynamic configuration for task queues set by system.
+		taskQueueType               enumspb.TaskQueueType   // Task queue type
 
 		timeSource        clock.TimeSource
 		adminNsRate       float64
@@ -52,11 +48,10 @@ type (
 		// must also be, and so we don't have to "skip over" the head of the queue due to rate
 		// limits. This isn't true in situations where weights have changed in between writing and
 		// reading. We'll handle that situation better in the future.
-		perKeyLimit                            simpleLimiterParams
-		perKeyReady                            cache.Cache
-		perKeyOverrides                        fairnessWeightOverrides // TODO(fairness): get this from config
-		cancel1, cancel2, cancel3              func()
-		cancelFairnessSub, cancelNewMatcherSub func() // Cancel functions for dynamic config subscriptions
+		perKeyLimit     simpleLimiterParams
+		perKeyReady     cache.Cache
+		perKeyOverrides fairnessWeightOverrides // TODO(fairness): get this from config
+		cancels         []func()
 	}
 )
 
@@ -71,7 +66,6 @@ const (
 func newRateLimitManager(userDataManager userDataManager,
 	config *taskQueueConfig,
 	taskQueueType enumspb.TaskQueueType,
-	isSticky bool,
 ) *rateLimitManager {
 	r := &rateLimitManager{
 		userDataManager: userDataManager,
@@ -79,7 +73,6 @@ func newRateLimitManager(userDataManager userDataManager,
 		taskQueueType:   taskQueueType,
 		perKeyReady:     cache.New(config.FairnessKeyRateLimitCacheSize(), nil),
 		timeSource:      clock.NewRealTimeSource(),
-		isSticky:        isSticky,
 	}
 	r.dynamicRateBurst = quotas.NewMutableRateBurst(
 		defaultTaskDispatchRPS,
@@ -89,12 +82,14 @@ func newRateLimitManager(userDataManager userDataManager,
 		r.dynamicRateBurst,
 		config.RateLimiterRefreshInterval,
 	)
-	// Overall system rate limit will be the min of the two configs that are partition wise times the number of partions.
-	r.adminNsRate, r.cancel1 = config.AdminNamespaceToPartitionRateSub(r.setAdminNsRate)
-	r.adminTqRate, r.cancel2 = config.AdminNamespaceTaskQueueToPartitionRateSub(r.setAdminTqRate)
-	r.numReadPartitions, r.cancel3 = config.NumReadPartitionsSub(r.setNumReadPartitions)
-	r.fairnessEnabled, r.cancelFairnessSub = config.EnableFairness(r.setFairnessEnabled)
-	r.newMatcherEnabled, r.cancelNewMatcherSub = config.NewMatcher(r.setNewMatcherEnabled)
+	// Overall system rate limit will be the min of the two configs that are partition wise times the number of partitons.
+	var cancel func()
+	r.adminNsRate, cancel = config.AdminNamespaceToPartitionRateSub(r.setAdminNsRate)
+	r.cancels = append(r.cancels, cancel)
+	r.adminTqRate, cancel = config.AdminNamespaceTaskQueueToPartitionRateSub(r.setAdminTqRate)
+	r.cancels = append(r.cancels, cancel)
+	r.numReadPartitions, cancel = config.NumReadPartitionsSub(r.setNumReadPartitions)
+	r.cancels = append(r.cancels, cancel)
 	r.computeEffectiveRPSAndSource()
 	return r
 }
@@ -103,40 +98,22 @@ func (r *rateLimitManager) setAdminNsRate(rps float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.adminNsRate = rps
+	r.computeEffectiveRPSAndSourceLocked()
 }
 
 func (r *rateLimitManager) setAdminTqRate(rps float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.adminTqRate = rps
+	r.computeEffectiveRPSAndSourceLocked()
 }
 
 func (r *rateLimitManager) setNumReadPartitions(val int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if val <= 0 {
-		// Defaulting to 1 partition if misconfigured
-		r.numReadPartitions = 1
-	} else {
-		r.numReadPartitions = val
-	}
-}
-
-func (r *rateLimitManager) setFairnessEnabled(fairnessEnabled bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	// If the task queue is sticky, fairness is disabled.
-	if r.isSticky {
-		r.fairnessEnabled = false
-		return
-	}
-	r.fairnessEnabled = fairnessEnabled
-}
-
-func (r *rateLimitManager) setNewMatcherEnabled(newMatcherEnabled bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.newMatcherEnabled = newMatcherEnabled
+	// Defaulting to 1 partition if misconfigured
+	r.numReadPartitions = max(val, 1)
+	r.computeEffectiveRPSAndSourceLocked()
 }
 
 func (r *rateLimitManager) computeEffectiveRPSAndSource() {
@@ -180,7 +157,7 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 }
 
 // Lazy injection of poll metadata.
-// Internally call UpdateRateLimit to share the same mutex.
+// Will update the effective RPS only if the worker RPS has changed.
 func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -191,15 +168,15 @@ func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
 			rps = &value
 		}
 	}
-	r.workerRPS = rps
-	// Always check for api configured rate limits before any update to the rate limits.
-	r.trySetRPSFromUserDataLocked()
-	// updateRatelimitLocked includes internal logic to determine if an update is needed,
-	// so calling it unconditionally is safe and avoids redundant updates.
-	r.updateRatelimitLocked()
-	if r.fairnessEnabled || r.newMatcherEnabled {
-		r.updateSimpleRateLimitLocked(defaultBurstDuration)
+	// Short-circuit if there's no change from the previous worker RPS.
+	if (r.workerRPS == nil && rps == nil) ||
+		(r.workerRPS != nil && rps != nil && *r.workerRPS == *rps) {
+		return
 	}
+	r.workerRPS = rps
+	r.computeEffectiveRPSAndSourceLocked()
+	r.updateRatelimitLocked()
+	r.updateSimpleRateLimitLocked(defaultBurstDuration)
 }
 
 // Return the effective RPS and its source together.
@@ -221,17 +198,26 @@ func (r *rateLimitManager) GetRateLimiter() quotas.RateLimiter {
 func (r *rateLimitManager) UserDataChanged() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// Always check for api configured rate limits before any update to the rate limits.
+	// Fetch the latest user data and update the API-configured RPS.
+	// Ensures that any user configured rate limits are effectively applied.
+	oldQueueRateLimit := r.apiConfigRPS
+	oldFairnessKeyRateLimitDefault := r.fairnessKeyRateLimitDefault
 	r.trySetRPSFromUserDataLocked()
-	// Immediately recompute and apply rate limit if necessary.
-	r.updateRatelimitLocked()
-	if r.fairnessEnabled || r.newMatcherEnabled {
+	// Call the update methods only if the effective RPS or fairness key rate limit has changed.
+	// This avoids unnecessary updates and rate limit recalculations.
+	if (r.apiConfigRPS == nil && oldQueueRateLimit != nil) ||
+		(r.apiConfigRPS != nil && *r.apiConfigRPS != r.effectiveRPS) {
+		r.updateRatelimitLocked()
 		r.updateSimpleRateLimitLocked(defaultBurstDuration)
+	}
+	if (r.fairnessKeyRateLimitDefault == nil && oldFairnessKeyRateLimitDefault != nil) ||
+		(r.fairnessKeyRateLimitDefault != nil && *oldFairnessKeyRateLimitDefault != *r.fairnessKeyRateLimitDefault) {
 		r.updatePerKeySimpleRateLimitLocked(defaultBurstDuration)
 	}
 }
 
 // trySetRPSFromUserDataLocked sets the apiConfigRPS from user data.
+// Called exclusively in response to updates in user data.
 func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 	userData, _, err := r.userDataManager.GetUserData()
 	if err != nil {
@@ -252,22 +238,16 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 	}
 	fairnessKeyRateLimitDefault := config.GetFairnessKeysRateLimitDefault()
 	if fairnessKeyRateLimitDefault.GetRateLimit() == nil {
-		r.fairnessRPS = nil
+		r.fairnessKeyRateLimitDefault = nil
 	} else {
 		val := float64(fairnessKeyRateLimitDefault.GetRateLimit().GetRequestsPerSecond())
-		r.fairnessRPS = &val
+		r.fairnessKeyRateLimitDefault = &val
 	}
 }
 
-// updateRatelimitLocked checks and updates the rate limit if changed.
+// updateRatelimitLocked checks and updates the overall queue rate limit if changed.
 func (r *rateLimitManager) updateRatelimitLocked() {
-	oldRPS := r.effectiveRPS / float64(r.numReadPartitions)
-	r.computeEffectiveRPSAndSourceLocked()
 	newRPS := r.effectiveRPS / float64(r.numReadPartitions)
-	if oldRPS == newRPS {
-		// No update required
-		return
-	}
 	// If the effective RPS is zero, we set the burst to zero as well.
 	// This prevents any initial tasks from executing immediately.
 	// Allows pausing of the task queue by setting the RPS to zero.
@@ -288,8 +268,7 @@ func (r *rateLimitManager) updateRatelimitLocked() {
 
 // UpdateSimpleRateLimit updates the overall queue rate limits for the simpleRateLimiter implementation
 func (r *rateLimitManager) updateSimpleRateLimitLocked(burstDuration time.Duration) {
-	r.computeEffectiveRPSAndSourceLocked()
-	newRPS := r.effectiveRPS
+	newRPS := r.effectiveRPS / float64(r.numReadPartitions)
 	// Always update the rate limit when called, even if RPS hasn't changed
 	// This ensures that the burst duration is properly applied
 	r.wholeQueueLimit = makeSimpleLimiterParams(newRPS, burstDuration)
@@ -301,16 +280,17 @@ func (r *rateLimitManager) updateSimpleRateLimitLocked(burstDuration time.Durati
 }
 
 // UpdatePerKeySimpleRateLimit updates the per-key rate limit for the simpleRateLimit implementation
+// UpdateTaskQueueConfig api is the single source for the per-key rate limit.
+// updatePerKeySimpleRateLimitLocked is only called when the user data changes.
 func (r *rateLimitManager) updatePerKeySimpleRateLimitLocked(burstDuration time.Duration) {
-	if r.fairnessRPS == nil {
+	if r.fairnessKeyRateLimitDefault == nil {
 		return
 	}
-	r.computeEffectiveRPSAndSourceLocked()
-	if r.fairnessRPS == nil {
+	if r.fairnessKeyRateLimitDefault == nil {
 		r.clearPerKeyRateLimitsLocked()
 		return
 	}
-	rate := *r.fairnessRPS
+	rate := *r.fairnessKeyRateLimitDefault
 	r.perKeyLimit = makeSimpleLimiterParams(rate, burstDuration)
 
 	// Clip to handle the case where we have increased from a zero or very low limit and had
@@ -350,6 +330,12 @@ func (r *rateLimitManager) clearPerKeyRateLimitsLocked() {
 }
 
 func (r *rateLimitManager) readyTimeForTask(task *internalTask) simpleLimiter {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.readyTimeForTaskLocked(task)
+}
+
+func (r *rateLimitManager) readyTimeForTaskLocked(task *internalTask) simpleLimiter {
 	// TODO(pri): after we have task-specific ready time, we can re-enable this
 	// if task.isForwarded() {
 	// 	// don't count any rate limit for forwarded tasks, it was counted on the child
@@ -396,9 +382,7 @@ func (r *rateLimitManager) consumeTokensLocked(now int64, task *internalTask, to
 }
 
 func (r *rateLimitManager) Stop() {
-	r.cancel1()
-	r.cancel2()
-	r.cancel3()
-	r.cancelFairnessSub()
-	r.cancelNewMatcherSub()
+	for _, cancel := range r.cancels {
+		cancel()
+	}
 }
