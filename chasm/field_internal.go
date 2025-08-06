@@ -30,6 +30,9 @@ func (fi fieldInternal) isEmpty() bool {
 func (fi fieldInternal) value() any {
 	// Deferred pointers are special-cased, since their serialized nodes are
 	// initialized as regular persistable pointers.
+	//
+	// Deferred pointers may have a non-nil node after syncSubComponents, but before
+	// resolution.
 	if fi.node == nil || fi.ft == fieldTypeDeferredPointer {
 		return fi.v
 	}
@@ -39,6 +42,9 @@ func (fi fieldInternal) value() any {
 func (fi fieldInternal) fieldType() fieldType {
 	// Deferred pointers are special-cased, since their serialized nodes are
 	// initialized as regular persistable pointers.
+	//
+	// Deferred pointers may have a non-nil node after syncSubComponents, but before
+	// resolution.
 	if fi.node == nil || fi.ft == fieldTypeDeferredPointer {
 		return fi.ft
 	}
