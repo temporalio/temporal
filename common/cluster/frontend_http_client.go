@@ -61,7 +61,10 @@ func (c *FrontendHTTPClientCache) newClientForCluster(targetClusterName string) 
 		if err != nil {
 			return nil, err
 		}
-		client.Transport = &http.Transport{TLSClientConfig: tlsClientConfig}
+		client.Transport = &http.Transport{
+			TLSClientConfig:   tlsClientConfig,
+			ForceAttemptHTTP2: true,
+		}
 		if tlsClientConfig != nil {
 			urlScheme = "https"
 		}
