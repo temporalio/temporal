@@ -3879,7 +3879,7 @@ type ActivityPauseInfo struct {
 	ActivityType string `protobuf:"bytes,2,opt,name=activity_type,json=activityType,proto3" json:"activity_type,omitempty"`
 	// The identity of the actor that paused the activity.
 	Identity string `protobuf:"bytes,3,opt,name=identity,proto3" json:"identity,omitempty"`
-	// The id of the request that paused the activity.
+	// The ID of the request that paused the activity. Duplicates pause requests with the same ID will succeed.
 	RequestId string `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// The reason for the pause.
 	Reason        string `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
