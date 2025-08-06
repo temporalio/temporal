@@ -141,7 +141,7 @@ type (
 		MinTaskThrottlingBurstSize func() int
 		MaxTaskDeleteBatchSize     func() int
 		TaskDeleteInterval         func() time.Duration
-		PriorityLevels             func() int32
+		PriorityLevels             func() priorityKey
 
 		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
 		GetUserDataMinWaitTime     time.Duration
@@ -363,8 +363,8 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		TaskDeleteInterval: func() time.Duration {
 			return config.TaskDeleteInterval(ns.String(), taskQueueName, taskType)
 		},
-		PriorityLevels: func() int32 {
-			return int32(config.PriorityLevels(ns.String(), taskQueueName, taskType))
+		PriorityLevels: func() priorityKey {
+			return priorityKey(config.PriorityLevels(ns.String(), taskQueueName, taskType))
 		},
 		GetUserDataLongPollTimeout: config.GetUserDataLongPollTimeout,
 		GetUserDataMinWaitTime:     1 * time.Second,
@@ -448,6 +448,6 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 	}
 }
 
-func defaultPriorityLevel(priorityLevels int32) int32 {
-	return (priorityLevels + 1) / 2
+func defaultPriorityLevel(priorityLevels priorityKey) priorityKey {
+	return priorityKey(priorityLevels+1) / 2
 }

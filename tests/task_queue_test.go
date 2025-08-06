@@ -224,7 +224,7 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 
 	// Start the activity worker
 	activityWorker = worker.New(s.SdkClient(), activityTaskQueue, worker.Options{
-		// Setting rate limit at worker level
+		// Setting rate limit at worker level (this will be ignored in favor of the limit set through the api)
 		TaskQueueActivitiesPerSecond: workerRPS,
 	})
 	activityWorker.RegisterActivityWithOptions(activityFunc, activity.RegisterOptions{Name: activityName})
@@ -236,7 +236,7 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 	s.NoError(wfWorker.Start())
 
 	// Launch workflows
-	for i := 0; i < taskCount; i++ {
+	for i := range taskCount {
 		_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 			TaskQueue: tv.TaskQueue().GetName(),
 			ID:        fmt.Sprintf("wf-%d", i),
