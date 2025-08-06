@@ -22,8 +22,6 @@ type Context interface {
 	// ComponentOptions(Component) []ComponentOption
 
 	getContext() context.Context
-	componentNodePath(Component) ([]string, error)
-	dataNodePath(proto.Message) ([]string, error)
 }
 
 type MutableContext interface {
