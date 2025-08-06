@@ -857,6 +857,7 @@ func (d *namespaceHandler) createResponse(
 			EagerWorkflowStart: d.config.EnableEagerWorkflowStart(info.Name),
 			SyncUpdate:         d.config.EnableUpdateWorkflowExecution(info.Name),
 			AsyncUpdate:        d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
+			WorkerHeartbeats:   d.config.WorkerHeartbeatsEnabled(info.Name),
 		},
 		SupportsSchedules: d.config.EnableSchedules(info.Name),
 	}
