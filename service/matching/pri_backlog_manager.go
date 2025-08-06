@@ -117,7 +117,6 @@ func (c *priBacklogManagerImpl) signalIfFatal(err error) bool {
 
 func (c *priBacklogManagerImpl) Start() {
 	c.taskWriter.Start()
-	go c.periodicSync()
 }
 
 func (c *priBacklogManagerImpl) Stop() {
@@ -157,6 +156,7 @@ func (c *priBacklogManagerImpl) initState(state taskQueueState, err error) {
 	defer c.subqueueLock.Unlock()
 
 	c.loadSubqueuesLocked(state.subqueues)
+	go c.periodicSync()
 }
 
 func (c *priBacklogManagerImpl) WaitUntilInitialized(ctx context.Context) error {
