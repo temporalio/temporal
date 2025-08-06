@@ -185,7 +185,6 @@ func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
 func (r *rateLimitManager) GetEffectiveRPSAndSource() (float64, enumspb.RateLimitSource) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.computeEffectiveRPSAndSourceLocked()
 	return r.effectiveRPS, r.rateLimitSource
 }
 
@@ -203,6 +202,7 @@ func (r *rateLimitManager) UserDataChanged() {
 	oldQueueRateLimit := r.apiConfigRPS
 	oldFairnessKeyRateLimitDefault := r.fairnessKeyRateLimitDefault
 	r.trySetRPSFromUserDataLocked()
+	r.computeEffectiveRPSAndSourceLocked()
 	// Call the update methods only if the effective RPS or fairness key rate limit has changed.
 	// This avoids unnecessary updates and rate limit recalculations.
 	if (r.apiConfigRPS == nil && oldQueueRateLimit != nil) ||
