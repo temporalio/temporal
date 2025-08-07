@@ -59,8 +59,12 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 			} else {
 				prefix := genericTypePrefix(fieldT)
 				if strings.HasPrefix(prefix, "*") {
-					// Skip non-CHASM generic pointer fields.
-					continue
+					switch prefix[1:] {
+					case chasmFieldTypePrefix, chasmMapTypePrefix:
+						fieldErr = serviceerror.NewInternalf("%s.%s: CHASM fields must not be pointers", valueT, fieldN)
+					default:
+						continue
+					}
 				} else {
 					switch prefix {
 					case chasmFieldTypePrefix:

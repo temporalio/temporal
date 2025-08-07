@@ -142,10 +142,10 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 		{
 			name:           "Component with *Field",
 			input:          &fieldPointer{},
-			expectedKinds:  []fieldKind{fieldKindData},
-			expectedNames:  []string{"DataField"},
-			expectedTypes:  []string{"*persistence.WorkflowExecutionState"},
-			expectedErrors: []string{""},
+			expectedKinds:  []fieldKind{fieldKindData, fieldKindUnspecified},
+			expectedNames:  []string{"DataField", "InvalidField"},
+			expectedTypes:  []string{"*persistence.WorkflowExecutionState", "*chasm.Field[string]"},
+			expectedErrors: []string{"", "*chasm.fieldPointer.InvalidField: CHASM fields must not be pointers"},
 		},
 		{
 			name:           "Component with multiple data fields",
