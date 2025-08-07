@@ -152,13 +152,7 @@ func (s {{$P.Name}}TypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs [
 }
 
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	dispatchUpdate(
-		c,
-		s.key,
-		s.convert,
-		sub.(*subscription[T]),
-		cvs,
-	)
+	// can't subscribe to constrained default settings
 }
 
 {{if eq $P.Name "Global" -}}

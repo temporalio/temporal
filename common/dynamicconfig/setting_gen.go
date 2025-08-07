@@ -844,13 +844,7 @@ func (s GlobalTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []Cons
 }
 
 func (s GlobalTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	dispatchUpdate(
-		c,
-		s.key,
-		s.convert,
-		sub.(*subscription[T]),
-		cvs,
-	)
+	// can't subscribe to constrained default settings
 }
 
 func GetTypedPropertyFn[T any](value T) TypedPropertyFn[T] {
@@ -968,13 +962,7 @@ func (s NamespaceTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []C
 }
 
 func (s NamespaceTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	dispatchUpdate(
-		c,
-		s.key,
-		s.convert,
-		sub.(*subscription[T]),
-		cvs,
-	)
+	// can't subscribe to constrained default settings
 }
 
 func GetTypedPropertyFnFilteredByNamespace[T any](value T) TypedPropertyFnWithNamespaceFilter[T] {
@@ -1092,13 +1080,7 @@ func (s NamespaceIDTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs [
 }
 
 func (s NamespaceIDTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	dispatchUpdate(
-		c,
-		s.key,
-		s.convert,
-		sub.(*subscription[T]),
-		cvs,
-	)
+	// can't subscribe to constrained default settings
 }
 
 func GetTypedPropertyFnFilteredByNamespaceID[T any](value T) TypedPropertyFnWithNamespaceIDFilter[T] {
@@ -1234,13 +1216,7 @@ func (s TaskQueueTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []C
 }
 
 func (s TaskQueueTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	dispatchUpdate(
-		c,
-		s.key,
-		s.convert,
-		sub.(*subscription[T]),
-		cvs,
-	)
+	// can't subscribe to constrained default settings
 }
 
 func GetTypedPropertyFnFilteredByTaskQueue[T any](value T) TypedPropertyFnWithTaskQueueFilter[T] {
@@ -1358,13 +1334,7 @@ func (s ShardIDTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []Con
 }
 
 func (s ShardIDTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	dispatchUpdate(
-		c,
-		s.key,
-		s.convert,
-		sub.(*subscription[T]),
-		cvs,
-	)
+	// can't subscribe to constrained default settings
 }
 
 func GetTypedPropertyFnFilteredByShardID[T any](value T) TypedPropertyFnWithShardIDFilter[T] {
@@ -1482,13 +1452,7 @@ func (s TaskTypeTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []Co
 }
 
 func (s TaskTypeTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	dispatchUpdate(
-		c,
-		s.key,
-		s.convert,
-		sub.(*subscription[T]),
-		cvs,
-	)
+	// can't subscribe to constrained default settings
 }
 
 func GetTypedPropertyFnFilteredByTaskType[T any](value T) TypedPropertyFnWithTaskTypeFilter[T] {
@@ -1621,13 +1585,7 @@ func (s DestinationTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs [
 }
 
 func (s DestinationTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	dispatchUpdate(
-		c,
-		s.key,
-		s.convert,
-		sub.(*subscription[T]),
-		cvs,
-	)
+	// can't subscribe to constrained default settings
 }
 
 func GetTypedPropertyFnFilteredByDestination[T any](value T) TypedPropertyFnWithDestinationFilter[T] {
