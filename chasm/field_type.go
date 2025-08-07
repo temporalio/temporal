@@ -6,5 +6,6 @@ const (
 	fieldTypeUnspecified fieldType = iota
 	fieldTypeComponent
 	fieldTypePointer
+	fieldTypeDeferredPointer
 	fieldTypeData
 )
