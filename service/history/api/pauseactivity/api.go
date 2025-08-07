@@ -67,8 +67,10 @@ func Invoke(
 				}
 			}
 
-			if err := mutableState.PauseActivityByType(activityTypeToPause, frontendRequest.GetIdentity(), frontendRequest.GetReason(), ""); err != nil {
-				return nil, err
+			if activityTypeToPause != "" {
+				if err := mutableState.PauseActivityByType(activityTypeToPause, frontendRequest.GetIdentity(), frontendRequest.GetReason()); err != nil {
+					return nil, err
+				}
 			}
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
