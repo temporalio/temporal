@@ -456,9 +456,7 @@ func (c *physicalTaskQueueManagerImpl) AddSpooledTask(task *internalTask) error 
 }
 
 func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) {
-	if c.priMatcher != nil {
-		c.priMatcher.AddTask(task)
-	}
+	c.priMatcher.AddTask(task)
 }
 
 func (c *physicalTaskQueueManagerImpl) UserDataChanged() {

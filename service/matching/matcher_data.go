@@ -202,16 +202,16 @@ func (t *taskPQ) ForEachTask(pred func(*internalTask) bool, post func(*internalT
 }
 
 type matcherData struct {
-	config     *taskQueueConfig
-	logger     log.Logger
-	timeSource clock.TimeSource
-	canForward bool
+	config           *taskQueueConfig
+	logger           log.Logger
+	timeSource       clock.TimeSource
+	canForward       bool
+	rateLimitManager *rateLimitManager
 
 	lock sync.Mutex // covers everything below, and all fields in any waitableMatchResult
 
 	rateLimitTimer         resettableTimer
 	reconsiderForwardTimer resettableTimer
-	rateLimitManager       *rateLimitManager
 
 	// waiting pollers and tasks
 	// invariant: all pollers and tasks in these data structures have matchResult == nil

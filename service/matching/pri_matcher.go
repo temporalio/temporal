@@ -33,20 +33,17 @@ type priTaskMatcher struct {
 	// Background context used for forwarding tasks. Closed when task queue is closed.
 	tqCtx context.Context
 
-	partition      tqid.Partition
-	fwdr           *priForwarder
-	validator      taskValidator
-	metricsHandler metrics.Handler // namespace metric scope
-	logger         log.Logger
-	numPartitions  func() int // number of task queue partitions
-	markAlive      func()     // function to mark the physical task queue alive
+	partition        tqid.Partition
+	fwdr             *priForwarder
+	validator        taskValidator
+	rateLimitManager *rateLimitManager
+	metricsHandler   metrics.Handler // namespace metric scope
+	logger           log.Logger
+	numPartitions    func() int // number of task queue partitions
+	markAlive        func()     // function to mark the physical task queue alive
 
 	limiterLock sync.Mutex
-	adminNsRate float64
-	adminTqRate float64
 	dynamicRate float64
-
-	rateLimitManager *rateLimitManager
 }
 
 type waitingPoller struct {
@@ -485,7 +482,8 @@ func (tm *priTaskMatcher) ReprocessAllTasks() {
 
 // Rate returns the current dynamic rate setting
 func (tm *priTaskMatcher) Rate() float64 {
-	return tm.rateLimitManager.GetEffectiveRPS()
+	rps, _ := tm.rateLimitManager.GetEffectiveRPSAndSource()
+	return rps
 }
 
 func (tm *priTaskMatcher) poll(

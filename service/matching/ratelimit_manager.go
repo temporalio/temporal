@@ -98,14 +98,14 @@ func (r *rateLimitManager) setAdminNsRate(rps float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.adminNsRate = rps
-	r.computeEffectiveRPSAndSourceLocked()
+	r.computeAndApplyRateLimitLocked()
 }
 
 func (r *rateLimitManager) setAdminTqRate(rps float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.adminTqRate = rps
-	r.computeEffectiveRPSAndSourceLocked()
+	r.computeAndApplyRateLimitLocked()
 }
 
 func (r *rateLimitManager) setNumReadPartitions(val int) {
@@ -113,13 +113,25 @@ func (r *rateLimitManager) setNumReadPartitions(val int) {
 	defer r.mu.Unlock()
 	// Defaulting to 1 partition if misconfigured
 	r.numReadPartitions = max(val, 1)
-	r.computeEffectiveRPSAndSourceLocked()
+	r.computeAndApplyRateLimitLocked()
 }
 
 func (r *rateLimitManager) computeEffectiveRPSAndSource() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.computeEffectiveRPSAndSourceLocked()
+}
+
+func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
+	oldRPS := r.effectiveRPS
+	r.computeEffectiveRPSAndSource()
+	newRPS := r.effectiveRPS
+	if oldRPS == newRPS {
+		// No change in effective RPS, no need to update rate limiters.
+		return
+	}
+	r.updateRatelimitLocked()
+	r.updateSimpleRateLimitLocked(defaultBurstDuration)
 }
 
 // Computes the effectiveRPS and its source by evaluating all possible rate limit configurations.
@@ -168,15 +180,8 @@ func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
 			rps = &value
 		}
 	}
-	// Short-circuit if there's no change from the previous worker RPS.
-	if (r.workerRPS == nil && rps == nil) ||
-		(r.workerRPS != nil && rps != nil && *r.workerRPS == *rps) {
-		return
-	}
 	r.workerRPS = rps
-	r.computeEffectiveRPSAndSourceLocked()
-	r.updateRatelimitLocked()
-	r.updateSimpleRateLimitLocked(defaultBurstDuration)
+	r.computeAndApplyRateLimitLocked()
 }
 
 // Return the effective RPS and its source together.
@@ -186,12 +191,6 @@ func (r *rateLimitManager) GetEffectiveRPSAndSource() (float64, enumspb.RateLimi
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.effectiveRPS, r.rateLimitSource
-}
-
-func (r *rateLimitManager) GetEffectiveRPS() float64 {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.effectiveRPS
 }
 
 func (r *rateLimitManager) GetRateLimiter() quotas.RateLimiter {
@@ -204,20 +203,14 @@ func (r *rateLimitManager) UserDataChanged() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// Fetch the latest user data and update the API-configured RPS.
-	// Ensures that any user configured rate limits are effectively applied.
-	oldQueueRateLimit := r.apiConfigRPS
 	oldFairnessKeyRateLimitDefault := r.fairnessKeyRateLimitDefault
 	r.trySetRPSFromUserDataLocked()
-	r.computeEffectiveRPSAndSourceLocked()
-	// Call the update methods only if the effective RPS or fairness key rate limit has changed.
-	// This avoids unnecessary updates and rate limit recalculations.
-	if (r.apiConfigRPS == nil && oldQueueRateLimit != nil) ||
-		(r.apiConfigRPS != nil && *r.apiConfigRPS != r.effectiveRPS) {
-		r.updateRatelimitLocked()
-		r.updateSimpleRateLimitLocked(defaultBurstDuration)
-	}
+	// Ensures that any user configured rate limits are effectively applied.
+	r.computeAndApplyRateLimitLocked()
+	// If the fairness key rate limit default has changed, update the per-key rate limit.
 	if (r.fairnessKeyRateLimitDefault == nil && oldFairnessKeyRateLimitDefault != nil) ||
-		(r.fairnessKeyRateLimitDefault != nil && oldFairnessKeyRateLimitDefault != nil && *oldFairnessKeyRateLimitDefault != *r.fairnessKeyRateLimitDefault) {
+		(r.fairnessKeyRateLimitDefault != nil && oldFairnessKeyRateLimitDefault != nil &&
+			*oldFairnessKeyRateLimitDefault != *r.fairnessKeyRateLimitDefault) {
 		r.updatePerKeySimpleRateLimitLocked(defaultBurstDuration)
 	}
 }
@@ -230,9 +223,6 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 		return
 	}
 	config := userData.GetData().GetPerType()[int32(r.taskQueueType)].GetConfig()
-	if config == nil {
-		return
-	}
 	// If rate limit is an empty message, it means rate limit could have been unset via API.
 	// In this case, the apiConfigRPS will need to be unset.
 	queueRateLimit := config.GetQueueRateLimit()
@@ -290,9 +280,6 @@ func (r *rateLimitManager) updateSimpleRateLimitLocked(burstDuration time.Durati
 // updatePerKeySimpleRateLimitLocked is only called when the user data changes.
 func (r *rateLimitManager) updatePerKeySimpleRateLimitLocked(burstDuration time.Duration) {
 	if r.fairnessKeyRateLimitDefault == nil {
-		return
-	}
-	if r.fairnessKeyRateLimitDefault == nil {
 		r.clearPerKeyRateLimitsLocked()
 		return
 	}
@@ -325,13 +312,7 @@ func (r *rateLimitManager) updatePerKeySimpleRateLimitLocked(burstDuration time.
 
 // clearPerKeyRateLimitsLocked removes all fairness per-key rate limits.
 func (r *rateLimitManager) clearPerKeyRateLimitsLocked() {
-	it := r.perKeyReady.Iterator()
-	for it.HasNext() {
-		e := it.Next()
-		r.perKeyReady.Delete(e.Key())
-	}
-	it.Close()
-
+	r.perKeyReady = cache.New(r.config.FairnessKeyRateLimitCacheSize(), nil)
 	r.perKeyLimit = simpleLimiterParams{}
 }
 
