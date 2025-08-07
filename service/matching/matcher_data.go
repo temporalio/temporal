@@ -604,6 +604,10 @@ func makeSimpleLimiterParams(rate float64, burstDuration time.Duration) simpleLi
 func (p simpleLimiterParams) never() bool   { return p.interval < 0 }
 func (p simpleLimiterParams) limited() bool { return p.interval > 0 }
 
+func (p simpleLimiterParams) Equals(other simpleLimiterParams) bool {
+	return p.interval == other.interval && p.burst == other.burst
+}
+
 // delay returns the time until the limiter is ready.
 // If the return value is <= 0 then the limiter can go now.
 func (ready simpleLimiter) delay(now int64) time.Duration {
