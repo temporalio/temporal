@@ -480,12 +480,6 @@ func (tm *priTaskMatcher) ReprocessAllTasks() {
 	}
 }
 
-// Rate returns the current dynamic rate setting
-func (tm *priTaskMatcher) Rate() float64 {
-	rps, _ := tm.rateLimitManager.GetEffectiveRPSAndSource()
-	return rps
-}
-
 func (tm *priTaskMatcher) poll(
 	ctx context.Context, pollMetadata *pollMetadata, queryOnly bool,
 ) (*internalTask, error) {

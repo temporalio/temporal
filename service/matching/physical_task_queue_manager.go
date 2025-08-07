@@ -100,7 +100,6 @@ type (
 	matcherInterface interface {
 		Start()
 		Stop()
-		Rate() float64
 		Poll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		PollForQuery(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		OfferQuery(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error)
@@ -537,7 +536,8 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	}
 	if includeTaskQueueStatus {
 		response.DescResponse.TaskQueueStatus = c.backlogMgr.BacklogStatus()
-		response.DescResponse.TaskQueueStatus.RatePerSecond = c.matcher.Rate()
+		rps, _ := c.partitionMgr.GetRateLimitManager().GetEffectiveRPSAndSource()
+		response.DescResponse.TaskQueueStatus.RatePerSecond = rps
 	}
 	return response
 }
