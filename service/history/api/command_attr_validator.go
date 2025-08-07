@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tqid"
@@ -128,6 +129,10 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetHeartbeatTimeout()); err != nil {
 		return failedCause, serviceerror.NewInvalidArgumentf("Invalid HeartbeatTimeout for ScheduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType)
+	}
+
+	if err := priorities.Validate(attributes.Priority); err != nil {
+		return failedCause, err
 	}
 
 	ScheduleToCloseSet := attributes.GetScheduleToCloseTimeout().AsDuration() > 0
@@ -556,6 +561,10 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 
 	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), targetNamespace.String()); err != nil {
 		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fmt.Errorf("invalid SearchAttributes on StartChildWorkflowCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
+	}
+
+	if err := priorities.Validate(attributes.Priority); err != nil {
+		return failedCause, err
 	}
 
 	// Inherit taskqueue from parent workflow execution if not provided on command

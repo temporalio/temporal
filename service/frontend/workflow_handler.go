@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -485,6 +486,10 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		// in case of retries, the field is set to the original value.
 		request = common.CloneProto(request)
 		request.SearchAttributes = sa
+	}
+
+	if err := priorities.Validate(request.Priority); err != nil {
+		return nil, err
 	}
 
 	if err := wh.validateWorkflowCompletionCallbacks(namespaceName, request.GetCompletionCallbacks()); err != nil {
@@ -2063,6 +2068,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		// cloning here so in case of retry the field is set to the current search attributes
 		request = common.CloneProto(request)
 		request.SearchAttributes = sa
+	}
+
+	if err := priorities.Validate(request.Priority); err != nil {
+		return nil, err
 	}
 
 	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
