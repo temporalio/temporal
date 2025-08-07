@@ -200,6 +200,13 @@ func (r *rateLimitManager) GetRateLimiter() quotas.RateLimiter {
 	return r.dynamicRateLimiter
 }
 
+func float64PtrEqual(a, b *float64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
 // Updates the API-configured RPS based on the latest user data
 // and applies the new rate limit if the effective RPS has changed.
 func (r *rateLimitManager) UserDataChanged() {
@@ -213,9 +220,7 @@ func (r *rateLimitManager) UserDataChanged() {
 	// If the fairness key rate limit default has changed, update the per-key rate limit.
 	// UpdateTaskQueueConfig API is the single source for the per-key rate limit.
 	// This is only updated when the user data changes.
-	if (r.fairnessKeyRateLimitDefault == nil && oldFairnessKeyRateLimitDefault != nil) ||
-		(r.fairnessKeyRateLimitDefault != nil && oldFairnessKeyRateLimitDefault != nil &&
-			*oldFairnessKeyRateLimitDefault != *r.fairnessKeyRateLimitDefault) {
+	if !float64PtrEqual(r.fairnessKeyRateLimitDefault, oldFairnessKeyRateLimitDefault) {
 		r.updatePerKeySimpleRateLimitLocked(defaultBurstDuration)
 	}
 }
