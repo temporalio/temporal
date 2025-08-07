@@ -417,7 +417,7 @@ func (s *chasmEngineSuite) validateCreateRequest(
 	s.True(ok)
 
 	activityInfo := &persistencespb.ActivityInfo{}
-	err := serialization.ProtoDecode(updatedNode.Data, activityInfo)
+	err := serialization.Decode(updatedNode.Data, activityInfo)
 	s.NoError(err)
 	s.Equal(expectedActivityID, activityInfo.ActivityId)
 }
@@ -483,7 +483,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 			s.True(ok)
 
 			activityInfo := &persistencespb.ActivityInfo{}
-			err := serialization.ProtoDecode(updatedNode.Data, activityInfo)
+			err := serialization.Decode(updatedNode.Data, activityInfo)
 			s.NoError(err)
 			s.Equal(newActivityID, activityInfo.ActivityId)
 			return tests.UpdateWorkflowExecutionResponse, nil

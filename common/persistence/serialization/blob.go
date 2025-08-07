@@ -13,7 +13,7 @@ func HistoryBranchToBlob(info *persistencespb.HistoryBranch) (*commonpb.DataBlob
 
 func HistoryBranchFromBlob(data *commonpb.DataBlob) (*persistencespb.HistoryBranch, error) {
 	result := &persistencespb.HistoryBranch{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func WorkflowExecutionStateToBlob(info *persistencespb.WorkflowExecutionState) (*commonpb.DataBlob, error) {
@@ -22,7 +22,7 @@ func WorkflowExecutionStateToBlob(info *persistencespb.WorkflowExecutionState) (
 
 func WorkflowExecutionStateFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionState, error) {
 	result := &persistencespb.WorkflowExecutionState{}
-	if err := ProtoDecode(data, result); err != nil {
+	if err := Decode(data, result); err != nil {
 		return nil, err
 	}
 	// Initialize the WorkflowExecutionStateDetails for old records.
@@ -44,7 +44,7 @@ func TransferTaskInfoToBlob(info *persistencespb.TransferTaskInfo) (*commonpb.Da
 
 func TransferTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TransferTaskInfo, error) {
 	result := &persistencespb.TransferTaskInfo{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func TimerTaskInfoToBlob(info *persistencespb.TimerTaskInfo) (*commonpb.DataBlob, error) {
@@ -53,7 +53,7 @@ func TimerTaskInfoToBlob(info *persistencespb.TimerTaskInfo) (*commonpb.DataBlob
 
 func TimerTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TimerTaskInfo, error) {
 	result := &persistencespb.TimerTaskInfo{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func ReplicationTaskInfoToBlob(info *persistencespb.ReplicationTaskInfo) (*commonpb.DataBlob, error) {
@@ -62,7 +62,7 @@ func ReplicationTaskInfoToBlob(info *persistencespb.ReplicationTaskInfo) (*commo
 
 func ReplicationTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ReplicationTaskInfo, error) {
 	result := &persistencespb.ReplicationTaskInfo{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func VisibilityTaskInfoToBlob(info *persistencespb.VisibilityTaskInfo) (*commonpb.DataBlob, error) {
@@ -71,7 +71,7 @@ func VisibilityTaskInfoToBlob(info *persistencespb.VisibilityTaskInfo) (*commonp
 
 func VisibilityTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.VisibilityTaskInfo, error) {
 	result := &persistencespb.VisibilityTaskInfo{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func ArchivalTaskInfoToBlob(info *persistencespb.ArchivalTaskInfo) (*commonpb.DataBlob, error) {
@@ -80,12 +80,12 @@ func ArchivalTaskInfoToBlob(info *persistencespb.ArchivalTaskInfo) (*commonpb.Da
 
 func ArchivalTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ArchivalTaskInfo, error) {
 	result := &persistencespb.ArchivalTaskInfo{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func OutboundTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.OutboundTaskInfo, error) {
 	result := &persistencespb.OutboundTaskInfo{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func QueueMetadataToBlob(metadata *persistencespb.QueueMetadata) (*commonpb.DataBlob, error) {
@@ -95,7 +95,7 @@ func QueueMetadataToBlob(metadata *persistencespb.QueueMetadata) (*commonpb.Data
 
 func QueueMetadataFromBlob(data *commonpb.DataBlob) (*persistencespb.QueueMetadata, error) {
 	result := &persistencespb.QueueMetadata{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func QueueStateToBlob(info *persistencespb.QueueState) (*commonpb.DataBlob, error) {
@@ -104,5 +104,5 @@ func QueueStateToBlob(info *persistencespb.QueueState) (*commonpb.DataBlob, erro
 
 func QueueStateFromBlob(data *commonpb.DataBlob) (*persistencespb.QueueState, error) {
 	result := &persistencespb.QueueState{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }

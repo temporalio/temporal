@@ -127,7 +127,7 @@ func (m *HistoryTaskQueueManagerImpl) ReadRawTasks(
 	responseTasks := make([]RawHistoryTask, len(response.Messages))
 	for i, message := range response.Messages {
 		var task persistencespb.HistoryTask
-		err := serialization.ProtoDecode(message.Data, &task)
+		err := serialization.Decode(message.Data, &task)
 		if err != nil {
 			return nil, fmt.Errorf("%v: %w", ErrMsgDeserializeRawHistoryTask, err)
 		}

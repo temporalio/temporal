@@ -350,7 +350,7 @@ func (t *serializerImpl) ShardInfoToBlob(info *persistencespb.ShardInfo) (*commo
 
 func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ShardInfo, error) {
 	shardInfo := &persistencespb.ShardInfo{}
-	err := ProtoDecode(data, shardInfo)
+	err := Decode(data, shardInfo)
 
 	if err != nil {
 		return nil, err
@@ -383,7 +383,7 @@ func (t *serializerImpl) NamespaceDetailToBlob(info *persistencespb.NamespaceDet
 
 func (t *serializerImpl) NamespaceDetailFromBlob(data *commonpb.DataBlob) (*persistencespb.NamespaceDetail, error) {
 	result := &persistencespb.NamespaceDetail{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func (t *serializerImpl) HistoryTreeInfoToBlob(info *persistencespb.HistoryTreeInfo) (*commonpb.DataBlob, error) {
@@ -392,7 +392,7 @@ func (t *serializerImpl) HistoryTreeInfoToBlob(info *persistencespb.HistoryTreeI
 
 func (t *serializerImpl) HistoryTreeInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.HistoryTreeInfo, error) {
 	result := &persistencespb.HistoryTreeInfo{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func (t *serializerImpl) HistoryBranchToBlob(info *persistencespb.HistoryBranch) (*commonpb.DataBlob, error) {
@@ -401,7 +401,7 @@ func (t *serializerImpl) HistoryBranchToBlob(info *persistencespb.HistoryBranch)
 
 func (t *serializerImpl) HistoryBranchFromBlob(data *commonpb.DataBlob) (*persistencespb.HistoryBranch, error) {
 	result := &persistencespb.HistoryBranch{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func (t *serializerImpl) WorkflowExecutionInfoToBlob(info *persistencespb.WorkflowExecutionInfo) (*commonpb.DataBlob, error) {
@@ -410,7 +410,7 @@ func (t *serializerImpl) WorkflowExecutionInfoToBlob(info *persistencespb.Workfl
 
 func (t *serializerImpl) WorkflowExecutionInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionInfo, error) {
 	result := &persistencespb.WorkflowExecutionInfo{}
-	err := ProtoDecode(data, result)
+	err := Decode(data, result)
 	if err != nil {
 		return nil, err
 	}
@@ -435,7 +435,7 @@ func (t *serializerImpl) ActivityInfoToBlob(info *persistencespb.ActivityInfo) (
 
 func (t *serializerImpl) ActivityInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ActivityInfo, error) {
 	result := &persistencespb.ActivityInfo{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func (t *serializerImpl) ChildExecutionInfoToBlob(info *persistencespb.ChildExecutionInfo) (*commonpb.DataBlob, error) {
@@ -444,7 +444,7 @@ func (t *serializerImpl) ChildExecutionInfoToBlob(info *persistencespb.ChildExec
 
 func (t *serializerImpl) ChildExecutionInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ChildExecutionInfo, error) {
 	result := &persistencespb.ChildExecutionInfo{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func (t *serializerImpl) SignalInfoToBlob(info *persistencespb.SignalInfo) (*commonpb.DataBlob, error) {
@@ -453,7 +453,7 @@ func (t *serializerImpl) SignalInfoToBlob(info *persistencespb.SignalInfo) (*com
 
 func (t *serializerImpl) SignalInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.SignalInfo, error) {
 	result := &persistencespb.SignalInfo{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func (t *serializerImpl) RequestCancelInfoToBlob(info *persistencespb.RequestCancelInfo) (*commonpb.DataBlob, error) {
@@ -462,7 +462,7 @@ func (t *serializerImpl) RequestCancelInfoToBlob(info *persistencespb.RequestCan
 
 func (t *serializerImpl) RequestCancelInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.RequestCancelInfo, error) {
 	result := &persistencespb.RequestCancelInfo{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func (t *serializerImpl) TimerInfoToBlob(info *persistencespb.TimerInfo) (*commonpb.DataBlob, error) {
@@ -471,7 +471,7 @@ func (t *serializerImpl) TimerInfoToBlob(info *persistencespb.TimerInfo) (*commo
 
 func (t *serializerImpl) TimerInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TimerInfo, error) {
 	result := &persistencespb.TimerInfo{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func (t *serializerImpl) TaskInfoToBlob(info *persistencespb.AllocatedTaskInfo) (*commonpb.DataBlob, error) {
@@ -480,7 +480,7 @@ func (t *serializerImpl) TaskInfoToBlob(info *persistencespb.AllocatedTaskInfo) 
 
 func (t *serializerImpl) TaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.AllocatedTaskInfo, error) {
 	result := &persistencespb.AllocatedTaskInfo{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func (t *serializerImpl) TaskQueueInfoToBlob(info *persistencespb.TaskQueueInfo) (*commonpb.DataBlob, error) {
@@ -489,7 +489,7 @@ func (t *serializerImpl) TaskQueueInfoToBlob(info *persistencespb.TaskQueueInfo)
 
 func (t *serializerImpl) TaskQueueInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueInfo, error) {
 	result := &persistencespb.TaskQueueInfo{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func (t *serializerImpl) TaskQueueUserDataToBlob(data *persistencespb.TaskQueueUserData) (*commonpb.DataBlob, error) {
@@ -498,7 +498,7 @@ func (t *serializerImpl) TaskQueueUserDataToBlob(data *persistencespb.TaskQueueU
 
 func (t *serializerImpl) TaskQueueUserDataFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueUserData, error) {
 	result := &persistencespb.TaskQueueUserData{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func (t *serializerImpl) ChecksumToBlob(checksum *persistencespb.Checksum) (*commonpb.DataBlob, error) {
@@ -511,7 +511,7 @@ func (t *serializerImpl) ChecksumToBlob(checksum *persistencespb.Checksum) (*com
 
 func (t *serializerImpl) ChecksumFromBlob(data *commonpb.DataBlob) (*persistencespb.Checksum, error) {
 	result := &persistencespb.Checksum{}
-	err := ProtoDecode(data, result)
+	err := Decode(data, result)
 	if err != nil || result.GetFlavor() == enumsspb.CHECKSUM_FLAVOR_UNSPECIFIED {
 		// If result is an empty struct (Flavor is unspecified), replace it with nil, because everywhere in the code checksum is pointer type.
 		return nil, err
@@ -525,7 +525,7 @@ func (t *serializerImpl) QueueMetadataToBlob(metadata *persistencespb.QueueMetad
 
 func (t *serializerImpl) QueueMetadataFromBlob(data *commonpb.DataBlob) (*persistencespb.QueueMetadata, error) {
 	result := &persistencespb.QueueMetadata{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func (t *serializerImpl) ReplicationTaskToBlob(replicationTask *replicationspb.ReplicationTask) (*commonpb.DataBlob, error) {
@@ -534,7 +534,7 @@ func (t *serializerImpl) ReplicationTaskToBlob(replicationTask *replicationspb.R
 
 func (t *serializerImpl) ReplicationTaskFromBlob(data *commonpb.DataBlob) (*replicationspb.ReplicationTask, error) {
 	result := &replicationspb.ReplicationTask{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func (t *serializerImpl) NexusEndpointToBlob(endpoint *persistencespb.NexusEndpoint) (*commonpb.DataBlob, error) {
@@ -543,7 +543,7 @@ func (t *serializerImpl) NexusEndpointToBlob(endpoint *persistencespb.NexusEndpo
 
 func (t *serializerImpl) NexusEndpointFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusEndpoint, error) {
 	result := &persistencespb.NexusEndpoint{}
-	return result, ProtoDecode(data, result)
+	return result, Decode(data, result)
 }
 
 func (t *serializerImpl) ChasmNodeToBlobs(node *persistencespb.ChasmNode) (metadata *commonpb.DataBlob, nodedata *commonpb.DataBlob, retErr error) {
@@ -559,7 +559,7 @@ func (t *serializerImpl) ChasmNodeFromBlobs(metadata *commonpb.DataBlob, data *c
 		Metadata: &persistencespb.ChasmNodeMetadata{},
 		Data:     data,
 	}
-	return result, ProtoDecode(metadata, result.Metadata)
+	return result, Decode(metadata, result.Metadata)
 }
 
 func (t *serializerImpl) ChasmNodeToBlob(node *persistencespb.ChasmNode) (*commonpb.DataBlob, error) {
@@ -568,5 +568,5 @@ func (t *serializerImpl) ChasmNodeToBlob(node *persistencespb.ChasmNode) (*commo
 
 func (t *serializerImpl) ChasmNodeFromBlob(blob *commonpb.DataBlob) (*persistencespb.ChasmNode, error) {
 	result := &persistencespb.ChasmNode{}
-	return result, ProtoDecode(blob, result)
+	return result, Decode(blob, result)
 }

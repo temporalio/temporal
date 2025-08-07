@@ -1429,7 +1429,7 @@ func (s *TaskSerializer) serializeOutboundTask(task tasks.Task) (*commonpb.DataB
 
 func (s *TaskSerializer) deserializeOutboundTask(blob *commonpb.DataBlob) (tasks.Task, error) {
 	info := &persistencespb.OutboundTaskInfo{}
-	if err := ProtoDecode(blob, info); err != nil {
+	if err := Decode(blob, info); err != nil {
 		return nil, err
 	}
 

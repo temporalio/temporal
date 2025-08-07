@@ -36,7 +36,7 @@ func TestProtoDecode(t *testing.T) {
 
 	t.Run("nil data blob", func(t *testing.T) {
 		var result persistencespb.ShardInfo
-		err := ProtoDecode(nil, &result)
+		err := Decode(nil, &result)
 		require.Error(t, err)
 		assert.IsType(t, &DeserializationError{}, err)
 		assert.Contains(t, err.Error(), "cannot decode nil")
@@ -49,7 +49,7 @@ func TestProtoDecode(t *testing.T) {
 		}
 
 		var result persistencespb.ShardInfo
-		err := ProtoDecode(blob, &result)
+		err := Decode(blob, &result)
 		require.NoError(t, err)
 	})
 
@@ -60,7 +60,7 @@ func TestProtoDecode(t *testing.T) {
 		}
 
 		var result persistencespb.ShardInfo
-		err := ProtoDecode(blob, &result)
+		err := Decode(blob, &result)
 		require.Error(t, err)
 		assert.IsType(t, &UnknownEncodingTypeError{}, err)
 		assert.Contains(t, err.Error(), "unknown or unsupported encoding type 999")
@@ -73,7 +73,7 @@ func TestProtoDecode(t *testing.T) {
 		}
 
 		var result persistencespb.ShardInfo
-		err := ProtoDecode(blob, &result)
+		err := Decode(blob, &result)
 		require.Error(t, err)
 		assert.IsType(t, &DeserializationError{}, err)
 		assert.Contains(t, err.Error(), "error deserializing using Proto3 encoding")

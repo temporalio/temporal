@@ -1050,7 +1050,7 @@ func unmarshalProto(
 		}
 	}
 
-	if err := serialization.ProtoDecode(dataBlob, value.Interface().(proto.Message)); err != nil {
+	if err := serialization.Decode(dataBlob, value.Interface().(proto.Message)); err != nil {
 		return reflect.Value{}, err
 	}
 

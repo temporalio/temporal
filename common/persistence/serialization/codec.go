@@ -45,7 +45,7 @@ func encodeBlob(m proto.Message, encoding enumspb.EncodingType) (*commonpb.DataB
 	}
 }
 
-func ProtoDecode(data *commonpb.DataBlob, result proto.Message) error {
+func Decode(data *commonpb.DataBlob, result proto.Message) error {
 	if data == nil {
 		return NewDeserializationError(enumspb.ENCODING_TYPE_UNSPECIFIED, errors.New("cannot decode nil"))
 	}
