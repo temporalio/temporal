@@ -204,8 +204,9 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	sd1Node := node.children["SubData1"]
 	s.NotNil(sd1Node)
 
-	err := node.syncSubComponents()
+	needsPointerResolution, err := node.syncSubComponents()
 	s.NoError(err)
+	s.False(needsPointerResolution)
 	s.Len(node.mutation.DeletedNodes, 1)
 
 	sd1Node = node.children["SubData1"]
@@ -471,9 +472,8 @@ func (s *nodeSuite) TestPointerAttributes() {
 		rootNode.valueState = valueStateNeedSerialize
 
 		ctx := NewMutableContext(context.Background(), rootNode)
-		rootComponent.SubComponent11Pointer, err = ComponentPointerTo(ctx, sc11)
-		s.NoError(err)
-		s.Equal([]string{"SubComponent1", "SubComponent11"}, rootComponent.SubComponent11Pointer.Internal.v)
+		rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, sc11)
+		s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.ft)
 
 		mutations, err := rootNode.CloseTransaction()
 		s.NoError(err)
@@ -531,8 +531,9 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	component.SubComponent1.Internal.v.(*TestSubComponent1).SubComponent11 = NewEmptyField[*TestSubComponent11]()
 	s.NotNil(node.children["SubComponent1"].children["SubComponent11"])
 
-	err := node.syncSubComponents()
+	needsPointerResolution, err := node.syncSubComponents()
 	s.NoError(err)
+	s.False(needsPointerResolution)
 
 	s.Len(node.mutation.DeletedNodes, 1)
 	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
@@ -548,8 +549,9 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteMiddleNode() {
 	component.SubComponent1 = NewEmptyField[*TestSubComponent1]()
 	s.NotNil(node.children["SubComponent1"])
 
-	err := node.syncSubComponents()
+	needsPointerResolution, err := node.syncSubComponents()
 	s.NoError(err)
+	s.False(needsPointerResolution)
 
 	s.Len(node.mutation.DeletedNodes, 3)
 	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
@@ -2343,7 +2345,8 @@ func (s *nodeSuite) testComponentTree() *Node {
 	// Sync tree with subcomponents of TestComponent.
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(4) // for InitialVersionedTransition of children.
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(4)
-	err = node.syncSubComponents()
+	needsPointerResolution, err := node.syncSubComponents()
+	s.False(needsPointerResolution)
 	s.NoError(err)
 	s.Empty(node.mutation.DeletedNodes)
 
