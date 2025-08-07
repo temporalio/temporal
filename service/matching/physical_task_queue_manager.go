@@ -537,6 +537,7 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	if includeTaskQueueStatus {
 		response.DescResponse.TaskQueueStatus = c.backlogMgr.BacklogStatus()
 		rps, _ := c.partitionMgr.GetRateLimitManager().GetEffectiveRPSAndSource()
+		//nolint:staticcheck // SA1019: using deprecated TaskQueueStatus for legacy compatibility
 		response.DescResponse.TaskQueueStatus.RatePerSecond = rps
 	}
 	return response

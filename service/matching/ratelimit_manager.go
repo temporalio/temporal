@@ -124,7 +124,7 @@ func (r *rateLimitManager) computeEffectiveRPSAndSource() {
 
 func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
 	oldRPS := r.effectiveRPS
-	r.computeEffectiveRPSAndSource()
+	r.computeEffectiveRPSAndSourceLocked()
 	newRPS := r.effectiveRPS
 	if oldRPS == newRPS {
 		// No change in effective RPS, no need to update rate limiters.
