@@ -15,15 +15,18 @@ type (
 	rateLimitManager struct {
 		mu sync.Mutex
 
-		effectiveRPS                float64                 // Min of api/worker set RPS and system defaults. Always reflects the overall task queue RPS.
-		rateLimitSource             enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
-		userDataManager             userDataManager         // User data manager to fetch user data for task queue configurations.
+		userDataManager userDataManager       // User data manager to fetch user data for task queue configurations.
+		config          *taskQueueConfig      // Dynamic configuration for task queues set by system.
+		taskQueueType   enumspb.TaskQueueType // Task queue type
+
+		effectiveRPS float64 // Min of api/worker set RPS and system defaults. Always reflects the overall task queue RPS.
+		systemRPS    float64 // Min of partition level dispatch rates times the number of read partitions.
+
+		// Sources of the effective RPS.
 		workerRPS                   *float64                // RPS set by worker at the time of polling, if available.
 		apiConfigRPS                *float64                // RPS set via API, if available.
 		fairnessKeyRateLimitDefault *float64                // fairnessKeyRateLimitDefault set via API, if available
-		systemRPS                   float64                 // Min of partition level dispatch rates times the number of read partitions.
-		config                      *taskQueueConfig        // Dynamic configuration for task queues set by system.
-		taskQueueType               enumspb.TaskQueueType   // Task queue type
+		rateLimitSource             enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
 
 		timeSource        clock.TimeSource
 		adminNsRate       float64
@@ -122,18 +125,6 @@ func (r *rateLimitManager) computeEffectiveRPSAndSource() {
 	r.computeEffectiveRPSAndSourceLocked()
 }
 
-func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
-	oldRPS := r.effectiveRPS
-	r.computeEffectiveRPSAndSourceLocked()
-	newRPS := r.effectiveRPS
-	if oldRPS == newRPS {
-		// No change in effective RPS, no need to update rate limiters.
-		return
-	}
-	r.updateRatelimitLocked()
-	r.updateSimpleRateLimitLocked(defaultBurstDuration)
-}
-
 // Computes the effectiveRPS and its source by evaluating all possible rate limit configurations.
 // - If an API-level RPS is configured, effectiveRPS = min(system default RPS, API-configured RPS)
 // - Else if a worker-level RPS is configured, effectiveRPS = min(system default RPS, worker-configured RPS)
@@ -166,6 +157,18 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 		r.effectiveRPS = r.systemRPS
 		r.rateLimitSource = enumspb.RATE_LIMIT_SOURCE_SYSTEM
 	}
+}
+
+func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
+	oldRPS := r.effectiveRPS
+	r.computeEffectiveRPSAndSourceLocked()
+	newRPS := r.effectiveRPS
+	if oldRPS == newRPS {
+		// No change in effective RPS, no need to update rate limiters.
+		return
+	}
+	r.updateRatelimitLocked()
+	r.updateSimpleRateLimitLocked(defaultBurstDuration)
 }
 
 // Lazy injection of poll metadata.
@@ -208,6 +211,8 @@ func (r *rateLimitManager) UserDataChanged() {
 	// Ensures that any user configured rate limits are effectively applied.
 	r.computeAndApplyRateLimitLocked()
 	// If the fairness key rate limit default has changed, update the per-key rate limit.
+	// UpdateTaskQueueConfig API is the single source for the per-key rate limit.
+	// This is only updated when the user data changes.
 	if (r.fairnessKeyRateLimitDefault == nil && oldFairnessKeyRateLimitDefault != nil) ||
 		(r.fairnessKeyRateLimitDefault != nil && oldFairnessKeyRateLimitDefault != nil &&
 			*oldFairnessKeyRateLimitDefault != *r.fairnessKeyRateLimitDefault) {
