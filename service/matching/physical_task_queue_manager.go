@@ -63,7 +63,7 @@ type (
 		partitionMgr       *taskQueuePartitionManagerImpl
 		queue              *PhysicalTaskQueueKey
 		config             *taskQueueConfig
-		defaultPriorityKey int32
+		defaultPriorityKey priorityKey
 
 		// This context is valid for lifetime of this physicalTaskQueueManagerImpl.
 		// It can be used to notify when the task queue is closing.
@@ -92,8 +92,8 @@ type (
 		pollerScalingRateLimiter    quotas.RateLimiter
 
 		taskTrackerLock sync.RWMutex
-		tasksAdded      map[int32]*taskTracker
-		tasksDispatched map[int32]*taskTracker
+		tasksAdded      map[priorityKey]*taskTracker
+		tasksDispatched map[priorityKey]*taskTracker
 	}
 
 	// TODO(pri): old matcher cleanup
@@ -153,8 +153,8 @@ func newPhysicalTaskQueueManager(
 		matchingClient:           e.matchingRawClient,
 		clusterMeta:              e.clusterMeta,
 		metricsHandler:           taggedMetricsHandler,
-		tasksAdded:               make(map[int32]*taskTracker),
-		tasksDispatched:          make(map[int32]*taskTracker),
+		tasksAdded:               make(map[priorityKey]*taskTracker),
+		tasksDispatched:          make(map[priorityKey]*taskTracker),
 		pollerScalingRateLimiter: quotas.NewDefaultOutgoingRateLimiter(pollerScalingRateLimitFn),
 		deploymentRegistrationCh: make(chan struct{}, 1),
 	}
@@ -224,6 +224,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.taskValidator,
 			pqMgr.logger,
 			newFairMetricsHandler(taggedMetricsHandler),
+			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
@@ -265,6 +266,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.taskValidator,
 			pqMgr.logger,
 			newPriMetricsHandler(taggedMetricsHandler),
+			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
@@ -292,7 +294,7 @@ func newPhysicalTaskQueueManager(
 			return nil, err
 		}
 	}
-	pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.rateLimiter)
+	pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.GetRateLimitManager().GetRateLimiter())
 	pqMgr.matcher = pqMgr.oldMatcher
 	return pqMgr, nil
 }
@@ -410,7 +412,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 
 		if pollMetadata.forwardedFrom == "" && // only track the original polls, not forwarded ones.
 			(!task.isStarted() || !task.started.hasEmptyResponse()) { // Need to filter out the empty "started" ones
-			c.getOrCreateTaskTracker(c.tasksDispatched, task.getPriority().GetPriorityKey()).incrementTaskCount()
+			c.getOrCreateTaskTracker(c.tasksDispatched, priorityKey(task.getPriority().GetPriorityKey())).incrementTaskCount()
 		}
 		return task, nil
 	}
@@ -447,6 +449,10 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 		var invalidTaskTag = getInvalidTaskTag(task)
 		c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
 		// Don't try to set read level here because it may have been advanced already.
+
+		// Stay alive as long as we're invalidating tasks
+		c.MarkAlive()
+
 		return nil
 	}
 	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue)
@@ -473,7 +479,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchQueryTask(
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	task := newInternalQueryTask(taskId, request)
 	if !task.isForwarded() {
-		c.getOrCreateTaskTracker(c.tasksAdded, request.GetPriority().GetPriorityKey()).incrementTaskCount()
+		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(request.GetPriority().GetPriorityKey())).incrementTaskCount()
 	}
 	return c.matcher.OfferQuery(ctx, task)
 }
@@ -498,7 +504,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 	}
 	task := newInternalNexusTask(taskId, deadline, opDeadline, request)
 	if !task.isForwarded() {
-		c.getOrCreateTaskTracker(c.tasksAdded, 0).incrementTaskCount() // Nexus has no priorities
+		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(0)).incrementTaskCount() // Nexus has no priorities
 	}
 	return c.matcher.OfferNexusTask(ctx, task)
 }
@@ -550,16 +556,16 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority() map[int32]*taskqueue
 	defer c.taskTrackerLock.RUnlock()
 
 	for pri, tt := range c.tasksAdded {
-		if _, ok := stats[pri]; !ok {
-			stats[pri] = &taskqueuepb.TaskQueueStats{}
+		if _, ok := stats[int32(pri)]; !ok {
+			stats[int32(pri)] = &taskqueuepb.TaskQueueStats{}
 		}
-		stats[pri].TasksAddRate = tt.rate()
+		stats[int32(pri)].TasksAddRate = tt.rate()
 	}
 	for pri, tt := range c.tasksDispatched {
-		if _, ok := stats[pri]; !ok {
-			stats[pri] = &taskqueuepb.TaskQueueStats{}
+		if _, ok := stats[int32(pri)]; !ok {
+			stats[int32(pri)] = &taskqueuepb.TaskQueueStats{}
 		}
-		stats[pri].TasksDispatchRate = tt.rate()
+		stats[int32(pri)].TasksDispatchRate = tt.rate()
 	}
 	return stats
 }
@@ -572,7 +578,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
-		c.getOrCreateTaskTracker(c.tasksAdded, task.getPriority().GetPriorityKey()).incrementTaskCount()
+		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey())).incrementTaskCount()
 		if disable, _ := testhooks.Get[bool](c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch); disable {
 			return false, nil
 		}
@@ -781,8 +787,8 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 }
 
 func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
-	intervals map[int32]*taskTracker,
-	priorityKey int32,
+	intervals map[priorityKey]*taskTracker,
+	priorityKey priorityKey,
 ) *taskTracker {
 	if priorityKey == 0 {
 		priorityKey = c.defaultPriorityKey

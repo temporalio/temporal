@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -176,16 +177,18 @@ func (s *PrioritySuite) TestSubqueue_Migration() {
 	}
 
 	processActivity := func() {
-		_, err := s.TaskPoller().PollAndHandleActivityTask(
-			tv,
-			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-				nothing, err := payloads.Encode()
-				s.NoError(err)
-				return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
-			},
-			taskpoller.WithContext(ctx),
-		)
-		s.NoError(err)
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			_, err := s.TaskPoller().PollAndHandleActivityTask(
+				tv,
+				func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+					nothing, err := payloads.Encode()
+					s.NoError(err)
+					return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
+				},
+				taskpoller.WithContext(ctx),
+			)
+			assert.NoError(c, err)
+		}, 5*time.Second, time.Millisecond)
 	}
 
 	s.T().Log("process first 100 activities")
@@ -229,9 +232,6 @@ type FairnessSuite struct {
 
 func TestFairnessSuite(t *testing.T) {
 	t.Parallel()
-	if !testcore.UseCassandraPersistence() {
-		t.Skip("only on cassandra for now")
-	}
 	suite.Run(t, new(FairnessSuite))
 }
 

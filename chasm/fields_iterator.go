@@ -43,8 +43,8 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 			if fieldT == UnimplementedComponentT {
 				continue
 			}
-			fieldN := fieldName(valueT.Elem().Field(i))
 
+			fieldN := fieldName(valueT.Elem().Field(i))
 			var fieldErr error
 			fieldK := fieldKindUnspecified
 			if fieldT.AssignableTo(protoMessageT) {

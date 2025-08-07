@@ -1372,6 +1372,12 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		descrResp.DescResponse.Config = userData.GetData().GetPerType()[int32(req.GetTaskQueueType())].GetConfig()
 	}
 
+	effectiveRPS, sourceForEffectiveRPS := pm.GetRateLimitManager().GetEffectiveRPSAndSource()
+	descrResp.DescResponse.EffectiveRateLimit = &workflowservice.DescribeTaskQueueResponse_EffectiveRateLimit{
+		RequestsPerSecond: float32(effectiveRPS),
+		RateLimitSource:   sourceForEffectiveRPS,
+	}
+
 	return descrResp, nil
 }
 
@@ -2391,11 +2397,11 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 	isOwner, ownershipLostCh, err := e.checkNexusEndpointsOwnership()
 	if err != nil {
 		e.logger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
-		return nil, serviceerror.NewFailedPreconditionf("cannot verify ownership of Nexus endpoints table: %v", err)
+		return nil, serviceerror.NewAbortedf("cannot verify ownership of Nexus endpoints table: %v", err)
 	}
 	if !isOwner {
 		e.logger.Error("Matching node doesn't think it's the Nexus endpoints table owner", tag.Error(err))
-		return nil, serviceerror.NewFailedPrecondition("matching node doesn't think it's the Nexus endpoints table owner")
+		return nil, serviceerror.NewAborted("matching node doesn't think it's the Nexus endpoints table owner")
 	}
 
 	if request.Wait {
@@ -2421,7 +2427,7 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 			// long-poll: wait for data to change/appear
 			select {
 			case <-ownershipLostCh:
-				return nil, serviceerror.NewFailedPrecondition("Nexus endpoints table ownership lost")
+				return nil, serviceerror.NewAborted("Nexus endpoints table ownership lost")
 			case <-ctx.Done():
 				return resp, nil
 			case <-tableVersionChanged:

@@ -273,6 +273,9 @@ message WorkflowExecutionInfo {
 
     // Run ID of the execution that supersedes this one (via terminate or continue-as-new).
     string successor_run_id = 105;
+
+    // Pause info contains the details of the request to pause the workflow.
+    WorkflowPauseInfo pause_info = 106;
 }
 
 message ExecutionStats {
@@ -378,6 +381,11 @@ message VisibilityTaskInfo {
     reserved 9;
     int64 close_visibility_task_id = 10;
     google.protobuf.Timestamp close_time = 11;
+
+    oneof task_details {
+        // If the task addresses a CHASM component, this field will be set.
+        ChasmTaskInfo chasm_task_info = 12;
+    }
 }
 
 // timer column
@@ -810,4 +818,26 @@ message NexusOperationCancellationInfo {
 message ResetChildInfo {
     // If true, the parent workflow should terminate the child before starting it.
     bool should_terminate_and_start = 1;
+}
+
+message WorkflowPauseInfo {
+    // List of activities that are to be paused.
+    repeated ActivityPauseInfo activity_pause_infos = 1;
+}
+
+message ActivityPauseInfo {
+    // The time when the activity pause info was updated.
+    google.protobuf.Timestamp update_time = 1;
+
+    // The type of the activity.
+    string activity_type = 2;
+
+    // The identity of the actor that paused the activity.
+    string identity = 3;
+
+    // The ID of the request that paused the activity. Duplicates pause requests with the same ID will succeed.
+    string request_id = 4;
+
+    // The reason for the pause.
+    string reason = 5;
 }

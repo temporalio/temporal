@@ -295,6 +295,8 @@ func (s *TaskSerializer) serializeVisibilityTask(
 		visibilityTask = s.visibilityCloseTaskToProto(task)
 	case *tasks.DeleteExecutionVisibilityTask:
 		visibilityTask = s.visibilityDeleteTaskToProto(task)
+	case *tasks.ChasmTask:
+		visibilityTask = s.visibilityChasmTaskToProto(task)
 	default:
 		return nil, serviceerror.NewInternalf("Unknown visibility task type: %v", task)
 	}
@@ -320,6 +322,8 @@ func (s *TaskSerializer) deserializeVisibilityTasks(
 		visibility = s.visibilityCloseTaskFromProto(visibilityTask)
 	case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
 		visibility = s.visibilityDeleteTaskFromProto(visibilityTask)
+	case enumsspb.TASK_TYPE_CHASM:
+		visibility = s.visibilityChasmTaskFromProto(visibilityTask)
 	default:
 		return nil, serviceerror.NewInternalf("Unknown visibility task type: %v", visibilityTask.TaskType)
 	}
@@ -1134,6 +1138,34 @@ func (s *TaskSerializer) visibilityDeleteTaskFromProto(
 		TaskID:                         deleteVisibilityTask.TaskId,
 		CloseExecutionVisibilityTaskID: deleteVisibilityTask.CloseVisibilityTaskId,
 		CloseTime:                      deleteVisibilityTask.CloseTime.AsTime(),
+	}
+}
+
+func (s *TaskSerializer) visibilityChasmTaskToProto(task *tasks.ChasmTask) *persistencespb.VisibilityTaskInfo {
+	return &persistencespb.VisibilityTaskInfo{
+		NamespaceId:    task.WorkflowKey.NamespaceID,
+		WorkflowId:     task.WorkflowKey.WorkflowID,
+		RunId:          task.WorkflowKey.RunID,
+		TaskId:         task.TaskID,
+		TaskType:       task.GetType(),
+		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
+		TaskDetails: &persistencespb.VisibilityTaskInfo_ChasmTaskInfo{
+			ChasmTaskInfo: task.Info,
+		},
+	}
+}
+
+func (s *TaskSerializer) visibilityChasmTaskFromProto(task *persistencespb.VisibilityTaskInfo) tasks.Task {
+	return &tasks.ChasmTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			task.NamespaceId,
+			task.WorkflowId,
+			task.RunId,
+		),
+		VisibilityTimestamp: task.VisibilityTime.AsTime(),
+		TaskID:              task.TaskId,
+		Category:            tasks.CategoryVisibility,
+		Info:                task.GetChasmTaskInfo(),
 	}
 }
 
