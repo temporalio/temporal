@@ -5852,7 +5852,10 @@ func (ms *MutableStateImpl) PauseActivityByType(activityType string, identity st
 			},
 		}
 		ms.executionStateUpdated = true
-		// TODO: update search attribute
+		if err := ms.updatePauseInfoSearchAttribute(); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	pausedActivities := ms.executionInfo.PauseInfo.ActivityPauseInfos
@@ -5877,21 +5880,30 @@ func (ms *MutableStateImpl) PauseActivityByType(activityType string, identity st
 		Reason:       reason,
 	})
 	ms.executionStateUpdated = true
-	// TODO: update search attribute
+	if err := ms.updatePauseInfoSearchAttribute(); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
-	pausedInfoMap := make(map[string]struct{})
+	pausedActivityTypes := make(map[string]struct{})
 
+	// add pending activities that are paused to the map
 	for _, ai := range ms.GetPendingActivityInfos() {
 		if !ai.Paused {
 			continue
 		}
-		pausedInfoMap[ai.ActivityType.Name] = struct{}{}
+		pausedActivityTypes[ai.ActivityType.Name] = struct{}{}
 	}
-	pausedInfo := make([]string, 0, len(pausedInfoMap))
-	for activityType := range pausedInfoMap {
+
+	// add activities that are explicitly paused by type to the map
+	for _, activityPauseInfo := range ms.executionInfo.PauseInfo.ActivityPauseInfos {
+		pausedActivityTypes[activityPauseInfo.ActivityType] = struct{}{}
+	}
+
+	pausedInfo := make([]string, 0, len(pausedActivityTypes))
+	for activityType := range pausedActivityTypes {
 		pausedInfo = append(pausedInfo, fmt.Sprintf("property:activityType=%s", activityType))
 	}
 
@@ -5903,10 +5915,30 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 	exeInfo := ms.executionInfo
 	if exeInfo.SearchAttributes == nil {
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
+		ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalPauseInfo: pauseInfoPayload})
+		return ms.taskGenerator.GenerateUpsertVisibilityTask()
 	}
 
-	if proto.Equal(exeInfo.SearchAttributes[searchattribute.TemporalPauseInfo], pauseInfoPayload) {
-		return nil // unchanged
+	existingSearchAttributes, found := exeInfo.SearchAttributes[searchattribute.TemporalPauseInfo]
+	if !found {
+		ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalPauseInfo: pauseInfoPayload})
+		return ms.taskGenerator.GenerateUpsertVisibilityTask()
+	}
+
+	decoded, err := searchattribute.DecodeValue(existingSearchAttributes, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	if err != nil {
+		return err
+	}
+	decodedExistingSearchAttributes, ok := decoded.([]string)
+	if !ok {
+		return serviceerror.NewInternal(fmt.Sprintf("decoded pause info search attribute value is not a list of strings: %+v", decoded))
+	}
+
+	// sort the slices to make sure the comparison is correct
+	slices.Sort(decodedExistingSearchAttributes)
+	slices.Sort(pausedInfo)
+	if slices.Equal(decodedExistingSearchAttributes, pausedInfo) {
+		return nil
 	}
 
 	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalPauseInfo: pauseInfoPayload})
