@@ -31,20 +31,22 @@ func Invoke(
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			frontendRequest := request.GetFrontendRequest()
-			var activityIDs []string
+			var activityIDsToPause []string
+			var activityTypeToPause string
 			switch a := frontendRequest.GetActivity().(type) {
 			case *workflowservice.PauseActivityRequest_Id:
-				activityIDs = append(activityIDs, a.Id)
+				activityIDsToPause = append(activityIDsToPause, a.Id)
 			case *workflowservice.PauseActivityRequest_Type:
-				activityType := a.Type
+				activityTypeToPause = a.Type
 				for _, ai := range mutableState.GetPendingActivityInfos() {
-					if ai.ActivityType.Name == activityType {
-						activityIDs = append(activityIDs, ai.ActivityId)
+					if ai.ActivityType.Name == activityTypeToPause {
+						// find all activities of this type that are currently pending and pause them.
+						activityIDsToPause = append(activityIDsToPause, ai.ActivityId)
 					}
 				}
 			}
 
-			if len(activityIDs) == 0 {
+			if len(activityIDsToPause) == 0 && activityTypeToPause == "" {
 				return nil, consts.ErrActivityNotFound
 			}
 
@@ -58,11 +60,15 @@ func Invoke(
 				},
 			}
 
-			for _, activityId := range activityIDs {
+			for _, activityId := range activityIDsToPause {
 				err := workflow.PauseActivity(mutableState, activityId, pauseInfo)
 				if err != nil {
 					return nil, err
 				}
+			}
+
+			if err := mutableState.PauseActivityByType(activityTypeToPause, frontendRequest.GetIdentity(), frontendRequest.GetReason(), ""); err != nil {
+				return nil, err
 			}
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
