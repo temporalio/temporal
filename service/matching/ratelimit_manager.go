@@ -160,12 +160,12 @@ func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
 	oldRPS := r.effectiveRPS
 	r.computeEffectiveRPSAndSourceLocked()
 	newRPS := r.effectiveRPS
-	if oldRPS == newRPS {
-		// No change in effective RPS, no need to update rate limiters.
-		return
+	// If the effective RPS has changed, we need to update the rate limiters.
+	if oldRPS != newRPS {
+		r.updateRatelimitLocked()
+		r.updateSimpleRateLimitLocked(defaultBurstDuration)
 	}
-	r.updateRatelimitLocked()
-	r.updateSimpleRateLimitLocked(defaultBurstDuration)
+	// Internally, checks if the per-key rate limit has changed and updates it accordingly.
 	r.updatePerKeySimpleRateLimitLocked(defaultBurstDuration)
 }
 
