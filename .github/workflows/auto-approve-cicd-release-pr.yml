@@ -1,0 +1,17 @@
+name: Auto-approve temporal-cicd[bot] PRs on cloud release branches
+on:
+  pull_request:
+    branches:
+      - cloud/**
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  auto_approve:
+    runs-on: ubuntu-latest
+    if: ${{ github.actor == 'temporal-cicd[bot]' }}
+    steps:
+      - name: Approve PR
+        run: gh pr review --approve ${{ github.event.pull_request.html_url }}
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
