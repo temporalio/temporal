@@ -5871,10 +5871,7 @@ func (ms *MutableStateImpl) PauseActivityByType(activityType string, identity st
 		Reason:       reason,
 	})
 	ms.executionStateUpdated = true
-	if err := ms.updatePauseInfoSearchAttribute(); err != nil {
-		return err
-	}
-	return nil
+	return ms.updatePauseInfoSearchAttribute()
 }
 
 func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
