@@ -39,13 +39,13 @@ func (s *fieldSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.nodeBackend = NewMockNodeBackend(s.controller)
 
-	s.registry = NewRegistry()
+	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	s.registry = NewRegistry(s.logger)
 	err := s.registry.Register(newTestLibrary(s.controller))
 	s.NoError(err)
 
 	s.timeSource = clock.NewEventTimeSource()
 	s.nodePathEncoder = &testNodePathEncoder{}
-	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 }
 
 func (s *fieldSuite) SetupSubTest() {
