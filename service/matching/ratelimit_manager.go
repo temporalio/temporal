@@ -170,7 +170,8 @@ func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
 }
 
 // Lazy injection of poll metadata.
-// Will update the effective RPS only if the worker RPS has changed.
+// Called whenever a new poll request comes in.
+// This allows the rate limit manager to adjust its rate limits based on any updates right before polling happens.
 func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
