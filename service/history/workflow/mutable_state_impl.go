@@ -5843,22 +5843,13 @@ func (ms *MutableStateImpl) UpdateActivity(scheduledEventId int64, updater histo
 func (ms *MutableStateImpl) PauseActivityByType(activityType string, identity string, reason string) error {
 	if ms.executionInfo.PauseInfo == nil {
 		ms.executionInfo.PauseInfo = &persistencespb.WorkflowPauseInfo{
-			ActivityPauseInfos: []*persistencespb.ActivityPauseInfo{
-				{
-					ActivityType: activityType,
-					Identity:     identity,
-					Reason:       reason,
-				},
-			},
+			ActivityPauseInfos: []*persistencespb.ActivityPauseInfo{},
 		}
-		ms.executionStateUpdated = true
-		if err := ms.updatePauseInfoSearchAttribute(); err != nil {
-			return err
-		}
-		return nil
 	}
 
 	pausedActivities := ms.executionInfo.PauseInfo.ActivityPauseInfos
+
+	// check if the activity is already paused
 	if slices.ContainsFunc(pausedActivities, func(activity *persistencespb.ActivityPauseInfo) bool {
 		return activity.ActivityType == activityType
 	}) {
@@ -5870,7 +5861,7 @@ func (ms *MutableStateImpl) PauseActivityByType(activityType string, identity st
 	if len(pausedActivities) >= maxPausedActivityTypeCount {
 		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT, "too many activity types paused")
 	}
-	if len(activityType) >= maxPausedActivityTypeLength {
+	if len(activityType) > maxPausedActivityTypeLength {
 		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT, "activity type name is too long to pause")
 	}
 
