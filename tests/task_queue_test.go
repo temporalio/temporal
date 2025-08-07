@@ -350,6 +350,112 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitZero() {
 	s.Len(runTimes, 0, "No activities should run when API rate limit is 0")
 }
 
+func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
+	const (
+		workerSetRPS      = 10.0 // Worker rate limit for activities
+		apiSetRPS         = 5.0  // API rate limit for activities set to half of workerSetRPS to test override behavior
+		taskCount         = 30   // Number of tasks to launch
+		activityTaskQueue = "RateLimitTest_Update"
+		drainTimeout      = 15 * time.Second // 5 second additional buffer to prevent flakiness
+		buffer            = 2 * time.Second
+		activityName      = "timedActivity"
+	)
+
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
+
+	var (
+		mu       sync.Mutex
+		runTimes []time.Time
+		wg       sync.WaitGroup
+	)
+
+	wg.Add(taskCount)
+
+	// Activity: record run time
+	activityFunc := func(ctx context.Context) error {
+		defer wg.Done()
+		mu.Lock()
+		runTimes = append(runTimes, time.Now())
+		mu.Unlock()
+		return nil
+	}
+
+	// Workflow: calls the activity
+	workflowFn := func(ctx workflow.Context) error {
+		ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			TaskQueue:           activityTaskQueue,
+			StartToCloseTimeout: 5 * time.Second,
+		})
+		return workflow.ExecuteActivity(ctx, activityName).Get(ctx, nil)
+	}
+
+	// Start activity worker
+	activityWorker := worker.New(s.SdkClient(), activityTaskQueue, worker.Options{
+		TaskQueueActivitiesPerSecond: workerSetRPS, // worker set RPS should take effect initially
+	})
+	activityWorker.RegisterActivityWithOptions(activityFunc, activity.RegisterOptions{Name: activityName})
+	s.NoError(activityWorker.Start())
+	defer activityWorker.Stop()
+
+	// Start workflow worker
+	tv := testvars.New(s.T())
+	wfWorker := worker.New(s.SdkClient(), tv.TaskQueue().GetName(), worker.Options{})
+	wfWorker.RegisterWorkflow(workflowFn)
+	s.NoError(wfWorker.Start())
+	defer wfWorker.Stop()
+
+	// Launch workflows under workerSetRPS (2 RPS)
+	for i := 0; i < taskCount; i++ {
+		_, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
+			TaskQueue: tv.TaskQueue().GetName(),
+			ID:        fmt.Sprintf("wf-dynamic-%d", i),
+		}, workflowFn)
+		s.NoError(err)
+	}
+
+	s.True(common.AwaitWaitGroup(&wg, drainTimeout), "tasks with dynamic config didn't complete")
+	s.Len(runTimes, taskCount, "task count mismatch")
+
+	// Measure duration with workerSetRPS config
+	firstGap := runTimes[len(runTimes)-1].Sub(runTimes[0])
+
+	// Reset for API override phase
+	runTimes = nil
+	wg.Add(taskCount)
+
+	//  Apply API rate limit override workerSetRPS (2 RPS) to set the effective RPS to 1 RPS
+	_, err := s.FrontendClient().UpdateTaskQueueConfig(context.Background(), &workflowservice.UpdateTaskQueueConfigRequest{
+		Namespace:     s.Namespace().String(),
+		Identity:      tv.ClientIdentity(),
+		TaskQueue:     activityTaskQueue,
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: float32(apiSetRPS)},
+			Reason:    "test api override",
+		},
+	})
+	s.NoError(err)
+
+	// Launch workflows under API override (1 RPS)
+	for i := 0; i < taskCount; i++ {
+		_, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
+			TaskQueue: tv.TaskQueue().GetName(),
+			ID:        fmt.Sprintf("wf-api-%d", i),
+		}, workflowFn)
+		s.NoError(err)
+	}
+
+	s.True(common.AwaitWaitGroup(&wg, drainTimeout), "tasks with API override didn't complete")
+	s.Len(runTimes, taskCount, "task count mismatch after API override")
+
+	// Measure duration with API override
+	secondGap := runTimes[len(runTimes)-1].Sub(runTimes[0])
+	// Second gap must be twice as larger as the effective RPS is halved
+	s.Greater(secondGap, 2*firstGap-buffer, "API override did not reduce throughput as expected")
+}
+
 // TestUpdateAndDescribeTaskQueueConfig tests the update and describe task queue config functionality.
 // It updates the task queue config via the frontend API and then describes the task queue to verify,
 // that the updated configuration is reflected correctly.

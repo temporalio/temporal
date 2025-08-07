@@ -37,8 +37,6 @@ type (
 		dynamicRateBurst quotas.MutableRateBurst
 		// dynamicRateLimiter is the dynamic rate limiter that can be used to force refresh on new rates.
 		dynamicRateLimiter *quotas.DynamicRateLimiterImpl
-		// forceRefreshRateOnce is used to force refresh rate limit for first time
-		forceRefreshRateOnce sync.Once
 
 		// Fairness tasks rate limiter.
 		wholeQueueLimit simpleLimiterParams
@@ -251,12 +249,10 @@ func (r *rateLimitManager) updateRatelimitLocked() {
 	}
 	r.dynamicRateBurst.SetRPS(newRPS)
 	r.dynamicRateBurst.SetBurst(burst)
-	r.forceRefreshRateOnce.Do(func() {
-		// Dynamic rate limiter only refresh its rate every 1m. Before that initial 1m interval, it uses default rate
-		// which is 10K and is too large in most cases. We need to force refresh for the first time this rate is set
-		// by poller. Only need to do that once. If the rate change later, it will be refresh in 1m.
-		r.dynamicRateLimiter.Refresh()
-	})
+	// updateRatelimitLocked is invoked whenever the effective RPS value changes.
+	// At this point, the dynamicRateLimiter is always updated with the latest rate and burst values,
+	// ensuring that the new rate limit takes effect immediately.
+	r.dynamicRateLimiter.Refresh()
 }
 
 // UpdateSimpleRateLimit updates the overall queue rate limits for the simpleRateLimiter implementation
