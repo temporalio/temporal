@@ -101,12 +101,14 @@ func (r *rateLimitManager) setAdminNsRate(rps float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.adminNsRate = rps
+	r.computeAndApplyRateLimitLocked()
 }
 
 func (r *rateLimitManager) setAdminTqRate(rps float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.adminTqRate = rps
+	r.computeAndApplyRateLimitLocked()
 }
 
 func (r *rateLimitManager) setNumReadPartitions(val int) {
@@ -114,6 +116,7 @@ func (r *rateLimitManager) setNumReadPartitions(val int) {
 	defer r.mu.Unlock()
 	// Defaulting to 1 partition if misconfigured
 	r.numReadPartitions = max(val, 1)
+	r.computeAndApplyRateLimitLocked()
 }
 
 func (r *rateLimitManager) computeEffectiveRPSAndSource() {
@@ -157,9 +160,9 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 }
 
 func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
-	oldRPS := r.effectiveRPS
+	oldRPS := r.effectiveRPS / float64(r.numReadPartitions)
 	r.computeEffectiveRPSAndSourceLocked()
-	newRPS := r.effectiveRPS
+	newRPS := r.effectiveRPS / float64(r.numReadPartitions)
 	// If the effective RPS has changed, we need to update the rate limiters.
 	if oldRPS != newRPS {
 		r.updateRatelimitLocked()
@@ -206,6 +209,7 @@ func (r *rateLimitManager) UserDataChanged() {
 	defer r.mu.Unlock()
 	// Fetch the latest user data and update the API-configured RPS.
 	r.trySetRPSFromUserDataLocked()
+	r.computeAndApplyRateLimitLocked()
 }
 
 // trySetRPSFromUserDataLocked sets the apiConfigRPS from user data.
