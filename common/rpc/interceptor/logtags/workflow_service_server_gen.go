@@ -68,6 +68,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.DescribeTaskQueueResponse:
 		return nil
+	case *workflowservice.DescribeWorkerRequest:
+		return nil
+	case *workflowservice.DescribeWorkerResponse:
+		return nil
 	case *workflowservice.DescribeWorkerDeploymentRequest:
 		return nil
 	case *workflowservice.DescribeWorkerDeploymentResponse:
@@ -90,6 +94,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.ExecuteMultiOperationRequest:
 		return nil
 	case *workflowservice.ExecuteMultiOperationResponse:
+		return nil
+	case *workflowservice.FetchWorkerConfigRequest:
+		return nil
+	case *workflowservice.FetchWorkerConfigResponse:
 		return nil
 	case *workflowservice.GetClusterInfoRequest:
 		return nil
@@ -177,6 +185,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.ListWorkerDeploymentsResponse:
 		return nil
+	case *workflowservice.ListWorkersRequest:
+		return nil
+	case *workflowservice.ListWorkersResponse:
+		return nil
 	case *workflowservice.ListWorkflowExecutionsRequest:
 		return nil
 	case *workflowservice.ListWorkflowExecutionsResponse:
@@ -241,6 +253,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *workflowservice.RecordActivityTaskHeartbeatByIdResponse:
+		return nil
+	case *workflowservice.RecordWorkerHeartbeatRequest:
+		return nil
+	case *workflowservice.RecordWorkerHeartbeatResponse:
 		return nil
 	case *workflowservice.RegisterNamespaceRequest:
 		return nil
@@ -416,9 +432,17 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.UpdateScheduleResponse:
 		return nil
+	case *workflowservice.UpdateTaskQueueConfigRequest:
+		return nil
+	case *workflowservice.UpdateTaskQueueConfigResponse:
+		return nil
 	case *workflowservice.UpdateWorkerBuildIdCompatibilityRequest:
 		return nil
 	case *workflowservice.UpdateWorkerBuildIdCompatibilityResponse:
+		return nil
+	case *workflowservice.UpdateWorkerConfigRequest:
+		return nil
+	case *workflowservice.UpdateWorkerConfigResponse:
 		return nil
 	case *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest:
 		return nil

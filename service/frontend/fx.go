@@ -61,7 +61,6 @@ type (
 var Module = fx.Options(
 	resource.Module,
 	scheduler.Module,
-	dynamicconfig.Module,
 	deployment.Module,
 	workerdeployment.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
@@ -602,6 +601,7 @@ func AdminHandlerProvider(
 	logger log.SnTaggedLogger,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	taskManager persistence.TaskManager,
+	fairTaskManager persistence.FairTaskManager,
 	persistenceExecutionManager persistence.ExecutionManager,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	persistenceMetadataManager persistence.MetadataManager,
@@ -631,6 +631,7 @@ func AdminHandlerProvider(
 		visibilityMgr,
 		logger,
 		taskManager,
+		fairTaskManager,
 		persistenceExecutionManager,
 		clusterMetadataManager,
 		persistenceMetadataManager,

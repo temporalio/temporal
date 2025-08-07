@@ -9,6 +9,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -33,11 +35,23 @@ func getWorkflowExecutionContextForTask(
 	workflowCache wcache.Cache,
 	task tasks.Task,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
+	archetype := chasmworkflow.Archetype
+	switch task.GetType() {
+	case enumsspb.TASK_TYPE_CHASM,
+		enumsspb.TASK_TYPE_CHASM_PURE,
+		enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT, // retention timer
+		enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
+		enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
+		// Those tasks work for all archetypes.
+		archetype = chasm.ArchetypeAny
+	}
+
 	return getWorkflowExecutionContext(
 		ctx,
 		shardContext,
 		workflowCache,
 		taskWorkflowKey(task),
+		archetype,
 		locks.PriorityLow,
 	)
 }
@@ -47,6 +61,7 @@ func getWorkflowExecutionContext(
 	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	key definition.WorkflowKey,
+	archetype chasm.Archetype,
 	lockPriority locks.Priority,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
 	if key.GetRunID() == "" {
@@ -56,6 +71,7 @@ func getWorkflowExecutionContext(
 			workflowCache,
 			key.NamespaceID,
 			key.WorkflowID,
+			archetype,
 			lockPriority,
 		)
 	}
@@ -67,11 +83,12 @@ func getWorkflowExecutionContext(
 	}
 	// workflowCache will automatically use short context timeout when
 	// locking workflow for all background calls, we don't need a separate context here
-	weContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
+	weContext, release, err := workflowCache.GetOrCreateChasmEntity(
 		ctx,
 		shardContext,
 		namespaceID,
 		execution,
+		archetype,
 		lockPriority,
 	)
 	if common.IsContextDeadlineExceededErr(err) {
@@ -87,6 +104,7 @@ func getCurrentWorkflowExecutionContext(
 	workflowCache wcache.Cache,
 	namespaceID string,
 	workflowID string,
+	archetype chasm.Archetype,
 	lockPriority locks.Priority,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
 	currentRunID, err := wcache.GetCurrentRunID(
@@ -106,6 +124,7 @@ func getCurrentWorkflowExecutionContext(
 		shardContext,
 		workflowCache,
 		definition.NewWorkflowKey(namespaceID, workflowID, currentRunID),
+		archetype,
 		lockPriority,
 	)
 	if err != nil {
@@ -308,7 +327,7 @@ func (e *stateMachineEnvironment) getValidatedMutableState(
 	key definition.WorkflowKey,
 	validate func(workflowContext historyi.WorkflowContext, ms historyi.MutableState, potentialStaleState bool) error,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, historyi.MutableState, error) {
-	wfCtx, release, err := getWorkflowExecutionContext(ctx, e.shardContext, e.cache, key, locks.PriorityLow)
+	wfCtx, release, err := getWorkflowExecutionContext(ctx, e.shardContext, e.cache, key, chasmworkflow.Archetype, locks.PriorityLow)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -340,11 +359,12 @@ func (e *stateMachineEnvironment) validateNotZombieWorkflow(
 func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, accessType hsm.AccessType, accessor func(*hsm.Node) error) (retErr error) {
 	wfCtx, release, ms, err := e.getValidatedMutableState(
 		ctx, ref.WorkflowKey, func(workflowContext historyi.WorkflowContext, ms historyi.MutableState, potentialStaleState bool) error {
-			// For task references we never want to access a zombie workflow, even if the machine is accessed for read.
+			accessTypeForZombieValidation := accessType
 			if ref.TaskID != 0 {
-				accessType = hsm.AccessWrite
+				// For task references we never want to access a zombie workflow, even if the machine is accessed for read.
+				accessTypeForZombieValidation = hsm.AccessWrite
 			}
-			if err := e.validateNotZombieWorkflow(ms, accessType); err != nil {
+			if err := e.validateNotZombieWorkflow(ms, accessTypeForZombieValidation); err != nil {
 				return err
 			}
 			return e.validateStateMachineRef(ctx, workflowContext, ms, ref, potentialStaleState)

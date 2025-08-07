@@ -183,6 +183,12 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"DeleteWorkflowRule":                    {},
 		"ListWorkflowRules":                     {},
 		"TriggerWorkflowRule":                   {},
+		"RecordWorkerHeartbeat":                 {},
+		"ListWorkers":                           {},
+		"DescribeWorker":                        {},
+		"UpdateTaskQueueConfig":                 {},
+		"FetchWorkerConfig":                     {},
+		"UpdateWorkerConfig":                    {},
 	}, apis)
 }
 

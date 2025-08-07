@@ -481,7 +481,7 @@ func parseLinks(links []*nexuspb.Link, logger log.Logger) []nexus.Link {
 		if err != nil {
 			// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
 			// so ignoring the error for now; we will revisit how to handle these errors later.
-			logger.Error(fmt.Sprintf("failed to parse link url: %s", link.Url), tag.Error(err))
+			logger.Error("failed to parse link url", tag.URL(link.Url), tag.Error(err))
 			continue
 		}
 		nexusLinks = append(nexusLinks, nexus.Link{
@@ -675,7 +675,11 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 			TaskQueue: oc.taskQueue,
 		}))
 	if err != nil {
-		oc.logger.Error(fmt.Sprintf("failed to forward Nexus request. error constructing ServiceBaseURL. baseURL=%s namespace=%s task_queue=%s", httpClient.BaseURL(), oc.namespaceName, oc.taskQueue), tag.Error(err))
+		oc.logger.Error("failed to forward Nexus request. error constructing ServiceBaseURL",
+			tag.URL(httpClient.BaseURL()),
+			tag.WorkflowNamespace(oc.namespaceName),
+			tag.WorkflowTaskQueueName(oc.taskQueue),
+			tag.Error(err))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarding_failed"))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed")
 	}

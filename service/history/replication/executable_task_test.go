@@ -34,7 +34,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/testing/protomock"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -56,7 +55,6 @@ type (
 		clientBean              *client.MockBean
 		shardController         *shard.MockController
 		namespaceCache          *namespace.MockRegistry
-		ndcHistoryResender      *xdc.MockNDCHistoryResender
 		remoteHistoryFetcher    *eventhandler.MockHistoryPaginatedFetcher
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
@@ -70,6 +68,7 @@ type (
 		taskId                  int64
 		mockExecutionManager    *persistence.MockExecutionManager
 		serializer              serialization.Serializer
+		resendHandler           *eventhandler.MockResendHandler
 		toolBox                 ProcessToolBox
 
 		task *ExecutableTaskImpl
@@ -95,7 +94,6 @@ func (s *executableTaskSuite) SetupTest() {
 	s.clientBean = client.NewMockBean(s.controller)
 	s.shardController = shard.NewMockController(s.controller)
 	s.namespaceCache = namespace.NewMockRegistry(s.controller)
-	s.ndcHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 	s.remoteHistoryFetcher = eventhandler.NewMockHistoryPaginatedFetcher(s.controller)
@@ -103,6 +101,7 @@ func (s *executableTaskSuite) SetupTest() {
 	s.logger = log.NewNoopLogger()
 	s.config = tests.NewDynamicConfig()
 	s.serializer = serialization.NewSerializer()
+	s.resendHandler = eventhandler.NewMockResendHandler(s.controller)
 
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
@@ -122,9 +121,9 @@ func (s *executableTaskSuite) SetupTest() {
 		Config:                  s.config,
 		ClusterMetadata:         s.clusterMetadata,
 		ClientBean:              s.clientBean,
+		ResendHandler:           s.resendHandler,
 		ShardController:         s.shardController,
 		NamespaceCache:          s.namespaceCache,
-		NDCHistoryResender:      s.ndcHistoryResender,
 		MetricsHandler:          s.metricsHandler,
 		Logger:                  s.logger,
 		EagerNamespaceRefresher: s.eagerNamespaceRefresher,
@@ -141,7 +140,6 @@ func (s *executableTaskSuite) SetupTest() {
 		receivedTime,
 		s.sourceCluster,
 		s.sourceShardKey,
-		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		&replicationspb.ReplicationTask{
 			RawTaskInfo: &persistencespb.ReplicationTaskInfo{
 				NamespaceId: s.namespaceId,
@@ -302,7 +300,7 @@ func (s *executableTaskSuite) TestResend_Success() {
 		EndEventVersion:   rand.Int63(),
 	}
 
-	s.ndcHistoryResender.EXPECT().SendSingleWorkflowHistory(
+	s.resendHandler.EXPECT().ResendHistoryEvents(
 		gomock.Any(),
 		remoteCluster,
 		namespace.ID(resendErr.NamespaceId),
@@ -331,7 +329,7 @@ func (s *executableTaskSuite) TestResend_NotFound() {
 		EndEventVersion:   rand.Int63(),
 	}
 
-	s.ndcHistoryResender.EXPECT().SendSingleWorkflowHistory(
+	s.resendHandler.EXPECT().ResendHistoryEvents(
 		gomock.Any(),
 		remoteCluster,
 		namespace.ID(resendErr.NamespaceId),
@@ -386,7 +384,7 @@ func (s *executableTaskSuite) TestResend_ResendError_Success() {
 	}
 
 	gomock.InOrder(
-		s.ndcHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		s.resendHandler.EXPECT().ResendHistoryEvents(
 			gomock.Any(),
 			remoteCluster,
 			namespace.ID(resendErr.NamespaceId),
@@ -397,7 +395,7 @@ func (s *executableTaskSuite) TestResend_ResendError_Success() {
 			resendErr.EndEventId,
 			resendErr.EndEventVersion,
 		).Return(anotherResendErr),
-		s.ndcHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		s.resendHandler.EXPECT().ResendHistoryEvents(
 			gomock.Any(),
 			remoteCluster,
 			namespace.ID(anotherResendErr.NamespaceId),
@@ -408,7 +406,7 @@ func (s *executableTaskSuite) TestResend_ResendError_Success() {
 			anotherResendErr.EndEventId,
 			anotherResendErr.EndEventVersion,
 		).Return(nil),
-		s.ndcHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		s.resendHandler.EXPECT().ResendHistoryEvents(
 			gomock.Any(),
 			remoteCluster,
 			namespace.ID(resendErr.NamespaceId),
@@ -449,7 +447,7 @@ func (s *executableTaskSuite) TestResend_ResendError_Error() {
 	}
 
 	gomock.InOrder(
-		s.ndcHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		s.resendHandler.EXPECT().ResendHistoryEvents(
 			gomock.Any(),
 			remoteCluster,
 			namespace.ID(resendErr.NamespaceId),
@@ -460,7 +458,7 @@ func (s *executableTaskSuite) TestResend_ResendError_Error() {
 			resendErr.EndEventId,
 			resendErr.EndEventVersion,
 		).Return(anotherResendErr),
-		s.ndcHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		s.resendHandler.EXPECT().ResendHistoryEvents(
 			gomock.Any(),
 			remoteCluster,
 			namespace.ID(anotherResendErr.NamespaceId),
@@ -500,7 +498,7 @@ func (s *executableTaskSuite) TestResend_SecondResendError_SameWorkflowRun() {
 		EndEventVersion:   resendErr.EndEventVersion,
 	}
 
-	s.ndcHistoryResender.EXPECT().SendSingleWorkflowHistory(
+	s.resendHandler.EXPECT().ResendHistoryEvents(
 		gomock.Any(),
 		remoteCluster,
 		namespace.ID(resendErr.NamespaceId),
@@ -530,7 +528,7 @@ func (s *executableTaskSuite) TestResend_Error() {
 		EndEventVersion:   rand.Int63(),
 	}
 
-	s.ndcHistoryResender.EXPECT().SendSingleWorkflowHistory(
+	s.resendHandler.EXPECT().ResendHistoryEvents(
 		gomock.Any(),
 		remoteCluster,
 		namespace.ID(resendErr.NamespaceId),
@@ -663,10 +661,10 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 	eventBatchOriginal2 := []*historypb.HistoryEvent{
 		{EventId: 21, Version: 12},
 	}
-	blogOriginal1, err := s.serializer.SerializeEvents(eventBatchOriginal1, enumspb.ENCODING_TYPE_PROTO3)
+	blogOriginal1, err := s.serializer.SerializeEvents(eventBatchOriginal1)
 	s.NoError(err)
 
-	blogOriginal2, err := s.serializer.SerializeEvents(eventBatchOriginal2, enumspb.ENCODING_TYPE_PROTO3)
+	blogOriginal2, err := s.serializer.SerializeEvents(eventBatchOriginal2)
 	s.NoError(err)
 	versionHistory := &historyspb.VersionHistory{
 		Items: []*historyspb.VersionHistoryItem{
@@ -684,7 +682,7 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 		{EventId: 1, Version: 12},
 		{EventId: 2, Version: 12},
 	}
-	blobNewRun, err := s.serializer.SerializeEvents(eventBatchNewRun, enumspb.ENCODING_TYPE_PROTO3)
+	blobNewRun, err := s.serializer.SerializeEvents(eventBatchNewRun)
 	s.NoError(err)
 	fetcherNewRun := collection.NewPagingIterator(func(paginationToken []byte) ([]*eventhandler.HistoryBatch, []byte, error) {
 		return []*eventhandler.HistoryBatch{
@@ -750,7 +748,6 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 		time.Now(),
 		s.sourceCluster,
 		s.sourceShardKey,
-		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		&replicationspb.ReplicationTask{
 			TaskType: enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
 			RawTaskInfo: &persistencespb.ReplicationTaskInfo{
@@ -904,7 +901,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 			ClientBean:              s.clientBean,
 			ShardController:         s.shardController,
 			NamespaceCache:          s.namespaceCache,
-			NDCHistoryResender:      s.ndcHistoryResender,
+			ResendHandler:           s.resendHandler,
 			MetricsHandler:          s.metricsHandler,
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
@@ -916,7 +913,6 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 		now,
 		s.sourceCluster,
 		s.sourceShardKey,
-		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		&replicationspb.ReplicationTask{
 			TaskType:            enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},
@@ -979,7 +975,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_Still
 			ClientBean:              s.clientBean,
 			ShardController:         s.shardController,
 			NamespaceCache:          s.namespaceCache,
-			NDCHistoryResender:      s.ndcHistoryResender,
+			ResendHandler:           s.resendHandler,
 			MetricsHandler:          s.metricsHandler,
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
@@ -991,7 +987,6 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_Still
 		now,
 		s.sourceCluster,
 		s.sourceShardKey,
-		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		&replicationspb.ReplicationTask{
 			TaskType:            enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},

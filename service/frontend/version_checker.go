@@ -14,7 +14,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/version/check"
+	"go.temporal.io/server/common/versioninfo"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -51,7 +51,7 @@ func (vc *VersionChecker) Start() {
 			// TODO: specify a timeout for the context
 			ctx := headers.SetCallerInfo(
 				context.TODO(),
-				headers.SystemBackgroundCallerInfo,
+				headers.SystemBackgroundHighCallerInfo,
 			)
 
 			go vc.versionCheckLoop(ctx)
@@ -124,8 +124,8 @@ func isUpdateNeeded(metadata *persistence.GetClusterMetadataResponse) bool {
 		metadata.VersionInfo.LastUpdateTime.AsTime().Before(time.Now().Add(-time.Hour)))
 }
 
-func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClusterMetadataResponse) (*check.VersionCheckRequest, error) {
-	return &check.VersionCheckRequest{
+func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClusterMetadataResponse) (*versioninfo.VersionCheckRequest, error) {
+	return &versioninfo.VersionCheckRequest{
 		Product:   headers.ClientNameServer,
 		Version:   headers.ServerVersion,
 		Arch:      runtime.GOARCH,
@@ -137,11 +137,11 @@ func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClu
 	}, nil
 }
 
-func (vc *VersionChecker) getVersionInfo(req *check.VersionCheckRequest) (*check.VersionCheckResponse, error) {
-	return check.NewCaller().Call(req)
+func (vc *VersionChecker) getVersionInfo(req *versioninfo.VersionCheckRequest) (*versioninfo.VersionCheckResponse, error) {
+	return versioninfo.NewCaller().Call(req)
 }
 
-func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *check.VersionCheckResponse) error {
+func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *versioninfo.VersionCheckResponse) error {
 	metadata, err := vc.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {
 		return err
@@ -163,7 +163,7 @@ func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *check.Versi
 	return nil
 }
 
-func toVersionInfo(resp *check.VersionCheckResponse) (*versionpb.VersionInfo, error) {
+func toVersionInfo(resp *versioninfo.VersionCheckResponse) (*versionpb.VersionInfo, error) {
 	for _, product := range resp.Products {
 		if product.Product == headers.ClientNameServer {
 			return &versionpb.VersionInfo{
@@ -178,7 +178,7 @@ func toVersionInfo(resp *check.VersionCheckResponse) (*versionpb.VersionInfo, er
 	return nil, serviceerror.NewNotFound("version info update was not found in response")
 }
 
-func convertAlerts(alerts []check.Alert) []*versionpb.Alert {
+func convertAlerts(alerts []versioninfo.Alert) []*versionpb.Alert {
 	var result []*versionpb.Alert
 	for _, alert := range alerts {
 		result = append(result, &versionpb.Alert{
@@ -189,7 +189,7 @@ func convertAlerts(alerts []check.Alert) []*versionpb.Alert {
 	return result
 }
 
-func convertReleaseInfo(releaseInfo check.ReleaseInfo) *versionpb.ReleaseInfo {
+func convertReleaseInfo(releaseInfo versioninfo.ReleaseInfo) *versionpb.ReleaseInfo {
 	return &versionpb.ReleaseInfo{
 		Version:     releaseInfo.Version,
 		ReleaseTime: timestamp.UnixOrZeroTimePtr(releaseInfo.ReleaseTime),

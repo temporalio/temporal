@@ -103,6 +103,7 @@ type (
 			newRunId string,
 		) error
 		MarkTaskDuplicated()
+		GetPriority() enumsspb.TaskPriority
 	}
 	ExecutableTaskImpl struct {
 		ProcessToolBox
@@ -134,7 +135,6 @@ func NewExecutableTask(
 	taskReceivedTime time.Time,
 	sourceClusterName string,
 	sourceShardKey ClusterShardKey,
-	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableTaskImpl {
 	return &ExecutableTaskImpl{
@@ -145,7 +145,7 @@ func NewExecutableTask(
 		taskReceivedTime:       taskReceivedTime,
 		sourceClusterName:      sourceClusterName,
 		sourceShardKey:         sourceShardKey,
-		taskPriority:           priority,
+		taskPriority:           replicationTask.GetPriority(),
 		replicationTask:        replicationTask,
 		taskState:              taskStatePending,
 		attempt:                1,
@@ -281,13 +281,19 @@ func (e *ExecutableTaskImpl) MarkTaskDuplicated() {
 	e.isDuplicated = true
 }
 
+func (e *ExecutableTaskImpl) GetPriority() enumsspb.TaskPriority {
+	return e.taskPriority
+}
+
 func (e *ExecutableTaskImpl) emitFinishMetrics(
 	now time.Time,
 ) {
 	if e.isDuplicated {
-		metrics.ReplicationDuplicatedTaskCount.With(e.MetricsHandler).Record(1,
-			metrics.OperationTag(e.metricsTag),
-			metrics.NamespaceTag(e.replicationTask.RawTaskInfo.NamespaceId))
+		if e.replicationTask.RawTaskInfo != nil {
+			metrics.ReplicationDuplicatedTaskCount.With(e.MetricsHandler).Record(1,
+				metrics.OperationTag(e.metricsTag),
+				metrics.NamespaceTag(e.replicationTask.RawTaskInfo.NamespaceId))
+		}
 		return
 	}
 	nsTag := metrics.NamespaceUnknownTag()
@@ -355,32 +361,17 @@ func (e *ExecutableTaskImpl) Resend(
 			metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 		)
 	}()
-	var resendErr error
-	if e.Config.EnableReplicateLocalGeneratedEvent() {
-		resendErr = e.ProcessToolBox.ResendHandler.ResendHistoryEvents(
-			ctx,
-			remoteCluster,
-			namespace.ID(retryErr.NamespaceId),
-			retryErr.WorkflowId,
-			retryErr.RunId,
-			retryErr.StartEventId,
-			retryErr.StartEventVersion,
-			retryErr.EndEventId,
-			retryErr.EndEventVersion,
-		)
-	} else {
-		resendErr = e.ProcessToolBox.NDCHistoryResender.SendSingleWorkflowHistory(
-			ctx,
-			remoteCluster,
-			namespace.ID(retryErr.NamespaceId),
-			retryErr.WorkflowId,
-			retryErr.RunId,
-			retryErr.StartEventId,
-			retryErr.StartEventVersion,
-			retryErr.EndEventId,
-			retryErr.EndEventVersion,
-		)
-	}
+	resendErr := e.ProcessToolBox.ResendHandler.ResendHistoryEvents(
+		ctx,
+		remoteCluster,
+		namespace.ID(retryErr.NamespaceId),
+		retryErr.WorkflowId,
+		retryErr.RunId,
+		retryErr.StartEventId,
+		retryErr.StartEventVersion,
+		retryErr.EndEventId,
+		retryErr.EndEventVersion,
+	)
 	switch resendErr := resendErr.(type) {
 	case nil:
 		// no-op
@@ -801,7 +792,11 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 		tag.ReplicationTask(taskInfo),
 	)
 
-	ctx, cancel := newTaskContext(e.replicationTask.RawTaskInfo.NamespaceId, e.Config.ReplicationTaskApplyTimeout())
+	ctx, cancel := newTaskContext(
+		e.replicationTask.RawTaskInfo.NamespaceId,
+		e.Config.ReplicationTaskApplyTimeout(),
+		headers.SystemPreemptableCallerInfo,
+	)
 	defer cancel()
 
 	return writeTaskToDLQ(ctx, e.DLQWriter, e.sourceShardKey.ShardID, e.SourceClusterName(), shardContext.GetShardID(), taskInfo)
@@ -810,11 +805,21 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 func newTaskContext(
 	namespaceName string,
 	timeout time.Duration,
+	callerInfo headers.CallerInfo,
 ) (context.Context, context.CancelFunc) {
 	ctx := headers.SetCallerInfo(
 		context.Background(),
-		headers.SystemPreemptableCallerInfo,
+		callerInfo,
 	)
 	ctx = headers.SetCallerName(ctx, namespaceName)
 	return context.WithTimeout(ctx, timeout)
+}
+
+func getReplicaitonCallerInfo(priority enumsspb.TaskPriority) headers.CallerInfo {
+	switch priority {
+	case enumsspb.TASK_PRIORITY_LOW:
+		return headers.SystemPreemptableCallerInfo
+	default:
+		return headers.SystemBackgroundLowCallerInfo
+	}
 }

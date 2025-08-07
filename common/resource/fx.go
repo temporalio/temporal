@@ -73,6 +73,7 @@ type (
 // See LifetimeHooksModule for detail
 var Module = fx.Options(
 	persistenceClient.Module,
+	dynamicconfig.Module,
 	fx.Provide(HostNameProvider),
 	fx.Provide(TimeSourceProvider),
 	cluster.MetadataLifetimeHooksModule,
@@ -339,6 +340,7 @@ func RPCFactoryProvider(
 	resolver *membership.GRPCResolver,
 	tracingStatsHandler telemetry.ClientStatsHandler,
 	monitor membership.Monitor,
+	dc *dynamicconfig.Collection,
 ) (common.RPCFactory, error) {
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
@@ -349,7 +351,9 @@ func RPCFactoryProvider(
 	if tracingStatsHandler != nil {
 		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
 	}
-	return rpc.NewFactory(
+	enableServerKeepalive := dynamicconfig.EnableInternodeServerKeepAlive.Get(dc)()
+	enableClientKeepalive := dynamicconfig.EnableInternodeClientKeepAlive.Get(dc)()
+	factory := rpc.NewFactory(
 		cfg,
 		svcName,
 		logger,
@@ -360,7 +364,11 @@ func RPCFactoryProvider(
 		frontendTLSConfig,
 		options,
 		monitor,
-	), nil
+	)
+	factory.EnableInternodeServerKeepalive = enableServerKeepalive
+	factory.EnableInternodeClientKeepalive = enableClientKeepalive
+	logger.Debug(fmt.Sprintf("RPC factory created. enableServerKeepalive: %v, enableClientKeepalive: %v", enableServerKeepalive, enableClientKeepalive))
+	return factory, nil
 }
 
 func FrontendHTTPClientCacheProvider(

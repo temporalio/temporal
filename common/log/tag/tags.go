@@ -80,6 +80,11 @@ func workflowListFilterType(listFilterType string) ZapTag {
 
 // general
 
+// Archetype returns tag for Archetype
+func Archetype(archetype string) ZapTag {
+	return NewStringTag("archetype", archetype)
+}
+
 // WorkflowTimeoutType returns tag for WorkflowTimeoutType
 func WorkflowTimeoutType(timeoutType enumspb.TimeoutType) ZapTag {
 	return NewStringerTag("wf-timeout-type", timeoutType)
@@ -988,4 +993,24 @@ func Cause(cause string) ZapTag {
 
 func NexusOperation(operation string) ZapTag {
 	return NewStringTag("nexus-operation", operation)
+}
+
+// NexusTaskQueueName returns tag for NexusTaskQueueName
+func NexusTaskQueueName(taskQueueName string) ZapTag {
+	return NewStringTag("nexus-task-queue-name", taskQueueName)
+}
+
+// WorkflowRuleID returns tag for WorkflowRuleID
+func WorkflowRuleID(ruleID string) ZapTag {
+	return NewStringTag("wf-rule-id", ruleID)
+}
+
+// URL returns tag for URL
+func URL(url string) ZapTag {
+	return NewStringTag("url", url)
+}
+
+// TaskPriority returns tag for TaskPriority
+func TaskPriority(priority string) ZapTag {
+	return NewStringTag("task-priority", priority)
 }

@@ -144,6 +144,8 @@ type (
 	// trace/span/log exporters.
 	ExportConfig struct {
 		inner exportConfig `yaml:",inline"`
+		// CustomExporters is for testing.
+		CustomExporters map[SpanExporterType]otelsdktrace.SpanExporter `yaml:"-"`
 	}
 
 	SpanExporterType string

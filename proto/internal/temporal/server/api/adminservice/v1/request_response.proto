@@ -54,12 +54,16 @@ message ImportWorkflowExecutionResponse {
 message DescribeMutableStateRequest {
   string namespace = 1;
   temporal.api.common.v1.WorkflowExecution execution = 2;
+  bool skip_force_reload = 3;
 }
 
 message DescribeMutableStateResponse {
   string shard_id = 1;
   string history_addr = 2;
+  // CacheMutableState is only available when mutable state is in cache.
   temporal.server.api.persistence.v1.WorkflowMutableState cache_mutable_state = 3;
+  // DatabaseMutableState is always available, 
+  // but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
   temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 4;
 }
 
@@ -377,6 +381,7 @@ message GetTaskQueueTasksRequest {
   string namespace = 1;
   string task_queue = 2;
   temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+  int64 min_pass = 9;
   int64 min_task_id = 4;
   int64 max_task_id = 5;
   int32 batch_size = 6;
@@ -562,6 +567,7 @@ message SyncWorkflowStateResponse {
 message GenerateLastHistoryReplicationTasksRequest {
   string namespace = 1;
   temporal.api.common.v1.WorkflowExecution execution = 2;
+  repeated string target_clusters = 3;
 }
 
 message GenerateLastHistoryReplicationTasksResponse {

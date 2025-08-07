@@ -62,6 +62,8 @@ const (
 	ActionResultIncludesStatus = 10
 	// limit the ScheduleSpec specs and exclusions to only 10 entries
 	LimitMemoSpecSize = 11
+	// trigger immediately timestamp is added to the PatchRequest
+	TriggerImmediatelyTimestamp = 12
 )
 
 const (
@@ -201,7 +203,7 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		Version:                           ActionResultIncludesStatus,
+		Version:                           TriggerImmediatelyTimestamp,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -410,6 +412,12 @@ func (s *scheduler) processPatch(patch *schedulepb.SchedulePatch) {
 
 	if trigger := patch.TriggerImmediately; trigger != nil {
 		now := s.now()
+		if s.hasMinVersion(TriggerImmediatelyTimestamp) {
+			now = timestamp.TimeValue(trigger.ScheduledTime)
+			if now.IsZero() {
+				now = s.now()
+			}
+		}
 		s.addStart(now, now, trigger.OverlapPolicy, true)
 	}
 
@@ -1307,6 +1315,13 @@ func (s *scheduler) startWorkflow(
 		continuedFailure = nil
 	}
 
+	// Reject duplicates as part of WFID reuse policy when possible, as a measure
+	// against WFT timeouts/failures that lead to non-determinism.
+	reusePolicy := enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
+	if start.Manual {
+		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+	}
+
 	req := &schedulespb.StartWorkflowRequest{
 		Request: &workflowservice.StartWorkflowExecutionRequest{
 			WorkflowId:               workflowID,
@@ -1318,7 +1333,7 @@ func (s *scheduler) startWorkflow(
 			WorkflowTaskTimeout:      newWorkflow.WorkflowTaskTimeout,
 			Identity:                 s.identity(),
 			RequestId:                s.newUUIDString(),
-			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			WorkflowIdReusePolicy:    reusePolicy,
 			RetryPolicy:              newWorkflow.RetryPolicy,
 			Memo:                     newWorkflow.Memo,
 			SearchAttributes:         s.addSearchAttributes(newWorkflow.SearchAttributes, nominalTimeSec),

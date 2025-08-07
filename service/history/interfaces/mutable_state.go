@@ -131,6 +131,7 @@ type (
 		IsResetRun() bool
 		SetChildrenInitializedPostResetPoint(children map[string]*persistencespb.ResetChildInfo)
 		GetChildrenInitializedPostResetPoint() map[string]*persistencespb.ResetChildInfo
+		AttachRequestID(requestID string, eventType enumspb.EventType, eventID int64)
 
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
@@ -275,7 +276,7 @@ type (
 		UpdateUserTimer(*persistencespb.TimerInfo) error
 		UpdateUserTimerTaskStatus(timerId string, status int64) error
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
-		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error
+		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
 		UpdateBuildIdAssignment(buildId string) error
 		ApplyBuildIdRedirect(startingTaskScheduledEventId int64, buildId string, redirectCounter int64) error
 		RefreshExpirationTimeoutTask(ctx context.Context) error
@@ -358,5 +359,8 @@ type (
 
 		DeleteSubStateMachine(path *persistencespb.StateMachinePath) error
 		IsSubStateMachineDeleted() bool
+
+		HasRequestID(requestID string) bool
+		SetSuccessorRunID(runID string)
 	}
 )

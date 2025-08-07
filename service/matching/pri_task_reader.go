@@ -34,7 +34,7 @@ const (
 type (
 	priTaskReader struct {
 		backlogMgr *priBacklogManagerImpl
-		subqueue   int
+		subqueue   subqueueIndex
 		notifyC    chan struct{} // Used as signal to notify pump of new tasks
 		logger     log.Logger
 
@@ -65,7 +65,7 @@ var addErrorRetryPolicy = backoff.NewExponentialRetryPolicy(2 * time.Second).
 
 func newPriTaskReader(
 	backlogMgr *priBacklogManagerImpl,
-	subqueue int,
+	subqueue subqueueIndex,
 	initialAckLevel int64,
 ) *priTaskReader {
 	return &priTaskReader{
@@ -84,6 +84,9 @@ func newPriTaskReader(
 		outstandingTasks: treemap.NewWith(godsutils.Int64Comparator),
 		readLevel:        initialAckLevel,
 		ackLevel:         initialAckLevel,
+
+		// gc state
+		lastGCTime: time.Now(),
 	}
 }
 
@@ -106,10 +109,7 @@ func (tr *priTaskReader) getOldestBacklogTime() time.Time {
 }
 
 func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
-	err := res.startErr
-	if res.forwarded {
-		err = res.forwardErr
-	}
+	err := res.err()
 
 	// We can handle some transient errors by just putting the task back in the matcher to
 	// match again. Note that for forwarded tasks, it's expected to get DeadlineExceeded when
@@ -157,44 +157,43 @@ func (tr *priTaskReader) getTasksPump() {
 	ctx := tr.backlogMgr.tqCtx
 
 	tr.SignalTaskLoading() // prime pump
-Loop:
 	for {
 		select {
 		case <-ctx.Done():
 			return
-
 		case <-tr.notifyC:
-			if tr.getLoadedTasks() > tr.backlogMgr.config.GetTasksReloadAt() {
-				// Too many loaded already, ignore this signal. We'll get another signal when
-				// loadedTasks drops low enough.
-				continue Loop
-			}
-
-			batch, err := tr.getTaskBatch(ctx)
-			tr.backlogMgr.signalIfFatal(err)
-			if err != nil {
-				// TODO: Should we ever stop retrying on db errors?
-				if common.IsResourceExhausted(err) {
-					tr.backoffSignal(taskReaderThrottleRetryDelay)
-				} else {
-					tr.backoffSignal(tr.retrier.NextBackOff(err))
-				}
-				continue Loop
-			}
-			tr.retrier.Reset()
-
-			if len(batch.tasks) == 0 {
-				tr.setReadLevelAfterGap(batch.readLevel)
-				if !batch.isReadBatchDone {
-					tr.SignalTaskLoading()
-				}
-				continue Loop
-			}
-
-			tr.processTaskBatch(batch.tasks)
-			// There may be more tasks.
-			tr.SignalTaskLoading()
 		}
+
+		if tr.getLoadedTasks() > tr.backlogMgr.config.GetTasksReloadAt() {
+			// Too many loaded already, ignore this signal. We'll get another signal when
+			// loadedTasks drops low enough.
+			continue
+		}
+
+		batch, err := tr.getTaskBatch(ctx)
+		tr.backlogMgr.signalIfFatal(err)
+		if err != nil {
+			// TODO: Should we ever stop retrying on db errors?
+			if common.IsResourceExhausted(err) {
+				tr.backoffSignal(taskReaderThrottleRetryDelay)
+			} else {
+				tr.backoffSignal(tr.retrier.NextBackOff(err))
+			}
+			continue
+		}
+		tr.retrier.Reset()
+
+		if len(batch.tasks) == 0 {
+			tr.setReadLevelAfterGap(batch.readLevel)
+			if !batch.isReadBatchDone {
+				tr.SignalTaskLoading()
+			}
+			continue
+		}
+
+		tr.processTaskBatch(batch.tasks)
+		// There may be more tasks.
+		tr.SignalTaskLoading()
 	}
 }
 
@@ -248,7 +247,8 @@ func (tr *priTaskReader) processTaskBatch(tasks []*persistencespb.AllocatedTaskI
 		tr.readLevel = max(tr.readLevel, t.TaskId)
 
 		if IsTaskExpired(t) {
-			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1)
+			// task expired when we read it
+			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.TaskExpireStageReadTag)
 			return true
 		}
 
@@ -290,6 +290,7 @@ func (tr *priTaskReader) addNewTasks(tasks []*persistencespb.AllocatedTaskInfo) 
 }
 
 func (tr *priTaskReader) addTaskToMatcher(task *internalTask) {
+	task.resetMatcherState()
 	err := tr.backlogMgr.addSpooledTask(task)
 	if err == nil {
 		return

@@ -10,6 +10,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	common2 "go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -59,7 +60,6 @@ func NewExecutableVerifyVersionedTransitionTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			sourceShardKey,
-			replicationTask.Priority,
 			replicationTask,
 		),
 		taskAttr: task,
@@ -75,9 +75,10 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 		return nil
 	}
 
+	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
-		headers.SystemPreemptableCallerInfo,
+		callerInfo,
 	), e.NamespaceID)
 	if nsError != nil {
 		return nsError
@@ -96,7 +97,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 		return nil
 	}
 
-	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
 
 	ms, err := e.getMutableState(ctx, e.RunID)
@@ -209,7 +210,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 	if err != nil {
 		return nil, err
 	}
-	wfContext, release, err := e.WorkflowCache.GetOrCreateWorkflowExecution(
+	wfContext, release, err := e.WorkflowCache.GetOrCreateChasmEntity(
 		ctx,
 		shardContext,
 		namespace.ID(e.NamespaceID),
@@ -217,6 +218,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 			WorkflowId: e.WorkflowID,
 			RunId:      runId,
 		},
+		chasm.ArchetypeAny,
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -245,14 +247,15 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 	)
 	switch taskErr := err.(type) {
 	case *serviceerrors.SyncState:
+		callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
-			headers.SystemPreemptableCallerInfo,
+			callerInfo,
 		), e.NamespaceID)
 		if nsError != nil {
 			return err
 		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 
 		if doContinue, syncStateErr := e.SyncState(

@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/service/matching/counter"
 )
 
 type (
@@ -28,7 +29,6 @@ type (
 		AlignMembershipChange                dynamicconfig.DurationPropertyFn
 		ShutdownDrainDuration                dynamicconfig.DurationPropertyFn
 		HistoryMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
-		MatchingDropNonRetryableTasks        dynamicconfig.BoolPropertyFn
 		EnableDeployments                    dynamicconfig.BoolPropertyFnWithNamespaceFilter // [cleanup-wv-pre-release]
 		EnableDeploymentVersions             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		MaxTaskQueuesInDeployment            dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -38,6 +38,7 @@ type (
 
 		RangeSize                                int64
 		NewMatcher                               dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
+		EnableFairness                           dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -71,7 +72,9 @@ type (
 		MembershipUnloadDelay                    dynamicconfig.DurationPropertyFn
 		TaskQueueInfoByBuildIdTTL                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PriorityLevels                           dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		RateLimiterRefreshInterval               time.Duration
+
+		RateLimiterRefreshInterval    time.Duration
+		FairnessKeyRateLimitCacheSize dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -106,6 +109,8 @@ type (
 		PollerScalingWaitTime           dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PollerScalingDecisionsPerSecond dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 
+		FairnessCounter dynamicconfig.TypedPropertyFnWithTaskQueueFilter[counter.CounterParams]
+
 		LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 
@@ -127,6 +132,7 @@ type (
 		BacklogTaskForwardTimeout  func() time.Duration
 		RangeSize                  int64
 		NewMatcher                 func(func(bool)) (bool, func())
+		EnableFairness             func(func(bool)) (bool, func())
 		GetTasksBatchSize          func() int
 		GetTasksReloadAt           func() int
 		UpdateAckInterval          func() time.Duration
@@ -134,7 +140,7 @@ type (
 		MinTaskThrottlingBurstSize func() int
 		MaxTaskDeleteBatchSize     func() int
 		TaskDeleteInterval         func() time.Duration
-		PriorityLevels             func() int32
+		PriorityLevels             func() priorityKey
 
 		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
 		GetUserDataMinWaitTime     time.Duration
@@ -161,8 +167,9 @@ type (
 		// TTL for cache holding TaskQueueInfoByBuildID
 		TaskQueueInfoByBuildIdTTL func() time.Duration
 
-		// Rate limiter refresh interval
-		RateLimiterRefreshInterval time.Duration
+		// Rate limiting
+		RateLimiterRefreshInterval    time.Duration
+		FairnessKeyRateLimitCacheSize func() int
 
 		BreakdownMetricsByTaskQueue func() bool
 		BreakdownMetricsByPartition func() bool
@@ -174,6 +181,8 @@ type (
 		PollerScalingBacklogAgeScaleUp  func() time.Duration
 		PollerScalingWaitTime           func() time.Duration
 		PollerScalingDecisionsPerSecond func() float64
+
+		FairnessCounter func() counter.CounterParams
 
 		loadCause loadCause
 	}
@@ -228,6 +237,7 @@ func NewConfig(
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		RangeSize:                                100000,
 		NewMatcher:                               dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
+		EnableFairness:                           dynamicconfig.MatchingEnableFairness.Subscribe(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
@@ -272,7 +282,7 @@ func NewConfig(
 		TaskQueueInfoByBuildIdTTL:                dynamicconfig.TaskQueueInfoByBuildIdTTL.Get(dc),
 		PriorityLevels:                           dynamicconfig.MatchingPriorityLevels.Get(dc),
 		RateLimiterRefreshInterval:               time.Minute,
-		MatchingDropNonRetryableTasks:            dynamicconfig.MatchingDropNonRetryableTasks.Get(dc),
+		FairnessKeyRateLimitCacheSize:            dynamicconfig.MatchingFairnessKeyRateLimitCacheSize.Get(dc),
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
 
 		AdminNamespaceToPartitionDispatchRate:          dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Get(dc),
@@ -295,6 +305,8 @@ func NewConfig(
 		PollerScalingWaitTime:           dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),
 		PollerScalingDecisionsPerSecond: dynamicconfig.MatchingPollerScalingDecisionsPerSecond.Get(dc),
 
+		FairnessCounter: dynamicconfig.MatchingFairnessCounter.Get(dc),
+
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 	}
 }
@@ -307,6 +319,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		RangeSize: config.RangeSize,
 		NewMatcher: func(cb func(bool)) (bool, func()) {
 			return config.NewMatcher(ns.String(), taskQueueName, taskType, cb)
+		},
+		EnableFairness: func(cb func(bool)) (bool, func()) {
+			return config.EnableFairness(ns.String(), taskQueueName, taskType, cb)
 		},
 		GetTasksBatchSize: func() int {
 			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)
@@ -345,8 +360,8 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		TaskDeleteInterval: func() time.Duration {
 			return config.TaskDeleteInterval(ns.String(), taskQueueName, taskType)
 		},
-		PriorityLevels: func() int32 {
-			return int32(config.PriorityLevels(ns.String(), taskQueueName, taskType))
+		PriorityLevels: func() priorityKey {
+			return priorityKey(config.PriorityLevels(ns.String(), taskQueueName, taskType))
 		},
 		GetUserDataLongPollTimeout: config.GetUserDataLongPollTimeout,
 		GetUserDataMinWaitTime:     1 * time.Second,
@@ -400,11 +415,14 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 				return max(1, config.ForwarderMaxChildrenPerNode(ns.String(), taskQueueName, taskType))
 			},
 		},
-		GetUserDataRetryPolicy: backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute),
+		GetUserDataRetryPolicy: backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute).WithExpirationInterval(backoff.NoInterval),
 		TaskQueueInfoByBuildIdTTL: func() time.Duration {
 			return config.TaskQueueInfoByBuildIdTTL(ns.String(), taskQueueName, taskType)
 		},
 		RateLimiterRefreshInterval: config.RateLimiterRefreshInterval,
+		FairnessKeyRateLimitCacheSize: func() int {
+			return config.FairnessKeyRateLimitCacheSize(ns.String(), taskQueueName, taskType)
+		},
 		PollerHistoryTTL: func() time.Duration {
 			return config.PollerHistoryTTL(ns.String())
 		},
@@ -417,9 +435,12 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		PollerScalingDecisionsPerSecond: func() float64 {
 			return config.PollerScalingDecisionsPerSecond(ns.String(), taskQueueName, taskType)
 		},
+		FairnessCounter: func() counter.CounterParams {
+			return config.FairnessCounter(ns.String(), taskQueueName, taskType)
+		},
 	}
 }
 
-func defaultPriorityLevel(priorityLevels int32) int32 {
-	return (priorityLevels + 1) / 2
+func defaultPriorityLevel(priorityLevels priorityKey) priorityKey {
+	return priorityKey(priorityLevels+1) / 2
 }

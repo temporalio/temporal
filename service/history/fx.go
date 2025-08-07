@@ -2,7 +2,6 @@ package history
 
 import (
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
@@ -45,18 +44,19 @@ import (
 var Module = fx.Options(
 	resource.Module,
 	fx.Provide(hsm.NewRegistry),
-	fx.Provide(chasm.NewRegistry),
 	workflow.Module,
 	shard.Module,
 	events.Module,
 	cache.Module,
 	archival.Module,
-	dynamicconfig.Module,
+	ChasmEngineModule,
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
+	fx.Provide(HealthSignalAggregatorProvider),
+	fx.Provide(HealthCheckInterceptorProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
@@ -99,6 +99,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		persistenceVisibilityManager: args.PersistenceVisibilityManager,
 		persistenceHealthSignal:      args.PersistenceHealthSignal,
 		healthServer:                 args.HealthServer,
+		historyHealthSignal:          args.HistoryHealthSignal,
 		historyServiceResolver:       args.HistoryServiceResolver,
 		metricsHandler:               args.MetricsHandler,
 		payloadSerializer:            args.PayloadSerializer,
@@ -114,10 +115,12 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		taskQueueManager:             args.TaskQueueManager,
 		taskCategoryRegistry:         args.TaskCategoryRegistry,
 		dlqMetricsEmitter:            args.DLQMetricsEmitter,
+		chasmEngine:                  args.ChasmEngine,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
 		streamReceiverMonitor:            args.StreamReceiverMonitor,
+		replicationServerRateLimiter:     args.ReplicationServerRateLimiter,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -168,6 +171,27 @@ func TelemetryInterceptorProvider(
 	)
 }
 
+func HealthSignalAggregatorProvider(
+	dynamicCollection *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.ThrottledLogger,
+) interceptor.HealthSignalAggregator {
+	return interceptor.NewHealthSignalAggregator(
+		logger,
+		dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection),
+		dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
+		dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
+	)
+}
+
+func HealthCheckInterceptorProvider(
+	dynamicCollection *dynamicconfig.Collection,
+	healthSignalAggregator interceptor.HealthSignalAggregator,
+) *interceptor.HealthCheckInterceptor {
+	return interceptor.NewHealthCheckInterceptor(
+		healthSignalAggregator,
+	)
+}
 func RateLimitInterceptorProvider(
 	serviceConfig *configs.Config,
 ) *interceptor.RateLimitInterceptor {

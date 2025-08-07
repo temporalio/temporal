@@ -51,7 +51,7 @@ func (m *taskManagerImpl) CreateTaskQueue(
 	if taskQueueInfo.ExpiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		panic("CreateTaskQueue encountered ExpiryTime not set for sticky task queue")
 	}
-	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo, enumspb.ENCODING_TYPE_PROTO3)
+	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (m *taskManagerImpl) UpdateTaskQueue(
 	if taskQueueInfo.ExpiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		panic("UpdateTaskQueue encountered ExpiryTime not set for sticky task queue")
 	}
-	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo, enumspb.ENCODING_TYPE_PROTO3)
+	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -164,19 +164,20 @@ func (m *taskManagerImpl) CreateTasks(
 ) (*CreateTasksResponse, error) {
 	taskQueueInfo := request.TaskQueueInfo.Data
 	taskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
-	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo, enumspb.ENCODING_TYPE_PROTO3)
+	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo)
 	if err != nil {
 		return nil, err
 	}
 
 	tasks := make([]*InternalCreateTask, len(request.Tasks))
 	for i, task := range request.Tasks {
-		taskBlob, err := m.serializer.TaskInfoToBlob(task, enumspb.ENCODING_TYPE_PROTO3)
+		taskBlob, err := m.serializer.TaskInfoToBlob(task)
 		if err != nil {
 			return nil, serviceerror.NewUnavailablef("CreateTasks operation failed during serialization. Error : %v", err)
 		}
 		tasks[i] = &InternalCreateTask{
-			TaskId:     task.GetTaskId(),
+			TaskPass:   task.TaskPass,
+			TaskId:     task.TaskId,
 			ExpiryTime: task.Data.ExpiryTime,
 			Task:       taskBlob,
 		}
@@ -245,7 +246,7 @@ func (m *taskManagerImpl) UpdateTaskQueueUserData(ctx context.Context, request *
 		Updates:     make(map[string]*InternalSingleTaskQueueUserDataUpdate, len(request.Updates)),
 	}
 	for taskQueue, update := range request.Updates {
-		userData, err := m.serializer.TaskQueueUserDataToBlob(update.UserData.Data, enumspb.ENCODING_TYPE_PROTO3)
+		userData, err := m.serializer.TaskQueueUserDataToBlob(update.UserData.Data)
 		if err != nil {
 			return err
 		}

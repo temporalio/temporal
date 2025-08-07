@@ -3,7 +3,9 @@ package history
 import (
 	"context"
 	"errors"
+	"fmt"
 
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -19,7 +21,8 @@ import (
 
 type outboundQueueStandbyTaskExecutor struct {
 	stateMachineEnvironment
-	config *configs.Config
+	chasmEngine chasm.Engine
+	config      *configs.Config
 
 	clusterName string
 }
@@ -32,6 +35,7 @@ func newOutboundQueueStandbyTaskExecutor(
 	clusterName string,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	chasmEngine chasm.Engine,
 ) *outboundQueueStandbyTaskExecutor {
 	return &outboundQueueStandbyTaskExecutor{
 		stateMachineEnvironment: stateMachineEnvironment{
@@ -44,6 +48,7 @@ func newOutboundQueueStandbyTaskExecutor(
 		},
 		config:      shardCtx.GetConfig(),
 		clusterName: clusterName,
+		chasmEngine: chasmEngine,
 	}
 }
 
@@ -53,9 +58,13 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
 	taskType := queues.GetOutboundTaskTypeTagValue(task, false)
+	namespaceTag, _ := getNamespaceTagAndReplicationStateByID(
+		e.shardContext.GetNamespaceRegistry(),
+		task.GetNamespaceID(),
+	)
 	respond := func(err error) queues.ExecuteResponse {
 		metricsTags := []metrics.Tag{
-			getNamespaceTagByID(e.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
+			namespaceTag,
 			metrics.TaskTypeTag(taskType),
 			metrics.OperationTag(taskType),
 		}
@@ -66,30 +75,42 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		}
 	}
 
-	return respond(e.processTask(ctx, task))
-}
-
-func (e *outboundQueueStandbyTaskExecutor) processTask(
-	ctx context.Context,
-	task tasks.Task,
-) error {
-	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
-	defer cancel()
-
 	nsRecord, err := e.shardContext.GetNamespaceRegistry().GetNamespaceByID(
 		namespace.ID(task.GetNamespaceID()),
 	)
 	if err != nil {
-		return err
+		return respond(err)
 	}
 
 	if !nsRecord.IsOnCluster(e.clusterName) {
 		// namespace is not replicated to local cluster, ignore corresponding tasks
-		return nil
+		return respond(nil)
 	}
 
 	if err := validateTaskByClock(e.shardContext, task); err != nil {
-		return err
+		return respond(err)
+	}
+
+	nsName := nsRecord.Name().String()
+
+	switch task := task.(type) {
+	case *tasks.StateMachineOutboundTask:
+		return respond(e.executeStateMachineTask(ctx, task, nsName))
+	case *tasks.ChasmTask:
+		return respond(e.executeChasmSideEffectTask(ctx, task))
+	}
+
+	return respond(queues.NewUnprocessableTaskError(fmt.Sprintf("unknown task type '%T'", task)))
+}
+
+func (e *outboundQueueStandbyTaskExecutor) executeStateMachineTask(
+	ctx context.Context,
+	task tasks.Task,
+	nsName string,
+) error {
+	destination := ""
+	if dtask, ok := task.(tasks.HasDestination); ok {
+		destination = dtask.GetDestination()
 	}
 
 	ref, _, err := StateMachineTask(e.shardContext.StateMachineRegistry(), task)
@@ -117,12 +138,7 @@ func (e *outboundQueueStandbyTaskExecutor) processTask(
 	// The *likely* reasons are: a) delay in the replication stack; b) destination is down.
 	// In any case, the task needs to be retried (or discarded, based on the configured discard delay).
 
-	destination := ""
-	if dtask, ok := task.(tasks.HasDestination); ok {
-		destination = dtask.GetDestination()
-	}
-
-	discardTime := task.GetVisibilityTime().Add(e.config.OutboundStandbyTaskMissingEventsDiscardDelay(nsRecord.Name().String(), destination))
+	discardTime := task.GetVisibilityTime().Add(e.config.OutboundStandbyTaskMissingEventsDiscardDelay(nsName, destination))
 	// now > task start time + discard delay
 	if e.Now().After(discardTime) {
 		e.logger.Warn("Discarding standby outbound task due to task being pending for too long.", tag.Task(task))
@@ -130,7 +146,7 @@ func (e *outboundQueueStandbyTaskExecutor) processTask(
 	}
 
 	err = consts.ErrTaskRetry
-	if e.config.OutboundStandbyTaskMissingEventsDestinationDownErr(nsRecord.Name().String(), destination) {
+	if e.config.OutboundStandbyTaskMissingEventsDestinationDownErr(nsName, destination) {
 		// Wrap the retry error with DestinationDownError so it can trigger the circuit breaker on
 		// the standby side. This won't do any harm, at most some delay processing the standby task.
 		// Assuming the dynamic config OutboundStandbyTaskMissingEventsDiscardDelay is long enough,
@@ -140,6 +156,35 @@ func (e *outboundQueueStandbyTaskExecutor) processTask(
 			"standby task executor returned retryable error",
 			err,
 		)
+		return err
 	}
+
+	return nil
+}
+
+func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(
+	ctx context.Context,
+	task *tasks.ChasmTask,
+) error {
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, e.shardContext, e.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(err) }()
+
+	ms, err := weContext.LoadMutableState(ctx, e.shardContext)
+	if err != nil {
+		return err
+	}
+
+	shouldRetry, err := validateChasmSideEffectTask(
+		ctx,
+		ms,
+		task,
+	)
+	if shouldRetry != nil {
+		err = consts.ErrTaskRetry
+	}
+
 	return err
 }

@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/authorization"
@@ -137,6 +138,7 @@ var (
 		dynamicconfig.Module,
 		pprof.Module,
 		TraceExportModule,
+		chasm.Module,
 		FxLogAdapter,
 		fx.Invoke(ServerLifetimeHooks),
 	)
@@ -164,19 +166,19 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		return serverOptionsProvider{}, err
 	}
 
-	persistenceConfig := so.config.Persistence
-	err = verifyPersistenceCompatibleVersion(persistenceConfig, so.persistenceServiceResolver)
-	if err != nil {
-		return serverOptionsProvider{}, err
-	}
-
-	stopChan := make(chan interface{})
-
 	// Logger
 	logger := so.logger
 	if logger == nil {
 		logger = log.NewZapLogger(log.BuildZapLogger(so.config.Log))
 	}
+
+	persistenceConfig := so.config.Persistence
+	err = verifyPersistenceCompatibleVersion(persistenceConfig, so.persistenceServiceResolver, logger)
+	if err != nil {
+		return serverOptionsProvider{}, err
+	}
+
+	stopChan := make(chan interface{})
 
 	// ClientFactoryProvider
 	clientFactoryProvider := so.clientFactoryProvider
@@ -352,6 +354,7 @@ type (
 		InstanceID                 resource.InstanceID                     `optional:"true"`
 		StaticServiceHosts         map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry       tasks.TaskCategoryRegistry
+		ChasmRegistry              *chasm.Registry
 	}
 )
 
@@ -423,6 +426,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() tasks.TaskCategoryRegistry {
 				return params.TaskCategoryRegistry
+			},
+			func() *chasm.Registry {
+				return params.ChasmRegistry
 			},
 		),
 		ServiceTracingModule,
@@ -624,7 +630,7 @@ func ApplyClusterMetadataConfigProvider(
 			tag.ClusterName(clusterMetadata.CurrentClusterName))
 		return svc.ClusterMetadata, svc.Persistence, missingCurrentClusterMetadataErr
 	}
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
 	resp, err := clusterMetadataManager.GetClusterMetadata(
 		ctx,
 		&persistence.GetClusterMetadataRequest{ClusterName: clusterMetadata.CurrentClusterName},
@@ -823,13 +829,17 @@ func ServerLifetimeHooks(
 	lc.Append(fx.StartStopHook(svr.Start, svr.Stop))
 }
 
-func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceServiceResolver resolver.ServiceResolver) error {
+func verifyPersistenceCompatibleVersion(
+	cfg config.Persistence,
+	persistenceServiceResolver resolver.ServiceResolver,
+	logger log.Logger,
+) error {
 	// cassandra schema version validation
-	if err := cassandra.VerifyCompatibleVersion(config, persistenceServiceResolver); err != nil {
+	if err := cassandra.VerifyCompatibleVersion(cfg, persistenceServiceResolver, logger); err != nil {
 		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
 	}
 	// sql schema version validation
-	if err := sql.VerifyCompatibleVersion(config, persistenceServiceResolver); err != nil {
+	if err := sql.VerifyCompatibleVersion(cfg, persistenceServiceResolver, logger); err != nil {
 		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
 	}
 	return nil
@@ -856,6 +866,7 @@ var TraceExportModule = fx.Options(
 			}
 		}))
 
+		// (1) Exporters from config.
 		exportersByType := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
 		if inputs.Config != nil {
 			var err error
@@ -865,16 +876,21 @@ var TraceExportModule = fx.Options(
 			}
 		}
 
+		// (2) Exporters from env variables.
 		exportersByTypeFromEnv, err := telemetry.SpanExportersFromEnv(os.LookupEnv)
 		if err != nil {
 			return nil, err
 		}
 
-		// config-defined exporters override env-defined exporters with the same type
-		maps.Copy(exportersByType, exportersByTypeFromEnv)
+		// (3) Exporters from code (ie from testing).
+		customExportersByType := inputs.Config.ExporterConfig.CustomExporters
 
+		// Merge exporters.
+		maps.Copy(exportersByType, exportersByTypeFromEnv) // env overrides config
+		maps.Copy(exportersByType, customExportersByType)  // custom overrides all
 		exporters := expmaps.Values(exportersByType)
 
+		// Configure exporters' lifecycle hooks.
 		inputs.Lifecycyle.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
 				err = startAll(exporters)(ctx)

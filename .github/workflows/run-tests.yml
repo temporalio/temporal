@@ -6,8 +6,9 @@ on:
   push:
     branches:
       - main
-      - release/**
-      - cloud/**
+      - cloud/*
+      - feature/*
+      - release/*
 
   workflow_dispatch:
     inputs:
@@ -294,7 +295,7 @@ jobs:
         if: ${{ !cancelled() && !inputs.run_single_unit_test }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--unit-test
-          path: .testoutput
+          path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
 
@@ -306,8 +307,7 @@ jobs:
           echo "Detecting flaky unit tests: ${{ needs.set-up-single-test.outputs.modified_unit_test_suites }}"
           make unit-test
         env:
-          # Not retrying failed tests intentionally here since we're trying to detect flakes.
-          FAILED_TEST_RETRIES: "0"
+          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_unit_test_suites }} -count=10"
           TEST_TIMEOUT: 35
 
@@ -386,7 +386,7 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--integration-test
-          path: .testoutput
+          path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
 
@@ -398,8 +398,7 @@ jobs:
           echo "Detecting flaky integration tests: ${{ needs.set-up-single-test.outputs.modified_integration_test_suites }}"
           make integration-test-coverage
         env:
-          # Not retrying failed tests intentionally here since we're trying to detect flakes.
-          FAILED_TEST_RETRIES: "0"
+          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_integration_test_suites }} -count=5"
 
       - name: Tear down docker compose
@@ -419,6 +418,7 @@ jobs:
         name:
           - cass_es
           - cass_es8
+          - cass_os2
           - sqlite
           - mysql8
           - postgres12
@@ -429,11 +429,19 @@ jobs:
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch]
             es_version: v7
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch8]
             es_version: v8
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
+          - name: cass_os2
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch2]
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
@@ -450,7 +458,7 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ${{ matrix.runs-on }}
+    runs-on: ${{ matrix.runs_on_override || matrix.runs-on }}
     env:
       TEST_TOTAL_SHARDS: ${{ needs.set-up-single-test.outputs.total_shards }}
       TEST_SHARD_INDEX: ${{ matrix.shard_index }}
@@ -499,7 +507,7 @@ jobs:
         id: get_job_id
         run: |
           set -eu
-          test_job_name="Functional test (${{matrix.runs-on}}, ${{matrix.shard_index}}, ${{matrix.name}})"
+          test_job_name="Functional test (${{ matrix.runs_on_override || matrix.runs-on }}, ${{matrix.shard_index}}, ${{matrix.name}})"
           job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
           # curl or jq might silently fail, but we are okay with that.
           # We don't want to fail the job if we can't get the job id.          
@@ -518,6 +526,8 @@ jobs:
         run: make functional-test-coverage
         env:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
+          TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
+          TEMPORAL_OTEL_DEBUG: true
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -549,8 +559,8 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
         with:
-          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
-          path: .testoutput
+          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{ matrix.runs_on_override || matrix.runs-on }}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
+          path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
 
@@ -562,9 +572,19 @@ jobs:
           echo "Detecting flaky functional tests: ${{ needs.set-up-single-test.outputs.modified_integration_test_suites }}"
           make functional-test-coverage
         env:
-          # Not retrying failed tests intentionally here since we're trying to detect flakes.
-          FAILED_TEST_RETRIES: "0"
+          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_test_suites }} -count=5"
+
+      # Upload OpenTelemetry traces.
+      - name: Upload OpenTelemetry traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-json--${{github.run_id}}-${{steps.get_job_id.outputs.JOB_ID}}--${{matrix.shard_index}}--${{github.run_attempt}}--${{matrix.name}}--functional-test
+          path: ./.testoutput/traces.*.json
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 28
 
   functional-test-xdc:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
@@ -573,18 +593,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
+        name: [cass_es, cass_es8, cass_os2, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: elasticsearch
             parallel_flags: ""
             containers: [cassandra, elasticsearch]
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: elasticsearch
             parallel_flags: ""
             containers: [cassandra, elasticsearch8]
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
+          - name: cass_os2
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch2]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -600,7 +628,7 @@ jobs:
             persistence_driver: postgres12_pgx
             parallel_flags: "-parallel=2" # reduce parallelism for postgres
             containers: [postgresql]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs_on_override || 'ubuntu-latest' }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
@@ -612,7 +640,6 @@ jobs:
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' }}
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
@@ -656,6 +683,9 @@ jobs:
       - name: Run functional test xdc
         timeout-minutes: 35   # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: make functional-test-xdc-coverage
+        env:
+          TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
+          TEMPORAL_OTEL_DEBUG: true
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -688,7 +718,7 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
-          path: .testoutput
+          path: ./.testoutput
           include-hidden-files: true
           retention-days: 28
 
@@ -700,9 +730,18 @@ jobs:
           echo "Detecting flaky functional xdc tests: ${{ needs.set-up-single-test.outputs.modified_functional_xdc_test_suites }}"
           make functional-test-xdc-coverage
         env:
-          # Not retrying failed tests intentionally here since we're trying to detect flakes.
-          FAILED_TEST_RETRIES: "0"
+          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_xdc_test_suites }} -count=5"
+
+      # Upload OpenTelemetry traces.
+      - name: Upload OpenTelemetry traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-json--${{github.run_id}}-${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
+          path: ./.testoutput/traces.*.json
+          if-no-files-found: ignore
+          retention-days: 28
 
   functional-test-ndc:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
@@ -714,6 +753,7 @@ jobs:
         name:
           - cass_es
           - cass_es8
+          - cass_os2
           - mysql8
           - postgres12
           - postgres12_pgx
@@ -723,11 +763,19 @@ jobs:
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch]
             es_version: v7
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch8]
             es_version: v8
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
+          - name: cass_os2
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch2]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -740,7 +788,7 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs_on_override || 'ubuntu-latest' }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
@@ -752,7 +800,6 @@ jobs:
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' }}
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
@@ -796,6 +843,9 @@ jobs:
       - name: Run functional test ndc
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
+        env:
+          TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
+          TEMPORAL_OTEL_DEBUG: true
 
       - name: Upload code coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -818,7 +868,7 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
-          path: .testoutput
+          path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
 
@@ -830,9 +880,18 @@ jobs:
           echo "Detecting flaky functional ndc tests: ${{ needs.set-up-single-test.outputs.modified_functional_ndc_test_suites }}"
           make functional-test-ndc-coverage
         env:
-          # Not retrying failed tests intentionally here since we're trying to detect flakes.
-          FAILED_TEST_RETRIES: "0"
+          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_ndc_test_suites }} -count=5"
+
+      # Upload OpenTelemetry traces.
+      - name: Upload OpenTelemetry traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-json--${{github.run_id}}-${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
+          path: ./.testoutput/traces.*.json
+          if-no-files-found: ignore
+          retention-days: 28
 
   test-status:
     if: always()

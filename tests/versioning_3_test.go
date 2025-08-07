@@ -41,6 +41,8 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/matching"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -68,14 +70,10 @@ type Versioning3Suite struct {
 	useV32 bool
 }
 
-func NewVersioning3Suite(useV32 bool) *Versioning3Suite {
-	return &Versioning3Suite{useV32: useV32}
-}
-
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, NewVersioning3Suite(true))
-	suite.Run(t, NewVersioning3Suite(false))
+	suite.Run(t, &Versioning3Suite{useV32: true})
+	suite.Run(t, &Versioning3Suite{useV32: false})
 }
 
 func (s *Versioning3Suite) SetupSuite() {
@@ -234,6 +232,120 @@ func (s *Versioning3Suite) TestQueryWithPinnedOverride_Sticky() {
 			s.testQueryWithPinnedOverride(true)
 		},
 	)
+}
+
+func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion_PollersAbsent() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testPinnedQuery_DrainedVersion(false, false)
+		},
+	)
+}
+
+func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion_PollersPresent() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testPinnedQuery_DrainedVersion(true, false)
+		},
+	)
+}
+
+func (s *Versioning3Suite) TestPinnedQuery_RollbackDrainedVersion() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testPinnedQuery_DrainedVersion(true, true)
+		},
+	)
+}
+
+func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool, rollback bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, 1*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 1*time.Second)
+	if !pollersPresent {
+		s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+	}
+
+	tv := testvars.New(s)
+
+	// create version v1 and make it current
+	idlePollerDone := make(chan struct{})
+	go func() {
+		s.idlePollWorkflow(tv, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
+		close(idlePollerDone)
+	}()
+	s.setCurrentDeployment(tv)
+	s.WaitForChannel(ctx, idlePollerDone)
+
+	wftCompleted := make(chan struct{})
+	s.pollWftAndHandle(tv, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondCompleteWorkflow(tv, vbPinned), nil
+		})
+
+	s.startWorkflow(tv, tv.VersioningOverridePinned(s.useV32))
+	s.WaitForChannel(ctx, wftCompleted)
+	s.verifyWorkflowVersioning(tv, vbPinned, tv.Deployment(), tv.VersioningOverridePinned(s.useV32), nil)
+
+	// create version v2 and make it current which shall make v1 go from current -> draining/drained
+	idlePollerDone = make(chan struct{})
+	tv2 := tv.WithBuildIDNumber(2)
+	go func() {
+		s.idlePollWorkflow(tv2, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
+		close(idlePollerDone)
+	}()
+	s.setCurrentDeployment(tv2)
+	s.WaitForChannel(ctx, idlePollerDone)
+
+	// wait for v1 to become drained
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv.DeploymentVersionString(),
+		})
+		a.NoError(err)
+		a.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
+	}, time.Second*10, time.Millisecond*1000)
+
+	if !pollersPresent {
+		// simulate the pollers going away, which should make the query fail as now the version is drained + has no pollers polling it
+		time.Sleep(1 * time.Second) //nolint:forbidigo
+		versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(tv.Deployment()))
+
+		_, err := s.queryWorkflow(tv)
+		s.Error(err)
+		s.ErrorContains(err, fmt.Sprintf(matching.ErrBlackholedQuery, versionStr, versionStr))
+	} else {
+		// since the version still has pollers, the query should succeed
+		s.pollAndQueryWorkflow(tv, false)
+	}
+
+	if rollback {
+		// ramp traffic back to v1 to remove it from drained state
+		s.setRampingDeployment(tv, 50, false)
+
+		// wait for v1 to become ramping
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			a := require.New(t)
+			resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+				Namespace: s.Namespace().String(),
+				Version:   tv.DeploymentVersionString(),
+			})
+			a.NoError(err)
+			a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.GetWorkerDeploymentVersionInfo().GetStatus())
+		}, time.Second*10, time.Millisecond*1000)
+
+		// the ramping status is propagated to the task queues
+		s.waitForDeploymentDataPropagation(tv, versionStatusRamping, false, tqTypeWf)
+
+		// the version has pollers and is ramping making the query succeed
+		s.pollAndQueryWorkflow(tv, false)
+
+	}
 }
 
 func (s *Versioning3Suite) testQueryWithPinnedOverride(sticky bool) {
@@ -771,14 +883,22 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 }
 
 func (s *Versioning3Suite) TestTransitionFromWft_Sticky() {
-	s.testTransitionFromWft(true)
+	s.testTransitionFromWft(true, false)
 }
 
 func (s *Versioning3Suite) TestTransitionFromWft_NoSticky() {
-	s.testTransitionFromWft(false)
+	s.testTransitionFromWft(false, false)
 }
 
-func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
+func (s *Versioning3Suite) TestTransitionFromWft_Sticky_ToUnversioned() {
+	s.testTransitionFromWft(true, true)
+}
+
+func (s *Versioning3Suite) TestTransitionFromWft_NoSticky_ToUnversioned() {
+	s.testTransitionFromWft(false, true)
+}
+
+func (s *Versioning3Suite) testTransitionFromWft(sticky bool, toUnversioned bool) {
 	// Wf runs one WFT and one AT on d1, then the second WFT is redirected to d2 and
 	// transitions the wf with it.
 
@@ -809,16 +929,29 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 		})
 	s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 
-	// Set B as the current deployment
-	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf, tqTypeAct)
+	if toUnversioned {
+		// unset A as current
+		s.updateTaskQueueDeploymentData(tv1, false, 0, false, 0, tqTypeWf, tqTypeAct)
 
-	s.pollWftAndHandle(tv2, false, nil,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.NotNil(task)
-			s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
-			return respondCompleteWorkflow(tv2, vbUnpinned), nil
-		})
-	s.verifyWorkflowVersioning(tv2, vbUnpinned, tv2.Deployment(), nil, nil)
+		s.unversionedPollWftAndHandle(tv1, false, nil,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+				s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, &workflowpb.DeploymentVersionTransition{Version: "__unversioned__"})
+				return respondCompleteWorkflowUnversioned(tv1), nil
+			})
+		s.verifyWorkflowVersioning(tv1, vbUnspecified, nil, nil, nil)
+	} else {
+		// Set B as the current deployment
+		s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf, tqTypeAct)
+
+		s.pollWftAndHandle(tv2, false, nil,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+				s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
+				return respondCompleteWorkflow(tv2, vbUnpinned), nil
+			})
+		s.verifyWorkflowVersioning(tv2, vbUnpinned, tv2.Deployment(), nil, nil)
+	}
 }
 
 func (s *Versioning3Suite) TestDoubleTransition() {
@@ -1836,7 +1969,7 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
 		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if errors.As(err, &notFound) || errors.Is(err, serviceerror.NewFailedPrecondition(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues)) {
 			return false
 		}
 		s.NoError(err)
@@ -1889,7 +2022,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, req)
 		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if errors.As(err, &notFound) || errors.Is(err, serviceerror.NewFailedPrecondition(workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues)) {
 			return false
 		}
 		s.NoError(err)
@@ -2051,6 +2184,9 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 		s.Equal(override.GetPinned().GetVersion().GetBuildId(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetBuildId())
 		s.Equal(override.GetPinned().GetVersion().GetDeploymentName(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetDeploymentName())
 		s.Equal(override.GetPinned().GetBehavior(), versioningInfo.GetVersioningOverride().GetPinned().GetBehavior())
+		if worker_versioning.OverrideIsPinned(override) {
+			s.Equal(override.GetPinned().GetVersion().GetDeploymentName(), dwf.WorkflowExecutionInfo.GetWorkerDeploymentName())
+		}
 	} else {
 		// v0.31 override
 		s.Equal(override.GetBehavior().String(), versioningInfo.GetVersioningOverride().GetBehavior().String())                                             //nolint:staticcheck // SA1019: worker versioning v0.31
@@ -2059,6 +2195,10 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 				override.GetPinnedVersion(), //nolint:staticcheck // SA1019: worker versioning v0.31
 				actualOverrideDeployment,
 			))
+		}
+		if worker_versioning.OverrideIsPinned(override) {
+			d, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+			s.Equal(d.GetDeploymentName(), dwf.WorkflowExecutionInfo.GetWorkerDeploymentName())
 		}
 	}
 
@@ -2160,6 +2300,24 @@ func respondCompleteWorkflow(
 			DeploymentName:       tv.DeploymentSeries(),
 			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 		},
+	}
+}
+
+func respondCompleteWorkflowUnversioned(
+	tv *testvars.TestVars,
+) *workflowservice.RespondWorkflowTaskCompletedRequest {
+	return &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: tv.Any().Payloads(),
+					},
+				},
+			},
+		},
+		ForceCreateNewWorkflowTask: false,
 	}
 }
 

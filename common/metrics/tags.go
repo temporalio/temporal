@@ -41,6 +41,7 @@ const (
 	// See server.api.enums.v1.ReplicationTaskType
 	replicationTaskType     = "replicationTaskType"
 	replicationTaskPriority = "replicationTaskPriority"
+	taskExpireStage         = "task_expire_stage"
 	versioningBehavior      = "versioning_behavior"
 	isFirstAttempt          = "first-attempt"
 	workflowStatus          = "workflow_status"
@@ -425,7 +426,7 @@ func WorkflowStatusTag(status string) Tag {
 
 func QueryTypeTag(queryType string) Tag {
 	if queryType == queryTypeStackTrace || queryType == queryTypeOpenSessions || queryType == queryTypeWorkflowMetadata {
-		return &tagImpl{key: queryType, value: queryType}
+		return &tagImpl{key: queryTypeTag, value: queryType}
 	}
 	// group all user defined queries into a single tag value
 	return &tagImpl{key: queryTypeTag, value: queryTypeUserDefined}
@@ -477,3 +478,7 @@ func ToUnversionedTag(version string) Tag {
 	}
 	return &tagImpl{key: toUnversioned, value: falseValue}
 }
+
+var TaskExpireStageReadTag Tag = &tagImpl{key: taskExpireStage, value: "read"}
+var TaskExpireStageMemoryTag Tag = &tagImpl{key: taskExpireStage, value: "memory"}
+var TaskInvalidTag Tag = &tagImpl{key: taskExpireStage, value: "invalid"}

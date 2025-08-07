@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -111,7 +110,7 @@ func (m *nexusEndpointManagerImpl) CreateOrUpdateNexusEndpoint(
 	ctx context.Context,
 	request *CreateOrUpdateNexusEndpointRequest,
 ) (*CreateOrUpdateNexusEndpointResponse, error) {
-	blob, err := m.serializer.NexusEndpointToBlob(request.Entry.Endpoint, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := m.serializer.NexusEndpointToBlob(request.Entry.Endpoint)
 	if err != nil {
 		return nil, err
 	}

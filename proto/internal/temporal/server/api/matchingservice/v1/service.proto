@@ -74,6 +74,11 @@ service MatchingService {
     rpc DescribeTaskQueuePartition (DescribeTaskQueuePartitionRequest) returns (DescribeTaskQueuePartitionResponse) {
     }
 
+    // DescribeVersionedTaskQueues returns details about the requested versioned task queues.
+    // It is an internal API; there is no direct user-facing equivalent.
+    rpc DescribeVersionedTaskQueues (DescribeVersionedTaskQueuesRequest) returns (DescribeVersionedTaskQueuesResponse) {
+    }
+
     // ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
     rpc  ListTaskQueuePartitions(ListTaskQueuePartitionsRequest) returns (ListTaskQueuePartitionsResponse){
     }
@@ -163,4 +168,27 @@ service MatchingService {
     rpc	DeleteNexusEndpoint(DeleteNexusEndpointRequest) returns (DeleteNexusEndpointResponse) {}
     // List all registered services.
     rpc	ListNexusEndpoints(ListNexusEndpointsRequest) returns (ListNexusEndpointsResponse) {}
+
+    // RecordWorkerHeartbeat receive heartbeat request from the worker.
+    rpc RecordWorkerHeartbeat (RecordWorkerHeartbeatRequest) returns (RecordWorkerHeartbeatResponse) {}
+
+    // ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
+    // Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
+    // Returns an error if the namespace doesn't exist.
+    rpc ListWorkers (ListWorkersRequest) returns (ListWorkersResponse) {}
+
+    // Set the persisted task queue configuration.
+    // (-- api-linter: core::0134::method-signature=disabled
+    //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::response-message-name=disabled
+    //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::request-resource-required=disabled
+    //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+    rpc UpdateTaskQueueConfig (UpdateTaskQueueConfigRequest) returns (UpdateTaskQueueConfigResponse) {}
+
+    // DescribeWorker retrieves a worker information in the specified namespace that match the provided instance key.
+    // Returns an error if the namespace or worker doesn't exist.
+    rpc DescribeWorker (DescribeWorkerRequest) returns (DescribeWorkerResponse) {}
+
 }
+

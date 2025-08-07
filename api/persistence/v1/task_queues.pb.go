@@ -525,6 +525,7 @@ func (x *DeploymentData) GetUnversionedRampData() *v12.DeploymentVersionData {
 type TaskQueueTypeUserData struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	DeploymentData *DeploymentData        `protobuf:"bytes,1,opt,name=deployment_data,json=deploymentData,proto3" json:"deployment_data,omitempty"`
+	Config         *v11.TaskQueueConfig   `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -562,6 +563,13 @@ func (*TaskQueueTypeUserData) Descriptor() ([]byte, []int) {
 func (x *TaskQueueTypeUserData) GetDeploymentData() *DeploymentData {
 	if x != nil {
 		return x.DeploymentData
+	}
+	return nil
+}
+
+func (x *TaskQueueTypeUserData) GetConfig() *v11.TaskQueueConfig {
+	if x != nil {
+		return x.Config
 	}
 	return nil
 }
@@ -780,9 +788,10 @@ const file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc = "" +
 	"\n" +
 	"deployment\x18\x01 \x01(\v2&.temporal.api.deployment.v1.DeploymentR\n" +
 	"deployment\x12D\n" +
-	"\x04data\x18\x02 \x01(\v20.temporal.server.api.deployment.v1.TaskQueueDataR\x04data\"t\n" +
+	"\x04data\x18\x02 \x01(\v20.temporal.server.api.deployment.v1.TaskQueueDataR\x04data\"\xb8\x01\n" +
 	"\x15TaskQueueTypeUserData\x12[\n" +
-	"\x0fdeployment_data\x18\x01 \x01(\v22.temporal.server.api.persistence.v1.DeploymentDataR\x0edeploymentData\"\x8e\x03\n" +
+	"\x0fdeployment_data\x18\x01 \x01(\v22.temporal.server.api.persistence.v1.DeploymentDataR\x0edeploymentData\x12B\n" +
+	"\x06config\x18\x02 \x01(\v2*.temporal.api.taskqueue.v1.TaskQueueConfigR\x06config\"\x8e\x03\n" +
 	"\x11TaskQueueUserData\x12F\n" +
 	"\x05clock\x18\x01 \x01(\v20.temporal.server.api.clock.v1.HybridLogicalClockR\x05clock\x12[\n" +
 	"\x0fversioning_data\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.VersioningDataR\x0eversioningData\x12]\n" +
@@ -825,8 +834,9 @@ var file_temporal_server_api_persistence_v1_task_queues_proto_goTypes = []any{
 	(*v11.BuildIdAssignmentRule)(nil), // 13: temporal.api.taskqueue.v1.BuildIdAssignmentRule
 	(*v11.CompatibleBuildIdRedirectRule)(nil), // 14: temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule
 	(*v12.DeploymentVersionData)(nil),         // 15: temporal.server.api.deployment.v1.DeploymentVersionData
-	(*v13.Deployment)(nil),                    // 16: temporal.api.deployment.v1.Deployment
-	(*v12.TaskQueueData)(nil),                 // 17: temporal.server.api.deployment.v1.TaskQueueData
+	(*v11.TaskQueueConfig)(nil),               // 16: temporal.api.taskqueue.v1.TaskQueueConfig
+	(*v13.Deployment)(nil),                    // 17: temporal.api.deployment.v1.Deployment
+	(*v12.TaskQueueData)(nil),                 // 18: temporal.server.api.deployment.v1.TaskQueueData
 }
 var file_temporal_server_api_persistence_v1_task_queues_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.api.persistence.v1.BuildId.state:type_name -> temporal.server.api.persistence.v1.BuildId.State
@@ -847,18 +857,19 @@ var file_temporal_server_api_persistence_v1_task_queues_proto_depIdxs = []int32{
 	15, // 15: temporal.server.api.persistence.v1.DeploymentData.versions:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
 	15, // 16: temporal.server.api.persistence.v1.DeploymentData.unversioned_ramp_data:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
 	6,  // 17: temporal.server.api.persistence.v1.TaskQueueTypeUserData.deployment_data:type_name -> temporal.server.api.persistence.v1.DeploymentData
-	12, // 18: temporal.server.api.persistence.v1.TaskQueueUserData.clock:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	5,  // 19: temporal.server.api.persistence.v1.TaskQueueUserData.versioning_data:type_name -> temporal.server.api.persistence.v1.VersioningData
-	11, // 20: temporal.server.api.persistence.v1.TaskQueueUserData.per_type:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
-	8,  // 21: temporal.server.api.persistence.v1.VersionedTaskQueueUserData.data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
-	16, // 22: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.deployment:type_name -> temporal.api.deployment.v1.Deployment
-	17, // 23: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.data:type_name -> temporal.server.api.deployment.v1.TaskQueueData
-	7,  // 24: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry.value:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
-	25, // [25:25] is the sub-list for method output_type
-	25, // [25:25] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	16, // 18: temporal.server.api.persistence.v1.TaskQueueTypeUserData.config:type_name -> temporal.api.taskqueue.v1.TaskQueueConfig
+	12, // 19: temporal.server.api.persistence.v1.TaskQueueUserData.clock:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	5,  // 20: temporal.server.api.persistence.v1.TaskQueueUserData.versioning_data:type_name -> temporal.server.api.persistence.v1.VersioningData
+	11, // 21: temporal.server.api.persistence.v1.TaskQueueUserData.per_type:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
+	8,  // 22: temporal.server.api.persistence.v1.VersionedTaskQueueUserData.data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
+	17, // 23: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.deployment:type_name -> temporal.api.deployment.v1.Deployment
+	18, // 24: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.data:type_name -> temporal.server.api.deployment.v1.TaskQueueData
+	7,  // 25: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry.value:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
+	26, // [26:26] is the sub-list for method output_type
+	26, // [26:26] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_task_queues_proto_init() }

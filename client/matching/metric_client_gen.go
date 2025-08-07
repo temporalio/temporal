@@ -107,6 +107,34 @@ func (c *metricClient) DescribeTaskQueuePartition(
 	return c.client.DescribeTaskQueuePartition(ctx, request, opts...)
 }
 
+func (c *metricClient) DescribeVersionedTaskQueues(
+	ctx context.Context,
+	request *matchingservice.DescribeVersionedTaskQueuesRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.DescribeVersionedTaskQueuesResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientDescribeVersionedTaskQueues")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeVersionedTaskQueues(ctx, request, opts...)
+}
+
+func (c *metricClient) DescribeWorker(
+	ctx context.Context,
+	request *matchingservice.DescribeWorkerRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.DescribeWorkerResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientDescribeWorker")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeWorker(ctx, request, opts...)
+}
+
 func (c *metricClient) DispatchNexusTask(
 	ctx context.Context,
 	request *matchingservice.DispatchNexusTaskRequest,
@@ -247,6 +275,20 @@ func (c *metricClient) ListTaskQueuePartitions(
 	return c.client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
+func (c *metricClient) ListWorkers(
+	ctx context.Context,
+	request *matchingservice.ListWorkersRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.ListWorkersResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientListWorkers")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ListWorkers(ctx, request, opts...)
+}
+
 func (c *metricClient) PollNexusTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollNexusTaskQueueRequest,
@@ -259,6 +301,20 @@ func (c *metricClient) PollNexusTaskQueue(
 	}()
 
 	return c.client.PollNexusTaskQueue(ctx, request, opts...)
+}
+
+func (c *metricClient) RecordWorkerHeartbeat(
+	ctx context.Context,
+	request *matchingservice.RecordWorkerHeartbeatRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.RecordWorkerHeartbeatResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientRecordWorkerHeartbeat")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.RecordWorkerHeartbeat(ctx, request, opts...)
 }
 
 func (c *metricClient) ReplicateTaskQueueUserData(
@@ -343,6 +399,20 @@ func (c *metricClient) UpdateNexusEndpoint(
 	}()
 
 	return c.client.UpdateNexusEndpoint(ctx, request, opts...)
+}
+
+func (c *metricClient) UpdateTaskQueueConfig(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueConfigRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.UpdateTaskQueueConfigResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientUpdateTaskQueueConfig")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateTaskQueueConfig(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateTaskQueueUserData(

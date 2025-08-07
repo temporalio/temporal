@@ -44,6 +44,10 @@ const (
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
 	InvalidVisibilityURITagValue = "invalid_visibility_uri"
+
+	ActiveNamespaceStateTagValue  = "active"
+	PassiveNamespaceStateTagValue = "passive"
+	UnknownNamespaceStateTagValue = "unknown"
 )
 
 // Admin Client Operations
@@ -549,6 +553,7 @@ const (
 	TaskTypeVisibilityTaskUpsertExecution                 = "VisibilityTaskUpsertExecution"
 	TaskTypeVisibilityTaskCloseExecution                  = "VisibilityTaskCloseExecution"
 	TaskTypeVisibilityTaskDeleteExecution                 = "VisibilityTaskDeleteExecution"
+	TaskTypeVisibilityTaskUpsertChasmExecution            = "VisibilityTaskUpsertChasmExecution"
 	TaskTypeArchivalTaskArchiveExecution                  = "ArchivalTaskArchiveExecution"
 	TaskTypeTimerActiveTaskActivityTimeout                = "TimerActiveTaskActivityTimeout"
 	TaskTypeTimerActiveTaskWorkflowTaskTimeout            = "TimerActiveTaskWorkflowTaskTimeout"
@@ -723,10 +728,24 @@ var (
 	)
 	SyncShardFromRemoteCounter = NewCounterDef("syncshard_remote_count")
 	SyncShardFromRemoteFailure = NewCounterDef("syncshard_remote_failed")
-	FinalizerItemsCompleted    = NewCounterDef("finalizer_items_completed")
-	FinalizerItemsUnfinished   = NewCounterDef("finalizer_items_unfinished")
-	FinalizerLatency           = NewTimerDef("finalizer_latency")
-	TaskRequests               = NewCounterDef(
+	FinalizerRuns              = NewCounterDef(
+		"finalizer_runs",
+		WithDescription("The number of finalizer runs."),
+	)
+	FinalizerRunTimeouts = NewCounterDef(
+		"finalizer_run_timeouts",
+		WithDescription("The number of finalizer run timeouts."),
+	)
+	FinalizerItemsCompleted = NewCounterDef(
+		"finalizer_items_completed",
+		WithDescription("The number of finalizer items that were completed successfully."),
+	)
+	FinalizerItemsUnfinished = NewCounterDef(
+		"finalizer_items_unfinished",
+		WithDescription("The number of finalizer items that were aborted before completion."),
+	)
+	FinalizerLatency = NewTimerDef("finalizer_latency")
+	TaskRequests     = NewCounterDef(
 		"task_requests",
 		WithDescription("The number of history tasks processed."),
 	)
@@ -940,6 +959,7 @@ var (
 	ReplicationNonEmptyDLQCount                    = NewCounterDef("replication_dlq_non_empty")
 	ReplicationOutlierNamespace                    = NewCounterDef("replication_outlier_namespace")
 	ReplicationDuplicatedTaskCount                 = NewCounterDef("replication_duplicated_task")
+	ReplicationRateLimitLatency                    = NewTimerDef("replication_sender_rate_limit_latency")
 	EventReapplySkippedCount                       = NewCounterDef("event_reapply_skipped_count")
 	DirectQueryDispatchLatency                     = NewTimerDef("direct_query_dispatch_latency")
 	DirectQueryDispatchStickyLatency               = NewTimerDef("direct_query_dispatch_sticky_latency")
@@ -1040,7 +1060,16 @@ var (
 	ApproximateBacklogAgeSeconds           = NewGaugeDef("approximate_backlog_age_seconds")
 	NonRetryableTasks                      = NewCounterDef(
 		"non_retryable_tasks",
-		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"))
+		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"),
+	)
+	TaskCompletedMissing = NewCounterDef(
+		"task_completed_dropped",
+		WithDescription("Count of tasks that were completed after being dropped from the matcher"),
+	)
+	TaskRetryTransient = NewCounterDef(
+		"task_retry_transient",
+		WithDescription("Count of tasks that hit a transient error during match or forward and are retried immediately"),
+	)
 
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
