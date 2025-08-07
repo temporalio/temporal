@@ -18,6 +18,7 @@ const (
 	CallerNameHeaderName = "caller-name"
 	CallerTypeHeaderName = "caller-type"
 	CallOriginHeaderName = "call-initiation"
+	FairnessContextKey   = "fairness-context-key"
 )
 
 var (
@@ -30,6 +31,7 @@ var (
 		CallerNameHeaderName,
 		CallerTypeHeaderName,
 		CallOriginHeaderName,
+		FairnessContextKey,
 	}
 )
 
