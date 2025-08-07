@@ -310,7 +310,7 @@ func (q *QueueStore) updateAckLevel(
 ) error {
 
 	// TODO: remove this once cluster_ack_level is removed from DB
-	metadataStruct, err := serialization.QueueMetadataFromBlob(metadata.Blob.Data, metadata.Blob.EncodingType.String())
+	metadataStruct, err := serialization.QueueMetadataFromBlob(metadata.Blob)
 	if err != nil {
 		return gocql.ConvertError("updateAckLevel", err)
 	}
