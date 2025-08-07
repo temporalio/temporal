@@ -5841,6 +5841,16 @@ func (ms *MutableStateImpl) UpdateActivity(scheduledEventId int64, updater histo
 }
 
 func (ms *MutableStateImpl) PauseActivityByType(activityType string, identity string, reason string) error {
+	maxPausedActivityTypeCount := ms.config.MutableStateMaxPausedActivityTypeCount(ms.namespaceEntry.Name().String())
+	maxPausedActivityTypeLength := ms.config.MutableStateMaxPausedActivityTypeLength()
+
+	if len(activityType) == 0 {
+		return serviceerror.NewInvalidArgument("activity type name is empty")
+	}
+	if len(activityType) > maxPausedActivityTypeLength {
+		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT, fmt.Sprintf("activity type name is too long: %s", activityType))
+	}
+
 	if ms.executionInfo.PauseInfo == nil {
 		ms.executionInfo.PauseInfo = &persistencespb.WorkflowPauseInfo{
 			ActivityPauseInfos: []*persistencespb.ActivityPauseInfo{},
@@ -5856,13 +5866,8 @@ func (ms *MutableStateImpl) PauseActivityByType(activityType string, identity st
 		return nil
 	}
 
-	maxPausedActivityTypeCount := ms.config.MutableStateMaxPausedActivityTypeCount(ms.namespaceEntry.Name().String())
-	maxPausedActivityTypeLength := ms.config.MutableStateMaxPausedActivityTypeLength()
 	if len(pausedActivities) >= maxPausedActivityTypeCount {
 		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT, "too many activity types paused")
-	}
-	if len(activityType) > maxPausedActivityTypeLength {
-		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT, "activity type name is too long to pause")
 	}
 
 	ms.executionInfo.PauseInfo.ActivityPauseInfos = append(ms.executionInfo.PauseInfo.ActivityPauseInfos, &persistencespb.ActivityPauseInfo{
