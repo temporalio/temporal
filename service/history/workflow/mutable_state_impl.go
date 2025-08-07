@@ -5886,8 +5886,10 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 	}
 
 	// add activities that are explicitly paused by type to the map
-	for _, activityPauseInfo := range ms.executionInfo.PauseInfo.ActivityPauseInfos {
-		pausedActivityTypes[activityPauseInfo.ActivityType] = struct{}{}
+	if ms.executionInfo.PauseInfo != nil {
+		for _, activityPauseInfo := range ms.executionInfo.PauseInfo.ActivityPauseInfos {
+			pausedActivityTypes[activityPauseInfo.ActivityType] = struct{}{}
+		}
 	}
 
 	pausedInfo := make([]string, 0, len(pausedActivityTypes))
