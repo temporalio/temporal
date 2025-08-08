@@ -102,7 +102,7 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.NoError(err)
 	s.mockShard.SetStateMachineRegistry(reg)
 
-	s.registry = chasm.NewRegistry()
+	s.registry = chasm.NewRegistry(s.mockShard.GetLogger())
 	err = s.registry.Register(&testChasmLibrary{})
 	s.NoError(err)
 	s.mockShard.SetChasmRegistry(s.registry)
