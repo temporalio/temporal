@@ -58,7 +58,7 @@ func (lr *YamlLoader) LoadFile(contents []byte) {
 	}
 
 	for key, yamlCV := range yamlValues {
-		lr.add(Key(key), yamlCV)
+		lr.add(MakeKey(key), yamlCV)
 	}
 }
 
@@ -106,7 +106,7 @@ func (lr *YamlLoader) add(key Key, yamlCV yamlConstrainedValue) {
 		cvs[i].Value = val
 		cvs[i].Constraints = convertYamlConstraints(key, cv.Constraints, precedence, lr)
 	}
-	lr.Map[key.Lower()] = cvs
+	lr.Map[key] = cvs
 }
 
 func (lr *YamlLoader) warn(err error) {
