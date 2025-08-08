@@ -104,6 +104,9 @@ var (
 // NewCollection creates a new collection. For subscriptions to work, you must call Start/Stop.
 // Get will work without Start/Stop.
 func NewCollection(client Client, logger log.Logger) *Collection {
+	// Do this at the first convenient place we have a logger:
+	logSharedStructureWarnings(logger)
+
 	return &Collection{
 		client:        client,
 		logger:        logger,
@@ -576,9 +579,6 @@ func convertMap(val any) (map[string]any, error) {
 // treat the fields independently), or the zero value of its type (if you want to treat the fields
 // as a group and default unset fields to zero).
 func ConvertStructure[T any](def T) func(v any) (T, error) {
-	// call deepCopyForMapstructure once to surface any potential panic at static init time.
-	_ = deepCopyForMapstructure(def)
-
 	return func(v any) (T, error) {
 		// if we already have the right type, no conversion is necessary
 		if typedV, ok := v.(T); ok {

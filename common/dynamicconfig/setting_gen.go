@@ -742,6 +742,11 @@ type GlobalTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, fu
 // values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
 // when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewGlobalTypedSetting[T any](key Key, def T, description string) GlobalTypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
 	s := GlobalTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -860,6 +865,11 @@ type NamespaceTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T,
 // values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
 // when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewNamespaceTypedSetting[T any](key Key, def T, description string) NamespaceTypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
 	s := NamespaceTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -978,6 +988,11 @@ type NamespaceIDTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[
 // values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
 // when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewNamespaceIDTypedSetting[T any](key Key, def T, description string) NamespaceIDTypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
 	s := NamespaceIDTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -1096,6 +1111,11 @@ type TaskQueueTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T,
 // values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
 // when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewTaskQueueTypedSetting[T any](key Key, def T, description string) TaskQueueTypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
 	s := TaskQueueTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -1232,6 +1252,11 @@ type ShardIDTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, f
 // values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
 // when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewShardIDTypedSetting[T any](key Key, def T, description string) ShardIDTypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
 	s := ShardIDTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -1350,6 +1375,11 @@ type TaskTypeTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, 
 // values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
 // when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewTaskTypeTypedSetting[T any](key Key, def T, description string) TaskTypeTypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
 	s := TaskTypeTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -1468,6 +1498,11 @@ type DestinationTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[
 // values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
 // when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewDestinationTypedSetting[T any](key Key, def T, description string) DestinationTypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
 	s := DestinationTypedSetting[T]{
 		key:         key,
 		def:         def,
