@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/mock/gomock"
@@ -33,7 +34,7 @@ func (s *componentRefSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	s.registry = NewRegistry()
+	s.registry = NewRegistry(log.NewTestLogger())
 	err := s.registry.Register(newTestLibrary(s.controller))
 	s.NoError(err)
 }

@@ -57,7 +57,8 @@ func (s *nodeSuite) SetupTest() {
 	s.nodeBackend = NewMockNodeBackend(s.controller)
 	s.testLibrary = newTestLibrary(s.controller)
 
-	s.registry = NewRegistry()
+	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	s.registry = NewRegistry(s.logger)
 	err := s.registry.Register(s.testLibrary)
 	s.NoError(err)
 	err = s.registry.Register(&CoreLibrary{})
@@ -65,7 +66,6 @@ func (s *nodeSuite) SetupTest() {
 
 	s.timeSource = clock.NewEventTimeSource()
 	s.nodePathEncoder = &testNodePathEncoder{}
-	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 }
 
 func (s *nodeSuite) SetupSubTest() {
@@ -204,8 +204,9 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	sd1Node := node.children["SubData1"]
 	s.NotNil(sd1Node)
 
-	err := node.syncSubComponents()
+	needsPointerResolution, err := node.syncSubComponents()
 	s.NoError(err)
+	s.False(needsPointerResolution)
 	s.Len(node.mutation.DeletedNodes, 1)
 
 	sd1Node = node.children["SubData1"]
@@ -471,9 +472,8 @@ func (s *nodeSuite) TestPointerAttributes() {
 		rootNode.valueState = valueStateNeedSerialize
 
 		ctx := NewMutableContext(context.Background(), rootNode)
-		rootComponent.SubComponent11Pointer, err = ComponentPointerTo(ctx, sc11)
-		s.NoError(err)
-		s.Equal([]string{"SubComponent1", "SubComponent11"}, rootComponent.SubComponent11Pointer.Internal.v)
+		rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, sc11)
+		s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.ft)
 
 		mutations, err := rootNode.CloseTransaction()
 		s.NoError(err)
@@ -531,8 +531,9 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	component.SubComponent1.Internal.v.(*TestSubComponent1).SubComponent11 = NewEmptyField[*TestSubComponent11]()
 	s.NotNil(node.children["SubComponent1"].children["SubComponent11"])
 
-	err := node.syncSubComponents()
+	needsPointerResolution, err := node.syncSubComponents()
 	s.NoError(err)
+	s.False(needsPointerResolution)
 
 	s.Len(node.mutation.DeletedNodes, 1)
 	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
@@ -548,8 +549,9 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteMiddleNode() {
 	component.SubComponent1 = NewEmptyField[*TestSubComponent1]()
 	s.NotNil(node.children["SubComponent1"])
 
-	err := node.syncSubComponents()
+	needsPointerResolution, err := node.syncSubComponents()
 	s.NoError(err)
+	s.False(needsPointerResolution)
 
 	s.Len(node.mutation.DeletedNodes, 3)
 	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
@@ -1586,7 +1588,7 @@ func (s *nodeSuite) TestSerializeDeserializeTask() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
-	expectedBlob, err := serialization.ProtoEncodeBlob(payload, enumspb.ENCODING_TYPE_PROTO3)
+	expectedBlob, err := serialization.ProtoEncode(payload)
 	s.NoError(err)
 
 	testCases := []struct {
@@ -1822,7 +1824,7 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
-	taskBlob, err := serialization.ProtoEncodeBlob(payload, enumspb.ENCODING_TYPE_PROTO3)
+	taskBlob, err := serialization.ProtoEncode(payload)
 	s.NoError(err)
 
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
@@ -2343,7 +2345,8 @@ func (s *nodeSuite) testComponentTree() *Node {
 	// Sync tree with subcomponents of TestComponent.
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(4) // for InitialVersionedTransition of children.
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(4)
-	err = node.syncSubComponents()
+	needsPointerResolution, err := node.syncSubComponents()
+	s.False(needsPointerResolution)
 	s.NoError(err)
 	s.Empty(node.mutation.DeletedNodes)
 
@@ -2356,7 +2359,7 @@ func (s *nodeSuite) TestEachPureTask() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
 	}
-	taskBlob, err := serialization.ProtoEncodeBlob(payload, enumspb.ENCODING_TYPE_PROTO3)
+	taskBlob, err := serialization.ProtoEncode(payload)
 	s.NoError(err)
 
 	// Set up a tree with expired and unexpired pure tasks.

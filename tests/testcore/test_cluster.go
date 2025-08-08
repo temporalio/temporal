@@ -322,7 +322,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		}
 	}
 
-	chasmRegistry := chasm.NewRegistry()
+	chasmRegistry := chasm.NewRegistry(logger)
 	if err := chasmRegistry.Register(&chasm.CoreLibrary{}); err != nil {
 		return nil, err
 	}

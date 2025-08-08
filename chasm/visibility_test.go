@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/log"
 	"go.uber.org/mock/gomock"
 )
 
@@ -32,7 +33,7 @@ func (s *visibilitySuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockChasmContext = NewMockMutableContext(s.controller)
 
-	s.registry = NewRegistry()
+	s.registry = NewRegistry(log.NewTestLogger())
 	err := s.registry.Register(&CoreLibrary{})
 	s.NoError(err)
 

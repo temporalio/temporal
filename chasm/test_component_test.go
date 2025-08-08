@@ -20,13 +20,14 @@ type (
 	TestComponent    struct {
 		UnimplementedComponent
 
-		ComponentData         *protoMessageType
-		SubComponent1         Field[*TestSubComponent1]
-		SubComponent2         Field[*TestSubComponent2]
-		SubData1              Field[*protoMessageType]
-		SubComponents         Map[string, *TestSubComponent1]
-		PendingActivities     Map[int, *TestSubComponent1]
-		SubComponent11Pointer Field[*TestSubComponent11]
+		ComponentData          *protoMessageType
+		SubComponent1          Field[*TestSubComponent1]
+		SubComponent2          Field[*TestSubComponent2]
+		SubData1               Field[*protoMessageType]
+		SubComponents          Map[string, *TestSubComponent1]
+		PendingActivities      Map[int, *TestSubComponent1]
+		SubComponent11Pointer  Field[*TestSubComponent11]
+		SubComponent11Pointer2 Field[*TestSubComponent11]
 
 		Visibility Field[*Visibility]
 	}
@@ -34,9 +35,12 @@ type (
 	TestSubComponent1 struct {
 		UnimplementedComponent
 
-		SubComponent1Data *protoMessageType
-		SubComponent11    Field[*TestSubComponent11]
-		SubData11         Field[*protoMessageType] // Random proto message.
+		SubComponent1Data    *protoMessageType
+		SubComponent11       Field[*TestSubComponent11]
+		SubComponent11_2     Field[*TestSubComponent11]
+		SubData11            Field[*protoMessageType] // Random proto message.
+		SubComponent2Pointer Field[*TestSubComponent2]
+		DataPointer          Field[*protoMessageType]
 	}
 
 	TestSubComponent11 struct {
