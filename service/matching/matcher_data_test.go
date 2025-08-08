@@ -351,7 +351,7 @@ func (s *MatcherDataSuite) TestRateLimitedBacklog() {
 }
 
 func (s *MatcherDataSuite) TestPerKeyRateLimit() {
-	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(10.0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.SetFairnessKeyRateLimitDefaultForTesting(10.0, enumspb.RATE_LIMIT_SOURCE_API)
 	s.md.rateLimitManager.UpdatePerKeySimpleRateLimitForTesting(300 * time.Millisecond)
 	// register some backlog with three keys
 	keys := []string{"key1", "key2", "key3"}

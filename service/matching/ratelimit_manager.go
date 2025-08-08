@@ -24,7 +24,7 @@ type (
 		// Sources of the effective RPS.
 		workerRPS                   *float64 // RPS set by worker at the time of polling, if available.
 		apiConfigRPS                *float64 // RPS set via API, if available.
-		fairnessKeyRateLimitDefault *float64 // fairnessKeyRateLimitDefault set via API, if available
+		fairnessKeyRateLimitDefault *float64 // per-partition fairnessKeyRateLimitDefault set via API, if available
 		adminNsRate                 float64
 		adminTqRate                 float64
 		numReadPartitions           int
@@ -232,7 +232,8 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 	if fairnessKeyRateLimitDefault.GetRateLimit() == nil {
 		r.fairnessKeyRateLimitDefault = nil
 	} else {
-		val := float64(fairnessKeyRateLimitDefault.GetRateLimit().GetRequestsPerSecond())
+		// Maintain the fairnessKeyRateLimitDefault as per-partition rate.
+		val := float64(fairnessKeyRateLimitDefault.GetRateLimit().GetRequestsPerSecond()) / float64(r.numReadPartitions)
 		r.fairnessKeyRateLimitDefault = &val
 	}
 }
