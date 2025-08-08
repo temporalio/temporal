@@ -409,7 +409,8 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 		return temporal.NewApplicationError("conflict token mismatch", errFailedPrecondition)
 	}
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if args.Version == d.State.GetRoutingConfig().GetCurrentVersion() && args.Version != worker_versioning.UnversionedVersionId {
+	if args.Version == d.State.GetRoutingConfig().GetCurrentVersion() &&
+		!(args.Version == worker_versioning.UnversionedVersionId && args.Percentage == 0) {
 		d.logger.Info("version can't be set to ramping since it is already current")
 		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s is already current", args.Version), errFailedPrecondition)
 	}
