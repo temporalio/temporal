@@ -60,7 +60,7 @@ func (d CancelRequestedEventDefinition) CherryPick(root *hsm.Node, event *histor
 type CancelRequestCompletedEventDefinition struct{}
 
 func (d CancelRequestCompletedEventDefinition) IsWorkflowTaskTrigger() bool {
-	return false
+	return true
 }
 
 func (d CancelRequestCompletedEventDefinition) Type() enumspb.EventType {
@@ -94,7 +94,7 @@ func (d CancelRequestCompletedEventDefinition) CherryPick(root *hsm.Node, event 
 type CancelRequestFailedEventDefinition struct{}
 
 func (d CancelRequestFailedEventDefinition) IsWorkflowTaskTrigger() bool {
-	return false
+	return true
 }
 
 func (d CancelRequestFailedEventDefinition) Type() enumspb.EventType {
