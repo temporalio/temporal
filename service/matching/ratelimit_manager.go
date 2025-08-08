@@ -15,7 +15,11 @@ type (
 	rateLimitManager struct {
 		mu sync.Mutex
 
-		numReadPartitions int
+		// Dependencies
+		userDataManager userDataManager       // User data manager to fetch user data for task queue configurations.
+		config          *taskQueueConfig      // Dynamic configuration for task queues set by system.
+		taskQueueType   enumspb.TaskQueueType // Task queue type
+		timeSource      clock.TimeSource
 
 		// Sources of the effective RPS.
 		workerRPS                   *float64 // RPS set by worker at the time of polling, if available.
@@ -23,27 +27,21 @@ type (
 		fairnessKeyRateLimitDefault *float64 // fairnessKeyRateLimitDefault set via API, if available
 		adminNsRate                 float64
 		adminTqRate                 float64
+		numReadPartitions           int
 
 		// Derived from the above sources.
-		effectiveRPS    float64                 // Min of api/worker set RPS and system defaults. Always reflects the overall task queue RPS.
-		systemRPS       float64                 // Min of partition level dispatch rates times the number of read partitions.
-		rateLimitSource enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
+		effectiveRPS              float64                 // Min of api/worker set RPS and system defaults. Always reflects the overall task queue RPS.
+		effectiveRPSPartitionWise float64                 // Min of api/worker set RPS and system defaults, partition-wise.
+		systemRPS                 float64                 // Min of partition level dispatch rates times the number of read partitions.
+		rateLimitSource           enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
 		// Derived from the `defaultTaskDispatchRPS`.
 		// dynamicRateBurst is the dynamic rate & burst for rate limiter
 		dynamicRateBurst quotas.MutableRateBurst
 		// dynamicRateLimiter is the dynamic rate limiter that can be used to force refresh on new rates.
 		dynamicRateLimiter *quotas.DynamicRateLimiterImpl
-
-		// Dependencies
-		userDataManager userDataManager       // User data manager to fetch user data for task queue configurations.
-		config          *taskQueueConfig      // Dynamic configuration for task queues set by system.
-		taskQueueType   enumspb.TaskQueueType // Task queue type
-		timeSource      clock.TimeSource
-
 		// Fairness tasks rate limiter.
 		wholeQueueLimit simpleLimiterParams
 		wholeQueueReady simpleLimiter
-
 		// Rate limiter for individual fairness keys.
 		// Note that we currently have only one limit for all keys, which is scaled by the key's
 		// weight. If we do this, we can assume that all keys are either at or below their rate
@@ -139,8 +137,8 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 	systemRPS := min(
 		r.adminNsRate,
 		r.adminTqRate,
-	) * float64(r.numReadPartitions)
-	r.systemRPS = systemRPS
+	)
+	r.systemRPS = systemRPS * float64(r.numReadPartitions) // System RPS is tracked for the entire task queue, not partition-wise.
 	switch {
 	case r.apiConfigRPS != nil:
 		effectiveRPS = *r.apiConfigRPS
@@ -152,19 +150,23 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 
 	if effectiveRPS < r.systemRPS {
 		r.effectiveRPS = effectiveRPS
+		r.effectiveRPSPartitionWise = effectiveRPS / float64(r.numReadPartitions)
 		r.rateLimitSource = rateLimitSource
 	} else {
 		r.effectiveRPS = r.systemRPS
+		r.effectiveRPSPartitionWise = systemRPS
 		r.rateLimitSource = enumspb.RATE_LIMIT_SOURCE_SYSTEM
 	}
 }
 
 func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
 	oldRPS := r.effectiveRPS
+	oldRPSPartitionWise := r.effectiveRPSPartitionWise
 	r.computeEffectiveRPSAndSourceLocked()
 	newRPS := r.effectiveRPS
+	newRPSPartitionWise := r.effectiveRPSPartitionWise
 	// If the effective RPS has changed, we need to update the rate limiters.
-	if oldRPS != newRPS {
+	if oldRPS != newRPS || oldRPSPartitionWise != newRPSPartitionWise {
 		r.updateRatelimitLocked()
 		r.updateSimpleRateLimitLocked(defaultBurstDuration)
 	}
@@ -241,7 +243,7 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 
 // updateRatelimitLocked checks and updates the overall queue rate limit if changed.
 func (r *rateLimitManager) updateRatelimitLocked() {
-	newRPS := r.effectiveRPS / float64(r.numReadPartitions)
+	newRPS := r.effectiveRPSPartitionWise
 	// If the effective RPS is zero, we set the burst to zero as well.
 	// This prevents any initial tasks from executing immediately.
 	// Allows pausing of the task queue by setting the RPS to zero.

@@ -93,9 +93,9 @@ func newPriTaskMatcher(
 		partition:        partition,
 		fwdr:             fwdr,
 		validator:        validator,
+		rateLimitManager: rateLimitManager,
 		numPartitions:    config.NumReadPartitions,
 		markAlive:        markAlive,
-		rateLimitManager: rateLimitManager,
 	}
 
 	return tm
