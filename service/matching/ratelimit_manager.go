@@ -186,6 +186,7 @@ func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
 		}
 	}
 	r.workerRPS = rps
+	r.trySetRPSFromUserDataLocked()
 	r.computeAndApplyRateLimitLocked()
 }
 
