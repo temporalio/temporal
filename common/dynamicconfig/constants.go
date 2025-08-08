@@ -550,11 +550,13 @@ is currently processing a task.
 	)
 
 	// keys for frontend
-	FrontendHTTPAllowedHosts = NewGlobalTypedSetting(
+	FrontendHTTPAllowedHosts = NewGlobalTypedSettingWithConverter(
 		"frontend.httpAllowedHosts",
-		[]string(nil),
+		ConvertWildcardStringListToRegexp,
+		MatchAnythingRE,
 		`HTTP API Requests with a "Host" header matching the allowed hosts will be processed, otherwise rejected.
-Wildcards (*) are expanded to allow any substring. By default any Host header is allowed.`,
+Wildcards (*) are expanded to allow any substring. By default any Host header is allowed.
+Concrete type should be list of strings.`,
 	)
 	FrontendPersistenceMaxQPS = NewGlobalIntSetting(
 		"frontend.persistenceMaxQPS",
@@ -891,11 +893,13 @@ used when the first cache layer has a miss. Requires server restart for change t
 		`The TTL of the Nexus endpoint registry's readthrough LRU cache - the cache is a secondary cache and is only
 used when the first cache layer has a miss. Requires server restart for change to be applied.`,
 	)
-	FrontendNexusRequestHeadersBlacklist = NewGlobalTypedSetting(
+	FrontendNexusRequestHeadersBlacklist = NewGlobalTypedSettingWithConverter(
 		"frontend.nexusRequestHeadersBlacklist",
-		[]string(nil),
+		ConvertWildcardStringListToRegexp,
+		MatchNothingRE,
 		`Nexus request headers to be removed before being sent to a user handler.
-Wildcards (*) are expanded to allow any substring. By default blacklist is empty.`,
+Wildcards (*) are expanded to allow any substring. By default blacklist is empty.
+Concrete type should be list of strings.`,
 	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",
