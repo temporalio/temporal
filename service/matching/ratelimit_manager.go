@@ -30,10 +30,9 @@ type (
 		numReadPartitions           int
 
 		// Derived from the above sources.
-		effectiveRPS              float64                 // Min of api/worker set RPS and system defaults. Always reflects the overall task queue RPS.
-		effectiveRPSPartitionWise float64                 // Min of api/worker set RPS and system defaults, partition-wise.
-		systemRPS                 float64                 // Min of partition level dispatch rates times the number of read partitions.
-		rateLimitSource           enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
+		effectiveRPS    float64                 // Min of api/worker set RPS and system defaults. Always reflects the per-partition wise task queue RPS.
+		systemRPS       float64                 // Min of partition level dispatch rates times the number of read partitions.
+		rateLimitSource enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
 		// Derived from the `defaultTaskDispatchRPS`.
 		// dynamicRateBurst is the dynamic rate & burst for rate limiter
 		dynamicRateBurst quotas.MutableRateBurst
@@ -89,8 +88,9 @@ func newRateLimitManager(userDataManager userDataManager,
 	r.cancels = append(r.cancels, cancel)
 	r.adminTqRate, cancel = config.AdminNamespaceTaskQueueToPartitionRateSub(r.setAdminTqRate)
 	r.cancels = append(r.cancels, cancel)
-	r.numReadPartitions, cancel = config.NumReadPartitionsSub(r.setNumReadPartitions)
-	r.cancels = append(r.cancels, cancel)
+	// r.numReadPartitions, cancel = config.NumReadPartitionsSub(r.setNumReadPartitions)
+	// r.cancels = append(r.cancels, cancel)
+	r.numReadPartitions = config.NumReadPartitions()
 	r.computeEffectiveRPSAndSource()
 	return r
 }
@@ -138,35 +138,31 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 		r.adminNsRate,
 		r.adminTqRate,
 	)
-	r.systemRPS = systemRPS * float64(r.numReadPartitions) // System RPS is tracked for the entire task queue, not partition-wise.
+	r.systemRPS = systemRPS
 	switch {
 	case r.apiConfigRPS != nil:
-		effectiveRPS = *r.apiConfigRPS
+		effectiveRPS = *r.apiConfigRPS / float64(r.numReadPartitions)
 		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_API
 	case r.workerRPS != nil:
-		effectiveRPS = *r.workerRPS
+		effectiveRPS = *r.workerRPS / float64(r.numReadPartitions)
 		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_WORKER
 	}
 
 	if effectiveRPS < r.systemRPS {
 		r.effectiveRPS = effectiveRPS
-		r.effectiveRPSPartitionWise = effectiveRPS / float64(r.numReadPartitions)
 		r.rateLimitSource = rateLimitSource
 	} else {
 		r.effectiveRPS = r.systemRPS
-		r.effectiveRPSPartitionWise = systemRPS
 		r.rateLimitSource = enumspb.RATE_LIMIT_SOURCE_SYSTEM
 	}
 }
 
 func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
 	oldRPS := r.effectiveRPS
-	oldRPSPartitionWise := r.effectiveRPSPartitionWise
 	r.computeEffectiveRPSAndSourceLocked()
 	newRPS := r.effectiveRPS
-	newRPSPartitionWise := r.effectiveRPSPartitionWise
 	// If the effective RPS has changed, we need to update the rate limiters.
-	if oldRPS != newRPS || oldRPSPartitionWise != newRPSPartitionWise {
+	if oldRPS != newRPS {
 		r.updateRatelimitLocked()
 		r.updateSimpleRateLimitLocked(defaultBurstDuration)
 	}
@@ -243,7 +239,7 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 
 // updateRatelimitLocked checks and updates the overall queue rate limit if changed.
 func (r *rateLimitManager) updateRatelimitLocked() {
-	newRPS := r.effectiveRPSPartitionWise
+	newRPS := r.effectiveRPS
 	// If the effective RPS is zero, we set the burst to zero as well.
 	// This prevents any initial tasks from executing immediately.
 	// Allows pausing of the task queue by setting the RPS to zero.

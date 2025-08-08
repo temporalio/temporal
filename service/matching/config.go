@@ -154,7 +154,7 @@ type (
 		MaxTaskBatchSize                func() int
 		NumWritePartitions              func() int
 		NumReadPartitions               func() int
-		NumReadPartitionsSub            func(func(int)) (int, func())
+		// NumReadPartitionsSub            func(func(int)) (int, func())
 
 		// partition qps = AdminNamespaceToPartitionDispatchRate(namespace)
 		AdminNamespaceToPartitionDispatchRate func() float64
@@ -223,38 +223,38 @@ func NewConfig(
 	dc *dynamicconfig.Collection,
 ) *Config {
 	return &Config{
-		PersistenceMaxQPS:                        dynamicconfig.MatchingPersistenceMaxQPS.Get(dc),
-		PersistenceGlobalMaxQPS:                  dynamicconfig.MatchingPersistenceGlobalMaxQPS.Get(dc),
-		PersistenceNamespaceMaxQPS:               dynamicconfig.MatchingPersistenceNamespaceMaxQPS.Get(dc),
-		PersistenceGlobalNamespaceMaxQPS:         dynamicconfig.MatchingPersistenceGlobalNamespaceMaxQPS.Get(dc),
-		PersistencePerShardNamespaceMaxQPS:       dynamicconfig.DefaultPerShardNamespaceRPSMax,
-		PersistenceDynamicRateLimitingParams:     dynamicconfig.MatchingPersistenceDynamicRateLimitingParams.Get(dc),
-		PersistenceQPSBurstRatio:                 dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
-		SyncMatchWaitDuration:                    dynamicconfig.MatchingSyncMatchWaitDuration.Get(dc),
-		HistoryMaxPageSize:                       dynamicconfig.MatchingHistoryMaxPageSize.Get(dc),
-		EnableDeployments:                        dynamicconfig.EnableDeployments.Get(dc), // [cleanup-wv-pre-release]
-		EnableDeploymentVersions:                 dynamicconfig.EnableDeploymentVersions.Get(dc),
-		MaxTaskQueuesInDeployment:                dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
-		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
-		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
-		RangeSize:                                100000,
-		NewMatcher:                               dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
-		EnableFairness:                           dynamicconfig.MatchingEnableFairness.Subscribe(dc),
-		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
-		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
-		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
-		MaxTaskQueueIdleTime:                     dynamicconfig.MatchingMaxTaskQueueIdleTime.Get(dc),
-		LongPollExpirationInterval:               dynamicconfig.MatchingLongPollExpirationInterval.Get(dc),
-		BacklogTaskForwardTimeout:                dynamicconfig.MatchingBacklogTaskForwardTimeout.Get(dc),
-		MinTaskThrottlingBurstSize:               dynamicconfig.MatchingMinTaskThrottlingBurstSize.Get(dc),
-		MaxTaskDeleteBatchSize:                   dynamicconfig.MatchingMaxTaskDeleteBatchSize.Get(dc),
-		TaskDeleteInterval:                       dynamicconfig.MatchingTaskDeleteInterval.Get(dc),
-		OutstandingTaskAppendsThreshold:          dynamicconfig.MatchingOutstandingTaskAppendsThreshold.Get(dc),
-		MaxTaskBatchSize:                         dynamicconfig.MatchingMaxTaskBatchSize.Get(dc),
-		ThrottledLogRPS:                          dynamicconfig.MatchingThrottledLogRPS.Get(dc),
-		NumTaskqueueWritePartitions:              dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(dc),
-		NumTaskqueueReadPartitions:               dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
-		NumTaskqueueReadPartitionsSub:            dynamicconfig.MatchingNumTaskqueueReadPartitions.Subscribe(dc),
+		PersistenceMaxQPS:                    dynamicconfig.MatchingPersistenceMaxQPS.Get(dc),
+		PersistenceGlobalMaxQPS:              dynamicconfig.MatchingPersistenceGlobalMaxQPS.Get(dc),
+		PersistenceNamespaceMaxQPS:           dynamicconfig.MatchingPersistenceNamespaceMaxQPS.Get(dc),
+		PersistenceGlobalNamespaceMaxQPS:     dynamicconfig.MatchingPersistenceGlobalNamespaceMaxQPS.Get(dc),
+		PersistencePerShardNamespaceMaxQPS:   dynamicconfig.DefaultPerShardNamespaceRPSMax,
+		PersistenceDynamicRateLimitingParams: dynamicconfig.MatchingPersistenceDynamicRateLimitingParams.Get(dc),
+		PersistenceQPSBurstRatio:             dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
+		SyncMatchWaitDuration:                dynamicconfig.MatchingSyncMatchWaitDuration.Get(dc),
+		HistoryMaxPageSize:                   dynamicconfig.MatchingHistoryMaxPageSize.Get(dc),
+		EnableDeployments:                    dynamicconfig.EnableDeployments.Get(dc), // [cleanup-wv-pre-release]
+		EnableDeploymentVersions:             dynamicconfig.EnableDeploymentVersions.Get(dc),
+		MaxTaskQueuesInDeployment:            dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
+		RPS:                                  dynamicconfig.MatchingRPS.Get(dc),
+		OperatorRPSRatio:                     dynamicconfig.OperatorRPSRatio.Get(dc),
+		RangeSize:                            100000,
+		NewMatcher:                           dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
+		EnableFairness:                       dynamicconfig.MatchingEnableFairness.Subscribe(dc),
+		GetTasksBatchSize:                    dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
+		GetTasksReloadAt:                     dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
+		UpdateAckInterval:                    dynamicconfig.MatchingUpdateAckInterval.Get(dc),
+		MaxTaskQueueIdleTime:                 dynamicconfig.MatchingMaxTaskQueueIdleTime.Get(dc),
+		LongPollExpirationInterval:           dynamicconfig.MatchingLongPollExpirationInterval.Get(dc),
+		BacklogTaskForwardTimeout:            dynamicconfig.MatchingBacklogTaskForwardTimeout.Get(dc),
+		MinTaskThrottlingBurstSize:           dynamicconfig.MatchingMinTaskThrottlingBurstSize.Get(dc),
+		MaxTaskDeleteBatchSize:               dynamicconfig.MatchingMaxTaskDeleteBatchSize.Get(dc),
+		TaskDeleteInterval:                   dynamicconfig.MatchingTaskDeleteInterval.Get(dc),
+		OutstandingTaskAppendsThreshold:      dynamicconfig.MatchingOutstandingTaskAppendsThreshold.Get(dc),
+		MaxTaskBatchSize:                     dynamicconfig.MatchingMaxTaskBatchSize.Get(dc),
+		ThrottledLogRPS:                      dynamicconfig.MatchingThrottledLogRPS.Get(dc),
+		NumTaskqueueWritePartitions:          dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(dc),
+		NumTaskqueueReadPartitions:           dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
+		// NumTaskqueueReadPartitionsSub:            dynamicconfig.MatchingNumTaskqueueReadPartitions.Subscribe(dc),
 		BreakdownMetricsByTaskQueue:              dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 		BreakdownMetricsByPartition:              dynamicconfig.MetricsBreakdownByPartition.Get(dc),
 		BreakdownMetricsByBuildID:                dynamicconfig.MetricsBreakdownByBuildID.Get(dc),
@@ -383,9 +383,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		NumReadPartitions: func() int {
 			return max(1, config.NumTaskqueueReadPartitions(ns.String(), taskQueueName, taskType))
 		},
-		NumReadPartitionsSub: func(cb func(int)) (int, func()) {
-			return config.NumTaskqueueReadPartitionsSub(ns.String(), taskQueueName, taskType, cb)
-		},
+		// NumReadPartitionsSub: func(cb func(int)) (int, func()) {
+		// 	return config.NumTaskqueueReadPartitionsSub(ns.String(), taskQueueName, taskType, cb)
+		// },
 		BreakdownMetricsByTaskQueue: func() bool {
 			return config.BreakdownMetricsByTaskQueue(ns.String(), taskQueueName, taskType)
 		},
