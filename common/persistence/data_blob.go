@@ -8,10 +8,6 @@ import (
 // NewDataBlob returns a new DataBlob.
 // TODO: return an UnknowEncodingType error with the actual type string when encodingTypeStr is invalid
 func NewDataBlob(data []byte, encodingTypeStr string) *commonpb.DataBlob {
-	if len(data) == 0 {
-		return nil
-	}
-
 	encodingType, err := enumspb.EncodingTypeFromString(encodingTypeStr)
 	if err != nil {
 		// encodingTypeStr not valid, an error will be returned on deserialization
