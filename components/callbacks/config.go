@@ -68,7 +68,7 @@ func allowedAddressConverter(val any) ([]AddressMatchRule, error) {
 		Pattern       string
 		AllowInsecure bool
 	}
-	intermediate, err := dynamicconfig.ConvertStructure([]entry{})(val)
+	intermediate, err := dynamicconfig.ConvertStructure[[]entry](nil)(val)
 	if err != nil {
 		return nil, err
 	}
