@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -407,7 +408,7 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 	defer wfWorker.Stop()
 
 	// Launch workflows under workerSetRPS (2 RPS)
-	for i := 0; i < taskCount; i++ {
+	for i := range taskCount {
 		_, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
 			TaskQueue: tv.TaskQueue().GetName(),
 			ID:        fmt.Sprintf("wf-dynamic-%d", i),
@@ -438,8 +439,31 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 	})
 	s.NoError(err)
 
+	require.Eventually(s.T(), func() bool {
+		describeResp, err := s.FrontendClient().DescribeTaskQueue(context.Background(), &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: activityTaskQueue},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			ReportConfig:  true,
+		})
+		if err != nil {
+			return false
+		}
+		cfg := describeResp.GetConfig()
+		rl := cfg.GetQueueRateLimit().GetRateLimit()
+		if rl == nil {
+			s.T().Logf("Rate limit not set in Persistence")
+			return false
+		}
+		if rl.GetRequestsPerSecond() == float32(apiSetRPS) {
+			s.T().Logf("Rate limit set in Persistence: %v", rl.GetRequestsPerSecond())
+			return true
+		}
+		return false
+	}, 3*time.Second, 100*time.Millisecond, "DescribeTaskQueue did not reflect override")
+
 	// Launch workflows under API override (1 RPS)
-	for i := 0; i < taskCount; i++ {
+	for i := range taskCount {
 		_, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
 			TaskQueue: tv.TaskQueue().GetName(),
 			ID:        fmt.Sprintf("wf-api-%d", i),
@@ -452,6 +476,7 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 
 	// Measure duration with API override
 	secondGap := runTimes[len(runTimes)-1].Sub(runTimes[0])
+	s.T().Logf("Completion time for First Activity tasks: %v, Second Activity tasks: %v", firstGap, secondGap)
 	// Second gap must be twice as larger as the effective RPS is halved
 	s.Greater(secondGap, 2*firstGap-buffer, "API override did not reduce throughput as expected")
 }

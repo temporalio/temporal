@@ -55,13 +55,15 @@ func (s *RateLimitManagerSuite) TestUpdatePerKeySimpleRateLimitLocked_WhenFairne
 	rateLimitManager.mu.Unlock()
 }
 
-func (r *rateLimitManager) UpdateSimpleRateLimit(burstDuration time.Duration) {
+// Additions to rateLimitManager for use by other unit tests:
+
+func (r *rateLimitManager) UpdateSimpleRateLimitForTesting(burstDuration time.Duration) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.updateSimpleRateLimitLocked(burstDuration)
 }
 
-func (r *rateLimitManager) UpdatePerKeySimpleRateLimit(burstDuration time.Duration) {
+func (r *rateLimitManager) UpdatePerKeySimpleRateLimitForTesting(burstDuration time.Duration) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.updatePerKeySimpleRateLimitLocked(burstDuration)

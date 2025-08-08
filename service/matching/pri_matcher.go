@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"strconv"
-	"sync"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -41,9 +40,6 @@ type priTaskMatcher struct {
 	logger           log.Logger
 	numPartitions    func() int // number of task queue partitions
 	markAlive        func()     // function to mark the physical task queue alive
-
-	limiterLock sync.Mutex
-	dynamicRate float64
 }
 
 type waitingPoller struct {
@@ -99,7 +95,6 @@ func newPriTaskMatcher(
 		validator:        validator,
 		numPartitions:    config.NumReadPartitions,
 		markAlive:        markAlive,
-		dynamicRate:      defaultTaskDispatchRPS,
 		rateLimitManager: rateLimitManager,
 	}
 

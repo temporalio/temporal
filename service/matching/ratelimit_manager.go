@@ -15,28 +15,30 @@ type (
 	rateLimitManager struct {
 		mu sync.Mutex
 
-		userDataManager userDataManager       // User data manager to fetch user data for task queue configurations.
-		config          *taskQueueConfig      // Dynamic configuration for task queues set by system.
-		taskQueueType   enumspb.TaskQueueType // Task queue type
-
-		effectiveRPS float64 // Min of api/worker set RPS and system defaults. Always reflects the overall task queue RPS.
-		systemRPS    float64 // Min of partition level dispatch rates times the number of read partitions.
-
-		// Sources of the effective RPS.
-		workerRPS                   *float64                // RPS set by worker at the time of polling, if available.
-		apiConfigRPS                *float64                // RPS set via API, if available.
-		fairnessKeyRateLimitDefault *float64                // fairnessKeyRateLimitDefault set via API, if available
-		rateLimitSource             enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
-
-		timeSource        clock.TimeSource
-		adminNsRate       float64
-		adminTqRate       float64
 		numReadPartitions int
 
-		// dynamicRate is the dynamic rate & burst for rate limiter
+		// Sources of the effective RPS.
+		workerRPS                   *float64 // RPS set by worker at the time of polling, if available.
+		apiConfigRPS                *float64 // RPS set via API, if available.
+		fairnessKeyRateLimitDefault *float64 // fairnessKeyRateLimitDefault set via API, if available
+		adminNsRate                 float64
+		adminTqRate                 float64
+
+		// Derived from the above sources.
+		effectiveRPS    float64                 // Min of api/worker set RPS and system defaults. Always reflects the overall task queue RPS.
+		systemRPS       float64                 // Min of partition level dispatch rates times the number of read partitions.
+		rateLimitSource enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
+		// Derived from the `defaultTaskDispatchRPS`.
+		// dynamicRateBurst is the dynamic rate & burst for rate limiter
 		dynamicRateBurst quotas.MutableRateBurst
 		// dynamicRateLimiter is the dynamic rate limiter that can be used to force refresh on new rates.
 		dynamicRateLimiter *quotas.DynamicRateLimiterImpl
+
+		// Dependencies
+		userDataManager userDataManager       // User data manager to fetch user data for task queue configurations.
+		config          *taskQueueConfig      // Dynamic configuration for task queues set by system.
+		taskQueueType   enumspb.TaskQueueType // Task queue type
+		timeSource      clock.TimeSource
 
 		// Fairness tasks rate limiter.
 		wholeQueueLimit simpleLimiterParams
@@ -158,9 +160,9 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 }
 
 func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
-	oldRPS := r.effectiveRPS / float64(r.numReadPartitions)
+	oldRPS := r.effectiveRPS
 	r.computeEffectiveRPSAndSourceLocked()
-	newRPS := r.effectiveRPS / float64(r.numReadPartitions)
+	newRPS := r.effectiveRPS
 	// If the effective RPS has changed, we need to update the rate limiters.
 	if oldRPS != newRPS {
 		r.updateRatelimitLocked()
@@ -258,8 +260,6 @@ func (r *rateLimitManager) updateRatelimitLocked() {
 // UpdateSimpleRateLimit updates the overall queue rate limits for the simpleRateLimiter implementation
 func (r *rateLimitManager) updateSimpleRateLimitLocked(burstDuration time.Duration) {
 	newRPS := r.effectiveRPS
-	// Always update the rate limit when called, even if RPS hasn't changed
-	// This ensures that the burst duration is properly applied
 	r.wholeQueueLimit = makeSimpleLimiterParams(newRPS, burstDuration)
 
 	// Clip to handle the case where we have increased from a zero or very low limit and had
@@ -277,7 +277,7 @@ func (r *rateLimitManager) updatePerKeySimpleRateLimitLocked(burstDuration time.
 	}
 	rate := *r.fairnessKeyRateLimitDefault
 	slp := makeSimpleLimiterParams(rate, burstDuration)
-	if slp.Equals(r.perKeyLimit) {
+	if slp == r.perKeyLimit {
 		// No change in per-key rate limit, no need to update.
 		return
 	}
@@ -316,10 +316,6 @@ func (r *rateLimitManager) clearPerKeyRateLimitsLocked() {
 func (r *rateLimitManager) readyTimeForTask(task *internalTask) simpleLimiter {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.readyTimeForTaskLocked(task)
-}
-
-func (r *rateLimitManager) readyTimeForTaskLocked(task *internalTask) simpleLimiter {
 	// TODO(pri): after we have task-specific ready time, we can re-enable this
 	// if task.isForwarded() {
 	// 	// don't count any rate limit for forwarded tasks, it was counted on the child
@@ -340,10 +336,6 @@ func (r *rateLimitManager) readyTimeForTaskLocked(task *internalTask) simpleLimi
 func (r *rateLimitManager) consumeTokens(now int64, task *internalTask, tokens int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.consumeTokensLocked(now, task, tokens)
-}
-
-func (r *rateLimitManager) consumeTokensLocked(now int64, task *internalTask, tokens int64) {
 	if task.isForwarded() {
 		// don't count any rate limit for forwarded tasks, it was counted on the child
 		return

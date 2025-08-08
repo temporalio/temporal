@@ -223,14 +223,14 @@ type matcherData struct {
 
 func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock.TimeSource, canForward bool, rateLimitManager *rateLimitManager) matcherData {
 	return matcherData{
-		config:     config,
-		logger:     logger,
-		timeSource: timeSource,
-		canForward: canForward,
+		config:           config,
+		logger:           logger,
+		timeSource:       timeSource,
+		canForward:       canForward,
+		rateLimitManager: rateLimitManager,
 		tasks: taskPQ{
 			ages: newBacklogAgeTracker(),
 		},
-		rateLimitManager: rateLimitManager,
 	}
 }
 
@@ -603,10 +603,6 @@ func makeSimpleLimiterParams(rate float64, burstDuration time.Duration) simpleLi
 
 func (p simpleLimiterParams) never() bool   { return p.interval < 0 }
 func (p simpleLimiterParams) limited() bool { return p.interval > 0 }
-
-func (p simpleLimiterParams) Equals(other simpleLimiterParams) bool {
-	return p.interval == other.interval && p.burst == other.burst
-}
 
 // delay returns the time until the limiter is ready.
 // If the return value is <= 0 then the limiter can go now.
