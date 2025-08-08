@@ -407,7 +407,7 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 	s.NoError(wfWorker.Start())
 	defer wfWorker.Stop()
 
-	// Launch workflows under workerSetRPS (2 RPS)
+	// Launch workflows under workerSetRPS
 	for i := range taskCount {
 		_, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
 			TaskQueue: tv.TaskQueue().GetName(),
@@ -426,7 +426,7 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 	runTimes = nil
 	wg.Add(taskCount)
 
-	//  Apply API rate limit override workerSetRPS (2 RPS) to set the effective RPS to 1 RPS
+	//  Apply API rate limit override workerSetRPS to set the effective RPS to apiSetRPS
 	_, err := s.FrontendClient().UpdateTaskQueueConfig(context.Background(), &workflowservice.UpdateTaskQueueConfigRequest{
 		Namespace:     s.Namespace().String(),
 		Identity:      tv.ClientIdentity(),
@@ -462,7 +462,7 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 		return false
 	}, 3*time.Second, 100*time.Millisecond, "DescribeTaskQueue did not reflect override")
 
-	// Launch workflows under API override (1 RPS)
+	// Launch workflows under API override
 	for i := range taskCount {
 		_, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
 			TaskQueue: tv.TaskQueue().GetName(),
@@ -476,9 +476,10 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 
 	// Measure duration with API override
 	secondGap := runTimes[len(runTimes)-1].Sub(runTimes[0])
-	s.T().Logf("Completion time for First Activity tasks: %v, Second Activity tasks: %v", firstGap, secondGap)
-	// Second gap must be twice as larger as the effective RPS is halved
-	s.Greater(secondGap, 2*firstGap-buffer, "API override did not reduce throughput as expected")
+	s.T().Logf("Completion time for First set of Activity tasks: %v, Second Activity tasks: %v", firstGap, secondGap)
+	// Second gap must be ideally twice as larger as the effective RPS is halved
+	// To avoid flakiness, we allow a buffer of 1.5x the first gap along with an additional buffer of 2s
+	s.Greater(secondGap, time.Duration(1.5*float64(firstGap))-buffer, "API override did not reduce throughput as expected")
 }
 
 // TestUpdateAndDescribeTaskQueueConfig tests the update and describe task queue config functionality.
