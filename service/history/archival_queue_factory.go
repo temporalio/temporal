@@ -5,6 +5,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/quotas"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/archival"
@@ -125,22 +126,26 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 	logger := log.With(shard.GetLogger(), tag.ComponentArchivalQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationArchivalQueueProcessorScope))
 
-	var shardScheduler = f.HostScheduler
-	if f.Config.TaskSchedulerEnableRateLimiter() {
-		shardScheduler = queues.NewRateLimitedScheduler(
-			f.HostScheduler,
-			queues.RateLimitedSchedulerOptions{
-				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
-				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
-			},
-			f.ClusterMetadata.GetCurrentClusterName(),
-			f.NamespaceRegistry,
-			f.SchedulerRateLimiter,
-			f.TimeSource,
-			logger,
-			metricsHandler,
-		)
+	schedulerRateLimiter := f.SchedulerRateLimiter
+	shadowMode := f.Config.TaskSchedulerEnableRateLimiterShadowMode
+	if !f.Config.TaskSchedulerEnableRateLimiter() {
+		schedulerRateLimiter = quotas.NoopRequestRateLimiter
+		shadowMode = dynamicconfig.GetBoolPropertyFn(false)
 	}
+
+	shardScheduler := queues.NewRateLimitedScheduler(
+		f.HostScheduler,
+		queues.RateLimitedSchedulerOptions{
+			EnableShadowMode: shadowMode,
+			StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
+		},
+		f.ClusterMetadata.GetCurrentClusterName(),
+		f.NamespaceRegistry,
+		schedulerRateLimiter,
+		f.TimeSource,
+		logger,
+		metricsHandler,
+	)
 
 	rescheduler := queues.NewRescheduler(
 		shardScheduler,
