@@ -36,16 +36,18 @@ type (
 
 		// task queue configuration
 
-		RangeSize                                int64
-		NewMatcher                               dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
-		EnableFairness                           dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
-		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		MaxTaskQueueIdleTime                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		NumTaskqueueWritePartitions              dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		NumTaskqueueReadPartitions               dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		NumTaskqueueReadPartitionsSub            dynamicconfig.TypedSubscribableWithTaskQueueFilter[int]
+		RangeSize                   int64
+		NewMatcher                  dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
+		EnableFairness              dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
+		GetTasksBatchSize           dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		GetTasksReloadAt            dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		UpdateAckInterval           dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		MaxTaskQueueIdleTime        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		NumTaskqueueWritePartitions dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		NumTaskqueueReadPartitions  dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		// TODO : revert to subscriptions for NumReadPartitions once the Dynamic config conversion is updated,
+		// to allow subscriptions for TypedConstrainedDefaultSettings.
+		// NumTaskqueueReadPartitionsSub            dynamicconfig.TypedSubscribableWithTaskQueueFilter[int]
 		BreakdownMetricsByTaskQueue              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByPartition              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByBuildID                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
