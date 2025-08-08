@@ -31,6 +31,7 @@ func logSharedStructureWarnings(logger log.Logger) {
 }
 
 func hasSharedStructure(v reflect.Value, path string) string {
+	// nolint:exhaustive // deliberately not exhaustive
 	switch v.Kind() {
 	case reflect.Map, reflect.Slice, reflect.Pointer:
 		if !v.IsNil() {
