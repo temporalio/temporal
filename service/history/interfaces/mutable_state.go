@@ -362,5 +362,7 @@ type (
 
 		HasRequestID(requestID string) bool
 		SetSuccessorRunID(runID string)
+
+		PauseActivityByType(activityType string, identity string, reason string) error
 	}
 )

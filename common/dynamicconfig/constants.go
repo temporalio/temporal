@@ -374,6 +374,16 @@ If exceeded, failure will be truncated before being stored in mutable state.`,
 		16,
 		`MutableStateTombstoneCountLimit is the maximum number of deleted sub state machines tracked in mutable state.`,
 	)
+	MutableStateMaxPausedActivityTypeCount = NewNamespaceIntSetting(
+		"limit.mutableStateMaxPausedActivityTypeCount",
+		10,
+		`MutableStateMaxPausedActivityTypeCount is the maximum number of activity types that can be paused at once.`,
+	)
+	MutableStateMaxPausedActivityTypeLength = NewGlobalIntSetting(
+		"limit.mutableStateMaxPausedActivityTypeLength",
+		512,
+		`MutableStateMaxPausedActivityTypeLength is the maximum length of an activity type name that can be paused.`,
+	)
 	HistoryCountSuggestContinueAsNew = NewNamespaceIntSetting(
 		"limit.historyCount.suggestContinueAsNew",
 		4*1024,
@@ -1272,7 +1282,7 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 	MatchingPollerScalingBacklogAgeScaleUp = NewTaskQueueDurationSetting(
 		"matching.pollerScalingMinimumBacklog",
 		200*time.Millisecond,
-		`MatchingPollerScalingBacklogAgeScaleUp is the minimum backlog age that must be accumulated before 
+		`MatchingPollerScalingBacklogAgeScaleUp is the minimum backlog age that must be accumulated before
 a decision to scale up the number of pollers will be issued`,
 	)
 	MatchingPollerScalingWaitTime = NewTaskQueueDurationSetting(
