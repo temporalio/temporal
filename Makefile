@@ -300,7 +300,7 @@ protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRP
 	@env \
 		PROTOGEN=$(PROTOGEN) MOCKGEN=$(MOCKGEN) GOIMPORTS=$(GOIMPORTS) \
 		API_BINPB=$(API_BINPB) PROTO_ROOT=$(PROTO_ROOT) PROTO_OUT=$(PROTO_OUT) \
-		./develop/protoc.sh
+		go run ./cmd/tools/protogen
 
 proto-codegen:
 	@printf $(COLOR) "Generate service clients..."
