@@ -65,6 +65,8 @@ func GetAuthorizerFromConfig(config *config.Authorization) (Authorizer, error) {
 		return NewNoopAuthorizer(), nil
 	case "default":
 		return NewDefaultAuthorizer(), nil
+	case "http":
+		return NewHttpAuthorizer(config.HttpAuthEndpoint), nil
 	}
 	return nil, fmt.Errorf("unknown authorizer: %s", config.Authorizer)
 }
