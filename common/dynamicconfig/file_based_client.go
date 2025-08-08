@@ -77,7 +77,7 @@ func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConf
 
 func (fc *fileBasedClient) GetValue(key Key) []ConstrainedValue {
 	values := fc.values.Load().(ConfigValueMap)
-	return values[key.Lower()]
+	return values[key]
 }
 
 func (fc *fileBasedClient) init() error {

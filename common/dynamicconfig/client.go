@@ -1,8 +1,6 @@
 package dynamicconfig
 
 import (
-	"strings"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 )
@@ -45,10 +43,6 @@ type (
 	// Called with modified keys on any change to the current value set.
 	// Deleted keys/constraints will get a nil value.
 	ClientUpdateFunc func(map[Key][]ConstrainedValue)
-
-	// Key is a key/property stored in dynamic config. For convenience, it is recommended that
-	// you treat keys as case-insensitive.
-	Key string
 
 	// ConstrainedValue is a value plus associated constraints.
 	//
@@ -100,11 +94,3 @@ type (
 		Destination   string
 	}
 )
-
-func (k Key) String() string {
-	return string(k)
-}
-
-func (k Key) Lower() Key {
-	return Key(strings.ToLower(string(k)))
-}

@@ -23,18 +23,17 @@ func register(s GenericSetting) {
 	if globalRegistry.settings == nil {
 		globalRegistry.settings = make(map[Key]GenericSetting)
 	}
-	lowerKey := s.Key().Lower()
-	if globalRegistry.settings[lowerKey] != nil {
-		panic(fmt.Sprintf("duplicate registration of dynamic config key: %q", lowerKey))
+	if globalRegistry.settings[s.Key()] != nil {
+		panic(fmt.Sprintf("duplicate registration of dynamic config key: %q", s.Key().String()))
 	}
-	globalRegistry.settings[lowerKey] = s
+	globalRegistry.settings[s.Key()] = s
 }
 
 func queryRegistry(k Key) GenericSetting {
 	if !globalRegistry.queried.Load() {
 		globalRegistry.queried.Store(true)
 	}
-	return globalRegistry.settings[k.Lower()]
+	return globalRegistry.settings[k]
 }
 
 // For testing only; do not call from regular code!
