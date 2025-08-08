@@ -28,6 +28,13 @@ func ConfigProvider(coll *dynamicconfig.Collection) *Config {
 		PayloadSizeLimit:              dynamicconfig.BlobSizeLimitError.Get(coll),
 		ForwardingEnabledForNamespace: dynamicconfig.EnableNamespaceNotActiveAutoForwarding.Get(coll),
 		MaxOperationTokenLength:       nexusoperations.MaxOperationTokenLength.Get(coll),
+		MetricTagConfig: dynamicconfig.NewGlobalCachedTypedValue(
+			coll,
+			nexusoperations.MetricTagConfiguration,
+			func(config nexusoperations.NexusMetricTagConfig) (*nexusoperations.NexusMetricTagConfig, error) {
+				return &config, nil
+			},
+		),
 	}
 }
 
