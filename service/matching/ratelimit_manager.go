@@ -194,7 +194,7 @@ func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
 func (r *rateLimitManager) GetEffectiveRPSAndSource() (float64, enumspb.RateLimitSource) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.effectiveRPS, r.rateLimitSource
+	return r.effectiveRPS * float64(r.numReadPartitions), r.rateLimitSource
 }
 
 func (r *rateLimitManager) GetRateLimiter() quotas.RateLimiter {
