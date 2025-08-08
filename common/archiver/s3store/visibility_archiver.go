@@ -52,15 +52,6 @@ const (
 	primaryIndexKeyWorkflowID       = "workflowID"
 )
 
-// NewVisibilityArchiver creates a new archiver.VisibilityArchiver based on s3
-func NewVisibilityArchiver(
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-	config *config.S3Archiver,
-) (archiver.VisibilityArchiver, error) {
-	return newVisibilityArchiver(logger, metricsHandler, config)
-}
-
 func newVisibilityArchiver(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
