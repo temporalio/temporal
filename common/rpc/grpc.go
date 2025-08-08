@@ -15,6 +15,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -58,7 +59,13 @@ const (
 // The hostName syntax is defined in
 // https://github.com/grpc/grpc/blob/master/doc/naming.md.
 // dns resolver is used by default
-func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+func Dial(
+	hostName string,
+	tlsConfig *tls.Config,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+	opts ...grpc.DialOption,
+) (*grpc.ClientConn, error) {
 	var grpcSecureOpt grpc.DialOption
 	if tlsConfig == nil {
 		grpcSecureOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
@@ -94,7 +101,13 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, opts ...grp
 	}
 	dialOptions = append(dialOptions, opts...)
 
-	return grpc.NewClient(hostName, dialOptions...)
+	cc, err := grpc.NewClient(hostName, dialOptions...)
+	if err != nil {
+		metrics.DialErrorCount.With(metricsHandler).Record(1)
+		return nil, err
+	}
+	watchDialAttempts(cc, metricsHandler)
+	return cc, nil
 }
 
 func errorInterceptor(
@@ -163,4 +176,75 @@ func addHeadersForResourceExhausted(ctx context.Context, logger log.Logger, err 
 			logger.Error("Failed to add Resource-Exhausted headers to response", tag.Error(headerErr))
 		}
 	}
+}
+
+// connState is the tiny interface we use in tests. *grpc.ClientConn satisfies it.
+type connState interface {
+	GetState() connectivity.State
+	WaitForStateChange(context.Context, connectivity.State) bool
+}
+
+// watchDialAttempts watches the gRPC dial attempts and records metrics
+func watchDialAttempts(cc *grpc.ClientConn, mh metrics.Handler) <-chan struct{} {
+	return watchDialAttemptsImpl(cc, mh)
+}
+
+// watchDialAttemptsImpl is the implementation of watchDialAttempts to make it easier to test.
+// It returns a channel that is closed when the shutdown is received.
+func watchDialAttemptsImpl(cc connState, mh metrics.Handler) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// gRPC’s state machine can emit CONNECTING multiple times in a single attempt.
+		// inAttempt is used to only start timing when we enter CONNECTING from a non-connecting
+		// state, and stop when we leave it for a terminal state (READY, TRANSIENT_FAILURE, SHUTDOWN)
+		var inAttempt bool
+		// start is the start time for the current attempt
+		var start time.Time
+
+		for {
+			st := cc.GetState()
+
+			switch st {
+			case connectivity.Idle:
+				// No action needed for idle state
+			case connectivity.Connecting:
+				// If we just entered CONNECTING and are not already timing,
+				// this marks the start of a new attempt.
+				if !inAttempt {
+					inAttempt = true
+					start = time.Now()
+					metrics.DialAttemptsCount.With(mh).Record(1)
+				}
+			case connectivity.Ready:
+				if inAttempt {
+					// Attempt succeeded
+					metrics.DialSuccessCount.With(mh).Record(1)
+					metrics.DialConnectLatency.With(mh).Record(time.Since(start))
+					inAttempt = false
+				}
+			case connectivity.TransientFailure:
+				if inAttempt {
+					// Attempt failed
+					metrics.DialErrorCount.With(mh).Record(1)
+					metrics.DialConnectLatency.With(mh).Record(time.Since(start))
+					inAttempt = false
+				}
+			case connectivity.Shutdown:
+				// If we shut down while timing an attempt (e.g., CONNECTING -> SHUTDOWN),
+				// count it as a failed attempt and exit.
+				if inAttempt {
+					metrics.DialErrorCount.With(mh).Record(1)
+					metrics.DialConnectLatency.With(mh).Record(time.Since(start))
+				}
+				return
+			}
+
+			// Block until the state changes.
+			if !cc.WaitForStateChange(context.Background(), st) {
+				return
+			}
+		}
+	}()
+	return done
 }
