@@ -9,4 +9,5 @@ const (
 	AddSearchAttributesActivityTQ = "temporal-sys-add-search-attributes-activity-tq"
 	DeleteNamespaceActivityTQ     = "temporal-sys-delete-namespace-activity-tq"
 	DLQActivityTQ                 = "temporal-sys-dlq-activity-tq"
+	WorkerSysTQ                   = "temporal-sys/worker-tq"
 )
