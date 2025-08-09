@@ -1,0 +1,12 @@
+# buf rules for CHASM protos
+version: v1
+deps:
+  - buf.build/googleapis/googleapis
+breaking:
+  use:
+    - WIRE
+lint:
+  use:
+    - DEFAULT
+  except:
+    - PACKAGE_DIRECTORY_MATCH

@@ -100,11 +100,13 @@ endef
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
+CHASM_PROTO_FILES = $(shell find ./chasm/lib -name "*.proto")
 PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
 API_BINPB := $(PROTO_ROOT)/api.binpb
 # Note: If you change the value of INTERNAL_BINPB, you'll have to add logic to
 # develop/buf-breaking.sh to handle the old and new values at once.
 INTERNAL_BINPB := $(PROTO_ROOT)/image.bin
+CHASM_BINPB := $(PROTO_ROOT)/chasm.bin
 PROTO_OUT := api
 
 ALL_SRC         := $(shell find . -name "*.go")
@@ -296,11 +298,20 @@ $(INTERNAL_BINPB): $(API_BINPB) $(PROTO_FILES)
 	@printf $(COLOR) "Generate proto image..."
 	@protoc --descriptor_set_in=$(API_BINPB) -I=$(PROTO_ROOT)/internal $(PROTO_FILES) -o $@
 
+$(CHASM_BINPB): $(API_BINPB) $(INTERNAL_BINPB) $(CHASM_PROTO_FILES)
+	@printf $(COLOR) "Generate CHASM proto image..."
+	@protoc --descriptor_set_in=$(API_BINPB):$(INTERNAL_BINPB) -I=. $(CHASM_PROTO_FILES) -o $@
+
 protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB)
-	@env \
-		PROTOGEN=$(PROTOGEN) MOCKGEN=$(MOCKGEN) GOIMPORTS=$(GOIMPORTS) \
-		API_BINPB=$(API_BINPB) PROTO_ROOT=$(PROTO_ROOT) PROTO_OUT=$(PROTO_OUT) \
-		./develop/protoc.sh
+	@go run ./cmd/tools/protogen \
+		-root=$(ROOT) \
+		-proto-out=$(PROTO_OUT) \
+		-proto-root=$(PROTO_ROOT) \
+		-protogen=$(PROTOGEN) \
+		-api-binpb=$(API_BINPB) \
+		-goimports=$(GOIMPORTS) \
+		-mockgen=$(MOCKGEN) \
+		$(PROTO_DIRS)
 
 proto-codegen:
 	@printf $(COLOR) "Generate service clients..."
@@ -368,14 +379,16 @@ lint-api: $(API_LINTER) $(API_BINPB)
 	@printf $(COLOR) "Linting proto API..."
 	$(call silent_exec, $(API_LINTER) --set-exit-status -I=$(PROTO_ROOT)/internal --descriptor-set-in $(API_BINPB) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES))
 
-lint-protos: $(BUF) $(INTERNAL_BINPB)
+lint-protos: $(BUF) $(INTERNAL_BINPB) $(CHASM_BINPB)
 	@printf $(COLOR) "Linting proto definitions..."
 	@$(BUF) lint $(INTERNAL_BINPB)
+	@$(BUF) lint --config chasm/lib/buf.yaml $(CHASM_BINPB)
 
 # Edit proto/internal/buf.yaml to exclude specific files from this check.
+# TODO: buf breaking check for CHASM protos.
 buf-breaking: $(BUF) $(API_BINPB) $(INTERNAL_BINPB)
 	@printf $(COLOR) "Run buf breaking proto changes check..."
-	@env BUF=$(BUF) API_BINPB=$(API_BINPB) INTERNAL_BINPB=$(INTERNAL_BINPB) MAIN_BRANCH=$(MAIN_BRANCH) \
+	@env BUF=$(BUF) API_BINPB=$(API_BINPB) INTERNAL_BINPB=$(INTERNAL_BINPB) CHASM_BINPB=$(CHASM_BINPB) MAIN_BRANCH=$(MAIN_BRANCH) \
 		./develop/buf-breaking.sh
 
 shell-check:
