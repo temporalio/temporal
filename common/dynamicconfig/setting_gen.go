@@ -772,7 +772,7 @@ func NewGlobalTypedSettingWithConverter[T any](key string, convert func(any) (T,
 // NewGlobalTypedSettingWithConstrainedDefault creates a setting with a compound default value.
 func NewGlobalTypedSettingWithConstrainedDefault[T any](key string, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) GlobalTypedConstrainedDefaultSetting[T] {
 	s := GlobalTypedConstrainedDefaultSetting[T]{
-		key:         key,
+		key:         MakeKey(key),
 		cdef:        cdef,
 		convert:     convert,
 		description: description,
@@ -908,7 +908,7 @@ func NewNamespaceTypedSettingWithConverter[T any](key string, convert func(any) 
 // NewNamespaceTypedSettingWithConstrainedDefault creates a setting with a compound default value.
 func NewNamespaceTypedSettingWithConstrainedDefault[T any](key string, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) NamespaceTypedConstrainedDefaultSetting[T] {
 	s := NamespaceTypedConstrainedDefaultSetting[T]{
-		key:         key,
+		key:         MakeKey(key),
 		cdef:        cdef,
 		convert:     convert,
 		description: description,
@@ -1044,7 +1044,7 @@ func NewNamespaceIDTypedSettingWithConverter[T any](key string, convert func(any
 // NewNamespaceIDTypedSettingWithConstrainedDefault creates a setting with a compound default value.
 func NewNamespaceIDTypedSettingWithConstrainedDefault[T any](key string, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) NamespaceIDTypedConstrainedDefaultSetting[T] {
 	s := NamespaceIDTypedConstrainedDefaultSetting[T]{
-		key:         key,
+		key:         MakeKey(key),
 		cdef:        cdef,
 		convert:     convert,
 		description: description,
@@ -1180,7 +1180,7 @@ func NewTaskQueueTypedSettingWithConverter[T any](key string, convert func(any) 
 // NewTaskQueueTypedSettingWithConstrainedDefault creates a setting with a compound default value.
 func NewTaskQueueTypedSettingWithConstrainedDefault[T any](key string, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) TaskQueueTypedConstrainedDefaultSetting[T] {
 	s := TaskQueueTypedConstrainedDefaultSetting[T]{
-		key:         key,
+		key:         MakeKey(key),
 		cdef:        cdef,
 		convert:     convert,
 		description: description,
@@ -1340,7 +1340,7 @@ func NewShardIDTypedSettingWithConverter[T any](key string, convert func(any) (T
 // NewShardIDTypedSettingWithConstrainedDefault creates a setting with a compound default value.
 func NewShardIDTypedSettingWithConstrainedDefault[T any](key string, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) ShardIDTypedConstrainedDefaultSetting[T] {
 	s := ShardIDTypedConstrainedDefaultSetting[T]{
-		key:         key,
+		key:         MakeKey(key),
 		cdef:        cdef,
 		convert:     convert,
 		description: description,
@@ -1476,7 +1476,7 @@ func NewTaskTypeTypedSettingWithConverter[T any](key string, convert func(any) (
 // NewTaskTypeTypedSettingWithConstrainedDefault creates a setting with a compound default value.
 func NewTaskTypeTypedSettingWithConstrainedDefault[T any](key string, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) TaskTypeTypedConstrainedDefaultSetting[T] {
 	s := TaskTypeTypedConstrainedDefaultSetting[T]{
-		key:         key,
+		key:         MakeKey(key),
 		cdef:        cdef,
 		convert:     convert,
 		description: description,
@@ -1612,7 +1612,7 @@ func NewDestinationTypedSettingWithConverter[T any](key string, convert func(any
 // NewDestinationTypedSettingWithConstrainedDefault creates a setting with a compound default value.
 func NewDestinationTypedSettingWithConstrainedDefault[T any](key string, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) DestinationTypedConstrainedDefaultSetting[T] {
 	s := DestinationTypedConstrainedDefaultSetting[T]{
-		key:         key,
+		key:         MakeKey(key),
 		cdef:        cdef,
 		convert:     convert,
 		description: description,

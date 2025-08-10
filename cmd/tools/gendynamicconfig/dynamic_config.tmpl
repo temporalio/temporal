@@ -60,7 +60,7 @@ func New{{$P.Name}}TypedSettingWithConverter[T any](key string, convert func(any
 func New{{$P.Name}}TypedSettingWithConstrainedDefault[T any](key string, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) {{$P.Name}}TypedConstrainedDefaultSetting[T] {
 	{{/* Do not warn on shared structure here, it's the converter's concern. */ -}}
 	s := {{$P.Name}}TypedConstrainedDefaultSetting[T]{
-		key:         key,
+		key:         MakeKey(key),
 		cdef:        cdef,
 		convert:     convert,
 		description: description,

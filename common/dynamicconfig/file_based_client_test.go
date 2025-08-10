@@ -55,7 +55,7 @@ func (s *fileBasedClientSuite) SetupTest() {
 }
 
 func (s *fileBasedClientSuite) TestGetValue() {
-	cvs := s.client.GetValue(testGetBoolPropertyKey)
+	cvs := s.client.GetValue(dynamicconfig.MakeKey(testGetBoolPropertyKey))
 	s.Equal(3, len(cvs))
 	s.ElementsMatch([]dynamicconfig.ConstrainedValue{
 		{Constraints: dynamicconfig.Constraints{}, Value: false},
@@ -65,7 +65,7 @@ func (s *fileBasedClientSuite) TestGetValue() {
 }
 
 func (s *fileBasedClientSuite) TestGetValue_NonExistKey() {
-	cvs := s.client.GetValue(unknownKey)
+	cvs := s.client.GetValue(dynamicconfig.MakeKey(unknownKey))
 	s.Nil(cvs)
 
 	defaultValue := true
@@ -74,7 +74,7 @@ func (s *fileBasedClientSuite) TestGetValue_NonExistKey() {
 }
 
 func (s *fileBasedClientSuite) TestGetValue_CaseInsensitie() {
-	cvs := s.client.GetValue(testCaseInsensitivePropertyKey)
+	cvs := s.client.GetValue(dynamicconfig.MakeKey(testCaseInsensitivePropertyKey))
 	s.Equal(1, len(cvs))
 
 	v := dynamicconfig.NewGlobalBoolSetting(testCaseInsensitivePropertyKey, false, "").Get(s.collection)()
