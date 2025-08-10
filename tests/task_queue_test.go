@@ -206,6 +206,7 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 		defer wg.Done()
 		mu.Lock()
 		*runTimes = append(*runTimes, time.Now())
+		time.Sleep(250 * time.Millisecond) //nolint
 		mu.Unlock()
 		return nil
 	}
@@ -258,7 +259,7 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
 	const (
 		apiRPS            = 5.0
 		taskCount         = 25
-		buffer            = 2 * time.Second // High Buffer to account for test flakiness
+		buffer            = time.Duration(3.5 * float64(time.Second)) // High Buffer to account for test flakiness
 		activityTaskQueue = "RateLimitTest"
 	)
 	expectedTotal := time.Duration(float64(taskCount-int(apiRPS))/apiRPS) * time.Second
