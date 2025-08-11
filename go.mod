@@ -64,7 +64,7 @@ require (
 	go.temporal.io/sdk v1.34.0
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/fx v1.23.0
-	go.uber.org/mock v0.5.0
+	go.uber.org/mock v0.5.2
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20250218142911-aa4b98e5adaa
@@ -182,3 +182,7 @@ require (
 	modernc.org/strutil v1.2.1 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
+
+replace go.temporal.io/api => /Users/sivagirishramesh/Documents/Work/Temporal-dev/api-go
+
+replace go.temporal.io/sdk => /Users/sivagirishramesh/Documents/Work/Temporal-dev/sdk-go

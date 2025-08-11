@@ -235,6 +235,8 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 		val := float64(fairnessKeyRateLimitDefault.GetRateLimit().GetRequestsPerSecond()) / float64(r.numReadPartitions)
 		r.fairnessKeyRateLimitDefault = &val
 	}
+	fairnessWeightOverrides := config.GetFairnessWeightOverrides()
+	r.perKeyOverrides = fairnessWeightOverrides
 }
 
 // updateRatelimitLocked checks and updates the overall queue rate limit if changed.
@@ -360,4 +362,11 @@ func (r *rateLimitManager) Stop() {
 	for _, cancel := range r.cancels {
 		cancel()
 	}
+}
+
+// GetFairnessWeightOverrides returns the current fairness weight overrides.
+func (r *rateLimitManager) GetFairnessWeightOverrides() fairnessWeightOverrides {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.perKeyOverrides
 }

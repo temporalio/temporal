@@ -100,8 +100,10 @@ var (
 	errUserDataNoMutateNonRoot  = serviceerror.NewInvalidArgument("can only mutate user data on root workflow task queue")
 	errRequestedVersionTooLarge = serviceerror.NewInvalidArgument("requested task queue user data for version greater than known version")
 	errTaskQueueClosed          = serviceerror.NewUnavailable("task queue closed")
-	errUserDataUnmodified       = errors.New("sentinel error for unchanged user data")
-	errUserDataVersionMismatch  = errors.New("user data version mismatch")
+	// Fairness weight override update rejected
+	errFwoUpdateRejected       = serviceerror.NewInvalidArgumentf("fairness weight overrides exceeds configuration limit")
+	errUserDataUnmodified      = errors.New("sentinel error for unchanged user data")
+	errUserDataVersionMismatch = errors.New("user data version mismatch")
 )
 
 func newUserDataManager(
@@ -488,7 +490,7 @@ func (m *userDataManagerImpl) updateUserData(
 		return nil, false, serviceerror.NewFailedPreconditionf("user data version mismatch: requested: %d, current: %d", options.KnownVersion, preUpdateVersion)
 	}
 	updatedUserData, shouldReplicate, err := updateFn(preUpdateData)
-	if err == errUserDataUnmodified {
+	if err == errUserDataUnmodified || err == errFwoUpdateRejected {
 		return userData, false, err
 	}
 	if err != nil {
