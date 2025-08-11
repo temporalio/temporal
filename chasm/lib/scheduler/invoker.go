@@ -40,22 +40,22 @@ func (i *Invoker) EnqueueBufferedStarts(ctx chasm.MutableContext, starts []*sche
 }
 
 type processBufferResult struct {
-	StartWorkflows     []*schedulespb.BufferedStart
-	CancelWorkflows    []*commonpb.WorkflowExecution
-	TerminateWorkflows []*commonpb.WorkflowExecution
+	startWorkflows     []*schedulespb.BufferedStart
+	cancelWorkflows    []*commonpb.WorkflowExecution
+	terminateWorkflows []*commonpb.WorkflowExecution
 
-	// DiscardStarts will be dropped from the Invoker's BufferedStarts without execution.
-	DiscardStarts []*schedulespb.BufferedStart
+	// discardStarts will be dropped from the Invoker's BufferedStarts without execution.
+	discardStarts []*schedulespb.BufferedStart
 
 	// Number of buffered starts dropped due to overlap policy during processing.
-	OverlapSkipped int64
+	overlapSkipped int64
 
 	// Nunmber of buffered starts dropped from missing the catchup window.
-	MissedCatchupWindow int64
+	missedCatchupWindow int64
 
 	// Number of buffered starts dropped due to the max buffer size having been exceeded.
 	// TODO - set this from Generator/Backfiller
-	BufferDropped int64
+	bufferDropped int64
 }
 
 // recordProcessBufferResult updates the Invoker's internal state based on result, as well as the
@@ -63,10 +63,10 @@ type processBufferResult struct {
 func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *processBufferResult) {
 	discards := make(map[string]bool) // request ID -> is present
 	ready := make(map[string]bool)
-	for _, start := range result.DiscardStarts {
+	for _, start := range result.discardStarts {
 		discards[start.RequestId] = true
 	}
-	for _, start := range result.StartWorkflows {
+	for _, start := range result.startWorkflows {
 		ready[start.RequestId] = true
 	}
 
@@ -87,8 +87,8 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 
 	// Update internal state.
 	i.BufferedStarts = starts
-	i.CancelWorkflows = append(i.GetCancelWorkflows(), result.CancelWorkflows...)
-	i.TerminateWorkflows = append(i.GetTerminateWorkflows(), result.TerminateWorkflows...)
+	i.CancelWorkflows = append(i.GetCancelWorkflows(), result.cancelWorkflows...)
+	i.TerminateWorkflows = append(i.GetTerminateWorkflows(), result.terminateWorkflows...)
 	i.LastProcessedTime = timestamppb.New(ctx.Now(i))
 
 	i.addTasks(ctx)

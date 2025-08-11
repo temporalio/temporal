@@ -77,6 +77,44 @@ func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
+// NewRangeBackfiller returns an intialized Backfiller component, which should
+// be parented under a Scheduler root node.
+func (s *Scheduler) NewRangeBackfiller(
+	ctx chasm.MutableContext,
+	request *schedulepb.BackfillRequest,
+) *Backfiller {
+	backfiller := newBackfiller(ctx, s)
+	backfiller.BackfillerInternal.Request = &schedulespb.BackfillerInternal_BackfillRequest{
+		BackfillRequest: request,
+	}
+	s.addBackfiller(ctx, backfiller)
+	return backfiller
+}
+
+// NewImmediateBackfiller returns an intialized Backfiller component, which should
+// be parented under a Scheduler root node.
+func (s *Scheduler) NewImmediateBackfiller(
+	ctx chasm.MutableContext,
+	request *schedulepb.TriggerImmediatelyRequest,
+) *Backfiller {
+	backfiller := newBackfiller(ctx, s)
+	backfiller.BackfillerInternal.Request = &schedulespb.BackfillerInternal_TriggerRequest{
+		TriggerRequest: request,
+	}
+	s.addBackfiller(ctx, backfiller)
+	return backfiller
+}
+
+// addBackfiller adds the backfiller to the scheduler tree, and adds a task to
+// kick off backfill processing.
+func (s *Scheduler) addBackfiller(
+	ctx chasm.MutableContext,
+	backfiller *Backfiller,
+) {
+	s.Backfillers[backfiller.BackfillId] = chasm.NewComponentField(ctx, backfiller)
+	ctx.AddTask(backfiller, chasm.TaskAttributes{}, &schedulespb.BackfillerTask{})
+}
+
 // useScheduledAction returns true when the Scheduler should allow scheduled
 // actions to be taken.
 //
@@ -208,10 +246,10 @@ func (s *Scheduler) hasMoreAllowAllBackfills(ctx chasm.Context) bool {
 }
 
 type schedulerActionResult struct {
-	OverlapSkipped      int64
-	BufferDropped       int64
-	MissedCatchupWindow int64
-	Starts              []*schedulepb.ScheduleActionResult
+	overlapSkipped      int64
+	bufferDropped       int64
+	missedCatchupWindow int64
+	starts              []*schedulepb.ScheduleActionResult
 }
 
 // recordActionResult updates the Scheduler's customer-facing metadata with execution results.
@@ -219,16 +257,16 @@ func (s *Scheduler) recordActionResult(
 	ctx chasm.MutableContext,
 	result *schedulerActionResult,
 ) (struct{}, error) {
-	s.Info.ActionCount += int64(len(result.Starts))
-	s.Info.OverlapSkipped += result.OverlapSkipped
-	s.Info.BufferDropped += result.BufferDropped
-	s.Info.MissedCatchupWindow += result.MissedCatchupWindow
+	s.Info.ActionCount += int64(len(result.starts))
+	s.Info.OverlapSkipped += result.overlapSkipped
+	s.Info.BufferDropped += result.bufferDropped
+	s.Info.MissedCatchupWindow += result.missedCatchupWindow
 
-	if len(result.Starts) > 0 {
-		s.Info.RecentActions = util.SliceTail(append(s.Info.RecentActions, result.Starts...), recentActionCount)
+	if len(result.starts) > 0 {
+		s.Info.RecentActions = util.SliceTail(append(s.Info.RecentActions, result.starts...), recentActionCount)
 	}
 
-	for _, start := range result.Starts {
+	for _, start := range result.starts {
 		if start.StartWorkflowResult != nil {
 			s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, start.StartWorkflowResult)
 		}

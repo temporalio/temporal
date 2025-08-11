@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	schedulepb "go.temporal.io/api/schedule/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -18,7 +17,6 @@ type Backfiller struct {
 	*schedulespb.BackfillerInternal
 
 	Scheduler chasm.Field[*Scheduler]
-	Invoker   chasm.Field[*Invoker]
 }
 
 // The type of Backfill represented by an invididual Backfiller.
@@ -29,25 +27,11 @@ const (
 	RequestTypeBackfill
 )
 
-// NewRangeBackfiller returns an intialized Backfiller component, which should
-// be parented under a Scheduler root node.
-func NewRangeBackfiller(
-	ctx chasm.MutableContext,
-	scheduler *Scheduler,
-	invoker *Invoker,
-	request *schedulepb.BackfillRequest,
-) *Backfiller {
-	backfiller := newBackfiller(ctx, scheduler, invoker)
-	backfiller.BackfillerInternal.Request = &schedulespb.BackfillerInternal_BackfillRequest{
-		BackfillRequest: request,
-	}
-	return backfiller
-}
-
+// newBackfiller returns an initialized backfiller without a request set or tasks
+// created.
 func newBackfiller(
 	ctx chasm.MutableContext,
 	scheduler *Scheduler,
-	invoker *Invoker,
 ) *Backfiller {
 	id := uuid.New()
 	backfiller := &Backfiller{
@@ -56,28 +40,6 @@ func newBackfiller(
 			LastProcessedTime: timestamppb.New(ctx.Now(scheduler)),
 		},
 		Scheduler: chasm.ComponentPointerTo(ctx, scheduler),
-		Invoker:   chasm.ComponentPointerTo(ctx, invoker),
-	}
-
-	// Add the backfiller to the scheduler tree, and add a task to kick off backfill
-	// processing.
-	scheduler.Backfillers[id] = chasm.NewComponentField(ctx, backfiller)
-	ctx.AddTask(backfiller, chasm.TaskAttributes{}, &schedulespb.BackfillerTask{})
-
-	return backfiller
-}
-
-// NewImmediateBackfiller returns an intialized Backfiller component, which should
-// be parented under a Scheduler root node.
-func NewImmediateBackfiller(
-	ctx chasm.MutableContext,
-	scheduler *Scheduler,
-	invoker *Invoker,
-	request *schedulepb.TriggerImmediatelyRequest,
-) *Backfiller {
-	backfiller := newBackfiller(ctx, scheduler, invoker)
-	backfiller.BackfillerInternal.Request = &schedulespb.BackfillerInternal_TriggerRequest{
-		TriggerRequest: request,
 	}
 	return backfiller
 }
