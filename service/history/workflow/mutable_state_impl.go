@@ -5845,10 +5845,10 @@ func (ms *MutableStateImpl) PauseActivityByType(activityType string, identity st
 	maxPausedActivityTypeLength := ms.config.MaxIDLengthLimit()
 
 	if len(activityType) == 0 {
-		return serviceerror.NewInvalidArgument("activity type name is empty")
+		return serviceerror.NewFailedPrecondition("activity type name is empty")
 	}
 	if len(activityType) > maxPausedActivityTypeLength {
-		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT, fmt.Sprintf("activity type name is too long: %s", activityType))
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf("activity type name (%s) exceeds length limit: %d", activityType, maxPausedActivityTypeLength))
 	}
 
 	if ms.executionInfo.PauseInfo == nil {
@@ -5867,7 +5867,7 @@ func (ms *MutableStateImpl) PauseActivityByType(activityType string, identity st
 	}
 
 	if len(pausedActivities) >= maxPausedActivityTypeCount {
-		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT, "too many activity types paused")
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf("activity pause limit reached: %d", maxPausedActivityTypeCount))
 	}
 
 	ms.executionInfo.PauseInfo.ActivityPauseInfos = append(ms.executionInfo.PauseInfo.ActivityPauseInfos, &persistencespb.ActivityPauseInfo{
