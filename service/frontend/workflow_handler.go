@@ -4567,11 +4567,13 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			}
 		} else {
 			// TODO: remove support for old fields later
+			//nolint:staticcheck // SA1019
 			resetType := op.ResetOperation.GetResetType()
 			if _, ok := enumspb.ResetType_name[int32(resetType)]; !ok || resetType == enumspb.RESET_TYPE_UNSPECIFIED {
 				return nil, serviceerror.NewInvalidArgumentf("unknown batch reset type %v", resetType)
 			}
 			resetParams.ResetType = resetType
+			//nolint:staticcheck // SA1019
 			resetParams.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
 		}
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:

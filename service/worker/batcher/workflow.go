@@ -284,32 +284,32 @@ func validateParams(params BatchParams) error {
 		params.Reason == "" ||
 		params.Namespace == "" ||
 		(params.Query == "" && len(params.Executions) == 0) {
-		return fmt.Errorf("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
+		return errors.New("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
 	}
 
 	if len(params.Query) > 0 && len(params.Executions) > 0 {
-		return fmt.Errorf("batch query and executions are mutually exclusive")
+		return errors.New("batch query and executions are mutually exclusive")
 	}
 
 	switch params.BatchType {
 	case BatchTypeSignal:
 		if params.SignalParams.SignalName == "" {
-			return fmt.Errorf("must provide signal name")
+			return errors.New("must provide signal name")
 		}
 		return nil
 	case BatchTypeUpdateOptions:
 		if params.UpdateOptionsParams.WorkflowExecutionOptions == nil {
-			return fmt.Errorf("must provide UpdateOptions")
+			return errors.New("must provide UpdateOptions")
 		}
 		if params.UpdateOptionsParams.UpdateMask == nil {
-			return fmt.Errorf("must provide UpdateMask")
+			return errors.New("must provide UpdateMask")
 		}
 		return worker_versioning.ValidateVersioningOverride(params.UpdateOptionsParams.WorkflowExecutionOptions.VersioningOverride)
 	case BatchTypeCancel, BatchTypeTerminate, BatchTypeDelete, BatchTypeReset:
 		return nil
 	case BatchTypeUnpauseActivities:
 		if params.UnpauseActivitiesParams.ActivityType == "" && !params.UnpauseActivitiesParams.MatchAll {
-			return fmt.Errorf("must provide ActivityType or MatchAll")
+			return errors.New("must provide ActivityType or MatchAll")
 		}
 		return nil
 	case BatchTypeResetActivities:
