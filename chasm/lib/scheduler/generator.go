@@ -14,7 +14,6 @@ type Generator struct {
 	*schedulespb.GeneratorInternal
 
 	Scheduler chasm.Field[*Scheduler]
-	Invoker   chasm.Field[*Invoker]
 }
 
 // NewGenerator returns an intialized Generator component, which should
@@ -25,7 +24,6 @@ func NewGenerator(ctx chasm.MutableContext, scheduler *Scheduler, invoker *Invok
 			LastProcessedTime: nil,
 		},
 		Scheduler: chasm.ComponentPointerTo(ctx, scheduler),
-		Invoker:   chasm.ComponentPointerTo(ctx, invoker),
 	}
 }
 
