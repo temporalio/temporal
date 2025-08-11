@@ -60,7 +60,7 @@ func (b *BackfillerTaskExecutor) Execute(
 	}
 	logger := newTaggedLogger(b.BaseLogger, scheduler)
 
-	invoker, err := backfiller.Invoker.Get(ctx)
+	invoker, err := scheduler.Invoker.Get(ctx)
 	if err != nil {
 		return fmt.Errorf("%w: %w",
 			serviceerror.NewInternal("Scheduler tree missing node"),
