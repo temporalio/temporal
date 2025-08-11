@@ -232,9 +232,9 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 	// Spawn backfiller.
 	var backfiller *scheduler.Backfiller
 	if c.InitialTriggerRequest != nil {
-		backfiller = scheduler.NewImmediateBackfiller(ctx, sched, invoker, c.InitialTriggerRequest)
+		backfiller = sched.NewImmediateBackfiller(ctx, c.InitialTriggerRequest)
 	} else {
-		backfiller = scheduler.NewRangeBackfiller(ctx, sched, invoker, c.InitialBackfillRequest)
+		backfiller = sched.NewRangeBackfiller(ctx, c.InitialBackfillRequest)
 	}
 
 	// Either type of request will spawn a Backfiller and schedule an immediate pure task.
