@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -581,6 +582,10 @@ func (s *TaskQueueSuite) setupPerKeyRateLimitWorkflow(
 	// Fast refresh so limiter state picks up config quickly.
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
 
+	// generate a unique base so IDs don't collide across shards/tests
+	base := uuid.NewString()
+	parsePattern := fmt.Sprintf("perkey-wf-%s-%%d", base) // for Sscanf later
+
 	// Set up the task queue config with whole-queue and per-key rate limits.
 	_, err := s.FrontendClient().UpdateTaskQueueConfig(ctx, &workflowservice.UpdateTaskQueueConfigRequest{
 		Namespace:     s.Namespace().String(),
@@ -600,9 +605,10 @@ func (s *TaskQueueSuite) setupPerKeyRateLimitWorkflow(
 
 	// Start workflows (each will schedule one activity tagged with a fairness key).
 	for i := range total {
+		wfID := fmt.Sprintf("perkey-wf-%s-%d", base, i)
 		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:    s.Namespace().String(),
-			WorkflowId:   fmt.Sprintf("perkey-wf-%d", i),
+			WorkflowId:   wfID,
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 		})
@@ -612,13 +618,16 @@ func (s *TaskQueueSuite) setupPerKeyRateLimitWorkflow(
 	// Drain workflow tasks -> schedule activities with Priority.FairnessKey.
 	wfHandled := 0
 	for wfHandled < total {
+		if err := ctx.Err(); err != nil {
+			s.T().Fatalf("context deadline while draining workflow tasks: handled=%d/%d: %v", wfHandled, total, err)
+		}
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				s.Equal(3, len(task.History.Events))
 
 				var idx int
-				_, scanErr := fmt.Sscanf(task.WorkflowExecution.WorkflowId, "perkey-wf-%d", &idx)
+				_, scanErr := fmt.Sscanf(task.WorkflowExecution.WorkflowId, parsePattern, &idx)
 				s.NoError(scanErr)
 
 				key := keys[idx%len(keys)]
@@ -657,6 +666,9 @@ func (s *TaskQueueSuite) setupPerKeyRateLimitWorkflow(
 
 	actsHandled := 0
 	for actsHandled < total {
+		if err := ctx.Err(); err != nil {
+			s.T().Fatalf("context deadline while draining activity tasks: handled=%d/%d: %v", actsHandled, total, err)
+		}
 		_, err := s.TaskPoller().PollAndHandleActivityTask(
 			tv,
 			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
