@@ -73,8 +73,8 @@ type operationContext struct {
 	telemetryInterceptor          *interceptor.TelemetryInterceptor
 	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	headersBlacklist              *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
-	metricTagConfig               *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
+	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	metricTagConfig               dynamicconfig.TypedPropertyFn[nexusoperations.NexusMetricTagConfig]
 	cleanupFunctions              []func(map[string]string, error)
 }
 
@@ -226,7 +226,7 @@ func (c *operationContext) interceptRequest(
 	if request.GetRequest().GetHeader() != nil {
 		// Making a copy to ensure the original map is not modified as it might be used somewhere else.
 		sanitizedHeaders := make(map[string]string, len(request.Request.Header))
-		headersBlacklist := c.headersBlacklist.Get()
+		headersBlacklist := c.headersBlacklist()
 		for name, value := range request.Request.Header {
 			if !headersBlacklist.MatchString(name) {
 				sanitizedHeaders[name] = value
@@ -259,10 +259,7 @@ func (c *operationContext) shouldForwardRequest(ctx context.Context, header nexu
 
 // enrichNexusOperationMetrics enhances metrics with additional Nexus operation context based on configuration.
 func (c *operationContext) enrichNexusOperationMetrics(service, operation string, requestHeader nexus.Header) {
-	conf := c.metricTagConfig.Get()
-	if conf == nil {
-		return
-	}
+	conf := c.metricTagConfig()
 
 	var tags []metrics.Tag
 
@@ -301,8 +298,8 @@ type nexusHandler struct {
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	forwardingClients             *cluster.FrontendHTTPClientCache
 	payloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	headersBlacklist              *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
-	metricTagConfig               *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
+	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	metricTagConfig               dynamicconfig.TypedPropertyFn[nexusoperations.NexusMetricTagConfig]
 	httpTraceProvider             commonnexus.HTTPClientTraceProvider
 }
 
