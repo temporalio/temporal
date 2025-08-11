@@ -219,7 +219,6 @@ type Config struct {
 	MutableStateSizeLimitWarn                 dynamicconfig.IntPropertyFn
 	MutableStateTombstoneCountLimit           dynamicconfig.IntPropertyFn
 	MutableStateMaxPausedActivityTypeCount    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MutableStateMaxPausedActivityTypeLength   dynamicconfig.IntPropertyFn
 	NumPendingChildExecutionsLimit            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NumPendingActivitiesLimit                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NumPendingSignalsLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -582,7 +581,6 @@ func NewConfig(
 		MutableStateSizeLimitWarn:                 dynamicconfig.MutableStateSizeLimitWarn.Get(dc),
 		MutableStateTombstoneCountLimit:           dynamicconfig.MutableStateTombstoneCountLimit.Get(dc),
 		MutableStateMaxPausedActivityTypeCount:    dynamicconfig.MutableStateMaxPausedActivityTypeCount.Get(dc),
-		MutableStateMaxPausedActivityTypeLength:   dynamicconfig.MutableStateMaxPausedActivityTypeLength.Get(dc),
 
 		ThrottledLogRPS:   dynamicconfig.HistoryThrottledLogRPS.Get(dc),
 		EnableStickyQuery: dynamicconfig.EnableStickyQuery.Get(dc),

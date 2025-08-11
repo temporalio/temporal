@@ -379,11 +379,6 @@ If exceeded, failure will be truncated before being stored in mutable state.`,
 		10,
 		`MutableStateMaxPausedActivityTypeCount is the maximum number of activity types that can be paused at once.`,
 	)
-	MutableStateMaxPausedActivityTypeLength = NewGlobalIntSetting(
-		"limit.mutableStateMaxPausedActivityTypeLength",
-		512,
-		`MutableStateMaxPausedActivityTypeLength is the maximum length of an activity type name that can be paused.`,
-	)
 	HistoryCountSuggestContinueAsNew = NewNamespaceIntSetting(
 		"limit.historyCount.suggestContinueAsNew",
 		4*1024,
@@ -2623,7 +2618,7 @@ Should be at least WorkerESProcessorFlushInterval+<time to process request>.`,
 	ExecutionsScannerEnabled = NewGlobalBoolSetting(
 		"worker.executionsScannerEnabled",
 		false,
-		`ExecutionsScannerEnabled indicates if executions scanner should be started as part of worker.Scanner. This flag has no effect when SQL persistence is used, 
+		`ExecutionsScannerEnabled indicates if executions scanner should be started as part of worker.Scanner. This flag has no effect when SQL persistence is used,
 because executions scanner support for SQL is not yet implemented.`,
 	)
 	HistoryScannerDataMinAge = NewGlobalDurationSetting(
