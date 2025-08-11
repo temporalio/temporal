@@ -50,7 +50,7 @@ func (g *GeneratorTaskExecutor) Execute(
 	}
 	logger := newTaggedLogger(g.BaseLogger, scheduler)
 
-	invoker, err := generator.Invoker.Get(ctx)
+	invoker, err := scheduler.Invoker.Get(ctx)
 	if err != nil {
 		return fmt.Errorf("%w: %w",
 			serviceerror.NewInternal("Scheduler tree missing node"),
