@@ -36,8 +36,8 @@ func generateRequestID(scheduler *Scheduler, backfillID string, nominal, actual 
 func newTaggedLogger(baseLogger log.Logger, scheduler *Scheduler) log.Logger {
 	return log.With(
 		baseLogger,
-		tag.NewStringTag("wf-namespace", scheduler.Namespace),
-		tag.NewStringTag("schedule-id", scheduler.ScheduleId),
+		tag.WorkflowNamespace(scheduler.Namespace),
+		tag.ScheduleID(scheduler.ScheduleId),
 	)
 }
 
