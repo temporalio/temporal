@@ -176,7 +176,7 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 		ctx,
 		schedulerRef,
 		(*Scheduler).recordActionResult,
-		&schedulerActionResult{Starts: startResults},
+		&schedulerActionResult{starts: startResults},
 	)
 	if err != nil {
 		return fmt.Errorf("%w: %w",
@@ -317,7 +317,7 @@ func (e *InvokerProcessBufferTaskExecutor) Execute(
 	executionInfo := scheduler.Schedule.Action.GetStartWorkflow()
 	if executionInfo == nil || len(invoker.GetBufferedStarts()) == 0 {
 		invoker.recordProcessBufferResult(ctx, &processBufferResult{
-			DiscardStarts: invoker.GetBufferedStarts(),
+			discardStarts: invoker.GetBufferedStarts(),
 		})
 		return nil
 	}
@@ -327,9 +327,9 @@ func (e *InvokerProcessBufferTaskExecutor) Execute(
 
 	// Update Scheduler metadata.
 	_, err = scheduler.recordActionResult(ctx, &schedulerActionResult{
-		OverlapSkipped:      result.OverlapSkipped,
-		BufferDropped:       result.BufferDropped,
-		MissedCatchupWindow: result.MissedCatchupWindow,
+		overlapSkipped:      result.overlapSkipped,
+		bufferDropped:       result.bufferDropped,
+		missedCatchupWindow: result.missedCatchupWindow,
 	})
 	if err != nil {
 		return err
@@ -373,39 +373,39 @@ func (e *InvokerProcessBufferTaskExecutor) processBuffer(
 	}
 
 	// Update result metrics.
-	result.OverlapSkipped = action.OverlapSkipped
+	result.overlapSkipped = action.OverlapSkipped
 
 	// Add starting workflows to result, trim others.
 	for _, start := range readyStarts {
 		// Ensure we can take more actions. Manual actions are always allowed.
 		if !start.Manual && !scheduler.useScheduledAction(true) {
 			// Drop buffered automated actions while paused.
-			result.DiscardStarts = append(result.DiscardStarts, start)
+			result.discardStarts = append(result.discardStarts, start)
 			continue
 		}
 
 		if ctx.Now(invoker).After(e.startWorkflowDeadline(scheduler, start)) {
 			// Drop expired starts.
-			result.MissedCatchupWindow++
-			result.DiscardStarts = append(result.DiscardStarts, start)
+			result.missedCatchupWindow++
+			result.discardStarts = append(result.discardStarts, start)
 			continue
 		}
 
 		// Append for immediate execution.
 		keepStarts[start.GetRequestId()] = struct{}{}
-		result.StartWorkflows = append(result.StartWorkflows, start)
+		result.startWorkflows = append(result.startWorkflows, start)
 	}
 
-	result.DiscardStarts = util.FilterSlice(pendingBufferedStarts, func(start *schedulespb.BufferedStart) bool {
+	result.discardStarts = util.FilterSlice(pendingBufferedStarts, func(start *schedulespb.BufferedStart) bool {
 		_, keep := keepStarts[start.GetRequestId()]
 		return !keep
 	})
 
 	// Terminate overrides cancel if both are requested.
 	if action.NeedTerminate {
-		result.TerminateWorkflows = scheduler.GetInfo().GetRunningWorkflows()
+		result.terminateWorkflows = scheduler.GetInfo().GetRunningWorkflows()
 	} else if action.NeedCancel {
-		result.CancelWorkflows = scheduler.GetInfo().GetRunningWorkflows()
+		result.cancelWorkflows = scheduler.GetInfo().GetRunningWorkflows()
 	}
 
 	return
