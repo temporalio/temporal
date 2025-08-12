@@ -15,7 +15,7 @@ type (
 )
 
 func (FairnessRequestRateLimiterAdapter) GetFairnessPriority(req Request) int64 {
-	return 1
+	return 0
 }
 
 var _ RequestRateLimiter = (*RequestRateLimiterAdapterImpl)(nil)
