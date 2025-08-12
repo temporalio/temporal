@@ -4,6 +4,6 @@ type (
 	FairnessRequestRateLimiterFn func(req Request) FairnessRequestRateLimiter
 	FairnessRequestRateLimiter   interface {
 		RequestRateLimiter
-		GetFairnessPriority(request Request) int32
+		GetFairnessPriority(request Request) int64
 	}
 )
