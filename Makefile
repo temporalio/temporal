@@ -71,7 +71,8 @@ COMPILED_TEST_ARGS := -timeout=$(TEST_TIMEOUT) \
 		     $(if $(filter 1 on y yes t true, $(TEST_SHUFFLE_FLAG)),-shuffle on,) \
 		     $(TEST_PARALLEL_FLAGS) \
 		     $(TEST_ARGS) \
-		     $(TEST_TAG_FLAG)
+		     $(TEST_TAG_FLAG) \
+			 -v
 
 ##### Variables ######
 
