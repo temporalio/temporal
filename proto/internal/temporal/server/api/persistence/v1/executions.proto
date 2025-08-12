@@ -552,7 +552,7 @@ message ActivityInfo {
     int32 stamp = 41;
 
     // Paused state. When activity is paused it will not advance until unpaused.
-    // Iw will not be scheduled, timer tasks will not be processed, etc.
+    // It will not be scheduled, timer tasks will not be processed, etc.
     // Note: it still can be cancelled/completed.
     bool  paused = 42;
 

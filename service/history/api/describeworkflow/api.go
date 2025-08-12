@@ -302,6 +302,19 @@ func Invoke(
 		result.PendingNexusOperations = append(result.PendingNexusOperations, operationInfo)
 	}
 
+	// Get paused activities by type from the mutable state or persistence layer
+	// TODO (seankane): how do we get the paused activities from the persistence layer?
+	if pi := executionInfo.GetPauseInfo(); pi != nil {
+		if result.WorkflowPauseInfo == nil {
+			result.WorkflowPauseInfo = &workflowpb.WorkflowPauseInfo{}
+		}
+		for _, ai := range pi.GetActivityPauseInfos() {
+			result.WorkflowPauseInfo.ActivityPauseInfos = append(result.WorkflowPauseInfo.ActivityPauseInfos, &workflowpb.ActivityPauseInfo{
+				ActivityType: ai.GetActivityType(),
+			})
+		}
+	}
+
 	return result, nil
 }
 
