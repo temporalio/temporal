@@ -124,6 +124,7 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 				DataField *protoMessageType
 				SubField  Field[string]
 				SubMap    Map[string, int]
+				ignored   *struct{}
 			}{},
 			expectedKinds:  []fieldKind{fieldKindData, fieldKindSubField, fieldKindSubMap},
 			expectedNames:  []string{"DataField", "SubField", "SubMap"},
@@ -144,7 +145,7 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 			expectedKinds:  []fieldKind{fieldKindData, fieldKindUnspecified},
 			expectedNames:  []string{"DataField", "InvalidField"},
 			expectedTypes:  []string{"*persistence.WorkflowExecutionState", "*chasm.Field[string]"},
-			expectedErrors: []string{"", "*chasm.fieldPointer.InvalidField: chasm field type *chasm.Field[string] must not be a pointer"},
+			expectedErrors: []string{"", "*chasm.fieldPointer.InvalidField: CHASM fields must not be pointers"},
 		},
 		{
 			name:           "Component with multiple data fields",
@@ -194,4 +195,22 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 			s.Equal(tt.expectedErrors, actualErrors)
 		})
 	}
+}
+
+func (s *fieldsIteratorSuite) TestUnmanagedFieldsOf() {
+	type unmanagedFields struct {
+		UnimplementedComponent
+
+		DataField  *protoMessageType
+		SomeField  Field[string]
+		unmanaged  struct{}
+		anotherPtr *struct{}
+	}
+
+	var result []string
+	for r := range unmanagedFieldsOf(reflect.TypeFor[unmanagedFields]()) {
+		result = append(result, r.name)
+	}
+	s.Equal(2, len(result))
+	s.ElementsMatch([]string{"unmanaged", "anotherPtr"}, result)
 }

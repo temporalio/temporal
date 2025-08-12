@@ -68,17 +68,17 @@ func NewPredefinedTaskBlobDeserializer() PredefinedTaskBlobDeserializer {
 func (d PredefinedTaskBlobDeserializer) Deserialize(categoryID int, blob *commonpb.DataBlob) (proto.Message, error) {
 	switch categoryID {
 	case tasks.CategoryIDTransfer:
-		return serialization.TransferTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
+		return serialization.TransferTaskInfoFromBlob(blob)
 	case tasks.CategoryIDTimer:
-		return serialization.TimerTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
+		return serialization.TimerTaskInfoFromBlob(blob)
 	case tasks.CategoryIDVisibility:
-		return serialization.VisibilityTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
+		return serialization.VisibilityTaskInfoFromBlob(blob)
 	case tasks.CategoryIDReplication:
-		return serialization.ReplicationTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
+		return serialization.ReplicationTaskInfoFromBlob(blob)
 	case tasks.CategoryIDArchival:
-		return serialization.ArchivalTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
+		return serialization.ArchivalTaskInfoFromBlob(blob)
 	case tasks.CategoryIDOutbound:
-		return serialization.OutboundTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
+		return serialization.OutboundTaskInfoFromBlob(blob)
 	default:
 		return nil, fmt.Errorf("unsupported task category %v", categoryID)
 	}
