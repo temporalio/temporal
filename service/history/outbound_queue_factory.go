@@ -202,6 +202,8 @@ func (f *outboundQueueFactory) CreateQueue(
 		shardContext.GetTimeSource(),
 		logger,
 		metricsHandler,
+		f.Config.TaskChanFullBackoff,
+		f.Config.TaskChanFullBackoffJitterCoefficient,
 	)
 
 	activeExecutor := newOutboundQueueActiveTaskExecutor(
