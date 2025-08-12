@@ -272,6 +272,7 @@ func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient 
 	return matching.NewRetryableClient(
 		matchingRawClient,
 		common.CreateMatchingClientRetryPolicy(),
+		common.CreateMatchingClientLongPollRetryPolicy(),
 		common.IsServiceClientTransientError,
 	)
 }

@@ -178,6 +178,12 @@ func CreateMatchingClientRetryPolicy() backoff.RetryPolicy {
 		WithMaximumAttempts(matchingClientRetryMaxAttempts)
 }
 
+// CreateMatchingClientLongPollRetryPolicy creates a retry policy for poll calls to matching service
+func CreateMatchingClientLongPollRetryPolicy() backoff.RetryPolicy {
+	// no maximum attempts, using default expiration interval of 1 minute
+	return backoff.NewExponentialRetryPolicy(matchingClientRetryInitialInterval)
+}
+
 // CreateFrontendHandlerRetryPolicy creates a retry policy for calls to frontend service
 func CreateFrontendHandlerRetryPolicy() backoff.RetryPolicy {
 	return backoff.NewExponentialRetryPolicy(frontendHandlerRetryInitialInterval).
