@@ -71,8 +71,7 @@ COMPILED_TEST_ARGS := -timeout=$(TEST_TIMEOUT) \
 		     $(if $(filter 1 on y yes t true, $(TEST_SHUFFLE_FLAG)),-shuffle on,) \
 		     $(TEST_PARALLEL_FLAGS) \
 		     $(TEST_ARGS) \
-		     $(TEST_TAG_FLAG) \
-			 -v
+		     $(TEST_TAG_FLAG)
 
 ##### Variables ######
 
@@ -448,12 +447,11 @@ integration-test-coverage: prepare-coverage-test
 pre-build-functional-test-coverage: prepare-coverage-test
 	go test -c -cover -o /dev/null $(FUNCTIONAL_TEST_ROOT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(COVERPKG_FLAG)
 
-# TODO: Revert changes. Adding verbose flag to debug.
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) --format=standard-verbose --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT) \
-		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)  -test.v
+		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
