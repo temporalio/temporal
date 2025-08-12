@@ -363,6 +363,9 @@ type (
 		HasRequestID(requestID string) bool
 		SetSuccessorRunID(runID string)
 
+		// PauseActivityByType pauses all activities of the given type. This includes both current and future activities.
 		PauseActivityByType(activityType string, identity string, reason string) error
+		// IsActivityTypePaused returns true if the activity type is paused in the mutable state.
+		IsActivityTypePaused(activityType string) bool
 	}
 )

@@ -2797,6 +2797,20 @@ func (mr *MockMutableStateMockRecorder) InitTransitionHistory() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitTransitionHistory", reflect.TypeOf((*MockMutableState)(nil).InitTransitionHistory))
 }
 
+// IsActivityTypePaused mocks base method.
+func (m *MockMutableState) IsActivityTypePaused(activityType string) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsActivityTypePaused", activityType)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsActivityTypePaused indicates an expected call of IsActivityTypePaused.
+func (mr *MockMutableStateMockRecorder) IsActivityTypePaused(activityType any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsActivityTypePaused", reflect.TypeOf((*MockMutableState)(nil).IsActivityTypePaused), activityType)
+}
+
 // IsCancelRequested mocks base method.
 func (m *MockMutableState) IsCancelRequested() bool {
 	m.ctrl.T.Helper()

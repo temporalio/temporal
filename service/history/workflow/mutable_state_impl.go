@@ -3456,6 +3456,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		Attempt:                 1,
 		ActivityType:            attributes.GetActivityType(),
 		Priority:                attributes.Priority,
+		Paused:                  ms.IsActivityTypePaused(attributes.GetActivityType().GetName()),
 	}
 
 	if attributes.UseWorkflowBuildId {
@@ -5851,22 +5852,17 @@ func (ms *MutableStateImpl) PauseActivityByType(activityType string, identity st
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("activity type name (%s) exceeds length limit: %d", activityType, maxPausedActivityTypeLength))
 	}
 
+	if ms.IsActivityTypePaused(activityType) {
+		return nil
+	}
+
 	if ms.executionInfo.PauseInfo == nil {
 		ms.executionInfo.PauseInfo = &persistencespb.WorkflowPauseInfo{
 			ActivityPauseInfos: []*persistencespb.ActivityPauseInfo{},
 		}
 	}
 
-	pausedActivities := ms.executionInfo.PauseInfo.ActivityPauseInfos
-
-	// check if the activity is already paused
-	if slices.ContainsFunc(pausedActivities, func(activity *persistencespb.ActivityPauseInfo) bool {
-		return activity.ActivityType == activityType
-	}) {
-		return nil
-	}
-
-	if len(pausedActivities) >= maxPausedActivityTypeCount {
+	if len(ms.executionInfo.PauseInfo.ActivityPauseInfos) >= maxPausedActivityTypeCount {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("activity pause limit reached: %d", maxPausedActivityTypeCount))
 	}
 
@@ -5877,6 +5873,17 @@ func (ms *MutableStateImpl) PauseActivityByType(activityType string, identity st
 	})
 	ms.executionStateUpdated = true
 	return ms.updatePauseInfoSearchAttribute()
+}
+
+func (ms *MutableStateImpl) IsActivityTypePaused(activityType string) bool {
+	if ms.executionInfo.PauseInfo == nil {
+		return false
+	}
+
+	pausedActivities := ms.executionInfo.PauseInfo.ActivityPauseInfos
+	return slices.ContainsFunc(pausedActivities, func(activity *persistencespb.ActivityPauseInfo) bool {
+		return activity.ActivityType == activityType
+	})
 }
 
 func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
