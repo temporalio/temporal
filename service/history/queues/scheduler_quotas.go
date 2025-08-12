@@ -5,7 +5,14 @@ import (
 	"go.temporal.io/server/common/tasks"
 )
 
-type SchedulerRateLimiter quotas.RequestRateLimiter
+type SchedulerRateLimiter quotas.FairnessRequestRateLimiter
+type FairnessRequestRateLimiterAdapter struct {
+	quotas.RequestRateLimiter
+}
+
+func (FairnessRequestRateLimiterAdapter) GetFairnessPriority(req quotas.Request) int64 {
+	return 0
+}
 
 func NewPrioritySchedulerRateLimiter(
 	namespaceRateFn quotas.NamespaceRateFn,
@@ -52,7 +59,7 @@ func NewPrioritySchedulerRateLimiter(
 
 	priorityLimiter := quotas.NewPriorityRateLimiter(requestPriorityFn, priorityToRateLimiters)
 
-	return priorityLimiter, nil
+	return FairnessRequestRateLimiterAdapter{priorityLimiter}, nil
 }
 
 func newTaskRequestRateLimiter(
