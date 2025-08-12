@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -62,7 +61,6 @@ type batchWorkerProcessor func(
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-	getHeartbeatDetails func() HeartBeatDetails,
 )
 
 // page represents a page of workflow executions to be processed
@@ -166,15 +164,13 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	taskCh := make(chan task, concurrency)
 	respCh := make(chan taskResponse, concurrency)
 
-	var hbdMutex sync.RWMutex
+	// Ticker for frequent heartbeats to avoid timeout during slow processing, 1/4 of the default heartbeat timeout (10s)
+	heartbeatTicker := time.NewTicker(defaultActivityHeartBeatTimeout / 4)
+	defer heartbeatTicker.Stop()
 
 	// Start worker processors
 	for range config.concurrency {
-		go startWorkerProcessor(ctx, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger, func() HeartBeatDetails {
-			hbdMutex.RLock()
-			defer hbdMutex.RUnlock()
-			return hbd
-		})
+		go startWorkerProcessor(ctx, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
 	}
 
 	// Initialize the first p from initial executions or fetch from query
@@ -192,82 +188,60 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 		p, err = fetchPage(ctx, sdkClient, config, config.initialPageToken, hbd.CurrentPage)
 		if err != nil {
 			metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
-			logger.Error("Failed to fetch initial page", tag.Error(err))
-			return HeartBeatDetails{}, err
+			return HeartBeatDetails{}, fmt.Errorf("failed to fetch next page: %w", err)
 		}
 	}
 
-	// New event loop using Page-based pager
 	for {
 		// Check if we need to fetch next page
 		if p.hasNext() && p.allSubmitted() {
 			nextPage, err := fetchPage(ctx, sdkClient, config, p.nextPageToken, p.pageNumber+1)
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
-				logger.Error("Failed to fetch next page", tag.Error(err))
-				return HeartBeatDetails{}, err
+				return HeartBeatDetails{}, fmt.Errorf("failed to fetch next page: %w", err)
 			}
-			// Link pages
 			p.next = nextPage
 			nextPage.prev = p
 			p = nextPage
 
-			// Update heartbeat details for new page (thread-safe)
-			hbdMutex.Lock()
 			hbd.CurrentPage = p.pageNumber
 			hbd.PageToken = p.nextPageToken
-			hbdMutex.Unlock()
 		}
 
 		select {
 		case taskCh <- p.nextTask():
-			// Successfully submitted a task
 			p.submittedCount++
 
 		case result := <-respCh:
-			// Handle task completion result
 			resultPage := result.page
+			if result.err == nil {
+				resultPage.successCount++
+			} else {
+				resultPage.errorCount++
+			}
 
-			if resultPage != nil {
-				// Update counts (thread-safe)
-				hbdMutex.Lock()
-				if result.err == nil {
-					resultPage.successCount++
-					hbd.SuccessCount++
-				} else {
-					resultPage.errorCount++
-					hbd.ErrorCount++
+			// Update heartbeat details if this page and all previous pages are complete
+			if resultPage.done() {
+				allPrevComplete := true
+				for curr := resultPage.prev; curr != nil; curr = curr.prev {
+					if !curr.done() {
+						allPrevComplete = false
+						break
+					}
 				}
-				hbdMutex.Unlock()
+				if allPrevComplete {
+					hbd.SuccessCount += resultPage.successCount
+					hbd.ErrorCount += resultPage.errorCount
 
-				// Update heartbeat details if this page and all previous pages are complete
-				if resultPage.successCount+resultPage.errorCount == len(resultPage.executions) {
-					allPrevComplete := true
-					for curr := resultPage.prev; curr != nil; curr = curr.prev {
-						if curr.successCount+curr.errorCount < len(curr.executions) {
-							allPrevComplete = false
-							break
-						}
-					}
-					if allPrevComplete {
-						// Send immediate heartbeat on page completion (original behavior)
-						hbdMutex.RLock()
-						activity.RecordHeartbeat(ctx, hbd)
-						hbdMutex.RUnlock()
+					activity.RecordHeartbeat(ctx, hbd)
 
-						// Delete all previous page pointers for completed pages to avoid scanning repeatedly
-						for curr := resultPage.prev; curr != nil; {
-							prev := curr.prev
-							curr.prev = nil
-							if prev != nil {
-								prev.next = nil
-							}
-							curr = prev
-						}
-						resultPage.prev = nil
-					}
+					resultPage.prev = nil
 				}
 			}
+
+		case <-heartbeatTicker.C:
+			// Send periodic heartbeat to prevent timeout during slow processing
+			activity.RecordHeartbeat(ctx, hbd)
 
 		case <-ctx.Done():
 			metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
@@ -393,9 +367,8 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		frontendClient workflowservice.WorkflowServiceClient,
 		metricsHandler metrics.Handler,
 		logger log.Logger,
-		getHeartbeatDetails func() HeartBeatDetails,
 	) {
-		startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger, getHeartbeatDetails)
+		startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
 	}
 
 	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, sdkClient, metricsHandler, logger, hbd)
@@ -465,9 +438,8 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		frontendClient workflowservice.WorkflowServiceClient,
 		metricsHandler metrics.Handler,
 		logger log.Logger,
-		getHeartbeatDetails func() HeartBeatDetails,
 	) {
-		startTaskProcessorProtobuf(ctx, batchParams, batchParams.Request.Namespace, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger, getHeartbeatDetails)
+		startTaskProcessorProtobuf(ctx, batchParams, batchParams.Request.Namespace, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
 	}
 
 	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, sdkClient, metricsHandler, logger, hbd)
@@ -536,7 +508,6 @@ func startTaskProcessor(
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-	getHeartbeatDetails func() HeartBeatDetails,
 ) {
 	for {
 		select {
@@ -553,12 +524,12 @@ func startTaskProcessor(
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
 						return sdkClient.TerminateWorkflow(ctx, execution.WorkflowId, execution.RunId, batchParams.Reason)
-					}, getHeartbeatDetails())
+					})
 			case BatchTypeCancel:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
 						return sdkClient.CancelWorkflow(ctx, execution.WorkflowId, execution.RunId)
-					}, getHeartbeatDetails())
+					})
 			case BatchTypeSignal:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -569,7 +540,7 @@ func startTaskProcessor(
 							Input:             batchParams.SignalParams.Input,
 						})
 						return err
-					}, getHeartbeatDetails())
+					})
 			case BatchTypeDelete:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -578,7 +549,7 @@ func startTaskProcessor(
 							WorkflowExecution: execution,
 						})
 						return err
-					}, getHeartbeatDetails())
+					})
 			case BatchTypeReset:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -611,7 +582,7 @@ func startTaskProcessor(
 							PostResetOperations:       batchParams.ResetParams.postResetOperations,
 						})
 						return err
-					}, getHeartbeatDetails())
+					})
 			case BatchTypeUnpauseActivities:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -632,7 +603,7 @@ func startTaskProcessor(
 						}
 						_, err = frontendClient.UnpauseActivity(ctx, unpauseRequest)
 						return err
-					}, getHeartbeatDetails())
+					})
 
 			case BatchTypeUpdateOptions:
 				err = processTask(ctx, limiter, task,
@@ -645,7 +616,7 @@ func startTaskProcessor(
 							UpdateMask:               &fieldmaskpb.FieldMask{Paths: batchParams.UpdateOptionsParams.UpdateMask.Paths},
 						})
 						return err
-					}, getHeartbeatDetails())
+					})
 
 			case BatchTypeResetActivities:
 				err = processTask(ctx, limiter, task,
@@ -669,7 +640,7 @@ func startTaskProcessor(
 
 						_, err = frontendClient.ResetActivity(ctx, resetRequest)
 						return err
-					}, getHeartbeatDetails())
+					})
 			case BatchTypeUpdateActivitiesOptions:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -709,7 +680,7 @@ func startTaskProcessor(
 
 						_, err = frontendClient.UpdateActivityOptions(ctx, updateRequest)
 						return err
-					}, getHeartbeatDetails())
+					})
 			default:
 				err = errors.New("unknown batch type: " + batchParams.BatchType)
 			}
@@ -745,7 +716,6 @@ func startTaskProcessorProtobuf(
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-	getHeartbeatDetails func() HeartBeatDetails,
 ) {
 	for {
 		select {
@@ -762,12 +732,12 @@ func startTaskProcessorProtobuf(
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
 						return sdkClient.TerminateWorkflow(ctx, execution.WorkflowId, execution.RunId, batchOperation.Request.Reason)
-					}, getHeartbeatDetails())
+					})
 			case *workflowservice.StartBatchOperationRequest_CancellationOperation:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
 						return sdkClient.CancelWorkflow(ctx, execution.WorkflowId, execution.RunId)
-					}, getHeartbeatDetails())
+					})
 			case *workflowservice.StartBatchOperationRequest_SignalOperation:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -779,7 +749,7 @@ func startTaskProcessorProtobuf(
 							Identity:          operation.SignalOperation.GetIdentity(),
 						})
 						return err
-					}, getHeartbeatDetails())
+					})
 			case *workflowservice.StartBatchOperationRequest_DeletionOperation:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -788,7 +758,7 @@ func startTaskProcessorProtobuf(
 							WorkflowExecution: execution,
 						})
 						return err
-					}, getHeartbeatDetails())
+					})
 			case *workflowservice.StartBatchOperationRequest_ResetOperation:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -828,7 +798,7 @@ func startTaskProcessorProtobuf(
 							Identity:                  operation.ResetOperation.Identity,
 						})
 						return err
-					}, getHeartbeatDetails())
+					})
 			case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -854,7 +824,7 @@ func startTaskProcessorProtobuf(
 
 						_, err = frontendClient.UnpauseActivity(ctx, unpauseRequest)
 						return err
-					}, getHeartbeatDetails())
+					})
 
 			case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 				err = processTask(ctx, limiter, task,
@@ -867,7 +837,7 @@ func startTaskProcessorProtobuf(
 							UpdateMask:               &fieldmaskpb.FieldMask{Paths: operation.UpdateWorkflowOptionsOperation.UpdateMask.Paths},
 						})
 						return err
-					}, getHeartbeatDetails())
+					})
 			case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -892,7 +862,7 @@ func startTaskProcessorProtobuf(
 
 						_, err = frontendClient.ResetActivity(ctx, resetRequest)
 						return err
-					}, getHeartbeatDetails())
+					})
 			case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
@@ -916,7 +886,7 @@ func startTaskProcessorProtobuf(
 						updateRequest.ActivityOptions = operation.UpdateActivityOptionsOperation.GetActivityOptions()
 						_, err = frontendClient.UpdateActivityOptions(ctx, updateRequest)
 						return err
-					}, getHeartbeatDetails())
+					})
 			default:
 				err = errors.New(fmt.Sprintf("unknown batch type: %v", batchOperation.BatchType))
 			}
@@ -944,14 +914,12 @@ func processTask(
 	limiter *rate.Limiter,
 	task task,
 	procFn func(*commonpb.WorkflowExecution) error,
-	hbd HeartBeatDetails,
 ) error {
 
 	err := limiter.Wait(ctx)
 	if err != nil {
 		return err
 	}
-	activity.RecordHeartbeat(ctx, hbd)
 
 	err = procFn(task.execution)
 	if err != nil {
