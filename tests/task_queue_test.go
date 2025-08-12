@@ -504,65 +504,6 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 		firstGap, secondGap)
 }
 
-// TestUpdateAndDescribeTaskQueueConfig tests the update and describe task queue config functionality.
-// It updates the task queue config via the frontend API and then describes the task queue to verify,
-// that the updated configuration is reflected correctly.
-func (s *TaskQueueSuite) TestUpdateAndDescribeTaskQueueConfig() {
-	tv := testvars.New(s.T())
-	taskQueueName := tv.TaskQueue().Name
-	namespace := s.Namespace().String()
-	taskQueueType := enumspb.TASK_QUEUE_TYPE_ACTIVITY
-	updateRPS := float32(42)
-	updateReason := "frontend-update-test"
-	updateIdentity := "test-identity"
-	updateReq := &workflowservice.UpdateTaskQueueConfigRequest{
-		Namespace:     namespace,
-		Identity:      updateIdentity,
-		TaskQueue:     taskQueueName,
-		TaskQueueType: taskQueueType,
-		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{
-				RequestsPerSecond: updateRPS,
-			},
-			Reason: updateReason,
-		},
-		UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{
-				RequestsPerSecond: updateRPS,
-			},
-			Reason: updateReason,
-		},
-	}
-	updateResp, err := s.FrontendClient().UpdateTaskQueueConfig(testcore.NewContext(), updateReq)
-	s.NoError(err)
-	s.NotNil(updateResp)
-	s.NotNil(updateResp.Config)
-	s.Equal(updateRPS, updateResp.Config.QueueRateLimit.RateLimit.RequestsPerSecond)
-	s.Equal(updateReason, updateResp.Config.QueueRateLimit.Metadata.Reason)
-	s.Equal(updateIdentity, updateResp.Config.QueueRateLimit.Metadata.UpdateIdentity)
-	s.Equal(updateRPS, updateResp.Config.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
-	s.Equal(updateReason, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
-	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
-
-	describeReq := &workflowservice.DescribeTaskQueueRequest{
-		Namespace:     namespace,
-		TaskQueue:     &taskqueuepb.TaskQueue{Name: taskQueueName},
-		TaskQueueType: taskQueueType,
-		ReportConfig:  true,
-	}
-	describeResp, err := s.FrontendClient().DescribeTaskQueue(testcore.NewContext(), describeReq)
-	s.NoError(err)
-	s.NotNil(describeResp)
-	s.NotNil(describeResp.Config)
-	s.NotNil(describeResp.Config.QueueRateLimit)
-	s.Equal(updateRPS, describeResp.Config.QueueRateLimit.RateLimit.RequestsPerSecond)
-	s.Equal(updateReason, describeResp.Config.QueueRateLimit.Metadata.Reason)
-	s.Equal(updateIdentity, updateResp.Config.QueueRateLimit.Metadata.UpdateIdentity)
-	s.Equal(updateRPS, describeResp.Config.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
-	s.Equal(updateReason, describeResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
-	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
-}
-
 func (s *TaskQueueSuite) setupPerKeyRateLimitWorkflow(
 	ctx context.Context,
 	tv *testvars.TestVars,
@@ -707,7 +648,7 @@ func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	perKeyTimes, allTimes := s.setupPerKeyRateLimitWorkflow(ctx, tv, keys, tasksPerKey, wholeQueueRPS, perKeyRPS)
+	_, allTimes := s.setupPerKeyRateLimitWorkflow(ctx, tv, keys, tasksPerKey, wholeQueueRPS, perKeyRPS)
 
 	// Measure overall throughput after initial burst, which should be limited by wholeQueueRPS.
 	start := allTimes[0]
@@ -716,23 +657,7 @@ func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced
 	expected := time.Duration(float64(tasksPerKey*len(keys))/wholeQueueRPS) * time.Second
 	actual := end.Sub(start)
 
-	s.T().Logf("RunTimes (grouped by second):")
-	start = allTimes[0]
-	for i, t := range allTimes {
-		elapsed := t.Sub(start).Truncate(time.Second)
-		s.T().Logf("[%2d] +%v -> %s (%v)\n", i, elapsed, t.Format("15:04:05.000000"), t.Sub(start))
-	}
-
-	for _, key := range keys {
-		times := perKeyTimes[key]
-		s.T().Logf("RunTimes (grouped by second):")
-		start := times[0]
-		for i, t := range times {
-			elapsed := t.Sub(start).Truncate(time.Second)
-			s.T().Logf("  [%2d] +%v -> %s (%v)\n", i, elapsed, t.Format("15:04:05.000000"), t.Sub(start))
-		}
-	}
-
+	s.T().Logf("Time taken for tasks across fairness keys to drain is %v vs expected %v", actual, expected)
 	s.GreaterOrEqual(actual, expected-buffer,
 		"whole-queue RPS violated: actual %v < expected %v (-%v buffer)", actual, expected, buffer)
 
@@ -760,19 +685,13 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 		times := perKeyTimes[key]
 		s.Len(times, tasksPerKey, "unexpected count for key %s", key)
 
-		s.T().Logf("RunTimes (grouped by second):")
 		start := times[0]
-		for i, t := range times {
-			elapsed := t.Sub(start).Truncate(time.Second)
-			s.T().Logf("  [%2d] +%v -> %s (%v)\n", i, elapsed, t.Format("15:04:05.000000"), t.Sub(start))
-		}
-
-		start = times[0]
 		end := times[len(times)-1]
 
 		expected := time.Duration(float64(tasksPerKey)/perKeyRPS) * time.Second
 		actual := end.Sub(start)
 
+		s.T().Logf("Time taken for fairness key %s to drain : %v vs expected %v", key, actual, expected)
 		s.GreaterOrEqual(actual, expected-buffer,
 			"per-key RPS violated for key %s: actual %v < expected %v (-%v buffer)",
 			key, actual, expected)
@@ -780,6 +699,65 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 		s.LessOrEqual(actual, expected+buffer,
 			"too slow for key %s: actual %v > expected %v (+%v buffer)", key, actual, expected, buffer)
 	}
+}
+
+// TestUpdateAndDescribeTaskQueueConfig tests the update and describe task queue config functionality.
+// It updates the task queue config via the frontend API and then describes the task queue to verify,
+// that the updated configuration is reflected correctly.
+func (s *TaskQueueSuite) TestUpdateAndDescribeTaskQueueConfig() {
+	tv := testvars.New(s.T())
+	taskQueueName := tv.TaskQueue().Name
+	namespace := s.Namespace().String()
+	taskQueueType := enumspb.TASK_QUEUE_TYPE_ACTIVITY
+	updateRPS := float32(42)
+	updateReason := "frontend-update-test"
+	updateIdentity := "test-identity"
+	updateReq := &workflowservice.UpdateTaskQueueConfigRequest{
+		Namespace:     namespace,
+		Identity:      updateIdentity,
+		TaskQueue:     taskQueueName,
+		TaskQueueType: taskQueueType,
+		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			RateLimit: &taskqueuepb.RateLimit{
+				RequestsPerSecond: updateRPS,
+			},
+			Reason: updateReason,
+		},
+		UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			RateLimit: &taskqueuepb.RateLimit{
+				RequestsPerSecond: updateRPS,
+			},
+			Reason: updateReason,
+		},
+	}
+	updateResp, err := s.FrontendClient().UpdateTaskQueueConfig(testcore.NewContext(), updateReq)
+	s.NoError(err)
+	s.NotNil(updateResp)
+	s.NotNil(updateResp.Config)
+	s.Equal(updateRPS, updateResp.Config.QueueRateLimit.RateLimit.RequestsPerSecond)
+	s.Equal(updateReason, updateResp.Config.QueueRateLimit.Metadata.Reason)
+	s.Equal(updateIdentity, updateResp.Config.QueueRateLimit.Metadata.UpdateIdentity)
+	s.Equal(updateRPS, updateResp.Config.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
+	s.Equal(updateReason, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
+	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
+
+	describeReq := &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     namespace,
+		TaskQueue:     &taskqueuepb.TaskQueue{Name: taskQueueName},
+		TaskQueueType: taskQueueType,
+		ReportConfig:  true,
+	}
+	describeResp, err := s.FrontendClient().DescribeTaskQueue(testcore.NewContext(), describeReq)
+	s.NoError(err)
+	s.NotNil(describeResp)
+	s.NotNil(describeResp.Config)
+	s.NotNil(describeResp.Config.QueueRateLimit)
+	s.Equal(updateRPS, describeResp.Config.QueueRateLimit.RateLimit.RequestsPerSecond)
+	s.Equal(updateReason, describeResp.Config.QueueRateLimit.Metadata.Reason)
+	s.Equal(updateIdentity, updateResp.Config.QueueRateLimit.Metadata.UpdateIdentity)
+	s.Equal(updateRPS, describeResp.Config.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
+	s.Equal(updateReason, describeResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
+	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
 }
 
 func (s *TaskQueueSuite) TestUpdateUnsetAndDescribeTaskQueueConfig() {
