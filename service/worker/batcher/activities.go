@@ -222,21 +222,12 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 
 			// Update heartbeat details if this page and all previous pages are complete
 			if resultPage.done() {
-				allPrevComplete := true
-				for curr := resultPage.prev; curr != nil; curr = curr.prev {
-					if !curr.done() {
-						allPrevComplete = false
-						break
-					}
-				}
-				if allPrevComplete {
-					hbd.SuccessCount += resultPage.successCount
-					hbd.ErrorCount += resultPage.errorCount
+				hbd.SuccessCount += resultPage.successCount
+				hbd.ErrorCount += resultPage.errorCount
 
-					activity.RecordHeartbeat(ctx, hbd)
+				activity.RecordHeartbeat(ctx, hbd)
 
-					resultPage.prev = nil
-				}
+				resultPage.prev = nil
 			}
 
 		case <-heartbeatTicker.C:
