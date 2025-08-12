@@ -3,7 +3,6 @@
 package queues
 
 import (
-	"github.com/google/btree"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -259,11 +258,12 @@ func (s *rateLimitedSchedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
 	return s.baseScheduler.TaskChannelKeyFn()
 }
 
-// Less implements btree.Item interface for TaskChannelKey
-func (t TaskChannelKey) Less(than btree.Item) bool {
-	otherKey := than.(TaskChannelKey)
-	if t.Priority == otherKey.Priority {
-		return t.NamespaceID < otherKey.NamespaceID
+// Less implements comparison for TaskChannelKey for btree
+// Priority is the primary ordering, NamespaceID is the tie-breaker to ensure unique keys
+func (t TaskChannelKey) Less(other TaskChannelKey) bool {
+	if t.Priority != other.Priority {
+		return t.Priority < other.Priority
 	}
-	return t.Priority < otherKey.Priority
+	// Use NamespaceID as tie-breaker to ensure all keys are distinguishable
+	return t.NamespaceID < other.NamespaceID
 }

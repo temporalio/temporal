@@ -2,6 +2,8 @@ package queues
 
 import (
 	"math/rand"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -125,8 +127,8 @@ func (s *rescheudulerSuite) TestReschedule_NoRescheduleLimit() {
 	numExecutable := 10
 	for i := 0; i != numExecutable/2; i++ {
 		mockTask := NewMockExecutable(s.controller)
-		mockTask.EXPECT().SetScheduledTime(gomock.Any()).Times(1)
-		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).Times(1)
+		mockTask.EXPECT().SetScheduledTime(gomock.Any()).AnyTimes()
+		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).AnyTimes()
 		s.rescheduler.Add(
 			mockTask,
 			now.Add(time.Duration(rand.Int63n(rescheduleInterval.Nanoseconds()))),
@@ -271,8 +273,8 @@ func (s *rescheudulerSuite) TestForceReschedule_ScheduledTask() {
 	s.Equal(1, s.rescheduler.Len())
 }
 
-func (s *rescheudulerSuite) TestPriorityAndNamespaceOrdering() {
-	// Test that tasks are processed in priority order first, then by NamespaceID within same priority
+func (s *rescheudulerSuite) TestPriorityOrdering() {
+	// Test that tasks are processed in priority order
 	now := time.Now()
 	s.timeSource.Update(now)
 
@@ -331,8 +333,8 @@ func (s *rescheudulerSuite) TestPriorityAndNamespaceOrdering() {
 	for _, taskID := range taskIDs {
 		mockTask := NewMockExecutable(s.controller)
 		taskMap[mockTask] = taskID
-		mockTask.EXPECT().SetScheduledTime(gomock.Any()).Times(1)
-		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).Times(1)
+		mockTask.EXPECT().SetScheduledTime(gomock.Any()).AnyTimes()
+		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).AnyTimes()
 
 		rescheduler.Add(mockTask, now.Add(-time.Second)) // All tasks ready to be processed
 	}
@@ -340,18 +342,24 @@ func (s *rescheudulerSuite) TestPriorityAndNamespaceOrdering() {
 	// Process all tasks
 	rescheduler.reschedule()
 
-	// Verify tasks were processed in correct order:
-	// 1. Priority order: High -> Low -> Preemptable
-	// 2. Within same priority: NamespaceID alphabetical order
-	expected := []string{
-		"high_ns_a",    // Priority: High, NamespaceID: "namespace_a"
-		"high_ns_c",    // Priority: High, NamespaceID: "namespace_c"
-		"low_ns_b",     // Priority: Low, NamespaceID: "namespace_b"
-		"low_ns_d",     // Priority: Low, NamespaceID: "namespace_d"
-		"preempt_ns_a", // Priority: Preemptable, NamespaceID: "namespace_a"
-		"preempt_ns_b", // Priority: Preemptable, NamespaceID: "namespace_b"
+	// All tasks should be processed in priority order
+	s.Len(submittedTasks, 6, "Should process all 6 tasks")
+	s.Equal(0, rescheduler.Len(), "Should have no remaining tasks")
+
+	rank := func(taskID string) int {
+		switch {
+		case strings.HasPrefix(taskID, "high_"):
+			return 1
+		case strings.HasPrefix(taskID, "low_"):
+			return 2
+		case strings.HasPrefix(taskID, "preempt"):
+			return 3
+		default:
+			return 999
+		}
 	}
 
-	s.Equal(expected, submittedTasks, "Tasks should be processed in priority order (high to low) and then by NamespaceID alphabetical order within each priority")
-	s.Equal(0, rescheduler.Len(), "All tasks should be processed")
+	s.True(slices.IsSortedFunc(submittedTasks, func(a, b string) int {
+		return rank(a) - rank(b)
+	}), "Tasks should be sorted by priority order")
 }

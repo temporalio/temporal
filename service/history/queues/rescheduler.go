@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/btree"
+	"github.com/tidwall/btree"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -47,7 +47,7 @@ type (
 		Stop()
 	}
 
-	rescheduledExecuable struct {
+	rescheduledExecutable struct {
 		executable     Executable
 		rescheduleTime time.Time
 	}
@@ -66,8 +66,8 @@ type (
 		taskChannelKeyFn TaskChannelKeyFn
 
 		sync.Mutex
-		pqMap          map[TaskChannelKey]collection.Queue[rescheduledExecuable]
-		keyBTree       *btree.BTree // Maintains TaskChannelKeys in priority order
+		pqMap          map[TaskChannelKey]collection.Queue[rescheduledExecutable]
+		keyBTree       *btree.BTreeG[TaskChannelKey] // Maintains TaskChannelKeys in priority order
 		numExecutables int
 	}
 )
@@ -90,8 +90,8 @@ func NewRescheduler(
 		timerGate:        timer.NewLocalGate(timeSource),
 		taskChannelKeyFn: scheduler.TaskChannelKeyFn(),
 
-		pqMap:    make(map[TaskChannelKey]collection.Queue[rescheduledExecuable]),
-		keyBTree: btree.New(2),
+		pqMap:    make(map[TaskChannelKey]collection.Queue[rescheduledExecutable]),
+		keyBTree: btree.NewBTreeG[TaskChannelKey](TaskChannelKey.Less),
 	}
 }
 
@@ -127,7 +127,7 @@ func (r *reschedulerImpl) Add(
 ) {
 	r.Lock()
 	pq := r.getOrCreatePQLocked(r.taskChannelKeyFn(executable))
-	pq.Add(rescheduledExecuable{
+	pq.Add(rescheduledExecutable{
 		executable:     executable,
 		rescheduleTime: rescheduleTime,
 	})
@@ -150,8 +150,7 @@ func (r *reschedulerImpl) Reschedule(
 	updatedRescheduleTime := false
 
 	// Process keys in decreasing order of priority
-	r.keyBTree.Ascend(func(item btree.Item) bool {
-		key := item.(TaskChannelKey)
+	r.keyBTree.Scan(func(key TaskChannelKey) bool {
 		if key.NamespaceID != namespaceID {
 			return true
 		}
@@ -159,7 +158,7 @@ func (r *reschedulerImpl) Reschedule(
 		pq := r.pqMap[key]
 		updatedRescheduleTime = true
 		// set reschedule time for all tasks in this pq to be now
-		items := make([]rescheduledExecuable, 0, pq.Len())
+		items := make([]rescheduledExecutable, 0, pq.Len())
 		for !pq.IsEmpty() {
 			rescheduled := pq.Remove()
 			// scheduled queue pre-fetches tasks,
@@ -222,8 +221,7 @@ func (r *reschedulerImpl) reschedule() {
 	now := r.timeSource.Now()
 
 	// Process keys in decreasing order of priority
-	r.keyBTree.Ascend(func(item btree.Item) bool {
-		key := item.(TaskChannelKey)
+	r.keyBTree.Scan(func(key TaskChannelKey) bool {
 		pq := r.pqMap[key]
 		for !pq.IsEmpty() {
 			rescheduled := pq.Peek()
@@ -287,20 +285,20 @@ func (r *reschedulerImpl) isStopped() bool {
 
 func (r *reschedulerImpl) getOrCreatePQLocked(
 	key TaskChannelKey,
-) collection.Queue[rescheduledExecuable] {
+) collection.Queue[rescheduledExecutable] {
 	if pq, ok := r.pqMap[key]; ok {
 		return pq
 	}
 
 	pq := r.newPriorityQueue(nil)
 	r.pqMap[key] = pq
-	r.keyBTree.ReplaceOrInsert(key)
+	r.keyBTree.Set(key)
 	return pq
 }
 
 func (r *reschedulerImpl) newPriorityQueue(
-	items []rescheduledExecuable,
-) collection.Queue[rescheduledExecuable] {
+	items []rescheduledExecutable,
+) collection.Queue[rescheduledExecutable] {
 	if items == nil {
 		return collection.NewPriorityQueue(r.rescheduledExecutableCompareLess)
 	}
@@ -309,8 +307,8 @@ func (r *reschedulerImpl) newPriorityQueue(
 }
 
 func (r *reschedulerImpl) rescheduledExecutableCompareLess(
-	this rescheduledExecuable,
-	that rescheduledExecuable,
+	this rescheduledExecutable,
+	that rescheduledExecutable,
 ) bool {
 	return this.rescheduleTime.Before(that.rescheduleTime)
 }
