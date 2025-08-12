@@ -451,7 +451,7 @@ pre-build-functional-test-coverage: prepare-coverage-test
 # TODO: Revert changes. Adding verbose flag to debug.
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --format=standard-verbose --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)  -test.v
 
