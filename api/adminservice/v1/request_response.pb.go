@@ -248,11 +248,12 @@ func (x *ImportWorkflowExecutionResponse) GetToken() []byte {
 }
 
 type DescribeMutableStateRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Execution     *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Namespace       string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Execution       *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
+	SkipForceReload bool                   `protobuf:"varint,3,opt,name=skip_force_reload,json=skipForceReload,proto3" json:"skip_force_reload,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DescribeMutableStateRequest) Reset() {
@@ -299,11 +300,21 @@ func (x *DescribeMutableStateRequest) GetExecution() *v1.WorkflowExecution {
 	return nil
 }
 
+func (x *DescribeMutableStateRequest) GetSkipForceReload() bool {
+	if x != nil {
+		return x.SkipForceReload
+	}
+	return false
+}
+
 type DescribeMutableStateResponse struct {
-	state                protoimpl.MessageState    `protogen:"open.v1"`
-	ShardId              string                    `protobuf:"bytes,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	HistoryAddr          string                    `protobuf:"bytes,2,opt,name=history_addr,json=historyAddr,proto3" json:"history_addr,omitempty"`
-	CacheMutableState    *v12.WorkflowMutableState `protobuf:"bytes,3,opt,name=cache_mutable_state,json=cacheMutableState,proto3" json:"cache_mutable_state,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	ShardId     string                 `protobuf:"bytes,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
+	HistoryAddr string                 `protobuf:"bytes,2,opt,name=history_addr,json=historyAddr,proto3" json:"history_addr,omitempty"`
+	// CacheMutableState is only available when mutable state is in cache.
+	CacheMutableState *v12.WorkflowMutableState `protobuf:"bytes,3,opt,name=cache_mutable_state,json=cacheMutableState,proto3" json:"cache_mutable_state,omitempty"`
+	// DatabaseMutableState is always available,
+	// but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
 	DatabaseMutableState *v12.WorkflowMutableState `protobuf:"bytes,4,opt,name=database_mutable_state,json=databaseMutableState,proto3" json:"database_mutable_state,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
@@ -5374,10 +5385,11 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x0fversion_history\x18\x04 \x01(\v2..temporal.server.api.history.v1.VersionHistoryR\x0eversionHistory\x12\x14\n" +
 	"\x05token\x18\x05 \x01(\fR\x05token\"7\n" +
 	"\x1fImportWorkflowExecutionResponse\x12\x14\n" +
-	"\x05token\x18\x01 \x01(\fR\x05token\"\x84\x01\n" +
+	"\x05token\x18\x01 \x01(\fR\x05token\"\xb0\x01\n" +
 	"\x1bDescribeMutableStateRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12G\n" +
-	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\"\xb6\x02\n" +
+	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12*\n" +
+	"\x11skip_force_reload\x18\x03 \x01(\bR\x0fskipForceReload\"\xb6\x02\n" +
 	"\x1cDescribeMutableStateResponse\x12\x19\n" +
 	"\bshard_id\x18\x01 \x01(\tR\ashardId\x12!\n" +
 	"\fhistory_addr\x18\x02 \x01(\tR\vhistoryAddr\x12h\n" +

@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -64,15 +65,15 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller          *gomock.Controller
-		mockShard           *shard.ContextTest
-		mockNamespaceCache  *namespace.MockRegistry
-		mockClusterMetadata *cluster.MockMetadata
-		mockAdminClient     *adminservicemock.MockAdminServiceClient
-		mockFrontendClient  *workflowservicemock.MockWorkflowServiceClient
-		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
-		mockMatchingClient  *matchingservicemock.MockMatchingServiceClient
-		mockChasmEngine     chasm.Engine
+		controller            *gomock.Controller
+		mockShard             *shard.ContextTest
+		mockNamespaceCache    *namespace.MockRegistry
+		mockClusterMetadata   *cluster.MockMetadata
+		mockFrontendClient    *workflowservicemock.MockWorkflowServiceClient
+		mockHistoryClient     *historyservicemock.MockHistoryServiceClient
+		mockMatchingClient    *matchingservicemock.MockMatchingServiceClient
+		mockRemoteAdminClient *adminservicemock.MockAdminServiceClient
+		mockChasmEngine       chasm.Engine
 
 		mockExecutionMgr     *persistence.MockExecutionManager
 		mockArchivalMetadata archiver.MetadataMock
@@ -149,7 +150,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockArchivalMetadata = s.mockShard.Resource.ArchivalMetadata
 	s.mockArchiverProvider = s.mockShard.Resource.ArchiverProvider
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
-	s.mockAdminClient = s.mockShard.Resource.RemoteAdminClient
+	s.mockRemoteAdminClient = s.mockShard.Resource.RemoteAdminClient
 	s.mockSearchAttributesProvider = s.mockShard.Resource.SearchAttributesProvider
 	s.mockVisibilityManager = s.mockShard.Resource.VisibilityManager
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
@@ -292,7 +293,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 	chasmTree := historyi.NewMockChasmTree(s.controller)
 	expectValidate := func(taskValue any, err error) {
 		chasmTree.EXPECT().ValidateSideEffectTask(
-			gomock.Any(),
 			gomock.Any(),
 			gomock.Any(),
 			gomock.Any(),
@@ -743,10 +743,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	})
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(parentNamespaceID)).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
-	s.clientBean.EXPECT().GetRemoteFrontendClient(tests.GlobalChildNamespaceEntry.ActiveClusterName()).Return(nil, s.mockFrontendClient, nil).AnyTimes()
-	s.mockFrontendClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), protomock.Eq(&workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: tests.ParentNamespace.String(),
-		Execution: parentExecution,
+	s.clientBean.EXPECT().GetRemoteAdminClient(tests.GlobalChildNamespaceEntry.ActiveClusterName()).Return(s.mockRemoteAdminClient, nil).AnyTimes()
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
+		Namespace:       tests.ParentNamespace.String(),
+		Execution:       parentExecution,
+		SkipForceReload: true,
 	})).Return(nil, serviceerror.NewInternal("some error")).AnyTimes()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())

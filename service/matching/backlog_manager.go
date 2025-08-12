@@ -193,7 +193,7 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 }
 
 func (c *backlogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats {
-	defaultPriority := defaultPriorityLevel(c.config.PriorityLevels())
+	defaultPriority := int32(defaultPriorityLevel(c.config.PriorityLevels()))
 	return map[int32]*taskqueuepb.TaskQueueStats{
 		defaultPriority: &taskqueuepb.TaskQueueStats{
 			ApproximateBacklogCount: c.db.getTotalApproximateBacklogCount(),

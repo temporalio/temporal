@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"strings"
+
+	"go.temporal.io/server/common/log"
 )
 
 var (
@@ -19,15 +22,18 @@ type (
 
 		taskByType   map[string]*RegistrableTask       // fully qualified type name -> task
 		taskByGoType map[reflect.Type]*RegistrableTask // task go type -> task
+
+		logger log.Logger
 	}
 )
 
-func NewRegistry() *Registry {
+func NewRegistry(logger log.Logger) *Registry {
 	return &Registry{
 		componentByType:   make(map[string]*RegistrableComponent),
 		componentByGoType: make(map[reflect.Type]*RegistrableComponent),
 		taskByType:        make(map[string]*RegistrableTask),
 		taskByGoType:      make(map[reflect.Type]*RegistrableTask),
+		logger:            logger,
 	}
 }
 
@@ -101,6 +107,7 @@ func (r *Registry) registerComponent(
 	if _, ok := r.componentByGoType[rc.goType]; ok {
 		return fmt.Errorf("component type %s is already registered", rc.goType.String())
 	}
+	r.warnUnmanagedFields(fqn, rc)
 
 	rc.library = lib
 	r.componentByType[fqn] = rc
@@ -149,4 +156,17 @@ func (r *Registry) validateName(n string) error {
 		return fmt.Errorf("name %s is invalid. name must follow golang identifier rules: %s", n, nameValidator.String())
 	}
 	return nil
+}
+
+func (r *Registry) warnUnmanagedFields(fqn string, rc *RegistrableComponent) {
+	var unmanagedFields []string
+	for f := range unmanagedFieldsOf(rc.goType) {
+		unmanagedFields = append(unmanagedFields, fmt.Sprintf("%s %s", f.name, f.typ))
+	}
+	if len(unmanagedFields) > 0 {
+		r.logger.Info(fmt.Sprintf(
+			"Warning: CHASM component %s declares state fields that won't be managed by CHASM:\n\t%s",
+			fqn,
+			strings.Join(unmanagedFields, "\n\t")))
+	}
 }

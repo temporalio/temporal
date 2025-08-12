@@ -32,6 +32,9 @@ type fieldInfo struct {
 	err  error
 }
 
+// fieldsOf iterates across all CHASM-managed fields of a struct. Other fields
+// are not yielded.
+//
 //nolint:revive // cognitive complexity 26 (> max enabled 25)
 func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 	valueT := valueV.Type()
@@ -43,8 +46,8 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 			if fieldT == UnimplementedComponentT {
 				continue
 			}
-			fieldN := fieldName(valueT.Elem().Field(i))
 
+			fieldN := fieldName(valueT.Elem().Field(i))
 			var fieldErr error
 			fieldK := fieldKindUnspecified
 			if fieldT.AssignableTo(protoMessageT) {
@@ -56,7 +59,12 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 			} else {
 				prefix := genericTypePrefix(fieldT)
 				if strings.HasPrefix(prefix, "*") {
-					fieldErr = serviceerror.NewInternalf("%s.%s: chasm field type %s must not be a pointer", valueT, fieldN, fieldT)
+					switch prefix[1:] {
+					case chasmFieldTypePrefix, chasmMapTypePrefix:
+						fieldErr = serviceerror.NewInternalf("%s.%s: CHASM fields must not be pointers", valueT, fieldN)
+					default:
+						continue
+					}
 				} else {
 					switch prefix {
 					case chasmFieldTypePrefix:
@@ -64,7 +72,7 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 					case chasmMapTypePrefix:
 						fieldK = fieldKindSubMap
 					default:
-						fieldErr = serviceerror.NewInternalf("%s.%s: unsupported field type %s: must implement proto.Message, or be chasm.Field[T] or chasm.Map[T]", valueT, fieldN, fieldT)
+						continue // Skip non-CHASM fields.
 					}
 				}
 
@@ -77,6 +85,37 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 		// If the data field is not found, generate one more fake field with only an error set.
 		if dataFieldName == "" {
 			yield(fieldInfo{err: serviceerror.NewInternalf("%s: no data field (implements proto.Message) found", valueT)})
+		}
+	}
+}
+
+// unmanagedFieldsOf yields all non-CHASM managed fields of a struct.
+func unmanagedFieldsOf(valueT reflect.Type) iter.Seq[fieldInfo] {
+	return func(yield func(fi fieldInfo) bool) {
+		if valueT.Kind() == reflect.Pointer {
+			valueT = valueT.Elem()
+		}
+		for i := range valueT.NumField() {
+			fieldT := valueT.Field(i).Type
+			if fieldT == UnimplementedComponentT {
+				continue
+			}
+
+			// Skip the data field, which is always CHASM-managed.
+			if fieldT.AssignableTo(protoMessageT) {
+				continue
+			}
+
+			fieldN := fieldName(valueT.Field(i))
+			prefix := genericTypePrefix(fieldT)
+			switch prefix {
+			case chasmFieldTypePrefix, chasmMapTypePrefix:
+				continue // Skip CHASM fields.
+			default:
+				if !yield(fieldInfo{typ: fieldT, name: fieldN}) {
+					return
+				}
+			}
 		}
 	}
 }

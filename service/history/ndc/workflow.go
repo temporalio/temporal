@@ -127,10 +127,11 @@ func (r *WorkflowImpl) Revive() error {
 	if r.mutableState.IsWorkflow() && !r.mutableState.HadOrHasWorkflowTask() {
 		state = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
 	}
-	return r.mutableState.UpdateWorkflowStateStatus(
+	_, err := r.mutableState.UpdateWorkflowStateStatus(
 		state,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	)
+	return err
 }
 
 func (r *WorkflowImpl) SuppressBy(
@@ -173,10 +174,11 @@ func (r *WorkflowImpl) SuppressBy(
 	if currentCluster == lastWriteCluster {
 		return historyi.TransactionPolicyActive, r.terminateMutableState(lastWriteVersion, incomingLastWriteVersion)
 	}
-	return historyi.TransactionPolicyPassive, r.mutableState.UpdateWorkflowStateStatus(
+	_, err = r.mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	)
+	return historyi.TransactionPolicyPassive, err
 }
 
 func (r *WorkflowImpl) FlushBufferedEvents() error {
