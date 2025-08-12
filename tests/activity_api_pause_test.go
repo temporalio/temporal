@@ -70,6 +70,8 @@ func (s *ActivityApiPauseClientTestSuite) makeWorkflowFunc(activityFunction Acti
 	}
 }
 
+// makeTestWorkflowFuncMultiActivities is a helper function to create a workflow function that starts multiple activities.
+// After the first activity is started, it will wait for a signal to unblock the starting of next activity.
 func (s *ActivityApiPauseClientTestSuite) makeTestWorkflowFuncMultiActivities(activityFunctions ...ActivityFunctions) WorkflowFunction {
 	return func(ctx workflow.Context) error {
 		var activityExecutions []workflow.Future
