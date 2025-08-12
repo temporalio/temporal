@@ -44,37 +44,28 @@ func NewComponentField[C Component](
 	}
 }
 
-// TODO: The Component|DataPointerTo() implementation below can't handle the case
-// where Pointer is created in the NewEntity transition, as the tree structure is
-// unknown to the framework yet.
-//
-// To handle that case, we have to store the Component value in the field when
-// the Pointer field is created and resolve the pointer at the end of the transition
-// i.e. when closing the transaction.
+// ComponentPointerTo returns a CHASM field populated with a pointer to the given
+// component. Pointers are resolved at the time the transaction is closed, and the
+// transaction will fail if any pointers cannot be resolved.
 func ComponentPointerTo[C Component](
 	ctx MutableContext,
 	c C,
-) (Field[C], error) {
-	path, err := ctx.componentNodePath(c)
-	if err != nil {
-		return NewEmptyField[C](), err
-	}
+) Field[C] {
 	return Field[C]{
-		Internal: newFieldInternalWithValue(fieldTypePointer, path),
-	}, nil
+		Internal: newFieldInternalWithValue(fieldTypeDeferredPointer, c),
+	}
 }
 
+// DataPointerTo returns a CHASM field populated with a pointer to the given
+// message. Pointers are resolved at the time the transaction is closed, and the
+// transaction will fail if any pointers cannot be resolved.
 func DataPointerTo[D proto.Message](
 	ctx MutableContext,
 	d D,
-) (Field[D], error) {
-	path, err := ctx.dataNodePath(d)
-	if err != nil {
-		return NewEmptyField[D](), err
-	}
+) Field[D] {
 	return Field[D]{
-		Internal: newFieldInternalWithValue(fieldTypePointer, path),
-	}, nil
+		Internal: newFieldInternalWithValue(fieldTypeDeferredPointer, d),
+	}
 }
 
 func (f Field[T]) Get(chasmContext Context) (T, error) {
@@ -112,18 +103,23 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 		//nolint:revive // value is guaranteed to be of type []string.
 		path := f.Internal.value().([]string)
 		if referencedNode, found := f.Internal.node.root().findNode(path); found {
-			fieldT := reflect.TypeFor[T]()
-			if fieldT.AssignableTo(protoMessageT) {
-				if err := f.Internal.node.prepareDataValue(chasmContext, fieldT); err != nil {
-					return nilT, err
-				}
-			} else {
-				if err := referencedNode.prepareComponentValue(chasmContext); err != nil {
-					return nilT, err
-				}
+			var err error
+			switch referencedNode.fieldType() {
+			case fieldTypeComponent:
+				err = referencedNode.prepareComponentValue(chasmContext)
+			case fieldTypeData:
+				err = referencedNode.prepareDataValue(chasmContext, reflect.TypeFor[T]())
+			default:
+				err = serviceerror.NewInternalf("pointer field referenced an unhandled value: %v", referencedNode.fieldType())
+			}
+			if err != nil {
+				return nilT, err
 			}
 			nodeValue = referencedNode.value
 		}
+	case fieldTypeDeferredPointer:
+		// For deferred pointers, return the component directly stored in v
+		nodeValue = f.Internal.v
 	default:
 		return nilT, serviceerror.NewInternalf("unsupported field type: %v", f.Internal.fieldType())
 	}

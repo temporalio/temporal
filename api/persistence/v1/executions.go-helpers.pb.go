@@ -929,3 +929,77 @@ func (this *ResetChildInfo) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type WorkflowPauseInfo to the protobuf v3 wire format
+func (val *WorkflowPauseInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type WorkflowPauseInfo from the protobuf v3 wire format
+func (val *WorkflowPauseInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *WorkflowPauseInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two WorkflowPauseInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *WorkflowPauseInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *WorkflowPauseInfo
+	switch t := that.(type) {
+	case *WorkflowPauseInfo:
+		that1 = t
+	case WorkflowPauseInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ActivityPauseInfo to the protobuf v3 wire format
+func (val *ActivityPauseInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ActivityPauseInfo from the protobuf v3 wire format
+func (val *ActivityPauseInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ActivityPauseInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ActivityPauseInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ActivityPauseInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ActivityPauseInfo
+	switch t := that.(type) {
+	case *ActivityPauseInfo:
+		that1 = t
+	case ActivityPauseInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

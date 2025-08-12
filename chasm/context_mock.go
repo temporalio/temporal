@@ -15,7 +15,6 @@ import (
 	time "time"
 
 	gomock "go.uber.org/mock/gomock"
-	proto "google.golang.org/protobuf/proto"
 )
 
 // MockContext is a mock of Context interface.
@@ -69,36 +68,6 @@ func (m *MockContext) Ref(arg0 Component) ([]byte, error) {
 func (mr *MockContextMockRecorder) Ref(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ref", reflect.TypeOf((*MockContext)(nil).Ref), arg0)
-}
-
-// componentNodePath mocks base method.
-func (m *MockContext) componentNodePath(arg0 Component) ([]string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "componentNodePath", arg0)
-	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// componentNodePath indicates an expected call of componentNodePath.
-func (mr *MockContextMockRecorder) componentNodePath(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "componentNodePath", reflect.TypeOf((*MockContext)(nil).componentNodePath), arg0)
-}
-
-// dataNodePath mocks base method.
-func (m *MockContext) dataNodePath(arg0 proto.Message) ([]string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "dataNodePath", arg0)
-	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// dataNodePath indicates an expected call of dataNodePath.
-func (mr *MockContextMockRecorder) dataNodePath(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "dataNodePath", reflect.TypeOf((*MockContext)(nil).dataNodePath), arg0)
 }
 
 // getContext mocks base method.
@@ -178,36 +147,6 @@ func (m *MockMutableContext) Ref(arg0 Component) ([]byte, error) {
 func (mr *MockMutableContextMockRecorder) Ref(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ref", reflect.TypeOf((*MockMutableContext)(nil).Ref), arg0)
-}
-
-// componentNodePath mocks base method.
-func (m *MockMutableContext) componentNodePath(arg0 Component) ([]string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "componentNodePath", arg0)
-	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// componentNodePath indicates an expected call of componentNodePath.
-func (mr *MockMutableContextMockRecorder) componentNodePath(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "componentNodePath", reflect.TypeOf((*MockMutableContext)(nil).componentNodePath), arg0)
-}
-
-// dataNodePath mocks base method.
-func (m *MockMutableContext) dataNodePath(arg0 proto.Message) ([]string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "dataNodePath", arg0)
-	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// dataNodePath indicates an expected call of dataNodePath.
-func (mr *MockMutableContextMockRecorder) dataNodePath(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "dataNodePath", reflect.TypeOf((*MockMutableContext)(nil).dataNodePath), arg0)
 }
 
 // getContext mocks base method.

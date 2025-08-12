@@ -1,8 +1,10 @@
 package priorities
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 )
@@ -76,6 +78,33 @@ func TestMerge(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			actual := Merge(tc.base, tc.override)
 			require.EqualExportedValues(t, tc.expected, actual)
+		})
+	}
+}
+
+func TestValidate(t *testing.T) {
+	testcases := []struct {
+		p   *commonpb.Priority
+		err bool
+	}{
+		{p: &commonpb.Priority{}},
+		{p: &commonpb.Priority{PriorityKey: 5}},
+		{p: &commonpb.Priority{PriorityKey: -5}, err: true},
+		{p: &commonpb.Priority{FairnessKey: "abcdefg"}},
+		{p: &commonpb.Priority{FairnessKey: strings.Repeat("abcdefg", 10)}, err: true},
+		{p: &commonpb.Priority{FairnessWeight: 0.1}},
+		{p: &commonpb.Priority{FairnessWeight: 1e10}},
+		{p: &commonpb.Priority{FairnessWeight: -3}, err: true},
+	}
+
+	for _, tc := range testcases {
+		t.Run("test", func(t *testing.T) {
+			err := Validate(tc.p)
+			if tc.err {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }
