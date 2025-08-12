@@ -558,6 +558,9 @@ func (s *queueBaseSuite) newQueueBase(
 		func() string {
 			return ""
 		},
+		quotas.FairnessRequestRateLimiterAdapter{
+			RequestRateLimiter: quotas.NoopRequestRateLimiter,
+		},
 	)
 	return newQueueBase(
 		mockShard,

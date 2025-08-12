@@ -6,6 +6,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -160,6 +161,9 @@ func (f *timerQueueFactory) CreateQueue(
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
+		quotas.FairnessRequestRateLimiterAdapter{
+			RequestRateLimiter: quotas.NoopRequestRateLimiter,
+		},
 	)
 	return queues.NewScheduledQueue(
 		shardContext,

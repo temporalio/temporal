@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/util"
@@ -159,6 +160,7 @@ type (
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
+		schedulerRateLimiter       SchedulerRateLimiter
 	}
 	ExecutableParams struct {
 		DLQEnabled                 dynamicconfig.BoolPropertyFn
@@ -166,6 +168,7 @@ type (
 		MaxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		DLQInternalErrors          dynamicconfig.BoolPropertyFn
 		DLQErrorPattern            dynamicconfig.StringPropertyFn
+		SchedulerRL                SchedulerRateLimiter
 	}
 	ExecutableOption func(*ExecutableParams)
 )
@@ -199,6 +202,9 @@ func NewExecutable(
 		DLQErrorPattern: func() string {
 			return ""
 		},
+		SchedulerRL: quotas.FairnessRequestRateLimiterAdapter{
+			RequestRateLimiter: quotas.NoopRequestRateLimiter,
+		},
 	}
 	for _, opt := range opts {
 		opt(&params)
@@ -229,6 +235,7 @@ func NewExecutable(
 		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
 		dlqInternalErrors:          params.DLQInternalErrors,
 		dlqErrorPattern:            params.DLQErrorPattern,
+		schedulerRateLimiter:       params.SchedulerRL,
 	}
 	executable.updatePriority()
 	return executable
@@ -260,6 +267,15 @@ func (e *executableImpl) Execute() (retErr error) {
 		metrics.AddMetricsContext(context.Background()),
 		callerInfo,
 	)
+	ctx = headers.SetFairnessPriority(ctx, e.schedulerRateLimiter.GetFairnessPriority(quotas.NewRequest(
+		"",
+		0,
+		ns.String(),
+		"",
+		0,
+		"",
+	)))
+
 	e.Unlock()
 
 	// Wrapped in if block to avoid unnecessary allocations when OTEL is disabled.

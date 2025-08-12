@@ -2,6 +2,7 @@ package headers
 
 import (
 	"context"
+	"strconv"
 
 	"google.golang.org/grpc/metadata"
 )
@@ -147,6 +148,13 @@ func SetOrigin(
 	callOrigin string,
 ) context.Context {
 	return setIncomingMD(ctx, map[string]string{CallOriginHeaderName: callOrigin})
+}
+
+func SetFairnessPriority(
+	ctx context.Context,
+	fairnessPriority int64,
+) context.Context {
+	return setIncomingMD(ctx, map[string]string{FairnessContextKey: strconv.Itoa(int(fairnessPriority))})
 }
 
 func setIncomingMD(
