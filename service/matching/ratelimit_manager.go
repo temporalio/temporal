@@ -50,7 +50,7 @@ type (
 		// reading. We'll handle that situation better in the future.
 		perKeyLimit     simpleLimiterParams
 		perKeyReady     cache.Cache
-		perKeyOverrides fairnessWeightOverrides // TODO(fairness): get this from config
+		perKeyOverrides fairnessWeightOverrides
 		cancels         []func()
 	}
 )

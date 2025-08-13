@@ -55,7 +55,7 @@ func validateFairnessWeightUpdates(updates map[string]float32, maxConfigLimit in
 			return serviceerror.NewInvalidArgument("override key must not be empty")
 		}
 		// NaN check: (w != w) is true only for NaN
-		if w != w {
+		if w != w { //nolint:revive
 			return serviceerror.NewInvalidArgumentf(
 				"invalid weight for key %q: value is not a number", k,
 			)

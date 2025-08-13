@@ -702,7 +702,7 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_WeightOverride_IsEnforcedAcrossThre
 
 	// Fairness weight overrides: make B twice as heavy => ~2x effective RPS
 	fwo := map[string]float32{
-		"B": 2,
+		"B": 2.0,
 	}
 
 	tv := testvars.New(s.T())

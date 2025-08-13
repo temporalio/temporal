@@ -183,6 +183,4 @@ require (
 	modernc.org/token v1.1.0 // indirect
 )
 
-replace go.temporal.io/api => /Users/sivagirishramesh/Documents/Work/Temporal-dev/api-go
-
-replace go.temporal.io/sdk => /Users/sivagirishramesh/Documents/Work/Temporal-dev/sdk-go
+replace go.temporal.io/api => github.com/sivagirish81/api-go v0.0.0-20250811183124-da33a5b5d272

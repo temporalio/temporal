@@ -734,7 +734,7 @@ func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
 }
 
 func (c *physicalTaskQueueManagerImpl) GetFairnessWeightOverrides() fairnessWeightOverrides {
-    return c.partitionMgr.GetRateLimitManager().GetFairnessWeightOverrides()
+	return c.partitionMgr.GetRateLimitManager().GetFairnessWeightOverrides()
 }
 
 func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
