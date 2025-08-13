@@ -253,6 +253,7 @@ func (e *executableImpl) Execute() (retErr error) {
 	}
 
 	ns, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+
 	var callerInfo headers.CallerInfo
 	switch e.priority {
 	case ctasks.PriorityHigh:
@@ -263,6 +264,9 @@ func (e *executableImpl) Execute() (retErr error) {
 		// priority preemptable or unknown
 		callerInfo = headers.NewPreemptableCallerInfo(ns.String())
 	}
+
+	callerInfo.CallOrigin = getTaskTypeTagValue(e.GetTask(), true)
+
 	ctx := headers.SetCallerInfo(
 		metrics.AddMetricsContext(context.Background()),
 		callerInfo,
