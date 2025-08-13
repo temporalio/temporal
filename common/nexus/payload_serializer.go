@@ -164,4 +164,4 @@ func xTemporalPayload(payload *commonpb.Payload) (*nexus.Content, error) {
 	}, nil
 }
 
-var PayloadSerializer nexus.Serializer = payloadSerializer{}
+var PayloadSerializer nexus.Serializer = nexus.CompositeSerializer{payloadSerializer{}, nexus.DefaultSerializer()}
