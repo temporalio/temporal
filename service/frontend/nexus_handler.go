@@ -850,15 +850,8 @@ func (h *nexusHandler) forwardGetOperationResult(ctx context.Context, service, o
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
 		return nil, err
 	}
-	//var result any
-	//err = lv.Consume(&result)
-	//if err != nil {
-	//	oc.logger.Error("unable to deserialize Nexus operation result for forwarded request.", tag.Error(err), tag.WorkflowNamespace(oc.namespaceName), tag.Operation(operation), tag.Endpoint(oc.endpointName))
-	//	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
-	//	return nil, serviceerror.NewInternal("internal error")
-	//}
 
-	return result, nil
+	return result.Reader, nil
 }
 
 func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service string) (*nexus.HTTPClient, error) {
