@@ -498,6 +498,7 @@ func (s *TaskQueueSuite) setupPerKeyRateLimitWorkflow(
 	tasksPerKey int,
 	wholeQueueRPS float64,
 	perKeyRPS float64,
+	fwo map[string]float32,
 ) (map[string][]time.Time, []time.Time) {
 
 	total := len(keys) * tasksPerKey
@@ -528,6 +529,7 @@ func (s *TaskQueueSuite) setupPerKeyRateLimitWorkflow(
 			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: float32(perKeyRPS)},
 			Reason:    "test: per-key default",
 		},
+		UpdateFairnessWeightOverrides: fwo,
 	})
 	s.NoError(err)
 
@@ -627,7 +629,7 @@ func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced
 		wholeQueueRPS = 10.0 // tighter
 		perKeyRPS     = 50.0 // looser than whole queue, should not bind
 		tasksPerKey   = 30
-		buffer        = 3 * time.Second // CI jitter
+		buffer        = 3 * time.Second
 	)
 	keys := []string{"A", "B", "C"}
 	tv := testvars.New(s.T())
@@ -635,7 +637,7 @@ func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	_, allTimes := s.setupPerKeyRateLimitWorkflow(ctx, tv, keys, tasksPerKey, wholeQueueRPS, perKeyRPS)
+	_, allTimes := s.setupPerKeyRateLimitWorkflow(ctx, tv, keys, tasksPerKey, wholeQueueRPS, perKeyRPS, nil)
 
 	// Measure overall throughput after initial burst, which should be limited by wholeQueueRPS.
 	start := allTimes[0]
@@ -657,7 +659,7 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 		perKeyRPS     = 5.0
 		wholeQueueRPS = 1000.0 // tighter
 		tasksPerKey   = 30
-		buffer        = 3 * time.Second // relax for CI jitter
+		buffer        = 3 * time.Second
 	)
 	keys := []string{"A", "B", "C"}
 
@@ -666,7 +668,7 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	perKeyTimes, _ := s.setupPerKeyRateLimitWorkflow(ctx, tv, keys, tasksPerKey, wholeQueueRPS, perKeyRPS)
+	perKeyTimes, _ := s.setupPerKeyRateLimitWorkflow(ctx, tv, keys, tasksPerKey, wholeQueueRPS, perKeyRPS, nil)
 
 	for _, key := range keys {
 		times := perKeyTimes[key]
@@ -685,6 +687,56 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 
 		s.LessOrEqual(actual, expected+buffer,
 			"too slow for key %s: actual %v > expected %v (+%v buffer)", key, actual, expected, buffer)
+	}
+}
+
+func (s *TaskQueueSuite) TestPerKeyRateLimit_WeightOverride_IsEnforcedAcrossThreeKeys() {
+	const (
+		perKeyRPS     = 5.0    // base per-key limit
+		wholeQueueRPS = 1000.0 // keep high so only per-key gates
+		tasksPerKey   = 30
+		buffer        = 3 * time.Second
+	)
+
+	keys := []string{"A", "B", "C"}
+
+	// Fairness weight overrides: make B twice as heavy => ~2x effective RPS
+	fwo := map[string]float32{
+		"B": 2,
+	}
+
+	tv := testvars.New(s.T())
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	perKeyTimes, _ := s.setupPerKeyRateLimitWorkflow(
+		ctx, tv, keys, tasksPerKey, wholeQueueRPS, perKeyRPS, fwo,
+	)
+	var fairnessWeightOverride float32
+	for _, key := range keys {
+		times := perKeyTimes[key]
+		s.Len(times, tasksPerKey, "unexpected count for key %s", key)
+
+		start := times[0]
+		end := times[len(times)-1]
+
+		if val, ok := fwo[key]; ok {
+			fairnessWeightOverride = val
+		} else {
+			fairnessWeightOverride = 1.0
+		}
+		expected := time.Duration(float64(tasksPerKey)/(perKeyRPS*float64(fairnessWeightOverride))) * time.Second
+		actual := end.Sub(start)
+
+		s.T().Logf("Time taken for fairness key %s with fairnessWeightOverride %v to drain : %v vs expected %v",
+			key, fairnessWeightOverride, actual, expected)
+		s.GreaterOrEqual(actual, expected-buffer,
+			"per-key RPS violated for key %s with fairnessWeightOverride %v: actual %v < expected %v (-%v buffer)",
+			key, fairnessWeightOverride, actual, expected)
+
+		s.LessOrEqual(actual, expected+buffer,
+			"too slow for key %s with fairnessWeightOverride %v: actual %v > expected %v (+%v buffer)",
+			key, fairnessWeightOverride, actual, expected, buffer)
 	}
 }
 
