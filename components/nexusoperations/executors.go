@@ -33,9 +33,6 @@ import (
 var ErrOperationTimeoutBelowMin = errors.New("remaining operation timeout is less than required minimum")
 var ErrInvalidOperationToken = errors.New("invalid operation token")
 
-// ClientProvider provides a nexus client for a given endpoint.
-type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error)
-
 type TaskExecutorOptions struct {
 	fx.In
 
@@ -44,7 +41,7 @@ type TaskExecutorOptions struct {
 	MetricsHandler         metrics.Handler
 	Logger                 log.Logger
 	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
-	ClientProvider         ClientProvider
+	ClientProvider         commonnexus.ClientProvider
 	EndpointRegistry       commonnexus.EndpointRegistry
 	HTTPTraceProvider      commonnexus.HTTPClientTraceProvider
 }
@@ -247,7 +244,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 			if err != nil {
 				callErr = err
 			} else if payload.Size() > e.Config.PayloadSizeLimit(ns.Name().String()) {
-				callErr = ErrResponseBodyTooLarge
+				callErr = commonnexus.ErrResponseBodyTooLarge
 			} else {
 				result = &nexus.ClientStartOperationResult[*commonpb.Payload]{
 					Successful: payload,
@@ -412,7 +409,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 			return handleNonRetryableStartOperationError(node, operation, handlerErr)
 		}
 		// Fall through to the AttemptFailed transition.
-	} else if errors.Is(callErr, ErrResponseBodyTooLarge) {
+	} else if errors.Is(callErr, commonnexus.ErrResponseBodyTooLarge) {
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response body is too large.
 		return handleNonRetryableStartOperationError(node, operation, callErr)
@@ -791,7 +788,7 @@ func isDestinationDown(err error) bool {
 	if errors.As(err, &handlerError) {
 		return handlerError.Retryable()
 	}
-	if errors.Is(err, ErrResponseBodyTooLarge) {
+	if errors.Is(err, commonnexus.ErrResponseBodyTooLarge) {
 		return false
 	}
 	if errors.Is(err, ErrInvalidOperationToken) {

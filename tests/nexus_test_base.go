@@ -56,7 +56,8 @@ func (s *NexusTestBaseSuite) versionedNexusTaskPoller(ctx context.Context, taskQ
 	if err != nil {
 		panic(err)
 	}
-	if res.Request.GetStartOperation().GetService() != "test-service" && res.Request.GetCancelOperation().GetService() != "test-service" {
+	if res.Request.GetStartOperation().GetService() != "test-service" && res.Request.GetCancelOperation().GetService() != "test-service" &&
+		res.Request.GetGetOperationInfo().GetService() != "test-service" && res.Request.GetGetOperationResult().GetService() != "test-service" {
 		panic("expected service to be test-service")
 	}
 	response, handlerError := handler(res)

@@ -69,7 +69,6 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/deployment"
@@ -147,7 +146,7 @@ type (
 		saProvider                      searchattribute.Provider
 		saValidator                     *searchattribute.Validator
 		endpointRegistry                commonnexus.EndpointRegistry
-		nexusClientProvider             nexusoperations.ClientProvider
+		nexusClientProvider             commonnexus.ClientProvider
 		archivalMetadata                archiver.ArchivalMetadata
 		healthServer                    *health.Server
 		overrides                       *Overrides
@@ -186,7 +185,7 @@ func NewWorkflowHandler(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	endpointRegistry commonnexus.EndpointRegistry,
-	nexusClientProvider nexusoperations.ClientProvider,
+	nexusClientProvider commonnexus.ClientProvider,
 	httpEnabled bool,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{

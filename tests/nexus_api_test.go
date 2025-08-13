@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	cnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/tests/testcore"
@@ -924,6 +925,405 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_ByEndpoint_EndpointNotFound(
 	s.Equal(1, len(snap["nexus_request_preprocess_errors"]))
 }
 
+func (s *NexusApiTestSuite) TestNexusGetOperationInfo_Outcomes() {
+	type testcase struct {
+		name      string
+		outcome   string
+		endpoint  *nexuspb.Endpoint
+		timeout   time.Duration
+		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
+		assertion func(*testing.T, *nexus.OperationInfo, error, http.Header)
+	}
+
+	testCases := []testcase{
+		{
+			name:     "success",
+			outcome:  "success",
+			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				// Choose an arbitrary test case to assert that all of the input is delivered to the
+				// poll response.
+				op := res.Request.Variant.(*nexuspb.Request_GetOperationInfo).GetOperationInfo
+				s.Equal("test-service", op.Service)
+				s.Equal("operation", op.Operation)
+				s.Equal("token", op.OperationToken)
+				s.Equal("value", res.Request.Header["key"])
+				return &nexuspb.Response{
+					Variant: &nexuspb.Response_GetOperationInfo{
+						GetOperationInfo: &nexuspb.GetOperationInfoResponse{
+							Info: &nexuspb.OperationInfo{
+								State: string(nexus.OperationStateRunning),
+								Token: op.OperationToken,
+							},
+						},
+					},
+				}, nil
+			},
+			assertion: func(t *testing.T, info *nexus.OperationInfo, err error, header http.Header) {
+				require.NoError(t, err)
+				require.NotNil(t, info)
+				require.Equal(t, nexus.OperationStateRunning, info.State)
+				require.Equal(t, "token", info.Token)
+			},
+		},
+		{
+			name:     "handler_error",
+			outcome:  "handler_error:INTERNAL",
+			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				return nil, &nexuspb.HandlerError{
+					ErrorType: string(nexus.HandlerErrorTypeInternal),
+					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
+				}
+			},
+			assertion: func(t *testing.T, info *nexus.OperationInfo, err error, header http.Header) {
+				require.Nil(t, info)
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, err, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+				require.Equal(t, "worker", header.Get("Temporal-Nexus-Failure-Source"))
+				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
+			},
+		},
+		{
+			name:     "handler_timeout",
+			outcome:  "handler_timeout",
+			timeout:  1 * time.Second,
+			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				timeoutStr, set := res.Request.Header[nexus.HeaderRequestTimeout]
+				s.True(set)
+				timeout, err := time.ParseDuration(timeoutStr)
+				s.NoError(err)
+				time.Sleep(timeout) //nolint:forbidigo // Allow time.Sleep for timeout tests
+				return nil, nil
+			},
+			assertion: func(t *testing.T, info *nexus.OperationInfo, err error, header http.Header) {
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, err, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, handlerErr.Type)
+				require.Equal(t, "upstream timeout", handlerErr.Cause.Error())
+			},
+		},
+	}
+
+	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
+		ctx, cancel := context.WithCancel(testcore.NewContext())
+		defer cancel()
+
+		httpCaller, headerCapture := newHeaderCaptureCaller()
+		client, err := nexus.NewHTTPClient(nexus.HTTPClientOptions{
+			BaseURL:    dispatchURL,
+			Service:    "test-service",
+			HTTPCaller: httpCaller,
+		})
+		require.NoError(t, err)
+		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
+		defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+
+		go s.nexusTaskPoller(ctx, tc.endpoint.Spec.Target.GetWorker().TaskQueue, tc.handler)
+
+		handle, err := client.NewHandle("operation", "token")
+		require.NoError(t, err)
+
+		eventuallyTick := 500 * time.Millisecond
+		header := nexus.Header{"key": "value"}
+		if tc.timeout > 0 {
+			eventuallyTick = tc.timeout + (100 * time.Millisecond)
+			header[nexus.HeaderRequestTimeout] = tc.timeout.String()
+		}
+
+		// Wait until the endpoint is loaded into the registry.
+		var info *nexus.OperationInfo
+		s.Eventually(func() bool {
+			info, err = handle.GetInfo(ctx, nexus.GetOperationInfoOptions{Header: header})
+			var handlerErr *nexus.HandlerError
+			return err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound)
+		}, 10*time.Second, eventuallyTick)
+
+		tc.assertion(t, info, err, headerCapture.lastHeaders)
+
+		snap := capture.Snapshot()
+
+		require.Equal(t, 1, len(snap["nexus_requests"]))
+		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "GetNexusOperationInfo", "outcome": tc.outcome})
+		require.Contains(t, snap["nexus_requests"][0].Tags, "nexus_endpoint")
+		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
+		require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
+
+		require.Equal(t, 1, len(snap["nexus_latency"]))
+		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "GetNexusOperationInfo", "outcome": tc.outcome})
+		require.Contains(t, snap["nexus_latency"][0].Tags, "nexus_endpoint")
+
+		// Ensure that GetNexusOperationInfo request is tracked as part of normal service telemetry metrics
+		require.Condition(t, func() bool {
+			for _, m := range snap["service_requests"] {
+				if opTag, ok := m.Tags["operation"]; ok && opTag == "GetNexusOperationInfo" {
+					return true
+				}
+			}
+			return false
+		})
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
+				testFn(t, tc, getDispatchByNsAndTqURL(s.HttpAPIAddress(), s.Namespace().String(), tc.endpoint.Spec.Target.GetWorker().TaskQueue))
+			})
+			t.Run("ByEndpoint", func(t *testing.T) {
+				testFn(t, tc, getDispatchByEndpointURL(s.HttpAPIAddress(), tc.endpoint.Id))
+			})
+		})
+	}
+}
+
+func (s *NexusApiTestSuite) TestNexusGetOperationResult_Outcomes() {
+	handlerLink := &commonpb.Link_WorkflowEvent{
+		Namespace:  "handler-ns",
+		WorkflowId: "handler-wf-id",
+		RunId:      "handler-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   5,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
+	}
+	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+
+	type testcase struct {
+		name      string
+		outcome   string
+		endpoint  *nexuspb.Endpoint
+		timeout   time.Duration
+		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
+		assertion func(*testing.T, any, error, http.Header)
+	}
+
+	testCases := []testcase{
+		{
+			name:     "success",
+			outcome:  "success",
+			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				// Choose an arbitrary test case to assert that all of the input is delivered to the
+				// poll response.
+				op := res.Request.Variant.(*nexuspb.Request_GetOperationResult).GetOperationResult
+				s.Equal("test-service", op.Service)
+				s.Equal("operation", op.Operation)
+				s.Equal("token", op.OperationToken)
+				s.Equal("value", res.Request.Header["key"])
+				return &nexuspb.Response{
+					Variant: &nexuspb.Response_GetOperationResult{
+						GetOperationResult: &nexuspb.GetOperationResultResponse{
+							Links: []*nexuspb.Link{{Url: handlerNexusLink.URL.String(), Type: handlerNexusLink.Type}},
+							Variant: &nexuspb.GetOperationResultResponse_Successful_{
+								Successful: &nexuspb.GetOperationResultResponse_Successful{
+									Result: payload.EncodeString("hello world"),
+								},
+							},
+						},
+					},
+				}, nil
+			},
+			assertion: func(t *testing.T, res any, err error, header http.Header) {
+				require.NoError(t, err)
+				require.NotNil(t, res)
+				l, ok := res.(*nexus.LazyValue)
+				require.True(t, ok)
+				var out string
+				require.NoError(t, l.Consume(&out))
+				require.Equal(t, "hello world", out)
+			},
+		},
+		{
+			name:     "operation_error",
+			outcome:  "operation_error",
+			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				// Choose an arbitrary test case to assert that all of the input is delivered to the
+				// poll response.
+				op := res.Request.Variant.(*nexuspb.Request_GetOperationResult).GetOperationResult
+				s.Equal("test-service", op.Service)
+				s.Equal("operation", op.Operation)
+				s.Equal("token", op.OperationToken)
+				s.Equal("value", res.Request.Header["key"])
+				return &nexuspb.Response{
+					Variant: &nexuspb.Response_GetOperationResult{
+						GetOperationResult: &nexuspb.GetOperationResultResponse{
+							Links: []*nexuspb.Link{},
+							Variant: &nexuspb.GetOperationResultResponse_Unsuccessful_{
+								Unsuccessful: &nexuspb.GetOperationResultResponse_Unsuccessful{
+									OperationError: &nexuspb.UnsuccessfulOperationError{
+										OperationState: string(nexus.OperationStateFailed),
+										Failure: &nexuspb.Failure{
+											Message:  "deliberate test failure",
+											Metadata: map[string]string{"k": "v"},
+											Details:  []byte(`"details"`),
+										},
+									},
+								},
+							},
+						},
+					},
+				}, nil
+			},
+			assertion: func(t *testing.T, res any, err error, header http.Header) {
+				require.Nil(t, res)
+				var operationError *nexus.OperationError
+				require.ErrorAs(t, err, &operationError)
+				require.Equal(t, nexus.OperationStateFailed, operationError.State)
+				require.Equal(t, "deliberate test failure", operationError.Cause.Error())
+				var failureErr *nexus.FailureError
+				require.ErrorAs(t, operationError.Cause, &failureErr)
+				require.Equal(t, map[string]string{"k": "v"}, failureErr.Failure.Metadata)
+				var details string
+				err = json.Unmarshal(failureErr.Failure.Details, &details)
+				require.NoError(t, err)
+				require.Equal(t, "details", details)
+			},
+		},
+		{
+			name:     "still_running",
+			outcome:  "running",
+			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				// Choose an arbitrary test case to assert that all of the input is delivered to the
+				// poll response.
+				op := res.Request.Variant.(*nexuspb.Request_GetOperationResult).GetOperationResult
+				s.Equal("test-service", op.Service)
+				s.Equal("operation", op.Operation)
+				s.Equal("token", op.OperationToken)
+				s.Equal("value", res.Request.Header["key"])
+				return &nexuspb.Response{
+					Variant: &nexuspb.Response_GetOperationResult{
+						GetOperationResult: &nexuspb.GetOperationResultResponse{
+							Links: []*nexuspb.Link{},
+							Variant: &nexuspb.GetOperationResultResponse_StillRunning_{
+								StillRunning: &nexuspb.GetOperationResultResponse_StillRunning{},
+							},
+						},
+					},
+				}, nil
+			},
+			assertion: func(t *testing.T, res any, err error, header http.Header) {
+				require.Nil(t, res)
+				require.ErrorIs(t, err, nexus.ErrOperationStillRunning)
+			},
+		},
+		{
+			name:     "handler_error",
+			outcome:  "handler_error:INTERNAL",
+			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				return nil, &nexuspb.HandlerError{
+					ErrorType: string(nexus.HandlerErrorTypeInternal),
+					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
+				}
+			},
+			assertion: func(t *testing.T, res any, err error, header http.Header) {
+				require.Nil(t, res)
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, err, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+				require.Equal(t, "worker", header.Get("Temporal-Nexus-Failure-Source"))
+				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
+			},
+		},
+		{
+			name:     "handler_timeout",
+			outcome:  "handler_timeout",
+			timeout:  1 * time.Second,
+			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				timeoutStr, set := res.Request.Header[nexus.HeaderRequestTimeout]
+				s.True(set)
+				timeout, err := time.ParseDuration(timeoutStr)
+				s.NoError(err)
+				time.Sleep(timeout) //nolint:forbidigo // Allow time.Sleep for timeout tests
+				return nil, nil
+			},
+			assertion: func(t *testing.T, res any, err error, header http.Header) {
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, err, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, handlerErr.Type)
+				require.Equal(t, "upstream timeout", handlerErr.Cause.Error())
+			},
+		},
+	}
+
+	testFn := func(t *testing.T, tc testcase, dispatchURL string) {
+		ctx, cancel := context.WithCancel(testcore.NewContext())
+		defer cancel()
+
+		httpCaller, headerCapture := newHeaderCaptureCaller()
+		client, err := nexus.NewHTTPClient(nexus.HTTPClientOptions{
+			BaseURL:    dispatchURL,
+			Service:    "test-service",
+			HTTPCaller: httpCaller,
+		})
+		require.NoError(t, err)
+		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
+		defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+
+		go s.nexusTaskPoller(ctx, tc.endpoint.Spec.Target.GetWorker().TaskQueue, tc.handler)
+
+		handle, err := client.NewHandle("operation", "token")
+		require.NoError(t, err)
+
+		eventuallyTick := 500 * time.Millisecond
+		header := nexus.Header{"key": "value"}
+		if tc.timeout > 0 {
+			eventuallyTick = tc.timeout + (100 * time.Millisecond)
+			header[nexus.HeaderRequestTimeout] = tc.timeout.String()
+		}
+
+		// Wait until the endpoint is loaded into the registry.
+		var res any
+		s.Eventually(func() bool {
+			res, err = handle.GetResult(ctx, nexus.GetOperationResultOptions{Header: header})
+			var handlerErr *nexus.HandlerError
+			return err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound)
+		}, 10*time.Second, eventuallyTick)
+
+		tc.assertion(t, res, err, headerCapture.lastHeaders)
+
+		snap := capture.Snapshot()
+
+		require.Equal(t, 1, len(snap["nexus_requests"]))
+		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "GetNexusOperationResult", "outcome": tc.outcome})
+		require.Contains(t, snap["nexus_requests"][0].Tags, "nexus_endpoint")
+		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
+		require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
+
+		require.Equal(t, 1, len(snap["nexus_latency"]))
+		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "GetNexusOperationResult", "outcome": tc.outcome})
+		require.Contains(t, snap["nexus_latency"][0].Tags, "nexus_endpoint")
+
+		// Ensure that GetNexusOperationResult request is tracked as part of normal service telemetry metrics
+		require.Condition(t, func() bool {
+			for _, m := range snap["service_requests"] {
+				if opTag, ok := m.Tags["operation"]; ok && opTag == "GetNexusOperationResult" {
+					return true
+				}
+			}
+			return false
+		})
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
+				testFn(t, tc, getDispatchByNsAndTqURL(s.HttpAPIAddress(), s.Namespace().String(), tc.endpoint.Spec.Target.GetWorker().TaskQueue))
+			})
+			t.Run("ByEndpoint", func(t *testing.T) {
+				testFn(t, tc, getDispatchByEndpointURL(s.HttpAPIAddress(), tc.endpoint.Id))
+			})
+		})
+	}
+}
+
 func (s *NexusApiTestSuite) versionedNexusTaskPoller(ctx context.Context, taskQueue, buildID string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
 	var vc *commonpb.WorkerVersionCapabilities
 
@@ -950,7 +1350,8 @@ func (s *NexusApiTestSuite) versionedNexusTaskPoller(ctx context.Context, taskQu
 	if err != nil {
 		panic(err)
 	}
-	if res.Request.GetStartOperation().GetService() != "test-service" && res.Request.GetCancelOperation().GetService() != "test-service" {
+	if res.Request.GetStartOperation().GetService() != "test-service" && res.Request.GetCancelOperation().GetService() != "test-service" &&
+		res.Request.GetGetOperationInfo().GetService() != "test-service" && res.Request.GetGetOperationResult().GetService() != "test-service" {
 		panic("expected service to be test-service")
 	}
 	response, handlerError := handler(res)
