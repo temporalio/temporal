@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/components/nexusoperations"
 	nexusfrontend "go.temporal.io/server/components/nexusoperations/frontend"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
@@ -106,9 +105,8 @@ var Module = fx.Options(
 	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
 	fx.Provide(NexusEndpointClientProvider),
-	fx.Provide(NexusEndpointRegistryProvider),
 	fx.Invoke(ServiceLifetimeHooks),
-	fx.Invoke(EndpointRegistryLifetimeHooks),
+	commonnexus.Module,
 	nexusfrontend.Module,
 )
 
@@ -722,7 +720,7 @@ func HandlerProvider(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	endpointRegistry commonnexus.EndpointRegistry,
-	callerProvider nexusoperations.ClientProvider,
+	callerProvider commonnexus.ClientProvider,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -874,27 +872,6 @@ func NexusEndpointClientProvider(
 		nexusEndpointManager,
 		logger,
 	)
-}
-
-func NexusEndpointRegistryProvider(
-	matchingClient resource.MatchingClient,
-	nexusEndpointManager persistence.NexusEndpointManager,
-	dc *dynamicconfig.Collection,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-) commonnexus.EndpointRegistry {
-	registryConfig := commonnexus.NewEndpointRegistryConfig(dc)
-	return commonnexus.NewEndpointRegistry(
-		registryConfig,
-		matchingClient,
-		nexusEndpointManager,
-		logger,
-		metricsHandler,
-	)
-}
-
-func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry commonnexus.EndpointRegistry) {
-	lc.Append(fx.StartStopHook(registry.StartLifecycle, registry.StopLifecycle))
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

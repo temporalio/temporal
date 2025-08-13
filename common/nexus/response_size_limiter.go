@@ -1,4 +1,4 @@
-package nexusoperations
+package nexus
 
 import (
 	"errors"

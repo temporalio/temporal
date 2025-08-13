@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/tests/testcore"
@@ -505,6 +506,290 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 	var result string
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("result", result)
+}
+
+// Only tests dispatch by namespace+task_queue.
+// TODO: Add test cases for dispatch by endpoint ID once endpoints support replication.
+func (s *NexusRequestForwardingSuite) TestGetOperationInfoForwardedFromStandbyToActive() {
+	ns := s.createGlobalNamespace()
+
+	testCases := []struct {
+		name      string
+		taskQueue string
+		header    nexus.Header
+		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
+		assertion func(*testing.T, *nexus.OperationInfo, error, map[string][]*metricstest.CapturedRecording, map[string][]*metricstest.CapturedRecording)
+	}{
+		{
+			name:      "success",
+			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				return &nexuspb.Response{
+					Variant: &nexuspb.Response_GetOperationInfo{
+						GetOperationInfo: &nexuspb.GetOperationInfoResponse{
+							Info: &nexuspb.OperationInfo{
+								State: string(nexus.OperationStateRunning),
+								Token: "id",
+							},
+						},
+					},
+				}, nil
+			},
+			assertion: func(t *testing.T, info *nexus.OperationInfo, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+				require.NoError(t, retErr)
+				require.NotNil(t, info)
+				require.Equal(t, nexus.OperationStateRunning, info.State)
+				require.Equal(t, "id", info.Token)
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "GetNexusOperationInfo", "success")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "GetNexusOperationInfo", "request_forwarded")
+			},
+		},
+		{
+			name:      "handler error",
+			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				return nil, &nexuspb.HandlerError{
+					ErrorType: string(nexus.HandlerErrorTypeInternal),
+					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
+				}
+			},
+			assertion: func(t *testing.T, info *nexus.OperationInfo, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+				require.Nil(t, info)
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, retErr, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "GetNexusOperationInfo", "handler_error:INTERNAL")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "GetNexusOperationInfo", "forwarded_request_error")
+			},
+		},
+		{
+			name:      "redirect disabled by header",
+			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
+			header:    nexus.Header{"xdc-redirection": "false"},
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				s.FailNow("nexus task handler invoked when redirection should be disabled")
+				return nil, &nexuspb.HandlerError{
+					ErrorType: string(nexus.HandlerErrorTypeInternal),
+					Failure:   &nexuspb.Failure{Message: "redirection should be disabled"},
+				}
+			},
+			assertion: func(t *testing.T, info *nexus.OperationInfo, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+				require.Nil(t, info)
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, retErr, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
+				require.Equal(t, "cluster inactive", handlerErr.Cause.Error())
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "GetNexusOperationInfo", "namespace_inactive_forwarding_disabled")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		s.T().Run(tc.name, func(t *testing.T) {
+			dispatchURL := fmt.Sprintf("http://%s/%s", s.clusters[1].Host().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
+			nexusClient, err := nexus.NewHTTPClient(nexus.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
+			s.NoError(err)
+
+			activeMetricsHandler, ok := s.clusters[0].Host().GetMetricsHandler().(*metricstest.CaptureHandler)
+			s.True(ok)
+			activeCapture := activeMetricsHandler.StartCapture()
+			defer activeMetricsHandler.StopCapture(activeCapture)
+
+			passiveMetricsHandler, ok := s.clusters[1].Host().GetMetricsHandler().(*metricstest.CaptureHandler)
+			s.True(ok)
+			passiveCapture := passiveMetricsHandler.StartCapture()
+			defer passiveMetricsHandler.StopCapture(passiveCapture)
+
+			ctx, cancel := context.WithCancel(testcore.NewContext())
+			defer cancel()
+
+			go s.nexusTaskPoller(ctx, s.clusters[0].FrontendClient(), ns, tc.taskQueue, tc.handler)
+
+			handle, err := nexusClient.NewHandle("operation", "id")
+			require.NoError(t, err)
+			info, err := handle.GetInfo(ctx, nexus.GetOperationInfoOptions{Header: tc.header})
+			tc.assertion(t, info, err, activeCapture.Snapshot(), passiveCapture.Snapshot())
+		})
+	}
+}
+
+// Only tests dispatch by namespace+task_queue.
+// TODO: Add test cases for dispatch by endpoint ID once endpoints support replication.
+func (s *NexusRequestForwardingSuite) TestGetOperationResultForwardedFromStandbyToActive() {
+	ns := s.createGlobalNamespace()
+
+	testCases := []struct {
+		name      string
+		taskQueue string
+		header    nexus.Header
+		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
+		assertion func(*testing.T, any, error, map[string][]*metricstest.CapturedRecording, map[string][]*metricstest.CapturedRecording)
+	}{
+		{
+			name:      "success",
+			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				return &nexuspb.Response{
+					Variant: &nexuspb.Response_GetOperationResult{
+						GetOperationResult: &nexuspb.GetOperationResultResponse{
+							Variant: &nexuspb.GetOperationResultResponse_Successful_{
+								Successful: &nexuspb.GetOperationResultResponse_Successful{
+									Result: payload.EncodeString("hello world"),
+								},
+							},
+						},
+					},
+				}, nil
+			},
+			assertion: func(t *testing.T, res any, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+				require.NoError(t, retErr)
+				require.NotNil(t, res)
+				l, ok := res.(*nexus.LazyValue)
+				require.True(t, ok)
+				var out string
+				require.NoError(t, l.Consume(&out))
+				require.Equal(t, "hello world", out)
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "GetNexusOperationResult", "success")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "GetNexusOperationResult", "request_forwarded")
+			},
+		},
+		{
+			name:      "operation error",
+			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				return &nexuspb.Response{
+					Variant: &nexuspb.Response_GetOperationResult{
+						GetOperationResult: &nexuspb.GetOperationResultResponse{
+							Variant: &nexuspb.GetOperationResultResponse_Unsuccessful_{
+								Unsuccessful: &nexuspb.GetOperationResultResponse_Unsuccessful{
+									OperationError: &nexuspb.UnsuccessfulOperationError{
+										OperationState: string(nexus.OperationStateFailed),
+										Failure: &nexuspb.Failure{
+											Message:  "deliberate test failure",
+											Metadata: map[string]string{"k": "v"},
+											Details:  []byte(`"details"`),
+										},
+									},
+								},
+							},
+						},
+					},
+				}, nil
+			},
+			assertion: func(t *testing.T, res any, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+				require.Nil(t, res)
+				var operationError *nexus.OperationError
+				require.ErrorAs(t, retErr, &operationError)
+				require.Equal(t, nexus.OperationStateFailed, operationError.State)
+				require.Equal(t, "deliberate test failure", operationError.Cause.Error())
+				var failureErr *nexus.FailureError
+				require.ErrorAs(t, operationError.Cause, &failureErr)
+				require.Equal(t, map[string]string{"k": "v"}, failureErr.Failure.Metadata)
+				var details string
+				require.NoError(t, json.Unmarshal(failureErr.Failure.Details, &details))
+				require.Equal(t, "details", details)
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "GetNexusOperationResult", "operation_error")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "GetNexusOperationResult", "forwarded_request_error")
+			},
+		},
+		{
+			name:      "still running",
+			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				return &nexuspb.Response{
+					Variant: &nexuspb.Response_GetOperationResult{
+						GetOperationResult: &nexuspb.GetOperationResultResponse{
+							Variant: &nexuspb.GetOperationResultResponse_StillRunning_{
+								StillRunning: &nexuspb.GetOperationResultResponse_StillRunning{},
+							},
+						},
+					},
+				}, nil
+			},
+			assertion: func(t *testing.T, res any, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+				require.Nil(t, res)
+				require.ErrorIs(t, retErr, nexus.ErrOperationStillRunning)
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "GetNexusOperationResult", "running")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "GetNexusOperationResult", "forwarded_request_error")
+			},
+		},
+		{
+			name:      "handler error",
+			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				return nil, &nexuspb.HandlerError{
+					ErrorType: string(nexus.HandlerErrorTypeInternal),
+					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
+				}
+			},
+			assertion: func(t *testing.T, res any, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+				require.Nil(t, res)
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, retErr, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
+				requireExpectedMetricsCaptured(t, activeSnap, ns, "GetNexusOperationResult", "handler_error:INTERNAL")
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "GetNexusOperationResult", "forwarded_request_error")
+			},
+		},
+		{
+			name:      "redirect disabled by header",
+			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
+			header:    nexus.Header{"xdc-redirection": "false"},
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				s.FailNow("nexus task handler invoked when redirection should be disabled")
+				return nil, &nexuspb.HandlerError{
+					ErrorType: string(nexus.HandlerErrorTypeInternal),
+					Failure:   &nexuspb.Failure{Message: "redirection should be disabled"},
+				}
+			},
+			assertion: func(t *testing.T, res any, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+				require.Nil(t, res)
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, retErr, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
+				require.Equal(t, "cluster inactive", handlerErr.Cause.Error())
+				requireExpectedMetricsCaptured(t, passiveSnap, ns, "GetNexusOperationResult", "namespace_inactive_forwarding_disabled")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		s.T().Run(tc.name, func(t *testing.T) {
+			dispatchURL := fmt.Sprintf("http://%s/%s", s.clusters[1].Host().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
+			nexusClient, err := nexus.NewHTTPClient(nexus.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
+			s.NoError(err)
+
+			activeMetricsHandler, ok := s.clusters[0].Host().GetMetricsHandler().(*metricstest.CaptureHandler)
+			s.True(ok)
+			activeCapture := activeMetricsHandler.StartCapture()
+			defer activeMetricsHandler.StopCapture(activeCapture)
+
+			passiveMetricsHandler, ok := s.clusters[1].Host().GetMetricsHandler().(*metricstest.CaptureHandler)
+			s.True(ok)
+			passiveCapture := passiveMetricsHandler.StartCapture()
+			defer passiveMetricsHandler.StopCapture(passiveCapture)
+
+			ctx, cancel := context.WithCancel(testcore.NewContext())
+			defer cancel()
+
+			go s.nexusTaskPoller(ctx, s.clusters[0].FrontendClient(), ns, tc.taskQueue, tc.handler)
+
+			handle, err := nexusClient.NewHandle("operation", "id")
+			require.NoError(t, err)
+			res, err := handle.GetResult(ctx, nexus.GetOperationResultOptions{Header: tc.header})
+			tc.assertion(t, res, err, activeCapture.Snapshot(), passiveCapture.Snapshot())
+		})
+	}
 }
 
 func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, frontendClient workflowservice.WorkflowServiceClient, ns string, taskQueue string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {

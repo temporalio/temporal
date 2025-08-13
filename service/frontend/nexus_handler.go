@@ -428,9 +428,7 @@ func (h *nexusHandler) StartOperation(
 	switch t := response.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
-
 		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
-
 		err := h.convertOutcomeToNexusHandlerError(t)
 		return nil, err
 
@@ -457,9 +455,7 @@ func (h *nexusHandler) StartOperation(
 
 		case *nexuspb.StartOperationResponse_OperationError:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("operation_error"))
-
 			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
-
 			err := &nexus.OperationError{
 				State: nexus.OperationState(t.OperationError.GetOperationState()),
 				Cause: &nexus.FailureError{
@@ -470,10 +466,8 @@ func (h *nexusHandler) StartOperation(
 		}
 	}
 	// This is the worker's fault.
-	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:EMPTY_OUTCOME"))
-
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error: invalid upstream response"))
 	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
-
 	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid upstream response")
 }
 
@@ -559,8 +553,6 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 				Service:        service,
 				Operation:      operation,
 				OperationToken: token,
-				// TODO(bergundy): Remove this fallback after the 1.27 release.
-				OperationId: token,
 			},
 		},
 	})
@@ -587,9 +579,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	switch t := response.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
-
 		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
-
 		err := h.convertOutcomeToNexusHandlerError(t)
 		return err
 	case *matchingservice.DispatchNexusTaskResponse_Response:
@@ -597,10 +587,8 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return nil
 	}
 	// This is the worker's fault.
-	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:EMPTY_OUTCOME"))
-
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error: invalid upstream response"))
 	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
-
 	return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid upstream response")
 }
 
@@ -648,6 +636,229 @@ func (h *nexusHandler) forwardCancelOperation(
 	}
 
 	return nil
+}
+
+func (h *nexusHandler) GetOperationInfo(ctx context.Context, service, operation, token string, options nexus.GetOperationInfoOptions) (_ *nexus.OperationInfo, retErr error) {
+	oc, err := h.getOperationContext(ctx, "GetNexusOperationInfo")
+	if err != nil {
+		return nil, err
+	}
+	ctx = oc.augmentContext(ctx, options.Header)
+	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
+
+	request := oc.matchingRequest(&nexuspb.Request{
+		Header:        options.Header,
+		ScheduledTime: timestamppb.New(oc.requestStartTime),
+		Variant: &nexuspb.Request_GetOperationInfo{
+			GetOperationInfo: &nexuspb.GetOperationInfoRequest{
+				Service:        service,
+				Operation:      operation,
+				OperationToken: token,
+			},
+		},
+	})
+	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
+		var notActiveErr *serviceerror.NamespaceNotActive
+		if errors.As(err, &notActiveErr) {
+			return h.forwardGetOperationInfo(ctx, service, operation, token, options, oc)
+		}
+		return nil, err
+	}
+
+	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
+	if err != nil {
+		if common.IsContextDeadlineExceededErr(err) {
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
+			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
+		}
+		return nil, commonnexus.ConvertGRPCError(err, false)
+	}
+
+	switch t := response.GetOutcome().(type) {
+	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
+		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+		err := h.convertOutcomeToNexusHandlerError(t)
+		return nil, err
+	case *matchingservice.DispatchNexusTaskResponse_Response:
+		if t.Response.GetGetOperationInfo() == nil {
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error: empty operation info"))
+			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty operation info")
+		}
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("success"))
+		info := t.Response.GetGetOperationInfo().GetInfo()
+		return &nexus.OperationInfo{
+			State: nexus.OperationState(info.State),
+			Token: info.Token,
+		}, nil
+	}
+
+	// This is the worker's fault.
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error: invalid upstream response"))
+	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid upstream response")
+}
+
+func (h *nexusHandler) forwardGetOperationInfo(ctx context.Context, service, operation, token string, options nexus.GetOperationInfoOptions, oc *operationContext) (*nexus.OperationInfo, error) {
+	options.Header[interceptor.DCRedirectionApiHeaderName] = "true"
+
+	client, err := h.nexusClientForActiveCluster(oc, service)
+	if err != nil {
+		return nil, err
+	}
+
+	handle, err := client.NewHandle(operation, token)
+	if err != nil {
+		oc.logger.Warn("invalid Nexus cancel operation.", tag.Error(err))
+		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation")
+	}
+
+	if h.httpTraceProvider != nil {
+		traceLogger := log.With(h.logger,
+			tag.Operation(oc.method),
+			tag.WorkflowNamespace(oc.namespaceName),
+			tag.NexusOperation(operation),
+			tag.Endpoint(oc.endpointName),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.SourceCluster(h.clusterMetadata.GetCurrentClusterName()),
+			tag.TargetCluster(oc.namespace.ActiveClusterName()),
+		)
+		if trace := h.httpTraceProvider.NewForwardingTrace(traceLogger); trace != nil {
+			ctx = httptrace.WithClientTrace(ctx, trace)
+		}
+	}
+
+	info, err := handle.GetInfo(ctx, options)
+	if err != nil {
+		oc.logger.Error("received error from remote cluster for forwarded Nexus get operation info request.", tag.Error(err))
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
+		return nil, err
+	}
+
+	return info, nil
+}
+
+func (h *nexusHandler) GetOperationResult(ctx context.Context, service, operation, token string, options nexus.GetOperationResultOptions) (_ any, retErr error) {
+	oc, err := h.getOperationContext(ctx, "GetNexusOperationResult")
+	if err != nil {
+		return nil, err
+	}
+	ctx = oc.augmentContext(ctx, options.Header)
+	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
+
+	request := oc.matchingRequest(&nexuspb.Request{
+		Header:        options.Header,
+		ScheduledTime: timestamppb.New(oc.requestStartTime),
+		Variant: &nexuspb.Request_GetOperationResult{
+			GetOperationResult: &nexuspb.GetOperationResultRequest{
+				Service:        service,
+				Operation:      operation,
+				OperationToken: token,
+			},
+		},
+	})
+	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
+		var notActiveErr *serviceerror.NamespaceNotActive
+		if errors.As(err, &notActiveErr) {
+			return h.forwardGetOperationResult(ctx, service, operation, token, options, oc)
+		}
+		return nil, err
+	}
+
+	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
+	if err != nil {
+		if common.IsContextDeadlineExceededErr(err) {
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
+			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
+		}
+		return nil, commonnexus.ConvertGRPCError(err, false)
+	}
+
+	switch t := response.GetOutcome().(type) {
+	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
+		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+		err := h.convertOutcomeToNexusHandlerError(t)
+		return nil, err
+	case *matchingservice.DispatchNexusTaskResponse_Response:
+		if t.Response.GetGetOperationResult() == nil {
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error: nil operation result"))
+			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "nil operation result")
+		}
+		switch t := t.Response.GetGetOperationResult().Variant.(type) {
+		case *nexuspb.GetOperationResultResponse_Successful_:
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("success"))
+			return t.Successful.GetResult(), nil
+		case *nexuspb.GetOperationResultResponse_Unsuccessful_:
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("operation_error"))
+			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+			return nil, &nexus.OperationError{
+				State: nexus.OperationState(t.Unsuccessful.OperationError.GetOperationState()),
+				Cause: &nexus.FailureError{
+					Failure: commonnexus.ProtoFailureToNexusFailure(t.Unsuccessful.OperationError.GetFailure()),
+				},
+			}
+		case *nexuspb.GetOperationResultResponse_StillRunning_:
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("running"))
+			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+			return nil, nexus.ErrOperationStillRunning
+		}
+	}
+
+	// This is the worker's fault.
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error: invalid upstream response"))
+	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid upstream response")
+}
+
+func (h *nexusHandler) forwardGetOperationResult(ctx context.Context, service, operation, token string, options nexus.GetOperationResultOptions, oc *operationContext) (any, error) {
+	options.Header[interceptor.DCRedirectionApiHeaderName] = "true"
+
+	client, err := h.nexusClientForActiveCluster(oc, service)
+	if err != nil {
+		return nil, err
+	}
+
+	handle, err := client.NewHandle(operation, token)
+	if err != nil {
+		oc.logger.Warn("invalid Nexus cancel operation.", tag.Error(err))
+		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation")
+	}
+
+	if h.httpTraceProvider != nil {
+		traceLogger := log.With(h.logger,
+			tag.Operation(oc.method),
+			tag.WorkflowNamespace(oc.namespaceName),
+			tag.NexusOperation(operation),
+			tag.Endpoint(oc.endpointName),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.SourceCluster(h.clusterMetadata.GetCurrentClusterName()),
+			tag.TargetCluster(oc.namespace.ActiveClusterName()),
+		)
+		if trace := h.httpTraceProvider.NewForwardingTrace(traceLogger); trace != nil {
+			ctx = httptrace.WithClientTrace(ctx, trace)
+		}
+	}
+
+	result, err := handle.GetResult(ctx, options)
+	if err != nil {
+		oc.logger.Error("received error from remote cluster for forwarded Nexus get operation result request.", tag.Error(err))
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
+		return nil, err
+	}
+	//var result any
+	//err = lv.Consume(&result)
+	//if err != nil {
+	//	oc.logger.Error("unable to deserialize Nexus operation result for forwarded request.", tag.Error(err), tag.WorkflowNamespace(oc.namespaceName), tag.Operation(operation), tag.Endpoint(oc.endpointName))
+	//	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
+	//	return nil, serviceerror.NewInternal("internal error")
+	//}
+
+	return result, nil
 }
 
 func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service string) (*nexus.HTTPClient, error) {
