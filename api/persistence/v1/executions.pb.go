@@ -2370,7 +2370,7 @@ type ActivityInfo struct {
 	// It is used to check if activity related tasks are still relevant to  their corresponding state machine.
 	Stamp int32 `protobuf:"varint,41,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	// Paused state. When activity is paused it will not advance until unpaused.
-	// Iw will not be scheduled, timer tasks will not be processed, etc.
+	// It will not be scheduled, timer tasks will not be processed, etc.
 	// Note: it still can be cancelled/completed.
 	Paused bool `protobuf:"varint,42,opt,name=paused,proto3" json:"paused,omitempty"`
 	// The deployment this activity was dispatched to most recently. Present only if the activity

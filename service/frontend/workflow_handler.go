@@ -2875,6 +2875,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		Callbacks:              response.GetCallbacks(),
 		PendingNexusOperations: response.GetPendingNexusOperations(),
 		WorkflowExtendedInfo:   response.GetWorkflowExtendedInfo(),
+		WorkflowPauseInfo:      response.GetWorkflowPauseInfo(),
 	}, nil
 }
 
