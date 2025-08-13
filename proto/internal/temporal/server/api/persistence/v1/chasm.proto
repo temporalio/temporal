@@ -101,3 +101,18 @@ message ChasmComponentRef {
     repeated string component_path = 6;
     VersionedTransition component_initial_versioned_transition = 7;
 }
+
+// TODO TODO TODO - move into retention/proto/v1 as soon as Roey's PR lands
+// 
+// Data for the Retention component.
+message RetentionData {
+    // True once the retention timer has fired and the component is now in its
+    // terminal state.
+    bool closed = 1;    
+
+    // The desired terminal chasm.LifecycleState (either Completed or Failed).
+    int64 terminal_state = 2;
+}
+
+// TODO TODO TODO - move into retention/proto/v1 as soon as Roey's PR lands
+message RetentionTask {}

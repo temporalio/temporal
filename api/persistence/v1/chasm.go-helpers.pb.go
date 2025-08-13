@@ -300,3 +300,77 @@ func (this *ChasmComponentRef) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type RetentionData to the protobuf v3 wire format
+func (val *RetentionData) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RetentionData from the protobuf v3 wire format
+func (val *RetentionData) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RetentionData) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RetentionData values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RetentionData) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RetentionData
+	switch t := that.(type) {
+	case *RetentionData:
+		that1 = t
+	case RetentionData:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type RetentionTask to the protobuf v3 wire format
+func (val *RetentionTask) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RetentionTask from the protobuf v3 wire format
+func (val *RetentionTask) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RetentionTask) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RetentionTask values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RetentionTask) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RetentionTask
+	switch t := that.(type) {
+	case *RetentionTask:
+		that1 = t
+	case RetentionTask:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
