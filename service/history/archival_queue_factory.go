@@ -5,7 +5,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/quotas"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/archival"
@@ -166,9 +165,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
-		quotas.FairnessRequestRateLimiterAdapter{
-			RequestRateLimiter: quotas.NoopRequestRateLimiter,
-		},
+		f.SchedulerRateLimiter,
 	)
 	return queues.NewScheduledQueue(
 		shard,

@@ -249,9 +249,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
-		quotas.FairnessRequestRateLimiterAdapter{
-			RequestRateLimiter: quotas.NoopRequestRateLimiter,
-		},
+		f.SchedulerRateLimiter,
 	)
 	return queues.NewImmediateQueue(
 		shardContext,
