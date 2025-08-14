@@ -6,6 +6,7 @@ option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;s
 
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/schedule/v1/message.proto";
+import "temporal/server/api/schedule/v1/message.proto";
 
 import "google/protobuf/timestamp.proto";
 
@@ -35,7 +36,7 @@ message GeneratorInternal {
 // CHASM scheduler's Invoker internal state.
 message InvokerInternal {
     // Buffered starts that will be started by the Invoker.
-    repeated BufferedStart buffered_starts = 2;
+    repeated temporal.server.api.schedule.v1.BufferedStart buffered_starts = 2;
 
     // Workflow executions that will be cancelled due to overlap policy.
     repeated temporal.api.common.v1.WorkflowExecution cancel_workflows = 3;
