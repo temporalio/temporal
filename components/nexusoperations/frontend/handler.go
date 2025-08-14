@@ -373,9 +373,9 @@ func httpHeaderToNexusHeader(httpHeader http.Header) nexus.Header {
 	header := nexus.Header{}
 	for k, v := range httpHeader {
 		lowerK := strings.ToLower(k)
-		if strings.HasPrefix(lowerK, "content-") {
+		if !strings.HasPrefix(lowerK, "content-") {
 			// Nexus headers can only have single values, ignore multiple values.
-			header[lowerK[len("content-"):]] = v[0]
+			header[lowerK] = v[0]
 		}
 	}
 	return header
