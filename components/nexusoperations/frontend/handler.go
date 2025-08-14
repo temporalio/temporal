@@ -287,7 +287,6 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		c := &nexus.OperationCompletionUnsuccessful{
 			Header:         httpHeaderToNexusHeader(r.HTTPRequest.Header),
 			State:          r.State,
-			OperationID:    r.OperationID,
 			OperationToken: r.OperationToken,
 			StartTime:      r.StartTime,
 			Links:          r.Links,
