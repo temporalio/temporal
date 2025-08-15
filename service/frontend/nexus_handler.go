@@ -48,6 +48,7 @@ type nexusContext struct {
 	namespaceName                        string
 	taskQueue                            string
 	endpointName                         string
+	endpointID                           string
 	claims                               *authorization.Claims
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
 	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
@@ -671,12 +672,21 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 		return response, nil
 	}
 
-	baseURL, err := url.JoinPath(
-		httpClient.BaseURL(),
-		commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(commonnexus.NamespaceAndTaskQueue{
-			Namespace: oc.namespaceName,
-			TaskQueue: oc.taskQueue,
-		}))
+	var baseURL string
+	if oc.endpointID != "" {
+		// If the request was originally dispatched by endpoint, forward by endpoint as well.
+		baseURL, err = url.JoinPath(httpClient.BaseURL(),
+			commonnexus.RouteDispatchNexusTaskByEndpoint.Path(oc.endpointID))
+	} else {
+		// Fallback to dispatch by namespace and task queue since those have already been resolved by this point.
+		baseURL, err = url.JoinPath(
+			httpClient.BaseURL(),
+			commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(commonnexus.NamespaceAndTaskQueue{
+				Namespace: oc.namespaceName,
+				TaskQueue: oc.taskQueue,
+			}))
+	}
+
 	if err != nil {
 		oc.logger.Error("failed to forward Nexus request. error constructing ServiceBaseURL",
 			tag.URL(httpClient.BaseURL()),
