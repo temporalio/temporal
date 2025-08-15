@@ -223,6 +223,47 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse() {
 	s.AssertHEEqualWithDB(newBranchToken, newEvents)
 }
 
+func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CHASM() {
+	// CHASM snapshot has no events and empty current version history.
+	prevLastWriteVersion := rand.Int63()
+	prevSnapshot := s.CreateCHASMSnapshot(
+		prevLastWriteVersion,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		rand.Int63(),
+	)
+
+	newRunID := uuid.New().String()
+	newSnapshot, newEvents := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		newRunID,
+		common.FirstEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+		nil, // CHASM snapshot has no events
+	)
+	s.Empty(newEvents)
+
+	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeUpdateCurrent,
+
+		PreviousRunID:            prevSnapshot.ExecutionState.RunId,
+		PreviousLastWriteVersion: prevLastWriteVersion,
+
+		NewWorkflowSnapshot: *newSnapshot,
+		NewWorkflowEvents:   newEvents,
+	})
+	s.NoError(err)
+
+	s.AssertMSEqualWithDB(newSnapshot)
+}
+
 func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 	prevLastWriteVersion := rand.Int63()
 	branchToken, prevSnapshot, prevEvents := s.CreateWorkflow(
@@ -1403,6 +1444,105 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 	s.AssertHEEqualWithDB(branchToken, currentEvents1, currentEvents2)
 }
 
+func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew_CHASM() {
+	currentSnapshot := s.CreateCHASMSnapshot(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+
+	baseRunID := uuid.New().String()
+	baseSnapshot, baseEvents := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		baseRunID,
+		common.FirstEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+		nil,
+	)
+	s.Empty(baseEvents)
+	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
+
+		PreviousRunID:            "",
+		PreviousLastWriteVersion: 0,
+
+		NewWorkflowSnapshot: *baseSnapshot,
+		NewWorkflowEvents:   baseEvents,
+	})
+	s.NoError(err)
+
+	resetSnapshot, resetEvents := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		baseRunID,
+		baseSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		baseSnapshot.DBRecordVersion+1,
+		nil,
+	)
+	s.Empty(resetEvents)
+
+	newRunID := uuid.New().String()
+	newSnapshot, newEvents := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		newRunID,
+		common.FirstEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+		nil,
+	)
+	s.Empty(newEvents)
+
+	currentMutation, currentEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		newSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		currentSnapshot.DBRecordVersion+1,
+		nil,
+	)
+	s.Empty(currentEvents)
+
+	_, err = s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
+
+		ResetWorkflowSnapshot: *resetSnapshot,
+		ResetWorkflowEvents:   resetEvents,
+
+		NewWorkflowSnapshot: newSnapshot,
+		NewWorkflowEvents:   newEvents,
+
+		CurrentWorkflowMutation: currentMutation,
+		CurrentWorkflowEvents:   currentEvents,
+	})
+	s.NoError(err)
+
+	s.AssertMSEqualWithDB(resetSnapshot)
+	s.AssertMSEqualWithDB(newSnapshot)
+	s.AssertMSEqualWithDB(currentSnapshot, currentMutation)
+}
+
 func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent() {
 	branchToken, baseSnapshot, baseEvents := s.CreateWorkflow(
 		rand.Int63(),
@@ -1946,6 +2086,37 @@ func (s *ExecutionMutableStateSuite) TestSet() {
 
 	s.AssertMSEqualWithDB(setSnapshot)
 	s.AssertHEEqualWithDB(branchToken, events)
+}
+
+func (s *ExecutionMutableStateSuite) TestSet_CHASM() {
+	snapshot := s.CreateCHASMSnapshot(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+
+	setSnapshot, _ := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		common.FirstEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		snapshot.DBRecordVersion+1,
+		nil, // CHASM snapshot has no events
+	)
+	_, err := s.ExecutionManager.SetWorkflowExecution(s.Ctx, &p.SetWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+
+		SetWorkflowSnapshot: *setSnapshot,
+	})
+	s.NoError(err)
+
+	s.AssertMSEqualWithDB(setSnapshot)
 }
 
 func (s *ExecutionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
