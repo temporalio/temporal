@@ -2984,6 +2984,68 @@ func prepareTaskQueueUserData(
 	return data
 }
 
+// mergeFairnessWeightOverrides applies fairness weight updates if valid:
+//   - keys must be non-empty
+//   - weight >= 0  → add/update
+//   - weight == -1 → delete
+//   - any other negative or NaN → error
+//
+// If, after applying deletions, adding new keys would exceed `maxFairnessKeyWeightOverrides`,
+// the update set is rejected entirely and the original map is returned unchanged.
+func mergeFairnessWeightOverrides(
+	existing map[string]float32,
+	updates map[string]float32,
+	maxFairnessKeyWeightOverrides int,
+) (map[string]float32, error) {
+	if updates == nil || len(updates) == 0 {
+		// Nothing to do; return original as-is.
+		return existing, nil
+	}
+	if existing == nil {
+		existing = map[string]float32{}
+	}
+
+	// Validate & compute capacity impact (single pass).
+	postDeleteSize := len(existing)
+	newKeys := 0
+
+	for k, w := range updates {
+		if w == -1 {
+			if _, ok := existing[k]; ok {
+				postDeleteSize--
+			}
+		} else if _, ok := existing[k]; !ok {
+			newKeys++
+		}
+	}
+
+	// Capacity check after deletions, before upserts.
+	projected := postDeleteSize + newKeys
+	if projected > maxFairnessKeyWeightOverrides {
+		// return a rejection error message indicating the update was rejected and did not fail
+		return existing, errFwoUpdateRejected
+	}
+
+	// Build new map
+	out := make(map[string]float32, postDeleteSize+newKeys)
+	for k, v := range existing {
+		out[k] = v
+	}
+	// deletions
+	for k, w := range updates {
+		if w == -1 {
+			delete(out, k)
+		}
+	}
+	// upserts
+	for k, w := range updates {
+		if w >= 0 {
+			out[k] = w
+		}
+	}
+	return out, nil
+}
+
 func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
 	taskQueueFamily, err := tqid.NewTaskQueueFamily(request.NamespaceId, request.UpdateTaskqueueConfig.GetTaskQueue())
 	if err != nil {
@@ -3031,6 +3093,20 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request 
 			// Fairness Queue Rate Limit
 			if fkrl := updateTaskQueueConfig.GetUpdateFairnessKeyRateLimitDefault(); fkrl != nil {
 				cfg.FairnessKeysRateLimitDefault = buildRateLimitConfig(fkrl, protoTs, updateIdentity)
+			}
+			if fwo := updateTaskQueueConfig.GetUpdateFairnessWeightOverrides(); fwo != nil {
+				cfg.FairnessWeightOverrides, err = mergeFairnessWeightOverrides(
+					cfg.FairnessWeightOverrides,
+					fwo,
+					e.config.MaxFairnessKeyWeightOverrides(
+						request.NamespaceId,
+						request.UpdateTaskqueueConfig.GetTaskQueue(),
+						taskQueueType,
+					),
+				)
+				if err != nil {
+					return nil, false, err
+				}
 			}
 			// Update the clock on TaskQueueUserData to enforce LWW on config updates
 			data.Clock = now
