@@ -24,8 +24,9 @@
 /tctl*
 /tdbg
 
-# proto image
+# proto images
 /proto/image.bin
+/proto/chasm.bin
 # api+google proto dependencies
 /proto/api.binpb
 
@@ -37,3 +38,5 @@
 
 # Git SPR: https://github.com/ejoffe/spr
 .spr.yml
+
+/proto.tmp

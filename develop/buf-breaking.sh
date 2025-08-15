@@ -23,6 +23,7 @@ set -eu -o pipefail
 : "${BUF:=buf}"
 : "${API_BINPB:=proto/api.binpb}"
 : "${INTERNAL_BINPB:=proto/image.bin}"
+: "${CHASM_BINPB:=proto/chasm.bin}"
 : "${MAIN_BRANCH:=main}"
 
 : "${COMMIT:=$(git rev-parse HEAD)}"
@@ -45,6 +46,7 @@ fi
 # If invoked from the Makefile, this should already be done. This is just in
 # case this is being run manually.
 $MAKE "$INTERNAL_BINPB"
+$MAKE "$CHASM_BINPB"
 
 tmp=$(mktemp --tmpdir -d temporal-buf-breaking.XXXXXXXXX)
 trap 'rm -rf $tmp' EXIT
@@ -60,7 +62,14 @@ check_against_commit() {
     $MAKE -C "$tmp" "$INTERNAL_BINPB"
     $BUF breaking "$INTERNAL_BINPB" --against "$tmp/$INTERNAL_BINPB" --config proto/internal/buf.yaml
   else
-    yellow "$name commit is too old to support breaking check"
+    yellow "$name commit is too old to support breaking check for internal protos"
+  fi
+
+  if grep -q CHASM_BINPB "$tmp/Makefile"; then
+    $MAKE -C "$tmp" "$CHASM_BINPB"
+    $BUF breaking "$CHASM_BINPB" --against "$tmp/$CHASM_BINPB" --config chasm/lib/buf.yaml
+  else
+    yellow "$name commit is too old to support breaking check for chasm protos"
   fi
 }
 
