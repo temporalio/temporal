@@ -151,8 +151,30 @@ func (s {{$P.Name}}TypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs [
 	)
 }
 
+{{if eq $P.Name "Global" -}}
+func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribable[T] {
+	return func(callback func(T)) (T, func()) {
+		prec := {{$P.Expr}}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+{{- else -}}
+func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWith{{$P.Name}}Filter[T] {
+	return func({{$P.GoArgs}}, callback func(T)) (T, func()) {
+		prec := {{$P.Expr}}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+{{- end}}
+
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	// can't subscribe to constrained default settings
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 {{if eq $P.Name "Global" -}}
