@@ -52,3 +52,4 @@ func GetActivityScheduledEventID(
 	}
 	return activityInfo.ScheduledEventId, nil
 }
+

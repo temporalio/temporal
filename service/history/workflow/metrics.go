@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"time"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/metrics"
@@ -8,6 +10,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func emitWorkflowHistoryStats(
@@ -130,4 +133,52 @@ func GetPerTaskQueueFamilyScope(
 		config.BreakdownMetricsByTaskQueue(namespaceName.String(), taskQueueFamily, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		tags...,
 	)
+}
+
+type ActivityCompletionMetrics struct {
+	// IsTerminalFailure is true if the activity failed and won't be retried
+	IsTerminalFailure bool
+	// RetryScheduled is true if the activity is scheduled to be retried
+	RetryScheduled bool
+	// AttemptStartedTime is the start time of the current attempt
+	AttemptStartedTime time.Time
+	// FirstScheduledTime is the scheduled time of the first attempt
+	FirstScheduledTime time.Time
+}
+
+func RecordActivityCompletionMetrics(
+	shard historyi.ShardContext,
+	namespace namespace.Name,
+	taskQueue string,
+	metricsState ActivityCompletionMetrics,
+	tags ...metrics.Tag,
+) {
+	metricsHandler := GetPerTaskQueueFamilyScope(
+		shard.GetMetricsHandler(),
+		namespace,
+		taskQueue,
+		shard.GetConfig(),
+		tags...,
+	)
+
+	if !metricsState.AttemptStartedTime.IsZero() {
+		latency := time.Since(metricsState.AttemptStartedTime)
+		// ActivityE2ELatency is deprecated due to its inaccurate naming. It captures the attempt duration instead of an end-to-end duration as its name suggests. For now record both metrics
+		metrics.ActivityE2ELatency.With(metricsHandler).Record(latency)
+		metrics.ActivityAttemptDuration.With(metricsHandler).Record(latency)
+	}
+
+	// Record true end-to-end duration only for terminal states (includes retries and backoffs)
+	if !metricsState.RetryScheduled && !metricsState.FirstScheduledTime.IsZero() {
+		e2eDuration := time.Since(metricsState.FirstScheduledTime)
+		metrics.ActivityE2EDuration.With(metricsHandler).Record(e2eDuration)
+	}
+
+	if metricsState.IsTerminalFailure {
+		metrics.ActivityFailedCount.With(metricsHandler).Record(1)
+	} else if metricsState.RetryScheduled {
+		metrics.ActivityRetryCount.With(metricsHandler).Record(1)
+	} else {
+		metrics.ActivitySucceededCount.With(metricsHandler).Record(1)
+	}
 }

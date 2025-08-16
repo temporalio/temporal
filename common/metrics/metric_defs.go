@@ -814,12 +814,30 @@ var (
 		"pending_tasks",
 		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
 	)
-	TaskSchedulerThrottled                               = NewCounterDef("task_scheduler_throttled")
-	QueueScheduleLatency                                 = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
-	QueueReaderCountHistogram                            = NewDimensionlessHistogramDef("queue_reader_count")
-	QueueSliceCountHistogram                             = NewDimensionlessHistogramDef("queue_slice_count")
-	QueueActionCounter                                   = NewCounterDef("queue_actions")
-	ActivityE2ELatency                                   = NewTimerDef("activity_end_to_end_latency")
+	TaskSchedulerThrottled    = NewCounterDef("task_scheduler_throttled")
+	QueueScheduleLatency      = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
+	QueueReaderCountHistogram = NewDimensionlessHistogramDef("queue_reader_count")
+	QueueSliceCountHistogram  = NewDimensionlessHistogramDef("queue_slice_count")
+	QueueActionCounter        = NewCounterDef("queue_actions")
+	ActivityE2ELatency        = NewTimerDef(
+		"activity_end_to_end_latency",
+		WithDescription("DEPRECATED: Will be removed in one of the next releases. Duration of an activity attempt. Use activity_attempt_duration instead."),
+	)
+	ActivityAttemptDuration = NewTimerDef(
+		"activity_attempt_duration",
+		WithDescription("Duration of a single activity attempt. Doesn't include retries or backoffs."),
+	)
+	ActivityE2EDuration = NewTimerDef(
+		"activity_e2e_duration",
+		WithDescription("Duration of activity execution from scheduled time to terminal state. Includes retries and backoffs."),
+	)
+	ActivitySucceededCount = NewCounterDef("activity_succeeded_count")
+	ActivityFailedCount    = NewCounterDef("activity_failed_count")
+	ActivityTimeoutCount   = NewCounterDef(
+		"activity_timeout_count",
+		WithDescription("Number of activity executions that ended in terminal timeout (e.g. ScheduleToClose timeout is expired)."),
+	)
+	ActivityRetryCount                                   = NewCounterDef("activity_retry_count")
 	AckLevelUpdateCounter                                = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                          = NewCounterDef("ack_level_update_failed")
 	CommandCounter                                       = NewCounterDef("command")
