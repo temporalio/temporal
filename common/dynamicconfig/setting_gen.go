@@ -848,8 +848,21 @@ func (s GlobalTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []Cons
 	)
 }
 
+func (s GlobalTypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribable[T] {
+	return func(callback func(T)) (T, func()) {
+		prec := []Constraints{{}}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+
 func (s GlobalTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	// can't subscribe to constrained default settings
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFn[T any](value T) TypedPropertyFn[T] {
@@ -971,8 +984,21 @@ func (s NamespaceTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []C
 	)
 }
 
+func (s NamespaceTypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWithNamespaceFilter[T] {
+	return func(namespace string, callback func(T)) (T, func()) {
+		prec := []Constraints{{Namespace: namespace}, {}}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+
 func (s NamespaceTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	// can't subscribe to constrained default settings
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByNamespace[T any](value T) TypedPropertyFnWithNamespaceFilter[T] {
@@ -1094,8 +1120,21 @@ func (s NamespaceIDTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs [
 	)
 }
 
+func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWithNamespaceIDFilter[T] {
+	return func(namespaceID namespace.ID, callback func(T)) (T, func()) {
+		prec := []Constraints{{NamespaceID: namespaceID.String()}, {}}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+
 func (s NamespaceIDTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	// can't subscribe to constrained default settings
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByNamespaceID[T any](value T) TypedPropertyFnWithNamespaceIDFilter[T] {
@@ -1235,8 +1274,27 @@ func (s TaskQueueTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []C
 	)
 }
 
+func (s TaskQueueTypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWithTaskQueueFilter[T] {
+	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType, callback func(T)) (T, func()) {
+		prec := []Constraints{
+			{Namespace: namespace, TaskQueueName: taskQueue, TaskQueueType: taskQueueType},
+			{Namespace: namespace, TaskQueueName: taskQueue},
+			{TaskQueueName: taskQueue},
+			{Namespace: namespace},
+			{},
+		}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+
 func (s TaskQueueTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	// can't subscribe to constrained default settings
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByTaskQueue[T any](value T) TypedPropertyFnWithTaskQueueFilter[T] {
@@ -1358,8 +1416,21 @@ func (s ShardIDTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []Con
 	)
 }
 
+func (s ShardIDTypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWithShardIDFilter[T] {
+	return func(shardID int32, callback func(T)) (T, func()) {
+		prec := []Constraints{{ShardID: shardID}, {}}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+
 func (s ShardIDTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	// can't subscribe to constrained default settings
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByShardID[T any](value T) TypedPropertyFnWithShardIDFilter[T] {
@@ -1481,8 +1552,21 @@ func (s TaskTypeTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []Co
 	)
 }
 
+func (s TaskTypeTypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWithTaskTypeFilter[T] {
+	return func(taskType enumsspb.TaskType, callback func(T)) (T, func()) {
+		prec := []Constraints{{TaskType: taskType}, {}}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+
 func (s TaskTypeTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	// can't subscribe to constrained default settings
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByTaskType[T any](value T) TypedPropertyFnWithTaskTypeFilter[T] {
@@ -1619,8 +1703,26 @@ func (s DestinationTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs [
 	)
 }
 
+func (s DestinationTypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWithDestinationFilter[T] {
+	return func(namespace string, destination string, callback func(T)) (T, func()) {
+		prec := []Constraints{
+			{Namespace: namespace, Destination: destination},
+			{Destination: destination},
+			{Namespace: namespace},
+			{},
+		}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+
 func (s DestinationTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	// can't subscribe to constrained default settings
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByDestination[T any](value T) TypedPropertyFnWithDestinationFilter[T] {
