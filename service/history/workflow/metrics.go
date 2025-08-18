@@ -77,19 +77,22 @@ func emitMutableStateStatus(
 func emitWorkflowCompletionStats(
 	metricsHandler metrics.Handler,
 	namespace namespace.Name,
-	namespaceState string,
-	taskQueue string,
-	workflowTypeName string,
-	status enumspb.WorkflowExecutionStatus,
+	completion completionMetric,
 	config *configs.Config,
 ) {
-	handler := GetPerTaskQueueFamilyScope(metricsHandler, namespace, taskQueue, config,
+	// Only emit metrics for Workflows, not other Chasm archetypes
+	if !completion.isWorkflow {
+		return
+	}
+
+	handler := GetPerTaskQueueFamilyScope(metricsHandler, namespace, completion.taskQueue, config,
 		metrics.OperationTag(metrics.WorkflowCompletionStatsScope),
-		metrics.NamespaceStateTag(namespaceState),
-		metrics.WorkflowTypeTag(workflowTypeName),
+		metrics.NamespaceStateTag(completion.namespaceState),
+		metrics.WorkflowTypeTag(completion.workflowTypeName),
 	)
 
-	switch status {
+	closed := true
+	switch completion.status {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
 		metrics.WorkflowSuccessCount.With(handler).Record(1)
 	case enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED:
@@ -102,6 +105,15 @@ func emitWorkflowCompletionStats(
 		metrics.WorkflowTerminateCount.With(handler).Record(1)
 	case enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
 		metrics.WorkflowContinuedAsNewCount.With(handler).Record(1)
+	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		closed = false
+	}
+	if closed && completion.startTime != nil && completion.closeTime != nil {
+		startTime := completion.startTime.AsTime()
+		closeTime := completion.closeTime.AsTime()
+		if closeTime.After(startTime) {
+			metrics.WorkflowDuration.With(handler).Record(closeTime.Sub(startTime))
+		}
 	}
 }
 

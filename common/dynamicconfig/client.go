@@ -23,6 +23,11 @@ type (
 		// Note that GetValue is called very often! You should not synchronously call out to an
 		// external system. Instead you should keep a set of all configured values, refresh it
 		// periodically or when notified, and only do in-memory lookups inside of GetValue.
+		//
+		// Implementations should prefer to return the same slice in response to the same key
+		// as long as the value hasn't changed. Value conversions are cached using weak
+		// pointers into the returned slice, so new slices will result in unnecessary calls to
+		// conversion functions.
 		GetValue(key Key) []ConstrainedValue
 	}
 

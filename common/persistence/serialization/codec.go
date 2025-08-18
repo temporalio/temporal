@@ -49,9 +49,6 @@ func Decode(data *commonpb.DataBlob, result proto.Message) error {
 	if data == nil {
 		return NewDeserializationError(enumspb.ENCODING_TYPE_UNSPECIFIED, errors.New("cannot decode nil"))
 	}
-	if data.Data == nil {
-		return nil
-	}
 
 	switch data.EncodingType {
 	case enumspb.ENCODING_TYPE_JSON:
