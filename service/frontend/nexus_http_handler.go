@@ -315,6 +315,7 @@ func (h *NexusHTTPHandler) parseTlsAndAuthInfo(r *http.Request, nc *nexusContext
 
 func (h *NexusHTTPHandler) serveResolvedURL(w http.ResponseWriter, r *http.Request, u *url.URL, nc *nexusContext) {
 	// Attach Nexus context to response writer and request context.
+	nc.originalRequestHeaders = r.Header.Clone()
 	w = newNexusHTTPResponseWriter(w, nc)
 	r = r.WithContext(context.WithValue(r.Context(), nexusContextKey{}, nc))
 
