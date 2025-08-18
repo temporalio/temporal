@@ -311,14 +311,16 @@ func findMatchWithConstrainedDefaults[T any](cvs []ConstrainedValue, defaultCVs 
 	return
 }
 
-func resolveConstrainedValue[T any](
+func findAndResolveWithConstrainedDefaults[T any](
 	c *Collection,
 	key Key,
 	convert func(value any) (T, error),
-	cvp *ConstrainedValue,
-	defVal T,
-	valOrder, defOrder int,
+	cvs []ConstrainedValue,
+	defaultCVs []TypedConstrainedValue[T],
+	precedence []Constraints,
 ) (value T, raw any) {
+	cvp, defVal, valOrder, defOrder := findMatchWithConstrainedDefaults(cvs, defaultCVs, precedence)
+
 	if defOrder == 0 {
 		// This is a server bug: all precedence lists must end with no-constraints, and all
 		// constrained defaults must have a no-constraints value, so we should have gotten a match.
@@ -353,8 +355,7 @@ func matchAndConvertWithConstrainedDefault[T any](
 	precedence []Constraints,
 ) T {
 	cvs := c.client.GetValue(key)
-	cvp, defVal, valOrder, defOrder := findMatchWithConstrainedDefaults(cvs, cdef, precedence)
-	value, _ := resolveConstrainedValue(c, key, convert, cvp, defVal, valOrder, defOrder)
+	value, _ := findAndResolveWithConstrainedDefaults(c, key, convert, cvs, cdef, precedence)
 	return value
 }
 
@@ -415,8 +416,7 @@ func subscribeWithConstrainedDefault[T any](
 	// get one value immediately (note that subscriptionLock is held here so we can't race with
 	// an update)
 	cvs := c.client.GetValue(key)
-	cvp, defVal, valOrder, defOrder := findMatchWithConstrainedDefaults(cvs, cdef, prec)
-	init, raw := resolveConstrainedValue(c, key, convert, cvp, defVal, valOrder, defOrder)
+	init, raw := findAndResolveWithConstrainedDefaults(c, key, convert, cvs, cdef, prec)
 
 	// As a convenience (and for efficiency), you can pass in a nil callback; we just return the
 	// current value and skip the subscription. The cancellation func returned is also nil.
@@ -500,12 +500,11 @@ func dispatchUpdateWithConstrainedDefault[T any](
 	sub *subscription[T],
 	cvs []ConstrainedValue,
 ) {
-	cvp, defVal, valOrder, defOrder := findMatchWithConstrainedDefaults(cvs, sub.cdef, sub.prec)
 	// Note: This performs the conversion even if the raw value is unchanged. This isn't ideal,
 	// but so far constrained default settings are only used for primitive values so it's okay.
 	// If we have a constrained default value with a complex conversion function, this could be
 	// optimized to delay conversion until after we check DeepEqual.
-	newVal, raw := resolveConstrainedValue(c, key, convert, cvp, defVal, valOrder, defOrder)
+	newVal, raw := findAndResolveWithConstrainedDefaults(c, key, convert, cvs, sub.cdef, sub.prec)
 
 	// compare raw (pre-conversion) values, if unchanged, skip this update. note that
 	// `usingDefaultValue` is equal to itself but nothing else.
