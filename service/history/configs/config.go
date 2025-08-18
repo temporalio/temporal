@@ -365,6 +365,9 @@ type Config struct {
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	MaxLocalParentWorkflowVerificationDuration dynamicconfig.DurationPropertyFn
+
+	// Eager activity rate limit cache configuration
+	EagerActivityRateLimitCacheTTL dynamicconfig.DurationPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -688,6 +691,8 @@ func NewConfig(
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
+
+		EagerActivityRateLimitCacheTTL: dynamicconfig.EagerActivityRateLimitCacheTTL.Get(dc),
 	}
 
 	return cfg

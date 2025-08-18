@@ -15,6 +15,7 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -133,6 +134,7 @@ type (
 		commandHandlerRegistry     *workflow.CommandHandlerRegistry
 		workflowCache              wcache.Cache
 		replicationProgressCache   replication.ProgressCache
+		rateLimitCache             cache.Cache // Shared cache for rate limit checks
 		syncStateRetriever         replication.SyncStateRetriever
 		outboundQueueCBPool        *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 		testHooks                  testhooks.TestHooks
@@ -210,6 +212,9 @@ func NewEngineWithShardContext(
 		commandHandlerRegistry:     commandHandlerRegistry,
 		workflowCache:              workflowCache,
 		replicationProgressCache:   replicationProgressCache,
+		rateLimitCache:             cache.New(1000, &cache.Options{
+			TTL: config.EagerActivityRateLimitCacheTTL(),
+		}),
 		syncStateRetriever:         syncStateRetriever,
 		outboundQueueCBPool:        outboundQueueCBPool,
 		testHooks:                  testHooks,
@@ -350,6 +355,12 @@ func (e *historyEngineImpl) Stop() {
 		queueProcessor.Stop()
 	}
 	e.replicationProcessorMgr.Stop()
+	
+	// Stop the rate limit cache
+	if stoppableCache, ok := e.rateLimitCache.(cache.StoppableCache); ok {
+		stoppableCache.Stop()
+	}
+	
 	// unset the failover callback
 	e.shardContext.GetNamespaceRegistry().UnregisterStateChangeCallback(e)
 }
@@ -555,6 +566,7 @@ func (e *historyEngineImpl) RespondWorkflowTaskCompleted(
 		e.persistenceVisibilityMgr,
 		e.workflowConsistencyChecker,
 		e.matchingClient,
+		e.rateLimitCache, // Pass the shared cache
 	)
 	return h.Invoke(ctx, req)
 }

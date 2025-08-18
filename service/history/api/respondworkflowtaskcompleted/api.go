@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
@@ -60,6 +61,7 @@ type (
 		persistenceVisibilityMgr       manager.VisibilityManager
 		commandHandlerRegistry         *workflow.CommandHandlerRegistry
 		matchingClient                 matchingservice.MatchingServiceClient
+		rateLimitCache                 cache.Cache // Shared cache for rate limit checks
 	}
 )
 
@@ -72,6 +74,7 @@ func NewWorkflowTaskCompletedHandler(
 	visibilityManager manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
+	rateLimitCache cache.Cache,
 ) *WorkflowTaskCompletedHandler {
 	return &WorkflowTaskCompletedHandler{
 		config:                     shardContext.GetConfig(),
@@ -94,6 +97,7 @@ func NewWorkflowTaskCompletedHandler(
 		persistenceVisibilityMgr:       visibilityManager,
 		commandHandlerRegistry:         commandHandlerRegistry,
 		matchingClient:                 matchingClient,
+		rateLimitCache:                 rateLimitCache,
 	}
 }
 
@@ -384,6 +388,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			hasBufferedEventsOrMessages,
 			handler.commandHandlerRegistry,
 			handler.matchingClient,
+			handler.rateLimitCache, // Pass the shared cache
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(

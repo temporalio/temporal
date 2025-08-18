@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/effect"
@@ -79,6 +80,8 @@ type (
 		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
 		matchingClient         matchingservice.MatchingServiceClient
+		// Shared cache for task queue rate limit checks
+		rateLimitCache cache.Cache
 	}
 
 	workflowTaskFailedCause struct {
@@ -118,6 +121,7 @@ func newWorkflowTaskCompletedHandler(
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	matchingClient matchingservice.MatchingServiceClient,
+	rateLimitCache cache.Cache,
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
 		identity:                identity,
@@ -150,6 +154,7 @@ func newWorkflowTaskCompletedHandler(
 		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
 		matchingClient:         matchingClient,
+		rateLimitCache:         rateLimitCache,
 	}
 }
 
@@ -493,6 +498,17 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	// for the task queue.
 	eagerStartActivity := attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) &&
 		(!versioningUsed || attr.UseWorkflowBuildId)
+
+	// Disable eager activities if rate limits are configured for the task queue
+	// This prevents eager activities from bypassing server-side rate limiting
+	if eagerStartActivity && handler.hasTaskQueueRateLimit(attr.TaskQueue.GetName(), enumspb.TASK_QUEUE_TYPE_ACTIVITY) {
+		metrics.WorkflowEagerExecutionDeniedCounter.With(handler.metricsHandler).
+			Record(1, metrics.ReasonTag("rate_limit_configured"))
+		eagerStartActivity = false
+	} else if eagerStartActivity {
+		// Record successful eager activity execution
+		metrics.ActivityEagerExecutionCounter.With(handler.metricsHandler).Record(1)
+	}
 
 	event, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
 		handler.workflowTaskCompletedID,
@@ -1492,4 +1508,68 @@ type commandValidator struct {
 func (v commandValidator) IsValidPayloadSize(size int) bool {
 	err := v.sizeChecker.checkIfPayloadSizeExceedsLimit(metrics.CommandTypeTag(v.commandType.String()), size, "")
 	return err == nil
+}
+
+// hasTaskQueueRateLimit checks if the specified task queue has rate limits configured.
+// This is used to disable eager activities when rate limits are set to prevent them
+// from bypassing server-side rate limiting.
+func (handler *workflowTaskCompletedHandler) hasTaskQueueRateLimit(taskQueueName string, taskQueueType enumspb.TaskQueueType) bool {
+	// Create cache key
+	cacheKey := fmt.Sprintf("%s:%s:%d", handler.mutableState.GetNamespaceEntry().ID().String(), taskQueueName, taskQueueType)
+	if cachedValue := handler.rateLimitCache.Get(cacheKey); cachedValue != nil {
+		if hasRateLimit, ok := cachedValue.(bool); ok {
+			return hasRateLimit
+		}
+	}
+	// Cache miss, need to fetch from matching service
+	hasRateLimit := handler.fetchTaskQueueRateLimitFromMatching(taskQueueName, taskQueueType)
+	// Cache the result - TTL is handled automatically by the cache
+	// Use PutIfNotExist to avoid race conditions if multiple goroutines fetch the same data
+	handler.rateLimitCache.PutIfNotExist(cacheKey, hasRateLimit)
+	return hasRateLimit
+}
+
+// fetchTaskQueueRateLimitFromMatching fetches rate limit configuration from matching service
+func (handler *workflowTaskCompletedHandler) fetchTaskQueueRateLimitFromMatching(taskQueueName string, taskQueueType enumspb.TaskQueueType) bool {
+	// Get the namespace ID from the mutable state
+	namespaceID := handler.mutableState.GetNamespaceEntry().ID()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// Call the matching service to get task queue user data
+	resp, err := handler.matchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:   namespaceID.String(),
+		TaskQueue:     taskQueueName,
+		TaskQueueType: taskQueueType,
+		WaitNewData:   false, // Don't wait, just get current data
+	})
+	if err != nil {
+		// If unable to get the data, assume no rate limit to avoid breaking existing behavior
+		handler.logger.Warn("Failed to get task queue user data for rate limit check, allowing eager activities",
+			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.Error(err))
+		return false
+	}
+	if resp == nil || resp.GetUserData() == nil || resp.GetUserData().GetData() == nil {
+		return false
+	}
+	// Check if there's a rate limit configured for this task queue type
+	perTypeData := resp.GetUserData().GetData().GetPerType()
+	if perTypeData == nil {
+		return false
+	}
+	typeData, exists := perTypeData[int32(taskQueueType)]
+	if !exists || typeData == nil || typeData.GetConfig() == nil {
+		return false
+	}
+	// Check if QueueRateLimit is configured
+	queueRateLimit := typeData.GetConfig().GetQueueRateLimit()
+	if queueRateLimit != nil && queueRateLimit.GetRateLimit() != nil {
+		return true
+	}
+	// Check if FairnessKeysRateLimitDefault is configured
+	fairnessRateLimit := typeData.GetConfig().GetFairnessKeysRateLimitDefault()
+	if fairnessRateLimit != nil && fairnessRateLimit.GetRateLimit() != nil {
+		return true
+	}
+	return false
 }

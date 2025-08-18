@@ -188,6 +188,11 @@ config as the other services.`,
 		false,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
 	)
+	EagerActivityRateLimitCacheTTL = NewGlobalDurationSetting(
+		"system.eagerActivityRateLimitCacheTTL",
+		30*time.Second,
+		`EagerActivityRateLimitCacheTTL is the TTL for caching task queue rate limit checks in the history service`,
+	)
 	EnableEagerWorkflowStart = NewNamespaceBoolSetting(
 		"system.enableEagerWorkflowStart",
 		true,
