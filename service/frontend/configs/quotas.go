@@ -51,8 +51,8 @@ var (
 		DispatchNexusTaskByEndpointAPIName:                                             1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartNexusOperation":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelNexusOperation": 1,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetNexusOperationInfo":       1,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetNexusOperationResult":     1,
+		"/temporal.api.workflowservice.v1.WorkflowService/FetchNexusOperationInfo":     1,
+		"/temporal.api.workflowservice.v1.WorkflowService/FetchNexusOperationResult":   1,
 	}
 
 	// APIToPriority determines common API priorities.
@@ -135,8 +135,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion": 3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":        3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":           3,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetNexusOperationInfo":           3,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetNexusOperationResult":         3,
+		"/temporal.api.workflowservice.v1.WorkflowService/FetchNexusOperationInfo":         3,
+		"/temporal.api.workflowservice.v1.WorkflowService/FetchNexusOperationResult":       3,
 
 		// P3: Progress APIs for reporting cancellations and failures.
 		// They are relatively low priority as the tasks need to be retried anyway.

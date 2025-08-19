@@ -192,8 +192,8 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 
 		"StartNexusOperation":         {},
 		"RequestCancelNexusOperation": {},
-		"GetNexusOperationInfo":       {},
-		"GetNexusOperationResult":     {},
+		"FetchNexusOperationInfo":     {},
+		"FetchNexusOperationResult":   {},
 	}, apis)
 }
 

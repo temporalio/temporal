@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/api"
@@ -138,8 +137,8 @@ var (
 
 		"StartNexusOperation":         func() any { return &workflowservice.StartNexusOperationResponse{} },
 		"RequestCancelNexusOperation": func() any { return &workflowservice.RequestCancelNexusOperationResponse{} },
-		"GetNexusOperationInfo":       func() any { return &workflowservice.GetNexusOperationInfoResponse{} },
-		"GetNexusOperationResult":     func() any { return &workflowservice.GetNexusOperationResultResponse{} },
+		"FetchNexusOperationInfo":     func() any { return &workflowservice.FetchNexusOperationInfoResponse{} },
+		"FetchNexusOperationResult":   func() any { return &workflowservice.FetchNexusOperationResultResponse{} },
 	}
 )
 
@@ -203,9 +202,9 @@ func (i *Redirection) Intercept(
 	if !i.RedirectionAllowed(ctx) {
 		return handler(ctx, req)
 	}
-	if isNexusEndpointTargetRequest(req) {
-		// Nexus requests targeting an endpoint are never forwarded here since the frontend handler will resolve
-		// the endpoint target to a URL and make an HTTP request and that request may be forwarded.
+	if isExternalNexusCall(req) {
+		// Nexus requests are never forwarded here since the frontend handler will resolve the endpoint target to a
+		// URL and make an HTTP request and THAT request may be forwarded.
 		return handler(ctx, req)
 	}
 
@@ -317,13 +316,13 @@ func (i *Redirection) RedirectionAllowed(
 	return allowed
 }
 
-func isNexusEndpointTargetRequest(request any) bool {
-	t, ok := request.(interface {
-		GetTarget() *nexuspb.TaskDispatchTarget
-	})
-	if !ok {
-		return false
+func isExternalNexusCall(request any) bool {
+	switch request.(type) {
+	case *workflowservice.StartNexusOperationRequest,
+		*workflowservice.RequestCancelNexusOperationRequest,
+		*workflowservice.FetchNexusOperationInfoRequest,
+		*workflowservice.FetchNexusOperationResultRequest:
+		return true
 	}
-	_, ok = t.GetTarget().Variant.(*nexuspb.TaskDispatchTarget_Endpoint)
-	return ok
+	return false
 }

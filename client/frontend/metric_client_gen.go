@@ -289,6 +289,34 @@ func (c *metricClient) ExecuteMultiOperation(
 	return c.client.ExecuteMultiOperation(ctx, request, opts...)
 }
 
+func (c *metricClient) FetchNexusOperationInfo(
+	ctx context.Context,
+	request *workflowservice.FetchNexusOperationInfoRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.FetchNexusOperationInfoResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientFetchNexusOperationInfo")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.FetchNexusOperationInfo(ctx, request, opts...)
+}
+
+func (c *metricClient) FetchNexusOperationResult(
+	ctx context.Context,
+	request *workflowservice.FetchNexusOperationResultRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.FetchNexusOperationResultResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientFetchNexusOperationResult")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.FetchNexusOperationResult(ctx, request, opts...)
+}
+
 func (c *metricClient) FetchWorkerConfig(
 	ctx context.Context,
 	request *workflowservice.FetchWorkerConfigRequest,
@@ -343,34 +371,6 @@ func (c *metricClient) GetDeploymentReachability(
 	}()
 
 	return c.client.GetDeploymentReachability(ctx, request, opts...)
-}
-
-func (c *metricClient) GetNexusOperationInfo(
-	ctx context.Context,
-	request *workflowservice.GetNexusOperationInfoRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.GetNexusOperationInfoResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientGetNexusOperationInfo")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.GetNexusOperationInfo(ctx, request, opts...)
-}
-
-func (c *metricClient) GetNexusOperationResult(
-	ctx context.Context,
-	request *workflowservice.GetNexusOperationResultRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.GetNexusOperationResultResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientGetNexusOperationResult")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.GetNexusOperationResult(ctx, request, opts...)
 }
 
 func (c *metricClient) GetSearchAttributes(
