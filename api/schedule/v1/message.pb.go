@@ -937,7 +937,8 @@ func (x *NextTimeCache) GetCompleted() bool {
 	return false
 }
 
-// State machine scheduler internal state.
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
+// CHASM scheduler top-level state.
 type SchedulerInternal struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Scheduler request parameters and metadata.
@@ -1034,10 +1035,11 @@ func (x *SchedulerInternal) GetConflictToken() int64 {
 	return 0
 }
 
-// State machine scheduler's Generator internal state.
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
+// CHASM scheduler's Generator internal state.
 type GeneratorInternal struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Generator waits for the next_invocation_time before buffering more actions.
+	// TODO: remove when HSM sched is removed.
 	NextInvocationTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=next_invocation_time,json=nextInvocationTime,proto3" json:"next_invocation_time,omitempty"`
 	// High water mark.
 	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
@@ -1089,9 +1091,11 @@ func (x *GeneratorInternal) GetLastProcessedTime() *timestamppb.Timestamp {
 	return nil
 }
 
-// State machine scheduler's Invoker internal state.
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
+// CHASM scheduler's Invoker internal state.
 type InvokerInternal struct {
-	state protoimpl.MessageState    `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// TODO: remove when HSM sched is removed.
 	State v15.SchedulerInvokerState `protobuf:"varint,1,opt,name=state,proto3,enum=temporal.server.api.enums.v1.SchedulerInvokerState" json:"state,omitempty"`
 	// Buffered starts that will be started by the Invoker.
 	BufferedStarts []*BufferedStart `protobuf:"bytes,2,rep,name=buffered_starts,json=bufferedStarts,proto3" json:"buffered_starts,omitempty"`
@@ -1174,7 +1178,8 @@ func (x *InvokerInternal) GetLastProcessedTime() *timestamppb.Timestamp {
 	return nil
 }
 
-// State machine scheduler's Backfiller internal state. Backfill requests are 1:1
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
+// CHASM scheduler's Backfiller internal state. Backfill requests are 1:1
 // with Backfiller nodes. Backfiller nodes also handle immediate trigger requests.
 type BackfillerInternal struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1187,6 +1192,7 @@ type BackfillerInternal struct {
 	// for deduplication.
 	BackfillId string `protobuf:"bytes,5,opt,name=backfill_id,json=backfillId,proto3" json:"backfill_id,omitempty"`
 	// Backfiller waits for the next_invocation_time before buffering more actions.
+	// TODO - remove after HSM sched goes away
 	NextInvocationTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=next_invocation_time,json=nextInvocationTime,proto3" json:"next_invocation_time,omitempty"`
 	// High water mark.
 	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
