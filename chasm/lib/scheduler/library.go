@@ -6,6 +6,7 @@ type (
 	library struct {
 		chasm.UnimplementedLibrary
 
+		schedulerIdleTaskExecutor        *SchedulerIdleTaskExecutor
 		generatorTaskExecutor            *GeneratorTaskExecutor
 		invokerExecuteTaskExecutor       *InvokerExecuteTaskExecutor
 		invokerProcessBufferTaskExecutor *InvokerProcessBufferTaskExecutor
@@ -14,6 +15,10 @@ type (
 )
 
 var Library = &library{}
+
+func (l *library) SetSchedulerIdleTaskExecutor(executor *SchedulerIdleTaskExecutor) {
+	l.schedulerIdleTaskExecutor = executor
+}
 
 func (l *library) SetGeneratorTaskExecutor(executor *GeneratorTaskExecutor) {
 	l.generatorTaskExecutor = executor
@@ -46,6 +51,11 @@ func (l *library) Components() []*chasm.RegistrableComponent {
 
 func (l *library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
+		chasm.NewRegistrablePureTask(
+			"idle",
+			l.schedulerIdleTaskExecutor,
+			l.schedulerIdleTaskExecutor,
+		),
 		chasm.NewRegistrablePureTask(
 			"generate",
 			l.generatorTaskExecutor,

@@ -15,7 +15,7 @@ type (
 		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
 		RecentActionCount                 int           // Number of recent actions taken (workflow execution results) recorded in the ScheduleInfo metadata.
 		MaxActionsPerExecution            int           // Limits the number of actions (startWorkflow, terminate/cancel) taken by ExecuteTask in a single iteration
-		RetentionTime                     time.Duration // How long to keep schedules after they're done
+		IdleTime                          time.Duration // How long to keep schedules after they're done
 	}
 
 	// CHASM Scheduler dynamic config, shared among all sub-components.
@@ -57,7 +57,7 @@ var (
 		CanceledTerminatedCountAsFailures: false,
 		RecentActionCount:                 10,
 		MaxActionsPerExecution:            10,
-		RetentionTime:                     7 * 24 * time.Hour,
+		IdleTime:                          7 * 24 * time.Hour,
 	}
 )
 
