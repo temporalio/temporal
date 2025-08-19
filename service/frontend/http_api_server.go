@@ -44,7 +44,7 @@ type HTTPAPIServer struct {
 	logger                        log.Logger
 	serveMux                      *runtime.ServeMux
 	stopped                       chan struct{}
-	allowedHosts                  *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+	allowedHosts                  dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	matchAdditionalHeaders        map[string]bool
 	matchAdditionalHeaderPrefixes []string
 }
@@ -273,7 +273,7 @@ func (h *HTTPAPIServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *HTTPAPIServer) allowedHostsMiddleware(hf runtime.HandlerFunc) runtime.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request, pathParams map[string]string) {
-		allowedHosts := h.allowedHosts.Get()
+		allowedHosts := h.allowedHosts()
 		if allowedHosts.MatchString(r.Host) {
 			hf(w, r, pathParams)
 			return

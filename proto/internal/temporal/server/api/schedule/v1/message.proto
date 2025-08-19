@@ -140,7 +140,8 @@ message NextTimeCache {
 }
 
 
-// State machine scheduler internal state.
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
+// CHASM scheduler top-level state.
 message SchedulerInternal {
     // Scheduler request parameters and metadata. 
     temporal.api.schedule.v1.Schedule schedule = 2;
@@ -157,17 +158,20 @@ message SchedulerInternal {
     int64 conflict_token = 8;
 }
 
-// State machine scheduler's Generator internal state.
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
+// CHASM scheduler's Generator internal state.
 message GeneratorInternal {
-    // Generator waits for the next_invocation_time before buffering more actions.
+    // TODO: remove when HSM sched is removed. 
     google.protobuf.Timestamp next_invocation_time = 2;
 
     // High water mark.
     google.protobuf.Timestamp last_processed_time = 3;
 }
 
-// State machine scheduler's Invoker internal state.
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
+// CHASM scheduler's Invoker internal state.
 message InvokerInternal {
+    // TODO: remove when HSM sched is removed.
     temporal.server.api.enums.v1.SchedulerInvokerState state = 1;
 
     // Buffered starts that will be started by the Invoker.
@@ -187,7 +191,8 @@ message InvokerInternal {
     google.protobuf.Timestamp last_processed_time = 5;
 }
 
-// State machine scheduler's Backfiller internal state. Backfill requests are 1:1
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
+// CHASM scheduler's Backfiller internal state. Backfill requests are 1:1
 // with Backfiller nodes. Backfiller nodes also handle immediate trigger requests.
 message BackfillerInternal {
     oneof request {
@@ -202,6 +207,7 @@ message BackfillerInternal {
     string backfill_id = 5;
     
     // Backfiller waits for the next_invocation_time before buffering more actions.
+    // TODO - remove after HSM sched goes away
     google.protobuf.Timestamp next_invocation_time = 6;
      
     // High water mark.
