@@ -10,9 +10,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
-	schedulespb "go.temporal.io/server/api/schedule/v1"
+	legacyschedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
+	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.temporal.io/server/service/history/tasks"
@@ -48,7 +49,7 @@ func (s *invokerExecuteTaskSuite) SetupTest() {
 }
 
 type executeTestCase struct {
-	InitialBufferedStarts     []*schedulespb.BufferedStart
+	InitialBufferedStarts     []*legacyschedulespb.BufferedStart
 	InitialCancelWorkflows    []*commonpb.WorkflowExecution
 	InitialTerminateWorkflows []*commonpb.WorkflowExecution
 	InitialRunningWorkflows   []*commonpb.WorkflowExecution
@@ -67,7 +68,7 @@ type executeTestCase struct {
 // Execute success case.
 func (s *invokerExecuteTaskSuite) TestExecuteTask_Basic() {
 	startTime := timestamppb.New(s.timeSource.Now())
-	bufferedStarts := []*schedulespb.BufferedStart{
+	bufferedStarts := []*legacyschedulespb.BufferedStart{
 		{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
@@ -116,7 +117,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_RetryableFailure() {
 	// Set up the Invoker's buffer with a two starts. One will succeed immediately,
 	// one will fail.
 	startTime := timestamppb.New(s.timeSource.Now())
-	bufferedStarts := []*schedulespb.BufferedStart{
+	bufferedStarts := []*legacyschedulespb.BufferedStart{
 		{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
@@ -167,7 +168,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_RetryableFailure() {
 // A buffered start fails when a duplicate workflow has already been started.
 func (s *invokerExecuteTaskSuite) TestExecuteTask_AlreadyStarted() {
 	startTime := timestamppb.New(s.timeSource.Now())
-	bufferedStarts := []*schedulespb.BufferedStart{
+	bufferedStarts := []*legacyschedulespb.BufferedStart{
 		{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
@@ -196,7 +197,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_AlreadyStarted() {
 // A buffered start fails from having exceeded its maximum retry limit.
 func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxAttempts() {
 	startTime := timestamppb.New(s.timeSource.Now())
-	bufferedStarts := []*schedulespb.BufferedStart{
+	bufferedStarts := []*legacyschedulespb.BufferedStart{
 		{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
@@ -288,11 +289,11 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_CancelTerminateSucceed() {
 // completed work.
 func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxActionsPerExecution() {
 	startTime := timestamppb.New(s.timeSource.Now())
-	var bufferedStarts []*schedulespb.BufferedStart
+	var bufferedStarts []*legacyschedulespb.BufferedStart
 	maxStarts := scheduler.DefaultTweakables.MaxActionsPerExecution
 	for i := range maxStarts * 2 {
 		bufferedStarts = append(bufferedStarts,
-			&schedulespb.BufferedStart{
+			&legacyschedulespb.BufferedStart{
 				NominalTime:   startTime,
 				ActualTime:    startTime,
 				DesiredTime:   startTime,
@@ -333,18 +334,10 @@ func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 	// Set LastProcessedTime to current time to ensure time checks pass
 	invoker.LastProcessedTime = timestamppb.New(s.timeSource.Now())
 
+	// Set expectations. The read and update calls will also update the Scheduler
+	// component, within the same transition.
 	s.ExpectReadComponent(invoker)
-	s.ExpectReadComponent(s.scheduler)
-
-	// Set up mock engine expectations for UpdateComponent calls only if there's work to do
-	hasWork := len(c.InitialBufferedStarts) > 0 ||
-		len(c.InitialCancelWorkflows) > 0 ||
-		len(c.InitialTerminateWorkflows) > 0
-
-	if hasWork {
-		s.ExpectUpdateComponent(invoker)
-		s.ExpectUpdateComponent(s.scheduler)
-	}
+	s.ExpectUpdateComponent(invoker)
 
 	// Clear old tasks and run the execute task.
 	s.addedTasks = make([]tasks.Task, 0)

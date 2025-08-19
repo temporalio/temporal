@@ -12,15 +12,16 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	schedulespb "go.temporal.io/server/api/schedule/v1"
+	legacyschedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
+	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/util"
-	scheduler1 "go.temporal.io/server/service/worker/scheduler"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -110,13 +111,32 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 ) error {
 	var result executeResult
 
-	invoker, err := chasm.ReadComponent(
+	var invoker *Invoker
+	var scheduler *Scheduler
+
+	// Read and deep copy returned components, since we'll continue to access them
+	// outside of this function (outside of the MS lock).
+	_, err := chasm.ReadComponent(
 		ctx,
 		invokerRef,
-		func(i *Invoker, _ chasm.Context, _ struct{}) (*Invoker, error) {
-			return i, nil
+		func(i *Invoker, ctx chasm.Context, _ any) (struct{}, error) {
+			invoker = &Invoker{
+				InvokerInternal: common.CloneProto(i.InvokerInternal),
+			}
+
+			s, err := i.Scheduler.Get(ctx)
+			if err != nil {
+				return struct{}{}, err
+			}
+			scheduler = &Scheduler{
+				SchedulerInternal:  common.CloneProto(s.SchedulerInternal),
+				cacheConflictToken: s.cacheConflictToken,
+				compiledSpec:       s.compiledSpec,
+			}
+
+			return struct{}{}, nil
 		},
-		struct{}{},
+		nil,
 	)
 	if err != nil {
 		return fmt.Errorf("%w: %w",
@@ -124,59 +144,33 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 			err)
 	}
 
-	schedulerRef := chasm.ComponentRef{
-		EntityKey: invokerRef.EntityKey,
-	}
-	scheduler, err := chasm.ReadComponent(
-		ctx,
-		schedulerRef,
-		func(s *Scheduler, _ chasm.Context, _ struct{}) (*Scheduler, error) {
-			return s, nil
-		},
-		struct{}{},
-	)
-	if err != nil {
-		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("Failed to read component"),
-			err)
-	}
 	logger := newTaggedLogger(e.BaseLogger, scheduler)
-
-	// If we have nothing to do, we can return without any additional writes.
-	eligibleStarts := invoker.getEligibleBufferedStarts()
-	if len(invoker.GetTerminateWorkflows())+
-		len(invoker.GetCancelWorkflows())+
-		len(eligibleStarts) == 0 {
-		return nil
-	}
 
 	// Terminate, cancel, and start workflows. The result struct contains the
 	// complete outcome of all requests executed in a single batch.
 	ictx := e.newInvokerTaskExecutorContext(ctx, scheduler)
 	result = result.Append(e.terminateWorkflows(ictx, logger, scheduler, invoker.GetTerminateWorkflows()))
 	result = result.Append(e.cancelWorkflows(ictx, logger, scheduler, invoker.GetCancelWorkflows()))
-	sres, startResults := e.startWorkflows(ictx, logger, scheduler, eligibleStarts)
+	sres, startResults := e.startWorkflows(ictx, logger, scheduler, invoker.getEligibleBufferedStarts())
 	result = result.Append(sres)
 
-	// Record completed executions on the Invoker (internal state).
+	// Record action results on the Invoker (internal state), as well as the
+	// Scheduler (user-facing metrics).
 	_, _, err = chasm.UpdateComponent(
 		ctx,
 		invokerRef,
-		(*Invoker).recordExecuteResult,
-		&result,
-	)
-	if err != nil {
-		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("Failed to update component state"),
-			err)
-	}
+		func(i *Invoker, ctx chasm.MutableContext, _ any) (struct{}, error) {
+			s, err := i.Scheduler.Get(ctx)
+			if err != nil {
+				return struct{}{}, err
+			}
 
-	// Record action results on the Scheduler (user-facing metrics).
-	_, _, err = chasm.UpdateComponent(
-		ctx,
-		schedulerRef,
-		(*Scheduler).recordActionResult,
-		&schedulerActionResult{starts: startResults},
+			i.recordExecuteResult(ctx, &result)
+			s.recordActionResult(&schedulerActionResult{starts: startResults})
+
+			return struct{}{}, nil
+		},
+		nil,
 	)
 	if err != nil {
 		return fmt.Errorf("%w: %w",
@@ -190,9 +184,11 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 // takeNextAction increments the context's actionTaken counter, returning true if
 // the action should be executed, and false if the task should instead yield.
 func (c *invokerTaskExecutorContext) takeNextAction() bool {
-	taken := c.actionsTaken
-	c.actionsTaken++
-	return taken < c.maxActions
+	allowed := c.actionsTaken < c.maxActions
+	if allowed {
+		c.actionsTaken++
+	}
+	return allowed
 }
 
 // cancelWorkflows does a best-effort attempt to cancel all workflow executions provided in targets.
@@ -248,7 +244,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflows(
 	ctx invokerTaskExecutorContext,
 	logger log.Logger,
 	scheduler *Scheduler,
-	starts []*schedulespb.BufferedStart,
+	starts []*legacyschedulespb.BufferedStart,
 ) (result executeResult, startResults []*schedulepb.ScheduleActionResult) {
 	metricsWithTag := e.MetricsHandler.WithTags(
 		metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
@@ -326,14 +322,11 @@ func (e *InvokerProcessBufferTaskExecutor) Execute(
 	result := e.processBuffer(ctx, invoker, scheduler)
 
 	// Update Scheduler metadata.
-	_, err = scheduler.recordActionResult(ctx, &schedulerActionResult{
+	scheduler.recordActionResult(&schedulerActionResult{
 		overlapSkipped:      result.overlapSkipped,
 		bufferDropped:       result.bufferDropped,
 		missedCatchupWindow: result.missedCatchupWindow,
 	})
-	if err != nil {
-		return err
-	}
 
 	// Update internal state and create new tasks.
 	invoker.recordProcessBufferResult(ctx, &result)
@@ -352,12 +345,12 @@ func (e *InvokerProcessBufferTaskExecutor) processBuffer(
 	isRunning := len(scheduler.Info.RunningWorkflows) > 0
 
 	// Processing completely ignores any BufferedStart that's already executing/backing off.
-	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
+	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *legacyschedulespb.BufferedStart) bool {
 		return start.Attempt == 0
 	})
 
 	// Resolve overlap policies and trim BufferedStarts that are skipped by policy.
-	action := scheduler1.ProcessBuffer(pendingBufferedStarts, isRunning, scheduler.resolveOverlapPolicy)
+	action := legacyscheduler.ProcessBuffer(pendingBufferedStarts, isRunning, scheduler.resolveOverlapPolicy)
 
 	// ProcessBuffer will drop starts by omitting them from NewBuffer. Start with the
 	// diff between the input and NewBuffer, and add any executing starts.
@@ -396,7 +389,7 @@ func (e *InvokerProcessBufferTaskExecutor) processBuffer(
 		result.startWorkflows = append(result.startWorkflows, start)
 	}
 
-	result.discardStarts = util.FilterSlice(pendingBufferedStarts, func(start *schedulespb.BufferedStart) bool {
+	result.discardStarts = util.FilterSlice(pendingBufferedStarts, func(start *legacyschedulespb.BufferedStart) bool {
 		_, keep := keepStarts[start.GetRequestId()]
 		return !keep
 	})
@@ -412,7 +405,7 @@ func (e *InvokerProcessBufferTaskExecutor) processBuffer(
 }
 
 // applyBackoff updates start's BackoffTime based on err and the retry policy.
-func (e *InvokerExecuteTaskExecutor) applyBackoff(start *schedulespb.BufferedStart, err error) {
+func (e *InvokerExecuteTaskExecutor) applyBackoff(start *legacyschedulespb.BufferedStart, err error) {
 	if err == nil {
 		return
 	}
@@ -435,7 +428,7 @@ func (e *InvokerExecuteTaskExecutor) applyBackoff(start *schedulespb.BufferedSta
 // the number of retry attempts per buffered start.
 func (e *InvokerTaskExecutorOptions) startWorkflowDeadline(
 	scheduler *Scheduler,
-	start *schedulespb.BufferedStart,
+	start *legacyschedulespb.BufferedStart,
 ) time.Time {
 	var timeout time.Duration
 	if start.Manual {
@@ -456,7 +449,7 @@ func (e *InvokerTaskExecutorOptions) startWorkflowDeadline(
 func (e *InvokerExecuteTaskExecutor) startWorkflow(
 	ctx context.Context,
 	scheduler *Scheduler,
-	start *schedulespb.BufferedStart,
+	start *legacyschedulespb.BufferedStart,
 ) (*schedulepb.ScheduleActionResult, error) {
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
 	nominalTimeSec := start.NominalTime.AsTime().Truncate(time.Second)
