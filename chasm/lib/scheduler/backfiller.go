@@ -4,8 +4,9 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	schedulespb "go.temporal.io/server/api/schedule/v1"
+	legacyschedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
+	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -60,7 +61,7 @@ func (b *Backfiller) RequestType() BackfillRequestType {
 
 type backfillProgressResult struct {
 	// BufferedStarts that should be enqueued to the Invoker.
-	BufferedStarts []*schedulespb.BufferedStart
+	BufferedStarts []*legacyschedulespb.BufferedStart
 
 	// High water mark for when state was last updated.
 	LastProcessedTime time.Time

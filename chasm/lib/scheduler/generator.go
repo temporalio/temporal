@@ -1,8 +1,8 @@
 package scheduler
 
 import (
-	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
+	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 )
 
 // The Generator component is responsible for buffering actions according

@@ -6,8 +6,8 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
-	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
+	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -74,6 +74,10 @@ func NewScheduler(
 }
 
 func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
+	if s.Closed {
+		return chasm.LifecycleStateCompleted
+	}
+
 	return chasm.LifecycleStateRunning
 }
 
@@ -253,10 +257,7 @@ type schedulerActionResult struct {
 }
 
 // recordActionResult updates the Scheduler's customer-facing metadata with execution results.
-func (s *Scheduler) recordActionResult(
-	ctx chasm.MutableContext,
-	result *schedulerActionResult,
-) (struct{}, error) {
+func (s *Scheduler) recordActionResult(result *schedulerActionResult) {
 	s.Info.ActionCount += int64(len(result.starts))
 	s.Info.OverlapSkipped += result.overlapSkipped
 	s.Info.BufferDropped += result.bufferDropped
@@ -271,6 +272,4 @@ func (s *Scheduler) recordActionResult(
 			s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, start.StartWorkflowResult)
 		}
 	}
-
-	return struct{}{}, nil
 }
