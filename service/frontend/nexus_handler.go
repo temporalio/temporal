@@ -466,7 +466,7 @@ func (h *nexusHandler) StartOperation(
 		}
 	}
 	// This is the worker's fault.
-	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error: invalid upstream response"))
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:INVALID_UPSTREAM_RESPONSE"))
 	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid upstream response")
 }
@@ -553,6 +553,8 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 				Service:        service,
 				Operation:      operation,
 				OperationToken: token,
+				// TODO(bergundy): Remove this fallback after the 1.27 release.
+				OperationId: token,
 			},
 		},
 	})
@@ -587,7 +589,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return nil
 	}
 	// This is the worker's fault.
-	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error: invalid upstream response"))
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:INVALID_UPSTREAM_RESPONSE"))
 	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 	return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid upstream response")
 }
@@ -683,9 +685,9 @@ func (h *nexusHandler) GetOperationInfo(ctx context.Context, service, operation,
 		return nil, err
 	case *matchingservice.DispatchNexusTaskResponse_Response:
 		if t.Response.GetGetOperationInfo() == nil {
-			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error: empty operation info"))
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:INVALID_UPSTREAM_RESPONSE"))
 			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
-			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty operation info")
+			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid upstream response")
 		}
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("success"))
 		info := t.Response.GetGetOperationInfo().GetInfo()
@@ -696,7 +698,7 @@ func (h *nexusHandler) GetOperationInfo(ctx context.Context, service, operation,
 	}
 
 	// This is the worker's fault.
-	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error: invalid upstream response"))
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:INVALID_UPSTREAM_RESPONSE"))
 	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid upstream response")
 }
@@ -711,7 +713,7 @@ func (h *nexusHandler) forwardGetOperationInfo(ctx context.Context, service, ope
 
 	handle, err := client.NewHandle(operation, token)
 	if err != nil {
-		oc.logger.Warn("invalid Nexus cancel operation.", tag.Error(err))
+		oc.logger.Warn("unabled to get operation handle for forwarded Nexus GetOperationInfo request.", tag.Error(err))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation")
 	}
 
@@ -785,9 +787,9 @@ func (h *nexusHandler) GetOperationResult(ctx context.Context, service, operatio
 		return nil, err
 	case *matchingservice.DispatchNexusTaskResponse_Response:
 		if t.Response.GetGetOperationResult() == nil {
-			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error: nil operation result"))
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:INVALID_UPSTREAM_RESPONSE"))
 			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
-			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "nil operation result")
+			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid upstream response")
 		}
 		switch t := t.Response.GetGetOperationResult().Variant.(type) {
 		case *nexuspb.GetOperationResultResponse_Successful_:
@@ -810,7 +812,7 @@ func (h *nexusHandler) GetOperationResult(ctx context.Context, service, operatio
 	}
 
 	// This is the worker's fault.
-	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error: invalid upstream response"))
+	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:INVALID_UPSTREAM_RESPONSE"))
 	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid upstream response")
 }
@@ -825,7 +827,7 @@ func (h *nexusHandler) forwardGetOperationResult(ctx context.Context, service, o
 
 	handle, err := client.NewHandle(operation, token)
 	if err != nil {
-		oc.logger.Warn("invalid Nexus cancel operation.", tag.Error(err))
+		oc.logger.Warn("unable to get operation handle for forwarded Nexus GetOperationResult request", tag.Error(err))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation")
 	}
 

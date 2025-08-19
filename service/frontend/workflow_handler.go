@@ -5103,13 +5103,20 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 		return nil, errRequestNotSet
 	}
 
+	if request.GetResponse().GetStartOperation() == nil &&
+		request.GetResponse().GetCancelOperation() == nil &&
+		request.GetResponse().GetGetOperationInfo() == nil &&
+		request.GetResponse().GetGetOperationResult() == nil {
+		return nil, serviceerror.NewInvalidArgument("invalid upstream Nexus response")
+	}
+
 	if r := request.GetResponse().GetStartOperation().GetAsyncSuccess(); r != nil {
 		operationToken := r.OperationToken
 		if operationToken == "" && r.OperationId != "" { //nolint:staticcheck // SA1019 this field might be by old clients.
 			operationToken = r.OperationId //nolint:staticcheck // SA1019 this field might be set by old clients.
 		}
 		if operationToken == "" {
-			return nil, serviceerror.NewInvalidArgument("missing opration token in response")
+			return nil, serviceerror.NewInvalidArgument("missing operation token in response")
 		}
 
 		tokenLimit := wh.config.MaxNexusOperationTokenLength(request.Namespace)
@@ -5135,7 +5142,13 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
 	// good reason to fail at this point.
 
-	if details := request.GetResponse().GetStartOperation().GetOperationError().GetFailure().GetDetails(); details != nil && !json.Valid(details) {
+	var details []byte
+	if request.GetResponse().GetStartOperation() != nil {
+		details = request.GetResponse().GetStartOperation().GetOperationError().GetFailure().GetDetails()
+	} else if request.Response.GetGetOperationResult() != nil {
+		details = request.GetResponse().GetGetOperationResult().GetUnsuccessful().GetOperationError().GetFailure().GetDetails()
+	}
+	if details != nil && !json.Valid(details) {
 		return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
 	}
 
