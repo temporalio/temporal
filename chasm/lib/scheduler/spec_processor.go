@@ -4,11 +4,11 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	schedulespb "go.temporal.io/server/api/schedule/v1"
+	legacyschedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	scheduler1 "go.temporal.io/server/service/worker/scheduler"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -43,13 +43,13 @@ type (
 		Config         *Config
 		MetricsHandler metrics.Handler
 		Logger         log.Logger
-		SpecBuilder    *scheduler1.SpecBuilder
+		SpecBuilder    *legacyscheduler.SpecBuilder
 	}
 
 	ProcessedTimeRange struct {
 		NextWakeupTime time.Time
 		LastActionTime time.Time
-		BufferedStarts []*schedulespb.BufferedStart
+		BufferedStarts []*legacyschedulespb.BufferedStart
 	}
 )
 
@@ -91,9 +91,9 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 
 	catchupWindow := catchupWindow(scheduler, tweakables)
 	lastAction := start
-	var next scheduler1.GetNextTimeResult
+	var next legacyscheduler.GetNextTimeResult
 	var err error
-	var bufferedStarts []*schedulespb.BufferedStart
+	var bufferedStarts []*legacyschedulespb.BufferedStart
 	for next, err = s.getNextTime(scheduler, start); err == nil && !(next.Next.IsZero() || next.Next.After(end)); next, err = s.getNextTime(scheduler, next.Next) {
 		if scheduler.Info.UpdateTime.AsTime().After(next.Next) {
 			// If we've received an update that took effect after the LastProcessedTime high
@@ -111,7 +111,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			continue
 		}
 
-		bufferedStarts = append(bufferedStarts, &schedulespb.BufferedStart{
+		bufferedStarts = append(bufferedStarts, &legacyschedulespb.BufferedStart{
 			NominalTime:   timestamppb.New(next.Nominal),
 			ActualTime:    timestamppb.New(next.Next),
 			OverlapPolicy: overlapPolicy,
@@ -144,11 +144,11 @@ func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {
 }
 
 // getNextTime returns the next time result, or an error if the schedule cannot be compiled.
-func (s *SpecProcessorImpl) getNextTime(scheduler *Scheduler, after time.Time) (scheduler1.GetNextTimeResult, error) {
+func (s *SpecProcessorImpl) getNextTime(scheduler *Scheduler, after time.Time) (legacyscheduler.GetNextTimeResult, error) {
 	spec, err := scheduler.getCompiledSpec(s.SpecBuilder)
 	if err != nil {
 		s.Logger.Error("Invalid schedule", tag.Error(err))
-		return scheduler1.GetNextTimeResult{}, err
+		return legacyscheduler.GetNextTimeResult{}, err
 	}
 
 	return spec.GetNextTime(scheduler.jitterSeed(), after), nil
