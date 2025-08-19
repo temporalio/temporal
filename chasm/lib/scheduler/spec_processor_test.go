@@ -12,7 +12,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	scheduler1 "go.temporal.io/server/service/worker/scheduler"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -53,7 +53,7 @@ func newTestSpecProcessor(ctrl *gomock.Controller) *testSpecProcessor {
 			},
 			MetricsHandler: mockMetrics,
 			Logger:         log.NewTestLogger(),
-			SpecBuilder:    scheduler1.NewSpecBuilder(),
+			SpecBuilder:    legacyscheduler.NewSpecBuilder(),
 		},
 	}
 }
