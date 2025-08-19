@@ -5,13 +5,12 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
+	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.uber.org/fx"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -93,12 +92,16 @@ func (g *GeneratorTaskExecutor) Execute(
 	// Write the new high water mark.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
 
-	_, inRetention := g.getRetentionExpiration(ctx, scheduler, result.NextWakeupTime)
-	if inRetention {
-		// We're in retention, no need for another buffer task.
+	idleDuration, isIdle := g.getIdleExpiration(ctx, scheduler, result.NextWakeupTime)
+	if isIdle {
+		// Schedule is complete, no need for another buffer task. We keep the schedule's
+		// backing mutable state explicitly open for a the idle period, during which the
+		// customer can describe/modify/restart the schedule.
 		//
-		// TODO - add a timer to close this scheduler tree. V1 scheduler waits this
-		// period before exiting, whereas we just stop pumping new tasks.
+		// Once the idle timer expires, we close the component.
+		ctx.AddTask(scheduler, chasm.TaskAttributes{
+			ScheduledTime: idleDuration,
+		}, &schedulespb.SchedulerIdleTask{})
 		return nil
 	}
 
@@ -116,12 +119,9 @@ func (g *GeneratorTaskExecutor) Execute(
 }
 
 func (g *GeneratorTaskExecutor) logSchedule(logger log.Logger, msg string, scheduler *Scheduler) {
-	// Log spec as json since it's more readable than the Go representation.
-	specJson, _ := protojson.Marshal(scheduler.Schedule.Spec)
-	policiesJson, _ := protojson.Marshal(scheduler.Schedule.Policies)
 	logger.Debug(msg,
-		tag.NewStringTag("spec", string(specJson)),
-		tag.NewStringTag("policies", string(policiesJson)))
+		tag.NewStringerTag("spec", jsonStringer{scheduler.Schedule.Spec}),
+		tag.NewStringerTag("policies", jsonStringer{scheduler.Schedule.Policies}))
 }
 
 func (g *GeneratorTaskExecutor) Validate(
@@ -133,23 +133,23 @@ func (g *GeneratorTaskExecutor) Validate(
 	return validateTaskHighWaterMark(generator.GetLastProcessedTime(), ctx.Now(generator))
 }
 
-// getRetentionExpiration returns a retention time and the boolean value of
-// 'true' for when a schedule is in retention (pending soft delete).
-func (g *GeneratorTaskExecutor) getRetentionExpiration(
+// getIdleExpiration returns an idle close time and the boolean value of 'true'
+// for when a schedule is idle (pending soft delete).
+func (g *GeneratorTaskExecutor) getIdleExpiration(
 	ctx chasm.Context,
 	scheduler *Scheduler,
 	nextWakeup time.Time,
 ) (time.Time, bool) {
-	retentionTime := g.Config.Tweakables(scheduler.Namespace).RetentionTime
+	idleTime := g.Config.Tweakables(scheduler.Namespace).IdleTime
 
 	// If RetentionTime is not set or the schedule is paused or nextWakeup time is not zero
 	// or there are more actions to take, there is no need for retention.
-	if retentionTime == 0 ||
+	if idleTime == 0 ||
 		scheduler.Schedule.State.Paused ||
 		(!nextWakeup.IsZero() && scheduler.useScheduledAction(false)) ||
 		scheduler.hasMoreAllowAllBackfills(ctx) {
 		return time.Time{}, false
 	}
 
-	return scheduler.getLastEventTime().Add(retentionTime), true
+	return scheduler.getLastEventTime().Add(idleTime), true
 }

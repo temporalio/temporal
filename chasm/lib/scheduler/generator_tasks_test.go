@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
+	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/tasks"
