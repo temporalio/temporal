@@ -140,6 +140,7 @@ message NextTimeCache {
 }
 
 
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
 // CHASM scheduler top-level state.
 message SchedulerInternal {
     // Scheduler request parameters and metadata. 
@@ -157,6 +158,7 @@ message SchedulerInternal {
     int64 conflict_token = 8;
 }
 
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
 // CHASM scheduler's Generator internal state.
 message GeneratorInternal {
     // TODO: remove when HSM sched is removed. 
@@ -166,6 +168,7 @@ message GeneratorInternal {
     google.protobuf.Timestamp last_processed_time = 3;
 }
 
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
 // CHASM scheduler's Invoker internal state.
 message InvokerInternal {
     // TODO: remove when HSM sched is removed.
@@ -188,6 +191,7 @@ message InvokerInternal {
     google.protobuf.Timestamp last_processed_time = 5;
 }
 
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
 // CHASM scheduler's Backfiller internal state. Backfill requests are 1:1
 // with Backfiller nodes. Backfiller nodes also handle immediate trigger requests.
 message BackfillerInternal {

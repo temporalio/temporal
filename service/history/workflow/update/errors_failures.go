@@ -19,7 +19,7 @@ var (
 		Message: "Workflow Update is rejected because it wasn't processed by worker. Probably, Workflow Update is not supported by the worker.",
 		Source:  "Server",
 		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-			Type:         "UnprocessedUpdategit",
+			Type:         "UnprocessedUpdate",
 			NonRetryable: true,
 		}},
 	}
