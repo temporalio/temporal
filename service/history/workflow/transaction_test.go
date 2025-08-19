@@ -107,6 +107,7 @@ func (s *transactionSuite) TestCreateWorkflowExecution_NotifyTaskWhenFailed() {
 			},
 		},
 		[]*persistence.WorkflowEvents{},
+		true, // isWorkflow
 	)
 	s.Equal(timeoutErr, err)
 }
@@ -136,6 +137,7 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 		util.Ptr(int64(0)),
 		&persistence.WorkflowSnapshot{},
 		[]*persistence.WorkflowEvents{},
+		true, // isWorkflow
 	)
 	s.Equal(timeoutErr, err)
 }
@@ -169,6 +171,7 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFa
 		util.Ptr(int64(0)),
 		&persistence.WorkflowMutation{},
 		[]*persistence.WorkflowEvents{},
+		true, // isWorkflow
 	)
 	s.Equal(timeoutErr, err)
 }

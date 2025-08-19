@@ -136,7 +136,8 @@ func (ChecksumFlavor) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_api_enums_v1_common_proto_rawDescGZIP(), []int{1}
 }
 
-// State for the state machine scheduler's Invoker.
+// State for the CHASM scheduler's Invoker.
+// TODO - remove after HSM scheduler is removed (obsolete)
 type SchedulerInvokerState int32
 
 const (
