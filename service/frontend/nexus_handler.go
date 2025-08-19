@@ -405,7 +405,7 @@ func (h *nexusHandler) StartOperation(
 
 	// Transform nexus Content to temporal Payload with common/nexus PayloadSerializer.
 	if err = input.Consume(&startOperationRequest.Payload); err != nil {
-		oc.logger.Warn("invalid input", tag.Error(err))
+		oc.logger.Warn("invalid Nexus input", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid input")
 	}
 	if startOperationRequest.Payload.Size() > h.payloadSizeLimit(oc.namespaceName) {
@@ -524,7 +524,7 @@ func (h *nexusHandler) forwardStartOperation(
 
 	resp, err := client.StartOperation(ctx, operation, input.Reader, options)
 	if err != nil {
-		oc.logger.Error("received error from remote cluster for forwarded Nexus start operation request.", tag.Error(err))
+		oc.logger.Error("received error from remote cluster for forwarded Nexus start operation request", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
 		return nil, err
 	}
@@ -611,7 +611,7 @@ func (h *nexusHandler) forwardCancelOperation(
 
 	handle, err := client.NewHandle(operation, id)
 	if err != nil {
-		oc.logger.Warn("invalid Nexus cancel operation.", tag.Error(err))
+		oc.logger.Warn("unable to get operation handle for forwarded Nexus CancelOperation request", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation")
 	}
 
@@ -632,7 +632,7 @@ func (h *nexusHandler) forwardCancelOperation(
 
 	err = handle.Cancel(ctx, options)
 	if err != nil {
-		oc.logger.Error("received error from remote cluster for forwarded Nexus cancel operation request.", tag.Error(err))
+		oc.logger.Error("received error from remote cluster for forwarded Nexus CancelOperation request", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
 		return err
 	}
@@ -713,7 +713,7 @@ func (h *nexusHandler) forwardGetOperationInfo(ctx context.Context, service, ope
 
 	handle, err := client.NewHandle(operation, token)
 	if err != nil {
-		oc.logger.Warn("unabled to get operation handle for forwarded Nexus GetOperationInfo request.", tag.Error(err))
+		oc.logger.Warn("unabled to get operation handle for forwarded Nexus GetOperationInfo request", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation")
 	}
 
@@ -734,7 +734,7 @@ func (h *nexusHandler) forwardGetOperationInfo(ctx context.Context, service, ope
 
 	info, err := handle.GetInfo(ctx, options)
 	if err != nil {
-		oc.logger.Error("received error from remote cluster for forwarded Nexus get operation info request.", tag.Error(err))
+		oc.logger.Error("received error from remote cluster for forwarded Nexus GetOperationInfo request", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
 		return nil, err
 	}
@@ -827,7 +827,7 @@ func (h *nexusHandler) forwardGetOperationResult(ctx context.Context, service, o
 
 	handle, err := client.NewHandle(operation, token)
 	if err != nil {
-		oc.logger.Warn("unable to get operation handle for forwarded Nexus GetOperationResult request", tag.Error(err))
+		oc.logger.Warn("unable to get operation handle for forwarded Nexus GetOperationResult request", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation")
 	}
 
@@ -848,7 +848,7 @@ func (h *nexusHandler) forwardGetOperationResult(ctx context.Context, service, o
 
 	result, err := handle.GetResult(ctx, options)
 	if err != nil {
-		oc.logger.Error("received error from remote cluster for forwarded Nexus get operation result request.", tag.Error(err))
+		oc.logger.Error("received error from remote cluster for forwarded Nexus GetOperationResult request", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
 		return nil, err
 	}
@@ -859,7 +859,7 @@ func (h *nexusHandler) forwardGetOperationResult(ctx context.Context, service, o
 func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service string) (*nexus.HTTPClient, error) {
 	httpClient, err := h.forwardingClients.Get(oc.namespace.ActiveClusterName())
 	if err != nil {
-		oc.logger.Error("failed to forward Nexus request. error creating HTTP client", tag.Error(err), tag.SourceCluster(oc.namespace.ActiveClusterName()), tag.TargetCluster(oc.namespace.ActiveClusterName()))
+		oc.logger.Error("failed to forward Nexus request: error creating HTTP client", tag.Error(err), tag.SourceCluster(oc.namespace.ActiveClusterName()), tag.TargetCluster(oc.namespace.ActiveClusterName()))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarding_failed"))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed")
 	}
@@ -884,7 +884,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 			TaskQueue: oc.taskQueue,
 		}))
 	if err != nil {
-		oc.logger.Error("failed to forward Nexus request. error constructing ServiceBaseURL",
+		oc.logger.Error("failed to forward Nexus request: error constructing ServiceBaseURL",
 			tag.URL(httpClient.BaseURL()),
 			tag.WorkflowNamespace(oc.namespaceName),
 			tag.WorkflowTaskQueueName(oc.taskQueue),
