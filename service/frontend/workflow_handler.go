@@ -5228,20 +5228,7 @@ func (wh *WorkflowHandler) StartNexusOperation(ctx context.Context, request *wor
 		return nil, err
 	}
 
-	switch t := request.GetTarget().GetVariant().(type) {
-	case *nexuspb.TaskDispatchTarget_Endpoint:
-		// resolve endpoint to URL and invoke via HTTP
-		return wh.startNexusOperationByEndpoint(ctx, ns, t.Endpoint, request)
-	case *nexuspb.TaskDispatchTarget_TaskQueue:
-		// dispatch directly to matching
-		return wh.startNexusOperationByTaskQueue(ctx, ns, t.TaskQueue, request)
-	default:
-		return nil, errNexusUnsupportedDispatch
-	}
-}
-
-func (wh *WorkflowHandler) startNexusOperationByEndpoint(ctx context.Context, ns *namespace.Namespace, endpoint string, request *workflowservice.StartNexusOperationRequest) (*workflowservice.StartNexusOperationResponse, error) {
-	endpointEntry, err := wh.endpointRegistry.GetByName(ctx, ns.ID(), endpoint)
+	endpointEntry, err := wh.endpointRegistry.GetByName(ctx, ns.ID(), request.Endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -5316,84 +5303,6 @@ func (wh *WorkflowHandler) startNexusOperationByEndpoint(ctx context.Context, ns
 	}, nil
 }
 
-func (wh *WorkflowHandler) startNexusOperationByTaskQueue(ctx context.Context, ns *namespace.Namespace, taskQueue string, request *workflowservice.StartNexusOperationRequest) (*workflowservice.StartNexusOperationResponse, error) {
-	matchingReq := &matchingservice.DispatchNexusTaskRequest{
-		NamespaceId: ns.ID().String(),
-		TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Request: &nexuspb.Request{
-			Header:        request.GetHeader(),
-			ScheduledTime: timestamp.TimeNowPtrUtc(),
-			Variant: &nexuspb.Request_StartOperation{
-				StartOperation: &nexuspb.StartOperationRequest{
-					Service:        request.Service,
-					Operation:      request.Operation,
-					RequestId:      request.RequestId,
-					Callback:       request.Callback,
-					Payload:        request.Payload,
-					CallbackHeader: request.CallbackHeader,
-					Links:          request.Links,
-				},
-			},
-		},
-	}
-
-	resp, err := wh.matchingClient.DispatchNexusTask(ctx, matchingReq)
-	if err != nil {
-		if common.IsContextDeadlineExceededErr(err) {
-			return &workflowservice.StartNexusOperationResponse{
-				Variant: &workflowservice.StartNexusOperationResponse_HandlerError{
-					HandlerError: errNexusUpstreamTimeout,
-				},
-			}, nil
-		}
-		return nil, err
-	}
-
-	switch t := resp.GetOutcome().(type) {
-	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
-		return &workflowservice.StartNexusOperationResponse{
-			Variant: &workflowservice.StartNexusOperationResponse_HandlerError{
-				HandlerError: t.HandlerError,
-			},
-		}, nil
-	case *matchingservice.DispatchNexusTaskResponse_Response:
-		switch t := t.Response.GetStartOperation().GetVariant().(type) {
-		case *nexuspb.StartOperationResponse_SyncSuccess:
-			return &workflowservice.StartNexusOperationResponse{
-				Links: t.SyncSuccess.Links,
-				Variant: &workflowservice.StartNexusOperationResponse_SyncSuccess{
-					SyncSuccess: &workflowservice.StartNexusOperationResponse_Sync{
-						Result: t.SyncSuccess.Payload,
-					},
-				},
-			}, nil
-		case *nexuspb.StartOperationResponse_AsyncSuccess:
-			return &workflowservice.StartNexusOperationResponse{
-				Links: t.AsyncSuccess.Links,
-				Variant: &workflowservice.StartNexusOperationResponse_AsyncSuccess{
-					AsyncSuccess: &workflowservice.StartNexusOperationResponse_Async{
-						OperationToken: t.AsyncSuccess.OperationToken,
-					},
-				},
-			}, nil
-		case *nexuspb.StartOperationResponse_OperationError:
-			return &workflowservice.StartNexusOperationResponse{
-				Variant: &workflowservice.StartNexusOperationResponse_Unsuccessful_{
-					Unsuccessful: &workflowservice.StartNexusOperationResponse_Unsuccessful{
-						OperationError: t.OperationError,
-					},
-				},
-			}, nil
-		}
-	}
-
-	return &workflowservice.StartNexusOperationResponse{
-		Variant: &workflowservice.StartNexusOperationResponse_HandlerError{
-			HandlerError: errNexusUnexpectedOutcome,
-		},
-	}, nil
-}
-
 func (wh *WorkflowHandler) RequestCancelNexusOperation(ctx context.Context, request *workflowservice.RequestCancelNexusOperationRequest) (_ *workflowservice.RequestCancelNexusOperationResponse, retErr error) {
 	defer log.CapturePanic(wh.logger, &retErr)
 
@@ -5405,20 +5314,7 @@ func (wh *WorkflowHandler) RequestCancelNexusOperation(ctx context.Context, requ
 		return nil, err
 	}
 
-	switch t := request.GetTarget().GetVariant().(type) {
-	case *nexuspb.TaskDispatchTarget_Endpoint:
-		// resolve endpoint to URL and invoke via HTTP
-		return wh.requestCancelNexusOperationByEndpoint(ctx, ns, t.Endpoint, request)
-	case *nexuspb.TaskDispatchTarget_TaskQueue:
-		// dispatch directly to matching
-		return wh.requestCancelNexusOperationByTaskQueue(ctx, ns, t.TaskQueue, request)
-	default:
-		return nil, errNexusUnsupportedDispatch
-	}
-}
-
-func (wh *WorkflowHandler) requestCancelNexusOperationByEndpoint(ctx context.Context, ns *namespace.Namespace, endpoint string, request *workflowservice.RequestCancelNexusOperationRequest) (*workflowservice.RequestCancelNexusOperationResponse, error) {
-	endpointEntry, err := wh.endpointRegistry.GetByName(ctx, ns.ID(), endpoint)
+	endpointEntry, err := wh.endpointRegistry.GetByName(ctx, ns.ID(), request.Endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -5448,49 +5344,7 @@ func (wh *WorkflowHandler) requestCancelNexusOperationByEndpoint(ctx context.Con
 	return &workflowservice.RequestCancelNexusOperationResponse{}, nil
 }
 
-func (wh *WorkflowHandler) requestCancelNexusOperationByTaskQueue(ctx context.Context, ns *namespace.Namespace, taskQueue string, request *workflowservice.RequestCancelNexusOperationRequest) (*workflowservice.RequestCancelNexusOperationResponse, error) {
-	matchingReq := &matchingservice.DispatchNexusTaskRequest{
-		NamespaceId: ns.ID().String(),
-		TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Request: &nexuspb.Request{
-			Header:        request.GetHeader(),
-			ScheduledTime: timestamp.TimeNowPtrUtc(),
-			Variant: &nexuspb.Request_CancelOperation{
-				CancelOperation: &nexuspb.CancelOperationRequest{
-					Service:        request.Service,
-					Operation:      request.Operation,
-					OperationToken: request.OperationToken,
-				},
-			},
-		},
-	}
-
-	resp, err := wh.matchingClient.DispatchNexusTask(ctx, matchingReq)
-	if err != nil {
-		if common.IsContextDeadlineExceededErr(err) {
-			return &workflowservice.RequestCancelNexusOperationResponse{
-				HandlerError: errNexusUpstreamTimeout,
-			}, nil
-		}
-		return nil, err
-	}
-
-	switch t := resp.GetOutcome().(type) {
-	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
-		return &workflowservice.RequestCancelNexusOperationResponse{
-			HandlerError: t.HandlerError,
-		}, nil
-	case *matchingservice.DispatchNexusTaskResponse_Response:
-		// empty response indicates success
-		return &workflowservice.RequestCancelNexusOperationResponse{}, nil
-	}
-
-	return &workflowservice.RequestCancelNexusOperationResponse{
-		HandlerError: errNexusUnexpectedOutcome,
-	}, nil
-}
-
-func (wh *WorkflowHandler) GetNexusOperationInfo(ctx context.Context, request *workflowservice.GetNexusOperationInfoRequest) (_ *workflowservice.GetNexusOperationInfoResponse, retErr error) {
+func (wh *WorkflowHandler) FetchNexusOperationInfo(ctx context.Context, request *workflowservice.FetchNexusOperationInfoRequest) (_ *workflowservice.FetchNexusOperationInfoResponse, retErr error) {
 	defer log.CapturePanic(wh.logger, &retErr)
 
 	if request == nil {
@@ -5501,20 +5355,7 @@ func (wh *WorkflowHandler) GetNexusOperationInfo(ctx context.Context, request *w
 		return nil, err
 	}
 
-	switch t := request.GetTarget().GetVariant().(type) {
-	case *nexuspb.TaskDispatchTarget_Endpoint:
-		// resolve endpoint to URL and invoke via HTTP
-		return wh.getNexusOperationInfoByEndpoint(ctx, ns, t.Endpoint, request)
-	case *nexuspb.TaskDispatchTarget_TaskQueue:
-		// dispatch directly to matching
-		return wh.getNexusOperationInfoByTaskQueue(ctx, ns, t.TaskQueue, request)
-	default:
-		return nil, errNexusUnsupportedDispatch
-	}
-}
-
-func (wh *WorkflowHandler) getNexusOperationInfoByEndpoint(ctx context.Context, ns *namespace.Namespace, endpoint string, request *workflowservice.GetNexusOperationInfoRequest) (*workflowservice.GetNexusOperationInfoResponse, error) {
-	endpointEntry, err := wh.endpointRegistry.GetByName(ctx, ns.ID(), endpoint)
+	endpointEntry, err := wh.endpointRegistry.GetByName(ctx, ns.ID(), request.Endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -5533,18 +5374,18 @@ func (wh *WorkflowHandler) getNexusOperationInfoByEndpoint(ctx context.Context, 
 	if err != nil {
 		var handlerErr *nexus.HandlerError
 		if errors.As(err, &handlerErr) {
-			return &workflowservice.GetNexusOperationInfoResponse{
-				Variant: &workflowservice.GetNexusOperationInfoResponse_HandlerError{
+			return &workflowservice.FetchNexusOperationInfoResponse{
+				Variant: &workflowservice.FetchNexusOperationInfoResponse_HandlerError{
 					HandlerError: commonnexus.NexusHandlerErrorToProtoHandlerError(handlerErr),
 				},
 			}, nil
 		}
-		wh.logger.Error("received unexpected error for get Nexus operation info HTTP request", tag.Operation("GetNexusOperationInfo"), tag.WorkflowNamespace(ns.Name().String()), tag.Error(err))
+		wh.logger.Error("received unexpected error for get Nexus operation info HTTP request", tag.Operation("FetchNexusOperationInfo"), tag.WorkflowNamespace(ns.Name().String()), tag.Error(err))
 		return nil, serviceerror.NewInternal("internal error")
 	}
 
-	return &workflowservice.GetNexusOperationInfoResponse{
-		Variant: &workflowservice.GetNexusOperationInfoResponse_Info{
+	return &workflowservice.FetchNexusOperationInfoResponse{
+		Variant: &workflowservice.FetchNexusOperationInfoResponse_Info{
 			Info: &nexuspb.OperationInfo{
 				State: string(info.State),
 				Token: info.Token,
@@ -5553,58 +5394,7 @@ func (wh *WorkflowHandler) getNexusOperationInfoByEndpoint(ctx context.Context, 
 	}, nil
 }
 
-func (wh *WorkflowHandler) getNexusOperationInfoByTaskQueue(ctx context.Context, ns *namespace.Namespace, taskQueue string, request *workflowservice.GetNexusOperationInfoRequest) (*workflowservice.GetNexusOperationInfoResponse, error) {
-	matchingReq := &matchingservice.DispatchNexusTaskRequest{
-		NamespaceId: ns.ID().String(),
-		TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Request: &nexuspb.Request{
-			Header:        request.GetHeader(),
-			ScheduledTime: timestamp.TimeNowPtrUtc(),
-			Variant: &nexuspb.Request_GetOperationInfo{
-				GetOperationInfo: &nexuspb.GetOperationInfoRequest{
-					Service:        request.Service,
-					Operation:      request.Operation,
-					OperationToken: request.OperationToken,
-				},
-			},
-		},
-	}
-
-	resp, err := wh.matchingClient.DispatchNexusTask(ctx, matchingReq)
-	if err != nil {
-		if common.IsContextDeadlineExceededErr(err) {
-			return &workflowservice.GetNexusOperationInfoResponse{
-				Variant: &workflowservice.GetNexusOperationInfoResponse_HandlerError{
-					HandlerError: errNexusUpstreamTimeout,
-				},
-			}, nil
-		}
-		return nil, err
-	}
-
-	switch t := resp.GetOutcome().(type) {
-	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
-		return &workflowservice.GetNexusOperationInfoResponse{
-			Variant: &workflowservice.GetNexusOperationInfoResponse_HandlerError{
-				HandlerError: t.HandlerError,
-			},
-		}, nil
-	case *matchingservice.DispatchNexusTaskResponse_Response:
-		return &workflowservice.GetNexusOperationInfoResponse{
-			Variant: &workflowservice.GetNexusOperationInfoResponse_Info{
-				Info: t.Response.GetGetOperationInfo().GetInfo(),
-			},
-		}, nil
-	}
-
-	return &workflowservice.GetNexusOperationInfoResponse{
-		Variant: &workflowservice.GetNexusOperationInfoResponse_HandlerError{
-			HandlerError: errNexusUnexpectedOutcome,
-		},
-	}, nil
-}
-
-func (wh *WorkflowHandler) GetNexusOperationResult(ctx context.Context, request *workflowservice.GetNexusOperationResultRequest) (_ *workflowservice.GetNexusOperationResultResponse, retErr error) {
+func (wh *WorkflowHandler) FetchNexusOperationResult(ctx context.Context, request *workflowservice.FetchNexusOperationResultRequest) (_ *workflowservice.FetchNexusOperationResultResponse, retErr error) {
 	defer log.CapturePanic(wh.logger, &retErr)
 
 	if request == nil {
@@ -5615,20 +5405,7 @@ func (wh *WorkflowHandler) GetNexusOperationResult(ctx context.Context, request 
 		return nil, err
 	}
 
-	switch t := request.GetTarget().GetVariant().(type) {
-	case *nexuspb.TaskDispatchTarget_Endpoint:
-		// resolve endpoint to URL and invoke via HTTP
-		return wh.getNexusOperationResultByEndpoint(ctx, ns, t.Endpoint, request)
-	case *nexuspb.TaskDispatchTarget_TaskQueue:
-		// dispatch directly to matching
-		return wh.getNexusOperationResultByTaskQueue(ctx, ns, t.TaskQueue, request)
-	default:
-		return nil, errNexusUnsupportedDispatch
-	}
-}
-
-func (wh *WorkflowHandler) getNexusOperationResultByEndpoint(ctx context.Context, ns *namespace.Namespace, endpoint string, request *workflowservice.GetNexusOperationResultRequest) (*workflowservice.GetNexusOperationResultResponse, error) {
-	endpointEntry, err := wh.endpointRegistry.GetByName(ctx, ns.ID(), endpoint)
+	endpointEntry, err := wh.endpointRegistry.GetByName(ctx, ns.ID(), request.Endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -5648,31 +5425,31 @@ func (wh *WorkflowHandler) getNexusOperationResultByEndpoint(ctx context.Context
 
 	if err != nil {
 		if errors.Is(err, nexus.ErrOperationStillRunning) {
-			return &workflowservice.GetNexusOperationResultResponse{
-				Variant: &workflowservice.GetNexusOperationResultResponse_StillRunning_{
-					StillRunning: &workflowservice.GetNexusOperationResultResponse_StillRunning{},
+			return &workflowservice.FetchNexusOperationResultResponse{
+				Variant: &workflowservice.FetchNexusOperationResultResponse_StillRunning_{
+					StillRunning: &workflowservice.FetchNexusOperationResultResponse_StillRunning{},
 				},
 			}, nil
 		}
 		var handlerErr *nexus.HandlerError
 		if errors.As(err, &handlerErr) {
-			return &workflowservice.GetNexusOperationResultResponse{
-				Variant: &workflowservice.GetNexusOperationResultResponse_HandlerError{
+			return &workflowservice.FetchNexusOperationResultResponse{
+				Variant: &workflowservice.FetchNexusOperationResultResponse_HandlerError{
 					HandlerError: commonnexus.NexusHandlerErrorToProtoHandlerError(handlerErr),
 				},
 			}, nil
 		}
 		var opFailedErr *nexus.OperationError
 		if errors.As(err, &opFailedErr) {
-			return &workflowservice.GetNexusOperationResultResponse{
-				Variant: &workflowservice.GetNexusOperationResultResponse_Unsuccessful_{
-					Unsuccessful: &workflowservice.GetNexusOperationResultResponse_Unsuccessful{
+			return &workflowservice.FetchNexusOperationResultResponse{
+				Variant: &workflowservice.FetchNexusOperationResultResponse_Unsuccessful_{
+					Unsuccessful: &workflowservice.FetchNexusOperationResultResponse_Unsuccessful{
 						OperationError: commonnexus.NexusOpErrorToProtoOpError(opFailedErr),
 					},
 				},
 			}, nil
 		}
-		wh.logger.Error("received unexpected error for get Nexus operation result HTTP request", tag.Operation("GetNexusOperationResult"), tag.WorkflowNamespace(ns.Name().String()), tag.Error(err))
+		wh.logger.Error("received unexpected error for get Nexus operation result HTTP request", tag.Operation("FetchNexusOperationResult"), tag.WorkflowNamespace(ns.Name().String()), tag.Error(err))
 		return nil, serviceerror.NewInternal("internal error")
 	}
 
@@ -5684,82 +5461,11 @@ func (wh *WorkflowHandler) getNexusOperationResultByEndpoint(ctx context.Context
 		}
 	}
 
-	return &workflowservice.GetNexusOperationResultResponse{
-		Variant: &workflowservice.GetNexusOperationResultResponse_Successful_{
-			Successful: &workflowservice.GetNexusOperationResultResponse_Successful{
+	return &workflowservice.FetchNexusOperationResultResponse{
+		Variant: &workflowservice.FetchNexusOperationResultResponse_Successful_{
+			Successful: &workflowservice.FetchNexusOperationResultResponse_Successful{
 				Result: p,
 			},
-		},
-	}, nil
-}
-
-func (wh *WorkflowHandler) getNexusOperationResultByTaskQueue(ctx context.Context, ns *namespace.Namespace, taskQueue string, request *workflowservice.GetNexusOperationResultRequest) (*workflowservice.GetNexusOperationResultResponse, error) {
-	matchingReq := &matchingservice.DispatchNexusTaskRequest{
-		NamespaceId: ns.ID().String(),
-		TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Request: &nexuspb.Request{
-			Header:        request.GetHeader(),
-			ScheduledTime: timestamp.TimeNowPtrUtc(),
-			Variant: &nexuspb.Request_GetOperationResult{
-				GetOperationResult: &nexuspb.GetOperationResultRequest{
-					Service:        request.Service,
-					Operation:      request.Operation,
-					OperationToken: request.OperationToken,
-					Wait:           request.Wait,
-				},
-			},
-		},
-	}
-
-	resp, err := wh.matchingClient.DispatchNexusTask(ctx, matchingReq)
-	if err != nil {
-		if common.IsContextDeadlineExceededErr(err) {
-			return &workflowservice.GetNexusOperationResultResponse{
-				Variant: &workflowservice.GetNexusOperationResultResponse_HandlerError{
-					HandlerError: errNexusUpstreamTimeout,
-				},
-			}, nil
-		}
-		return nil, err
-	}
-
-	switch t := resp.GetOutcome().(type) {
-	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
-		return &workflowservice.GetNexusOperationResultResponse{
-			Variant: &workflowservice.GetNexusOperationResultResponse_HandlerError{
-				HandlerError: t.HandlerError,
-			},
-		}, nil
-	case *matchingservice.DispatchNexusTaskResponse_Response:
-		switch t := t.Response.GetGetOperationResult().GetVariant().(type) {
-		case *nexuspb.GetOperationResultResponse_Unsuccessful_:
-			return &workflowservice.GetNexusOperationResultResponse{
-				Variant: &workflowservice.GetNexusOperationResultResponse_Unsuccessful_{
-					Unsuccessful: &workflowservice.GetNexusOperationResultResponse_Unsuccessful{
-						OperationError: t.Unsuccessful.GetOperationError(),
-					},
-				},
-			}, nil
-		case *nexuspb.GetOperationResultResponse_Successful_:
-			return &workflowservice.GetNexusOperationResultResponse{
-				Variant: &workflowservice.GetNexusOperationResultResponse_Successful_{
-					Successful: &workflowservice.GetNexusOperationResultResponse_Successful{
-						Result: t.Successful.GetResult(),
-					},
-				},
-			}, nil
-		case *nexuspb.GetOperationResultResponse_StillRunning_:
-			return &workflowservice.GetNexusOperationResultResponse{
-				Variant: &workflowservice.GetNexusOperationResultResponse_StillRunning_{
-					StillRunning: &workflowservice.GetNexusOperationResultResponse_StillRunning{},
-				},
-			}, nil
-		}
-	}
-
-	return &workflowservice.GetNexusOperationResultResponse{
-		Variant: &workflowservice.GetNexusOperationResultResponse_HandlerError{
-			HandlerError: errNexusUnexpectedOutcome,
 		},
 	}, nil
 }

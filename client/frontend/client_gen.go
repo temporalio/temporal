@@ -209,6 +209,26 @@ func (c *clientImpl) ExecuteMultiOperation(
 	return c.client.ExecuteMultiOperation(ctx, request, opts...)
 }
 
+func (c *clientImpl) FetchNexusOperationInfo(
+	ctx context.Context,
+	request *workflowservice.FetchNexusOperationInfoRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.FetchNexusOperationInfoResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.FetchNexusOperationInfo(ctx, request, opts...)
+}
+
+func (c *clientImpl) FetchNexusOperationResult(
+	ctx context.Context,
+	request *workflowservice.FetchNexusOperationResultRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.FetchNexusOperationResultResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.FetchNexusOperationResult(ctx, request, opts...)
+}
+
 func (c *clientImpl) FetchWorkerConfig(
 	ctx context.Context,
 	request *workflowservice.FetchWorkerConfigRequest,
@@ -247,26 +267,6 @@ func (c *clientImpl) GetDeploymentReachability(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.GetDeploymentReachability(ctx, request, opts...)
-}
-
-func (c *clientImpl) GetNexusOperationInfo(
-	ctx context.Context,
-	request *workflowservice.GetNexusOperationInfoRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetNexusOperationInfoResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.GetNexusOperationInfo(ctx, request, opts...)
-}
-
-func (c *clientImpl) GetNexusOperationResult(
-	ctx context.Context,
-	request *workflowservice.GetNexusOperationResultRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetNexusOperationResultResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.GetNexusOperationResult(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetSearchAttributes(

@@ -95,6 +95,14 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.ExecuteMultiOperationResponse:
 		return nil
+	case *workflowservice.FetchNexusOperationInfoRequest:
+		return nil
+	case *workflowservice.FetchNexusOperationInfoResponse:
+		return nil
+	case *workflowservice.FetchNexusOperationResultRequest:
+		return nil
+	case *workflowservice.FetchNexusOperationResultResponse:
+		return nil
 	case *workflowservice.FetchWorkerConfigRequest:
 		return nil
 	case *workflowservice.FetchWorkerConfigResponse:
@@ -110,14 +118,6 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.GetDeploymentReachabilityRequest:
 		return nil
 	case *workflowservice.GetDeploymentReachabilityResponse:
-		return nil
-	case *workflowservice.GetNexusOperationInfoRequest:
-		return nil
-	case *workflowservice.GetNexusOperationInfoResponse:
-		return nil
-	case *workflowservice.GetNexusOperationResultRequest:
-		return nil
-	case *workflowservice.GetNexusOperationResultResponse:
 		return nil
 	case *workflowservice.GetSearchAttributesRequest:
 		return nil
