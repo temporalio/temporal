@@ -5262,7 +5262,7 @@ func (wh *WorkflowHandler) StartNexusOperation(ctx context.Context, request *wor
 				}, nil
 			}
 			wh.logger.Error("received HandlerError from server for gRPC StartNexusOperation", tag.Error(err), tag.Operation("StartNexusOperation"), tag.WorkflowNamespace(ns.Name().String()))
-			return nil, commonnexus.ConvertHandlerError(handlerErr, false)
+			return nil, commonnexus.ConvertHandlerError(handlerErr)
 		}
 		var opFailedErr *nexus.OperationError
 		if errors.As(err, &opFailedErr) {
@@ -5350,7 +5350,7 @@ func (wh *WorkflowHandler) RequestCancelNexusOperation(ctx context.Context, requ
 				}, nil
 			}
 			wh.logger.Error("received HandlerError from server for gRPC RequestCancelNexusOperation", tag.Error(err), tag.Operation("RequestCancelNexusOperation"), tag.WorkflowNamespace(ns.Name().String()))
-			return nil, commonnexus.ConvertHandlerError(handlerErr, false)
+			return nil, commonnexus.ConvertHandlerError(handlerErr)
 		}
 		wh.logger.Error("received unexpected error for request cancel Nexus operation HTTP request", tag.Operation("RequestCancelNexusOperation"), tag.WorkflowNamespace(ns.Name().String()), tag.Error(err))
 		return nil, serviceerror.NewInternal("internal error")
@@ -5398,7 +5398,7 @@ func (wh *WorkflowHandler) FetchNexusOperationInfo(ctx context.Context, request 
 				}, nil
 			}
 			wh.logger.Error("received HandlerError from server for gRPC FetchNexusOperationInfo", tag.Error(err), tag.Operation("FetchNexusOperationInfo"), tag.WorkflowNamespace(ns.Name().String()))
-			return nil, commonnexus.ConvertHandlerError(handlerErr, false)
+			return nil, commonnexus.ConvertHandlerError(handlerErr)
 		}
 		wh.logger.Error("received unexpected error for get Nexus operation info HTTP request", tag.Operation("FetchNexusOperationInfo"), tag.WorkflowNamespace(ns.Name().String()), tag.Error(err))
 		return nil, serviceerror.NewInternal("internal error")
@@ -5462,7 +5462,7 @@ func (wh *WorkflowHandler) FetchNexusOperationResult(ctx context.Context, reques
 				}, nil
 			}
 			wh.logger.Error("received HandlerError from server for gRPC FetchNexusOperationResult", tag.Error(err), tag.Operation("FetchNexusOperationResult"), tag.WorkflowNamespace(ns.Name().String()))
-			return nil, commonnexus.ConvertHandlerError(handlerErr, false)
+			return nil, commonnexus.ConvertHandlerError(handlerErr)
 		}
 		var opFailedErr *nexus.OperationError
 		if errors.As(err, &opFailedErr) {

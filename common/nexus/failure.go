@@ -351,53 +351,24 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 }
 
 // ConvertHandlerError converts a nexus.HandlerError returned by a Nexus client into a gRPC serviceerror.
-func ConvertHandlerError(err *nexus.HandlerError, exposeDetails bool) error {
-	msg := err.Error()
-
+func ConvertHandlerError(err *nexus.HandlerError) error {
 	switch err.Type {
 	case nexus.HandlerErrorTypeBadRequest:
-		if !exposeDetails {
-			msg = "invalid argument"
-		}
-		return serviceerror.NewInvalidArgument(msg)
+		return serviceerror.NewInvalidArgument(err.Error())
 	case nexus.HandlerErrorTypeUnauthenticated, nexus.HandlerErrorTypeUnauthorized:
-		if exposeDetails {
-			msg = err.Cause.Error()
-		} else {
-			msg = ""
-		}
-		return serviceerror.NewPermissionDenied("permission denied", msg)
+		return serviceerror.NewPermissionDenied("permission denied", err.Cause.Error())
 	case nexus.HandlerErrorTypeNotFound:
-		if !exposeDetails {
-			msg = "not found"
-		}
-		return serviceerror.NewNotFound(msg)
+		return serviceerror.NewNotFound(err.Error())
 	case nexus.HandlerErrorTypeResourceExhausted:
-		if !exposeDetails {
-			msg = "resource exhausted"
-		}
-		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED, msg)
+		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED, err.Error())
 	case nexus.HandlerErrorTypeInternal:
-		if !exposeDetails {
-			msg = "internal error"
-		}
-		return serviceerror.NewInternal(msg)
+		return serviceerror.NewInternal(err.Error())
 	case nexus.HandlerErrorTypeNotImplemented:
-		if !exposeDetails {
-			msg = "not implemented"
-		}
-		return serviceerror.NewUnimplemented(msg)
+		return serviceerror.NewUnimplemented(err.Error())
 	case nexus.HandlerErrorTypeUnavailable:
-		if !exposeDetails {
-			msg = "unavailable"
-		}
-		return serviceerror.NewUnavailable(msg)
+		return serviceerror.NewUnavailable(err.Error())
 	}
-
-	if !exposeDetails {
-		msg = "internal error"
-	}
-	return serviceerror.NewInternal(msg)
+	return serviceerror.NewInternal("internal error")
 }
 
 func AdaptAuthorizeError(err error) error {
