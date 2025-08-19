@@ -11,6 +11,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.uber.org/mock/gomock"
 )
@@ -334,6 +335,7 @@ testGetBoolPropertyKey:
 	reader.EXPECT().GetModTime().Return(originModTime, nil).Times(2)
 	reader.EXPECT().ReadFile().Return(originFileData, nil)
 
+	mockLogger.EXPECT().Debug(gomock.Any(), tag.Key(dynamicconfig.DynamicConfigSubscriptionCallback.Key().String()), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Info(gomock.Any()).Times(6)
 	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
 		&dynamicconfig.FileBasedClientConfig{

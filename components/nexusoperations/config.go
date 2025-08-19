@@ -1,7 +1,6 @@
 package nexusoperations
 
 import (
-	"slices"
 	"strings"
 	"time"
 
@@ -74,20 +73,26 @@ ScheduleNexusOperation commands with a "nexus_header" field that exceeds this li
 Uses Go's len() function on header keys and values to determine the total size.`,
 )
 
-// defaultDisallowedOperationHeaders - set in the convert function below due to a limitation in the dynamic config framework.
-// TODO: restore after an upgrade to Go 1.24 and merging #7052.
-var defaultDisallowedOperationHeaders = []string{
-	"request-timeout",
-	interceptor.DCRedirectionApiHeaderName,
-	interceptor.DCRedirectionContextHeaderName,
-	headers.CallerNameHeaderName,
-	headers.CallerTypeHeaderName,
-	headers.CallOriginHeaderName,
-}
-
-var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSetting(
+var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSettingWithConverter(
 	"component.nexusoperations.disallowedHeaders",
-	[]string(nil),
+	func(in any) ([]string, error) {
+		keys, err := dynamicconfig.ConvertStructure[[]string](nil)(in)
+		if err != nil {
+			return nil, err
+		}
+		for i, k := range keys {
+			keys[i] = strings.ToLower(k)
+		}
+		return keys, nil
+	},
+	[]string{
+		"request-timeout",
+		interceptor.DCRedirectionApiHeaderName,
+		interceptor.DCRedirectionContextHeaderName,
+		headers.CallerNameHeaderName,
+		headers.CallerTypeHeaderName,
+		headers.CallOriginHeaderName,
+	},
 	`Case insensitive list of disallowed header keys for Nexus Operations.
 ScheduleNexusOperation commands with a "nexus_header" field that contains any of these disallowed keys will be
 rejected.`,
@@ -136,9 +141,9 @@ requirements and query complexity. Consider the cardinality impact when enabling
 
 var RecordCancelRequestCompletionEvents = dynamicconfig.NewGlobalBoolSetting(
 	"component.nexusoperations.recordCancelRequestCompletionEvents",
-	false,
+	true,
 	`Boolean flag to control whether to record NexusOperationCancelRequestCompleted and 
-NexusOperationCancelRequestFailed events. Default false.`,
+NexusOperationCancelRequestFailed events. Default true.`,
 )
 
 type Config struct {
@@ -161,26 +166,15 @@ type Config struct {
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		Enabled:                 dynamicconfig.EnableNexus.Get(dc),
-		RequestTimeout:          RequestTimeout.Get(dc),
-		MinOperationTimeout:     MinOperationTimeout.Get(dc),
-		MaxConcurrentOperations: MaxConcurrentOperations.Get(dc),
-		MaxServiceNameLength:    MaxServiceNameLength.Get(dc),
-		MaxOperationNameLength:  MaxOperationNameLength.Get(dc),
-		MaxOperationTokenLength: MaxOperationTokenLength.Get(dc),
-		MaxOperationHeaderSize:  MaxOperationHeaderSize.Get(dc),
-		DisallowedOperationHeaders: dynamicconfig.NewGlobalCachedTypedValue(dc, DisallowedOperationHeaders, func(keys []string) ([]string, error) {
-			// Override with defaults unless explicitly set.
-			// Note that this prevents the ability to unset the config but that's an acceptable limitation.
-			if len(keys) == 0 {
-				keys = defaultDisallowedOperationHeaders
-			}
-			keys = slices.Clone(keys)
-			for i, k := range keys {
-				keys[i] = strings.ToLower(k)
-			}
-			return keys, nil
-		}).Get,
+		Enabled:                             dynamicconfig.EnableNexus.Get(dc),
+		RequestTimeout:                      RequestTimeout.Get(dc),
+		MinOperationTimeout:                 MinOperationTimeout.Get(dc),
+		MaxConcurrentOperations:             MaxConcurrentOperations.Get(dc),
+		MaxServiceNameLength:                MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:              MaxOperationNameLength.Get(dc),
+		MaxOperationTokenLength:             MaxOperationTokenLength.Get(dc),
+		MaxOperationHeaderSize:              MaxOperationHeaderSize.Get(dc),
+		DisallowedOperationHeaders:          DisallowedOperationHeaders.Get(dc),
 		MaxOperationScheduleToCloseTimeout:  MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                    dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:                 CallbackURLTemplate.Get(dc),
