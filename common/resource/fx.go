@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsregistry"
-	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -104,7 +103,6 @@ var Module = fx.Options(
 	deadlock.Module,
 	config.Module,
 	testhooks.Module,
-	fx.Provide(commonnexus.NewLoggedHTTPClientTraceProvider),
 )
 
 var DefaultOptions = fx.Options(
