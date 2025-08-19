@@ -7,9 +7,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
-	schedulespb "go.temporal.io/server/api/schedule/v1"
+	legacyschedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
+	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -72,7 +73,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_TriggerImmediateFullBuffer() {
 	invoker, err := s.scheduler.Invoker.Get(ctx)
 	s.NoError(err)
 	for range scheduler.DefaultTweakables.MaxBufferSize {
-		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{})
+		invoker.BufferedStarts = append(invoker.BufferedStarts, &legacyschedulespb.BufferedStart{})
 	}
 
 	now := s.timeSource.Now()
@@ -154,7 +155,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_BufferCompletelyFull() {
 	invoker, err := s.scheduler.Invoker.Get(ctx)
 	s.NoError(err)
 	for range scheduler.DefaultTweakables.MaxBufferSize {
-		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{})
+		invoker.BufferedStarts = append(invoker.BufferedStarts, &legacyschedulespb.BufferedStart{})
 	}
 
 	startTime := s.timeSource.Now()
@@ -181,7 +182,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_PartialFill() {
 	invoker, err := s.scheduler.Invoker.Get(ctx)
 	s.NoError(err)
 	for range (scheduler.DefaultTweakables.MaxBufferSize / 2) - 5 {
-		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{})
+		invoker.BufferedStarts = append(invoker.BufferedStarts, &legacyschedulespb.BufferedStart{})
 	}
 
 	startTime := s.timeSource.Now()

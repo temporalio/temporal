@@ -5,8 +5,9 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	schedulespb "go.temporal.io/server/api/schedule/v1"
+	legacyschedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
+	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -191,7 +192,7 @@ func (b *BackfillerTaskExecutor) processTrigger(
 	nowpb := backfiller.GetLastProcessedTime()
 	now := nowpb.AsTime()
 	requestID := generateRequestID(scheduler, backfiller.GetBackfillId(), now, now)
-	result.BufferedStarts = []*schedulespb.BufferedStart{
+	result.BufferedStarts = []*legacyschedulespb.BufferedStart{
 		{
 			NominalTime:   nowpb,
 			ActualTime:    nowpb,
