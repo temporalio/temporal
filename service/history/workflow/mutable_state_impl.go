@@ -5694,6 +5694,8 @@ func (ms *MutableStateImpl) RetryActivity(
 		ActivityMatchWorkflowRules(ms, ms.timeSource, ms.logger, ai)
 	}
 
+	const threshold = 2
+
 	// if activity is paused
 	if ai.Paused {
 		// need to update activity
@@ -5733,6 +5735,26 @@ func (ms *MutableStateImpl) RetryActivity(
 	)
 	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
 		return retryState, nil
+	}
+
+	if ai.Attempt+1 >= threshold {
+		fmt.Println("MutableStateImpl:RetryActivity Adding Problems search attribute",
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowNamespaceID(ms.namespaceEntry.ID().String()))
+		if _, err := ms.AddUpsertWorkflowSearchAttributesEvent(ai.ScheduledEventId, &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
+			SearchAttributes: &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					"Problems": {
+						Metadata: map[string][]byte{
+							"type": []byte("bool"),
+						},
+						Data: []byte("true"),
+					},
+				},
+			},
+		}); err != nil {
+			return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
+		}
 	}
 
 	ms.updateActivityInfoForRetries(ai,
@@ -5869,6 +5891,53 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 	}
 
 	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalPauseInfo: pauseInfoPayload})
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+}
+
+func (ms *MutableStateImpl) updateReportedProblemsSearchAttribute(
+	reportedProblem, reportedCause string,
+) error {
+	fmt.Println("updateReportedProblemsSearchAttribute:", reportedProblem, reportedCause)
+	reportedProblems := []string{
+		fmt.Sprintf("property:reportedProblem=%s", reportedProblem),
+		fmt.Sprintf("property:reportedCause=%s", reportedCause),
+	}
+
+	reportedProblemsPayload, err := searchattribute.EncodeValue(reportedProblems, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	if err != nil {
+		return err
+	}
+
+	exeInfo := ms.executionInfo
+	if exeInfo.SearchAttributes == nil {
+		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
+	}
+
+	if proto.Equal(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], reportedProblemsPayload) {
+		return nil // unchanged
+	}
+
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: reportedProblemsPayload})
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+}
+
+func (ms *MutableStateImpl) removeReportedProblemsSearchAttribute() error {
+	fmt.Println("removeReportedProblemsSearchAttribute")
+	reportedProblemsPayload, err := searchattribute.EncodeValue(nil, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	if err != nil {
+		return err
+	}
+
+	exeInfo := ms.executionInfo
+	if exeInfo.SearchAttributes == nil {
+		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
+	}
+
+	if proto.Equal(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], reportedProblemsPayload) {
+		return nil
+	}
+
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: reportedProblemsPayload})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 

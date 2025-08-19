@@ -978,6 +978,12 @@ to allow waiting on the "Accepted" lifecycle stage.`,
 		`FrontendEnableWorkerVersioningRuleAPIs enables worker versioning in workflow progress APIs.`,
 	)
 
+	FrontendEnableReportedProblemsSearchAttribute = NewNamespaceBoolSetting(
+		"frontend.enableReportedProblemsSearchAttribute",
+		true,
+		`FrontendEnableReportedProblemsSearchAttribute enables the TemporalReportedProblems search attribute in the frontend.`,
+	)
+
 	DeleteNamespaceDeleteActivityRPS = NewGlobalIntSetting(
 		"frontend.deleteNamespaceDeleteActivityRPS",
 		100,

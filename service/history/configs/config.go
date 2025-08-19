@@ -365,6 +365,8 @@ type Config struct {
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	MaxLocalParentWorkflowVerificationDuration dynamicconfig.DurationPropertyFn
+
+	FrontendEnableReportedProblemsSearchAttribute dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -688,6 +690,8 @@ func NewConfig(
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
+
+		FrontendEnableReportedProblemsSearchAttribute: dynamicconfig.FrontendEnableReportedProblemsSearchAttribute.Get(dc),
 	}
 
 	return cfg

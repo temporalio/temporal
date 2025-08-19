@@ -4,6 +4,8 @@ package workflow
 
 import (
 	"cmp"
+	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -23,6 +25,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -240,8 +243,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskCompletedEvent(
 }
 
 func (m *workflowTaskStateMachine) ApplyWorkflowTaskFailedEvent() error {
-	m.failWorkflowTask(true)
-	return nil
+	return m.failWorkflowTask(true)
 }
 
 func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(
@@ -252,8 +254,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(
 	if timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
 		incrementAttempt = false
 	}
-	m.failWorkflowTask(incrementAttempt)
-	return nil
+	return m.failWorkflowTask(incrementAttempt)
 }
 
 func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
@@ -810,6 +811,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 		)
 	}
 
+	// One pathway for TemporalReportedProblems search attribute is here.
 	if err := m.ApplyWorkflowTaskFailedEvent(); err != nil {
 		return nil, err
 	}
@@ -869,6 +871,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 		)
 	}
 
+	// One pathway for TemporalReportedProblems search attribute is here.
 	if err := m.ApplyWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
 		return nil, err
 	}
@@ -877,7 +880,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 
 func (m *workflowTaskStateMachine) failWorkflowTask(
 	incrementAttempt bool,
-) {
+) error {
 	// Increment attempts only if workflow task is failing on non-sticky task queue.
 	// If it was sticky task queue, clear sticky task queue first and try again before creating transient workflow task.
 	if m.ms.IsStickyTaskQueueSet() {
@@ -907,6 +910,84 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	}
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
+
+	// TODO seankane: add TemporalReportedProblems search attribute here
+	if failWorkflowTaskInfo.Attempt == 2 {
+		fmt.Println("failWorkflowTask", failWorkflowTaskInfo.Attempt)
+
+		lastWorkflowTaskCloseEvent, err := m.getLastWorkflowTaskCloseEvent(context.TODO())
+		if err != nil {
+			fmt.Println("failWorkflowTask:GetLastWorkflowTaskCloseEvent", err)
+			return err
+		}
+
+		fmt.Println("lastWorkflowTaskCloseEvent", lastWorkflowTaskCloseEvent)
+
+		switch tFailure := lastWorkflowTaskCloseEvent.GetAttributes().(type) {
+		case *historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes:
+			wftTimedOut := tFailure.WorkflowTaskTimedOutEventAttributes
+			return m.ms.updateReportedProblemsSearchAttribute(
+				"WorkflowTaskTimedOut",
+				wftTimedOut.GetTimeoutType().String(),
+			)
+		case *historypb.HistoryEvent_WorkflowTaskFailedEventAttributes:
+			wftFailure := tFailure.WorkflowTaskFailedEventAttributes
+			return m.ms.updateReportedProblemsSearchAttribute(
+				"WorkflowTaskFailed",
+				wftFailure.GetCause().String(),
+			)
+		}
+
+		return fmt.Errorf("failWorkflowTask: unknown workflow task close event type: %T", lastWorkflowTaskCloseEvent.GetAttributes())
+	}
+	return nil
+}
+
+// new code
+func (m *workflowTaskStateMachine) getLastWorkflowTaskCloseEvent(
+	ctx context.Context,
+) (*historypb.HistoryEvent, error) {
+	branchToken, err := m.ms.GetCurrentBranchToken()
+	if err != nil {
+		fmt.Println("failWorkflowTask:GetCurrentBranchToken", err)
+		return nil, err
+	}
+	// Use persisted-safe MaxEventID. If you’re mid-transaction, NextEventID may be ahead of persisted events.
+	maxEventID := int64(common.EmptyEventID)
+	if !m.ms.HasBufferedEvents() && !m.ms.IsDirty() {
+		maxEventID = m.ms.GetNextEventID()
+	}
+
+	_, txID := m.ms.GetLastFirstEventIDTxnID()
+
+	req := &persistence.ReadHistoryBranchReverseRequest{
+		ShardID:                m.ms.shard.GetShardID(),
+		BranchToken:            branchToken,
+		MaxEventID:             maxEventID,
+		PageSize:               128, // small page; paginate if needed
+		LastFirstTransactionID: txID,
+		NextPageToken:          nil,
+	}
+	for {
+		resp, err := m.ms.shard.GetExecutionManager().ReadHistoryBranchReverse(ctx, req)
+		if err != nil {
+			fmt.Println("failWorkflowTask:ReadHistoryBranchReverse", err)
+			fmt.Println("failWorkflowTask:ReadHistoryBranchReverse.MaxEventID", req.MaxEventID)
+			return nil, err
+		}
+		for _, e := range resp.HistoryEvents {
+			switch e.GetEventType() {
+			case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
+				return e, nil
+			}
+		}
+		if len(resp.NextPageToken) == 0 {
+			break
+		}
+		req.NextPageToken = resp.NextPageToken
+	}
+	fmt.Println("failWorkflowTask:ReadHistoryBranchReverse: no prior workflow task close event found")
+	return nil, serviceerror.NewNotFound("no prior workflow task close event found")
 }
 
 // deleteWorkflowTask deletes a workflow task.

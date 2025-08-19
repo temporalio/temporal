@@ -92,27 +92,33 @@ const (
 	// execution. It is updated at workflow task completion when the server gets the
 	// behavior (`auto_upgrade` or `pinned`) from the SDK. Empty for unversioned workflows.
 	TemporalWorkflowVersioningBehavior = "TemporalWorkflowVersioningBehavior"
+
+	// TemporalReportedProblems is a search attribute that stores the information about problems reported by the workflow.
+	// It is updated after successive workflow task failures with the last workflow task failure cause. After the workflow
+	// task is completed successfully, the search attribute is removed.
+	TemporalReportedProblems = "TemporalReportedProblems"
 )
 
 var (
 	// system are internal search attributes which are passed and stored as separate fields.
 	system = map[string]enumspb.IndexedValueType{
-		WorkflowID:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		RunID:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		WorkflowType:         enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		StartTime:            enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		ExecutionTime:        enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		CloseTime:            enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		ExecutionStatus:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TaskQueue:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		HistoryLength:        enumspb.INDEXED_VALUE_TYPE_INT,
-		ExecutionDuration:    enumspb.INDEXED_VALUE_TYPE_INT,
-		StateTransitionCount: enumspb.INDEXED_VALUE_TYPE_INT,
-		HistorySizeBytes:     enumspb.INDEXED_VALUE_TYPE_INT,
-		ParentWorkflowID:     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		ParentRunID:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		RootWorkflowID:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		RootRunID:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		WorkflowID:               enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		RunID:                    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		WorkflowType:             enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		StartTime:                enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		ExecutionTime:            enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		CloseTime:                enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		ExecutionStatus:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TaskQueue:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		HistoryLength:            enumspb.INDEXED_VALUE_TYPE_INT,
+		ExecutionDuration:        enumspb.INDEXED_VALUE_TYPE_INT,
+		StateTransitionCount:     enumspb.INDEXED_VALUE_TYPE_INT,
+		HistorySizeBytes:         enumspb.INDEXED_VALUE_TYPE_INT,
+		ParentWorkflowID:         enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		ParentRunID:              enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		RootWorkflowID:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		RootRunID:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalReportedProblems: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 
 	// predefinedWhiteList contains a subset of predefined Search Attributes (SAs)
@@ -135,6 +141,7 @@ var (
 		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
 		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalPauseInfo:          enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalReportedProblems:   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
@@ -150,6 +157,7 @@ var (
 		TemporalSchedulePaused:             enumspb.INDEXED_VALUE_TYPE_BOOL,
 		TemporalNamespaceDivision:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalPauseInfo:                  enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalReportedProblems:           enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		TemporalWorkerDeploymentVersion:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalWorkflowVersioningBehavior: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalWorkerDeployment:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -165,25 +173,26 @@ var (
 	}
 
 	sqlDbSystemNameToColName = map[string]string{
-		NamespaceID:          "namespace_id",
-		WorkflowID:           "workflow_id",
-		RunID:                "run_id",
-		WorkflowType:         "workflow_type_name",
-		StartTime:            "start_time",
-		ExecutionTime:        "execution_time",
-		CloseTime:            "close_time",
-		ExecutionStatus:      "status",
-		TaskQueue:            "task_queue",
-		HistoryLength:        "history_length",
-		HistorySizeBytes:     "history_size_bytes",
-		ExecutionDuration:    "execution_duration",
-		StateTransitionCount: "state_transition_count",
-		Memo:                 "memo",
-		MemoEncoding:         "encoding",
-		ParentWorkflowID:     "parent_workflow_id",
-		ParentRunID:          "parent_run_id",
-		RootWorkflowID:       "root_workflow_id",
-		RootRunID:            "root_run_id",
+		NamespaceID:              "namespace_id",
+		WorkflowID:               "workflow_id",
+		RunID:                    "run_id",
+		WorkflowType:             "workflow_type_name",
+		StartTime:                "start_time",
+		ExecutionTime:            "execution_time",
+		CloseTime:                "close_time",
+		ExecutionStatus:          "status",
+		TaskQueue:                "task_queue",
+		HistoryLength:            "history_length",
+		HistorySizeBytes:         "history_size_bytes",
+		ExecutionDuration:        "execution_duration",
+		StateTransitionCount:     "state_transition_count",
+		Memo:                     "memo",
+		MemoEncoding:             "encoding",
+		ParentWorkflowID:         "parent_workflow_id",
+		ParentRunID:              "parent_run_id",
+		RootWorkflowID:           "root_workflow_id",
+		RootRunID:                "root_run_id",
+		TemporalReportedProblems: "temporal_reported_problems",
 	}
 
 	sqlDbCustomSearchAttributes = map[string]enumspb.IndexedValueType{
