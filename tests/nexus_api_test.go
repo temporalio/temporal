@@ -943,14 +943,14 @@ func (s *NexusApiTestSuite) TestNexusGetOperationInfo_Outcomes() {
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				// Choose an arbitrary test case to assert that all of the input is delivered to the
 				// poll response.
-				op := res.Request.Variant.(*nexuspb.Request_GetOperationInfo).GetOperationInfo
+				op := res.Request.Variant.(*nexuspb.Request_FetchOperationInfo).FetchOperationInfo
 				s.Equal("test-service", op.Service)
 				s.Equal("operation", op.Operation)
 				s.Equal("token", op.OperationToken)
 				s.Equal("value", res.Request.Header["key"])
 				return &nexuspb.Response{
-					Variant: &nexuspb.Response_GetOperationInfo{
-						GetOperationInfo: &nexuspb.GetOperationInfoResponse{
+					Variant: &nexuspb.Response_FetchOperationInfo{
+						FetchOperationInfo: &nexuspb.FetchOperationInfoResponse{
 							Info: &nexuspb.OperationInfo{
 								State: string(nexus.OperationStateRunning),
 								Token: op.OperationToken,
@@ -1109,17 +1109,17 @@ func (s *NexusApiTestSuite) TestNexusGetOperationResult_Outcomes() {
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				// Choose an arbitrary test case to assert that all of the input is delivered to the
 				// poll response.
-				op := res.Request.Variant.(*nexuspb.Request_GetOperationResult).GetOperationResult
+				op := res.Request.Variant.(*nexuspb.Request_FetchOperationResult).FetchOperationResult
 				s.Equal("test-service", op.Service)
 				s.Equal("operation", op.Operation)
 				s.Equal("token", op.OperationToken)
 				s.Equal("value", res.Request.Header["key"])
 				return &nexuspb.Response{
-					Variant: &nexuspb.Response_GetOperationResult{
-						GetOperationResult: &nexuspb.GetOperationResultResponse{
+					Variant: &nexuspb.Response_FetchOperationResult{
+						FetchOperationResult: &nexuspb.FetchOperationResultResponse{
 							Links: []*nexuspb.Link{{Url: handlerNexusLink.URL.String(), Type: handlerNexusLink.Type}},
-							Variant: &nexuspb.GetOperationResultResponse_Successful_{
-								Successful: &nexuspb.GetOperationResultResponse_Successful{
+							Variant: &nexuspb.FetchOperationResultResponse_Successful_{
+								Successful: &nexuspb.FetchOperationResultResponse_Successful{
 									Result: payload.EncodeString("hello world"),
 								},
 							},
@@ -1144,17 +1144,17 @@ func (s *NexusApiTestSuite) TestNexusGetOperationResult_Outcomes() {
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				// Choose an arbitrary test case to assert that all of the input is delivered to the
 				// poll response.
-				op := res.Request.Variant.(*nexuspb.Request_GetOperationResult).GetOperationResult
+				op := res.Request.Variant.(*nexuspb.Request_FetchOperationResult).FetchOperationResult
 				s.Equal("test-service", op.Service)
 				s.Equal("operation", op.Operation)
 				s.Equal("token", op.OperationToken)
 				s.Equal("value", res.Request.Header["key"])
 				return &nexuspb.Response{
-					Variant: &nexuspb.Response_GetOperationResult{
-						GetOperationResult: &nexuspb.GetOperationResultResponse{
+					Variant: &nexuspb.Response_FetchOperationResult{
+						FetchOperationResult: &nexuspb.FetchOperationResultResponse{
 							Links: []*nexuspb.Link{},
-							Variant: &nexuspb.GetOperationResultResponse_Unsuccessful_{
-								Unsuccessful: &nexuspb.GetOperationResultResponse_Unsuccessful{
+							Variant: &nexuspb.FetchOperationResultResponse_Unsuccessful_{
+								Unsuccessful: &nexuspb.FetchOperationResultResponse_Unsuccessful{
 									OperationError: &nexuspb.UnsuccessfulOperationError{
 										OperationState: string(nexus.OperationStateFailed),
 										Failure: &nexuspb.Failure{
@@ -1191,17 +1191,17 @@ func (s *NexusApiTestSuite) TestNexusGetOperationResult_Outcomes() {
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				// Choose an arbitrary test case to assert that all of the input is delivered to the
 				// poll response.
-				op := res.Request.Variant.(*nexuspb.Request_GetOperationResult).GetOperationResult
+				op := res.Request.Variant.(*nexuspb.Request_FetchOperationResult).FetchOperationResult
 				s.Equal("test-service", op.Service)
 				s.Equal("operation", op.Operation)
 				s.Equal("token", op.OperationToken)
 				s.Equal("value", res.Request.Header["key"])
 				return &nexuspb.Response{
-					Variant: &nexuspb.Response_GetOperationResult{
-						GetOperationResult: &nexuspb.GetOperationResultResponse{
+					Variant: &nexuspb.Response_FetchOperationResult{
+						FetchOperationResult: &nexuspb.FetchOperationResultResponse{
 							Links: []*nexuspb.Link{},
-							Variant: &nexuspb.GetOperationResultResponse_StillRunning_{
-								StillRunning: &nexuspb.GetOperationResultResponse_StillRunning{},
+							Variant: &nexuspb.FetchOperationResultResponse_StillRunning_{
+								StillRunning: &nexuspb.FetchOperationResultResponse_StillRunning{},
 							},
 						},
 					},
@@ -1351,7 +1351,7 @@ func (s *NexusApiTestSuite) versionedNexusTaskPoller(ctx context.Context, taskQu
 		panic(err)
 	}
 	if res.Request.GetStartOperation().GetService() != "test-service" && res.Request.GetCancelOperation().GetService() != "test-service" &&
-		res.Request.GetGetOperationInfo().GetService() != "test-service" && res.Request.GetGetOperationResult().GetService() != "test-service" {
+		res.Request.GetFetchOperationInfo().GetService() != "test-service" && res.Request.GetFetchOperationResult().GetService() != "test-service" {
 		panic("expected service to be test-service")
 	}
 	response, handlerError := handler(res)

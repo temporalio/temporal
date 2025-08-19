@@ -652,8 +652,8 @@ func (h *nexusHandler) GetOperationInfo(ctx context.Context, service, operation,
 	request := oc.matchingRequest(&nexuspb.Request{
 		Header:        options.Header,
 		ScheduledTime: timestamppb.New(oc.requestStartTime),
-		Variant: &nexuspb.Request_GetOperationInfo{
-			GetOperationInfo: &nexuspb.GetOperationInfoRequest{
+		Variant: &nexuspb.Request_FetchOperationInfo{
+			FetchOperationInfo: &nexuspb.FetchOperationInfoRequest{
 				Service:        service,
 				Operation:      operation,
 				OperationToken: token,
@@ -684,13 +684,13 @@ func (h *nexusHandler) GetOperationInfo(ctx context.Context, service, operation,
 		err := h.convertOutcomeToNexusHandlerError(t)
 		return nil, err
 	case *matchingservice.DispatchNexusTaskResponse_Response:
-		if t.Response.GetGetOperationInfo() == nil {
+		if t.Response.GetFetchOperationInfo() == nil {
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:INVALID_UPSTREAM_RESPONSE"))
 			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid upstream response")
 		}
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("success"))
-		info := t.Response.GetGetOperationInfo().GetInfo()
+		info := t.Response.GetFetchOperationInfo().GetInfo()
 		return &nexus.OperationInfo{
 			State: nexus.OperationState(info.State),
 			Token: info.Token,
@@ -754,8 +754,8 @@ func (h *nexusHandler) GetOperationResult(ctx context.Context, service, operatio
 	request := oc.matchingRequest(&nexuspb.Request{
 		Header:        options.Header,
 		ScheduledTime: timestamppb.New(oc.requestStartTime),
-		Variant: &nexuspb.Request_GetOperationResult{
-			GetOperationResult: &nexuspb.GetOperationResultRequest{
+		Variant: &nexuspb.Request_FetchOperationResult{
+			FetchOperationResult: &nexuspb.FetchOperationResultRequest{
 				Service:        service,
 				Operation:      operation,
 				OperationToken: token,
@@ -786,16 +786,16 @@ func (h *nexusHandler) GetOperationResult(ctx context.Context, service, operatio
 		err := h.convertOutcomeToNexusHandlerError(t)
 		return nil, err
 	case *matchingservice.DispatchNexusTaskResponse_Response:
-		if t.Response.GetGetOperationResult() == nil {
+		if t.Response.GetFetchOperationResult() == nil {
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:INVALID_UPSTREAM_RESPONSE"))
 			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid upstream response")
 		}
-		switch t := t.Response.GetGetOperationResult().Variant.(type) {
-		case *nexuspb.GetOperationResultResponse_Successful_:
+		switch t := t.Response.GetFetchOperationResult().Variant.(type) {
+		case *nexuspb.FetchOperationResultResponse_Successful_:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("success"))
 			return t.Successful.GetResult(), nil
-		case *nexuspb.GetOperationResultResponse_Unsuccessful_:
+		case *nexuspb.FetchOperationResultResponse_Unsuccessful_:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("operation_error"))
 			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 			return nil, &nexus.OperationError{
@@ -804,7 +804,7 @@ func (h *nexusHandler) GetOperationResult(ctx context.Context, service, operatio
 					Failure: commonnexus.ProtoFailureToNexusFailure(t.Unsuccessful.OperationError.GetFailure()),
 				},
 			}
-		case *nexuspb.GetOperationResultResponse_StillRunning_:
+		case *nexuspb.FetchOperationResultResponse_StillRunning_:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("running"))
 			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 			return nil, nexus.ErrOperationStillRunning

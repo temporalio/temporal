@@ -5105,8 +5105,8 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 
 	if request.GetResponse().GetStartOperation() == nil &&
 		request.GetResponse().GetCancelOperation() == nil &&
-		request.GetResponse().GetGetOperationInfo() == nil &&
-		request.GetResponse().GetGetOperationResult() == nil {
+		request.GetResponse().GetFetchOperationInfo() == nil &&
+		request.GetResponse().GetFetchOperationResult() == nil {
 		return nil, serviceerror.NewInvalidArgument("invalid upstream Nexus response")
 	}
 
@@ -5145,8 +5145,8 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 	var details []byte
 	if request.GetResponse().GetStartOperation() != nil {
 		details = request.GetResponse().GetStartOperation().GetOperationError().GetFailure().GetDetails()
-	} else if request.Response.GetGetOperationResult() != nil {
-		details = request.GetResponse().GetGetOperationResult().GetUnsuccessful().GetOperationError().GetFailure().GetDetails()
+	} else if request.Response.GetFetchOperationResult() != nil {
+		details = request.GetResponse().GetFetchOperationResult().GetUnsuccessful().GetOperationError().GetFailure().GetDetails()
 	}
 	if details != nil && !json.Valid(details) {
 		return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
