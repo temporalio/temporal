@@ -14,15 +14,19 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
 	completionMetric struct {
 		initialized      bool
+		isWorkflow       bool
 		taskQueue        string
 		namespaceState   string
 		workflowTypeName string
 		status           enumspb.WorkflowExecutionStatus
+		startTime        *timestamppb.Timestamp
+		closeTime        *timestamppb.Timestamp
 	}
 	TransactionImpl struct {
 		shard  historyi.ShardContext
@@ -47,6 +51,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 	newWorkflowFailoverVersion int64,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
+	isWorkflow bool,
 ) (int64, error) {
 
 	engine, err := t.shard.GetEngine(ctx)
@@ -65,6 +70,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 			NewWorkflowSnapshot: *newWorkflowSnapshot,
 			NewWorkflowEvents:   newWorkflowEventsSeq,
 		},
+		isWorkflow,
 	)
 	if persistence.OperationPossiblySucceeded(err) {
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
@@ -92,6 +98,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 	currentWorkflowFailoverVersion *int64,
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
+	isWorkflow bool,
 ) (int64, int64, int64, error) {
 
 	engine, err := t.shard.GetEngine(ctx)
@@ -116,6 +123,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 			CurrentWorkflowMutation: currentWorkflowMutation,
 			CurrentWorkflowEvents:   currentWorkflowEventsSeq,
 		},
+		isWorkflow,
 	)
 	if persistence.OperationPossiblySucceeded(err) {
 		NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot)
@@ -156,6 +164,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	newWorkflowFailoverVersion *int64,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
+	isWorkflow bool,
 ) (int64, int64, error) {
 
 	engine, err := t.shard.GetEngine(ctx)
@@ -176,6 +185,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 			NewWorkflowSnapshot:    newWorkflowSnapshot,
 			NewWorkflowEvents:      newWorkflowEventsSeq,
 		},
+		isWorkflow,
 	)
 	if persistence.OperationPossiblySucceeded(err) {
 		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
@@ -341,6 +351,7 @@ func createWorkflowExecution(
 	shardContext historyi.ShardContext,
 	mutableStateFailoverVersion int64,
 	request *persistence.CreateWorkflowExecutionRequest,
+	isWorkflow bool,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
 
 	resp, err := shardContext.CreateWorkflowExecution(ctx, request)
@@ -380,6 +391,7 @@ func createWorkflowExecution(
 			snapshotToCompletionMetric(
 				namespaceState(shardContext.GetClusterMetadata(), &mutableStateFailoverVersion),
 				&request.NewWorkflowSnapshot,
+				isWorkflow,
 			),
 		)
 	}
@@ -393,6 +405,7 @@ func conflictResolveWorkflowExecution(
 	newWorkflowFailoverVersion *int64,
 	currentWorkflowFailoverVersion *int64,
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
+	isWorkflow bool,
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
 
 	resp, err := shardContext.ConflictResolveWorkflowExecution(ctx, request)
@@ -424,14 +437,17 @@ func conflictResolveWorkflowExecution(
 			snapshotToCompletionMetric(
 				namespaceState(shardContext.GetClusterMetadata(), &resetWorkflowFailoverVersion),
 				&request.ResetWorkflowSnapshot,
+				isWorkflow,
 			),
 			snapshotToCompletionMetric(
 				namespaceState(shardContext.GetClusterMetadata(), newWorkflowFailoverVersion),
 				request.NewWorkflowSnapshot,
+				isWorkflow,
 			),
 			mutationToCompletionMetric(
 				namespaceState(shardContext.GetClusterMetadata(), currentWorkflowFailoverVersion),
 				request.CurrentWorkflowMutation,
+				isWorkflow,
 			),
 		)
 	}
@@ -481,6 +497,7 @@ func updateWorkflowExecution(
 	updateWorkflowFailoverVersion int64,
 	newWorkflowFailoverVersion *int64,
 	request *persistence.UpdateWorkflowExecutionRequest,
+	isWorkflow bool,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
 
 	resp, err := shardContext.UpdateWorkflowExecution(ctx, request)
@@ -511,10 +528,12 @@ func updateWorkflowExecution(
 			mutationToCompletionMetric(
 				namespaceState(shardContext.GetClusterMetadata(), &updateWorkflowFailoverVersion),
 				&request.UpdateWorkflowMutation,
+				isWorkflow,
 			),
 			snapshotToCompletionMetric(
 				namespaceState(shardContext.GetClusterMetadata(), newWorkflowFailoverVersion),
 				request.NewWorkflowSnapshot,
+				isWorkflow,
 			),
 		)
 	}
@@ -676,32 +695,42 @@ func emitGetMetrics(
 func snapshotToCompletionMetric(
 	namespaceState string,
 	workflowSnapshot *persistence.WorkflowSnapshot,
+	isWorkflow bool,
 ) completionMetric {
 	if workflowSnapshot == nil {
 		return completionMetric{initialized: false}
 	}
+
 	return completionMetric{
 		initialized:      true,
+		isWorkflow:       isWorkflow,
 		taskQueue:        workflowSnapshot.ExecutionInfo.TaskQueue,
 		namespaceState:   namespaceState,
 		workflowTypeName: workflowSnapshot.ExecutionInfo.WorkflowTypeName,
 		status:           workflowSnapshot.ExecutionState.Status,
+		startTime:        workflowSnapshot.ExecutionState.StartTime,
+		closeTime:        workflowSnapshot.ExecutionInfo.CloseTime,
 	}
 }
 
 func mutationToCompletionMetric(
 	namespaceState string,
 	workflowMutation *persistence.WorkflowMutation,
+	isWorkflow bool,
 ) completionMetric {
 	if workflowMutation == nil {
 		return completionMetric{initialized: false}
 	}
+
 	return completionMetric{
 		initialized:      true,
+		isWorkflow:       isWorkflow,
 		taskQueue:        workflowMutation.ExecutionInfo.TaskQueue,
 		namespaceState:   namespaceState,
 		workflowTypeName: workflowMutation.ExecutionInfo.WorkflowTypeName,
 		status:           workflowMutation.ExecutionState.Status,
+		startTime:        workflowMutation.ExecutionState.StartTime,
+		closeTime:        workflowMutation.ExecutionInfo.CloseTime,
 	}
 }
 
@@ -717,13 +746,11 @@ func emitCompletionMetrics(
 		if !completionMetric.initialized {
 			continue
 		}
+
 		emitWorkflowCompletionStats(
 			metricsHandler,
 			namespaceName,
-			completionMetric.namespaceState,
-			completionMetric.taskQueue,
-			completionMetric.workflowTypeName,
-			completionMetric.status,
+			completionMetric,
 			shardContext.GetConfig(),
 		)
 	}

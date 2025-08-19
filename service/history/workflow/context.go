@@ -246,6 +246,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		shardContext,
 		newMutableState.GetCurrentVersion(),
 		createRequest,
+		newMutableState.IsWorkflow(),
 	)
 	if err != nil {
 		return err
@@ -363,6 +364,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		MutableStateFailoverVersion(currentMutableState),
 		currentWorkflow,
 		currentWorkflowEventsSeq,
+		resetMutableState.IsWorkflow(),
 	); err != nil {
 		return err
 	}
@@ -576,6 +578,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		MutableStateFailoverVersion(newMutableState),
 		newWorkflow,
 		newWorkflowEventsSeq,
+		c.MutableState.IsWorkflow(),
 	); err != nil {
 		return err
 	}

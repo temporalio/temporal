@@ -369,6 +369,7 @@ func (r *workflowResetterImpl) persistToDB(
 			workflow.MutableStateFailoverVersion(resetWorkflow.GetMutableState()),
 			resetWorkflowSnapshot,
 			resetWorkflowEventsSeq,
+			currentWorkflow.GetMutableState().IsWorkflow(),
 		); err != nil {
 			return err
 		}
@@ -409,6 +410,7 @@ func (r *workflowResetterImpl) persistToDB(
 		&currentRunVerson,
 		currentWorkflowMutation,
 		currentWorkflowEventsSeq,
+		currentWorkflow.GetMutableState().IsWorkflow(),
 	); err != nil {
 		return err
 	}

@@ -15,6 +15,7 @@ type (
 			newWorkflowFailoverVersion int64,
 			newWorkflowSnapshot *persistence.WorkflowSnapshot,
 			newWorkflowEventsSeq []*persistence.WorkflowEvents,
+			isWorkflow bool,
 		) (int64, error)
 
 		ConflictResolveWorkflowExecution(
@@ -29,6 +30,7 @@ type (
 			currentWorkflowFailoverVersion *int64,
 			currentWorkflowMutation *persistence.WorkflowMutation,
 			currentWorkflowEventsSeq []*persistence.WorkflowEvents,
+			isWorkflow bool,
 		) (int64, int64, int64, error)
 
 		UpdateWorkflowExecution(
@@ -40,6 +42,7 @@ type (
 			newWorkflowFailoverVersion *int64,
 			newWorkflowSnapshot *persistence.WorkflowSnapshot,
 			newWorkflowEventsSeq []*persistence.WorkflowEvents,
+			isWorkflow bool,
 		) (int64, int64, error)
 
 		SetWorkflowExecution(

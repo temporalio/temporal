@@ -269,6 +269,7 @@ func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusE
 		nc.namespaceName = nsName.String()
 		nc.taskQueue = v.Worker.GetTaskQueue()
 		nc.endpointName = entry.Endpoint.Spec.Name
+		nc.endpointID = entry.Id
 		return nc, true
 	default:
 		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid endpoint target"})

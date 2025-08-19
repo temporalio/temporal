@@ -937,6 +937,7 @@ func (x *NextTimeCache) GetCompleted() bool {
 	return false
 }
 
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
 // CHASM scheduler top-level state.
 type SchedulerInternal struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1034,6 +1035,7 @@ func (x *SchedulerInternal) GetConflictToken() int64 {
 	return 0
 }
 
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
 // CHASM scheduler's Generator internal state.
 type GeneratorInternal struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1089,6 +1091,7 @@ func (x *GeneratorInternal) GetLastProcessedTime() *timestamppb.Timestamp {
 	return nil
 }
 
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
 // CHASM scheduler's Invoker internal state.
 type InvokerInternal struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1175,6 +1178,7 @@ func (x *InvokerInternal) GetLastProcessedTime() *timestamppb.Timestamp {
 	return nil
 }
 
+// TODO: Remove, this is moved to chasm/lib/scheduler/proto.
 // CHASM scheduler's Backfiller internal state. Backfill requests are 1:1
 // with Backfiller nodes. Backfiller nodes also handle immediate trigger requests.
 type BackfillerInternal struct {

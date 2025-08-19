@@ -264,10 +264,41 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		}
 	}
 
-	forwardReq, err := http.NewRequestWithContext(ctx, r.HTTPRequest.Method, forwardURL, r.HTTPRequest.Body)
-	if err != nil {
-		h.Logger.Error("failed to construct forwarding HTTP request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+	var forwardReq *http.Request
+	switch r.State {
+	case nexus.OperationStateSucceeded:
+		// For successful operations, the Nexus framework streams the result as a LazyValue, so we can reuse the
+		// incoming request body.
+		forwardReq, err = http.NewRequestWithContext(ctx, r.HTTPRequest.Method, forwardURL, r.HTTPRequest.Body)
+		if err != nil {
+			h.Logger.Error("failed to construct forwarding HTTP request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+		}
+	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
+		// For unsuccessful operations, the Nexus framework reads and closes the original request body to deserialize
+		// the failure, so we must construct a new completion to forward.
+		var failureErr *nexus.FailureError
+		if !errors.As(r.Error, &failureErr) {
+			// This shouldn't happen as the Nexus SDK is always expected to convert Failures from the wire to
+			// FailureErrors.
+			h.Logger.Error("received unexpected error type when trying to forward Nexus operation completion", tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+		}
+		c := &nexus.OperationCompletionUnsuccessful{
+			Header:         httpHeaderToNexusHeader(r.HTTPRequest.Header),
+			State:          r.State,
+			OperationToken: r.OperationToken,
+			StartTime:      r.StartTime,
+			Links:          r.Links,
+			Failure:        failureErr.Failure,
+		}
+		forwardReq, err = nexus.NewCompletionHTTPRequest(ctx, forwardURL, c)
+		if err != nil {
+			h.Logger.Error("failed to construct forwarding HTTP request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+		}
+	default:
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation state: %q", r.State)
 	}
 
 	if r.HTTPRequest.Header != nil {
@@ -335,6 +366,19 @@ func isMediaTypeJSON(contentType string) bool {
 	}
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	return err == nil && mediaType == "application/json"
+}
+
+// Copies HTTP request headers to Nexus headers except those starting with content- since those will be added by the client.
+func httpHeaderToNexusHeader(httpHeader http.Header) nexus.Header {
+	header := nexus.Header{}
+	for k, v := range httpHeader {
+		lowerK := strings.ToLower(k)
+		if !strings.HasPrefix(lowerK, "content-") {
+			// Nexus headers can only have single values, ignore multiple values.
+			header[lowerK] = v[0]
+		}
+	}
+	return header
 }
 
 type requestContext struct {

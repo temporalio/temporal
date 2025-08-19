@@ -221,11 +221,20 @@ type (
 		ErrorCount int
 	}
 
-	taskDetail struct {
+	task struct {
+		// the workflow execution to process
 		execution *commonpb.WorkflowExecution
-		attempts  int
-		// passing along the current heartbeat details to make heartbeat within a task so that it won't timeout
-		hbd HeartBeatDetails
+		// the number of attempts to process the workflow execution
+		attempts int
+		// reference to the page this task belongs to (for tracking page completion)
+		page *page
+	}
+
+	taskResponse struct {
+		// the error result from processing the task (nil for success)
+		err error
+		// reference to the page the completed task belonged to
+		page *page
 	}
 )
 
