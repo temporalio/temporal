@@ -221,6 +221,21 @@ func (c *retryableClient) GenerateLastHistoryReplicationTasks(
 	return resp, err
 }
 
+func (c *retryableClient) GetConfigurations(
+	ctx context.Context,
+	request *adminservice.GetConfigurationsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetConfigurationsResponse, error) {
+	var resp *adminservice.GetConfigurationsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetConfigurations(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetDLQMessages(
 	ctx context.Context,
 	request *adminservice.GetDLQMessagesRequest,
