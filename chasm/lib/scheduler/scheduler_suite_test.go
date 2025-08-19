@@ -54,7 +54,7 @@ func (s *schedulerSuite) SetupSuite() {
 	s.nodePathEncoder = chasm.DefaultPathEncoder
 
 	s.registry = chasm.NewRegistry(s.logger)
-	err := s.registry.Register(scheduler.Library)
+	err := s.registry.Register(&scheduler.Library{})
 	s.NoError(err)
 
 	// Advance here, because otherwise ctx.Now().IsZero() will be true.
