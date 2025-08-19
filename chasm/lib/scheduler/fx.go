@@ -7,17 +7,9 @@ import (
 
 func Register(
 	registry *chasm.Registry,
-	generatorTaskExecutor *GeneratorTaskExecutor,
-	invokerExecuteTaskExecutor *InvokerExecuteTaskExecutor,
-	invokerProcessBufferTaskExecutor *InvokerProcessBufferTaskExecutor,
-	backfillerTaskExecutor *BackfillerTaskExecutor,
+	library *Library,
 ) error {
-	Library.SetGeneratorTaskExecutor(generatorTaskExecutor)
-	Library.SetInvokerExecuteTaskExecutor(invokerExecuteTaskExecutor)
-	Library.SetInvokerProcessBufferTaskExecutor(invokerProcessBufferTaskExecutor)
-	Library.SetBackfillerTaskExecutor(backfillerTaskExecutor)
-
-	return registry.Register(Library)
+	return registry.Register(library)
 }
 
 var Module = fx.Module(
@@ -26,5 +18,6 @@ var Module = fx.Module(
 	fx.Provide(NewInvokerExecuteTaskExecutor),
 	fx.Provide(NewInvokerProcessBufferTaskExecutor),
 	fx.Provide(NewBackfillerTaskExecutor),
+	fx.Provide(NewLibrary),
 	fx.Invoke(Register),
 )

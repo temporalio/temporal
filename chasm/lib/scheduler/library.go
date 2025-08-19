@@ -1,46 +1,45 @@
 package scheduler
 
-import "go.temporal.io/server/chasm"
+import (
+	"go.temporal.io/server/chasm"
+	"go.uber.org/fx"
+)
 
 type (
-	library struct {
+	Library struct {
+		fx.In
+
 		chasm.UnimplementedLibrary
 
-		schedulerIdleTaskExecutor        *SchedulerIdleTaskExecutor
-		generatorTaskExecutor            *GeneratorTaskExecutor
-		invokerExecuteTaskExecutor       *InvokerExecuteTaskExecutor
-		invokerProcessBufferTaskExecutor *InvokerProcessBufferTaskExecutor
-		backfillerTaskExecutor           *BackfillerTaskExecutor
+		SchedulerIdleTaskExecutor        *SchedulerIdleTaskExecutor
+		GeneratorTaskExecutor            *GeneratorTaskExecutor
+		InvokerExecuteTaskExecutor       *InvokerExecuteTaskExecutor
+		InvokerProcessBufferTaskExecutor *InvokerProcessBufferTaskExecutor
+		BackfillerTaskExecutor           *BackfillerTaskExecutor
 	}
 )
 
-var Library = &library{}
-
-func (l *library) SetSchedulerIdleTaskExecutor(executor *SchedulerIdleTaskExecutor) {
-	l.schedulerIdleTaskExecutor = executor
+func NewLibrary(
+	SchedulerIdleTaskExecutor *SchedulerIdleTaskExecutor,
+	GeneratorTaskExecutor *GeneratorTaskExecutor,
+	InvokerExecuteTaskExecutor *InvokerExecuteTaskExecutor,
+	InvokerProcessBufferTaskExecutor *InvokerProcessBufferTaskExecutor,
+	BackfillerTaskExecutor *BackfillerTaskExecutor,
+) *Library {
+	return &Library{
+		SchedulerIdleTaskExecutor:        SchedulerIdleTaskExecutor,
+		GeneratorTaskExecutor:            GeneratorTaskExecutor,
+		InvokerExecuteTaskExecutor:       InvokerExecuteTaskExecutor,
+		InvokerProcessBufferTaskExecutor: InvokerProcessBufferTaskExecutor,
+		BackfillerTaskExecutor:           BackfillerTaskExecutor,
+	}
 }
 
-func (l *library) SetGeneratorTaskExecutor(executor *GeneratorTaskExecutor) {
-	l.generatorTaskExecutor = executor
-}
-
-func (l *library) SetInvokerExecuteTaskExecutor(executor *InvokerExecuteTaskExecutor) {
-	l.invokerExecuteTaskExecutor = executor
-}
-
-func (l *library) SetInvokerProcessBufferTaskExecutor(executor *InvokerProcessBufferTaskExecutor) {
-	l.invokerProcessBufferTaskExecutor = executor
-}
-
-func (l *library) SetBackfillerTaskExecutor(executor *BackfillerTaskExecutor) {
-	l.backfillerTaskExecutor = executor
-}
-
-func (l *library) Name() string {
+func (l *Library) Name() string {
 	return "scheduler"
 }
 
-func (l *library) Components() []*chasm.RegistrableComponent {
+func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Scheduler]("scheduler"),
 		chasm.NewRegistrableComponent[*Generator]("generator"),
@@ -49,32 +48,32 @@ func (l *library) Components() []*chasm.RegistrableComponent {
 	}
 }
 
-func (l *library) Tasks() []*chasm.RegistrableTask {
+func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
 		chasm.NewRegistrablePureTask(
 			"idle",
-			l.schedulerIdleTaskExecutor,
-			l.schedulerIdleTaskExecutor,
+			l.SchedulerIdleTaskExecutor,
+			l.SchedulerIdleTaskExecutor,
 		),
 		chasm.NewRegistrablePureTask(
 			"generate",
-			l.generatorTaskExecutor,
-			l.generatorTaskExecutor,
+			l.GeneratorTaskExecutor,
+			l.GeneratorTaskExecutor,
 		),
 		chasm.NewRegistrableSideEffectTask(
 			"execute",
-			l.invokerExecuteTaskExecutor,
-			l.invokerExecuteTaskExecutor,
+			l.InvokerExecuteTaskExecutor,
+			l.InvokerExecuteTaskExecutor,
 		),
 		chasm.NewRegistrablePureTask(
 			"processBuffer",
-			l.invokerProcessBufferTaskExecutor,
-			l.invokerProcessBufferTaskExecutor,
+			l.InvokerProcessBufferTaskExecutor,
+			l.InvokerProcessBufferTaskExecutor,
 		),
 		chasm.NewRegistrablePureTask(
 			"backfill",
-			l.backfillerTaskExecutor,
-			l.backfillerTaskExecutor,
+			l.BackfillerTaskExecutor,
+			l.BackfillerTaskExecutor,
 		),
 	}
 }
