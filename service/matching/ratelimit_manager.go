@@ -88,9 +88,8 @@ func newRateLimitManager(userDataManager userDataManager,
 	r.cancels = append(r.cancels, cancel)
 	r.adminTqRate, cancel = config.AdminNamespaceTaskQueueToPartitionRateSub(r.setAdminTqRate)
 	r.cancels = append(r.cancels, cancel)
-	// r.numReadPartitions, cancel = config.NumReadPartitionsSub(r.setNumReadPartitions)
-	// r.cancels = append(r.cancels, cancel)
-	r.numReadPartitions = config.NumReadPartitions()
+	r.numReadPartitions, cancel = config.NumReadPartitionsSub(r.setNumReadPartitions)
+	r.cancels = append(r.cancels, cancel)
 	r.computeEffectiveRPSAndSource()
 	return r
 }
