@@ -96,9 +96,10 @@ func (t *task) Run() executor.TaskStatus {
 		record, err := iter.Next()
 		if err != nil {
 			metrics.ScavengerValidationSkipsCount.With(t.metricsHandler).Record(1)
-			// continue validation process and retry after all workflow records has been iterated.
+			// break out of the loop when pagination fails
 			t.logger.Error("unable to paginate concrete execution", tag.ShardID(t.shardID), tag.Error(err))
 			retryTask = true
+			break
 		}
 
 		mutableState := &MutableState{WorkflowMutableState: record}

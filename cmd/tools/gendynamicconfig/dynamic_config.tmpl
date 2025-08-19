@@ -22,11 +22,17 @@ const (
 {{- range $P := $Precedences}}
 {{ if $T.IsGeneric -}}
 type {{$P.Name}}TypedSetting[T any] setting[T, func({{$P.GoArgs}})]
+type {{$P.Name}}TypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, func({{$P.GoArgs}})]
 
 // New{{$P.Name}}TypedSetting creates a setting that uses mapstructure to handle complex structured
-// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
-// 'def' must not contain any non-nil slices, maps, or pointers.
+// values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
+// when using non-empty maps or slices as defaults, the result may not be what you want.
 func New{{$P.Name}}TypedSetting[T any](key Key, def T, description string) {{$P.Name}}TypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
 	s := {{$P.Name}}TypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -39,6 +45,7 @@ func New{{$P.Name}}TypedSetting[T any](key Key, def T, description string) {{$P.
 
 // New{{$P.Name}}TypedSettingWithConverter creates a setting with a custom converter function.
 func New{{$P.Name}}TypedSettingWithConverter[T any](key Key, convert func(any) (T, error), def T, description string) {{$P.Name}}TypedSetting[T] {
+	{{/* Do not warn on shared structure here, it's the converter's concern. */ -}}
 	s := {{$P.Name}}TypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -50,10 +57,11 @@ func New{{$P.Name}}TypedSettingWithConverter[T any](key Key, convert func(any) (
 }
 
 // New{{$P.Name}}TypedSettingWithConstrainedDefault creates a setting with a compound default value.
-func New{{$P.Name}}TypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) {{$P.Name}}TypedSetting[T] {
-	s := {{$P.Name}}TypedSetting[T]{
+func New{{$P.Name}}TypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) {{$P.Name}}TypedConstrainedDefaultSetting[T] {
+	{{/* Do not warn on shared structure here, it's the converter's concern. */ -}}
+	s := {{$P.Name}}TypedConstrainedDefaultSetting[T]{
 		key:         key,
-		cdef:        &cdef,
+		cdef:        cdef,
 		convert:     convert,
 		description: description,
 	}
@@ -64,6 +72,13 @@ func New{{$P.Name}}TypedSettingWithConstrainedDefault[T any](key Key, convert fu
 func (s {{$P.Name}}TypedSetting[T]) Key() Key               { return s.key }
 func (s {{$P.Name}}TypedSetting[T]) Precedence() Precedence { return Precedence{{$P.Name}} }
 func (s {{$P.Name}}TypedSetting[T]) Validate(v any) error {
+	_, err := s.convert(v)
+	return err
+}
+
+func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
+func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Precedence() Precedence { return Precedence{{$P.Name}} }
+func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
 }
@@ -92,6 +107,22 @@ func (s {{$P.Name}}TypedSetting[T]) Get(c *Collection) TypedPropertyFnWith{{$P.N
 			c,
 			s.key,
 			s.def,
+			s.convert,
+			prec,
+		)
+	}
+}
+
+{{if eq $P.Name "Global" -}}
+func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Get(c *Collection) TypedPropertyFn[T] {
+{{- else -}}
+func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Get(c *Collection) TypedPropertyFnWith{{$P.Name}}Filter[T] {
+{{- end}}
+	return func({{$P.GoArgs}}) T {
+		prec := {{$P.Expr}}
+		return matchAndConvertWithConstrainedDefault(
+			c,
+			s.key,
 			s.cdef,
 			s.convert,
 			prec,
@@ -113,12 +144,38 @@ func (s {{$P.Name}}TypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWi
 	return func({{$P.GoArgs}}, callback func(T)) (T, func()) {
 {{- end}}
 		prec := {{$P.Expr}}
-		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
+		return subscribe(c, s.key, s.def, s.convert, prec, callback)
 	}
 }
 
 func (s {{$P.Name}}TypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
 	dispatchUpdate(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
+}
+
+{{if eq $P.Name "Global" -}}
+func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribable[T] {
+	return func(callback func(T)) (T, func()) {
+		prec := {{$P.Expr}}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+{{- else -}}
+func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWith{{$P.Name}}Filter[T] {
+	return func({{$P.GoArgs}}, callback func(T)) (T, func()) {
+		prec := {{$P.Expr}}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+{{- end}}
+
+func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
+	dispatchUpdateWithConstrainedDefault(
 		c,
 		s.key,
 		s.convert,
@@ -138,12 +195,13 @@ func GetTypedPropertyFnFilteredBy{{$P.Name}}[T any](value T) TypedPropertyFnWith
 }
 {{else -}}
 type {{$P.Name}}{{$T.Name}}Setting = {{$P.Name}}TypedSetting[{{$T.GoType}}]
+type {{$P.Name}}{{$T.Name}}ConstrainedDefaultSetting = {{$P.Name}}TypedConstrainedDefaultSetting[{{$T.GoType}}]
 
 func New{{$P.Name}}{{$T.Name}}Setting(key Key, def {{$T.GoType}}, description string) {{$P.Name}}{{$T.Name}}Setting {
 	return New{{$P.Name}}TypedSettingWithConverter[{{$T.GoType}}](key, convert{{$T.Name}}, def, description)
 }
 
-func New{{$P.Name}}{{$T.Name}}SettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[{{$T.GoType}}], description string) {{$P.Name}}{{$T.Name}}Setting {
+func New{{$P.Name}}{{$T.Name}}SettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[{{$T.GoType}}], description string) {{$P.Name}}{{$T.Name}}ConstrainedDefaultSetting {
 	return New{{$P.Name}}TypedSettingWithConstrainedDefault[{{$T.GoType}}](key, convert{{$T.Name}}, cdef, description)
 }
 
