@@ -6,6 +6,8 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -53,4 +55,15 @@ func validateTaskHighWaterMark(lastProcessedTime *timestamppb.Timestamp, schedul
 	}
 
 	return true, nil
+}
+
+// jsonStringer wraps a proto.Message for lazy JSON serialization. Intended for
+// debug logging structures.
+type jsonStringer struct {
+	proto.Message
+}
+
+func (j jsonStringer) String() string {
+	json, _ := protojson.Marshal(j.Message)
+	return string(json)
 }
