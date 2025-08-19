@@ -49,6 +49,18 @@ func SetFailureSourceOnContext(ctx context.Context, response *http.Response) {
 	}
 }
 
+func GetFailureSourceFromContext(ctx context.Context) string {
+	src := ""
+	failureSrcCtx := ctx.Value(FailureSourceContextKey)
+	if failureSrcCtx == nil {
+		return src
+	}
+	if val, ok := failureSrcCtx.(*atomic.Value); ok {
+		src = val.Load().(string)
+	}
+	return src
+}
+
 var failureTypeString = string((&failurepb.Failure{}).ProtoReflect().Descriptor().FullName())
 
 // ProtoFailureToNexusFailure converts a proto Nexus Failure to a Nexus SDK Failure.
@@ -336,6 +348,56 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 	}
 	// Let the nexus SDK handle this for us (log and convert to an internal error).
 	return err
+}
+
+// ConvertHandlerError converts a nexus.HandlerError returned by a Nexus client into a gRPC serviceerror.
+func ConvertHandlerError(err *nexus.HandlerError, exposeDetails bool) error {
+	msg := err.Error()
+
+	switch err.Type {
+	case nexus.HandlerErrorTypeBadRequest:
+		if !exposeDetails {
+			msg = "invalid argument"
+		}
+		return serviceerror.NewInvalidArgument(msg)
+	case nexus.HandlerErrorTypeUnauthenticated, nexus.HandlerErrorTypeUnauthorized:
+		if exposeDetails {
+			msg = err.Cause.Error()
+		} else {
+			msg = ""
+		}
+		return serviceerror.NewPermissionDenied("permission denied", msg)
+	case nexus.HandlerErrorTypeNotFound:
+		if !exposeDetails {
+			msg = "not found"
+		}
+		return serviceerror.NewNotFound(msg)
+	case nexus.HandlerErrorTypeResourceExhausted:
+		if !exposeDetails {
+			msg = "resource exhausted"
+		}
+		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED, msg)
+	case nexus.HandlerErrorTypeInternal:
+		if !exposeDetails {
+			msg = "internal error"
+		}
+		return serviceerror.NewInternal(msg)
+	case nexus.HandlerErrorTypeNotImplemented:
+		if !exposeDetails {
+			msg = "not implemented"
+		}
+		return serviceerror.NewUnimplemented(msg)
+	case nexus.HandlerErrorTypeUnavailable:
+		if !exposeDetails {
+			msg = "unavailable"
+		}
+		return serviceerror.NewUnavailable(msg)
+	}
+
+	if !exposeDetails {
+		msg = "internal error"
+	}
+	return serviceerror.NewInternal(msg)
 }
 
 func AdaptAuthorizeError(err error) error {
