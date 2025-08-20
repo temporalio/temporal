@@ -841,16 +841,15 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	// wait until all task queue partitions know that tv1 is current
 	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
 
+	deploymentOpts := worker.DeploymentOptions{
+		Version: tv2.SDKDeploymentVersion(),
+	}
+	if !toUnversioned {
+		deploymentOpts.UseVersioning = true
+		deploymentOpts.DefaultVersioningBehavior = workflow.VersioningBehaviorAutoUpgrade
+	}
 	w2 := worker.New(s.SdkClient(), tv2.TaskQueue().GetName(), worker.Options{
-		DeploymentOptions: worker.DeploymentOptions{
-			Version:       tv2.SDKDeploymentVersion(),
-			UseVersioning: !toUnversioned,
-			// We are passing default behavior even for unversioned because SDK accepts it
-			// for now. Later SDK will stop accepting such config and this test should be fixed
-			// to not pass this value. The reason we pass it is to ensure server does not get
-			// confused by the conflicting wft completion response until the SDK fix comes.
-			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
-		},
+		DeploymentOptions:                deploymentOpts,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
