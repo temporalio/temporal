@@ -2,7 +2,6 @@ package testvars
 
 import (
 	"fmt"
-	"go.temporal.io/sdk/worker"
 	"sync"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/sdk/worker"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
