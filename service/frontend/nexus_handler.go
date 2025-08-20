@@ -301,6 +301,7 @@ type nexusHandler struct {
 	forwardingClients             *cluster.FrontendHTTPClientCache
 	payloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	useForwardByEndpoint          dynamicconfig.BoolPropertyFn
 	metricTagConfig               dynamicconfig.TypedPropertyFn[nexusoperations.NexusMetricTagConfig]
 	httpTraceProvider             commonnexus.HTTPClientTraceProvider
 }
@@ -664,7 +665,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 	}
 
 	var baseURL string
-	if oc.endpointID != "" {
+	if h.useForwardByEndpoint() && oc.endpointID != "" {
 		// If the request was originally dispatched by endpoint, forward by endpoint as well.
 		baseURL, err = url.JoinPath(httpClient.BaseURL(),
 			commonnexus.RouteDispatchNexusTaskByEndpoint.Path(oc.endpointID))

@@ -89,6 +89,7 @@ func NewNexusHTTPHandler(
 				forwardingClients:             clientCache,
 				payloadSizeLimit:              serviceConfig.BlobSizeLimitError,
 				headersBlacklist:              serviceConfig.NexusRequestHeadersBlacklist,
+				useForwardByEndpoint:          serviceConfig.NexusForwardRequestUseEndpoint,
 				metricTagConfig:               serviceConfig.NexusOperationsMetricTagConfig,
 				httpTraceProvider:             httpTraceProvider,
 			},
