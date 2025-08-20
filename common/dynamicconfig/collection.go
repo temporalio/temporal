@@ -53,6 +53,7 @@ type (
 		prec []Constraints
 		f    func(T)
 		def  T
+		cdef []TypedConstrainedValue[T] // nil for regular settings, populated for constrained default settings
 		// protected by subscriptionLock in Collection:
 		raw any // raw value that last sent value was converted from
 	}
@@ -313,6 +314,42 @@ func findMatchWithConstrainedDefaults[T any](cvs []ConstrainedValue, defaultCVs 
 	return
 }
 
+func findAndResolveWithConstrainedDefaults[T any](
+	c *Collection,
+	key Key,
+	convert func(value any) (T, error),
+	cvs []ConstrainedValue,
+	defaultCVs []TypedConstrainedValue[T],
+	precedence []Constraints,
+) (value T, raw any) {
+	cvp, defVal, valOrder, defOrder := findMatchWithConstrainedDefaults(cvs, defaultCVs, precedence)
+
+	if defOrder == 0 {
+		// This is a server bug: all precedence lists must end with no-constraints, and all
+		// constrained defaults must have a no-constraints value, so we should have gotten a match.
+		c.logger.Warn("Constrained defaults had no match (this is a bug; fix server code)", tag.Key(key.String()))
+		// leave value as the zero value, that's the best we can do
+		return value, usingDefaultValue
+	} else if valOrder == 0 {
+		if c.throttleLog() {
+			c.logger.Debug("No such key in dynamic config, using default", tag.Key(key.String()))
+		}
+		return defVal, usingDefaultValue
+	} else if defOrder < valOrder {
+		// value was present but constrained default took precedence
+		return defVal, usingDefaultValue // use sentinel since we're using default
+	}
+	typedVal, err := convertWithCache(c, key, convert, cvp)
+	if err != nil {
+		// We failed to convert the value to the desired type. Use the default.
+		if c.throttleLog() {
+			c.logger.Warn("Failed to convert value, using default", tag.Key(key.String()), tag.IgnoredValue(cvp), tag.Error(err))
+		}
+		return defVal, usingDefaultValue
+	}
+	return typedVal, cvp.Value
+}
+
 func matchAndConvertWithConstrainedDefault[T any](
 	c *Collection,
 	key Key,
@@ -321,37 +358,10 @@ func matchAndConvertWithConstrainedDefault[T any](
 	precedence []Constraints,
 ) T {
 	cvs := c.client.GetValue(key)
-	cvp, defVal, valOrder, defOrder := findMatchWithConstrainedDefaults(cvs, cdef, precedence)
-	if defOrder == 0 {
-		// This is a server bug: all precedence lists must end with no-constraints, and all
-		// constrained defaults must have a no-constraints value, so we should have gotten a match.
-		c.logger.Warn("Constrained defaults had no match (this is a bug; fix server code)", tag.Key(key.String()))
-		// leave defVal as the zero value, that's the best we can do
-	}
-	if valOrder == 0 {
-		if c.throttleLog() {
-			c.logger.Debug("No such key in dynamic config, using default", tag.Key(key.String()))
-		}
-		return defVal
-	}
-	if defOrder < valOrder {
-		// value was present but constrained default took precedence
-		return defVal
-	}
-	typedVal, err := convertWithCache(c, key, convert, cvp)
-	if err != nil {
-		// We failed to convert the value to the desired type. Use the default.
-		if c.throttleLog() {
-			c.logger.Warn("Failed to convert value, using default", tag.Key(key.String()), tag.IgnoredValue(cvp), tag.Error(err))
-		}
-		// if defOrder == 0, this will be the zero value, but that's the best we can do
-		return defVal
-	}
-	return typedVal
+	value, _ := findAndResolveWithConstrainedDefaults(c, key, convert, cvs, cdef, precedence)
+	return value
 }
 
-// Note: subscriptions currently only work with regular (single default) settings, not
-// constrained default settings.
 func subscribe[T any](
 	c *Collection,
 	key Key,
@@ -385,6 +395,49 @@ func subscribe[T any](
 		prec: prec,
 		f:    callback,
 		def:  def,
+		raw:  raw,
+	}
+
+	return init, func() {
+		c.subscriptionLock.Lock()
+		defer c.subscriptionLock.Unlock()
+		delete(c.subscriptions[key], id)
+	}
+}
+
+func subscribeWithConstrainedDefault[T any](
+	c *Collection,
+	key Key,
+	cdef []TypedConstrainedValue[T],
+	convert func(value any) (T, error),
+	prec []Constraints,
+	callback func(T),
+) (T, func()) {
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+
+	// get one value immediately (note that subscriptionLock is held here so we can't race with
+	// an update)
+	cvs := c.client.GetValue(key)
+	init, raw := findAndResolveWithConstrainedDefaults(c, key, convert, cvs, cdef, prec)
+
+	// As a convenience (and for efficiency), you can pass in a nil callback; we just return the
+	// current value and skip the subscription. The cancellation func returned is also nil.
+	if callback == nil {
+		return init, nil
+	}
+
+	c.subscriptionIdx++
+	id := c.subscriptionIdx
+
+	if c.subscriptions[key] == nil {
+		c.subscriptions[key] = make(map[int]any)
+	}
+
+	c.subscriptions[key][id] = &subscription[T]{
+		prec: prec,
+		f:    callback,
+		cdef: cdef,
 		raw:  raw,
 	}
 
@@ -436,6 +489,33 @@ func dispatchUpdate[T any](
 			}
 			newVal, raw = sub.def, usingDefaultValue
 		}
+	}
+
+	sub.raw = raw
+	c.callbackPool.Do(func() { sub.f(newVal) })
+}
+
+// called with subscriptionLock
+func dispatchUpdateWithConstrainedDefault[T any](
+	c *Collection,
+	key Key,
+	convert func(value any) (T, error),
+	sub *subscription[T],
+	cvs []ConstrainedValue,
+) {
+	// Note: This performs the conversion even if the raw value is unchanged. This isn't ideal,
+	// but so far constrained default settings are only used for primitive values so it's okay.
+	// If we have a constrained default value with a complex conversion function, this could be
+	// optimized to delay conversion until after we check DeepEqual.
+	newVal, raw := findAndResolveWithConstrainedDefaults(c, key, convert, cvs, sub.cdef, sub.prec)
+
+	// compare raw (pre-conversion) values, if unchanged, skip this update. note that
+	// `usingDefaultValue` is equal to itself but nothing else.
+	if reflect.DeepEqual(sub.raw, raw) {
+		// make raw field point to new one, not old one, so that old loaded files can get
+		// garbage collected.
+		sub.raw = raw
+		return
 	}
 
 	sub.raw = raw
