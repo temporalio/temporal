@@ -816,6 +816,14 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 		return nil, err
 	}
 
+	// Set TemporalReportedProblems search attribute when reaching 2 consecutive failures.
+	if m.ms.executionInfo.WorkflowTaskAttempt == 2 {
+		_ = m.ms.updateReportedProblemsSearchAttribute(
+			"WorkflowTaskFailed",
+			cause.String(),
+		)
+	}
+
 	switch cause {
 	case enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND:
@@ -874,6 +882,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 	// One pathway for TemporalReportedProblems search attribute is here.
 	if err := m.ApplyWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
 		return nil, err
+	}
+	// Set TemporalReportedProblems search attribute when reaching 2 consecutive timeouts.
+	if m.ms.executionInfo.WorkflowTaskAttempt == 2 {
+		_ = m.ms.updateReportedProblemsSearchAttribute(
+			"WorkflowTaskTimedOut",
+			enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String(),
+		)
 	}
 	return event, nil
 }

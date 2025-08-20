@@ -302,7 +302,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 
 		if handler.config.FrontendEnableReportedProblemsSearchAttribute(nsName) {
-
 			// Get the current search attributes for the workflow task
 			searchAttributes := ms.GetExecutionInfo().SearchAttributes
 			fmt.Println("RespondWorkflowTaskCompleted:Invoke SearchAttributes", searchAttributes)
@@ -314,11 +313,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 					tag.WorkflowID(token.GetWorkflowId()),
 					tag.WorkflowRunID(token.GetRunId()),
 					tag.WorkflowNamespaceID(namespaceEntry.ID().String()))
-
-				// ms.updateSearchAttributes()
-				// if err := ms.taskGenerator.GenerateUpsertVisibilityTask(); err != nil {
-				// 	return nil, err
-				// }
 
 				clearedPayload, err := searchattribute.EncodeValue(nil, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 				if err != nil {
