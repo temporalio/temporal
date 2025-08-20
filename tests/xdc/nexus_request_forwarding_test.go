@@ -68,10 +68,15 @@ func TestNexusRequestForwardingTestSuite(t *testing.T) {
 }
 
 func (s *NexusRequestForwardingSuite) SetupSuite() {
+	re, err := dynamicconfig.ConvertWildcardStringListToRegexp([]string{"internal-test-*"})
+	if err != nil {
+		panic(err)
+	}
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                               1 * time.Millisecond,
+		dynamicconfig.FrontendNexusRequestHeadersBlacklist.Key():                       dynamicconfig.GetTypedPropertyFn(re),
 		callbacks.AllowedAddresses.Key():                                               []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
 	s.setupSuite()
@@ -115,7 +120,6 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 		{
 			name:      "success",
 			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
-			header:    nexus.Header{testAuthHeader: "stripped"},
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				s.Equal("true", res.Request.Header["xdc-redirection-api"])
 				_, ok := res.Request.Header[testAuthHeader]
@@ -138,7 +142,6 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 		{
 			name:      "operation error",
 			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
-			header:    nexus.Header{testAuthHeader: "stripped"},
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				s.Equal("true", res.Request.Header["xdc-redirection-api"])
 				_, ok := res.Request.Header[testAuthHeader]
@@ -175,7 +178,6 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 		{
 			name:      "handler error",
 			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
-			header:    nexus.Header{testAuthHeader: "stripped"},
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				s.Equal("true", res.Request.Header["xdc-redirection-api"])
 				_, ok := res.Request.Header[testAuthHeader]
@@ -218,8 +220,12 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
+			caller := func(req *http.Request) (*http.Response, error) {
+				req.Header.Set(testAuthHeader, "stripped")
+				return http.DefaultClient.Do(req)
+			}
 			dispatchURL := fmt.Sprintf("http://%s/%s", s.clusters[1].Host().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
-			nexusClient, err := nexus.NewHTTPClient(nexus.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
+			nexusClient, err := nexus.NewHTTPClient(nexus.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service", HTTPCaller: caller})
 			s.NoError(err)
 
 			activeMetricsHandler, ok := s.clusters[0].Host().GetMetricsHandler().(*metricstest.CaptureHandler)
