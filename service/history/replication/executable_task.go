@@ -301,11 +301,20 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 	if item != nil {
 		nsTag = metrics.NamespaceTag(item.(namespace.Name).String())
 	}
+	processingLatency := now.Sub(e.taskReceivedTime)
 	metrics.ReplicationTaskProcessingLatency.With(e.MetricsHandler).Record(
-		now.Sub(e.taskReceivedTime),
+		processingLatency,
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 	)
+	if processingLatency > 30*time.Second {
+		e.Logger.Warn("replication task processing latency is too long",
+			tag.WorkflowNamespaceID(e.replicationTask.RawTaskInfo.NamespaceId),
+			tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
+			tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
+			tag.ReplicationTask(e.replicationTask.GetRawTaskInfo()),
+		)
+	}
 
 	metrics.ReplicationLatency.With(e.MetricsHandler).Record(
 		now.Sub(e.taskCreationTime),
