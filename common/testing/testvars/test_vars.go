@@ -2,6 +2,7 @@ package testvars
 
 import (
 	"fmt"
+	"go.temporal.io/sdk/worker"
 	"sync"
 	"time"
 
@@ -249,6 +250,14 @@ func (tv *TestVars) DeploymentVersion() *deploymentspb.WorkerDeploymentVersion {
 
 func (tv *TestVars) ExternalDeploymentVersion() *deploymentpb.WorkerDeploymentVersion {
 	return &deploymentpb.WorkerDeploymentVersion{
+		BuildId:        tv.BuildID(),
+		DeploymentName: tv.DeploymentSeries(),
+	}
+}
+
+// SDKDeploymentVersion returns SDK worker deployment version
+func (tv *TestVars) SDKDeploymentVersion() worker.WorkerDeploymentVersion {
+	return worker.WorkerDeploymentVersion{
 		BuildId:        tv.BuildID(),
 		DeploymentName: tv.DeploymentSeries(),
 	}

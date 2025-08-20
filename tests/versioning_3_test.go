@@ -819,7 +819,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 
 	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
-			Version:                   tv1.DeploymentVersionString(),
+			Version:                   tv1.SDKDeploymentVersion(),
 			UseVersioning:             true,
 			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 		},
@@ -843,7 +843,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 
 	w2 := worker.New(s.SdkClient(), tv2.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
-			Version:       tv2.DeploymentVersionString(),
+			Version:       tv2.SDKDeploymentVersion(),
 			UseVersioning: !toUnversioned,
 			// We are passing default behavior even for unversioned because SDK accepts it
 			// for now. Later SDK will stop accepting such config and this test should be fixed
@@ -1386,15 +1386,11 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 	tv2Child := tv1Child.WithBuildIDNumber(2)
 
 	var override *workflowpb.VersioningOverride
-	var sdkOverride sdkclient.VersioningOverride
+	var sdkOverride sdkclient.PinnedVersioningOverride
 	if withOverride {
 		override = tv1.VersioningOverridePinned(s.useV32)
-		sdkOverride = sdkclient.VersioningOverride{
-			Behavior: workflow.VersioningBehaviorPinned,
-			Deployment: sdkclient.Deployment{
-				SeriesName: tv1.DeploymentSeries(),
-				BuildID:    tv1.BuildID(),
-			},
+		sdkOverride = sdkclient.PinnedVersioningOverride{
+			Version: tv1.SDKDeploymentVersion(),
 		}
 	}
 
@@ -1435,7 +1431,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 	if crossTq {
 		w1xtq := worker.New(s.SdkClient(), tv1Child.TaskQueue().GetName(), worker.Options{
 			DeploymentOptions: worker.DeploymentOptions{
-				Version:                   tv1Child.DeploymentVersionString(),
+				Version:                   tv1Child.SDKDeploymentVersion(),
 				UseVersioning:             true,
 				DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 			},
@@ -1448,7 +1444,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 
 	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
-			Version:                   tv1.DeploymentVersionString(),
+			Version:                   tv1.SDKDeploymentVersion(),
 			UseVersioning:             true,
 			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 		},
@@ -1467,7 +1463,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                  tv1.WorkflowID(),
 		TaskQueue:           tv1.TaskQueue().GetName(),
-		VersioningOverride:  sdkOverride,
+		VersioningOverride:  &sdkOverride,
 		WorkflowTaskTimeout: 10 * time.Second,
 	}, "wf")
 	s.NoError(err)
@@ -1570,7 +1566,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 
 	w1 := worker.New(sdkClient, tv1.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
-			Version:                   tv1.DeploymentVersionString(),
+			Version:                   tv1.SDKDeploymentVersion(),
 			UseVersioning:             true,
 			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 		},
@@ -1591,7 +1587,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	if crossTq {
 		w2xtq := worker.New(sdkClient, tv2Child.TaskQueue().GetName(), worker.Options{
 			DeploymentOptions: worker.DeploymentOptions{
-				Version:                   tv2Child.DeploymentVersionString(),
+				Version:                   tv2Child.SDKDeploymentVersion(),
 				UseVersioning:             true,
 				DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 			},
@@ -1603,7 +1599,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	}
 	w2 := worker.New(sdkClient, tv2.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
-			Version:                   tv2.DeploymentVersionString(),
+			Version:                   tv2.SDKDeploymentVersion(),
 			UseVersioning:             true,
 			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 		},
@@ -1709,7 +1705,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	if crossTq && expectInherit {
 		w1xtq := worker.New(sdkClient, canxTq, worker.Options{
 			DeploymentOptions: worker.DeploymentOptions{
-				Version:                   tv1.DeploymentVersionString(),
+				Version:                   tv1.SDKDeploymentVersion(),
 				UseVersioning:             true,
 				DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 			},
@@ -1722,7 +1718,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	w1 := worker.New(sdkClient, tv1.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
 			UseVersioning:             true,
-			Version:                   tv1.DeploymentVersionString(),
+			Version:                   tv1.SDKDeploymentVersion(),
 			DefaultVersioningBehavior: workflow.VersioningBehaviorPinned,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
@@ -1736,7 +1732,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	if crossTq {
 		w2xtq := worker.New(sdkClient, canxTq, worker.Options{
 			DeploymentOptions: worker.DeploymentOptions{
-				Version:                   tv2.DeploymentVersionString(),
+				Version:                   tv2.SDKDeploymentVersion(),
 				UseVersioning:             true,
 				DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
 			},
@@ -1749,7 +1745,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	w2 := worker.New(sdkClient, tv2.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
 			UseVersioning:             true,
-			Version:                   tv2.DeploymentVersionString(),
+			Version:                   tv2.SDKDeploymentVersion(),
 			DefaultVersioningBehavior: workflow.VersioningBehaviorPinned,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
