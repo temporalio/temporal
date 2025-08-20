@@ -3,6 +3,7 @@ package xdc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -99,7 +100,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 		dispatchNexusRequest, ok := target.Request.(*matchingservice.DispatchNexusTaskRequest)
 		if ok {
 			if _, set := dispatchNexusRequest.Request.Header[testAuthHeader]; !set {
-				return authorization.Result{}, fmt.Errorf("auth header not set")
+				return authorization.Result{}, errors.New("auth header not set")
 			}
 			delete(dispatchNexusRequest.Request.Header, testAuthHeader)
 		}
@@ -262,7 +263,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 		dispatchNexusRequest, ok := target.Request.(*matchingservice.DispatchNexusTaskRequest)
 		if ok {
 			if _, set := dispatchNexusRequest.Request.Header[testAuthHeader]; !set {
-				return authorization.Result{}, fmt.Errorf("auth header not set")
+				return authorization.Result{}, errors.New("auth header not set")
 			}
 			delete(dispatchNexusRequest.Request.Header, testAuthHeader)
 		}
