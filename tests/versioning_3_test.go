@@ -1386,12 +1386,8 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 	tv2Child := tv1Child.WithBuildIDNumber(2)
 
 	var override *workflowpb.VersioningOverride
-	var sdkOverride sdkclient.PinnedVersioningOverride
 	if withOverride {
 		override = tv1.VersioningOverridePinned(s.useV32)
-		sdkOverride = sdkclient.PinnedVersioningOverride{
-			Version: tv1.SDKDeploymentVersion(),
-		}
 	}
 
 	// This is the registered behavior which can be unpinned, but only if withOverride. We want
@@ -1460,12 +1456,18 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 	// v1 is current for both parent and child
 	s.setCurrentDeployment(tv1)
 
-	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	startOpts := sdkclient.StartWorkflowOptions{
 		ID:                  tv1.WorkflowID(),
 		TaskQueue:           tv1.TaskQueue().GetName(),
-		VersioningOverride:  &sdkOverride,
+		VersioningOverride:  nil,
 		WorkflowTaskTimeout: 10 * time.Second,
-	}, "wf")
+	}
+	if withOverride {
+		startOpts.VersioningOverride = &sdkclient.PinnedVersioningOverride{
+			Version: tv1.SDKDeploymentVersion(),
+		}
+	}
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, startOpts, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
 	s.WaitForChannel(ctx, wfStarted)
