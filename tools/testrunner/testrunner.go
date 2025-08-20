@@ -19,9 +19,11 @@ import (
 
 const (
 	codeCoverageExtension = ".cover.out"
-	retriesFlag           = "--retries="
+	maxAttemptsFlag       = "--max-attempts="
 	coverProfileFlag      = "-coverprofile="
 	junitReportFlag       = "--junitfile="
+	crashReportNameFlag   = "--crashreportname="
+	crashReportCommand    = "report-crash"
 )
 
 type attempt struct {
@@ -41,8 +43,8 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 		}
 	}
 	log.Printf("starting test attempt #%d: %v %v",
-		a.number, a.runner.gotestsumExecutable, strings.Join(args, " "))
-	cmd := exec.CommandContext(ctx, a.runner.gotestsumExecutable, args...)
+		a.number, a.runner.command, strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, a.runner.command, args...)
 	var output strings.Builder
 	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
 	cmd.Stderr = os.Stderr
@@ -54,31 +56,43 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 }
 
 type runner struct {
-	gotestsumExecutable string
-	junitOutputPath     string
-	coverProfilePath    string
-	attempts            []*attempt
-	retries             int
+	command          string
+	junitOutputPath  string
+	coverProfilePath string
+	attempts         []*attempt
+	maxAttempts      int
+	crashName        string
 }
 
-func newRunner(gotestsumExecutable string) *runner {
+func newRunner(command string) *runner {
 	return &runner{
-		gotestsumExecutable: gotestsumExecutable,
-		attempts:            make([]*attempt, 0),
+		command:  command,
+		attempts: make([]*attempt, 0),
 	}
 }
 
 func (r *runner) sanitizeAndParseArgs(args []string) ([]string, error) {
 	var sanitizedArgs []string
 	for _, arg := range args {
-		if strings.HasPrefix(arg, retriesFlag) {
+		if strings.HasPrefix(arg, maxAttemptsFlag) {
 			var err error
-			r.retries, err = strconv.Atoi(strings.Split(arg, "=")[1])
+			r.maxAttempts, err = strconv.Atoi(strings.Split(arg, "=")[1])
 			if err != nil {
-				return nil, fmt.Errorf("invalid argument %q: %w", retriesFlag, err)
+				return nil, fmt.Errorf("invalid argument %q: %w", maxAttemptsFlag, err)
 			}
-			if r.retries == 0 {
-				return nil, fmt.Errorf("invalid argument %q: must be greater than zero", retriesFlag)
+			if r.maxAttempts == 0 {
+				return nil, fmt.Errorf("invalid argument %q: must be greater than zero", maxAttemptsFlag)
+			}
+			continue // this is a `testrunner` only arg and not passed through
+		}
+
+		if strings.HasPrefix(arg, crashReportNameFlag) {
+			r.crashName = strings.Split(arg, "=")[1]
+			if r.crashName == "" {
+				return nil, fmt.Errorf("invalid argument %q: must not be empty", crashReportNameFlag)
+			}
+			if r.command != crashReportCommand {
+				return nil, fmt.Errorf("argument %q is only valid for command %q", crashReportNameFlag, crashReportCommand)
 			}
 			continue // this is a `testrunner` only arg and not passed through
 		}
@@ -92,15 +106,23 @@ func (r *runner) sanitizeAndParseArgs(args []string) ([]string, error) {
 
 		sanitizedArgs = append(sanitizedArgs, arg)
 	}
+
 	if r.junitOutputPath == "" {
 		return nil, fmt.Errorf("missing required argument %q", junitReportFlag)
 	}
-	if r.coverProfilePath == "" {
-		return nil, fmt.Errorf("missing required argument %q", coverProfileFlag)
+
+	switch r.command {
+	case crashReportCommand:
+		// nothing else to verify
+	default: // ie gotestsum
+		if r.coverProfilePath == "" {
+			return nil, fmt.Errorf("missing required argument %q", coverProfileFlag)
+		}
+		if r.maxAttempts == 0 {
+			return nil, fmt.Errorf("missing required argument %q", maxAttemptsFlag)
+		}
 	}
-	if r.retries == 0 {
-		return nil, fmt.Errorf("missing required argument %q", retriesFlag)
-	}
+
 	return sanitizedArgs, nil
 }
 
@@ -141,8 +163,25 @@ func Main() {
 		log.Fatalf("failed to parse command line options: %v", err)
 	}
 
+	switch r.command {
+	case crashReportCommand:
+		r.reportCrash()
+	default:
+		r.runTests(ctx, args)
+	}
+}
+
+func (r *runner) reportCrash() {
+	jr := generateStatic([]string{r.crashName}, "crash", "Crash")
+	jr.path = r.junitOutputPath
+	if err := jr.write(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (r *runner) runTests(ctx context.Context, args []string) {
 	var currentAttempt *attempt
-	for retry := 0; retry <= r.retries; retry++ {
+	for attempt := 1; attempt <= r.maxAttempts; attempt++ {
 		currentAttempt = r.newAttempt()
 
 		// Run tests.
@@ -155,7 +194,7 @@ func Main() {
 		if len(timedoutTests) > 0 {
 			// Run timed out and was aborted.
 			// Update JUnit XML output for timed out tests since none will have been generated.
-			currentAttempt.junitReport = generateForTimedoutTests(timedoutTests)
+			currentAttempt.junitReport = generateStatic(timedoutTests, "timed out", "Timeout")
 			log.Print(stacktrace)
 
 			// Don't retry.
@@ -179,7 +218,7 @@ func Main() {
 		}
 
 		// Rerun all tests from previous attempt if there's more than 10 failures in a single suite.
-		if len(failures) > 10 && retry < r.retries {
+		if len(failures) > 10 && attempt < r.maxAttempts {
 			log.Printf(
 				"number of failures exceeds configured threshold (%d/%d) for narrowing down tests to retry, retrying with previous attempt's args",
 				len(failures), 10)
