@@ -93,9 +93,11 @@ const (
 	// behavior (`auto_upgrade` or `pinned`) from the SDK. Empty for unversioned workflows.
 	TemporalWorkflowVersioningBehavior = "TemporalWorkflowVersioningBehavior"
 
-	// TemporalReportedProblems is a search attribute that stores the information about problems reported by the workflow.
-	// It is updated after successive workflow task failures with the last workflow task failure cause. After the workflow
-	// task is completed successfully, the search attribute is removed.
+	// TemporalReportedProblems is a search attribute that stores the information about problems
+	// the workflow has encountered in making progress. It is updated after successive workflow task
+	// failures with the last workflow task failure cause. After the workflow task is completed
+	// successfully, the search attribute is removed. Format of a single problem:
+	// "property:reportedProblem=<problem_type> property:reportedCause=<cause>".
 	TemporalReportedProblems = "TemporalReportedProblems"
 )
 

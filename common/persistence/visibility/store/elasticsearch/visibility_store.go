@@ -859,18 +859,17 @@ func (s *VisibilityStore) GenerateESDoc(
 	visibilityTaskKey string,
 ) (map[string]interface{}, error) {
 	doc := map[string]interface{}{
-		searchattribute.VisibilityTaskKey:        visibilityTaskKey,
-		searchattribute.NamespaceID:              request.NamespaceID,
-		searchattribute.WorkflowID:               request.WorkflowID,
-		searchattribute.RunID:                    request.RunID,
-		searchattribute.WorkflowType:             request.WorkflowTypeName,
-		searchattribute.StartTime:                request.StartTime,
-		searchattribute.ExecutionTime:            request.ExecutionTime,
-		searchattribute.ExecutionStatus:          request.Status.String(),
-		searchattribute.TaskQueue:                request.TaskQueue,
-		searchattribute.RootWorkflowID:           request.RootWorkflowID,
-		searchattribute.RootRunID:                request.RootRunID,
-		searchattribute.TemporalReportedProblems: "false",
+		searchattribute.VisibilityTaskKey: visibilityTaskKey,
+		searchattribute.NamespaceID:       request.NamespaceID,
+		searchattribute.WorkflowID:        request.WorkflowID,
+		searchattribute.RunID:             request.RunID,
+		searchattribute.WorkflowType:      request.WorkflowTypeName,
+		searchattribute.StartTime:         request.StartTime,
+		searchattribute.ExecutionTime:     request.ExecutionTime,
+		searchattribute.ExecutionStatus:   request.Status.String(),
+		searchattribute.TaskQueue:         request.TaskQueue,
+		searchattribute.RootWorkflowID:    request.RootWorkflowID,
+		searchattribute.RootRunID:         request.RootRunID,
 	}
 
 	if request.ParentWorkflowID != nil {

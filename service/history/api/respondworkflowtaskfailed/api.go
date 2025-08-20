@@ -83,13 +83,6 @@ func Invoke(
 				return nil, err
 			}
 
-			// fmt.Println("RespondWorkflowTaskFailed:Invoke Adding TemporalReportedProblems search attribute",
-			// 	tag.WorkflowID(token.GetWorkflowId()),
-			// 	tag.WorkflowRunID(token.GetRunId()),
-			// 	tag.WorkflowNamespaceID(namespaceEntry.ID().String()),
-			// 	tag.Attempt(workflowTask.Attempt),
-			// )
-
 			metrics.FailedWorkflowTasksCounter.With(shardContext.GetMetricsHandler()).Record(
 				1,
 				metrics.OperationTag(metrics.HistoryRespondWorkflowTaskFailedScope),

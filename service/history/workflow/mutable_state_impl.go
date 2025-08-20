@@ -5694,8 +5694,6 @@ func (ms *MutableStateImpl) RetryActivity(
 		ActivityMatchWorkflowRules(ms, ms.timeSource, ms.logger, ai)
 	}
 
-	const threshold = 2
-
 	// if activity is paused
 	if ai.Paused {
 		// need to update activity
@@ -5735,26 +5733,6 @@ func (ms *MutableStateImpl) RetryActivity(
 	)
 	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
 		return retryState, nil
-	}
-
-	if ai.Attempt+1 >= threshold {
-		fmt.Println("MutableStateImpl:RetryActivity Adding Problems search attribute",
-			tag.WorkflowID(ms.executionInfo.WorkflowId),
-			tag.WorkflowNamespaceID(ms.namespaceEntry.ID().String()))
-		if _, err := ms.AddUpsertWorkflowSearchAttributesEvent(ai.ScheduledEventId, &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
-			SearchAttributes: &commonpb.SearchAttributes{
-				IndexedFields: map[string]*commonpb.Payload{
-					"Problems": {
-						Metadata: map[string][]byte{
-							"type": []byte("bool"),
-						},
-						Data: []byte("true"),
-					},
-				},
-			},
-		}); err != nil {
-			return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
-		}
 	}
 
 	ms.updateActivityInfoForRetries(ai,
@@ -5913,6 +5891,7 @@ func (ms *MutableStateImpl) updateReportedProblemsSearchAttribute(
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
 
+	// This is not guaranteed to be accurate because of ordering non-determinism. Needs to be fixed.
 	if proto.Equal(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], reportedProblemsPayload) {
 		return nil // unchanged
 	}
