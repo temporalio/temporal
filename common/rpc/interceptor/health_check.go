@@ -40,6 +40,12 @@ type (
 	}
 )
 
+var excludedAPIsForHealthSignal = map[string]struct{}{
+	"DeepHealthCheck":             {},
+	"PollMutableState":            {},
+	"PollWorkflowExecutionUpdate": {},
+}
+
 // NewHealthCheckInterceptor creates a new health check interceptor
 func NewHealthCheckInterceptor(healthSignalAggregator HealthSignalAggregator) *HealthCheckInterceptor {
 	return &HealthCheckInterceptor{
@@ -60,10 +66,9 @@ func (h *HealthCheckInterceptor) UnaryIntercept(
 
 	// Skip health check recording for specific methods
 	methodName := api.MethodName(info.FullMethod)
-	if methodName != "DeepHealthCheck" { // Do not try to measure a tool with itself.
+	if _, ok := excludedAPIsForHealthSignal[methodName]; !ok {
 		h.healthSignalAggregator.Record(elapsed, err)
 	}
-
 	return resp, err
 }
 
