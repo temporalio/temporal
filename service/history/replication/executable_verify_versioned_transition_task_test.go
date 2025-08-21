@@ -396,7 +396,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_MissingVersio
 
 	err := task.Execute()
 	s.IsType(&serviceerrors.SyncState{}, err)
-	var expected *persistencespb.VersionedTransition = nil
+	var expected *persistencespb.VersionedTransition
 	s.Equal(expected, err.(*serviceerrors.SyncState).VersionedTransition)
 }
 
