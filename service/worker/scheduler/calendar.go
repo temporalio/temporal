@@ -421,8 +421,14 @@ func makeRange(s, field, def string, minVal, maxVal int, parseMode parseMode) ([
 		step := 1
 		hasStep := false
 		if strings.Contains(part, "/") {
+			// We only allow a single slash introducing an integer step. Reject inputs
+			// with more than one slash (e.g. "3/5/7") so tests receive the
+			// canonical "too many slashes" error instead of a strconv parse error.
+			if strings.Count(part, "/") > 1 { // faster than re-splitting pieces later
+				return nil, fmt.Errorf("%s has too many slashes", field)
+			}
 			skipParts := strings.SplitN(part, "/", 2)
-			if len(skipParts) != 2 {
+			if len(skipParts) != 2 || skipParts[1] == "" { // second part must exist and be non-empty
 				return nil, fmt.Errorf("%s has too many slashes", field)
 			}
 			part = skipParts[0]
@@ -439,6 +445,12 @@ func makeRange(s, field, def string, minVal, maxVal int, parseMode parseMode) ([
 		start, end := minVal, maxVal
 		if part != "*" {
 			if strings.Contains(part, "-") {
+				// Only a single dash is allowed to denote a range (e.g. "1-5").
+				// Inputs with multiple dashes like "1-5-7" should raise the
+				// canonical "too many dashes" error expected by tests.
+				if strings.Count(part, "-") > 1 { // no negative numbers are expected in spec
+					return nil, fmt.Errorf("%s has too many dashes", field)
+				}
 				rangeParts := strings.SplitN(part, "-", 2)
 				if len(rangeParts) != 2 {
 					return nil, fmt.Errorf("%s has too many dashes", field)
