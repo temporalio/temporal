@@ -2,7 +2,6 @@ package respondworkflowtaskcompleted
 
 import (
 	"context"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -103,7 +102,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskCompletedRequest,
 ) (_ *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
-	fmt.Println("RespondWorkflowTaskCompleted:Invoke")
 	// By default, retError is passed to workflow lease release method in deferred function.
 	// If error is passed, then workflow context and mutable state are cleared.
 	// If no changes to mutable state are made or changes already persisted (in memory version corresponds to the database),

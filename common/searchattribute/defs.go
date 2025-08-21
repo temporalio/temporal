@@ -97,7 +97,7 @@ const (
 	// the workflow has encountered in making progress. It is updated after successive workflow task
 	// failures with the last workflow task failure cause. After the workflow task is completed
 	// successfully, the search attribute is removed. Format of a single problem:
-	// "category=<problem_type> cause=<cause>".
+	// "category=<category> cause=<cause>".
 	TemporalReportedProblems = "TemporalReportedProblems"
 )
 
