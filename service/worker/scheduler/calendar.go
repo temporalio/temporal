@@ -270,14 +270,26 @@ func parseCronString(c string) (*schedulepb.StructuredCalendarSpec, *schedulepb.
 
 	// split fields
 	cal := schedulepb.CalendarSpec{Comment: comment}
-	fields := strings.Fields(c)
-	switch len(fields) {
+	// Use FieldsSeq to avoid building an unbounded slice; we only accept 5–7 fields.
+	const maxCronFields = 7
+	var toks [maxCronFields]string
+	n := 0
+	for tok := range strings.FieldsSeq(c) {
+		if n < maxCronFields {
+			toks[n] = tok
+			n++
+			continue
+		}
+		// More than 7 fields → invalid.
+		return nil, nil, "", errors.New("CronString does not have 5-7 fields")
+	}
+	switch n {
 	case 5:
-		cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek = fields[0], fields[1], fields[2], fields[3], fields[4]
+		cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek = toks[0], toks[1], toks[2], toks[3], toks[4]
 	case 6:
-		cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek, cal.Year = fields[0], fields[1], fields[2], fields[3], fields[4], fields[5]
+		cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek, cal.Year = toks[0], toks[1], toks[2], toks[3], toks[4], toks[5]
 	case 7:
-		cal.Second, cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek, cal.Year = fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[6]
+		cal.Second, cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek, cal.Year = toks[0], toks[1], toks[2], toks[3], toks[4], toks[5], toks[6]
 	default:
 		return nil, nil, "", errors.New("CronString does not have 5-7 fields")
 	}
