@@ -1385,15 +1385,34 @@ func BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, runID string) strin
 
 // SplitHistoryGarbageCleanupInfo returns workflow identity information
 func SplitHistoryGarbageCleanupInfo(info string) (namespaceID, workflowID, runID string, err error) {
-	ss := strings.Split(info, ":")
-	// workflowID can contain ":" so len(ss) can be greater than 3
-	if len(ss) < numItemsInGarbageInfo {
+	// Expect format: namespaceID:workflowID:runID, but workflowID may contain ':'
+	var (
+		count int
+		first string
+		prev  string
+		mid   strings.Builder
+	)
+	for part := range strings.SplitSeq(info, ":") {
+		count++
+		if count == 1 {
+			first = part
+			continue
+		}
+		if count > 2 {
+			if mid.Len() > 0 {
+				mid.WriteByte(':')
+			}
+			mid.WriteString(prev)
+		}
+		prev = part
+	}
+	// workflowID can contain ':' so we require at least 3 parts overall
+	if count < numItemsInGarbageInfo {
 		return "", "", "", fmt.Errorf("not able to split info for  %s", info)
 	}
-	namespaceID = ss[0]
-	runID = ss[len(ss)-1]
-	workflowEnd := len(info) - len(runID) - 1
-	workflowID = info[len(namespaceID)+1 : workflowEnd]
+	namespaceID = first
+	runID = prev
+	workflowID = mid.String()
 	return
 }
 
