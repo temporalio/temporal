@@ -5912,44 +5912,8 @@ func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute(
 		return nil
 	}
 
-	fmt.Println("removeReportedProblemsSearchAttribute", reportedProbs)
-
-	reportedProblemsMap := make(map[string]interface{}, len(reportedProbs))
-	for _, reportedProb := range reportedProbs {
-		reportedProblemsMap[reportedProb] = nil
-	}
-
-	// Deserialize the payload into a list
-	reportedProblemsDecoded, err := searchattribute.DecodeValue(temporalReportedProblems, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
-	if err != nil {
-		return err
-	}
-
-	reportedProblemsDecodedList := reportedProblemsDecoded.([]string)
-	reportedProblemsDecodedListCopy := make([]string, len(reportedProblemsDecodedList))
-	copy(reportedProblemsDecodedListCopy, reportedProblemsDecodedList)
-
-	for idx, reportedSearchAttribute := range reportedProblemsDecodedList {
-		if _, ok := reportedProblemsMap[reportedSearchAttribute]; ok {
-			fmt.Println("removeReportedProblemsSearchAttribute: removing", reportedSearchAttribute)
-			reportedProblemsDecodedListCopy = append(reportedProblemsDecodedListCopy[:idx], reportedProblemsDecodedListCopy[idx+1:]...)
-		}
-	}
-
-	reportedProblemsPayload, err := searchattribute.EncodeValue(reportedProblemsDecodedListCopy, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
-	if err != nil {
-		return err
-	}
-
-	// TODO (seankane): Only remove the a single problem or cause, not all of them.
-	// TODO (seankane): delete from the map
-	exeInfo := ms.executionInfo
-	if proto.Equal(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], reportedProblemsPayload) {
-		return nil
-	}
-
-	// TODO (seankane): delete from the map
-	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: reportedProblemsPayload})
+	// Just remove the search attribute entirely for now
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: nil})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 

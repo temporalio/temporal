@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -302,35 +301,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 
 		if handler.config.EnableReportedProblemsSearchAttribute(nsName) {
-			// Get the current search attributes for the workflow task
-			searchAttributes := ms.GetExecutionInfo().SearchAttributes
-			fmt.Println("RespondWorkflowTaskCompleted:Invoke SearchAttributes", searchAttributes)
-
-			if searchAttributes[searchattribute.TemporalReportedProblems] != nil {
-				fmt.Println("RespondWorkflowTaskCompleted:Invoke TemporalReportedProblems search attribute", searchAttributes[searchattribute.TemporalReportedProblems])
-
-				fmt.Println("RespondWorkflowTaskCompleted:Invoke Removing TemporalReportedProblems search attribute",
-					tag.WorkflowID(token.GetWorkflowId()),
-					tag.WorkflowRunID(token.GetRunId()),
-					tag.WorkflowNamespaceID(namespaceEntry.ID().String()))
-
-				clearedPayload, err := searchattribute.EncodeValue(nil, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
-				if err != nil {
-					return nil, err
-				}
-
-				fmt.Println("RespondWorkflowTaskCompleted:Invoke clearedPayload", clearedPayload)
-
-				if _, err := ms.AddUpsertWorkflowSearchAttributesEvent(currentWorkflowTask.ScheduledEventID, &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
-					SearchAttributes: &commonpb.SearchAttributes{
-						IndexedFields: map[string]*commonpb.Payload{
-							searchattribute.TemporalReportedProblems: clearedPayload,
-						},
-					},
-				}); err != nil {
-					return nil, err
-				}
-				fmt.Println("RespondWorkflowTaskCompleted:Invoke UpsertWorkflowSearchAttributesEvent", clearedPayload)
+			if err := ms.RemoveReportedProblemsSearchAttribute("category=WorkflowTaskFailed", "cause=WorkflowWorkerUnhandledFailure"); err != nil {
+				return nil, err
 			}
 		}
 	}

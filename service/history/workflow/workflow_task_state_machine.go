@@ -25,7 +25,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -913,31 +912,24 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 
 	// TODO seankane: add TemporalReportedProblems search attribute here
 	if failWorkflowTaskInfo.Attempt == 2 {
-		fmt.Println("failWorkflowTask", failWorkflowTaskInfo.Attempt)
-
 		lastWorkflowTaskCloseEvent, err := m.getLastWorkflowTaskCloseEvent(context.TODO())
 		if err != nil {
-			fmt.Println("failWorkflowTask:GetLastWorkflowTaskCloseEvent", err)
 			return err
 		}
 
-		// Set TemporalReportedProblems search attribute when reaching 2 consecutive failures.
-		if m.ms.executionInfo.WorkflowTaskAttempt == 2 {
-
-			switch tFailure := lastWorkflowTaskCloseEvent.GetAttributes().(type) {
-			case *historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes:
-				wftTimedOut := tFailure.WorkflowTaskTimedOutEventAttributes
-				return m.ms.UpdateReportedProblemsSearchAttribute(
-					"WorkflowTaskTimedOut",
-					wftTimedOut.GetTimeoutType().String(),
-				)
-			case *historypb.HistoryEvent_WorkflowTaskFailedEventAttributes:
-				wftFailure := tFailure.WorkflowTaskFailedEventAttributes
-				return m.ms.UpdateReportedProblemsSearchAttribute(
-					"WorkflowTaskFailed",
-					wftFailure.GetCause().String(),
-				)
-			}
+		switch tFailure := lastWorkflowTaskCloseEvent.GetAttributes().(type) {
+		case *historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes:
+			wftTimedOut := tFailure.WorkflowTaskTimedOutEventAttributes
+			return m.ms.UpdateReportedProblemsSearchAttribute(
+				"WorkflowTaskTimedOut",
+				wftTimedOut.GetTimeoutType().String(),
+			)
+		case *historypb.HistoryEvent_WorkflowTaskFailedEventAttributes:
+			wftFailure := tFailure.WorkflowTaskFailedEventAttributes
+			return m.ms.UpdateReportedProblemsSearchAttribute(
+				"WorkflowTaskFailed",
+				wftFailure.GetCause().String(),
+			)
 		}
 
 		return fmt.Errorf("failWorkflowTask: unknown workflow task close event type: %T", lastWorkflowTaskCloseEvent.GetAttributes())
@@ -945,51 +937,65 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	return nil
 }
 
-// TODO (seankane): do not want to incur persistence reads here, should be strictly using data stored in mutable state
+// getLastWorkflowTaskCloseEvent retrieves the last workflow task close event (failed or timed out)
+// using only data stored in mutable state, without incurring persistence reads
 func (m *workflowTaskStateMachine) getLastWorkflowTaskCloseEvent(
 	ctx context.Context,
 ) (*historypb.HistoryEvent, error) {
-	branchToken, err := m.ms.GetCurrentBranchToken()
-	if err != nil {
-		fmt.Println("failWorkflowTask:GetCurrentBranchToken", err)
-		return nil, err
-	}
-	// Use persisted-safe MaxEventID. If you’re mid-transaction, NextEventID may be ahead of persisted events.
-	maxEventID := int64(common.EmptyEventID)
-	if !m.ms.HasBufferedEvents() && !m.ms.IsDirty() {
-		maxEventID = m.ms.GetNextEventID()
+	// Get the last completed workflow task started event ID from mutable state
+	lastCompletedWorkflowTaskStartedEventID := m.ms.GetLastCompletedWorkflowTaskStartedEventId()
+	if lastCompletedWorkflowTaskStartedEventID == common.EmptyEventID {
+		return nil, serviceerror.NewNotFound("no prior workflow task close event found")
 	}
 
-	_, txID := m.ms.GetLastFirstEventIDTxnID()
+	// Search through events stored in the history builder's memory
+	// Check memLatestBatch first (current batch being built)
+	if event := m.findWorkflowTaskCloseEventInBatch(m.ms.hBuilder.GetMemLatestBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
+		return event, nil
+	}
 
-	req := &persistence.ReadHistoryBranchReverseRequest{
-		ShardID:                m.ms.shard.GetShardID(),
-		BranchToken:            branchToken,
-		MaxEventID:             maxEventID,
-		PageSize:               128, // small page; paginate if needed
-		LastFirstTransactionID: txID,
-		NextPageToken:          nil,
+	// Check memEventsBatches (completed batches)
+	for i := len(m.ms.hBuilder.GetMemEventsBatches()) - 1; i >= 0; i-- {
+		batch := m.ms.hBuilder.GetMemEventsBatches()[i]
+		if event := m.findWorkflowTaskCloseEventInBatch(batch, lastCompletedWorkflowTaskStartedEventID); event != nil {
+			return event, nil
+		}
 	}
-	for {
-		resp, err := m.ms.shard.GetExecutionManager().ReadHistoryBranchReverse(ctx, req)
-		if err != nil {
-			fmt.Println("failWorkflowTask:ReadHistoryBranchReverse", err)
-			fmt.Println("failWorkflowTask:ReadHistoryBranchReverse.MaxEventID", req.MaxEventID)
-			return nil, err
-		}
-		for _, e := range resp.HistoryEvents {
-			switch e.GetEventType() {
-			case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
-				return e, nil
-			}
-		}
-		if len(resp.NextPageToken) == 0 {
-			break
-		}
-		req.NextPageToken = resp.NextPageToken
+
+	// Check memBufferBatch (buffered events)
+	if event := m.findWorkflowTaskCloseEventInBatch(m.ms.hBuilder.GetMemBufferBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
+		return event, nil
 	}
-	fmt.Println("failWorkflowTask:ReadHistoryBranchReverse: no prior workflow task close event found")
+
+	// Check dbBufferBatch (persisted buffer events)
+	if event := m.findWorkflowTaskCloseEventInBatch(m.ms.hBuilder.GetDBBufferBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
+		return event, nil
+	}
+
 	return nil, serviceerror.NewNotFound("no prior workflow task close event found")
+}
+
+// findWorkflowTaskCloseEventInBatch searches for workflow task close events in a batch of events
+// starting from the last completed workflow task started event ID
+func (m *workflowTaskStateMachine) findWorkflowTaskCloseEventInBatch(
+	events []*historypb.HistoryEvent,
+	lastCompletedWorkflowTaskStartedEventID int64,
+) *historypb.HistoryEvent {
+	// Search backwards through the batch to find the most recent workflow task close event
+	for i := len(events) - 1; i >= 0; i-- {
+		event := events[i]
+
+		// Only consider events that are after the last completed workflow task started event
+		if event.GetEventId() <= lastCompletedWorkflowTaskStartedEventID {
+			continue
+		}
+
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
+			return event
+		}
+	}
+	return nil
 }
 
 // deleteWorkflowTask deletes a workflow task.
