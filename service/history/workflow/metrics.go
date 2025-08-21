@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"time"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/metrics"
@@ -8,6 +10,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func emitWorkflowHistoryStats(
@@ -130,4 +133,75 @@ func GetPerTaskQueueFamilyScope(
 		config.BreakdownMetricsByTaskQueue(namespaceName.String(), taskQueueFamily, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		tags...,
 	)
+}
+
+type ActivityExecutionState int
+
+const (
+	ActivityStateUnknown ActivityExecutionState = iota
+	ActivityStateSucceeded
+	ActivityStateFailed
+	ActivityStateCanceled
+	ActivityStateTimeout
+)
+
+type ActivityCompletionMetrics struct {
+	// State determines whether the activity succeeded, and whether it is/will be retried
+	State ActivityExecutionState
+	// AttemptStartedTime is the start time of the current attempt
+	AttemptStartedTime time.Time
+	// FirstScheduledTime is the scheduled time of the first attempt
+	FirstScheduledTime time.Time
+	// Closed is true if no more attempts will be made to execute the activity.
+	Closed bool
+	// TimerType is the type of timer that caused the activity execution to timeout.
+	TimerType enumspb.TimeoutType
+}
+
+func RecordActivityCompletionMetrics(
+	shard historyi.ShardContext,
+	namespace namespace.Name,
+	taskQueue string,
+	metricsState ActivityCompletionMetrics,
+	tags ...metrics.Tag,
+) {
+	metricsHandler := GetPerTaskQueueFamilyScope(
+		shard.GetMetricsHandler(),
+		namespace,
+		taskQueue,
+		shard.GetConfig(),
+		tags...,
+	)
+
+	if !metricsState.AttemptStartedTime.IsZero() {
+		latency := time.Since(metricsState.AttemptStartedTime)
+		// ActivityE2ELatency is deprecated due to its inaccurate naming. It captures the attempt duration instead of an end-to-end duration as its name suggests. For now record both metrics
+		metrics.ActivityE2ELatency.With(metricsHandler).Record(latency)
+		metrics.ActivityStartToCloseLatency.With(metricsHandler).Record(latency)
+	}
+
+	// Record true end-to-end duration only for terminal states (includes retries and backoffs)
+	if metricsState.Closed && !metricsState.FirstScheduledTime.IsZero() {
+		scheduleToCloseLatency := time.Since(metricsState.FirstScheduledTime)
+		metrics.ActivityScheduleToCloseLatency.With(metricsHandler).Record(scheduleToCloseLatency)
+	}
+
+	switch metricsState.State {
+	case ActivityStateFailed:
+		metrics.ActivityTaskFail.With(metricsHandler).Record(1)
+		if metricsState.Closed {
+			metrics.ActivityFail.With(metricsHandler).Record(1)
+		}
+	case ActivityStateCanceled:
+		metrics.ActivityCancel.With(metricsHandler).Record(1)
+	case ActivityStateSucceeded:
+		metrics.ActivitySuccess.With(metricsHandler).Record(1)
+	case ActivityStateTimeout:
+		metrics.ActivityTaskTimeout.With(metricsHandler).Record(1, metrics.StringTag("timeout_type", metricsState.TimerType.String()))
+		if metricsState.Closed {
+			metrics.ActivityTimeout.With(metricsHandler).Record(1, metrics.StringTag("timeout_type", metricsState.TimerType.String()))
+		}
+	case ActivityStateUnknown:
+		// Do nothing
+	}
 }

@@ -296,6 +296,19 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		return result, nil
 	}
 
+	workflow.RecordActivityCompletionMetrics(
+		t.shardContext,
+		namespace.Name(mutableState.GetNamespaceEntry().Name()),
+		ai.TaskQueue,
+		workflow.ActivityCompletionMetrics{
+			State:              workflow.ActivityStateTimeout,
+			AttemptStartedTime: timestamp.TimeValue(ai.StartedTime),
+			FirstScheduledTime: timestamp.TimeValue(ai.FirstScheduledTime),
+			Closed:             retryState != enumspb.RETRY_STATE_IN_PROGRESS,
+			TimerType:          timerSequenceID.TimerType,
+		},
+	)
+
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		// TODO uncommment once RETRY_STATE_PAUSED is supported
 		// || retryState == enumspb.RETRY_STATE_PAUSED {
