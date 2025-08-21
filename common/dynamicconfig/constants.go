@@ -276,6 +276,12 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 		`How many extra goroutines can be created per root.`,
 	)
 
+	EnableReportedProblemsSearchAttribute = NewNamespaceBoolSetting(
+		"system.enableReportedProblemsSearchAttribute",
+		true,
+		`FrontendEnableReportedProblemsSearchAttribute enables the TemporalReportedProblems search attribute in the frontend.`,
+	)
+
 	// keys for size limit
 
 	BlobSizeLimitError = NewNamespaceIntSetting(
@@ -976,12 +982,6 @@ to allow waiting on the "Accepted" lifecycle stage.`,
 		"frontend.workerVersioningRuleAPIs",
 		false,
 		`FrontendEnableWorkerVersioningRuleAPIs enables worker versioning in workflow progress APIs.`,
-	)
-
-	FrontendEnableReportedProblemsSearchAttribute = NewNamespaceBoolSetting(
-		"frontend.enableReportedProblemsSearchAttribute",
-		true,
-		`FrontendEnableReportedProblemsSearchAttribute enables the TemporalReportedProblems search attribute in the frontend.`,
 	)
 
 	DeleteNamespaceDeleteActivityRPS = NewGlobalIntSetting(

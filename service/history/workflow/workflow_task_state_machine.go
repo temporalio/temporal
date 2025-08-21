@@ -816,14 +816,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 		return nil, err
 	}
 
-	// Set TemporalReportedProblems search attribute when reaching 2 consecutive failures.
-	if m.ms.executionInfo.WorkflowTaskAttempt == 2 {
-		_ = m.ms.updateReportedProblemsSearchAttribute(
-			"WorkflowTaskFailed",
-			cause.String(),
-		)
-	}
-
 	switch cause {
 	case enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND:
@@ -883,13 +875,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 	if err := m.ApplyWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
 		return nil, err
 	}
-	// Set TemporalReportedProblems search attribute when reaching 2 consecutive timeouts.
-	if m.ms.executionInfo.WorkflowTaskAttempt == 2 {
-		_ = m.ms.updateReportedProblemsSearchAttribute(
-			"WorkflowTaskTimedOut",
-			enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String(),
-		)
-	}
 	return event, nil
 }
 
@@ -936,21 +921,23 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 			return err
 		}
 
-		fmt.Println("lastWorkflowTaskCloseEvent", lastWorkflowTaskCloseEvent)
+		// Set TemporalReportedProblems search attribute when reaching 2 consecutive failures.
+		if m.ms.executionInfo.WorkflowTaskAttempt == 2 {
 
-		switch tFailure := lastWorkflowTaskCloseEvent.GetAttributes().(type) {
-		case *historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes:
-			wftTimedOut := tFailure.WorkflowTaskTimedOutEventAttributes
-			return m.ms.updateReportedProblemsSearchAttribute(
-				"WorkflowTaskTimedOut",
-				wftTimedOut.GetTimeoutType().String(),
-			)
-		case *historypb.HistoryEvent_WorkflowTaskFailedEventAttributes:
-			wftFailure := tFailure.WorkflowTaskFailedEventAttributes
-			return m.ms.updateReportedProblemsSearchAttribute(
-				"WorkflowTaskFailed",
-				wftFailure.GetCause().String(),
-			)
+			switch tFailure := lastWorkflowTaskCloseEvent.GetAttributes().(type) {
+			case *historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes:
+				wftTimedOut := tFailure.WorkflowTaskTimedOutEventAttributes
+				return m.ms.UpdateReportedProblemsSearchAttribute(
+					"WorkflowTaskTimedOut",
+					wftTimedOut.GetTimeoutType().String(),
+				)
+			case *historypb.HistoryEvent_WorkflowTaskFailedEventAttributes:
+				wftFailure := tFailure.WorkflowTaskFailedEventAttributes
+				return m.ms.UpdateReportedProblemsSearchAttribute(
+					"WorkflowTaskFailed",
+					wftFailure.GetCause().String(),
+				)
+			}
 		}
 
 		return fmt.Errorf("failWorkflowTask: unknown workflow task close event type: %T", lastWorkflowTaskCloseEvent.GetAttributes())
@@ -958,7 +945,7 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	return nil
 }
 
-// new code
+// TODO (seankane): do not want to incur persistence reads here, should be strictly using data stored in mutable state
 func (m *workflowTaskStateMachine) getLastWorkflowTaskCloseEvent(
 	ctx context.Context,
 ) (*historypb.HistoryEvent, error) {

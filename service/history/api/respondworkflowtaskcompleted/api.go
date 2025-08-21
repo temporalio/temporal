@@ -301,7 +301,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			return nil, err
 		}
 
-		if handler.config.FrontendEnableReportedProblemsSearchAttribute(nsName) {
+		if handler.config.EnableReportedProblemsSearchAttribute(nsName) {
 			// Get the current search attributes for the workflow task
 			searchAttributes := ms.GetExecutionInfo().SearchAttributes
 			fmt.Println("RespondWorkflowTaskCompleted:Invoke SearchAttributes", searchAttributes)

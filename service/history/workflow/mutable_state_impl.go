@@ -5872,13 +5872,13 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
-func (ms *MutableStateImpl) updateReportedProblemsSearchAttribute(
-	reportedProblem, reportedCause string,
+func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute(
+	reportedProblemCategory, reportedCause string,
 ) error {
-	fmt.Println("updateReportedProblemsSearchAttribute:", reportedProblem, reportedCause)
+	fmt.Println("updateReportedProblemsSearchAttribute:", reportedProblemCategory, reportedCause)
 	reportedProblems := []string{
-		fmt.Sprintf("property:reportedProblem=%s", reportedProblem),
-		fmt.Sprintf("property:reportedCause=%s", reportedCause),
+		fmt.Sprintf("category=%s", reportedProblemCategory),
+		fmt.Sprintf("cause=%s", reportedCause),
 	}
 
 	reportedProblemsPayload, err := searchattribute.EncodeValue(reportedProblems, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
@@ -5900,22 +5900,55 @@ func (ms *MutableStateImpl) updateReportedProblemsSearchAttribute(
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
-func (ms *MutableStateImpl) removeReportedProblemsSearchAttribute() error {
-	fmt.Println("removeReportedProblemsSearchAttribute")
-	reportedProblemsPayload, err := searchattribute.EncodeValue(nil, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute(
+	reportedProbs ...string,
+) error {
+	if ms.executionInfo.SearchAttributes == nil {
+		return nil
+	}
+
+	temporalReportedProblems := ms.executionInfo.SearchAttributes[searchattribute.TemporalReportedProblems]
+	if temporalReportedProblems == nil {
+		return nil
+	}
+
+	fmt.Println("removeReportedProblemsSearchAttribute", reportedProbs)
+
+	reportedProblemsMap := make(map[string]interface{}, len(reportedProbs))
+	for _, reportedProb := range reportedProbs {
+		reportedProblemsMap[reportedProb] = nil
+	}
+
+	// Deserialize the payload into a list
+	reportedProblemsDecoded, err := searchattribute.DecodeValue(temporalReportedProblems, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	if err != nil {
 		return err
 	}
 
-	exeInfo := ms.executionInfo
-	if exeInfo.SearchAttributes == nil {
-		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
+	reportedProblemsDecodedList := reportedProblemsDecoded.([]string)
+	reportedProblemsDecodedListCopy := make([]string, len(reportedProblemsDecodedList))
+	copy(reportedProblemsDecodedListCopy, reportedProblemsDecodedList)
+
+	for idx, reportedSearchAttribute := range reportedProblemsDecodedList {
+		if _, ok := reportedProblemsMap[reportedSearchAttribute]; ok {
+			fmt.Println("removeReportedProblemsSearchAttribute: removing", reportedSearchAttribute)
+			reportedProblemsDecodedListCopy = append(reportedProblemsDecodedListCopy[:idx], reportedProblemsDecodedListCopy[idx+1:]...)
+		}
 	}
 
+	reportedProblemsPayload, err := searchattribute.EncodeValue(reportedProblemsDecodedListCopy, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	if err != nil {
+		return err
+	}
+
+	// TODO (seankane): Only remove the a single problem or cause, not all of them.
+	// TODO (seankane): delete from the map
+	exeInfo := ms.executionInfo
 	if proto.Equal(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], reportedProblemsPayload) {
 		return nil
 	}
 
+	// TODO (seankane): delete from the map
 	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: reportedProblemsPayload})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
