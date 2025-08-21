@@ -126,7 +126,7 @@ func (c *operationContext) augmentContext(ctx context.Context, header nexus.Head
 		func() string { return c.method },
 	)
 	if userAgent, ok := header[headerUserAgent]; ok {
-		parts := strings.Split(userAgent, clientNameVersionDelim)
+		parts := strings.SplitN(userAgent, clientNameVersionDelim, 2)
 		if len(parts) == 2 {
 			mdIncoming, ok := metadata.FromIncomingContext(ctx)
 			if !ok {

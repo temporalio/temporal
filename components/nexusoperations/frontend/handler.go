@@ -402,7 +402,7 @@ func (c *requestContext) augmentContext(ctx context.Context, header http.Header)
 		func() string { return methodNameForMetrics },
 	)
 	if userAgent := header.Get(http.CanonicalHeaderKey(headerUserAgent)); userAgent != "" {
-		parts := strings.Split(userAgent, clientNameVersionDelim)
+		parts := strings.SplitN(userAgent, clientNameVersionDelim, 2)
 		if len(parts) == 2 {
 			mdIncoming, ok := metadata.FromIncomingContext(ctx)
 			if !ok {
