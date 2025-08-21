@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	outboundTaskTimeout = time.Second * 3 * debug.TimeoutMultiplier
+	outboundTaskTimeout = time.Second * 10 * debug.TimeoutMultiplier
 )
 
 type outboundQueueActiveTaskExecutor struct {
