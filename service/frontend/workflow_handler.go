@@ -5103,13 +5103,6 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 		return nil, errRequestNotSet
 	}
 
-	if request.GetResponse().GetStartOperation() == nil &&
-		request.GetResponse().GetCancelOperation() == nil &&
-		request.GetResponse().GetFetchOperationInfo() == nil &&
-		request.GetResponse().GetFetchOperationResult() == nil {
-		return nil, serviceerror.NewInvalidArgument("invalid upstream Nexus response")
-	}
-
 	if r := request.GetResponse().GetStartOperation().GetAsyncSuccess(); r != nil {
 		operationToken := r.OperationToken
 		if operationToken == "" && r.OperationId != "" { //nolint:staticcheck // SA1019 this field might be by old clients.
@@ -5260,11 +5253,16 @@ func (wh *WorkflowHandler) StartNexusOperation(ctx context.Context, request *wor
 	if err != nil {
 		var handlerErr *nexus.HandlerError
 		if errors.As(err, &handlerErr) {
-			return &workflowservice.StartNexusOperationResponse{
-				Variant: &workflowservice.StartNexusOperationResponse_HandlerError{
-					HandlerError: commonnexus.NexusHandlerErrorToProtoHandlerError(handlerErr),
-				},
-			}, nil
+			failureSource := commonnexus.GetFailureSourceFromContext(ctx)
+			if failureSource == commonnexus.FailureSourceWorker {
+				return &workflowservice.StartNexusOperationResponse{
+					Variant: &workflowservice.StartNexusOperationResponse_HandlerError{
+						HandlerError: commonnexus.NexusHandlerErrorToProtoHandlerError(handlerErr),
+					},
+				}, nil
+			}
+			wh.logger.Error("received HandlerError from server for gRPC StartNexusOperation", tag.Error(err), tag.Operation("StartNexusOperation"), tag.WorkflowNamespace(ns.Name().String()))
+			return nil, commonnexus.ConvertHandlerError(handlerErr)
 		}
 		var opFailedErr *nexus.OperationError
 		if errors.As(err, &opFailedErr) {
@@ -5345,9 +5343,14 @@ func (wh *WorkflowHandler) RequestCancelNexusOperation(ctx context.Context, requ
 	if err != nil {
 		var handlerErr *nexus.HandlerError
 		if errors.As(err, &handlerErr) {
-			return &workflowservice.RequestCancelNexusOperationResponse{
-				HandlerError: commonnexus.NexusHandlerErrorToProtoHandlerError(handlerErr),
-			}, nil
+			failureSource := commonnexus.GetFailureSourceFromContext(ctx)
+			if failureSource == commonnexus.FailureSourceWorker {
+				return &workflowservice.RequestCancelNexusOperationResponse{
+					HandlerError: commonnexus.NexusHandlerErrorToProtoHandlerError(handlerErr),
+				}, nil
+			}
+			wh.logger.Error("received HandlerError from server for gRPC RequestCancelNexusOperation", tag.Error(err), tag.Operation("RequestCancelNexusOperation"), tag.WorkflowNamespace(ns.Name().String()))
+			return nil, commonnexus.ConvertHandlerError(handlerErr)
 		}
 		wh.logger.Error("received unexpected error for request cancel Nexus operation HTTP request", tag.Operation("RequestCancelNexusOperation"), tag.WorkflowNamespace(ns.Name().String()), tag.Error(err))
 		return nil, serviceerror.NewInternal("internal error")
@@ -5386,11 +5389,16 @@ func (wh *WorkflowHandler) FetchNexusOperationInfo(ctx context.Context, request 
 	if err != nil {
 		var handlerErr *nexus.HandlerError
 		if errors.As(err, &handlerErr) {
-			return &workflowservice.FetchNexusOperationInfoResponse{
-				Variant: &workflowservice.FetchNexusOperationInfoResponse_HandlerError{
-					HandlerError: commonnexus.NexusHandlerErrorToProtoHandlerError(handlerErr),
-				},
-			}, nil
+			failureSource := commonnexus.GetFailureSourceFromContext(ctx)
+			if failureSource == commonnexus.FailureSourceWorker {
+				return &workflowservice.FetchNexusOperationInfoResponse{
+					Variant: &workflowservice.FetchNexusOperationInfoResponse_HandlerError{
+						HandlerError: commonnexus.NexusHandlerErrorToProtoHandlerError(handlerErr),
+					},
+				}, nil
+			}
+			wh.logger.Error("received HandlerError from server for gRPC FetchNexusOperationInfo", tag.Error(err), tag.Operation("FetchNexusOperationInfo"), tag.WorkflowNamespace(ns.Name().String()))
+			return nil, commonnexus.ConvertHandlerError(handlerErr)
 		}
 		wh.logger.Error("received unexpected error for get Nexus operation info HTTP request", tag.Operation("FetchNexusOperationInfo"), tag.WorkflowNamespace(ns.Name().String()), tag.Error(err))
 		return nil, serviceerror.NewInternal("internal error")
@@ -5445,11 +5453,16 @@ func (wh *WorkflowHandler) FetchNexusOperationResult(ctx context.Context, reques
 		}
 		var handlerErr *nexus.HandlerError
 		if errors.As(err, &handlerErr) {
-			return &workflowservice.FetchNexusOperationResultResponse{
-				Variant: &workflowservice.FetchNexusOperationResultResponse_HandlerError{
-					HandlerError: commonnexus.NexusHandlerErrorToProtoHandlerError(handlerErr),
-				},
-			}, nil
+			failureSource := commonnexus.GetFailureSourceFromContext(ctx)
+			if failureSource == commonnexus.FailureSourceWorker {
+				return &workflowservice.FetchNexusOperationResultResponse{
+					Variant: &workflowservice.FetchNexusOperationResultResponse_HandlerError{
+						HandlerError: commonnexus.NexusHandlerErrorToProtoHandlerError(handlerErr),
+					},
+				}, nil
+			}
+			wh.logger.Error("received HandlerError from server for gRPC FetchNexusOperationResult", tag.Error(err), tag.Operation("FetchNexusOperationResult"), tag.WorkflowNamespace(ns.Name().String()))
+			return nil, commonnexus.ConvertHandlerError(handlerErr)
 		}
 		var opFailedErr *nexus.OperationError
 		if errors.As(err, &opFailedErr) {

@@ -49,6 +49,18 @@ func SetFailureSourceOnContext(ctx context.Context, response *http.Response) {
 	}
 }
 
+func GetFailureSourceFromContext(ctx context.Context) string {
+	src := ""
+	failureSrcCtx := ctx.Value(FailureSourceContextKey)
+	if failureSrcCtx == nil {
+		return src
+	}
+	if val, ok := failureSrcCtx.(*atomic.Value); ok {
+		src = val.Load().(string)
+	}
+	return src
+}
+
 var failureTypeString = string((&failurepb.Failure{}).ProtoReflect().Descriptor().FullName())
 
 // ProtoFailureToNexusFailure converts a proto Nexus Failure to a Nexus SDK Failure.
@@ -336,6 +348,27 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 	}
 	// Let the nexus SDK handle this for us (log and convert to an internal error).
 	return err
+}
+
+// ConvertHandlerError converts a nexus.HandlerError returned by a Nexus client into a gRPC serviceerror.
+func ConvertHandlerError(err *nexus.HandlerError) error {
+	switch err.Type {
+	case nexus.HandlerErrorTypeBadRequest:
+		return serviceerror.NewInvalidArgument(err.Error())
+	case nexus.HandlerErrorTypeUnauthenticated, nexus.HandlerErrorTypeUnauthorized:
+		return serviceerror.NewPermissionDenied("permission denied", err.Cause.Error())
+	case nexus.HandlerErrorTypeNotFound:
+		return serviceerror.NewNotFound(err.Error())
+	case nexus.HandlerErrorTypeResourceExhausted:
+		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED, err.Error())
+	case nexus.HandlerErrorTypeInternal:
+		return serviceerror.NewInternal(err.Error())
+	case nexus.HandlerErrorTypeNotImplemented:
+		return serviceerror.NewUnimplemented(err.Error())
+	case nexus.HandlerErrorTypeUnavailable:
+		return serviceerror.NewUnavailable(err.Error())
+	}
+	return serviceerror.NewInternal("internal error")
 }
 
 func AdaptAuthorizeError(err error) error {
