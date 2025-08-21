@@ -160,14 +160,14 @@ type ActivityCompletionMetrics struct {
 
 func RecordActivityCompletionMetrics(
 	shard historyi.ShardContext,
-	namespace namespace.Name,
+	namespaceName namespace.Name,
 	taskQueue string,
 	metricsState ActivityCompletionMetrics,
 	tags ...metrics.Tag,
 ) {
 	metricsHandler := GetPerTaskQueueFamilyScope(
 		shard.GetMetricsHandler(),
-		namespace,
+		namespaceName,
 		taskQueue,
 		shard.GetConfig(),
 		tags...,
