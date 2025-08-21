@@ -404,12 +404,12 @@ func makeRange(s, field, def string, minVal, maxVal int, parseMode parseMode) ([
 		return nil, nil // special case for year: all is represented as empty range list
 	}
 	var ranges []*schedulepb.Range
-	for _, part := range strings.Split(s, ",") {
+	for part := range strings.SplitSeq(s, ",") {
 		var err error
 		step := 1
 		hasStep := false
 		if strings.Contains(part, "/") {
-			skipParts := strings.Split(part, "/")
+			skipParts := strings.SplitN(part, "/", 2)
 			if len(skipParts) != 2 {
 				return nil, fmt.Errorf("%s has too many slashes", field)
 			}
@@ -427,7 +427,7 @@ func makeRange(s, field, def string, minVal, maxVal int, parseMode parseMode) ([
 		start, end := minVal, maxVal
 		if part != "*" {
 			if strings.Contains(part, "-") {
-				rangeParts := strings.Split(part, "-")
+				rangeParts := strings.SplitN(part, "-", 2)
 				if len(rangeParts) != 2 {
 					return nil, fmt.Errorf("%s has too many dashes", field)
 				}
