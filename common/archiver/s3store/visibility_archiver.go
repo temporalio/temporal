@@ -2,6 +2,7 @@ package s3store
 
 import (
 	"context"
+	"path"
 	"strings"
 	"time"
 
@@ -223,11 +224,17 @@ func (v *visibilityArchiver) queryAll(
 			nextPageToken: nextPageToken,
 			parsedQuery:   &parsedQuery{},
 		}, saTypeMap, searchPrefix, func(key string) bool {
-			// We only want to return entries for the closeTimeout secondary index, which will always be of the form:
-			// .../closeTimeout/<closeTimeout>/<runID>, so we split the key on "/" and check that the third-to-last
-			// element is "closeTimeout".
-			elements := strings.Split(key, "/")
-			return len(elements) >= 3 && elements[len(elements)-3] == secondaryIndexKeyCloseTimeout
+			// We only want to return entries for the closeTimeout secondary index. Keys for this
+			// index are always of the form:
+			//   .../closeTimeout/<timestamp>/<runID>
+			// Walk from the end instead of splitting the whole string to avoid unnecessary
+			// allocations and to keep the logic clear:
+			//   - drop <runID>
+			//   - drop <timestamp>
+			//   - check the remaining last segment equals "closeTimeout".
+			dir := path.Dir(key) // drop runID
+			dir = path.Dir(dir)  // drop <timestamp>
+			return path.Base(dir) == secondaryIndexKeyCloseTimeout
 		})
 		if err != nil {
 			return nil, err
