@@ -588,6 +588,15 @@ type (
 		AuthHeaderName string `yaml:"authHeaderName"`
 		// Name of extra auth header to pass to ClaimMapper (as `ExtraData`). Defaults to `authorization-extras`.
 		AuthExtraHeaderName string `yaml:"authExtraHeaderName"`
+		// Audience is the expected audience claim in the JWT token for defaultJWTClaimMapper. If set, the audience
+		// claim in the token ("aud") must match this value.
+		//
+		// To use a dynamic audience from a request, use JWTAudienceMapper, which allows for more flexible audience
+		// mapping provided via AuthInfo. This simple configuration is purely for optional static audience validation
+		// which takes precedence over any dynamic audience mapping if both are configured.
+		//
+		// When using the noopClaimMapper, this value is ignored entirely.
+		Audience string `yaml:"audience"`
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider

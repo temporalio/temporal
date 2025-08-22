@@ -321,6 +321,148 @@ func (s *defaultClaimMapperSuite) testGetClaimMapperFromConfig(name string, vali
 	}
 }
 
+// If the default claim mapper is configured with an audience of "specific-test-audience"
+// and the JWT token contains "test-audience" with no audience in the auth info,
+// the claim mapper should error when validating the `aud` claim from the generated JWT.
+//
+// mapper:"specific-test-audience" != jwt:"test-audience"
+func (s *defaultClaimMapperSuite) TestStaticAudienceWrongAudience() {
+	s.claimMapper.(*defaultJWTClaimMapper).audience = "specific-test-audience"
+	tokenString, err := s.tokenGenerator.generateRSAToken(testSubject, permissionsAdmin, errorTestOptionNoError)
+	s.NoError(err)
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		"",
+	}
+	_, err = s.claimMapper.GetClaims(authInfo)
+	s.Error(err)
+}
+
+// If the default claim mapper doesn't have an audience configured, the claim mapper should not
+// error when validating the `aud` claim from the generated JWT.
+//
+// The audience from the JWT isn't validated, because it was not configured in the claim mapper
+// and not present in the auth info.
+func (s *defaultClaimMapperSuite) TestIgnoreEmptyAudience() {
+	s.claimMapper.(*defaultJWTClaimMapper).audience = ""
+	tokenString, err := s.tokenGenerator.generateRSAToken(testSubject, permissionsAdmin, errorTestOptionNoError)
+	s.NoError(err)
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		"",
+	}
+	_, err = s.claimMapper.GetClaims(authInfo)
+	s.NoError(err)
+}
+
+// If the default claim mapper doesn't have an audience configured, but it does have an audience
+// in the auth info, the claim mapper should not error when validating the `aud` claim from the generated JWT
+// with the correct audience.
+//
+// authInfo:"test-audience" == jwt:"test-audience"
+func (s *defaultClaimMapperSuite) TestIgnoreEmptyAudienceWithCorrectAuthInfo() {
+	s.claimMapper.(*defaultJWTClaimMapper).audience = ""
+	tokenString, err := s.tokenGenerator.generateRSAToken(testSubject, permissionsAdmin, errorTestOptionNoError)
+	s.NoError(err)
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		"test-audience",
+	}
+	_, err = s.claimMapper.GetClaims(authInfo)
+	s.NoError(err)
+}
+
+// If the default claim mapper doesn't have an audience configured, but it does have an audience
+// in the auth info, the claim mapper should not error when validating the `aud` claim from the generated JWT
+// with the correct audience.
+//
+// authInfo:"wrong-audience" != jwt:"test-audience"
+func (s *defaultClaimMapperSuite) TestIgnoreEmptyAudienceWithWrongAuthInfo() {
+	s.claimMapper.(*defaultJWTClaimMapper).audience = ""
+	tokenString, err := s.tokenGenerator.generateRSAToken(testSubject, permissionsAdmin, errorTestOptionNoError)
+	s.NoError(err)
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		"wrong-audience",
+	}
+	_, err = s.claimMapper.GetClaims(authInfo)
+	s.Error(err)
+}
+
+// If the default claim mapper doesn't have an audience configured, but it does have an audience
+// in the auth info, the claim mapper should not error when validating the `aud` claim from the generated JWT
+// with the correct audience.
+//
+// authInfo:"test-audience" == jwt:"test-audience"
+func (s *defaultClaimMapperSuite) TestEmptyAudienceAndAudienceFromAuthInfo() {
+	s.claimMapper.(*defaultJWTClaimMapper).audience = ""
+	tokenString, err := s.tokenGenerator.generateRSAToken(testSubject, permissionsAdmin, errorTestOptionNoError)
+	s.NoError(err)
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		"test-audience",
+	}
+	_, err = s.claimMapper.GetClaims(authInfo)
+	s.NoError(err)
+}
+
+// If the default claim mapper has a static audience configured, it should validate the `aud` claim
+// from the generated JWT with the correct audience.
+//
+// mapper:"test-audience" == jwt:"test-audience"
+func (s *defaultClaimMapperSuite) TestStaticAudienceCorrectAudience() {
+	s.claimMapper.(*defaultJWTClaimMapper).audience = "test-audience"
+	tokenString, err := s.tokenGenerator.generateRSAToken(testSubject, permissionsAdmin, errorTestOptionNoError)
+	s.NoError(err)
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		"",
+	}
+	_, err = s.claimMapper.GetClaims(authInfo)
+	s.NoError(err)
+}
+
+// If the default claim mapper has a static audience configured, it should validate the `aud` claim
+// from the generated JWT with the correct audience.
+//
+//	if mapper:"test-audience" == jwt:"test-audience" {
+//	  ignore(authInfo:"wrong-audience")
+//	}
+func (s *defaultClaimMapperSuite) TestCorrectAudienceWrongAuthInfo() {
+	s.claimMapper.(*defaultJWTClaimMapper).audience = "test-audience"
+	tokenString, err := s.tokenGenerator.generateRSAToken(testSubject, permissionsAdmin, errorTestOptionNoError)
+	s.NoError(err)
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		// this is wrong, but will be ignored, but the JWT will contain the correct audience
+		// and will take precedence when configuring the claim mapper with `audience`
+		"wrong-audience",
+	}
+	_, err = s.claimMapper.GetClaims(authInfo)
+	s.NoError(err)
+}
+
 func AddBearer(token string) string {
 	return "Bearer " + token
 }

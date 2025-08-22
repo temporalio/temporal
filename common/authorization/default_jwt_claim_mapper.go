@@ -1,6 +1,7 @@
 package authorization
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"regexp"
@@ -32,6 +33,7 @@ type defaultJWTClaimMapper struct {
 	permissionsRegex     *regexp.Regexp
 	matchNamespaceIndex  int
 	matchRoleIndex       int
+	audience             string
 }
 
 func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Authorization, logger log.Logger) ClaimMapper {
@@ -68,6 +70,7 @@ func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Authorizati
 		permissionsRegex:     permissionsRegex,
 		matchNamespaceIndex:  namespaceIndex,
 		matchRoleIndex:       roleIndex,
+		audience:             cfg.Audience,
 	}
 }
 
@@ -90,7 +93,7 @@ func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 	if !strings.EqualFold(parts[0], authorizationBearer) {
 		return nil, serviceerror.NewPermissionDenied("unexpected name in authorization token", "")
 	}
-	jwtClaims, err := parseJWTWithAudience(parts[1], a.keyProvider, authInfo.Audience)
+	jwtClaims, err := parseJWTWithAudience(parts[1], a.keyProvider, cmp.Or(a.audience, authInfo.Audience))
 	if err != nil {
 		return nil, err
 	}
