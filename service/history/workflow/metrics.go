@@ -201,7 +201,7 @@ func RecordActivityCompletionMetrics(
 		if metricsState.Closed {
 			metrics.ActivityTimeout.With(metricsHandler).Record(1, metrics.StringTag("timeout_type", metricsState.TimerType.String()))
 		}
-	case ActivityStateUnknown:
+	default:
 		// Do nothing
 	}
 }
