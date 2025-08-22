@@ -2309,6 +2309,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask
 		s.Run(tc.name, func() {
 			if tc.expectRetryActivity {
 				ms.EXPECT().RetryActivity(gomock.Any(), gomock.Any()).Return(tc.retryState, tc.retryError)
+				ms.EXPECT().GetWorkflowType().Return(&commonpb.WorkflowType{Name: "test-workflow-type"}).AnyTimes()
 			}
 
 			if tc.expectAddTimedTask {
