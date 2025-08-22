@@ -4,11 +4,10 @@ package workflow
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"math"
 	"time"
-
-	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -991,6 +990,8 @@ func (m *workflowTaskStateMachine) printCompleteWorkflowHistory() {
 			attrs := event.GetWorkflowTaskTimedOutEventAttributes()
 			fmt.Printf("      ScheduledEventID: %d, StartedEventID: %d, TimeoutType: %s\n",
 				attrs.GetScheduledEventId(), attrs.GetStartedEventId(), attrs.GetTimeoutType())
+		default:
+			continue
 		}
 	}
 
@@ -1002,7 +1003,7 @@ func (m *workflowTaskStateMachine) printWorkflowTaskLifecycle() {
 	fmt.Println("=== WORKFLOW TASK LIFECYCLE DEBUG ===")
 
 	execInfo := m.ms.executionInfo
-	fmt.Printf("Workflow Task State:\n")
+	fmt.Println("Workflow Task State:")
 	fmt.Printf("  Scheduled Event ID: %d\n", execInfo.WorkflowTaskScheduledEventId)
 	fmt.Printf("  Started Event ID: %d\n", execInfo.WorkflowTaskStartedEventId)
 	fmt.Printf("  Last Completed Started Event ID: %d\n", execInfo.LastCompletedWorkflowTaskStartedEventId)
@@ -1672,6 +1673,8 @@ func (m *workflowTaskStateMachine) printWorkflowTaskEventSummary() {
 			enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
 			fmt.Printf("  EventID: %d, Type: %s, Time: %s\n",
 				event.GetEventId(), event.GetEventType(), event.GetEventTime())
+		default:
+			continue
 		}
 	}
 
