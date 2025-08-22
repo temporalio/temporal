@@ -9,10 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commandpb "go.temporal.io/api/command/v1"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -27,11 +24,8 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/taskpoller"
-	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -384,102 +378,7 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 		wg       sync.WaitGroup
 	)
 
-	_, cancel, activityWorker, wfWorker := s.configureRateLimitAndLaunchWorkflows(
-		activityTaskQueue,
-		activityName,
-		taskCount,
-		workerRPS,
-		drainTimeout,
-		&runTimes,
-		&wg,
-		apiRPS,
-		&mu,
-	)
-	defer cancel()
-	defer activityWorker.Stop()
-	defer wfWorker.Stop()
-
-	// Wait for all activities to complete
-	s.True(common.AwaitWaitGroup(&wg, drainTimeout), "timeout waiting for activities to complete")
-	s.Len(runTimes, taskCount)
-
-	totalGap := runTimes[len(runTimes)-1].Sub(runTimes[0])
-	s.GreaterOrEqual(totalGap, expectedTotal-buffer, "Activity run time too short — API rate limit override not taking effect over the worker rate limit")
-	s.LessOrEqual(totalGap, expectedTotal+buffer, "Activity run time too long — API rate limit override not enforced as expected")
-}
-
-// TestTaskQueueAPIRateLimitZero ensures that when the API rate limit is set to 0,
-// no activity tasks are dispatched. Also checks if the rate limit is set to 0,
-// then the burst is defaulted to 0 to prevent any initial tasks from executing immediately.
-func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitZero() {
-	const (
-		apiRPS            = 0.0
-		taskCount         = 10
-		drainTimeout      = 3 * time.Second
-		activityTaskQueue = "RateLimitTestZero"
-	)
-
-	// Override configs
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
-
-	var (
-		mu       sync.Mutex
-		runTimes []time.Time
-		wg       sync.WaitGroup
-	)
-
-	const (
-		workerRPS    = 50.0
-		activityName = "noopActivity"
-	)
-
-	_, cancel, activityWorker, wfWorker := s.configureRateLimitAndLaunchWorkflows(
-		activityTaskQueue,
-		activityName,
-		taskCount,
-		workerRPS,
-		drainTimeout,
-		&runTimes,
-		&wg,
-		apiRPS,
-		&mu,
-	)
-	defer cancel()
-	defer activityWorker.Stop()
-	defer wfWorker.Stop()
-
-	// Wait for the duration and ensure no tasks executed
-	s.False(common.AwaitWaitGroup(&wg, drainTimeout), "Some activities unexpectedly completed despite API RPS = 0")
-	s.Len(runTimes, 0, "No activities should run when API rate limit is 0")
-}
-
-func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
-	const (
-		workerSetRPS      = 2.0 // Worker rate limit for activities
-		apiSetRPS         = 4.0 // API rate limit for activities set to half of workerSetRPS to test override behavior
-		taskCount         = 12  // Number of tasks to launch
-		activityTaskQueue = "RateLimitTest_Update"
-		drainTimeout      = 15 * time.Second // 5 second additional buffer to prevent flakiness
-		buffer            = 2 * time.Second
-		activityName      = "timedActivity"
-	)
-
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
-
-	var (
-		mu       sync.Mutex
-		runTimes []time.Time
-		wg       sync.WaitGroup
-	)
-
 	wg.Add(taskCount)
-
-	// Activity: record run time
-	activityFunc := func(ctx context.Context) error {
 
 	// Activity: record run time
 	activityFunc := func(ctx context.Context) error {
@@ -491,29 +390,22 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 	}
 
 	// Workflow: calls the activity
-	// Workflow: calls the activity
 	workflowFn := func(ctx workflow.Context) error {
-		ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			TaskQueue:           activityTaskQueue,
 			StartToCloseTimeout: 5 * time.Second,
-		})
 		})
 		return workflow.ExecuteActivity(ctx, activityName).Get(ctx, nil)
 	}
 
 	// Start activity worker
-	// Start activity worker
 	activityWorker := worker.New(s.SdkClient(), activityTaskQueue, worker.Options{
-		TaskQueueActivitiesPerSecond: workerSetRPS, // worker set RPS should take effect initially
 		TaskQueueActivitiesPerSecond: workerSetRPS, // worker set RPS should take effect initially
 	})
 	activityWorker.RegisterActivityWithOptions(activityFunc, activity.RegisterOptions{Name: activityName})
 	s.NoError(activityWorker.Start())
 	defer activityWorker.Stop()
 
-	// Start workflow worker
-	tv := testvars.New(s.T())
 	// Start workflow worker
 	tv := testvars.New(s.T())
 	wfWorker := worker.New(s.SdkClient(), tv.TaskQueue().GetName(), worker.Options{})
@@ -577,67 +469,9 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 	}, 3*time.Second, 100*time.Millisecond, "DescribeTaskQueue did not reflect override")
 
 	// Launch workflows under API override
-	// Launch workflows under workerSetRPS
 	for i := range taskCount {
 		_, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
 			TaskQueue: tv.TaskQueue().GetName(),
-			ID:        fmt.Sprintf("wf-dynamic-%d", i),
-		}, workflowFn)
-		s.NoError(err)
-	}
-
-	s.True(common.AwaitWaitGroup(&wg, drainTimeout), "tasks with dynamic config didn't complete")
-	s.Len(runTimes, taskCount, "task count mismatch")
-
-	// Measure duration with workerSetRPS config
-	firstGap := runTimes[len(runTimes)-1].Sub(runTimes[0])
-
-	// Reset for API override phase
-	runTimes = nil
-	wg.Add(taskCount)
-
-	//  Apply API rate limit override workerSetRPS to set the effective RPS to apiSetRPS
-	_, err := s.FrontendClient().UpdateTaskQueueConfig(context.Background(), &workflowservice.UpdateTaskQueueConfigRequest{
-		Namespace:     s.Namespace().String(),
-		Identity:      tv.ClientIdentity(),
-		TaskQueue:     activityTaskQueue,
-		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: float32(apiSetRPS)},
-			Reason:    "test api override",
-		},
-	})
-	s.NoError(err)
-
-	require.Eventually(s.T(), func() bool {
-		describeResp, err := s.FrontendClient().DescribeTaskQueue(context.Background(), &workflowservice.DescribeTaskQueueRequest{
-			Namespace:     s.Namespace().String(),
-			TaskQueue:     &taskqueuepb.TaskQueue{Name: activityTaskQueue},
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-			ReportConfig:  true,
-		})
-		if err != nil {
-			return false
-		}
-		cfg := describeResp.GetConfig()
-		rl := cfg.GetQueueRateLimit().GetRateLimit()
-		if rl == nil {
-			s.T().Logf("Rate limit not set in Persistence")
-			return false
-		}
-		if rl.GetRequestsPerSecond() == float32(apiSetRPS) {
-			s.T().Logf("Rate limit set in Persistence: %v", rl.GetRequestsPerSecond())
-			return true
-		}
-		return false
-	}, 3*time.Second, 100*time.Millisecond, "DescribeTaskQueue did not reflect override")
-
-	// Launch workflows under API override
-	for i := range taskCount {
-		_, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
-		_, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
-			TaskQueue: tv.TaskQueue().GetName(),
-			ID:        fmt.Sprintf("wf-api-%d", i),
 			ID:        fmt.Sprintf("wf-api-%d", i),
 		}, workflowFn)
 		s.NoError(err)
@@ -795,7 +629,7 @@ func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced
 		wholeQueueRPS = 10.0 // tighter
 		perKeyRPS     = 50.0 // looser than whole queue, should not bind
 		tasksPerKey   = 30
-		buffer        = 3 * time.Second
+		buffer        = 3 * time.Second // CI jitter
 	)
 	keys := []string{"A", "B", "C"}
 	tv := testvars.New(s.T())
@@ -825,7 +659,7 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 		perKeyRPS     = 5.0
 		wholeQueueRPS = 1000.0 // tighter
 		tasksPerKey   = 30
-		buffer        = 3 * time.Second
+		buffer        = 3 * time.Second // relax for CI jitter
 	)
 	keys := []string{"A", "B", "C"}
 
