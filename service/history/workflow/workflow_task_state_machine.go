@@ -810,7 +810,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 		)
 	}
 
-	// One pathway for TemporalReportedProblems search attribute is here.
 	if err := m.ApplyWorkflowTaskFailedEvent(); err != nil {
 		return nil, err
 	}
@@ -870,7 +869,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 		)
 	}
 
-	// One pathway for TemporalReportedProblems search attribute is here.
 	if err := m.ApplyWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
 		return nil, err
 	}
@@ -910,12 +908,13 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
 
-	// TODO seankane: add TemporalReportedProblems search attribute here
 	if failWorkflowTaskInfo.Attempt == 2 {
 		lastWorkflowTaskCloseEvent, err := m.getLastWorkflowTaskCloseEvent(context.TODO())
 		if err != nil {
 			return err
 		}
+
+		fmt.Println("failWorkflowTask: lastWorkflowTaskCloseEvent", lastWorkflowTaskCloseEvent)
 
 		switch tFailure := lastWorkflowTaskCloseEvent.GetAttributes().(type) {
 		case *historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes:
