@@ -4,8 +4,11 @@ import (
 	"math"
 	"sync"
 	"time"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/quotas"
@@ -31,7 +34,26 @@ type (
 
 		// Derived from the above sources.
 		effectiveRPS    float64                 // Min of api/worker set RPS and system defaults. Always reflects the per-partition wise task queue RPS.
+		// Dependencies
+		userDataManager userDataManager       // User data manager to fetch user data for task queue configurations.
+		config          *taskQueueConfig      // Dynamic configuration for task queues set by system.
+		taskQueueType   enumspb.TaskQueueType // Task queue type
+		timeSource      clock.TimeSource
+
+		// Sources of the effective RPS.
+		workerRPS                   *float64 // RPS set by worker at the time of polling, if available.
+		apiConfigRPS                *float64 // RPS set via API, if available.
+		fairnessKeyRateLimitDefault *float64 // per-partition fairnessKeyRateLimitDefault set via API, if available
+		adminNsRate                 float64
+		adminTqRate                 float64
+		numReadPartitions           int
+
+		// Derived from the above sources.
+		effectiveRPS    float64                 // Min of api/worker set RPS and system defaults. Always reflects the per-partition wise task queue RPS.
 		systemRPS       float64                 // Min of partition level dispatch rates times the number of read partitions.
+		rateLimitSource enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
+		// Derived from the `defaultTaskDispatchRPS`.
+		// dynamicRateBurst is the dynamic rate & burst for rate limiter
 		rateLimitSource enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
 		// Derived from the `defaultTaskDispatchRPS`.
 		// dynamicRateBurst is the dynamic rate & burst for rate limiter
@@ -50,7 +72,7 @@ type (
 		// reading. We'll handle that situation better in the future.
 		perKeyLimit     simpleLimiterParams
 		perKeyReady     cache.Cache
-		perKeyOverrides fairnessWeightOverrides
+		perKeyOverrides fairnessWeightOverrides // TODO(fairness): get this from config
 		cancels         []func()
 	}
 )
@@ -73,6 +95,8 @@ func newRateLimitManager(userDataManager userDataManager,
 		taskQueueType:   taskQueueType,
 		perKeyReady:     cache.New(config.FairnessKeyRateLimitCacheSize(), nil),
 		timeSource:      clock.NewRealTimeSource(),
+		perKeyReady:     cache.New(config.FairnessKeyRateLimitCacheSize(), nil),
+		timeSource:      clock.NewRealTimeSource(),
 	}
 	r.dynamicRateBurst = quotas.NewMutableRateBurst(
 		defaultTaskDispatchRPS,
@@ -88,13 +112,32 @@ func newRateLimitManager(userDataManager userDataManager,
 	r.cancels = append(r.cancels, cancel)
 	r.adminTqRate, cancel = config.AdminNamespaceTaskQueueToPartitionRateSub(r.setAdminTqRate)
 	r.cancels = append(r.cancels, cancel)
-	// r.numReadPartitions, cancel = config.NumReadPartitionsSub(r.setNumReadPartitions)
-	// r.cancels = append(r.cancels, cancel)
-	r.numReadPartitions = config.NumReadPartitions()
+	r.numReadPartitions, cancel = config.NumReadPartitionsSub(r.setNumReadPartitions)
+	r.cancels = append(r.cancels, cancel)
 	r.computeEffectiveRPSAndSource()
 	return r
 }
 
+func (r *rateLimitManager) setAdminNsRate(rps float64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.adminNsRate = rps
+	r.computeAndApplyRateLimitLocked()
+}
+
+func (r *rateLimitManager) setAdminTqRate(rps float64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.adminTqRate = rps
+	r.computeAndApplyRateLimitLocked()
+}
+
+func (r *rateLimitManager) setNumReadPartitions(val int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// Defaulting to 1 partition if misconfigured
+	r.numReadPartitions = max(val, 1)
+	r.computeAndApplyRateLimitLocked()
 func (r *rateLimitManager) setAdminNsRate(rps float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -138,12 +181,17 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 		r.adminNsRate,
 		r.adminTqRate,
 	)
+		r.adminNsRate,
+		r.adminTqRate,
+	)
 	r.systemRPS = systemRPS
 	switch {
 	case r.apiConfigRPS != nil:
 		effectiveRPS = *r.apiConfigRPS / float64(r.numReadPartitions)
+		effectiveRPS = *r.apiConfigRPS / float64(r.numReadPartitions)
 		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_API
 	case r.workerRPS != nil:
+		effectiveRPS = *r.workerRPS / float64(r.numReadPartitions)
 		effectiveRPS = *r.workerRPS / float64(r.numReadPartitions)
 		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_WORKER
 	}
@@ -170,7 +218,22 @@ func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
 	r.updatePerKeySimpleRateLimitLocked(defaultBurstDuration)
 }
 
+func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
+	oldRPS := r.effectiveRPS
+	r.computeEffectiveRPSAndSourceLocked()
+	newRPS := r.effectiveRPS
+	// If the effective RPS has changed, we need to update the rate limiters.
+	if oldRPS != newRPS {
+		r.updateRatelimitLocked()
+		r.updateSimpleRateLimitLocked(defaultBurstDuration)
+	}
+	// Internally, checks if the per-key rate limit has changed and updates it accordingly.
+	r.updatePerKeySimpleRateLimitLocked(defaultBurstDuration)
+}
+
 // Lazy injection of poll metadata.
+// Called whenever a new poll request comes in.
+// This allows the rate limit manager to adjust its rate limits based on any updates right before polling happens.
 // Called whenever a new poll request comes in.
 // This allows the rate limit manager to adjust its rate limits based on any updates right before polling happens.
 func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
@@ -185,6 +248,7 @@ func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
 	}
 	r.workerRPS = rps
 	r.computeAndApplyRateLimitLocked()
+	r.computeAndApplyRateLimitLocked()
 }
 
 // Return the effective RPS and its source together.
@@ -193,6 +257,7 @@ func (r *rateLimitManager) InjectWorkerRPS(meta *pollMetadata) {
 func (r *rateLimitManager) GetEffectiveRPSAndSource() (float64, enumspb.RateLimitSource) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.effectiveRPS * float64(r.numReadPartitions), r.rateLimitSource
 	return r.effectiveRPS * float64(r.numReadPartitions), r.rateLimitSource
 }
 
@@ -208,9 +273,13 @@ func (r *rateLimitManager) UserDataChanged() {
 	// Fetch the latest user data and update the API-configured RPS.
 	r.trySetRPSFromUserDataLocked()
 	r.computeAndApplyRateLimitLocked()
+	// Fetch the latest user data and update the API-configured RPS.
+	r.trySetRPSFromUserDataLocked()
+	r.computeAndApplyRateLimitLocked()
 }
 
 // trySetRPSFromUserDataLocked sets the apiConfigRPS from user data.
+// Called exclusively in response to updates in user data.
 // Called exclusively in response to updates in user data.
 func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 	userData, _, err := r.userDataManager.GetUserData()
@@ -220,6 +289,8 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 	config := userData.GetData().GetPerType()[int32(r.taskQueueType)].GetConfig()
 	// If rate limit is an empty message, it means rate limit could have been unset via API.
 	// In this case, the apiConfigRPS will need to be unset.
+	queueRateLimit := config.GetQueueRateLimit()
+	if queueRateLimit.GetRateLimit() == nil {
 	queueRateLimit := config.GetQueueRateLimit()
 	if queueRateLimit.GetRateLimit() == nil {
 		r.apiConfigRPS = nil
@@ -240,8 +311,18 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 }
 
 // updateRatelimitLocked checks and updates the overall queue rate limit if changed.
+// updateRatelimitLocked checks and updates the overall queue rate limit if changed.
 func (r *rateLimitManager) updateRatelimitLocked() {
 	newRPS := r.effectiveRPS
+	// If the effective RPS is zero, we set the burst to zero as well.
+	// This prevents any initial tasks from executing immediately.
+	// Allows pausing of the task queue by setting the RPS to zero.
+	var burst int
+	if newRPS != 0 {
+		// If the effective RPS is non-zero, we can set a burst based on the effective RPS.
+		burst = max(int(math.Ceil(newRPS)), r.config.MinTaskThrottlingBurstSize())
+	}
+	r.dynamicRateBurst.SetRPS(newRPS)
 	// If the effective RPS is zero, we set the burst to zero as well.
 	// This prevents any initial tasks from executing immediately.
 	// Allows pausing of the task queue by setting the RPS to zero.

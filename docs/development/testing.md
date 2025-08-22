@@ -1,6 +1,18 @@
 # Testing
 
-This document describes the project's testing utilities and best practices.
+This document describes the project's testing setup, utilities and best practices.
+
+## Setup
+
+### Build tags
+- `test_dep` (required): This Go build tag is required for running functional tests.
+- `TEMPORAL_DEBUG`: Extends functional test timeouts to allow sufficient time for debugging sessions.
+
+### Environment variables
+- `CGO_ENABLED`: Set to `0` to disable CGO, which can significantly speed up compilation time.
+- `TEMPORAL_TEST_LOG_FORMAT`: Controls the output format for test logs. Available options: `json` or `console`
+- `TEMPORAL_TEST_LOG_LEVEL`:  Sets the verbosity level for test logging. Available levels: `debug`, `info`, `warn`, `error`, `fatal`
+- `TEMPORAL_TEST_OTEL_OUTPUT`: Enables OpenTelemetry (OTEL) trace output for failed tests to the provided file path.
 
 ## Test helpers
 
