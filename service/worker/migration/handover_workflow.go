@@ -9,12 +9,12 @@ import (
 )
 
 const (
-	namespaceHandoverWorkflowName = "namespace-handover"
+	namespaceHandoverWorkflowName   = "namespace-handover"
+	namespaceHandoverWorkflowV2Name = "namespace-handover-v2"
 
 	minimumAllowedLaggingSeconds  = 5
 	maximumAllowedLaggingSeconds  = 120
 	maximumHandoverTimeoutSeconds = 30
-	minimumRequiredTime           = 10 * time.Minute // minimum time required before entering handover state
 )
 
 type (
@@ -59,24 +59,22 @@ type (
 	}
 )
 
+func NamespaceHandoverWorkflowV2(ctx workflow.Context, params NamespaceHandoverParams) (retErr error) {
+	workflowInfo := workflow.GetInfo(ctx)
+	if workflowInfo.WorkflowRunTimeout > 0 {
+		return temporal.NewNonRetryableApplicationError(
+			"Workflow run timeout is insufficient for handover process",
+			"InsufficientTimeout",
+			nil,
+		)
+	}
+	return NamespaceHandoverWorkflow(ctx, params)
+}
+
 func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverParams) (retErr error) {
 	if err := validateAndSetNamespaceHandoverParams(&params); err != nil {
 		return err
 	}
-
-	workflowInfo := workflow.GetInfo(ctx)
-	timeoutCheckVersion := workflow.GetVersion(ctx, "2025-08-timeout-validation", workflow.DefaultVersion, 1)
-	if timeoutCheckVersion > workflow.DefaultVersion {
-		// ** Early check: Ensure workflow run timeout is sufficient for handover process
-		if workflowInfo.WorkflowRunTimeout > 0 && workflowInfo.WorkflowRunTimeout < minimumRequiredTime {
-			return temporal.NewNonRetryableApplicationError(
-				"Workflow run timeout is insufficient for handover process",
-				"InsufficientTimeout",
-				nil,
-			)
-		}
-	}
-
 	retryPolicy := &temporal.RetryPolicy{
 		InitialInterval:    time.Second,
 		MaximumInterval:    time.Second,
@@ -123,27 +121,7 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		return err
 	}
 
-	if timeoutCheckVersion > workflow.DefaultVersion {
-		// ** Step 4: Check remaining workflow timeout before entering handover state
-		currentTime := workflow.Now(ctx)
-		elapsedTime := currentTime.Sub(workflowInfo.WorkflowStartTime)
-
-		// Only check WorkflowRunTimeout
-		if workflowInfo.WorkflowRunTimeout > 0 {
-			remainingTime := workflowInfo.WorkflowRunTimeout - elapsedTime
-
-			// Require at least 10 minutes remaining before entering handover state
-			if remainingTime < minimumRequiredTime {
-				return temporal.NewNonRetryableApplicationError(
-					"Cannot enter handover state: insufficient time remaining",
-					"InsufficientTime",
-					nil,
-				)
-			}
-		}
-	}
-
-	// ** Step 5: RecoverOrInitialize Handover (WARNING: Namespace cannot serve traffic while in this state)
+	// ** Step 4: RecoverOrInitialize Handover (WARNING: Namespace cannot serve traffic while in this state)
 	handoverRequest := updateStateRequest{
 		Namespace: params.Namespace,
 		NewState:  enumspb.REPLICATION_STATE_HANDOVER,
@@ -168,7 +146,7 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		}
 	}()
 
-	// ** Step 6: Wait for Remote Cluster to completely drain its Replication Tasks
+	// ** Step 5: Wait for Remote Cluster to completely drain its Replication Tasks
 	ao3 := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Second * time.Duration(params.HandoverTimeoutSeconds),
 		HeartbeatTimeout:    time.Second * 10,
@@ -188,7 +166,7 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		return err
 	}
 
-	// ** Step 7: Remote Cluster is caught up. Update Namespace to be Active on the Remote Cluster.
+	// ** Step 6: Remote Cluster is caught up. Update Namespace to be Active on the Remote Cluster.
 	updateRequest := updateActiveClusterRequest{
 		Namespace:     params.Namespace,
 		ActiveCluster: params.RemoteCluster,
