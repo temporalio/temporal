@@ -188,6 +188,7 @@ func (s *WFTTimedOutReportedProblemsTestSuite) makeWorkflowFunc(activityFunction
 			workflow.GetLogger(ctx).Info("t.WFTTimedOutReportedProblemsTestSuite: makeWorkflowFunc: sleeping")
 			// Sleep for a duration that's longer than the workflow task timeout (2 seconds)
 			// but shorter than the default timeout (10 seconds) to ensure we hit the timeout
+			// nolint:forbidigo // required to induce start to close timeout
 			time.Sleep(5 * time.Minute)
 			workflow.GetLogger(ctx).Info("t.WFTTimedOutReportedProblemsTestSuite: makeWorkflowFunc: done sleeping")
 		}

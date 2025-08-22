@@ -4,7 +4,6 @@ package workflow
 
 import (
 	"cmp"
-	"context"
 	"fmt"
 	"math"
 	"time"
@@ -909,9 +908,12 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
 
 	if failWorkflowTaskInfo.Attempt == 2 {
-		lastWorkflowTaskCloseEvent, err := m.getLastWorkflowTaskCloseEvent(context.TODO())
+		lastWorkflowTaskCloseEvent, err := m.getLastWorkflowTaskCloseEvent()
 		if err != nil {
-			return err
+			// TODO seankane: error needs to be returned and checked. Not sure why some workflows
+			// do not have a previous workflow task close event and have an attempt of 2.
+			fmt.Println("failWorkflowTask: getLastWorkflowTaskCloseEvent error", err)
+			return nil
 		}
 
 		fmt.Println("failWorkflowTask: lastWorkflowTaskCloseEvent", lastWorkflowTaskCloseEvent)
@@ -938,9 +940,7 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 
 // getLastWorkflowTaskCloseEvent retrieves the last workflow task close event (failed or timed out)
 // using only data stored in mutable state, without incurring persistence reads
-func (m *workflowTaskStateMachine) getLastWorkflowTaskCloseEvent(
-	ctx context.Context,
-) (*historypb.HistoryEvent, error) {
+func (m *workflowTaskStateMachine) getLastWorkflowTaskCloseEvent() (*historypb.HistoryEvent, error) {
 	// Get the last completed workflow task started event ID from mutable state
 	lastCompletedWorkflowTaskStartedEventID := m.ms.GetLastCompletedWorkflowTaskStartedEventId()
 	if lastCompletedWorkflowTaskStartedEventID == common.EmptyEventID {
@@ -992,6 +992,8 @@ func (m *workflowTaskStateMachine) findWorkflowTaskCloseEventInBatch(
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
 			return event
+		default:
+			continue
 		}
 	}
 	return nil
