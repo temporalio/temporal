@@ -307,6 +307,9 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 			Closed:             retryState != enumspb.RETRY_STATE_IN_PROGRESS,
 			TimerType:          timerSequenceID.TimerType,
 		},
+		metrics.OperationTag(metrics.TimerActiveTaskActivityTimeoutScope),
+		metrics.WorkflowTypeTag(mutableState.GetWorkflowType().GetName()),
+		metrics.ActivityTypeTag(ai.ActivityType.GetName()),
 	)
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
