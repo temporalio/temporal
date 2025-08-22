@@ -3,9 +3,11 @@ package history
 import (
 	"context"
 	"fmt"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/consts"
@@ -13,6 +15,10 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+)
+
+const (
+	outboundTaskTimeout = time.Second * 10 * debug.TimeoutMultiplier
 )
 
 type outboundQueueActiveTaskExecutor struct {
@@ -94,7 +100,7 @@ func (e *outboundQueueActiveTaskExecutor) executeChasmSideEffectTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
 ) error {
-	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	ctx, cancel := context.WithTimeout(ctx, outboundTaskTimeout)
 	defer cancel()
 
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, e.shardContext, e.cache, task)
@@ -128,6 +134,8 @@ func (e *outboundQueueActiveTaskExecutor) executeStateMachineTask(
 	ctx context.Context,
 	task tasks.Task,
 ) error {
+	// Timeout for hsm outbound tasks are determined by each component's task executor
+
 	ref, smt, err := StateMachineTask(e.shardContext.StateMachineRegistry(), task)
 	if err != nil {
 		return err
