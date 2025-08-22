@@ -4,6 +4,9 @@
 This tool simulates the behavior of Temporal's fair task queues, for use in
 evaluating different parameters.
 
+## Build
+run `make fairsim`
+
 ## Usage
 
 There are two main modes:
