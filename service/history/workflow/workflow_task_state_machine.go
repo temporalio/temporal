@@ -941,6 +941,10 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 // getLastWorkflowTaskCloseEvent retrieves the last workflow task close event (failed or timed out)
 // using only data stored in mutable state, without incurring persistence reads
 func (m *workflowTaskStateMachine) getLastWorkflowTaskCloseEvent() (*historypb.HistoryEvent, error) {
+	// logging information, print out number of history events in the workflow history
+	history := m.ms.GetHistorySize()
+	fmt.Println("failWorkflowTask: history", history)
+
 	// Get the last completed workflow task started event ID from mutable state
 	lastCompletedWorkflowTaskStartedEventID := m.ms.GetLastCompletedWorkflowTaskStartedEventId()
 	if lastCompletedWorkflowTaskStartedEventID == common.EmptyEventID {
