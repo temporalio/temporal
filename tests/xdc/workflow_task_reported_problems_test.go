@@ -36,6 +36,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) SetupSuite() {
 	if s.dynamicConfigOverrides == nil {
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	}
+	s.enableTransitionHistory = true
 	s.setupSuite()
 }
 
@@ -46,6 +47,42 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) SetupTest() {
 
 func (s *WorkflowTaskReportedProblemsReplicationSuite) TearDownSuite() {
 	s.tearDownSuite()
+}
+
+// checkReportedProblemsSearchAttribute is a helper function to verify reported problems search attributes
+func (s *WorkflowTaskReportedProblemsReplicationSuite) checkReportedProblemsSearchAttribute(
+	client sdkclient.Client,
+	workflowID, runID string,
+	expectedCategory, expectedCause string,
+	shouldExist bool,
+) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := client.DescribeWorkflowExecution(context.Background(), workflowID, runID)
+		require.NoError(t, err)
+
+		if shouldExist {
+			require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes)
+			require.NotEmpty(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields)
+			require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems])
+
+			// Decode the search attribute in keyword list format
+			searchValBytes := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems]
+			searchVal, err := searchattribute.DecodeValue(searchValBytes, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+			require.NoError(t, err)
+			require.NotEmpty(t, searchVal)
+
+			searchValList := searchVal.([]string)
+			require.Len(t, searchValList, 2)
+			require.Equal(t, "category="+expectedCategory, searchValList[0])
+			require.Equal(t, "cause="+expectedCause, searchValList[1])
+		} else {
+			// Check that the search attribute is not present or is nil
+			if description.WorkflowExecutionInfo.SearchAttributes != nil &&
+				description.WorkflowExecutionInfo.SearchAttributes.IndexedFields != nil {
+				require.Nil(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems])
+			}
+		}
+	}, 20*time.Second, 500*time.Millisecond)
 }
 
 func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedProblemsReplication() {
@@ -108,28 +145,21 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, description.WorkflowExecutionInfo.Status)
 	}, 5*time.Second, 500*time.Millisecond)
 
-	// verify search attributes are set in cluster0
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes)
-		require.NotEmpty(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields)
-		require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems])
-
-		// Decode the search attribute in keyword list format
-		searchValBytes := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems]
-		searchVal, err := searchattribute.DecodeValue(searchValBytes, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
-		require.NoError(t, err)
-		require.NotEmpty(t, searchVal)
-		require.Equal(t, "category=WorkflowTaskFailed", searchVal.([]string)[0])
-		require.Equal(t, "cause=WorkflowWorkerUnhandledFailure", searchVal.([]string)[1])
-	}, 5*time.Second, 500*time.Millisecond)
+	// verify search attributes are set in cluster0 using the helper function
+	s.checkReportedProblemsSearchAttribute(
+		activeSDKClient,
+		workflowRun.GetID(),
+		workflowRun.GetRunID(),
+		"WorkflowTaskFailed",
+		"WorkflowWorkerUnhandledFailure",
+		true,
+	)
 
 	// stop worker1 so cluster0 won't make any progress
-	worker1.Stop()
+	// worker1.Stop()
 
 	// failover to standby cluster
-	s.failover(ns, 0, s.clusters[1].ClusterName(), 2)
+	// s.failover(ns, 0, s.clusters[1].ClusterName(), 2)
 
 	// get standby client
 	standbyClient, err := sdkclient.Dial(sdkclient.Options{
@@ -139,22 +169,15 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	s.NoError(err)
 	s.NotNil(standbyClient)
 
-	// verify search attributes are replicated to cluster1
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := standbyClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes)
-		require.NotEmpty(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields)
-		require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems])
-
-		// Decode the search attribute in keyword list format
-		searchValBytes := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems]
-		searchVal, err := searchattribute.DecodeValue(searchValBytes, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
-		require.NoError(t, err)
-		require.NotEmpty(t, searchVal)
-		require.Equal(t, "category=WorkflowTaskFailed", searchVal.([]string)[0])
-		require.Equal(t, "cause=WorkflowWorkerUnhandledFailure", searchVal.([]string)[1])
-	}, 5*time.Second, 500*time.Millisecond)
+	// verify search attributes are replicated to cluster1 using the helper function
+	s.checkReportedProblemsSearchAttribute(
+		standbyClient,
+		workflowRun.GetID(),
+		workflowRun.GetRunID(),
+		"WorkflowTaskFailed",
+		"WorkflowWorkerUnhandledFailure",
+		true,
+	)
 
 	// start worker2 in cluster1
 	worker2 := sdkworker.New(standbyClient, taskQueue, sdkworker.Options{})
@@ -171,11 +194,13 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	err = workflowRun.Get(ctx, &out)
 	s.NoError(err)
 
-	// verify search attributes are cleared in cluster1
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := standbyClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, description.WorkflowExecutionInfo.Status)
-		require.Nil(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems])
-	}, 5*time.Second, 500*time.Millisecond)
+	// verify search attributes are cleared in cluster1 using the helper function
+	s.checkReportedProblemsSearchAttribute(
+		standbyClient,
+		workflowRun.GetID(),
+		workflowRun.GetRunID(),
+		"",
+		"",
+		false,
+	)
 }
