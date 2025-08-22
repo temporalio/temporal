@@ -1069,7 +1069,8 @@ func buildExecutionRow(
 ) (row *sqlplugin.ExecutionsRow, err error) {
 	// TODO: double encoding execution state? executionState could've been passed to the function as
 	// *commonpb.DataBlob like executionInfo
-	stateBlob, err := serialization.WorkflowExecutionStateToBlob(executionState)
+	// Note: This function should probably take a serializer parameter rather than using a default one
+	stateBlob, err := serialization.NewSerializer().WorkflowExecutionStateToBlob(executionState)
 	if err != nil {
 		return nil, err
 	}
@@ -1191,7 +1192,8 @@ func workflowExecutionStateFromCurrentExecutionsRow(
 	row *sqlplugin.CurrentExecutionsRow,
 ) (*persistencespb.WorkflowExecutionState, error) {
 	if len(row.Data) > 0 && row.DataEncoding != "" {
-		return serialization.WorkflowExecutionStateFromBlob(p.NewDataBlob(row.Data, row.DataEncoding))
+		// Note: This function should probably take a serializer parameter rather than using a default one
+		return serialization.DefaultDecoder.WorkflowExecutionStateFromBlob(p.NewDataBlob(row.Data, row.DataEncoding))
 	}
 
 	// Old records don't have the serialized WorkflowExecutionState stored in DB.

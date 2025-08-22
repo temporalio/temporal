@@ -687,7 +687,8 @@ func (s *testSerializer) SerializeTask(
 		}, nil
 	}
 
-	return s.Serializer.SerializeTask(task)
+	taskSerializer := serialization.NewTaskSerializer(s.Serializer)
+	return taskSerializer.SerializeTask(task)
 }
 
 func (s *testSerializer) DeserializeTask(
@@ -697,7 +698,8 @@ func (s *testSerializer) DeserializeTask(
 	categoryID := category.ID()
 	if categoryID != fakeImmediateTaskCategory.ID() &&
 		categoryID != fakeScheduledTaskCategory.ID() {
-		return s.Serializer.DeserializeTask(category, blob)
+		taskSerializer := serialization.NewTaskSerializer(s.Serializer)
+		return taskSerializer.DeserializeTask(category, blob)
 	}
 
 	taskInfo := &persistencespb.TransferTaskInfo{}

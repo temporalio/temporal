@@ -155,7 +155,7 @@ func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
-		&persistence.HistoryBranchUtilImpl{},
+		persistence.NewHistoryBranchUtil(),
 		testData.Logger,
 	)
 	suite.Run(t, s)

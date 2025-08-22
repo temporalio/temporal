@@ -38,8 +38,15 @@ type (
 	}
 
 	HistoryBranchUtilImpl struct {
+		serializer serialization.Serializer
 	}
 )
+
+func NewHistoryBranchUtil() *HistoryBranchUtilImpl {
+	return &HistoryBranchUtilImpl{
+		serializer: serialization.NewSerializer(),
+	}
+}
 
 func (u *HistoryBranchUtilImpl) NewHistoryBranch(
 	_ string, // namespaceID
@@ -63,7 +70,7 @@ func (u *HistoryBranchUtilImpl) NewHistoryBranch(
 		BranchId:  id,
 		Ancestors: ancestors,
 	}
-	data, err := serialization.HistoryBranchToBlob(bi)
+	data, err := u.serializer.HistoryBranchToBlob(bi)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +80,7 @@ func (u *HistoryBranchUtilImpl) NewHistoryBranch(
 func (u *HistoryBranchUtilImpl) ParseHistoryBranchInfo(
 	branchToken []byte,
 ) (*persistencespb.HistoryBranch, error) {
-	return serialization.HistoryBranchFromBlob(&commonpb.DataBlob{Data: branchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
+	return u.serializer.HistoryBranchFromBlob(&commonpb.DataBlob{Data: branchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
 }
 
 func (u *HistoryBranchUtilImpl) UpdateHistoryBranchInfo(
@@ -81,7 +88,7 @@ func (u *HistoryBranchUtilImpl) UpdateHistoryBranchInfo(
 	branchInfo *persistencespb.HistoryBranch,
 	runID string,
 ) ([]byte, error) {
-	bi, err := serialization.HistoryBranchFromBlob(&commonpb.DataBlob{Data: branchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
+	bi, err := u.serializer.HistoryBranchFromBlob(&commonpb.DataBlob{Data: branchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +96,7 @@ func (u *HistoryBranchUtilImpl) UpdateHistoryBranchInfo(
 	bi.BranchId = branchInfo.BranchId
 	bi.Ancestors = branchInfo.Ancestors
 
-	blob, err := serialization.HistoryBranchToBlob(bi)
+	blob, err := u.serializer.HistoryBranchToBlob(bi)
 	if err != nil {
 		return nil, err
 	}
