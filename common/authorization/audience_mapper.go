@@ -2,6 +2,7 @@ package authorization
 
 import (
 	"context"
+
 	"go.temporal.io/server/common/config"
 	"google.golang.org/grpc"
 )
@@ -23,6 +24,6 @@ func NewAudienceMapper(audience string) JWTAudienceMapper {
 
 // GetAudienceMapperFromConfig returns a JWTAudienceMapper based on the provided Authorization config.
 // Currently, it returns a static audience mapper using the Audience field.
-func GetAudienceMapperFromConfig(config *config.Authorization) (JWTAudienceMapper, error) {
-	return NewAudienceMapper(config.Audience), nil
+func GetAudienceMapperFromConfig(cfg *config.Authorization) (JWTAudienceMapper, error) {
+	return NewAudienceMapper(cfg.Audience), nil
 }
