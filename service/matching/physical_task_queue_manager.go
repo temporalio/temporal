@@ -101,7 +101,6 @@ type (
 	matcherInterface interface {
 		Start()
 		Stop()
-		Rate() float64
 		Poll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		PollForQuery(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		OfferQuery(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error)
@@ -187,7 +186,6 @@ func newPhysicalTaskQueueManager(
 			pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
 		})
 	}
-
 	if fairness {
 		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagFairness)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagFairness)
@@ -225,6 +223,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.taskValidator,
 			pqMgr.logger,
 			newFairMetricsHandler(taggedMetricsHandler),
+			partitionMgr.rateLimitManager,
 			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
@@ -267,6 +266,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.taskValidator,
 			pqMgr.logger,
 			newPriMetricsHandler(taggedMetricsHandler),
+			partitionMgr.rateLimitManager,
 			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
@@ -373,14 +373,6 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	if c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
 		if err = c.ensureRegisteredInDeploymentVersion(ctx, namespaceEntry, pollMetadata); err != nil {
 			return nil, err
-		}
-	}
-
-	// If the priority matcher is enabled, use the rate limiter defined in the priority matcher.
-	// TODO(pri): remove this once we have a way to set the partition-scoped rate limiter for the priority matcher.
-	if rps := pollMetadata.taskQueueMetadata.GetMaxTasksPerSecond(); rps != nil {
-		if c.priMatcher != nil {
-			c.priMatcher.UpdateRatelimit(rps.Value)
 		}
 	}
 
@@ -546,8 +538,9 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	if includeTaskQueueStatus {
 		//nolint:staticcheck // SA1019
 		response.DescResponse.TaskQueueStatus = c.backlogMgr.BacklogStatus()
-		//nolint:staticcheck // SA1019
-		response.DescResponse.TaskQueueStatus.RatePerSecond = c.matcher.Rate()
+		rps, _ := c.partitionMgr.GetRateLimitManager().GetEffectiveRPSAndSource()
+		//nolint:staticcheck // SA1019: using deprecated TaskQueueStatus for legacy compatibility
+		response.DescResponse.TaskQueueStatus.RatePerSecond = rps
 	}
 	return response
 }

@@ -46,7 +46,8 @@ func (s *MatcherDataSuite) SetupTest() {
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 	s.ts = clock.NewEventTimeSource().Update(time.Now())
 	s.ts.UseAsyncTimers(true)
-	s.md = newMatcherData(cfg, logger, s.ts, true)
+	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	s.md = newMatcherData(cfg, logger, s.ts, true, rateLimitManager)
 }
 
 func (s *MatcherDataSuite) now() time.Time {
@@ -311,8 +312,8 @@ func (s *MatcherDataSuite) TestTaskForward() {
 }
 
 func (s *MatcherDataSuite) TestRateLimitedBacklog() {
-	// 10 tasks/sec with burst of 3
-	s.md.UpdateRateLimit(10, 300*time.Millisecond)
+	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(10.0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdateSimpleRateLimitForTesting(300 * time.Millisecond)
 
 	// register some backlog with old tasks
 	for i := range 100 {
@@ -350,9 +351,8 @@ func (s *MatcherDataSuite) TestRateLimitedBacklog() {
 }
 
 func (s *MatcherDataSuite) TestPerKeyRateLimit() {
-	// 10 tasks/key/sec with burst of 3
-	s.md.UpdatePerKeyRateLimit(10, 300*time.Millisecond)
-
+	s.md.rateLimitManager.SetFairnessKeyRateLimitDefaultForTesting(10.0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdatePerKeySimpleRateLimitForTesting(300 * time.Millisecond)
 	// register some backlog with three keys
 	keys := []string{"key1", "key2", "key3"}
 	for i := range 300 {
@@ -656,7 +656,8 @@ func FuzzMatcherData(f *testing.F) {
 		ts := clock.NewEventTimeSource()
 		ts.UseAsyncTimers(true)
 		logger := log.NewNoopLogger()
-		md := newMatcherData(cfg, logger, ts, true)
+		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+		md := newMatcherData(cfg, logger, ts, true, rateLimitManager)
 
 		next := func() int {
 			if len(tape) == 0 {
