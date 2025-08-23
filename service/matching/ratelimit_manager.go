@@ -163,10 +163,10 @@ func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
 	// If the effective RPS has changed, we need to update the rate limiters.
 	if oldRPS != newRPS {
 		r.updateRatelimitLocked()
-		r.updateSimpleRateLimitLocked(defaultBurstDuration)
+		r.updateSimpleRateLimitWithBurstLocked(defaultBurstDuration)
 	}
 	// Internally, checks if the per-key rate limit has changed and updates it accordingly.
-	r.updatePerKeySimpleRateLimitLocked(defaultBurstDuration)
+	r.updatePerKeySimpleRateLimitWithBurstLocked(defaultBurstDuration)
 }
 
 // Lazy injection of poll metadata.
@@ -258,7 +258,7 @@ func (r *rateLimitManager) updateRatelimitLocked() {
 }
 
 // UpdateSimpleRateLimit updates the overall queue rate limits for the simpleRateLimiter implementation
-func (r *rateLimitManager) updateSimpleRateLimitLocked(burstDuration time.Duration) {
+func (r *rateLimitManager) updateSimpleRateLimitWithBurstLocked(burstDuration time.Duration) {
 	newRPS := r.effectiveRPS
 	r.wholeQueueLimit = makeSimpleLimiterParams(newRPS, burstDuration)
 
@@ -270,7 +270,7 @@ func (r *rateLimitManager) updateSimpleRateLimitLocked(burstDuration time.Durati
 
 // UpdatePerKeySimpleRateLimit updates the per-key rate limit for the simpleRateLimit implementation
 // UpdateTaskQueueConfig api is the single source for the per-key rate limit.
-func (r *rateLimitManager) updatePerKeySimpleRateLimitLocked(burstDuration time.Duration) {
+func (r *rateLimitManager) updatePerKeySimpleRateLimitWithBurstLocked(burstDuration time.Duration) {
 	if r.fairnessKeyRateLimitDefault == nil {
 		r.clearPerKeyRateLimitsLocked()
 		return

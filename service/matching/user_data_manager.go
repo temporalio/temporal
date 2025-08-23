@@ -101,7 +101,7 @@ var (
 	errRequestedVersionTooLarge = serviceerror.NewInvalidArgument("requested task queue user data for version greater than known version")
 	errTaskQueueClosed          = serviceerror.NewUnavailable("task queue closed")
 	// Fairness weight override update rejected
-	errFwoUpdateRejected       = serviceerror.NewInvalidArgumentf("fairness weight overrides exceeds configuration limit")
+	errFwoUpdateRejected       = serviceerror.NewInvalidArgumentf("fairness weight overrides update rejected: would exceed maximum allowed count")
 	errUserDataUnmodified      = errors.New("sentinel error for unchanged user data")
 	errUserDataVersionMismatch = errors.New("user data version mismatch")
 )

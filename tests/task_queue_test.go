@@ -211,7 +211,6 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 		defer wg.Done()
 		mu.Lock()
 		*runTimes = append(*runTimes, time.Now())
-		time.Sleep(250 * time.Millisecond) //nolint
 		mu.Unlock()
 		return nil
 	}
@@ -233,6 +232,8 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 	activityWorker = worker.New(s.SdkClient(), activityTaskQueue, worker.Options{
 		// Setting rate limit at worker level (this will be ignored in favor of the limit set through the api)
 		TaskQueueActivitiesPerSecond: workerRPS,
+		// Setting rate limit to throttle the worker to 4 activities per second
+		WorkerActivitiesPerSecond: 4,
 	})
 	activityWorker.RegisterActivityWithOptions(activityFunc, activity.RegisterOptions{Name: activityName})
 	s.NoError(activityWorker.Start())
