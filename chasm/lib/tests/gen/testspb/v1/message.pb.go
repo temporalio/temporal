@@ -2,9 +2,9 @@
 // plugins:
 // 	protoc-gen-go
 // 	protoc
-// source: temporal/server/api/persistence/v1/test_payload_store.proto
+// source: temporal/server/chasm/lib/tests/proto/v1/message.proto
 
-package persistence
+package testspb
 
 import (
 	reflect "reflect"
@@ -36,7 +36,7 @@ type TestPayloadStore struct {
 
 func (x *TestPayloadStore) Reset() {
 	*x = TestPayloadStore{}
-	mi := &file_temporal_server_api_persistence_v1_test_payload_store_proto_msgTypes[0]
+	mi := &file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48,7 +48,7 @@ func (x *TestPayloadStore) String() string {
 func (*TestPayloadStore) ProtoMessage() {}
 
 func (x *TestPayloadStore) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_test_payload_store_proto_msgTypes[0]
+	mi := &file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -61,7 +61,7 @@ func (x *TestPayloadStore) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestPayloadStore.ProtoReflect.Descriptor instead.
 func (*TestPayloadStore) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDescGZIP(), []int{0}
+	return file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *TestPayloadStore) GetTotalCount() int64 {
@@ -101,7 +101,7 @@ type TestPayloadTTLPureTask struct {
 
 func (x *TestPayloadTTLPureTask) Reset() {
 	*x = TestPayloadTTLPureTask{}
-	mi := &file_temporal_server_api_persistence_v1_test_payload_store_proto_msgTypes[1]
+	mi := &file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -113,7 +113,7 @@ func (x *TestPayloadTTLPureTask) String() string {
 func (*TestPayloadTTLPureTask) ProtoMessage() {}
 
 func (x *TestPayloadTTLPureTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_test_payload_store_proto_msgTypes[1]
+	mi := &file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -126,7 +126,7 @@ func (x *TestPayloadTTLPureTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestPayloadTTLPureTask.ProtoReflect.Descriptor instead.
 func (*TestPayloadTTLPureTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDescGZIP(), []int{1}
+	return file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *TestPayloadTTLPureTask) GetPayloadKey() string {
@@ -145,7 +145,7 @@ type TestPayloadTTLSideEffectTask struct {
 
 func (x *TestPayloadTTLSideEffectTask) Reset() {
 	*x = TestPayloadTTLSideEffectTask{}
-	mi := &file_temporal_server_api_persistence_v1_test_payload_store_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -157,7 +157,7 @@ func (x *TestPayloadTTLSideEffectTask) String() string {
 func (*TestPayloadTTLSideEffectTask) ProtoMessage() {}
 
 func (x *TestPayloadTTLSideEffectTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_test_payload_store_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -170,7 +170,7 @@ func (x *TestPayloadTTLSideEffectTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestPayloadTTLSideEffectTask.ProtoReflect.Descriptor instead.
 func (*TestPayloadTTLSideEffectTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDescGZIP(), []int{2}
+	return file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *TestPayloadTTLSideEffectTask) GetPayloadKey() string {
@@ -180,17 +180,17 @@ func (x *TestPayloadTTLSideEffectTask) GetPayloadKey() string {
 	return ""
 }
 
-var File_temporal_server_api_persistence_v1_test_payload_store_proto protoreflect.FileDescriptor
+var File_temporal_server_chasm_lib_tests_proto_v1_message_proto protoreflect.FileDescriptor
 
-const file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDesc = "" +
+const file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	";temporal/server/api/persistence/v1/test_payload_store.proto\x12\"temporal.server.api.persistence.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc0\x02\n" +
+	"6temporal/server/chasm/lib/tests/proto/v1/message.proto\x12(temporal.server.chasm.lib.tests.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc6\x02\n" +
 	"\x10TestPayloadStore\x12\x1f\n" +
 	"\vtotal_count\x18\x01 \x01(\x03R\n" +
 	"totalCount\x12\x1d\n" +
 	"\n" +
-	"total_size\x18\x02 \x01(\x03R\ttotalSize\x12t\n" +
-	"\x10expiration_times\x18\x03 \x03(\v2I.temporal.server.api.persistence.v1.TestPayloadStore.ExpirationTimesEntryR\x0fexpirationTimes\x12\x16\n" +
+	"total_size\x18\x02 \x01(\x03R\ttotalSize\x12z\n" +
+	"\x10expiration_times\x18\x03 \x03(\v2O.temporal.server.chasm.lib.tests.proto.v1.TestPayloadStore.ExpirationTimesEntryR\x0fexpirationTimes\x12\x16\n" +
 	"\x06closed\x18\x04 \x01(\bR\x06closed\x1a^\n" +
 	"\x14ExpirationTimesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
@@ -200,31 +200,31 @@ const file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDesc =
 	"payloadKey\"?\n" +
 	"\x1cTestPayloadTTLSideEffectTask\x12\x1f\n" +
 	"\vpayload_key\x18\x01 \x01(\tR\n" +
-	"payloadKeyB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
+	"payloadKeyB;Z9go.temporal.io/server/chasm/lib/tests/gen/testspb;testspbb\x06proto3"
 
 var (
-	file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDescData []byte
+	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescOnce sync.Once
+	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescData []byte
 )
 
-func file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDesc), len(file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDesc)))
+func file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescGZIP() []byte {
+	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescOnce.Do(func() {
+		file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc)))
 	})
-	return file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDescData
+	return file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescData
 }
 
-var file_temporal_server_api_persistence_v1_test_payload_store_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_temporal_server_api_persistence_v1_test_payload_store_proto_goTypes = []any{
-	(*TestPayloadStore)(nil),             // 0: temporal.server.api.persistence.v1.TestPayloadStore
-	(*TestPayloadTTLPureTask)(nil),       // 1: temporal.server.api.persistence.v1.TestPayloadTTLPureTask
-	(*TestPayloadTTLSideEffectTask)(nil), // 2: temporal.server.api.persistence.v1.TestPayloadTTLSideEffectTask
-	nil,                                  // 3: temporal.server.api.persistence.v1.TestPayloadStore.ExpirationTimesEntry
+var file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_temporal_server_chasm_lib_tests_proto_v1_message_proto_goTypes = []any{
+	(*TestPayloadStore)(nil),             // 0: temporal.server.chasm.lib.tests.proto.v1.TestPayloadStore
+	(*TestPayloadTTLPureTask)(nil),       // 1: temporal.server.chasm.lib.tests.proto.v1.TestPayloadTTLPureTask
+	(*TestPayloadTTLSideEffectTask)(nil), // 2: temporal.server.chasm.lib.tests.proto.v1.TestPayloadTTLSideEffectTask
+	nil,                                  // 3: temporal.server.chasm.lib.tests.proto.v1.TestPayloadStore.ExpirationTimesEntry
 	(*timestamppb.Timestamp)(nil),        // 4: google.protobuf.Timestamp
 }
-var file_temporal_server_api_persistence_v1_test_payload_store_proto_depIdxs = []int32{
-	3, // 0: temporal.server.api.persistence.v1.TestPayloadStore.expiration_times:type_name -> temporal.server.api.persistence.v1.TestPayloadStore.ExpirationTimesEntry
-	4, // 1: temporal.server.api.persistence.v1.TestPayloadStore.ExpirationTimesEntry.value:type_name -> google.protobuf.Timestamp
+var file_temporal_server_chasm_lib_tests_proto_v1_message_proto_depIdxs = []int32{
+	3, // 0: temporal.server.chasm.lib.tests.proto.v1.TestPayloadStore.expiration_times:type_name -> temporal.server.chasm.lib.tests.proto.v1.TestPayloadStore.ExpirationTimesEntry
+	4, // 1: temporal.server.chasm.lib.tests.proto.v1.TestPayloadStore.ExpirationTimesEntry.value:type_name -> google.protobuf.Timestamp
 	2, // [2:2] is the sub-list for method output_type
 	2, // [2:2] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
@@ -232,26 +232,26 @@ var file_temporal_server_api_persistence_v1_test_payload_store_proto_depIdxs = [
 	0, // [0:2] is the sub-list for field type_name
 }
 
-func init() { file_temporal_server_api_persistence_v1_test_payload_store_proto_init() }
-func file_temporal_server_api_persistence_v1_test_payload_store_proto_init() {
-	if File_temporal_server_api_persistence_v1_test_payload_store_proto != nil {
+func init() { file_temporal_server_chasm_lib_tests_proto_v1_message_proto_init() }
+func file_temporal_server_chasm_lib_tests_proto_v1_message_proto_init() {
+	if File_temporal_server_chasm_lib_tests_proto_v1_message_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDesc), len(file_temporal_server_api_persistence_v1_test_payload_store_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_temporal_server_api_persistence_v1_test_payload_store_proto_goTypes,
-		DependencyIndexes: file_temporal_server_api_persistence_v1_test_payload_store_proto_depIdxs,
-		MessageInfos:      file_temporal_server_api_persistence_v1_test_payload_store_proto_msgTypes,
+		GoTypes:           file_temporal_server_chasm_lib_tests_proto_v1_message_proto_goTypes,
+		DependencyIndexes: file_temporal_server_chasm_lib_tests_proto_v1_message_proto_depIdxs,
+		MessageInfos:      file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes,
 	}.Build()
-	File_temporal_server_api_persistence_v1_test_payload_store_proto = out.File
-	file_temporal_server_api_persistence_v1_test_payload_store_proto_goTypes = nil
-	file_temporal_server_api_persistence_v1_test_payload_store_proto_depIdxs = nil
+	File_temporal_server_chasm_lib_tests_proto_v1_message_proto = out.File
+	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_goTypes = nil
+	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_depIdxs = nil
 }
