@@ -109,6 +109,8 @@ type (
 		// systemMutation field captures all cell specific system changes (those will NOT be replicated)
 		systemMutation NodesMutation
 		newTasks       map[any][]taskWithAttributes // component value -> task & attributes
+
+		taskValueCache map[*commonpb.DataBlob]reflect.Value
 	}
 
 	taskWithAttributes struct {
@@ -238,7 +240,8 @@ func newTreeHelper(
 			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
 			DeletedNodes: make(map[string]struct{}),
 		},
-		newTasks: make(map[any][]taskWithAttributes),
+		newTasks:       make(map[any][]taskWithAttributes),
+		taskValueCache: make(map[*commonpb.DataBlob]reflect.Value),
 	}
 
 	return newNode(base, nil, "")
@@ -1363,6 +1366,9 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 				validationErr = err
 				return false
 			}
+			if !valid {
+				delete(n.taskValueCache, existingTask.Data)
+			}
 			return !valid
 		}
 		componentAttr.SideEffectTasks = slices.DeleteFunc(componentAttr.SideEffectTasks, deleteFunc)
@@ -1393,13 +1399,12 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 				continue
 			}
 
-			taskValue := newTask.task
-			registrableTask, ok := n.registry.taskFor(taskValue)
+			registrableTask, ok := n.registry.taskFor(newTask.task)
 			if !ok {
-				return serviceerror.NewInternalf("task type %s is not registered", reflect.TypeOf(taskValue).String())
+				return serviceerror.NewInternalf("task type %s is not registered", reflect.TypeOf(newTask.task).String())
 			}
 
-			taskBlob, err := serializeTask(registrableTask, taskValue)
+			taskBlob, err := n.serializeTaskWithCache(registrableTask, reflect.ValueOf(newTask.task))
 			if err != nil {
 				return err
 			}
@@ -1444,9 +1449,7 @@ func (n *Node) deserializeComponentTask(
 		return nil, serviceerror.NewInternalf("task type %s is not registered", componentTask.Type)
 	}
 
-	// TODO: cache deserialized task value (reflect.Value) in the node,
-	// use task VT and offset as the key
-	taskValue, err := deserializeTask(registableTask, componentTask.Data)
+	taskValue, err := n.deserializeTaskWithCache(registableTask, componentTask.Data)
 	if err != nil {
 		return nil, err
 	}
@@ -2056,7 +2059,7 @@ func isComponentTaskExpired(
 // close).
 func (n *Node) EachPureTask(
 	referenceTime time.Time,
-	callback func(executor NodePureTask, taskAttributes TaskAttributes, task any) error,
+	callback func(executor NodePureTask, taskAttributes TaskAttributes, taskInstance any) error,
 ) error {
 	ctx := NewContext(context.Background(), n)
 
@@ -2086,7 +2089,7 @@ func (n *Node) EachPureTask(
 				break
 			}
 
-			taskValue, err := node.deserializeComponentTask(task)
+			taskInstance, err := node.deserializeComponentTask(task)
 			if err != nil {
 				return err
 			}
@@ -2096,7 +2099,7 @@ func (n *Node) EachPureTask(
 				Destination:   task.Destination,
 			}
 
-			if err = callback(node, taskAttributes, taskValue); err != nil {
+			if err = callback(node, taskAttributes, taskInstance); err != nil {
 				return err
 			}
 		}
@@ -2190,6 +2193,36 @@ func taskCategory(
 	return tasks.CategoryTimer, nil
 }
 
+func (n *Node) deserializeTaskWithCache(
+	registrableTask *RegistrableTask,
+	taskBlob *commonpb.DataBlob,
+) (taskValue reflect.Value, retErr error) {
+	if cachedValue, ok := n.taskValueCache[taskBlob]; ok {
+		return cachedValue, nil
+	}
+
+	taskValue, err := deserializeTask(registrableTask, taskBlob)
+	if err != nil {
+		return reflect.Value{}, err
+	}
+
+	n.taskValueCache[taskBlob] = taskValue
+	return taskValue, nil
+}
+
+func (n *Node) serializeTaskWithCache(
+	registrableTask *RegistrableTask,
+	taskValue reflect.Value,
+) (*commonpb.DataBlob, error) {
+	taskBlob, err := serializeTask(registrableTask, taskValue)
+	if err != nil {
+		return nil, err
+	}
+
+	n.taskValueCache[taskBlob] = taskValue
+	return taskBlob, nil
+}
+
 func deserializeTask(
 	registrableTask *RegistrableTask,
 	taskBlob *commonpb.DataBlob,
@@ -2249,15 +2282,14 @@ func deserializeTask(
 
 func serializeTask(
 	registrableTask *RegistrableTask,
-	task any,
+	taskValue reflect.Value,
 ) (*commonpb.DataBlob, error) {
-	protoValue, ok := task.(proto.Message)
+	protoValue, ok := taskValue.Interface().(proto.Message)
 	if ok {
 		return serialization.ProtoEncode(protoValue)
 	}
 
 	taskGoType := registrableTask.goType
-	taskValue := reflect.ValueOf(task)
 
 	// Handle pointer to struct.
 	if taskGoType.Kind() == reflect.Ptr {
@@ -2383,27 +2415,28 @@ func (n *Node) ValidatePureTask(
 // If validation fails, that error is returned.
 func (n *Node) ValidateSideEffectTask(
 	ctx context.Context,
-	taskAttributes TaskAttributes,
-	taskInfo *persistencespb.ChasmTaskInfo,
-) (any, error) {
+	chasmTask *tasks.ChasmTask,
+) (bool, error) {
+
+	taskInfo := chasmTask.Info
 	taskType := taskInfo.Type
 	registrableTask, ok := n.registry.task(taskType)
 	if !ok {
-		return nil, serviceerror.NewInternalf("unknown task type '%s'", taskType)
+		return false, serviceerror.NewInternalf("unknown task type '%s'", taskType)
 	}
 
 	if registrableTask.isPureTask {
-		return nil, serviceerror.NewInternalf("ValidateSideEffectTask called on a Pure task '%s'", taskType)
+		return false, serviceerror.NewInternalf("ValidateSideEffectTask called on a Pure task '%s'", taskType)
 	}
 
 	nodePath, err := n.pathEncoder.Decode(taskInfo.Path)
 	if err != nil {
-		return nil, serviceerror.NewInternalf("failed to decode path '%s'", taskInfo.Path)
+		return false, serviceerror.NewInternalf("failed to decode path '%s'", taskInfo.Path)
 	}
 
 	node, ok := n.findNode(nodePath)
 	if !ok {
-		return nil, nil
+		return false, nil
 	}
 
 	// node.serializedNode should always be available when running a side effect task.
@@ -2411,31 +2444,31 @@ func (n *Node) ValidateSideEffectTask(
 		taskInfo.ComponentInitialVersionedTransition,
 		node.serializedNode.Metadata.InitialVersionedTransition,
 	) != 0 {
-		return nil, nil
+		return false, nil
 	}
 
 	// Component must be hydrated before the task's validator is called.
 	validateCtx := NewContext(ctx, n)
 	if err := node.prepareComponentValue(validateCtx); err != nil {
-		return nil, err
+		return false, err
 	}
 
-	// TODO - cache deserialized task
-	taskValue, err := deserializeTask(registrableTask, taskInfo.Data)
-	if err != nil {
-		return nil, err
-	}
-	taskInstance := taskValue.Interface()
-
-	valid, err := node.validateTask(validateCtx, taskAttributes, taskInstance)
-	if err != nil {
-		return nil, err
-	}
-	if !valid {
-		return nil, nil
+	if !chasmTask.DeserializedTask.IsValid() {
+		// TODO: Change physical side effect task to reference logical task and
+		// then use deserializeTaskWithCache as well.
+		chasmTask.DeserializedTask, err = deserializeTask(registrableTask, taskInfo.Data)
+		if err != nil {
+			return false, err
+		}
 	}
 
-	return taskInstance, nil
+	return node.validateTask(
+		validateCtx, TaskAttributes{
+			ScheduledTime: chasmTask.GetVisibilityTime(),
+			Destination:   chasmTask.Destination,
+		},
+		chasmTask.DeserializedTask.Interface(),
+	)
 }
 
 // ExecuteSideEffectTask executes the given ChasmTask on its associated node
@@ -2449,23 +2482,33 @@ func (n *Node) ExecuteSideEffectTask(
 	ctx context.Context,
 	registry *Registry,
 	entityKey EntityKey,
-	taskAttributes TaskAttributes,
-	taskInfo *persistencespb.ChasmTaskInfo,
+	chasmTask *tasks.ChasmTask,
 	validate func(NodeBackend, Context, Component) error,
 ) error {
 	if engineFromContext(ctx) == nil {
 		return serviceerror.NewInternal("no CHASM engine set on context")
 	}
 
+	taskInfo := chasmTask.Info
 	taskType := taskInfo.Type
 	registrableTask, ok := registry.task(taskType)
 	if !ok {
 		return serviceerror.NewInternalf("unknown task type '%s'", taskType)
 	}
-
 	if registrableTask.isPureTask {
 		return serviceerror.NewInternalf("ExecuteSideEffectTask called on a Pure task '%s'", taskType)
 	}
+
+	if !chasmTask.DeserializedTask.IsValid() {
+		var err error
+		// TODO: Change physical side effect task to reference logical task and
+		// then use deserializeTaskWithCache as well.
+		chasmTask.DeserializedTask, err = deserializeTask(registrableTask, taskInfo.Data)
+		if err != nil {
+			return err
+		}
+	}
+	taskValue := chasmTask.DeserializedTask
 
 	// TODO - update ComponentRef to use the encoded path, and then leave decoding
 	// until access/dereference time.
@@ -2474,9 +2517,9 @@ func (n *Node) ExecuteSideEffectTask(
 		return serviceerror.NewInternalf("failed to decode path '%s'", taskInfo.Path)
 	}
 
-	taskValue, err := deserializeTask(registrableTask, taskInfo.Data)
-	if err != nil {
-		return err
+	taskAttributes := TaskAttributes{
+		ScheduledTime: chasmTask.GetVisibilityTime(),
+		Destination:   chasmTask.Destination,
 	}
 
 	ref := ComponentRef{
