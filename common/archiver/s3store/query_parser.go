@@ -18,7 +18,14 @@ type (
 		Parse(query string) (*parsedQuery, error)
 	}
 
-	queryParser struct{}
+	queryParser struct {
+		withSearchAttributes bool
+	}
+
+	NameValuePair struct {
+		name  *string
+		value *string
+	}
 
 	parsedQuery struct {
 		workflowTypeName *string
@@ -26,6 +33,7 @@ type (
 		startTime        *time.Time
 		closeTime        *time.Time
 		searchPrecision  *string
+		custom           *NameValuePair
 	}
 )
 
@@ -47,8 +55,10 @@ const (
 )
 
 // NewQueryParser creates a new query parser for filestore
-func NewQueryParser() QueryParser {
-	return &queryParser{}
+func NewQueryParser(withSearchAttributes bool) QueryParser {
+	return &queryParser{
+		withSearchAttributes: withSearchAttributes,
+	}
 }
 
 func (p *queryParser) Parse(query string) (*parsedQuery, error) {
@@ -77,6 +87,11 @@ func (p *queryParser) Parse(query string) (*parsedQuery, error) {
 	if parsedQuery.closeTime == nil && parsedQuery.startTime == nil && parsedQuery.searchPrecision != nil {
 		return nil, errors.New("SearchPrecision requires a StartTime or CloseTime")
 	}
+
+	if p.withSearchAttributes && parsedQuery.closeTime != nil && parsedQuery.startTime != nil && parsedQuery.custom != nil {
+		return nil, errors.New("only one secondary filter attribute can be specified in a query")
+	}
+
 	return parsedQuery, nil
 }
 
@@ -186,7 +201,17 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		parsedQuery.searchPrecision = util.Ptr(val)
 
 	default:
-		return fmt.Errorf("unknown filter name: %s", colNameStr)
+		if !p.withSearchAttributes {
+			return fmt.Errorf("unknown filter name: %s", colNameStr)
+		}
+		val, err := sqlquery.ExtractStringValue(valStr)
+		if err != nil {
+			return err
+		}
+		parsedQuery.custom = &NameValuePair{
+			name:  util.Ptr(colNameStr),
+			value: util.Ptr(val),
+		}
 	}
 
 	return nil
