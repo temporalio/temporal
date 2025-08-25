@@ -27,14 +27,14 @@ type {{$P.Name}}TypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[
 // New{{$P.Name}}TypedSetting creates a setting that uses mapstructure to handle complex structured
 // values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
 // when using non-empty maps or slices as defaults, the result may not be what you want.
-func New{{$P.Name}}TypedSetting[T any](key Key, def T, description string) {{$P.Name}}TypedSetting[T] {
+func New{{$P.Name}}TypedSetting[T any](key string, def T, description string) {{$P.Name}}TypedSetting[T] {
 	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
 	warnDefaultSharedStructure(key, def)
 	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
 	_ = deepCopyForMapstructure(def)
 
 	s := {{$P.Name}}TypedSetting[T]{
-		key:         key,
+		key:         MakeKey(key),
 		def:         def,
 		convert:     ConvertStructure[T](def),
 		description: description,
@@ -44,10 +44,10 @@ func New{{$P.Name}}TypedSetting[T any](key Key, def T, description string) {{$P.
 }
 
 // New{{$P.Name}}TypedSettingWithConverter creates a setting with a custom converter function.
-func New{{$P.Name}}TypedSettingWithConverter[T any](key Key, convert func(any) (T, error), def T, description string) {{$P.Name}}TypedSetting[T] {
+func New{{$P.Name}}TypedSettingWithConverter[T any](key string, convert func(any) (T, error), def T, description string) {{$P.Name}}TypedSetting[T] {
 	{{/* Do not warn on shared structure here, it's the converter's concern. */ -}}
 	s := {{$P.Name}}TypedSetting[T]{
-		key:         key,
+		key:         MakeKey(key),
 		def:         def,
 		convert:     convert,
 		description: description,
@@ -57,10 +57,10 @@ func New{{$P.Name}}TypedSettingWithConverter[T any](key Key, convert func(any) (
 }
 
 // New{{$P.Name}}TypedSettingWithConstrainedDefault creates a setting with a compound default value.
-func New{{$P.Name}}TypedSettingWithConstrainedDefault[T any](key Key, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) {{$P.Name}}TypedConstrainedDefaultSetting[T] {
+func New{{$P.Name}}TypedSettingWithConstrainedDefault[T any](key string, convert func(any) (T, error), cdef []TypedConstrainedValue[T], description string) {{$P.Name}}TypedConstrainedDefaultSetting[T] {
 	{{/* Do not warn on shared structure here, it's the converter's concern. */ -}}
 	s := {{$P.Name}}TypedConstrainedDefaultSetting[T]{
-		key:         key,
+		key:         MakeKey(key),
 		cdef:        cdef,
 		convert:     convert,
 		description: description,
@@ -197,11 +197,11 @@ func GetTypedPropertyFnFilteredBy{{$P.Name}}[T any](value T) TypedPropertyFnWith
 type {{$P.Name}}{{$T.Name}}Setting = {{$P.Name}}TypedSetting[{{$T.GoType}}]
 type {{$P.Name}}{{$T.Name}}ConstrainedDefaultSetting = {{$P.Name}}TypedConstrainedDefaultSetting[{{$T.GoType}}]
 
-func New{{$P.Name}}{{$T.Name}}Setting(key Key, def {{$T.GoType}}, description string) {{$P.Name}}{{$T.Name}}Setting {
+func New{{$P.Name}}{{$T.Name}}Setting(key string, def {{$T.GoType}}, description string) {{$P.Name}}{{$T.Name}}Setting {
 	return New{{$P.Name}}TypedSettingWithConverter[{{$T.GoType}}](key, convert{{$T.Name}}, def, description)
 }
 
-func New{{$P.Name}}{{$T.Name}}SettingWithConstrainedDefault(key Key, cdef []TypedConstrainedValue[{{$T.GoType}}], description string) {{$P.Name}}{{$T.Name}}ConstrainedDefaultSetting {
+func New{{$P.Name}}{{$T.Name}}SettingWithConstrainedDefault(key string, cdef []TypedConstrainedValue[{{$T.GoType}}], description string) {{$P.Name}}{{$T.Name}}ConstrainedDefaultSetting {
 	return New{{$P.Name}}TypedSettingWithConstrainedDefault[{{$T.GoType}}](key, convert{{$T.Name}}, cdef, description)
 }
 
