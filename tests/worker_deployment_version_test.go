@@ -428,11 +428,10 @@ func (s *DeploymentVersionSuite) startPinnedWorkflow(ctx context.Context, tv *te
 	wId := testcore.RandomizeStr("id")
 	w := worker.New(s.SdkClient(), tv.TaskQueue().String(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
-			DeploymentSeriesName: tv.DeploymentSeries(), //nolint:staticcheck // SA1019: worker versioning v0.30
+			Version:       tv.SDKDeploymentVersion(),
+			UseVersioning: true,
 		},
-		UseBuildIDForVersioning: true,         //nolint:staticcheck // SA1019: old worker versioning
-		BuildID:                 tv.BuildID(), //nolint:staticcheck // SA1019: old worker versioning
-		Identity:                wId,
+		Identity: wId,
 	})
 	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{VersioningBehavior: workflow.VersioningBehaviorPinned})
 	s.NoError(w.Start())

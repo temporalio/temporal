@@ -56,6 +56,7 @@ type nexusContext struct {
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
 	responseHeaders                      map[string]string
 	responseHeadersMutex                 sync.Mutex
+	originalRequestHeaders               http.Header // Original HTTP request headers to be used for forwarded requests.
 }
 
 // Context for a specific Nexus operation, includes a resolved namespace, and a bound metrics handler and logger.
@@ -300,6 +301,7 @@ type nexusHandler struct {
 	forwardingClients             *cluster.FrontendHTTPClientCache
 	payloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	useForwardByEndpoint          dynamicconfig.BoolPropertyFn
 	metricTagConfig               dynamicconfig.TypedPropertyFn[nexusoperations.NexusMetricTagConfig]
 	httpTraceProvider             commonnexus.HTTPClientTraceProvider
 }
@@ -656,21 +658,14 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed")
 	}
 
-	wrappedHttpDo := func(req *http.Request) (*http.Response, error) {
-		response, err := httpClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-
-		if failureSource := response.Header.Get(commonnexus.FailureSourceHeaderName); failureSource != "" {
-			oc.nexusContext.setFailureSource(failureSource)
-		}
-
-		return response, nil
+	httpCaller := &forwardingHttpHeaderWrapper{
+		client:                 httpClient,
+		nc:                     oc.nexusContext,
+		originalRequestHeaders: oc.originalRequestHeaders,
 	}
 
 	var baseURL string
-	if oc.endpointID != "" {
+	if h.useForwardByEndpoint() && oc.endpointID != "" {
 		// If the request was originally dispatched by endpoint, forward by endpoint as well.
 		baseURL, err = url.JoinPath(httpClient.BaseURL(),
 			commonnexus.RouteDispatchNexusTaskByEndpoint.Path(oc.endpointID))
@@ -695,7 +690,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 	}
 
 	return nexus.NewHTTPClient(nexus.HTTPClientOptions{
-		HTTPCaller: wrappedHttpDo,
+		HTTPCaller: httpCaller.Do,
 		BaseURL:    baseURL,
 		Service:    service,
 	})
@@ -739,4 +734,30 @@ func (nc *nexusContext) setFailureSource(source string) {
 	nc.responseHeadersMutex.Lock()
 	defer nc.responseHeadersMutex.Unlock()
 	nc.responseHeaders[commonnexus.FailureSourceHeaderName] = source
+}
+
+type forwardingHttpHeaderWrapper struct {
+	client                 *common.FrontendHTTPClient
+	nc                     *nexusContext
+	originalRequestHeaders http.Header
+}
+
+func (f *forwardingHttpHeaderWrapper) Do(req *http.Request) (*http.Response, error) {
+	// For forwarded requests, copy the original HTTP headers without sanitization.
+	for k, v := range f.originalRequestHeaders {
+		if req.Header.Get(k) == "" {
+			req.Header.Set(k, v[0])
+		}
+	}
+
+	response, err := f.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if failureSource := response.Header.Get(commonnexus.FailureSourceHeaderName); failureSource != "" {
+		f.nc.setFailureSource(failureSource)
+	}
+
+	return response, nil
 }
