@@ -237,6 +237,9 @@ type (
 
 		// Tracks all events added via the AddHistoryEvent method that is used by the state machine framework.
 		currentTransactionAddedStateMachineEventTypes []enumspb.EventType
+
+		lastWorkflowTaskFailureEventID int64
+		lastWorkflowTaskTimeoutEventID int64
 	}
 
 	lastUpdatedStateTransitionGetter interface {
@@ -3349,7 +3352,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskTimedOutEvent(
 func (ms *MutableStateImpl) ApplyWorkflowTaskTimedOutEvent(
 	timeoutType enumspb.TimeoutType,
 ) error {
-	return ms.workflowTaskManager.ApplyWorkflowTaskTimedOutEvent(timeoutType)
+	return ms.workflowTaskManager.ApplyWorkflowTaskTimedOutEventWithoutEvent(timeoutType)
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskScheduleToStartTimeoutEvent(
@@ -3389,7 +3392,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskFailedEvent() error {
-	return ms.workflowTaskManager.ApplyWorkflowTaskFailedEvent()
+	return ms.workflowTaskManager.ApplyWorkflowTaskFailedEventWithoutEvent()
 }
 
 func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
