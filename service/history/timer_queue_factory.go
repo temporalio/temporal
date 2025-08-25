@@ -160,6 +160,7 @@ func (f *timerQueueFactory) CreateQueue(
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
+		f.SchedulerRateLimiter,
 	)
 	return queues.NewScheduledQueue(
 		shardContext,
