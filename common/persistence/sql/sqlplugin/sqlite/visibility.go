@@ -10,21 +10,6 @@ import (
 )
 
 var (
-	// Max number of keyword list elements to materialize when splitting a stored
-	// keyword-list string back into []string. This is a defensive cap to avoid
-	// pathological allocations on crafted inputs.
-	//
-	// Actual values are already size-limited at write time by search-attribute
-	// validation in the Frontend using dynamic config:
-	//   - per-value size: common/dynamicconfig/constants.go → SearchAttributesSizeOfValueLimit
-	//     default: 2*1024 bytes (config key: "frontend.searchAttributesSizeOfValueLimit")
-	//   - total map size: common/dynamicconfig/constants.go → SearchAttributesTotalSizeLimit
-	//     default: 40*1024 bytes (config key: "frontend.searchAttributesTotalSizeLimit")
-	//   - number of keys: common/dynamicconfig/constants.go → SearchAttributesNumberOfKeysLimit
-	//     default: 100 (config key: "frontend.searchAttributesNumberOfKeysLimit")
-	// With a 2KiB per-value cap and a 3-byte separator, a pathological value can
-	// produce ~680 tokens; this 1024 cap should therefore never be hit in normal use.
-	maxKeywordListElems  = 1024
 	keywordListSeparator = "♡"
 
 	templateInsertWorkflowExecution = fmt.Sprintf(
@@ -206,16 +191,9 @@ func (mdb *db) processRowFromDB(row *sqlplugin.VisibilityRow) error {
 			switch typedSaValue := saValue.(type) {
 			case string:
 				if strings.Contains(typedSaValue, keywordListSeparator) {
-					// If the string contains the keywordListSeparator, split it into a list of
-					// keywords. Use a defensive cap on the number of elements. If the cap is
-					// exceeded (should not happen under normal size limits), truncate overflow
-					// instead of merging it into the last element to preserve token semantics
-					// for the returned slice.
-					parts := strings.SplitN(typedSaValue, keywordListSeparator, maxKeywordListElems+1)
-					if len(parts) > maxKeywordListElems {
-						parts = parts[:maxKeywordListElems]
-					}
-					(*row.SearchAttributes)[saName] = parts
+					// If the string contains the keywordListSeparator, then we need to split it
+					// into a list of keywords.
+					(*row.SearchAttributes)[saName] = strings.Split(typedSaValue, keywordListSeparator)
 				}
 			default:
 				// no-op
