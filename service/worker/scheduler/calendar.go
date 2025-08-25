@@ -420,16 +420,18 @@ func makeRange(s, field, def string, minVal, maxVal int, parseMode parseMode) ([
 		var err error
 		step := 1
 		hasStep := false
-		if strings.Contains(part, "/") {
-			// We only allow a single slash introducing an integer step. Reject inputs
-			// with more than one slash (e.g. "3/5/7") so tests receive the
-			// canonical "too many slashes" error instead of a strconv parse error.
-			if strings.Count(part, "/") > 1 { // faster than re-splitting pieces later
-				return nil, fmt.Errorf("%s has too many slashes", field)
-			}
+		slashes := strings.Count(part, "/")
+		if slashes > 1 {
+			// Inputs like "3/5/7" should yield the canonical "too many slashes" error
+			// (instead of a later strconv parse error) so tests get consistent results.
+			return nil, fmt.Errorf("%s has too many slashes", field)
+		}
+		if slashes == 1 {
+			// A single slash introduces an integer step.
 			skipParts := strings.SplitN(part, "/", 2)
-			if len(skipParts) != 2 || skipParts[1] == "" { // second part must exist and be non-empty
-				return nil, fmt.Errorf("%s has too many slashes", field)
+			// Count==1 guarantees len==2; only need to ensure the right side is non-empty.
+			if skipParts[1] == "" { // e.g. "5/"
+				return nil, fmt.Errorf("%s missing step value", field)
 			}
 			part = skipParts[0]
 			step, err = strconv.Atoi(skipParts[1])
