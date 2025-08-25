@@ -1000,20 +1000,20 @@ func (m *workflowTaskStateMachine) getLastWorkflowTaskCloseEvent() (*historypb.H
 		)
 
 		// Print entire workflow history for debugging
-		fmt.Printf("\n=== WORKFLOW HISTORY DEBUG - getLastWorkflowTaskCloseEvent ===\n")
+		fmt.Println("\n=== WORKFLOW HISTORY DEBUG - getLastWorkflowTaskCloseEvent ===")
 		fmt.Printf("WorkflowID: %s\n", m.ms.GetExecutionInfo().WorkflowId)
 		fmt.Printf("RunID: %s\n", m.ms.GetExecutionState().RunId)
 		fmt.Printf("Namespace: %s\n", m.ms.GetNamespaceEntry().Name().String())
 		fmt.Printf("NextEventID: %d\n", m.ms.GetNextEventID())
 		fmt.Printf("LastCompletedWorkflowTaskStartedEventID: %d\n", lastCompletedWorkflowTaskStartedEventID)
-		fmt.Printf("Current WorkflowTask State:\n")
+		fmt.Println("Current WorkflowTask State:")
 		fmt.Printf("  - ScheduledEventId: %d\n", m.ms.executionInfo.WorkflowTaskScheduledEventId)
 		fmt.Printf("  - StartedEventId: %d\n", m.ms.executionInfo.WorkflowTaskStartedEventId)
 		fmt.Printf("  - Attempt: %d\n", m.ms.executionInfo.WorkflowTaskAttempt)
 		fmt.Printf("  - Type: %s\n", m.ms.executionInfo.WorkflowTaskType.String())
 
 		// Print version history information
-		fmt.Printf("Version History:\n")
+		fmt.Println("Version History:")
 		if m.ms.executionInfo.VersionHistories != nil {
 			for i, history := range m.ms.executionInfo.VersionHistories.Histories {
 				fmt.Printf("  History %d: BranchToken=%s\n", i, history.BranchToken)
@@ -1024,22 +1024,22 @@ func (m *workflowTaskStateMachine) getLastWorkflowTaskCloseEvent() (*historypb.H
 		}
 
 		// Print all events in memory batches
-		fmt.Printf("\n--- Memory Latest Batch ---\n")
+		fmt.Println("\n--- Memory Latest Batch ---")
 		m.printEventBatch("memLatestBatch", m.ms.hBuilder.GetMemLatestBatch())
 
-		fmt.Printf("\n--- Memory Events Batches ---\n")
+		fmt.Println("\n--- Memory Events Batches ---")
 		for i, batch := range m.ms.hBuilder.GetMemEventsBatches() {
 			fmt.Printf("Batch %d:\n", i)
 			m.printEventBatch("", batch)
 		}
 
-		fmt.Printf("\n--- Memory Buffer Batch ---\n")
+		fmt.Println("\n--- Memory Buffer Batch ---")
 		m.printEventBatch("memBufferBatch", m.ms.hBuilder.GetMemBufferBatch())
 
-		fmt.Printf("\n--- DB Buffer Batch ---\n")
+		fmt.Println("\n--- DB Buffer Batch ---")
 		m.printEventBatch("dbBufferBatch", m.ms.hBuilder.GetDBBufferBatch())
 
-		fmt.Printf("=== END WORKFLOW HISTORY DEBUG ===\n\n")
+		fmt.Println("=== END WORKFLOW HISTORY DEBUG ===")
 
 		return nil, serviceerror.NewNotFound("no prior workflow task close event found")
 	}
@@ -1568,7 +1568,7 @@ func (m *workflowTaskStateMachine) printEventBatch(batchName string, events []*h
 		if batchName != "" {
 			fmt.Printf("  %s: (empty)\n", batchName)
 		} else {
-			fmt.Printf("    (empty)\n")
+			fmt.Println("    (empty)")
 		}
 		return
 	}
@@ -1604,7 +1604,9 @@ func (m *workflowTaskStateMachine) printEventBatch(batchName string, events []*h
 			attrs := event.GetWorkflowTaskTimedOutEventAttributes()
 			fmt.Printf(", ScheduledEventId=%d, StartedEventId=%d, TimeoutType=%s",
 				attrs.GetScheduledEventId(), attrs.GetStartedEventId(), attrs.GetTimeoutType().String())
+		default:
+			continue
 		}
-		fmt.Printf("\n")
+		fmt.Println("")
 	}
 }
