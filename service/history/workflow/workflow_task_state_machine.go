@@ -4,6 +4,7 @@ package workflow
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"math"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -908,28 +910,17 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
 
 	if failWorkflowTaskInfo.Attempt == 2 {
-		// Add debugging information for attempt 2
-		m.ms.logger.Error("failWorkflowTask: attempting to get last workflow task close event for attempt 2",
-			tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-			tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-			tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-			tag.WorkflowScheduledEventID(m.ms.executionInfo.WorkflowTaskScheduledEventId),
-			tag.WorkflowStartedEventID(m.ms.executionInfo.WorkflowTaskStartedEventId),
-			tag.Attempt(m.ms.executionInfo.WorkflowTaskAttempt),
-			tag.WorkflowTaskType(m.ms.executionInfo.WorkflowTaskType.String()),
-			tag.WorkflowNextEventID(m.ms.GetNextEventID()),
-		)
-
-		lastWorkflowTaskCloseEvent, err := m.getLastWorkflowTaskCloseEvent()
+		lastWorkflowTaskCloseEvent, err := m.getLastWorkflowTaskFailureEvent()
 		if err != nil {
-			return err
-		}
-
-		// If lastWorkflowTaskCloseEvent is nil, it means this is an NDC replication scenario
-		// where we don't have a prior workflow task close event, so we skip the reported problems update
-		if lastWorkflowTaskCloseEvent == nil {
+			// This is expected when the last completed workflow task was successful and the current task is failing
+			// In this case, we don't have a previous close event to reference, which is normal
+			fmt.Println("failWorkflowTask: getLastWorkflowTaskCloseEvent error", err)
+			fmt.Println("failWorkflowTask: this is expected when the last completed workflow task was successful")
+			// Return nil to indicate no search attribute update is needed
 			return nil
 		}
+
+		fmt.Println("failWorkflowTask: lastWorkflowTaskCloseEvent", lastWorkflowTaskCloseEvent)
 
 		switch tFailure := lastWorkflowTaskCloseEvent.GetAttributes().(type) {
 		case *historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes:
@@ -946,167 +937,255 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 			)
 		}
 
-		return fmt.Errorf("unknown workflow task close event type: %T", lastWorkflowTaskCloseEvent.GetAttributes())
+		return fmt.Errorf("failWorkflowTask: unknown workflow task close event type: %T", lastWorkflowTaskCloseEvent.GetAttributes())
 	}
 	return nil
 }
 
-// getLastWorkflowTaskCloseEvent retrieves the last workflow task close event (failed or timed out)
-// using only data stored in mutable state, without incurring persistence reads
-func (m *workflowTaskStateMachine) getLastWorkflowTaskCloseEvent() (*historypb.HistoryEvent, error) {
+// printCompleteWorkflowHistory prints the complete workflow history from the database
+func (m *workflowTaskStateMachine) printCompleteWorkflowHistory() {
+	fmt.Println("=== COMPLETE WORKFLOW HISTORY DEBUG ===")
 
-	// Check if this is an NDC replication scenario by looking at the current workflow task state
-	// In NDC replication, we might be applying events from a different version branch where
-	// the workflow task state is not fully consistent with the current mutable state
-	// if m.ms.executionInfo.WorkflowTaskAttempt > 1 &&
-	// 	(m.ms.executionInfo.WorkflowTaskScheduledEventId == 0 ||
-	// 		m.ms.executionInfo.WorkflowTaskStartedEventId == 0) {
-	// 	// This appears to be an NDC replication scenario where the workflow task state
-	// 	// is being reconstructed. In this case, we should allow the operation to proceed
-	// 	// without requiring a prior workflow task close event.
-	// 	m.ms.logger.Warn("getLastWorkflowTaskCloseEvent: NDC replication scenario detected, allowing workflow task failure without prior close event",
-	// 		tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-	// 		tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-	// 		tag.Attempt(m.ms.executionInfo.WorkflowTaskAttempt),
-	// 		tag.WorkflowScheduledEventID(m.ms.executionInfo.WorkflowTaskScheduledEventId),
-	// 		tag.WorkflowStartedEventID(m.ms.executionInfo.WorkflowTaskStartedEventId),
-	// 	)
-	// 	return nil, nil // Return nil to indicate no prior event is needed
-	// }
+	ctx := context.Background()
+
+	// Get the complete history from the database
+	historyResponse, err := m.ms.shard.GetExecutionManager().ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+		ShardID:       m.ms.shard.GetShardID(),
+		BranchToken:   m.ms.executionInfo.VersionHistories.GetHistories()[0].GetBranchToken(),
+		MinEventID:    1,
+		MaxEventID:    m.ms.GetNextEventID(),
+		PageSize:      1000,
+		NextPageToken: nil,
+	})
+
+	if err != nil {
+		fmt.Printf("Error reading history: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Complete History (%d events):\n", len(historyResponse.HistoryEvents))
+	for i, event := range historyResponse.HistoryEvents {
+		fmt.Printf("  [%d] EventID: %d, Type: %s, Time: %s, Version: %d\n",
+			i, event.GetEventId(), event.GetEventType(), event.GetEventTime(), event.GetVersion())
+
+		// Add more details for workflow task events
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:
+			attrs := event.GetWorkflowTaskScheduledEventAttributes()
+			fmt.Printf("      TaskQueue: %s, Timeout: %s, Attempt: %d\n",
+				attrs.GetTaskQueue().GetName(), attrs.GetStartToCloseTimeout(), attrs.GetAttempt())
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED:
+			attrs := event.GetWorkflowTaskStartedEventAttributes()
+			fmt.Printf("      ScheduledEventID: %d, Identity: %s\n",
+				attrs.GetScheduledEventId(), attrs.GetIdentity())
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
+			attrs := event.GetWorkflowTaskCompletedEventAttributes()
+			fmt.Printf("      ScheduledEventID: %d, StartedEventID: %d, Identity: %s\n",
+				attrs.GetScheduledEventId(), attrs.GetStartedEventId(), attrs.GetIdentity())
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
+			attrs := event.GetWorkflowTaskFailedEventAttributes()
+			fmt.Printf("      ScheduledEventID: %d, StartedEventID: %d, Cause: %s, Identity: %s\n",
+				attrs.GetScheduledEventId(), attrs.GetStartedEventId(), attrs.GetCause(), attrs.GetIdentity())
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
+			attrs := event.GetWorkflowTaskTimedOutEventAttributes()
+			fmt.Printf("      ScheduledEventID: %d, StartedEventID: %d, TimeoutType: %s\n",
+				attrs.GetScheduledEventId(), attrs.GetStartedEventId(), attrs.GetTimeoutType())
+		default:
+			continue
+		}
+	}
+
+	fmt.Println("=== END COMPLETE WORKFLOW HISTORY DEBUG ===")
+}
+
+// printWorkflowTaskLifecycle prints workflow task lifecycle information for debugging
+func (m *workflowTaskStateMachine) printWorkflowTaskLifecycle() {
+	fmt.Println("=== WORKFLOW TASK LIFECYCLE DEBUG ===")
+
+	execInfo := m.ms.executionInfo
+	fmt.Println("Workflow Task State:")
+	fmt.Printf("  Scheduled Event ID: %d\n", execInfo.WorkflowTaskScheduledEventId)
+	fmt.Printf("  Started Event ID: %d\n", execInfo.WorkflowTaskStartedEventId)
+	fmt.Printf("  Last Completed Started Event ID: %d\n", execInfo.LastCompletedWorkflowTaskStartedEventId)
+	fmt.Printf("  Attempt: %d\n", execInfo.WorkflowTaskAttempt)
+	fmt.Printf("  Version: %d\n", execInfo.WorkflowTaskVersion)
+	fmt.Printf("  Request ID: %s\n", execInfo.WorkflowTaskRequestId)
+	fmt.Printf("  Type: %s\n", execInfo.WorkflowTaskType)
+	fmt.Printf("  Suggest Continue As New: %t\n", execInfo.WorkflowTaskSuggestContinueAsNew)
+
+	// Check if we have a current workflow task
+	if m.HasStartedWorkflowTask() {
+		fmt.Println("  Status: Has started workflow task")
+	} else if m.HasPendingWorkflowTask() {
+		fmt.Println("  Status: Has pending workflow task")
+	} else {
+		fmt.Println("  Status: No workflow task")
+	}
+
+	// Check if we have completed any workflow tasks
+	if m.ms.HasCompletedAnyWorkflowTask() {
+		fmt.Println("  Has completed workflow tasks: true")
+	} else {
+		fmt.Println("  Has completed workflow tasks: false")
+	}
+
+	fmt.Println("=== END WORKFLOW TASK LIFECYCLE DEBUG ===")
+}
+
+// printAllWorkflowEvents prints all events in the workflow history for debugging
+func (m *workflowTaskStateMachine) printAllWorkflowEvents() {
+	fmt.Println("=== WORKFLOW EVENTS DEBUG ===")
+
+	// Print events from memLatestBatch (current batch being built)
+	memLatestBatch := m.ms.hBuilder.GetMemLatestBatch()
+	if len(memLatestBatch) > 0 {
+		fmt.Printf("memLatestBatch (%d events):\n", len(memLatestBatch))
+		for i, event := range memLatestBatch {
+			fmt.Printf("  [%d] EventID: %d, Type: %s, Time: %s\n",
+				i, event.GetEventId(), event.GetEventType(), event.GetEventTime())
+		}
+	}
+
+	// Print events from memEventsBatches (completed batches)
+	memEventsBatches := m.ms.hBuilder.GetMemEventsBatches()
+	for batchIdx, batch := range memEventsBatches {
+		if len(batch) > 0 {
+			fmt.Printf("memEventsBatches[%d] (%d events):\n", batchIdx, len(batch))
+			for i, event := range batch {
+				fmt.Printf("  [%d] EventID: %d, Type: %s, Time: %s\n",
+					i, event.GetEventId(), event.GetEventType(), event.GetEventTime())
+			}
+		}
+	}
+
+	// Print events from memBufferBatch (buffered events)
+	memBufferBatch := m.ms.hBuilder.GetMemBufferBatch()
+	if len(memBufferBatch) > 0 {
+		fmt.Printf("memBufferBatch (%d events):\n", len(memBufferBatch))
+		for i, event := range memBufferBatch {
+			fmt.Printf("  [%d] EventID: %d, Type: %s, Time: %s\n",
+				i, event.GetEventId(), event.GetEventType(), event.GetEventTime())
+		}
+	}
+
+	// Print events from dbBufferBatch (persisted buffer events)
+	dbBufferBatch := m.ms.hBuilder.GetDBBufferBatch()
+	if len(dbBufferBatch) > 0 {
+		fmt.Printf("dbBufferBatch (%d events):\n", len(dbBufferBatch))
+		for i, event := range dbBufferBatch {
+			fmt.Printf("  [%d] EventID: %d, Type: %s, Time: %s\n",
+				i, event.GetEventId(), event.GetEventType(), event.GetEventTime())
+		}
+	}
+
+	fmt.Println("=== END WORKFLOW EVENTS DEBUG ===")
+}
+
+// getLastWorkflowTaskFailureEvent retrieves the last workflow task close event (failed or timed out)
+// using only data stored in mutable state, without incurring persistence reads
+func (m *workflowTaskStateMachine) getLastWorkflowTaskFailureEvent() (*historypb.HistoryEvent, error) {
+	// logging information, print out number of history events in the workflow history
+	history := m.ms.GetHistorySize()
+	fmt.Println("failWorkflowTask: history", history)
 
 	// Get the last completed workflow task started event ID from mutable state
 	lastCompletedWorkflowTaskStartedEventID := m.ms.GetLastCompletedWorkflowTaskStartedEventId()
+	fmt.Println("failWorkflowTask: lastCompletedWorkflowTaskStartedEventID", lastCompletedWorkflowTaskStartedEventID)
+
+	// Add more detailed logging
+	fmt.Printf("failWorkflowTask: current workflow task - scheduled: %d, started: %d\n",
+		m.ms.executionInfo.WorkflowTaskScheduledEventId,
+		m.ms.executionInfo.WorkflowTaskStartedEventId)
+
+	// Print workflow task lifecycle information for debugging
+	m.printWorkflowTaskLifecycle()
+
+	// Print workflow task event summary for quick debugging
+	m.printWorkflowTaskEventSummary()
+
+	// Print all workflow events for debugging
+	m.printAllWorkflowEvents()
+
 	if lastCompletedWorkflowTaskStartedEventID == common.EmptyEventID {
-		// Add debugging information
-		m.ms.logger.Error("getLastWorkflowTaskCloseEvent: no prior workflow task close event found - debugging info",
-			tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-			tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-			tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-			tag.WorkflowScheduledEventID(m.ms.executionInfo.WorkflowTaskScheduledEventId),
-			tag.WorkflowStartedEventID(m.ms.executionInfo.WorkflowTaskStartedEventId),
-			tag.Attempt(m.ms.executionInfo.WorkflowTaskAttempt),
-			tag.WorkflowTaskType(m.ms.executionInfo.WorkflowTaskType.String()),
-			tag.WorkflowNextEventID(m.ms.GetNextEventID()),
-		)
-
-		// Log history builder state for debugging
-		m.ms.logger.Error("getLastWorkflowTaskCloseEvent: history builder state",
-			tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-			tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-			tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-			tag.WorkflowNextEventID(m.ms.GetNextEventID()),
-			tag.WorkflowScheduledEventID(m.ms.executionInfo.WorkflowTaskScheduledEventId),
-			tag.WorkflowStartedEventID(m.ms.executionInfo.WorkflowTaskStartedEventId),
-		)
-
-		// Print entire workflow history for debugging
-		fmt.Println("\n=== WORKFLOW HISTORY DEBUG - getLastWorkflowTaskCloseEvent ===")
-		fmt.Printf("WorkflowID: %s\n", m.ms.GetExecutionInfo().WorkflowId)
-		fmt.Printf("RunID: %s\n", m.ms.GetExecutionState().RunId)
-		fmt.Printf("Namespace: %s\n", m.ms.GetNamespaceEntry().Name().String())
-		fmt.Printf("NextEventID: %d\n", m.ms.GetNextEventID())
-		fmt.Printf("LastCompletedWorkflowTaskStartedEventID: %d\n", lastCompletedWorkflowTaskStartedEventID)
-		fmt.Println("Current WorkflowTask State:")
-		fmt.Printf("  - ScheduledEventId: %d\n", m.ms.executionInfo.WorkflowTaskScheduledEventId)
-		fmt.Printf("  - StartedEventId: %d\n", m.ms.executionInfo.WorkflowTaskStartedEventId)
-		fmt.Printf("  - Attempt: %d\n", m.ms.executionInfo.WorkflowTaskAttempt)
-		fmt.Printf("  - Type: %s\n", m.ms.executionInfo.WorkflowTaskType.String())
-
-		// Print version history information
-		fmt.Println("Version History:")
-		if m.ms.executionInfo.VersionHistories != nil {
-			for i, history := range m.ms.executionInfo.VersionHistories.Histories {
-				fmt.Printf("  History %d: BranchToken=%s\n", i, history.BranchToken)
-				for j, item := range history.Items {
-					fmt.Printf("    Item %d: EventID=%d, Version=%d\n", j, item.EventId, item.Version)
-				}
-			}
-		}
-
-		// Print all events in memory batches
-		fmt.Println("\n--- Memory Latest Batch ---")
-		m.printEventBatch("memLatestBatch", m.ms.hBuilder.GetMemLatestBatch())
-
-		fmt.Println("\n--- Memory Events Batches ---")
-		for i, batch := range m.ms.hBuilder.GetMemEventsBatches() {
-			fmt.Printf("Batch %d:\n", i)
-			m.printEventBatch("", batch)
-		}
-
-		fmt.Println("\n--- Memory Buffer Batch ---")
-		m.printEventBatch("memBufferBatch", m.ms.hBuilder.GetMemBufferBatch())
-
-		fmt.Println("\n--- DB Buffer Batch ---")
-		m.printEventBatch("dbBufferBatch", m.ms.hBuilder.GetDBBufferBatch())
-
-		fmt.Println("=== END WORKFLOW HISTORY DEBUG ===")
-
+		fmt.Println("failWorkflowTask: no prior completed workflow task found")
 		return nil, serviceerror.NewNotFound("no prior workflow task close event found")
 	}
 
 	// Search through events stored in the history builder's memory
 	// Check memLatestBatch first (current batch being built)
-	if event := m.findWorkflowTaskCloseOrTimedOutEventInBatch(m.ms.hBuilder.GetMemLatestBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
+	if event := m.findLastWorkflowTaskFailedEventInBatch(m.ms.hBuilder.GetMemLatestBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
+		fmt.Printf("failWorkflowTask: found close event in memLatestBatch - event_id: %d, type: %s\n",
+			event.GetEventId(), event.GetEventType())
 		return event, nil
 	}
 
 	// Check memEventsBatches (completed batches)
 	for i := len(m.ms.hBuilder.GetMemEventsBatches()) - 1; i >= 0; i-- {
 		batch := m.ms.hBuilder.GetMemEventsBatches()[i]
-		if event := m.findWorkflowTaskCloseOrTimedOutEventInBatch(batch, lastCompletedWorkflowTaskStartedEventID); event != nil {
+		if event := m.findLastWorkflowTaskFailedEventInBatch(batch, lastCompletedWorkflowTaskStartedEventID); event != nil {
+			fmt.Printf("failWorkflowTask: found close event in memEventsBatches[%d] - event_id: %d, type: %s\n",
+				i, event.GetEventId(), event.GetEventType())
 			return event, nil
 		}
 	}
 
 	// Check memBufferBatch (buffered events)
-	if event := m.findWorkflowTaskCloseOrTimedOutEventInBatch(m.ms.hBuilder.GetMemBufferBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
+	if event := m.findLastWorkflowTaskFailedEventInBatch(m.ms.hBuilder.GetMemBufferBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
+		fmt.Printf("failWorkflowTask: found close event in memBufferBatch - event_id: %d, type: %s\n",
+			event.GetEventId(), event.GetEventType())
 		return event, nil
 	}
 
 	// Check dbBufferBatch (persisted buffer events)
-	if event := m.findWorkflowTaskCloseOrTimedOutEventInBatch(m.ms.hBuilder.GetDBBufferBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
+	if event := m.findLastWorkflowTaskFailedEventInBatch(m.ms.hBuilder.GetDBBufferBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
+		fmt.Printf("failWorkflowTask: found close event in dbBufferBatch - event_id: %d, type: %s\n",
+			event.GetEventId(), event.GetEventType())
 		return event, nil
 	}
 
-	// Add debugging information when no event is found in any batch
-	m.ms.logger.Error("getLastWorkflowTaskCloseEvent: no workflow task close event found in any batch - debugging info",
-		tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-		tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-		tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-		tag.WorkflowScheduledEventID(m.ms.executionInfo.WorkflowTaskScheduledEventId),
-		tag.WorkflowStartedEventID(m.ms.executionInfo.WorkflowTaskStartedEventId),
-		tag.Attempt(m.ms.executionInfo.WorkflowTaskAttempt),
-		tag.WorkflowTaskType(m.ms.executionInfo.WorkflowTaskType.String()),
-		tag.WorkflowNextEventID(m.ms.GetNextEventID()),
-		tag.WorkflowScheduledEventID(lastCompletedWorkflowTaskStartedEventID), // Using ScheduledEventID tag for LastCompletedWorkflowTaskStartedEventId
-	)
+	fmt.Println("failWorkflowTask: no close events found in any batch")
 
+	// Print complete workflow history for debugging when no close events are found
+	fmt.Println("failWorkflowTask: printing complete workflow history for debugging...")
+	m.printCompleteWorkflowHistory()
+
+	// This is expected when the last completed workflow task was successful and the current task is failing
+	// In this case, we don't have a previous close event to reference, which is normal
+	fmt.Println("failWorkflowTask: this is expected when the last completed workflow task was successful")
 	return nil, serviceerror.NewNotFound("no prior workflow task close event found")
 }
 
-// findWorkflowTaskCloseOrTimedOutEventInBatch searches for workflow task close events in a batch of events
+// findLastWorkflowTaskFailedEventInBatch searches for workflow task close events in a batch of events
 // starting from the last completed workflow task started event ID
-func (m *workflowTaskStateMachine) findWorkflowTaskCloseOrTimedOutEventInBatch(
+func (m *workflowTaskStateMachine) findLastWorkflowTaskFailedEventInBatch(
 	events []*historypb.HistoryEvent,
 	lastCompletedWorkflowTaskStartedEventID int64,
 ) *historypb.HistoryEvent {
+	fmt.Printf("failWorkflowTask: searching batch with %d events, looking for events after %d\n",
+		len(events), lastCompletedWorkflowTaskStartedEventID)
 
 	// Search backwards through the batch to find the most recent workflow task close event
 	for i := len(events) - 1; i >= 0; i-- {
 		event := events[i]
 
-		// Only consider events that are after the last completed workflow task started event
-		// If lastCompletedWorkflowTaskStartedEventID is 0, we look for any workflow task close event
-		// if lastCompletedWorkflowTaskStartedEventID > 0 && event.GetEventId() <= lastCompletedWorkflowTaskStartedEventID {
+		// // Only consider events that are after the last completed workflow task started event
+		// if event.GetEventId() <= lastCompletedWorkflowTaskStartedEventID {
 		// 	continue
 		// }
+
+		fmt.Printf("failWorkflowTask: checking event %d, type: %s\n",
+			event.GetEventId(), event.GetEventType())
+
 		switch event.GetEventType() {
-		case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT: //, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
+			fmt.Printf("failWorkflowTask: found close event - event_id: %d, type: %s\n",
+				event.GetEventId(), event.GetEventType())
 			return event
 		default:
 			continue
 		}
 	}
+	fmt.Printf("failWorkflowTask: no close events found in batch\n")
 	return nil
 }
 
@@ -1562,51 +1641,42 @@ func cleanTaskQueue(proto *taskqueuepb.TaskQueue, taskType enumspb.TaskQueueType
 	return cleanTq
 }
 
-// printEventBatch is a helper method to pretty print a batch of history events for debugging
-func (m *workflowTaskStateMachine) printEventBatch(batchName string, events []*historypb.HistoryEvent) {
-	if len(events) == 0 {
-		if batchName != "" {
-			fmt.Printf("  %s: (empty)\n", batchName)
-		} else {
-			fmt.Println("    (empty)")
-		}
-		return
+// printWorkflowTaskEventSummary prints a summary of workflow task events for quick debugging
+func (m *workflowTaskStateMachine) printWorkflowTaskEventSummary() {
+	fmt.Println("=== WORKFLOW TASK EVENT SUMMARY ===")
+
+	// Collect all events from all batches
+	var allEvents []*historypb.HistoryEvent
+
+	// Add events from memLatestBatch
+	allEvents = append(allEvents, m.ms.hBuilder.GetMemLatestBatch()...)
+
+	// Add events from memEventsBatches
+	for _, batch := range m.ms.hBuilder.GetMemEventsBatches() {
+		allEvents = append(allEvents, batch...)
 	}
 
-	for i, event := range events {
-		prefix := "    "
-		if batchName != "" {
-			prefix = fmt.Sprintf("  %s: ", batchName)
-		}
+	// Add events from memBufferBatch
+	allEvents = append(allEvents, m.ms.hBuilder.GetMemBufferBatch()...)
 
-		fmt.Printf("%sEvent %d: ID=%d, Type=%s, Version=%d",
-			prefix, i, event.GetEventId(), event.GetEventType().String(), event.GetVersion())
+	// Add events from dbBufferBatch
+	allEvents = append(allEvents, m.ms.hBuilder.GetDBBufferBatch()...)
 
-		// Add specific details for workflow task events
+	// Filter and print only workflow task related events
+	fmt.Println("Workflow Task Events:")
+	for _, event := range allEvents {
 		switch event.GetEventType() {
-		case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:
-			attrs := event.GetWorkflowTaskScheduledEventAttributes()
-			fmt.Printf(", Attempt=%d, TaskQueue=%s",
-				attrs.GetAttempt(), attrs.GetTaskQueue().GetName())
-		case enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED:
-			attrs := event.GetWorkflowTaskStartedEventAttributes()
-			fmt.Printf(", ScheduledEventId=%d, Identity=%s",
-				attrs.GetScheduledEventId(), attrs.GetIdentity())
-		case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
-			attrs := event.GetWorkflowTaskCompletedEventAttributes()
-			fmt.Printf(", ScheduledEventId=%d, StartedEventId=%d",
-				attrs.GetScheduledEventId(), attrs.GetStartedEventId())
-		case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
-			attrs := event.GetWorkflowTaskFailedEventAttributes()
-			fmt.Printf(", ScheduledEventId=%d, StartedEventId=%d, Cause=%s",
-				attrs.GetScheduledEventId(), attrs.GetStartedEventId(), attrs.GetCause().String())
-		case enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
-			attrs := event.GetWorkflowTaskTimedOutEventAttributes()
-			fmt.Printf(", ScheduledEventId=%d, StartedEventId=%d, TimeoutType=%s",
-				attrs.GetScheduledEventId(), attrs.GetStartedEventId(), attrs.GetTimeoutType().String())
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+			enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
+			enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
+			fmt.Printf("  EventID: %d, Type: %s, Time: %s\n",
+				event.GetEventId(), event.GetEventType(), event.GetEventTime())
 		default:
 			continue
 		}
-		fmt.Println("")
 	}
+
+	fmt.Println("=== END WORKFLOW TASK EVENT SUMMARY ===")
 }
