@@ -5164,3 +5164,158 @@ func (s *mutableStateSuite) TestHasRequestID_EmptyExecutionState() {
 		s.False(s.mutableState.HasRequestID(requestID), "Should return false for request ID: %s", requestID)
 	}
 }
+
+func (s *mutableStateSuite) TestPauseActivityByType_EmptyState() {
+	s.SetupTest()
+
+	// Create a mock task generator
+	mockTaskGenerator := NewMockTaskGenerator(s.controller)
+	s.mutableState.taskGenerator = mockTaskGenerator
+
+	// Assert that the task generator is called to update the visibility task
+	mockTaskGenerator.EXPECT().GenerateUpsertVisibilityTask().Return(nil).Times(1)
+
+	activityType := "test-activity-type"
+	identity := "test-identity"
+	reason := "test-reason"
+
+	// Verify the execution info starts with no pause info
+	s.Nil(s.mutableState.executionInfo.PauseInfo)
+
+	// Call PauseActivityByType
+	err := s.mutableState.PauseActivityByType(activityType, identity, reason)
+	s.NoError(err)
+
+	// Verify the pause info was correctly added
+	s.NotNil(s.mutableState.executionInfo.PauseInfo)
+	s.Len(s.mutableState.executionInfo.PauseInfo.ActivityPauseInfos, 1)
+
+	pauseInfo := s.mutableState.executionInfo.PauseInfo.ActivityPauseInfos[0]
+	s.Equal(activityType, pauseInfo.ActivityType)
+	s.Equal(identity, pauseInfo.Identity)
+	s.Equal(reason, pauseInfo.Reason)
+
+	// Verify execution state was marked as updated
+	s.True(s.mutableState.executionStateUpdated)
+}
+
+func (s *mutableStateSuite) TestPauseActivityByType_ExistingActivityType() {
+	s.SetupTest()
+
+	// Create a mock task generator
+	mockTaskGenerator := NewMockTaskGenerator(s.controller)
+	s.mutableState.taskGenerator = mockTaskGenerator
+
+	activityType := "test-activity-type"
+	identity := "test-identity"
+	reason := "test-reason"
+
+	// Pre-populate the execution info with an existing pause info for the same activity type
+	s.mutableState.executionInfo.PauseInfo = &persistencespb.WorkflowPauseInfo{
+		ActivityPauseInfos: []*persistencespb.ActivityPauseInfo{
+			{
+				ActivityType: activityType,
+				Identity:     "original-identity",
+				Reason:       "original-reason",
+			},
+		},
+	}
+
+	// Mark execution state as not updated initially
+	s.mutableState.executionStateUpdated = false
+
+	// Call PauseActivityByType with the same activity type
+	err := s.mutableState.PauseActivityByType(activityType, identity, reason)
+	s.NoError(err) // Verify no error occurred (it's a no-op)
+
+	// Verify the pause info was NOT modified (still has original values)
+	s.NotNil(s.mutableState.executionInfo.PauseInfo)
+	s.Len(s.mutableState.executionInfo.PauseInfo.ActivityPauseInfos, 1)
+
+	pauseInfo := s.mutableState.executionInfo.PauseInfo.ActivityPauseInfos[0]
+	s.Equal(activityType, pauseInfo.ActivityType)
+	s.Equal("original-identity", pauseInfo.Identity) // Original values preserved
+	s.Equal("original-reason", pauseInfo.Reason)     // Original values preserved
+
+	// Verify execution state was NOT marked as updated (no-op)
+	s.False(s.mutableState.executionStateUpdated)
+}
+
+func (s *mutableStateSuite) TestPauseActivityByType_ExistingSearchAttributes() {
+	s.SetupTest()
+
+	// Create a mock task generator
+	mockTaskGenerator := NewMockTaskGenerator(s.controller)
+	s.mutableState.taskGenerator = mockTaskGenerator
+
+	// NO expectations set for task generator - it should not be called since search attributes won't change
+
+	activityType1 := "test-activity-type-1"
+	activityType2 := "test-activity-type-2"
+	newActivityType := "test-activity-type-1" // Same as one of the existing types
+	identity := "test-identity"
+	reason := "test-reason"
+
+	// Set up existing paused activities of different types in GetPendingActivityInfos
+	existingActivity1 := &persistencespb.ActivityInfo{
+		ScheduledEventId: 1,
+		ActivityId:       "activity-1",
+		ActivityType: &commonpb.ActivityType{
+			Name: activityType1,
+		},
+		Paused: true,
+	}
+	existingActivity2 := &persistencespb.ActivityInfo{
+		ScheduledEventId: 2,
+		ActivityId:       "activity-2",
+		ActivityType: &commonpb.ActivityType{
+			Name: activityType2,
+		},
+		Paused: true,
+	}
+	s.mutableState.pendingActivityInfoIDs = map[int64]*persistencespb.ActivityInfo{
+		1: existingActivity1,
+		2: existingActivity2,
+	}
+
+	// Set up existing search attributes that already include both activity types
+	// This simulates the scenario where the search attributes already contain these activity types
+	existingSearchAttr, _ := searchattribute.EncodeValue(
+		[]string{
+			"property:activityType=test-activity-type-1",
+			"property:activityType=test-activity-type-2",
+		},
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+	)
+	s.mutableState.executionInfo.SearchAttributes = map[string]*commonpb.Payload{
+		searchattribute.TemporalPauseInfo: existingSearchAttr,
+	}
+
+	// Initialize pause info to empty (no explicitly paused types yet)
+	s.mutableState.executionInfo.PauseInfo = &persistencespb.WorkflowPauseInfo{
+		ActivityPauseInfos: []*persistencespb.ActivityPauseInfo{},
+	}
+
+	// Mark execution state as not updated initially
+	s.mutableState.executionStateUpdated = false
+
+	// Call PauseActivityByType with one of the existing activity types
+	err := s.mutableState.PauseActivityByType(newActivityType, identity, reason)
+	s.NoError(err)
+
+	// Verify the pause info was correctly added to ActivityPauseInfos
+	s.NotNil(s.mutableState.executionInfo.PauseInfo)
+	s.Len(s.mutableState.executionInfo.PauseInfo.ActivityPauseInfos, 1)
+	pauseInfo := s.mutableState.executionInfo.PauseInfo.ActivityPauseInfos[0]
+	s.Equal(newActivityType, pauseInfo.ActivityType)
+	s.Equal(identity, pauseInfo.Identity)
+	s.Equal(reason, pauseInfo.Reason)
+
+	// Verify execution state was marked as updated (since ActivityPauseInfos was modified)
+	s.True(s.mutableState.executionStateUpdated)
+
+	// Verify search attributes remain unchanged (task generator should not have been called)
+	// The search attributes should still contain the same values as before
+	currentSearchAttr := s.mutableState.executionInfo.SearchAttributes[searchattribute.TemporalPauseInfo]
+	s.Equal(existingSearchAttr, currentSearchAttr)
+}
