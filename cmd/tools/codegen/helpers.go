@@ -81,17 +81,14 @@ func CamelCaseToSnakeCase(s string) string {
 }
 
 func SnakeCaseToPascalCase(s string) string {
-	// Split the string by underscores
-	words := strings.Split(s, "_")
-
-	// Capitalize the first letter of each word
-	for i, word := range words {
+	var b strings.Builder
+	// Capitalize the first letter of each word split by underscore
+	for word := range strings.SplitSeq(s, "_") {
 		// Convert first rune to upper and the rest to lower case
-		words[i] = cases.Title(language.AmericanEnglish).String(strings.ToLower(word))
+		b.WriteString(cases.Title(language.AmericanEnglish).String(strings.ToLower(word)))
 	}
-
 	// Join them back into a single string
-	return strings.Join(words, "")
+	return b.String()
 }
 
 func IsASCIIUpper(c rune) bool {
