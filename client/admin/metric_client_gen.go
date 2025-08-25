@@ -205,6 +205,20 @@ func (c *metricClient) GenerateLastHistoryReplicationTasks(
 	return c.client.GenerateLastHistoryReplicationTasks(ctx, request, opts...)
 }
 
+func (c *metricClient) GetConfigurations(
+	ctx context.Context,
+	request *adminservice.GetConfigurationsRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.GetConfigurationsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientGetConfigurations")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetConfigurations(ctx, request, opts...)
+}
+
 func (c *metricClient) GetDLQMessages(
 	ctx context.Context,
 	request *adminservice.GetDLQMessagesRequest,

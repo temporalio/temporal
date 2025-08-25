@@ -323,6 +323,26 @@ func (mr *MockAdminServiceClientMockRecorder) GenerateLastHistoryReplicationTask
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).GenerateLastHistoryReplicationTasks), varargs...)
 }
 
+// GetConfigurations mocks base method.
+func (m *MockAdminServiceClient) GetConfigurations(ctx context.Context, in *adminservice.GetConfigurationsRequest, opts ...grpc.CallOption) (*adminservice.GetConfigurationsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetConfigurations", varargs...)
+	ret0, _ := ret[0].(*adminservice.GetConfigurationsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetConfigurations indicates an expected call of GetConfigurations.
+func (mr *MockAdminServiceClientMockRecorder) GetConfigurations(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConfigurations", reflect.TypeOf((*MockAdminServiceClient)(nil).GetConfigurations), varargs...)
+}
+
 // GetDLQMessages mocks base method.
 func (m *MockAdminServiceClient) GetDLQMessages(ctx context.Context, in *adminservice.GetDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.GetDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -1273,6 +1293,21 @@ func (m *MockAdminServiceServer) GenerateLastHistoryReplicationTasks(arg0 contex
 func (mr *MockAdminServiceServerMockRecorder) GenerateLastHistoryReplicationTasks(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).GenerateLastHistoryReplicationTasks), arg0, arg1)
+}
+
+// GetConfigurations mocks base method.
+func (m *MockAdminServiceServer) GetConfigurations(arg0 context.Context, arg1 *adminservice.GetConfigurationsRequest) (*adminservice.GetConfigurationsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetConfigurations", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.GetConfigurationsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetConfigurations indicates an expected call of GetConfigurations.
+func (mr *MockAdminServiceServerMockRecorder) GetConfigurations(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConfigurations", reflect.TypeOf((*MockAdminServiceServer)(nil).GetConfigurations), arg0, arg1)
 }
 
 // GetDLQMessages mocks base method.
