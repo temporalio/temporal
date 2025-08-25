@@ -40,6 +40,9 @@ type SchedulerInternal struct {
 	// Implemented as a sequence number. Used for optimistic locking against
 	// update requests.
 	ConflictToken int64 `protobuf:"varint,8,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	// The closed flag is set true after a schedule completes, and the idle timer
+	// expires.
+	Closed        bool `protobuf:"varint,9,opt,name=closed,proto3" json:"closed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -121,6 +124,13 @@ func (x *SchedulerInternal) GetConflictToken() int64 {
 		return x.ConflictToken
 	}
 	return 0
+}
+
+func (x *SchedulerInternal) GetClosed() bool {
+	if x != nil {
+		return x.Closed
+	}
+	return false
 }
 
 // CHASM scheduler's Generator internal state.
@@ -364,7 +374,7 @@ var File_temporal_server_chasm_lib_scheduler_proto_v1_message_proto protoreflect
 
 const file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	":temporal/server/chasm/lib/scheduler/proto/v1/message.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a-temporal/server/api/schedule/v1/message.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe6\x02\n" +
+	":temporal/server/chasm/lib/scheduler/proto/v1/message.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a-temporal/server/api/schedule/v1/message.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xfe\x02\n" +
 	"\x11SchedulerInternal\x12>\n" +
 	"\bschedule\x18\x02 \x01(\v2\".temporal.api.schedule.v1.ScheduleR\bschedule\x12:\n" +
 	"\x04info\x18\x03 \x01(\v2&.temporal.api.schedule.v1.ScheduleInfoR\x04info\x12L\n" +
@@ -373,7 +383,8 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc = 
 	"\fnamespace_id\x18\x06 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vschedule_id\x18\a \x01(\tR\n" +
 	"scheduleId\x12%\n" +
-	"\x0econflict_token\x18\b \x01(\x03R\rconflictToken\"_\n" +
+	"\x0econflict_token\x18\b \x01(\x03R\rconflictToken\x12\x16\n" +
+	"\x06closed\x18\t \x01(\bR\x06closed\"_\n" +
 	"\x11GeneratorInternal\x12J\n" +
 	"\x13last_processed_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\"\xe8\x02\n" +
 	"\x0fInvokerInternal\x12W\n" +

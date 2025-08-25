@@ -25,6 +25,10 @@ message SchedulerInternal {
     // Implemented as a sequence number. Used for optimistic locking against
     // update requests.
     int64 conflict_token = 8;
+
+    // The closed flag is set true after a schedule completes, and the idle timer
+    // expires.
+    bool closed = 9;
 }
 
 // CHASM scheduler's Generator internal state.
