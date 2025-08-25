@@ -335,9 +335,10 @@ func eventImporterProvider(
 
 func dlqWriterAdapterProvider(
 	dlqWriter *queues.DLQWriter,
-	taskSerializer serialization.Serializer,
+	serializer serialization.Serializer,
 	clusterMetadata cluster.Metadata,
 ) *DLQWriterAdapter {
+	taskSerializer := serialization.NewTaskSerializer(serializer)
 	return NewDLQWriterAdapter(dlqWriter, taskSerializer, clusterMetadata.GetCurrentClusterName())
 }
 

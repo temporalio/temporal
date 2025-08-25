@@ -35,7 +35,7 @@ func (s *historyBranchUtilSuite) TearDownTest() {
 }
 
 func (s *historyBranchUtilSuite) TestHistoryBranchUtil() {
-	var historyBranchUtil HistoryBranchUtil = &HistoryBranchUtilImpl{}
+	var historyBranchUtil HistoryBranchUtil = NewHistoryBranchUtil()
 
 	treeID0 := primitives.NewUUID().String()
 	branchID0 := primitives.NewUUID().String()

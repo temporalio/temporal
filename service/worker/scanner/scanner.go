@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
@@ -89,6 +90,7 @@ type (
 		namespaceRegistry  namespace.Registry
 		currentClusterName string
 		hostInfo           membership.HostInfo
+		serializer         serialization.Serializer
 	}
 
 	// Scanner is the background sub-system that does full scans
@@ -121,6 +123,7 @@ func New(
 	registry namespace.Registry,
 	currentClusterName string,
 	hostInfo membership.HostInfo,
+	serializer serialization.Serializer,
 ) *Scanner {
 	return &Scanner{
 		context: scannerContext{
@@ -138,6 +141,7 @@ func New(
 			namespaceRegistry:  registry,
 			currentClusterName: currentClusterName,
 			hostInfo:           hostInfo,
+			serializer:         serializer,
 		},
 	}
 }

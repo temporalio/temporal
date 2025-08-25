@@ -210,7 +210,7 @@ func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs
 	clusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 
 	executionManager := shardContext.Resource.ExecutionMgr
-	executionManager.EXPECT().GetHistoryBranchUtil().Return(&persistence.HistoryBranchUtilImpl{}).AnyTimes()
+	executionManager.EXPECT().GetHistoryBranchUtil().Return(persistence.NewHistoryBranchUtil()).AnyTimes()
 
 	startTime := time.Time{}
 	logger := log.NewNoopLogger()

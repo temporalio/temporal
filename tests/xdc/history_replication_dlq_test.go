@@ -264,8 +264,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 
 	// Wait for the replication task executor to process all the replication tasks for this workflow.
 	// That way, we will know when the DLQ contains everything it needs for this workflow.
-	serializer := serialization.NewSerializer()
-	events := s.waitUntilWorkflowReplicated(ctx, serializer, workflowID)
+	events := s.waitUntilWorkflowReplicated(ctx, workflowID)
 
 	// Wait until all the replication tasks for this workflow are in the DLQ.
 	// We need to do this because we don't want to start re-enqueuing the DLQ until it contains all the replication
@@ -327,7 +326,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 		if s.enableTransitionHistory {
 			s.waitUntilWorkflowVerified(ctx, workflowID, events[len(events)-1].GetEventId())
 		} else {
-			s.waitUntilWorkflowReplicated(context.Background(), serializer, workflowID)
+			s.waitUntilWorkflowReplicated(context.Background(), workflowID)
 		}
 	}
 
@@ -391,7 +390,6 @@ func (s *historyReplicationDLQSuite) waitForNSReplication(ctx context.Context, n
 // It does this by waiting for the replication task executor to process the workflow completion replication event.
 func (s *historyReplicationDLQSuite) waitUntilWorkflowReplicated(
 	ctx context.Context,
-	serializer serialization.Serializer,
 	workflowID string,
 ) []*historypb.HistoryEvent {
 	var historyEvents []*historypb.HistoryEvent
@@ -402,7 +400,7 @@ func (s *historyReplicationDLQSuite) waitUntilWorkflowReplicated(
 				if attr.WorkflowId != workflowID {
 					continue
 				}
-				events, err := serializer.DeserializeEvents(attr.Events)
+				events, err := serialization.DefaultDecoder.DeserializeEvents(attr.Events)
 				s.NoError(err)
 				historyEvents = append(historyEvents, events...)
 
@@ -419,7 +417,7 @@ func (s *historyReplicationDLQSuite) waitUntilWorkflowReplicated(
 				}
 				completed := false
 				for _, blob := range attr.VersionedTransitionArtifact.EventBatches {
-					e, err := serializer.DeserializeEvents(blob)
+					e, err := serialization.DefaultDecoder.DeserializeEvents(blob)
 					s.NoError(err)
 					historyEvents = append(historyEvents, e...)
 					for _, event := range e {
