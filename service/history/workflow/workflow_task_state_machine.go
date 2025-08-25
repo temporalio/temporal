@@ -4,6 +4,7 @@ package workflow
 
 import (
 	"cmp"
+	"fmt"
 	"math"
 	"time"
 
@@ -240,8 +241,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskCompletedEvent(
 }
 
 func (m *workflowTaskStateMachine) ApplyWorkflowTaskFailedEvent() error {
-	m.failWorkflowTask(true)
-	return nil
+	return m.failWorkflowTask(true)
 }
 
 func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(
@@ -252,8 +252,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(
 	if timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
 		incrementAttempt = false
 	}
-	m.failWorkflowTask(incrementAttempt)
-	return nil
+	return m.failWorkflowTask(incrementAttempt)
 }
 
 func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
@@ -877,7 +876,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 
 func (m *workflowTaskStateMachine) failWorkflowTask(
 	incrementAttempt bool,
-) {
+) error {
 	// Increment attempts only if workflow task is failing on non-sticky task queue.
 	// If it was sticky task queue, clear sticky task queue first and try again before creating transient workflow task.
 	if m.ms.IsStickyTaskQueueSet() {
@@ -907,6 +906,93 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	}
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
+
+	if failWorkflowTaskInfo.Attempt == 2 {
+		lastWorkflowTaskCloseEvent, err := m.getLastWorkflowTaskCloseEvent()
+		if err != nil {
+			return err
+		}
+
+		switch tFailure := lastWorkflowTaskCloseEvent.GetAttributes().(type) {
+		case *historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes:
+			wftTimedOut := tFailure.WorkflowTaskTimedOutEventAttributes
+			return m.ms.UpdateReportedProblemsSearchAttribute(
+				"WorkflowTaskTimedOut",
+				wftTimedOut.GetTimeoutType().String(),
+			)
+		case *historypb.HistoryEvent_WorkflowTaskFailedEventAttributes:
+			wftFailure := tFailure.WorkflowTaskFailedEventAttributes
+			return m.ms.UpdateReportedProblemsSearchAttribute(
+				"WorkflowTaskFailed",
+				wftFailure.GetCause().String(),
+			)
+		}
+
+		return fmt.Errorf("unknown workflow task close event type: %T", lastWorkflowTaskCloseEvent.GetAttributes())
+	}
+	return nil
+}
+
+// getLastWorkflowTaskCloseEvent retrieves the last workflow task close event (failed or timed out)
+// using only data stored in mutable state, without incurring persistence reads
+func (m *workflowTaskStateMachine) getLastWorkflowTaskCloseEvent() (*historypb.HistoryEvent, error) {
+
+	// Get the last completed workflow task started event ID from mutable state
+	lastCompletedWorkflowTaskStartedEventID := m.ms.GetLastCompletedWorkflowTaskStartedEventId()
+	if lastCompletedWorkflowTaskStartedEventID == common.EmptyEventID {
+		return nil, serviceerror.NewNotFound("no prior workflow task close event found")
+	}
+
+	// Search through events stored in the history builder's memory
+	// Check memLatestBatch first (current batch being built)
+	if event := m.findWorkflowTaskCloseEventInBatch(m.ms.hBuilder.GetMemLatestBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
+		return event, nil
+	}
+
+	// Check memEventsBatches (completed batches)
+	for i := len(m.ms.hBuilder.GetMemEventsBatches()) - 1; i >= 0; i-- {
+		batch := m.ms.hBuilder.GetMemEventsBatches()[i]
+		if event := m.findWorkflowTaskCloseEventInBatch(batch, lastCompletedWorkflowTaskStartedEventID); event != nil {
+			return event, nil
+		}
+	}
+
+	// Check memBufferBatch (buffered events)
+	if event := m.findWorkflowTaskCloseEventInBatch(m.ms.hBuilder.GetMemBufferBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
+		return event, nil
+	}
+
+	// Check dbBufferBatch (persisted buffer events)
+	if event := m.findWorkflowTaskCloseEventInBatch(m.ms.hBuilder.GetDBBufferBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
+		return event, nil
+	}
+
+	return nil, serviceerror.NewNotFound("no prior workflow task close event found")
+}
+
+// findWorkflowTaskCloseEventInBatch searches for workflow task close events in a batch of events
+// starting from the last completed workflow task started event ID
+func (m *workflowTaskStateMachine) findWorkflowTaskCloseEventInBatch(
+	events []*historypb.HistoryEvent,
+	lastCompletedWorkflowTaskStartedEventID int64,
+) *historypb.HistoryEvent {
+
+	// Search backwards through the batch to find the most recent workflow task close event
+	for i := len(events) - 1; i >= 0; i-- {
+		event := events[i]
+
+		// Only consider events that are after the last completed workflow task started event
+		if event.GetEventId() <= lastCompletedWorkflowTaskStartedEventID {
+			continue
+		}
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
+			return event
+		default:
+			continue
+		}
+	}
+	return nil
 }
 
 // deleteWorkflowTask deletes a workflow task.
