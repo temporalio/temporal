@@ -958,21 +958,21 @@ func (m *workflowTaskStateMachine) getLastWorkflowTaskCloseEvent() (*historypb.H
 	// Check if this is an NDC replication scenario by looking at the current workflow task state
 	// In NDC replication, we might be applying events from a different version branch where
 	// the workflow task state is not fully consistent with the current mutable state
-	if m.ms.executionInfo.WorkflowTaskAttempt > 1 &&
-		(m.ms.executionInfo.WorkflowTaskScheduledEventId == 0 ||
-			m.ms.executionInfo.WorkflowTaskStartedEventId == 0) {
-		// This appears to be an NDC replication scenario where the workflow task state
-		// is being reconstructed. In this case, we should allow the operation to proceed
-		// without requiring a prior workflow task close event.
-		m.ms.logger.Warn("getLastWorkflowTaskCloseEvent: NDC replication scenario detected, allowing workflow task failure without prior close event",
-			tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-			tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-			tag.Attempt(m.ms.executionInfo.WorkflowTaskAttempt),
-			tag.WorkflowScheduledEventID(m.ms.executionInfo.WorkflowTaskScheduledEventId),
-			tag.WorkflowStartedEventID(m.ms.executionInfo.WorkflowTaskStartedEventId),
-		)
-		return nil, nil // Return nil to indicate no prior event is needed
-	}
+	// if m.ms.executionInfo.WorkflowTaskAttempt > 1 &&
+	// 	(m.ms.executionInfo.WorkflowTaskScheduledEventId == 0 ||
+	// 		m.ms.executionInfo.WorkflowTaskStartedEventId == 0) {
+	// 	// This appears to be an NDC replication scenario where the workflow task state
+	// 	// is being reconstructed. In this case, we should allow the operation to proceed
+	// 	// without requiring a prior workflow task close event.
+	// 	m.ms.logger.Warn("getLastWorkflowTaskCloseEvent: NDC replication scenario detected, allowing workflow task failure without prior close event",
+	// 		tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
+	// 		tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
+	// 		tag.Attempt(m.ms.executionInfo.WorkflowTaskAttempt),
+	// 		tag.WorkflowScheduledEventID(m.ms.executionInfo.WorkflowTaskScheduledEventId),
+	// 		tag.WorkflowStartedEventID(m.ms.executionInfo.WorkflowTaskStartedEventId),
+	// 	)
+	// 	return nil, nil // Return nil to indicate no prior event is needed
+	// }
 
 	// Get the last completed workflow task started event ID from mutable state
 	lastCompletedWorkflowTaskStartedEventID := m.ms.GetLastCompletedWorkflowTaskStartedEventId()
@@ -1046,25 +1046,25 @@ func (m *workflowTaskStateMachine) getLastWorkflowTaskCloseEvent() (*historypb.H
 
 	// Search through events stored in the history builder's memory
 	// Check memLatestBatch first (current batch being built)
-	if event := m.findWorkflowTaskCloseEventInBatch(m.ms.hBuilder.GetMemLatestBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
+	if event := m.findWorkflowTaskCloseOrTimedOutEventInBatch(m.ms.hBuilder.GetMemLatestBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
 		return event, nil
 	}
 
 	// Check memEventsBatches (completed batches)
 	for i := len(m.ms.hBuilder.GetMemEventsBatches()) - 1; i >= 0; i-- {
 		batch := m.ms.hBuilder.GetMemEventsBatches()[i]
-		if event := m.findWorkflowTaskCloseEventInBatch(batch, lastCompletedWorkflowTaskStartedEventID); event != nil {
+		if event := m.findWorkflowTaskCloseOrTimedOutEventInBatch(batch, lastCompletedWorkflowTaskStartedEventID); event != nil {
 			return event, nil
 		}
 	}
 
 	// Check memBufferBatch (buffered events)
-	if event := m.findWorkflowTaskCloseEventInBatch(m.ms.hBuilder.GetMemBufferBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
+	if event := m.findWorkflowTaskCloseOrTimedOutEventInBatch(m.ms.hBuilder.GetMemBufferBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
 		return event, nil
 	}
 
 	// Check dbBufferBatch (persisted buffer events)
-	if event := m.findWorkflowTaskCloseEventInBatch(m.ms.hBuilder.GetDBBufferBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
+	if event := m.findWorkflowTaskCloseOrTimedOutEventInBatch(m.ms.hBuilder.GetDBBufferBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
 		return event, nil
 	}
 
@@ -1084,9 +1084,9 @@ func (m *workflowTaskStateMachine) getLastWorkflowTaskCloseEvent() (*historypb.H
 	return nil, serviceerror.NewNotFound("no prior workflow task close event found")
 }
 
-// findWorkflowTaskCloseEventInBatch searches for workflow task close events in a batch of events
+// findWorkflowTaskCloseOrTimedOutEventInBatch searches for workflow task close events in a batch of events
 // starting from the last completed workflow task started event ID
-func (m *workflowTaskStateMachine) findWorkflowTaskCloseEventInBatch(
+func (m *workflowTaskStateMachine) findWorkflowTaskCloseOrTimedOutEventInBatch(
 	events []*historypb.HistoryEvent,
 	lastCompletedWorkflowTaskStartedEventID int64,
 ) *historypb.HistoryEvent {
@@ -1097,11 +1097,11 @@ func (m *workflowTaskStateMachine) findWorkflowTaskCloseEventInBatch(
 
 		// Only consider events that are after the last completed workflow task started event
 		// If lastCompletedWorkflowTaskStartedEventID is 0, we look for any workflow task close event
-		if lastCompletedWorkflowTaskStartedEventID > 0 && event.GetEventId() <= lastCompletedWorkflowTaskStartedEventID {
-			continue
-		}
+		// if lastCompletedWorkflowTaskStartedEventID > 0 && event.GetEventId() <= lastCompletedWorkflowTaskStartedEventID {
+		// 	continue
+		// }
 		switch event.GetEventType() {
-		case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT: //, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
 			return event
 		default:
 			continue
