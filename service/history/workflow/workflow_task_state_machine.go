@@ -1106,10 +1106,10 @@ func (m *workflowTaskStateMachine) getLastWorkflowTaskFailureEvent() (*historypb
 	// Print all workflow events for debugging
 	m.printAllWorkflowEvents()
 
-	if lastCompletedWorkflowTaskStartedEventID == common.EmptyEventID {
-		fmt.Println("failWorkflowTask: no prior completed workflow task found")
-		return nil, serviceerror.NewNotFound("no prior workflow task close event found")
-	}
+	// if lastCompletedWorkflowTaskStartedEventID == common.EmptyEventID {
+	// 	fmt.Println("failWorkflowTask: no prior completed workflow task found")
+	// 	return nil, serviceerror.NewNotFound("no prior workflow task close event found")
+	// }
 
 	// Search through events stored in the history builder's memory
 	// Check memLatestBatch first (current batch being built)
