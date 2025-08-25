@@ -10,9 +10,9 @@
 package mocks
 
 import (
-	context "context"
 	reflect "reflect"
 
+	aws "github.com/aws/aws-sdk-go/aws"
 	request "github.com/aws/aws-sdk-go/aws/request"
 	s3 "github.com/aws/aws-sdk-go/service/s3"
 	gomock "go.uber.org/mock/gomock"
@@ -73,7 +73,7 @@ func (mr *MockS3APIMockRecorder) AbortMultipartUploadRequest(arg0 any) *gomock.C
 }
 
 // AbortMultipartUploadWithContext mocks base method.
-func (m *MockS3API) AbortMultipartUploadWithContext(arg0 context.Context, arg1 *s3.AbortMultipartUploadInput, arg2 ...request.Option) (*s3.AbortMultipartUploadOutput, error) {
+func (m *MockS3API) AbortMultipartUploadWithContext(arg0 aws.Context, arg1 *s3.AbortMultipartUploadInput, arg2 ...request.Option) (*s3.AbortMultipartUploadOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -123,7 +123,7 @@ func (mr *MockS3APIMockRecorder) CompleteMultipartUploadRequest(arg0 any) *gomoc
 }
 
 // CompleteMultipartUploadWithContext mocks base method.
-func (m *MockS3API) CompleteMultipartUploadWithContext(arg0 context.Context, arg1 *s3.CompleteMultipartUploadInput, arg2 ...request.Option) (*s3.CompleteMultipartUploadOutput, error) {
+func (m *MockS3API) CompleteMultipartUploadWithContext(arg0 aws.Context, arg1 *s3.CompleteMultipartUploadInput, arg2 ...request.Option) (*s3.CompleteMultipartUploadOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -173,7 +173,7 @@ func (mr *MockS3APIMockRecorder) CopyObjectRequest(arg0 any) *gomock.Call {
 }
 
 // CopyObjectWithContext mocks base method.
-func (m *MockS3API) CopyObjectWithContext(arg0 context.Context, arg1 *s3.CopyObjectInput, arg2 ...request.Option) (*s3.CopyObjectOutput, error) {
+func (m *MockS3API) CopyObjectWithContext(arg0 aws.Context, arg1 *s3.CopyObjectInput, arg2 ...request.Option) (*s3.CopyObjectOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -223,7 +223,7 @@ func (mr *MockS3APIMockRecorder) CreateBucketRequest(arg0 any) *gomock.Call {
 }
 
 // CreateBucketWithContext mocks base method.
-func (m *MockS3API) CreateBucketWithContext(arg0 context.Context, arg1 *s3.CreateBucketInput, arg2 ...request.Option) (*s3.CreateBucketOutput, error) {
+func (m *MockS3API) CreateBucketWithContext(arg0 aws.Context, arg1 *s3.CreateBucketInput, arg2 ...request.Option) (*s3.CreateBucketOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -273,7 +273,7 @@ func (mr *MockS3APIMockRecorder) CreateMultipartUploadRequest(arg0 any) *gomock.
 }
 
 // CreateMultipartUploadWithContext mocks base method.
-func (m *MockS3API) CreateMultipartUploadWithContext(arg0 context.Context, arg1 *s3.CreateMultipartUploadInput, arg2 ...request.Option) (*s3.CreateMultipartUploadOutput, error) {
+func (m *MockS3API) CreateMultipartUploadWithContext(arg0 aws.Context, arg1 *s3.CreateMultipartUploadInput, arg2 ...request.Option) (*s3.CreateMultipartUploadOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -323,7 +323,7 @@ func (mr *MockS3APIMockRecorder) CreateSessionRequest(arg0 any) *gomock.Call {
 }
 
 // CreateSessionWithContext mocks base method.
-func (m *MockS3API) CreateSessionWithContext(arg0 context.Context, arg1 *s3.CreateSessionInput, arg2 ...request.Option) (*s3.CreateSessionOutput, error) {
+func (m *MockS3API) CreateSessionWithContext(arg0 aws.Context, arg1 *s3.CreateSessionInput, arg2 ...request.Option) (*s3.CreateSessionOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -388,7 +388,7 @@ func (mr *MockS3APIMockRecorder) DeleteBucketAnalyticsConfigurationRequest(arg0 
 }
 
 // DeleteBucketAnalyticsConfigurationWithContext mocks base method.
-func (m *MockS3API) DeleteBucketAnalyticsConfigurationWithContext(arg0 context.Context, arg1 *s3.DeleteBucketAnalyticsConfigurationInput, arg2 ...request.Option) (*s3.DeleteBucketAnalyticsConfigurationOutput, error) {
+func (m *MockS3API) DeleteBucketAnalyticsConfigurationWithContext(arg0 aws.Context, arg1 *s3.DeleteBucketAnalyticsConfigurationInput, arg2 ...request.Option) (*s3.DeleteBucketAnalyticsConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -438,7 +438,7 @@ func (mr *MockS3APIMockRecorder) DeleteBucketCorsRequest(arg0 any) *gomock.Call 
 }
 
 // DeleteBucketCorsWithContext mocks base method.
-func (m *MockS3API) DeleteBucketCorsWithContext(arg0 context.Context, arg1 *s3.DeleteBucketCorsInput, arg2 ...request.Option) (*s3.DeleteBucketCorsOutput, error) {
+func (m *MockS3API) DeleteBucketCorsWithContext(arg0 aws.Context, arg1 *s3.DeleteBucketCorsInput, arg2 ...request.Option) (*s3.DeleteBucketCorsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -488,7 +488,7 @@ func (mr *MockS3APIMockRecorder) DeleteBucketEncryptionRequest(arg0 any) *gomock
 }
 
 // DeleteBucketEncryptionWithContext mocks base method.
-func (m *MockS3API) DeleteBucketEncryptionWithContext(arg0 context.Context, arg1 *s3.DeleteBucketEncryptionInput, arg2 ...request.Option) (*s3.DeleteBucketEncryptionOutput, error) {
+func (m *MockS3API) DeleteBucketEncryptionWithContext(arg0 aws.Context, arg1 *s3.DeleteBucketEncryptionInput, arg2 ...request.Option) (*s3.DeleteBucketEncryptionOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -538,7 +538,7 @@ func (mr *MockS3APIMockRecorder) DeleteBucketIntelligentTieringConfigurationRequ
 }
 
 // DeleteBucketIntelligentTieringConfigurationWithContext mocks base method.
-func (m *MockS3API) DeleteBucketIntelligentTieringConfigurationWithContext(arg0 context.Context, arg1 *s3.DeleteBucketIntelligentTieringConfigurationInput, arg2 ...request.Option) (*s3.DeleteBucketIntelligentTieringConfigurationOutput, error) {
+func (m *MockS3API) DeleteBucketIntelligentTieringConfigurationWithContext(arg0 aws.Context, arg1 *s3.DeleteBucketIntelligentTieringConfigurationInput, arg2 ...request.Option) (*s3.DeleteBucketIntelligentTieringConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -588,7 +588,7 @@ func (mr *MockS3APIMockRecorder) DeleteBucketInventoryConfigurationRequest(arg0 
 }
 
 // DeleteBucketInventoryConfigurationWithContext mocks base method.
-func (m *MockS3API) DeleteBucketInventoryConfigurationWithContext(arg0 context.Context, arg1 *s3.DeleteBucketInventoryConfigurationInput, arg2 ...request.Option) (*s3.DeleteBucketInventoryConfigurationOutput, error) {
+func (m *MockS3API) DeleteBucketInventoryConfigurationWithContext(arg0 aws.Context, arg1 *s3.DeleteBucketInventoryConfigurationInput, arg2 ...request.Option) (*s3.DeleteBucketInventoryConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -638,7 +638,7 @@ func (mr *MockS3APIMockRecorder) DeleteBucketLifecycleRequest(arg0 any) *gomock.
 }
 
 // DeleteBucketLifecycleWithContext mocks base method.
-func (m *MockS3API) DeleteBucketLifecycleWithContext(arg0 context.Context, arg1 *s3.DeleteBucketLifecycleInput, arg2 ...request.Option) (*s3.DeleteBucketLifecycleOutput, error) {
+func (m *MockS3API) DeleteBucketLifecycleWithContext(arg0 aws.Context, arg1 *s3.DeleteBucketLifecycleInput, arg2 ...request.Option) (*s3.DeleteBucketLifecycleOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -688,7 +688,7 @@ func (mr *MockS3APIMockRecorder) DeleteBucketMetricsConfigurationRequest(arg0 an
 }
 
 // DeleteBucketMetricsConfigurationWithContext mocks base method.
-func (m *MockS3API) DeleteBucketMetricsConfigurationWithContext(arg0 context.Context, arg1 *s3.DeleteBucketMetricsConfigurationInput, arg2 ...request.Option) (*s3.DeleteBucketMetricsConfigurationOutput, error) {
+func (m *MockS3API) DeleteBucketMetricsConfigurationWithContext(arg0 aws.Context, arg1 *s3.DeleteBucketMetricsConfigurationInput, arg2 ...request.Option) (*s3.DeleteBucketMetricsConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -738,7 +738,7 @@ func (mr *MockS3APIMockRecorder) DeleteBucketOwnershipControlsRequest(arg0 any) 
 }
 
 // DeleteBucketOwnershipControlsWithContext mocks base method.
-func (m *MockS3API) DeleteBucketOwnershipControlsWithContext(arg0 context.Context, arg1 *s3.DeleteBucketOwnershipControlsInput, arg2 ...request.Option) (*s3.DeleteBucketOwnershipControlsOutput, error) {
+func (m *MockS3API) DeleteBucketOwnershipControlsWithContext(arg0 aws.Context, arg1 *s3.DeleteBucketOwnershipControlsInput, arg2 ...request.Option) (*s3.DeleteBucketOwnershipControlsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -788,7 +788,7 @@ func (mr *MockS3APIMockRecorder) DeleteBucketPolicyRequest(arg0 any) *gomock.Cal
 }
 
 // DeleteBucketPolicyWithContext mocks base method.
-func (m *MockS3API) DeleteBucketPolicyWithContext(arg0 context.Context, arg1 *s3.DeleteBucketPolicyInput, arg2 ...request.Option) (*s3.DeleteBucketPolicyOutput, error) {
+func (m *MockS3API) DeleteBucketPolicyWithContext(arg0 aws.Context, arg1 *s3.DeleteBucketPolicyInput, arg2 ...request.Option) (*s3.DeleteBucketPolicyOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -838,7 +838,7 @@ func (mr *MockS3APIMockRecorder) DeleteBucketReplicationRequest(arg0 any) *gomoc
 }
 
 // DeleteBucketReplicationWithContext mocks base method.
-func (m *MockS3API) DeleteBucketReplicationWithContext(arg0 context.Context, arg1 *s3.DeleteBucketReplicationInput, arg2 ...request.Option) (*s3.DeleteBucketReplicationOutput, error) {
+func (m *MockS3API) DeleteBucketReplicationWithContext(arg0 aws.Context, arg1 *s3.DeleteBucketReplicationInput, arg2 ...request.Option) (*s3.DeleteBucketReplicationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -903,7 +903,7 @@ func (mr *MockS3APIMockRecorder) DeleteBucketTaggingRequest(arg0 any) *gomock.Ca
 }
 
 // DeleteBucketTaggingWithContext mocks base method.
-func (m *MockS3API) DeleteBucketTaggingWithContext(arg0 context.Context, arg1 *s3.DeleteBucketTaggingInput, arg2 ...request.Option) (*s3.DeleteBucketTaggingOutput, error) {
+func (m *MockS3API) DeleteBucketTaggingWithContext(arg0 aws.Context, arg1 *s3.DeleteBucketTaggingInput, arg2 ...request.Option) (*s3.DeleteBucketTaggingOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -953,7 +953,7 @@ func (mr *MockS3APIMockRecorder) DeleteBucketWebsiteRequest(arg0 any) *gomock.Ca
 }
 
 // DeleteBucketWebsiteWithContext mocks base method.
-func (m *MockS3API) DeleteBucketWebsiteWithContext(arg0 context.Context, arg1 *s3.DeleteBucketWebsiteInput, arg2 ...request.Option) (*s3.DeleteBucketWebsiteOutput, error) {
+func (m *MockS3API) DeleteBucketWebsiteWithContext(arg0 aws.Context, arg1 *s3.DeleteBucketWebsiteInput, arg2 ...request.Option) (*s3.DeleteBucketWebsiteOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -973,7 +973,7 @@ func (mr *MockS3APIMockRecorder) DeleteBucketWebsiteWithContext(arg0, arg1 any, 
 }
 
 // DeleteBucketWithContext mocks base method.
-func (m *MockS3API) DeleteBucketWithContext(arg0 context.Context, arg1 *s3.DeleteBucketInput, arg2 ...request.Option) (*s3.DeleteBucketOutput, error) {
+func (m *MockS3API) DeleteBucketWithContext(arg0 aws.Context, arg1 *s3.DeleteBucketInput, arg2 ...request.Option) (*s3.DeleteBucketOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1053,7 +1053,7 @@ func (mr *MockS3APIMockRecorder) DeleteObjectTaggingRequest(arg0 any) *gomock.Ca
 }
 
 // DeleteObjectTaggingWithContext mocks base method.
-func (m *MockS3API) DeleteObjectTaggingWithContext(arg0 context.Context, arg1 *s3.DeleteObjectTaggingInput, arg2 ...request.Option) (*s3.DeleteObjectTaggingOutput, error) {
+func (m *MockS3API) DeleteObjectTaggingWithContext(arg0 aws.Context, arg1 *s3.DeleteObjectTaggingInput, arg2 ...request.Option) (*s3.DeleteObjectTaggingOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1073,7 +1073,7 @@ func (mr *MockS3APIMockRecorder) DeleteObjectTaggingWithContext(arg0, arg1 any, 
 }
 
 // DeleteObjectWithContext mocks base method.
-func (m *MockS3API) DeleteObjectWithContext(arg0 context.Context, arg1 *s3.DeleteObjectInput, arg2 ...request.Option) (*s3.DeleteObjectOutput, error) {
+func (m *MockS3API) DeleteObjectWithContext(arg0 aws.Context, arg1 *s3.DeleteObjectInput, arg2 ...request.Option) (*s3.DeleteObjectOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1123,7 +1123,7 @@ func (mr *MockS3APIMockRecorder) DeleteObjectsRequest(arg0 any) *gomock.Call {
 }
 
 // DeleteObjectsWithContext mocks base method.
-func (m *MockS3API) DeleteObjectsWithContext(arg0 context.Context, arg1 *s3.DeleteObjectsInput, arg2 ...request.Option) (*s3.DeleteObjectsOutput, error) {
+func (m *MockS3API) DeleteObjectsWithContext(arg0 aws.Context, arg1 *s3.DeleteObjectsInput, arg2 ...request.Option) (*s3.DeleteObjectsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1173,7 +1173,7 @@ func (mr *MockS3APIMockRecorder) DeletePublicAccessBlockRequest(arg0 any) *gomoc
 }
 
 // DeletePublicAccessBlockWithContext mocks base method.
-func (m *MockS3API) DeletePublicAccessBlockWithContext(arg0 context.Context, arg1 *s3.DeletePublicAccessBlockInput, arg2 ...request.Option) (*s3.DeletePublicAccessBlockOutput, error) {
+func (m *MockS3API) DeletePublicAccessBlockWithContext(arg0 aws.Context, arg1 *s3.DeletePublicAccessBlockInput, arg2 ...request.Option) (*s3.DeletePublicAccessBlockOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1223,7 +1223,7 @@ func (mr *MockS3APIMockRecorder) GetBucketAccelerateConfigurationRequest(arg0 an
 }
 
 // GetBucketAccelerateConfigurationWithContext mocks base method.
-func (m *MockS3API) GetBucketAccelerateConfigurationWithContext(arg0 context.Context, arg1 *s3.GetBucketAccelerateConfigurationInput, arg2 ...request.Option) (*s3.GetBucketAccelerateConfigurationOutput, error) {
+func (m *MockS3API) GetBucketAccelerateConfigurationWithContext(arg0 aws.Context, arg1 *s3.GetBucketAccelerateConfigurationInput, arg2 ...request.Option) (*s3.GetBucketAccelerateConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1273,7 +1273,7 @@ func (mr *MockS3APIMockRecorder) GetBucketAclRequest(arg0 any) *gomock.Call {
 }
 
 // GetBucketAclWithContext mocks base method.
-func (m *MockS3API) GetBucketAclWithContext(arg0 context.Context, arg1 *s3.GetBucketAclInput, arg2 ...request.Option) (*s3.GetBucketAclOutput, error) {
+func (m *MockS3API) GetBucketAclWithContext(arg0 aws.Context, arg1 *s3.GetBucketAclInput, arg2 ...request.Option) (*s3.GetBucketAclOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1323,7 +1323,7 @@ func (mr *MockS3APIMockRecorder) GetBucketAnalyticsConfigurationRequest(arg0 any
 }
 
 // GetBucketAnalyticsConfigurationWithContext mocks base method.
-func (m *MockS3API) GetBucketAnalyticsConfigurationWithContext(arg0 context.Context, arg1 *s3.GetBucketAnalyticsConfigurationInput, arg2 ...request.Option) (*s3.GetBucketAnalyticsConfigurationOutput, error) {
+func (m *MockS3API) GetBucketAnalyticsConfigurationWithContext(arg0 aws.Context, arg1 *s3.GetBucketAnalyticsConfigurationInput, arg2 ...request.Option) (*s3.GetBucketAnalyticsConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1373,7 +1373,7 @@ func (mr *MockS3APIMockRecorder) GetBucketCorsRequest(arg0 any) *gomock.Call {
 }
 
 // GetBucketCorsWithContext mocks base method.
-func (m *MockS3API) GetBucketCorsWithContext(arg0 context.Context, arg1 *s3.GetBucketCorsInput, arg2 ...request.Option) (*s3.GetBucketCorsOutput, error) {
+func (m *MockS3API) GetBucketCorsWithContext(arg0 aws.Context, arg1 *s3.GetBucketCorsInput, arg2 ...request.Option) (*s3.GetBucketCorsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1423,7 +1423,7 @@ func (mr *MockS3APIMockRecorder) GetBucketEncryptionRequest(arg0 any) *gomock.Ca
 }
 
 // GetBucketEncryptionWithContext mocks base method.
-func (m *MockS3API) GetBucketEncryptionWithContext(arg0 context.Context, arg1 *s3.GetBucketEncryptionInput, arg2 ...request.Option) (*s3.GetBucketEncryptionOutput, error) {
+func (m *MockS3API) GetBucketEncryptionWithContext(arg0 aws.Context, arg1 *s3.GetBucketEncryptionInput, arg2 ...request.Option) (*s3.GetBucketEncryptionOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1473,7 +1473,7 @@ func (mr *MockS3APIMockRecorder) GetBucketIntelligentTieringConfigurationRequest
 }
 
 // GetBucketIntelligentTieringConfigurationWithContext mocks base method.
-func (m *MockS3API) GetBucketIntelligentTieringConfigurationWithContext(arg0 context.Context, arg1 *s3.GetBucketIntelligentTieringConfigurationInput, arg2 ...request.Option) (*s3.GetBucketIntelligentTieringConfigurationOutput, error) {
+func (m *MockS3API) GetBucketIntelligentTieringConfigurationWithContext(arg0 aws.Context, arg1 *s3.GetBucketIntelligentTieringConfigurationInput, arg2 ...request.Option) (*s3.GetBucketIntelligentTieringConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1523,7 +1523,7 @@ func (mr *MockS3APIMockRecorder) GetBucketInventoryConfigurationRequest(arg0 any
 }
 
 // GetBucketInventoryConfigurationWithContext mocks base method.
-func (m *MockS3API) GetBucketInventoryConfigurationWithContext(arg0 context.Context, arg1 *s3.GetBucketInventoryConfigurationInput, arg2 ...request.Option) (*s3.GetBucketInventoryConfigurationOutput, error) {
+func (m *MockS3API) GetBucketInventoryConfigurationWithContext(arg0 aws.Context, arg1 *s3.GetBucketInventoryConfigurationInput, arg2 ...request.Option) (*s3.GetBucketInventoryConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1588,7 +1588,7 @@ func (mr *MockS3APIMockRecorder) GetBucketLifecycleConfigurationRequest(arg0 any
 }
 
 // GetBucketLifecycleConfigurationWithContext mocks base method.
-func (m *MockS3API) GetBucketLifecycleConfigurationWithContext(arg0 context.Context, arg1 *s3.GetBucketLifecycleConfigurationInput, arg2 ...request.Option) (*s3.GetBucketLifecycleConfigurationOutput, error) {
+func (m *MockS3API) GetBucketLifecycleConfigurationWithContext(arg0 aws.Context, arg1 *s3.GetBucketLifecycleConfigurationInput, arg2 ...request.Option) (*s3.GetBucketLifecycleConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1623,7 +1623,7 @@ func (mr *MockS3APIMockRecorder) GetBucketLifecycleRequest(arg0 any) *gomock.Cal
 }
 
 // GetBucketLifecycleWithContext mocks base method.
-func (m *MockS3API) GetBucketLifecycleWithContext(arg0 context.Context, arg1 *s3.GetBucketLifecycleInput, arg2 ...request.Option) (*s3.GetBucketLifecycleOutput, error) {
+func (m *MockS3API) GetBucketLifecycleWithContext(arg0 aws.Context, arg1 *s3.GetBucketLifecycleInput, arg2 ...request.Option) (*s3.GetBucketLifecycleOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1673,7 +1673,7 @@ func (mr *MockS3APIMockRecorder) GetBucketLocationRequest(arg0 any) *gomock.Call
 }
 
 // GetBucketLocationWithContext mocks base method.
-func (m *MockS3API) GetBucketLocationWithContext(arg0 context.Context, arg1 *s3.GetBucketLocationInput, arg2 ...request.Option) (*s3.GetBucketLocationOutput, error) {
+func (m *MockS3API) GetBucketLocationWithContext(arg0 aws.Context, arg1 *s3.GetBucketLocationInput, arg2 ...request.Option) (*s3.GetBucketLocationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1723,7 +1723,7 @@ func (mr *MockS3APIMockRecorder) GetBucketLoggingRequest(arg0 any) *gomock.Call 
 }
 
 // GetBucketLoggingWithContext mocks base method.
-func (m *MockS3API) GetBucketLoggingWithContext(arg0 context.Context, arg1 *s3.GetBucketLoggingInput, arg2 ...request.Option) (*s3.GetBucketLoggingOutput, error) {
+func (m *MockS3API) GetBucketLoggingWithContext(arg0 aws.Context, arg1 *s3.GetBucketLoggingInput, arg2 ...request.Option) (*s3.GetBucketLoggingOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1773,7 +1773,7 @@ func (mr *MockS3APIMockRecorder) GetBucketMetricsConfigurationRequest(arg0 any) 
 }
 
 // GetBucketMetricsConfigurationWithContext mocks base method.
-func (m *MockS3API) GetBucketMetricsConfigurationWithContext(arg0 context.Context, arg1 *s3.GetBucketMetricsConfigurationInput, arg2 ...request.Option) (*s3.GetBucketMetricsConfigurationOutput, error) {
+func (m *MockS3API) GetBucketMetricsConfigurationWithContext(arg0 aws.Context, arg1 *s3.GetBucketMetricsConfigurationInput, arg2 ...request.Option) (*s3.GetBucketMetricsConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1838,7 +1838,7 @@ func (mr *MockS3APIMockRecorder) GetBucketNotificationConfigurationRequest(arg0 
 }
 
 // GetBucketNotificationConfigurationWithContext mocks base method.
-func (m *MockS3API) GetBucketNotificationConfigurationWithContext(arg0 context.Context, arg1 *s3.GetBucketNotificationConfigurationRequest, arg2 ...request.Option) (*s3.NotificationConfiguration, error) {
+func (m *MockS3API) GetBucketNotificationConfigurationWithContext(arg0 aws.Context, arg1 *s3.GetBucketNotificationConfigurationRequest, arg2 ...request.Option) (*s3.NotificationConfiguration, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1873,7 +1873,7 @@ func (mr *MockS3APIMockRecorder) GetBucketNotificationRequest(arg0 any) *gomock.
 }
 
 // GetBucketNotificationWithContext mocks base method.
-func (m *MockS3API) GetBucketNotificationWithContext(arg0 context.Context, arg1 *s3.GetBucketNotificationConfigurationRequest, arg2 ...request.Option) (*s3.NotificationConfigurationDeprecated, error) {
+func (m *MockS3API) GetBucketNotificationWithContext(arg0 aws.Context, arg1 *s3.GetBucketNotificationConfigurationRequest, arg2 ...request.Option) (*s3.NotificationConfigurationDeprecated, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -1923,7 +1923,7 @@ func (mr *MockS3APIMockRecorder) GetBucketOwnershipControlsRequest(arg0 any) *go
 }
 
 // GetBucketOwnershipControlsWithContext mocks base method.
-func (m *MockS3API) GetBucketOwnershipControlsWithContext(arg0 context.Context, arg1 *s3.GetBucketOwnershipControlsInput, arg2 ...request.Option) (*s3.GetBucketOwnershipControlsOutput, error) {
+func (m *MockS3API) GetBucketOwnershipControlsWithContext(arg0 aws.Context, arg1 *s3.GetBucketOwnershipControlsInput, arg2 ...request.Option) (*s3.GetBucketOwnershipControlsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2003,7 +2003,7 @@ func (mr *MockS3APIMockRecorder) GetBucketPolicyStatusRequest(arg0 any) *gomock.
 }
 
 // GetBucketPolicyStatusWithContext mocks base method.
-func (m *MockS3API) GetBucketPolicyStatusWithContext(arg0 context.Context, arg1 *s3.GetBucketPolicyStatusInput, arg2 ...request.Option) (*s3.GetBucketPolicyStatusOutput, error) {
+func (m *MockS3API) GetBucketPolicyStatusWithContext(arg0 aws.Context, arg1 *s3.GetBucketPolicyStatusInput, arg2 ...request.Option) (*s3.GetBucketPolicyStatusOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2023,7 +2023,7 @@ func (mr *MockS3APIMockRecorder) GetBucketPolicyStatusWithContext(arg0, arg1 any
 }
 
 // GetBucketPolicyWithContext mocks base method.
-func (m *MockS3API) GetBucketPolicyWithContext(arg0 context.Context, arg1 *s3.GetBucketPolicyInput, arg2 ...request.Option) (*s3.GetBucketPolicyOutput, error) {
+func (m *MockS3API) GetBucketPolicyWithContext(arg0 aws.Context, arg1 *s3.GetBucketPolicyInput, arg2 ...request.Option) (*s3.GetBucketPolicyOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2073,7 +2073,7 @@ func (mr *MockS3APIMockRecorder) GetBucketReplicationRequest(arg0 any) *gomock.C
 }
 
 // GetBucketReplicationWithContext mocks base method.
-func (m *MockS3API) GetBucketReplicationWithContext(arg0 context.Context, arg1 *s3.GetBucketReplicationInput, arg2 ...request.Option) (*s3.GetBucketReplicationOutput, error) {
+func (m *MockS3API) GetBucketReplicationWithContext(arg0 aws.Context, arg1 *s3.GetBucketReplicationInput, arg2 ...request.Option) (*s3.GetBucketReplicationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2123,7 +2123,7 @@ func (mr *MockS3APIMockRecorder) GetBucketRequestPaymentRequest(arg0 any) *gomoc
 }
 
 // GetBucketRequestPaymentWithContext mocks base method.
-func (m *MockS3API) GetBucketRequestPaymentWithContext(arg0 context.Context, arg1 *s3.GetBucketRequestPaymentInput, arg2 ...request.Option) (*s3.GetBucketRequestPaymentOutput, error) {
+func (m *MockS3API) GetBucketRequestPaymentWithContext(arg0 aws.Context, arg1 *s3.GetBucketRequestPaymentInput, arg2 ...request.Option) (*s3.GetBucketRequestPaymentOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2173,7 +2173,7 @@ func (mr *MockS3APIMockRecorder) GetBucketTaggingRequest(arg0 any) *gomock.Call 
 }
 
 // GetBucketTaggingWithContext mocks base method.
-func (m *MockS3API) GetBucketTaggingWithContext(arg0 context.Context, arg1 *s3.GetBucketTaggingInput, arg2 ...request.Option) (*s3.GetBucketTaggingOutput, error) {
+func (m *MockS3API) GetBucketTaggingWithContext(arg0 aws.Context, arg1 *s3.GetBucketTaggingInput, arg2 ...request.Option) (*s3.GetBucketTaggingOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2223,7 +2223,7 @@ func (mr *MockS3APIMockRecorder) GetBucketVersioningRequest(arg0 any) *gomock.Ca
 }
 
 // GetBucketVersioningWithContext mocks base method.
-func (m *MockS3API) GetBucketVersioningWithContext(arg0 context.Context, arg1 *s3.GetBucketVersioningInput, arg2 ...request.Option) (*s3.GetBucketVersioningOutput, error) {
+func (m *MockS3API) GetBucketVersioningWithContext(arg0 aws.Context, arg1 *s3.GetBucketVersioningInput, arg2 ...request.Option) (*s3.GetBucketVersioningOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2273,7 +2273,7 @@ func (mr *MockS3APIMockRecorder) GetBucketWebsiteRequest(arg0 any) *gomock.Call 
 }
 
 // GetBucketWebsiteWithContext mocks base method.
-func (m *MockS3API) GetBucketWebsiteWithContext(arg0 context.Context, arg1 *s3.GetBucketWebsiteInput, arg2 ...request.Option) (*s3.GetBucketWebsiteOutput, error) {
+func (m *MockS3API) GetBucketWebsiteWithContext(arg0 aws.Context, arg1 *s3.GetBucketWebsiteInput, arg2 ...request.Option) (*s3.GetBucketWebsiteOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2338,7 +2338,7 @@ func (mr *MockS3APIMockRecorder) GetObjectAclRequest(arg0 any) *gomock.Call {
 }
 
 // GetObjectAclWithContext mocks base method.
-func (m *MockS3API) GetObjectAclWithContext(arg0 context.Context, arg1 *s3.GetObjectAclInput, arg2 ...request.Option) (*s3.GetObjectAclOutput, error) {
+func (m *MockS3API) GetObjectAclWithContext(arg0 aws.Context, arg1 *s3.GetObjectAclInput, arg2 ...request.Option) (*s3.GetObjectAclOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2388,7 +2388,7 @@ func (mr *MockS3APIMockRecorder) GetObjectAttributesRequest(arg0 any) *gomock.Ca
 }
 
 // GetObjectAttributesWithContext mocks base method.
-func (m *MockS3API) GetObjectAttributesWithContext(arg0 context.Context, arg1 *s3.GetObjectAttributesInput, arg2 ...request.Option) (*s3.GetObjectAttributesOutput, error) {
+func (m *MockS3API) GetObjectAttributesWithContext(arg0 aws.Context, arg1 *s3.GetObjectAttributesInput, arg2 ...request.Option) (*s3.GetObjectAttributesOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2438,7 +2438,7 @@ func (mr *MockS3APIMockRecorder) GetObjectLegalHoldRequest(arg0 any) *gomock.Cal
 }
 
 // GetObjectLegalHoldWithContext mocks base method.
-func (m *MockS3API) GetObjectLegalHoldWithContext(arg0 context.Context, arg1 *s3.GetObjectLegalHoldInput, arg2 ...request.Option) (*s3.GetObjectLegalHoldOutput, error) {
+func (m *MockS3API) GetObjectLegalHoldWithContext(arg0 aws.Context, arg1 *s3.GetObjectLegalHoldInput, arg2 ...request.Option) (*s3.GetObjectLegalHoldOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2488,7 +2488,7 @@ func (mr *MockS3APIMockRecorder) GetObjectLockConfigurationRequest(arg0 any) *go
 }
 
 // GetObjectLockConfigurationWithContext mocks base method.
-func (m *MockS3API) GetObjectLockConfigurationWithContext(arg0 context.Context, arg1 *s3.GetObjectLockConfigurationInput, arg2 ...request.Option) (*s3.GetObjectLockConfigurationOutput, error) {
+func (m *MockS3API) GetObjectLockConfigurationWithContext(arg0 aws.Context, arg1 *s3.GetObjectLockConfigurationInput, arg2 ...request.Option) (*s3.GetObjectLockConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2553,7 +2553,7 @@ func (mr *MockS3APIMockRecorder) GetObjectRetentionRequest(arg0 any) *gomock.Cal
 }
 
 // GetObjectRetentionWithContext mocks base method.
-func (m *MockS3API) GetObjectRetentionWithContext(arg0 context.Context, arg1 *s3.GetObjectRetentionInput, arg2 ...request.Option) (*s3.GetObjectRetentionOutput, error) {
+func (m *MockS3API) GetObjectRetentionWithContext(arg0 aws.Context, arg1 *s3.GetObjectRetentionInput, arg2 ...request.Option) (*s3.GetObjectRetentionOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2603,7 +2603,7 @@ func (mr *MockS3APIMockRecorder) GetObjectTaggingRequest(arg0 any) *gomock.Call 
 }
 
 // GetObjectTaggingWithContext mocks base method.
-func (m *MockS3API) GetObjectTaggingWithContext(arg0 context.Context, arg1 *s3.GetObjectTaggingInput, arg2 ...request.Option) (*s3.GetObjectTaggingOutput, error) {
+func (m *MockS3API) GetObjectTaggingWithContext(arg0 aws.Context, arg1 *s3.GetObjectTaggingInput, arg2 ...request.Option) (*s3.GetObjectTaggingOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2653,7 +2653,7 @@ func (mr *MockS3APIMockRecorder) GetObjectTorrentRequest(arg0 any) *gomock.Call 
 }
 
 // GetObjectTorrentWithContext mocks base method.
-func (m *MockS3API) GetObjectTorrentWithContext(arg0 context.Context, arg1 *s3.GetObjectTorrentInput, arg2 ...request.Option) (*s3.GetObjectTorrentOutput, error) {
+func (m *MockS3API) GetObjectTorrentWithContext(arg0 aws.Context, arg1 *s3.GetObjectTorrentInput, arg2 ...request.Option) (*s3.GetObjectTorrentOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2673,7 +2673,7 @@ func (mr *MockS3APIMockRecorder) GetObjectTorrentWithContext(arg0, arg1 any, arg
 }
 
 // GetObjectWithContext mocks base method.
-func (m *MockS3API) GetObjectWithContext(arg0 context.Context, arg1 *s3.GetObjectInput, arg2 ...request.Option) (*s3.GetObjectOutput, error) {
+func (m *MockS3API) GetObjectWithContext(arg0 aws.Context, arg1 *s3.GetObjectInput, arg2 ...request.Option) (*s3.GetObjectOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2723,7 +2723,7 @@ func (mr *MockS3APIMockRecorder) GetPublicAccessBlockRequest(arg0 any) *gomock.C
 }
 
 // GetPublicAccessBlockWithContext mocks base method.
-func (m *MockS3API) GetPublicAccessBlockWithContext(arg0 context.Context, arg1 *s3.GetPublicAccessBlockInput, arg2 ...request.Option) (*s3.GetPublicAccessBlockOutput, error) {
+func (m *MockS3API) GetPublicAccessBlockWithContext(arg0 aws.Context, arg1 *s3.GetPublicAccessBlockInput, arg2 ...request.Option) (*s3.GetPublicAccessBlockOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2773,7 +2773,7 @@ func (mr *MockS3APIMockRecorder) HeadBucketRequest(arg0 any) *gomock.Call {
 }
 
 // HeadBucketWithContext mocks base method.
-func (m *MockS3API) HeadBucketWithContext(arg0 context.Context, arg1 *s3.HeadBucketInput, arg2 ...request.Option) (*s3.HeadBucketOutput, error) {
+func (m *MockS3API) HeadBucketWithContext(arg0 aws.Context, arg1 *s3.HeadBucketInput, arg2 ...request.Option) (*s3.HeadBucketOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2823,7 +2823,7 @@ func (mr *MockS3APIMockRecorder) HeadObjectRequest(arg0 any) *gomock.Call {
 }
 
 // HeadObjectWithContext mocks base method.
-func (m *MockS3API) HeadObjectWithContext(arg0 context.Context, arg1 *s3.HeadObjectInput, arg2 ...request.Option) (*s3.HeadObjectOutput, error) {
+func (m *MockS3API) HeadObjectWithContext(arg0 aws.Context, arg1 *s3.HeadObjectInput, arg2 ...request.Option) (*s3.HeadObjectOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2873,7 +2873,7 @@ func (mr *MockS3APIMockRecorder) ListBucketAnalyticsConfigurationsRequest(arg0 a
 }
 
 // ListBucketAnalyticsConfigurationsWithContext mocks base method.
-func (m *MockS3API) ListBucketAnalyticsConfigurationsWithContext(arg0 context.Context, arg1 *s3.ListBucketAnalyticsConfigurationsInput, arg2 ...request.Option) (*s3.ListBucketAnalyticsConfigurationsOutput, error) {
+func (m *MockS3API) ListBucketAnalyticsConfigurationsWithContext(arg0 aws.Context, arg1 *s3.ListBucketAnalyticsConfigurationsInput, arg2 ...request.Option) (*s3.ListBucketAnalyticsConfigurationsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2923,7 +2923,7 @@ func (mr *MockS3APIMockRecorder) ListBucketIntelligentTieringConfigurationsReque
 }
 
 // ListBucketIntelligentTieringConfigurationsWithContext mocks base method.
-func (m *MockS3API) ListBucketIntelligentTieringConfigurationsWithContext(arg0 context.Context, arg1 *s3.ListBucketIntelligentTieringConfigurationsInput, arg2 ...request.Option) (*s3.ListBucketIntelligentTieringConfigurationsOutput, error) {
+func (m *MockS3API) ListBucketIntelligentTieringConfigurationsWithContext(arg0 aws.Context, arg1 *s3.ListBucketIntelligentTieringConfigurationsInput, arg2 ...request.Option) (*s3.ListBucketIntelligentTieringConfigurationsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -2973,7 +2973,7 @@ func (mr *MockS3APIMockRecorder) ListBucketInventoryConfigurationsRequest(arg0 a
 }
 
 // ListBucketInventoryConfigurationsWithContext mocks base method.
-func (m *MockS3API) ListBucketInventoryConfigurationsWithContext(arg0 context.Context, arg1 *s3.ListBucketInventoryConfigurationsInput, arg2 ...request.Option) (*s3.ListBucketInventoryConfigurationsOutput, error) {
+func (m *MockS3API) ListBucketInventoryConfigurationsWithContext(arg0 aws.Context, arg1 *s3.ListBucketInventoryConfigurationsInput, arg2 ...request.Option) (*s3.ListBucketInventoryConfigurationsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3023,7 +3023,7 @@ func (mr *MockS3APIMockRecorder) ListBucketMetricsConfigurationsRequest(arg0 any
 }
 
 // ListBucketMetricsConfigurationsWithContext mocks base method.
-func (m *MockS3API) ListBucketMetricsConfigurationsWithContext(arg0 context.Context, arg1 *s3.ListBucketMetricsConfigurationsInput, arg2 ...request.Option) (*s3.ListBucketMetricsConfigurationsOutput, error) {
+func (m *MockS3API) ListBucketMetricsConfigurationsWithContext(arg0 aws.Context, arg1 *s3.ListBucketMetricsConfigurationsInput, arg2 ...request.Option) (*s3.ListBucketMetricsConfigurationsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3073,7 +3073,7 @@ func (mr *MockS3APIMockRecorder) ListBucketsRequest(arg0 any) *gomock.Call {
 }
 
 // ListBucketsWithContext mocks base method.
-func (m *MockS3API) ListBucketsWithContext(arg0 context.Context, arg1 *s3.ListBucketsInput, arg2 ...request.Option) (*s3.ListBucketsOutput, error) {
+func (m *MockS3API) ListBucketsWithContext(arg0 aws.Context, arg1 *s3.ListBucketsInput, arg2 ...request.Option) (*s3.ListBucketsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3122,7 +3122,7 @@ func (mr *MockS3APIMockRecorder) ListDirectoryBucketsPages(arg0, arg1 any) *gomo
 }
 
 // ListDirectoryBucketsPagesWithContext mocks base method.
-func (m *MockS3API) ListDirectoryBucketsPagesWithContext(arg0 context.Context, arg1 *s3.ListDirectoryBucketsInput, arg2 func(*s3.ListDirectoryBucketsOutput, bool) bool, arg3 ...request.Option) error {
+func (m *MockS3API) ListDirectoryBucketsPagesWithContext(arg0 aws.Context, arg1 *s3.ListDirectoryBucketsInput, arg2 func(*s3.ListDirectoryBucketsOutput, bool) bool, arg3 ...request.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -3156,7 +3156,7 @@ func (mr *MockS3APIMockRecorder) ListDirectoryBucketsRequest(arg0 any) *gomock.C
 }
 
 // ListDirectoryBucketsWithContext mocks base method.
-func (m *MockS3API) ListDirectoryBucketsWithContext(arg0 context.Context, arg1 *s3.ListDirectoryBucketsInput, arg2 ...request.Option) (*s3.ListDirectoryBucketsOutput, error) {
+func (m *MockS3API) ListDirectoryBucketsWithContext(arg0 aws.Context, arg1 *s3.ListDirectoryBucketsInput, arg2 ...request.Option) (*s3.ListDirectoryBucketsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3205,7 +3205,7 @@ func (mr *MockS3APIMockRecorder) ListMultipartUploadsPages(arg0, arg1 any) *gomo
 }
 
 // ListMultipartUploadsPagesWithContext mocks base method.
-func (m *MockS3API) ListMultipartUploadsPagesWithContext(arg0 context.Context, arg1 *s3.ListMultipartUploadsInput, arg2 func(*s3.ListMultipartUploadsOutput, bool) bool, arg3 ...request.Option) error {
+func (m *MockS3API) ListMultipartUploadsPagesWithContext(arg0 aws.Context, arg1 *s3.ListMultipartUploadsInput, arg2 func(*s3.ListMultipartUploadsOutput, bool) bool, arg3 ...request.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -3239,7 +3239,7 @@ func (mr *MockS3APIMockRecorder) ListMultipartUploadsRequest(arg0 any) *gomock.C
 }
 
 // ListMultipartUploadsWithContext mocks base method.
-func (m *MockS3API) ListMultipartUploadsWithContext(arg0 context.Context, arg1 *s3.ListMultipartUploadsInput, arg2 ...request.Option) (*s3.ListMultipartUploadsOutput, error) {
+func (m *MockS3API) ListMultipartUploadsWithContext(arg0 aws.Context, arg1 *s3.ListMultipartUploadsInput, arg2 ...request.Option) (*s3.ListMultipartUploadsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3288,7 +3288,7 @@ func (mr *MockS3APIMockRecorder) ListObjectVersionsPages(arg0, arg1 any) *gomock
 }
 
 // ListObjectVersionsPagesWithContext mocks base method.
-func (m *MockS3API) ListObjectVersionsPagesWithContext(arg0 context.Context, arg1 *s3.ListObjectVersionsInput, arg2 func(*s3.ListObjectVersionsOutput, bool) bool, arg3 ...request.Option) error {
+func (m *MockS3API) ListObjectVersionsPagesWithContext(arg0 aws.Context, arg1 *s3.ListObjectVersionsInput, arg2 func(*s3.ListObjectVersionsOutput, bool) bool, arg3 ...request.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -3322,7 +3322,7 @@ func (mr *MockS3APIMockRecorder) ListObjectVersionsRequest(arg0 any) *gomock.Cal
 }
 
 // ListObjectVersionsWithContext mocks base method.
-func (m *MockS3API) ListObjectVersionsWithContext(arg0 context.Context, arg1 *s3.ListObjectVersionsInput, arg2 ...request.Option) (*s3.ListObjectVersionsOutput, error) {
+func (m *MockS3API) ListObjectVersionsWithContext(arg0 aws.Context, arg1 *s3.ListObjectVersionsInput, arg2 ...request.Option) (*s3.ListObjectVersionsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3371,7 +3371,7 @@ func (mr *MockS3APIMockRecorder) ListObjectsPages(arg0, arg1 any) *gomock.Call {
 }
 
 // ListObjectsPagesWithContext mocks base method.
-func (m *MockS3API) ListObjectsPagesWithContext(arg0 context.Context, arg1 *s3.ListObjectsInput, arg2 func(*s3.ListObjectsOutput, bool) bool, arg3 ...request.Option) error {
+func (m *MockS3API) ListObjectsPagesWithContext(arg0 aws.Context, arg1 *s3.ListObjectsInput, arg2 func(*s3.ListObjectsOutput, bool) bool, arg3 ...request.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -3434,7 +3434,7 @@ func (mr *MockS3APIMockRecorder) ListObjectsV2Pages(arg0, arg1 any) *gomock.Call
 }
 
 // ListObjectsV2PagesWithContext mocks base method.
-func (m *MockS3API) ListObjectsV2PagesWithContext(arg0 context.Context, arg1 *s3.ListObjectsV2Input, arg2 func(*s3.ListObjectsV2Output, bool) bool, arg3 ...request.Option) error {
+func (m *MockS3API) ListObjectsV2PagesWithContext(arg0 aws.Context, arg1 *s3.ListObjectsV2Input, arg2 func(*s3.ListObjectsV2Output, bool) bool, arg3 ...request.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -3468,7 +3468,7 @@ func (mr *MockS3APIMockRecorder) ListObjectsV2Request(arg0 any) *gomock.Call {
 }
 
 // ListObjectsV2WithContext mocks base method.
-func (m *MockS3API) ListObjectsV2WithContext(arg0 context.Context, arg1 *s3.ListObjectsV2Input, arg2 ...request.Option) (*s3.ListObjectsV2Output, error) {
+func (m *MockS3API) ListObjectsV2WithContext(arg0 aws.Context, arg1 *s3.ListObjectsV2Input, arg2 ...request.Option) (*s3.ListObjectsV2Output, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3488,7 +3488,7 @@ func (mr *MockS3APIMockRecorder) ListObjectsV2WithContext(arg0, arg1 any, arg2 .
 }
 
 // ListObjectsWithContext mocks base method.
-func (m *MockS3API) ListObjectsWithContext(arg0 context.Context, arg1 *s3.ListObjectsInput, arg2 ...request.Option) (*s3.ListObjectsOutput, error) {
+func (m *MockS3API) ListObjectsWithContext(arg0 aws.Context, arg1 *s3.ListObjectsInput, arg2 ...request.Option) (*s3.ListObjectsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3537,7 +3537,7 @@ func (mr *MockS3APIMockRecorder) ListPartsPages(arg0, arg1 any) *gomock.Call {
 }
 
 // ListPartsPagesWithContext mocks base method.
-func (m *MockS3API) ListPartsPagesWithContext(arg0 context.Context, arg1 *s3.ListPartsInput, arg2 func(*s3.ListPartsOutput, bool) bool, arg3 ...request.Option) error {
+func (m *MockS3API) ListPartsPagesWithContext(arg0 aws.Context, arg1 *s3.ListPartsInput, arg2 func(*s3.ListPartsOutput, bool) bool, arg3 ...request.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -3571,7 +3571,7 @@ func (mr *MockS3APIMockRecorder) ListPartsRequest(arg0 any) *gomock.Call {
 }
 
 // ListPartsWithContext mocks base method.
-func (m *MockS3API) ListPartsWithContext(arg0 context.Context, arg1 *s3.ListPartsInput, arg2 ...request.Option) (*s3.ListPartsOutput, error) {
+func (m *MockS3API) ListPartsWithContext(arg0 aws.Context, arg1 *s3.ListPartsInput, arg2 ...request.Option) (*s3.ListPartsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3621,7 +3621,7 @@ func (mr *MockS3APIMockRecorder) PutBucketAccelerateConfigurationRequest(arg0 an
 }
 
 // PutBucketAccelerateConfigurationWithContext mocks base method.
-func (m *MockS3API) PutBucketAccelerateConfigurationWithContext(arg0 context.Context, arg1 *s3.PutBucketAccelerateConfigurationInput, arg2 ...request.Option) (*s3.PutBucketAccelerateConfigurationOutput, error) {
+func (m *MockS3API) PutBucketAccelerateConfigurationWithContext(arg0 aws.Context, arg1 *s3.PutBucketAccelerateConfigurationInput, arg2 ...request.Option) (*s3.PutBucketAccelerateConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3671,7 +3671,7 @@ func (mr *MockS3APIMockRecorder) PutBucketAclRequest(arg0 any) *gomock.Call {
 }
 
 // PutBucketAclWithContext mocks base method.
-func (m *MockS3API) PutBucketAclWithContext(arg0 context.Context, arg1 *s3.PutBucketAclInput, arg2 ...request.Option) (*s3.PutBucketAclOutput, error) {
+func (m *MockS3API) PutBucketAclWithContext(arg0 aws.Context, arg1 *s3.PutBucketAclInput, arg2 ...request.Option) (*s3.PutBucketAclOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3721,7 +3721,7 @@ func (mr *MockS3APIMockRecorder) PutBucketAnalyticsConfigurationRequest(arg0 any
 }
 
 // PutBucketAnalyticsConfigurationWithContext mocks base method.
-func (m *MockS3API) PutBucketAnalyticsConfigurationWithContext(arg0 context.Context, arg1 *s3.PutBucketAnalyticsConfigurationInput, arg2 ...request.Option) (*s3.PutBucketAnalyticsConfigurationOutput, error) {
+func (m *MockS3API) PutBucketAnalyticsConfigurationWithContext(arg0 aws.Context, arg1 *s3.PutBucketAnalyticsConfigurationInput, arg2 ...request.Option) (*s3.PutBucketAnalyticsConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3771,7 +3771,7 @@ func (mr *MockS3APIMockRecorder) PutBucketCorsRequest(arg0 any) *gomock.Call {
 }
 
 // PutBucketCorsWithContext mocks base method.
-func (m *MockS3API) PutBucketCorsWithContext(arg0 context.Context, arg1 *s3.PutBucketCorsInput, arg2 ...request.Option) (*s3.PutBucketCorsOutput, error) {
+func (m *MockS3API) PutBucketCorsWithContext(arg0 aws.Context, arg1 *s3.PutBucketCorsInput, arg2 ...request.Option) (*s3.PutBucketCorsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3821,7 +3821,7 @@ func (mr *MockS3APIMockRecorder) PutBucketEncryptionRequest(arg0 any) *gomock.Ca
 }
 
 // PutBucketEncryptionWithContext mocks base method.
-func (m *MockS3API) PutBucketEncryptionWithContext(arg0 context.Context, arg1 *s3.PutBucketEncryptionInput, arg2 ...request.Option) (*s3.PutBucketEncryptionOutput, error) {
+func (m *MockS3API) PutBucketEncryptionWithContext(arg0 aws.Context, arg1 *s3.PutBucketEncryptionInput, arg2 ...request.Option) (*s3.PutBucketEncryptionOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3871,7 +3871,7 @@ func (mr *MockS3APIMockRecorder) PutBucketIntelligentTieringConfigurationRequest
 }
 
 // PutBucketIntelligentTieringConfigurationWithContext mocks base method.
-func (m *MockS3API) PutBucketIntelligentTieringConfigurationWithContext(arg0 context.Context, arg1 *s3.PutBucketIntelligentTieringConfigurationInput, arg2 ...request.Option) (*s3.PutBucketIntelligentTieringConfigurationOutput, error) {
+func (m *MockS3API) PutBucketIntelligentTieringConfigurationWithContext(arg0 aws.Context, arg1 *s3.PutBucketIntelligentTieringConfigurationInput, arg2 ...request.Option) (*s3.PutBucketIntelligentTieringConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3921,7 +3921,7 @@ func (mr *MockS3APIMockRecorder) PutBucketInventoryConfigurationRequest(arg0 any
 }
 
 // PutBucketInventoryConfigurationWithContext mocks base method.
-func (m *MockS3API) PutBucketInventoryConfigurationWithContext(arg0 context.Context, arg1 *s3.PutBucketInventoryConfigurationInput, arg2 ...request.Option) (*s3.PutBucketInventoryConfigurationOutput, error) {
+func (m *MockS3API) PutBucketInventoryConfigurationWithContext(arg0 aws.Context, arg1 *s3.PutBucketInventoryConfigurationInput, arg2 ...request.Option) (*s3.PutBucketInventoryConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -3986,7 +3986,7 @@ func (mr *MockS3APIMockRecorder) PutBucketLifecycleConfigurationRequest(arg0 any
 }
 
 // PutBucketLifecycleConfigurationWithContext mocks base method.
-func (m *MockS3API) PutBucketLifecycleConfigurationWithContext(arg0 context.Context, arg1 *s3.PutBucketLifecycleConfigurationInput, arg2 ...request.Option) (*s3.PutBucketLifecycleConfigurationOutput, error) {
+func (m *MockS3API) PutBucketLifecycleConfigurationWithContext(arg0 aws.Context, arg1 *s3.PutBucketLifecycleConfigurationInput, arg2 ...request.Option) (*s3.PutBucketLifecycleConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4021,7 +4021,7 @@ func (mr *MockS3APIMockRecorder) PutBucketLifecycleRequest(arg0 any) *gomock.Cal
 }
 
 // PutBucketLifecycleWithContext mocks base method.
-func (m *MockS3API) PutBucketLifecycleWithContext(arg0 context.Context, arg1 *s3.PutBucketLifecycleInput, arg2 ...request.Option) (*s3.PutBucketLifecycleOutput, error) {
+func (m *MockS3API) PutBucketLifecycleWithContext(arg0 aws.Context, arg1 *s3.PutBucketLifecycleInput, arg2 ...request.Option) (*s3.PutBucketLifecycleOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4071,7 +4071,7 @@ func (mr *MockS3APIMockRecorder) PutBucketLoggingRequest(arg0 any) *gomock.Call 
 }
 
 // PutBucketLoggingWithContext mocks base method.
-func (m *MockS3API) PutBucketLoggingWithContext(arg0 context.Context, arg1 *s3.PutBucketLoggingInput, arg2 ...request.Option) (*s3.PutBucketLoggingOutput, error) {
+func (m *MockS3API) PutBucketLoggingWithContext(arg0 aws.Context, arg1 *s3.PutBucketLoggingInput, arg2 ...request.Option) (*s3.PutBucketLoggingOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4121,7 +4121,7 @@ func (mr *MockS3APIMockRecorder) PutBucketMetricsConfigurationRequest(arg0 any) 
 }
 
 // PutBucketMetricsConfigurationWithContext mocks base method.
-func (m *MockS3API) PutBucketMetricsConfigurationWithContext(arg0 context.Context, arg1 *s3.PutBucketMetricsConfigurationInput, arg2 ...request.Option) (*s3.PutBucketMetricsConfigurationOutput, error) {
+func (m *MockS3API) PutBucketMetricsConfigurationWithContext(arg0 aws.Context, arg1 *s3.PutBucketMetricsConfigurationInput, arg2 ...request.Option) (*s3.PutBucketMetricsConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4186,7 +4186,7 @@ func (mr *MockS3APIMockRecorder) PutBucketNotificationConfigurationRequest(arg0 
 }
 
 // PutBucketNotificationConfigurationWithContext mocks base method.
-func (m *MockS3API) PutBucketNotificationConfigurationWithContext(arg0 context.Context, arg1 *s3.PutBucketNotificationConfigurationInput, arg2 ...request.Option) (*s3.PutBucketNotificationConfigurationOutput, error) {
+func (m *MockS3API) PutBucketNotificationConfigurationWithContext(arg0 aws.Context, arg1 *s3.PutBucketNotificationConfigurationInput, arg2 ...request.Option) (*s3.PutBucketNotificationConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4221,7 +4221,7 @@ func (mr *MockS3APIMockRecorder) PutBucketNotificationRequest(arg0 any) *gomock.
 }
 
 // PutBucketNotificationWithContext mocks base method.
-func (m *MockS3API) PutBucketNotificationWithContext(arg0 context.Context, arg1 *s3.PutBucketNotificationInput, arg2 ...request.Option) (*s3.PutBucketNotificationOutput, error) {
+func (m *MockS3API) PutBucketNotificationWithContext(arg0 aws.Context, arg1 *s3.PutBucketNotificationInput, arg2 ...request.Option) (*s3.PutBucketNotificationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4271,7 +4271,7 @@ func (mr *MockS3APIMockRecorder) PutBucketOwnershipControlsRequest(arg0 any) *go
 }
 
 // PutBucketOwnershipControlsWithContext mocks base method.
-func (m *MockS3API) PutBucketOwnershipControlsWithContext(arg0 context.Context, arg1 *s3.PutBucketOwnershipControlsInput, arg2 ...request.Option) (*s3.PutBucketOwnershipControlsOutput, error) {
+func (m *MockS3API) PutBucketOwnershipControlsWithContext(arg0 aws.Context, arg1 *s3.PutBucketOwnershipControlsInput, arg2 ...request.Option) (*s3.PutBucketOwnershipControlsOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4321,7 +4321,7 @@ func (mr *MockS3APIMockRecorder) PutBucketPolicyRequest(arg0 any) *gomock.Call {
 }
 
 // PutBucketPolicyWithContext mocks base method.
-func (m *MockS3API) PutBucketPolicyWithContext(arg0 context.Context, arg1 *s3.PutBucketPolicyInput, arg2 ...request.Option) (*s3.PutBucketPolicyOutput, error) {
+func (m *MockS3API) PutBucketPolicyWithContext(arg0 aws.Context, arg1 *s3.PutBucketPolicyInput, arg2 ...request.Option) (*s3.PutBucketPolicyOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4371,7 +4371,7 @@ func (mr *MockS3APIMockRecorder) PutBucketReplicationRequest(arg0 any) *gomock.C
 }
 
 // PutBucketReplicationWithContext mocks base method.
-func (m *MockS3API) PutBucketReplicationWithContext(arg0 context.Context, arg1 *s3.PutBucketReplicationInput, arg2 ...request.Option) (*s3.PutBucketReplicationOutput, error) {
+func (m *MockS3API) PutBucketReplicationWithContext(arg0 aws.Context, arg1 *s3.PutBucketReplicationInput, arg2 ...request.Option) (*s3.PutBucketReplicationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4421,7 +4421,7 @@ func (mr *MockS3APIMockRecorder) PutBucketRequestPaymentRequest(arg0 any) *gomoc
 }
 
 // PutBucketRequestPaymentWithContext mocks base method.
-func (m *MockS3API) PutBucketRequestPaymentWithContext(arg0 context.Context, arg1 *s3.PutBucketRequestPaymentInput, arg2 ...request.Option) (*s3.PutBucketRequestPaymentOutput, error) {
+func (m *MockS3API) PutBucketRequestPaymentWithContext(arg0 aws.Context, arg1 *s3.PutBucketRequestPaymentInput, arg2 ...request.Option) (*s3.PutBucketRequestPaymentOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4471,7 +4471,7 @@ func (mr *MockS3APIMockRecorder) PutBucketTaggingRequest(arg0 any) *gomock.Call 
 }
 
 // PutBucketTaggingWithContext mocks base method.
-func (m *MockS3API) PutBucketTaggingWithContext(arg0 context.Context, arg1 *s3.PutBucketTaggingInput, arg2 ...request.Option) (*s3.PutBucketTaggingOutput, error) {
+func (m *MockS3API) PutBucketTaggingWithContext(arg0 aws.Context, arg1 *s3.PutBucketTaggingInput, arg2 ...request.Option) (*s3.PutBucketTaggingOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4521,7 +4521,7 @@ func (mr *MockS3APIMockRecorder) PutBucketVersioningRequest(arg0 any) *gomock.Ca
 }
 
 // PutBucketVersioningWithContext mocks base method.
-func (m *MockS3API) PutBucketVersioningWithContext(arg0 context.Context, arg1 *s3.PutBucketVersioningInput, arg2 ...request.Option) (*s3.PutBucketVersioningOutput, error) {
+func (m *MockS3API) PutBucketVersioningWithContext(arg0 aws.Context, arg1 *s3.PutBucketVersioningInput, arg2 ...request.Option) (*s3.PutBucketVersioningOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4571,7 +4571,7 @@ func (mr *MockS3APIMockRecorder) PutBucketWebsiteRequest(arg0 any) *gomock.Call 
 }
 
 // PutBucketWebsiteWithContext mocks base method.
-func (m *MockS3API) PutBucketWebsiteWithContext(arg0 context.Context, arg1 *s3.PutBucketWebsiteInput, arg2 ...request.Option) (*s3.PutBucketWebsiteOutput, error) {
+func (m *MockS3API) PutBucketWebsiteWithContext(arg0 aws.Context, arg1 *s3.PutBucketWebsiteInput, arg2 ...request.Option) (*s3.PutBucketWebsiteOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4636,7 +4636,7 @@ func (mr *MockS3APIMockRecorder) PutObjectAclRequest(arg0 any) *gomock.Call {
 }
 
 // PutObjectAclWithContext mocks base method.
-func (m *MockS3API) PutObjectAclWithContext(arg0 context.Context, arg1 *s3.PutObjectAclInput, arg2 ...request.Option) (*s3.PutObjectAclOutput, error) {
+func (m *MockS3API) PutObjectAclWithContext(arg0 aws.Context, arg1 *s3.PutObjectAclInput, arg2 ...request.Option) (*s3.PutObjectAclOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4686,7 +4686,7 @@ func (mr *MockS3APIMockRecorder) PutObjectLegalHoldRequest(arg0 any) *gomock.Cal
 }
 
 // PutObjectLegalHoldWithContext mocks base method.
-func (m *MockS3API) PutObjectLegalHoldWithContext(arg0 context.Context, arg1 *s3.PutObjectLegalHoldInput, arg2 ...request.Option) (*s3.PutObjectLegalHoldOutput, error) {
+func (m *MockS3API) PutObjectLegalHoldWithContext(arg0 aws.Context, arg1 *s3.PutObjectLegalHoldInput, arg2 ...request.Option) (*s3.PutObjectLegalHoldOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4736,7 +4736,7 @@ func (mr *MockS3APIMockRecorder) PutObjectLockConfigurationRequest(arg0 any) *go
 }
 
 // PutObjectLockConfigurationWithContext mocks base method.
-func (m *MockS3API) PutObjectLockConfigurationWithContext(arg0 context.Context, arg1 *s3.PutObjectLockConfigurationInput, arg2 ...request.Option) (*s3.PutObjectLockConfigurationOutput, error) {
+func (m *MockS3API) PutObjectLockConfigurationWithContext(arg0 aws.Context, arg1 *s3.PutObjectLockConfigurationInput, arg2 ...request.Option) (*s3.PutObjectLockConfigurationOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4801,7 +4801,7 @@ func (mr *MockS3APIMockRecorder) PutObjectRetentionRequest(arg0 any) *gomock.Cal
 }
 
 // PutObjectRetentionWithContext mocks base method.
-func (m *MockS3API) PutObjectRetentionWithContext(arg0 context.Context, arg1 *s3.PutObjectRetentionInput, arg2 ...request.Option) (*s3.PutObjectRetentionOutput, error) {
+func (m *MockS3API) PutObjectRetentionWithContext(arg0 aws.Context, arg1 *s3.PutObjectRetentionInput, arg2 ...request.Option) (*s3.PutObjectRetentionOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4851,7 +4851,7 @@ func (mr *MockS3APIMockRecorder) PutObjectTaggingRequest(arg0 any) *gomock.Call 
 }
 
 // PutObjectTaggingWithContext mocks base method.
-func (m *MockS3API) PutObjectTaggingWithContext(arg0 context.Context, arg1 *s3.PutObjectTaggingInput, arg2 ...request.Option) (*s3.PutObjectTaggingOutput, error) {
+func (m *MockS3API) PutObjectTaggingWithContext(arg0 aws.Context, arg1 *s3.PutObjectTaggingInput, arg2 ...request.Option) (*s3.PutObjectTaggingOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4871,7 +4871,7 @@ func (mr *MockS3APIMockRecorder) PutObjectTaggingWithContext(arg0, arg1 any, arg
 }
 
 // PutObjectWithContext mocks base method.
-func (m *MockS3API) PutObjectWithContext(arg0 context.Context, arg1 *s3.PutObjectInput, arg2 ...request.Option) (*s3.PutObjectOutput, error) {
+func (m *MockS3API) PutObjectWithContext(arg0 aws.Context, arg1 *s3.PutObjectInput, arg2 ...request.Option) (*s3.PutObjectOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4921,7 +4921,7 @@ func (mr *MockS3APIMockRecorder) PutPublicAccessBlockRequest(arg0 any) *gomock.C
 }
 
 // PutPublicAccessBlockWithContext mocks base method.
-func (m *MockS3API) PutPublicAccessBlockWithContext(arg0 context.Context, arg1 *s3.PutPublicAccessBlockInput, arg2 ...request.Option) (*s3.PutPublicAccessBlockOutput, error) {
+func (m *MockS3API) PutPublicAccessBlockWithContext(arg0 aws.Context, arg1 *s3.PutPublicAccessBlockInput, arg2 ...request.Option) (*s3.PutPublicAccessBlockOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -4971,7 +4971,7 @@ func (mr *MockS3APIMockRecorder) RestoreObjectRequest(arg0 any) *gomock.Call {
 }
 
 // RestoreObjectWithContext mocks base method.
-func (m *MockS3API) RestoreObjectWithContext(arg0 context.Context, arg1 *s3.RestoreObjectInput, arg2 ...request.Option) (*s3.RestoreObjectOutput, error) {
+func (m *MockS3API) RestoreObjectWithContext(arg0 aws.Context, arg1 *s3.RestoreObjectInput, arg2 ...request.Option) (*s3.RestoreObjectOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -5021,7 +5021,7 @@ func (mr *MockS3APIMockRecorder) SelectObjectContentRequest(arg0 any) *gomock.Ca
 }
 
 // SelectObjectContentWithContext mocks base method.
-func (m *MockS3API) SelectObjectContentWithContext(arg0 context.Context, arg1 *s3.SelectObjectContentInput, arg2 ...request.Option) (*s3.SelectObjectContentOutput, error) {
+func (m *MockS3API) SelectObjectContentWithContext(arg0 aws.Context, arg1 *s3.SelectObjectContentInput, arg2 ...request.Option) (*s3.SelectObjectContentOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -5086,7 +5086,7 @@ func (mr *MockS3APIMockRecorder) UploadPartCopyRequest(arg0 any) *gomock.Call {
 }
 
 // UploadPartCopyWithContext mocks base method.
-func (m *MockS3API) UploadPartCopyWithContext(arg0 context.Context, arg1 *s3.UploadPartCopyInput, arg2 ...request.Option) (*s3.UploadPartCopyOutput, error) {
+func (m *MockS3API) UploadPartCopyWithContext(arg0 aws.Context, arg1 *s3.UploadPartCopyInput, arg2 ...request.Option) (*s3.UploadPartCopyOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -5121,7 +5121,7 @@ func (mr *MockS3APIMockRecorder) UploadPartRequest(arg0 any) *gomock.Call {
 }
 
 // UploadPartWithContext mocks base method.
-func (m *MockS3API) UploadPartWithContext(arg0 context.Context, arg1 *s3.UploadPartInput, arg2 ...request.Option) (*s3.UploadPartOutput, error) {
+func (m *MockS3API) UploadPartWithContext(arg0 aws.Context, arg1 *s3.UploadPartInput, arg2 ...request.Option) (*s3.UploadPartOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -5155,7 +5155,7 @@ func (mr *MockS3APIMockRecorder) WaitUntilBucketExists(arg0 any) *gomock.Call {
 }
 
 // WaitUntilBucketExistsWithContext mocks base method.
-func (m *MockS3API) WaitUntilBucketExistsWithContext(arg0 context.Context, arg1 *s3.HeadBucketInput, arg2 ...request.WaiterOption) error {
+func (m *MockS3API) WaitUntilBucketExistsWithContext(arg0 aws.Context, arg1 *s3.HeadBucketInput, arg2 ...request.WaiterOption) error {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -5188,7 +5188,7 @@ func (mr *MockS3APIMockRecorder) WaitUntilBucketNotExists(arg0 any) *gomock.Call
 }
 
 // WaitUntilBucketNotExistsWithContext mocks base method.
-func (m *MockS3API) WaitUntilBucketNotExistsWithContext(arg0 context.Context, arg1 *s3.HeadBucketInput, arg2 ...request.WaiterOption) error {
+func (m *MockS3API) WaitUntilBucketNotExistsWithContext(arg0 aws.Context, arg1 *s3.HeadBucketInput, arg2 ...request.WaiterOption) error {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -5221,7 +5221,7 @@ func (mr *MockS3APIMockRecorder) WaitUntilObjectExists(arg0 any) *gomock.Call {
 }
 
 // WaitUntilObjectExistsWithContext mocks base method.
-func (m *MockS3API) WaitUntilObjectExistsWithContext(arg0 context.Context, arg1 *s3.HeadObjectInput, arg2 ...request.WaiterOption) error {
+func (m *MockS3API) WaitUntilObjectExistsWithContext(arg0 aws.Context, arg1 *s3.HeadObjectInput, arg2 ...request.WaiterOption) error {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -5254,7 +5254,7 @@ func (mr *MockS3APIMockRecorder) WaitUntilObjectNotExists(arg0 any) *gomock.Call
 }
 
 // WaitUntilObjectNotExistsWithContext mocks base method.
-func (m *MockS3API) WaitUntilObjectNotExistsWithContext(arg0 context.Context, arg1 *s3.HeadObjectInput, arg2 ...request.WaiterOption) error {
+func (m *MockS3API) WaitUntilObjectNotExistsWithContext(arg0 aws.Context, arg1 *s3.HeadObjectInput, arg2 ...request.WaiterOption) error {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
@@ -5303,7 +5303,7 @@ func (mr *MockS3APIMockRecorder) WriteGetObjectResponseRequest(arg0 any) *gomock
 }
 
 // WriteGetObjectResponseWithContext mocks base method.
-func (m *MockS3API) WriteGetObjectResponseWithContext(arg0 context.Context, arg1 *s3.WriteGetObjectResponseInput, arg2 ...request.Option) (*s3.WriteGetObjectResponseOutput, error) {
+func (m *MockS3API) WriteGetObjectResponseWithContext(arg0 aws.Context, arg1 *s3.WriteGetObjectResponseInput, arg2 ...request.Option) (*s3.WriteGetObjectResponseOutput, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1}
 	for _, a := range arg2 {
