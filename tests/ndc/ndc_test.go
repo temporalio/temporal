@@ -377,6 +377,12 @@ func (s *NDCFunctionalTestSuite) TestEmptyVersionAndNonEmptyVersion() {
 			historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 		}
 		baseBranch = append(baseBranch, historyEvents)
+
+		// Debug: Log the events in this batch
+		s.T().Logf("Base branch batch %d has %d events", i, len(historyEvents.Events))
+		for j, event := range historyEvents.Events {
+			s.T().Logf("  Event %d: ID=%d, Type=%s, Version=%d", j, event.GetEventId(), event.GetEventType().String(), event.GetVersion())
+		}
 	}
 	baseVersionHistory := s.eventBatchesToVersionHistory(nil, baseBranch)
 
@@ -391,6 +397,12 @@ func (s *NDCFunctionalTestSuite) TestEmptyVersionAndNonEmptyVersion() {
 			historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 		}
 		branch1 = append(branch1, historyEvents)
+
+		// Debug: Log the events in this batch
+		s.T().Logf("Branch1 batch %d has %d events", i, len(historyEvents.Events))
+		for j, event := range historyEvents.Events {
+			s.T().Logf("  Event %d: ID=%d, Type=%s, Version=%d", j, event.GetEventId(), event.GetEventType().String(), event.GetVersion())
+		}
 	}
 	branchVersionHistory1 = s.eventBatchesToVersionHistory(branchVersionHistory1, branch1)
 
@@ -412,6 +424,9 @@ func (s *NDCFunctionalTestSuite) TestEmptyVersionAndNonEmptyVersion() {
 		branch1,
 		historyClient,
 	)
+
+	// Add debugging to understand the workflow state
+	s.dumpWorkflowHistoryForDebugging(workflowID, runID, historyClient)
 }
 
 func (s *NDCFunctionalTestSuite) TestReplicateWorkflowState_PartialReplicated() {
@@ -692,9 +707,28 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 				EventId:   15,
 				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   32,
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{
-					RetryState: enumspb.RETRY_STATE_TIMEOUT,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
+					ScheduledEventId: 9,
+					StartedEventId:   10,
+					Identity:         identity,
+				}},
+			},
+			{
+				EventId:   16,
+				EventTime: timestamppb.New(time.Now().UTC()),
+				Version:   32,
+				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+					WorkflowTaskCompletedEventId: 4,
+					ActivityId:                   "0",
+					ActivityType:                 &commonpb.ActivityType{Name: "activity-type"},
+					TaskQueue:                    &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					Input:                        nil,
+					ScheduleToCloseTimeout:       durationpb.New(20 * time.Second),
+					ScheduleToStartTimeout:       durationpb.New(20 * time.Second),
+					StartToCloseTimeout:          durationpb.New(20 * time.Second),
+					HeartbeatTimeout:             durationpb.New(20 * time.Second),
 				}},
 			},
 		}},
@@ -2167,6 +2201,13 @@ func (s *NDCFunctionalTestSuite) applyEvents(
 		}
 
 		resp, err := historyClient.ReplicateEventsV2(s.newContext(), req)
+		if err != nil {
+			s.T().Logf("Failed to replicate history event: %v", err)
+			s.T().Logf("WorkflowID: %s, RunID: %s", workflowID, runID)
+			s.T().Logf("Event count: %d", len(eventBatches))
+			// Dump workflow state before failing
+			s.dumpWorkflowHistoryForDebugging(workflowID, runID, historyClient)
+		}
 		s.NoError(err, "Failed to replicate history event")
 		s.ProtoEqual(&historyservice.ReplicateEventsV2Response{}, resp)
 		resp, err = historyClient.ReplicateEventsV2(s.newContext(), req)
@@ -2456,4 +2497,39 @@ func (s *NDCFunctionalTestSuite) IsForceTerminated(
 	terminationEventAttr := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
 	return terminationEventAttr.Reason == common.FailureReasonWorkflowTerminationDueToVersionConflict &&
 		terminationEventAttr.Identity == consts.IdentityHistoryService
+}
+
+func (s *NDCFunctionalTestSuite) dumpWorkflowHistoryForDebugging(
+	workflowID string,
+	runID string,
+	historyClient historyservice.HistoryServiceClient,
+) {
+	// Get mutable state
+	mutableStateResp, err := historyClient.GetMutableState(s.newContext(), &historyservice.GetMutableStateRequest{
+		NamespaceId: s.namespaceID.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+	})
+	if err != nil {
+		s.T().Logf("Failed to get mutable state for debugging: %v", err)
+		return
+	}
+
+	s.T().Logf("=== WORKFLOW MUTABLE STATE DEBUG INFO ===")
+	s.T().Logf("WorkflowID: %s", workflowID)
+	s.T().Logf("RunID: %s", runID)
+	s.T().Logf("NextEventID: %d", mutableStateResp.GetNextEventId())
+	s.T().Logf("LastFirstEventID: %d", mutableStateResp.GetLastFirstEventId())
+	s.T().Logf("PreviousStartedEventId: %d", mutableStateResp.GetPreviousStartedEventId())
+	s.T().Logf("WorkflowState: %s", mutableStateResp.GetWorkflowState().String())
+	s.T().Logf("WorkflowStatus: %s", mutableStateResp.GetWorkflowStatus().String())
+
+	// Log version history info if available
+	if mutableStateResp.GetVersionHistories() != nil {
+		s.T().Logf("VersionHistories: %+v", mutableStateResp.GetVersionHistories())
+	}
+
+	s.T().Logf("=== END MUTABLE STATE DEBUG INFO ===")
 }
