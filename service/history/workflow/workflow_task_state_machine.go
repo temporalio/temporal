@@ -1185,7 +1185,7 @@ func (m *workflowTaskStateMachine) findLastWorkflowTaskFailedEventInBatch(
 			continue
 		}
 	}
-	fmt.Printf("failWorkflowTask: no close events found in batch\n")
+	fmt.Println("failWorkflowTask: no close events found in batch")
 	return nil
 }
 
