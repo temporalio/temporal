@@ -238,6 +238,7 @@ type (
 		// Tracks all events added via the AddHistoryEvent method that is used by the state machine framework.
 		currentTransactionAddedStateMachineEventTypes []enumspb.EventType
 
+		// TODO seankane: store the failure and cause of the last workflow task failure/timedout event
 		lastWorkflowTaskFailureEventID int64
 		lastWorkflowTaskTimeoutEventID int64
 	}
