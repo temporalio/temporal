@@ -314,6 +314,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 		enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 	)
 
+	fmt.Printf("=== EVENT CACHING DEBUG ===\n")
+	fmt.Printf("caching: schedule-to-start timeout event - EventID: %d, Type: %s\n",
+		event.GetEventId(), event.GetEventType())
+	fmt.Printf("caching: workflow key - NamespaceID: %s, WorkflowID: %s, RunID: %s\n",
+		m.ms.GetWorkflowKey().NamespaceID, m.ms.GetWorkflowKey().WorkflowID, m.ms.GetWorkflowKey().RunID)
+	fmt.Println("=== END EVENT CACHING DEBUG ===")
+
 	// Track the timeout event for cache retrieval
 	m.trackWorkflowTaskFailureEvent(event)
 
@@ -841,6 +848,12 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 
 		if event != nil {
 			m.ms.writeEventToCache(event)
+			fmt.Printf("=== EVENT CACHING DEBUG ===\n")
+			fmt.Printf("caching: workflow task failure event - EventID: %d, Type: %s\n",
+				event.GetEventId(), event.GetEventType())
+			fmt.Printf("caching: workflow key - NamespaceID: %s, WorkflowID: %s, RunID: %s\n",
+				m.ms.GetWorkflowKey().NamespaceID, m.ms.GetWorkflowKey().WorkflowID, m.ms.GetWorkflowKey().RunID)
+			fmt.Println("=== END EVENT CACHING DEBUG ===")
 			// Track the failure event for cache retrieval
 			m.trackWorkflowTaskFailureEvent(event)
 		}
@@ -905,6 +918,12 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 		)
 
 		if event != nil {
+			fmt.Printf("=== EVENT CACHING DEBUG ===\n")
+			fmt.Printf("caching: workflow task timeout event - EventID: %d, Type: %s\n",
+				event.GetEventId(), event.GetEventType())
+			fmt.Printf("caching: workflow key - NamespaceID: %s, WorkflowID: %s, RunID: %s\n",
+				m.ms.GetWorkflowKey().NamespaceID, m.ms.GetWorkflowKey().WorkflowID, m.ms.GetWorkflowKey().RunID)
+			fmt.Println("=== END EVENT CACHING DEBUG ===")
 			// Track the timeout event for cache retrieval
 			m.trackWorkflowTaskFailureEvent(event)
 		}
@@ -984,14 +1003,22 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 
 // Update tracking when events are added
 func (m *workflowTaskStateMachine) trackWorkflowTaskFailureEvent(event *historypb.HistoryEvent) {
+	fmt.Printf("=== EVENT TRACKING DEBUG ===\n")
+	fmt.Printf("tracking: event ID: %d, type: %s\n", event.GetEventId(), event.GetEventType())
+	fmt.Printf("tracking: previous failureEventID: %d, timeoutEventID: %d\n",
+		m.ms.lastWorkflowTaskFailureEventID, m.ms.lastWorkflowTaskTimeoutEventID)
+
 	switch event.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
 		m.ms.lastWorkflowTaskFailureEventID = event.GetEventId()
+		fmt.Printf("tracking: updated failureEventID to: %d\n", m.ms.lastWorkflowTaskFailureEventID)
 	case enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
 		m.ms.lastWorkflowTaskTimeoutEventID = event.GetEventId()
+		fmt.Printf("tracking: updated timeoutEventID to: %d\n", m.ms.lastWorkflowTaskTimeoutEventID)
 	default:
-		fmt.Println("trackWorkflowTaskFailureEvent: unknown event type", event.GetEventType())
+		fmt.Printf("tracking: unknown event type: %s (not tracking)\n", event.GetEventType())
 	}
+	fmt.Println("=== END EVENT TRACKING DEBUG ===")
 }
 
 // getWorkflowTaskFailureEventFromCache retrieves workflow task failure events from the events cache
@@ -999,20 +1026,36 @@ func (m *workflowTaskStateMachine) trackWorkflowTaskFailureEvent(event *historyp
 func (m *workflowTaskStateMachine) getWorkflowTaskFailureEventFromCache(
 	lastCompletedWorkflowTaskStartedEventID int64,
 ) (*historypb.HistoryEvent, error) {
+	fmt.Println("=== CACHE RETRIEVAL DEBUG ===")
+
 	// Get the most recent failure event ID from mutable state
 	failureEventID := m.getMostRecentWorkflowTaskFailureEventID()
+	fmt.Printf("cache: most recent failure event ID: %d\n", failureEventID)
+	fmt.Printf("cache: last completed workflow task started event ID: %d\n", lastCompletedWorkflowTaskStartedEventID)
+
 	if failureEventID == common.EmptyEventID {
+		fmt.Println("cache: no workflow task failure event found in tracking fields")
+		fmt.Println("cache: tracking fields - failureEventID:", m.ms.lastWorkflowTaskFailureEventID, "timeoutEventID:", m.ms.lastWorkflowTaskTimeoutEventID)
 		return nil, serviceerror.NewNotFound("no workflow task failure event found")
 	}
 
 	// Get the version for this event ID using version history
 	version := m.ms.GetCurrentVersion() // fallback to current version
+	fmt.Printf("cache: current version (fallback): %d\n", version)
+
 	if m.ms.executionInfo.VersionHistories != nil {
 		if versionHistory, err := versionhistory.GetCurrentVersionHistory(m.ms.executionInfo.VersionHistories); err == nil {
 			if eventVersion, err := versionhistory.GetVersionHistoryEventVersion(versionHistory, failureEventID); err == nil {
 				version = eventVersion
+				fmt.Printf("cache: found version from version history: %d\n", version)
+			} else {
+				fmt.Printf("cache: failed to get version from version history for event %d: %v\n", failureEventID, err)
 			}
+		} else {
+			fmt.Printf("cache: failed to get current version history: %v\n", err)
 		}
+	} else {
+		fmt.Println("cache: no version histories available")
 	}
 
 	wfKey := m.ms.GetWorkflowKey()
@@ -1024,11 +1067,16 @@ func (m *workflowTaskStateMachine) getWorkflowTaskFailureEventFromCache(
 		Version:     version,
 	}
 
+	fmt.Printf("cache: attempting to retrieve event with key: NamespaceID=%s, WorkflowID=%s, RunID=%s, EventID=%d, Version=%d\n",
+		eventKey.NamespaceID, eventKey.WorkflowID, eventKey.RunID, eventKey.EventID, eventKey.Version)
+
 	// Get branch token for the event
 	branchToken, err := m.ms.GetCurrentBranchToken()
 	if err != nil {
+		fmt.Printf("cache: failed to get branch token: %v\n", err)
 		return nil, err
 	}
+	fmt.Printf("cache: branch token length: %d\n", len(branchToken))
 
 	event, err := m.ms.eventsCache.GetEvent(
 		context.TODO(),
@@ -1038,18 +1086,29 @@ func (m *workflowTaskStateMachine) getWorkflowTaskFailureEventFromCache(
 		branchToken,
 	)
 	if err != nil {
+		fmt.Printf("cache: failed to get event from cache: %v\n", err)
 		return nil, err
 	}
 
+	fmt.Printf("cache: successfully retrieved event from cache - EventID: %d, Type: %s\n",
+		event.GetEventId(), event.GetEventType())
+
 	// Verify this is actually a failure event and is after the last completed workflow task
 	if event.GetEventId() <= lastCompletedWorkflowTaskStartedEventID {
+		fmt.Printf("cache: event %d is not after last completed workflow task %d\n",
+			event.GetEventId(), lastCompletedWorkflowTaskStartedEventID)
 		return nil, serviceerror.NewNotFound("failure event is not after last completed workflow task")
 	}
 
 	switch event.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
+		fmt.Printf("cache: returning valid failure event - EventID: %d, Type: %s\n",
+			event.GetEventId(), event.GetEventType())
+		fmt.Println("=== END CACHE RETRIEVAL DEBUG ===")
 		return event, nil
 	default:
+		fmt.Printf("cache: event is not a workflow task failure event - EventID: %d, Type: %s\n",
+			event.GetEventId(), event.GetEventType())
 		return nil, serviceerror.NewNotFound("event is not a workflow task failure event")
 	}
 }
@@ -1060,10 +1119,17 @@ func (m *workflowTaskStateMachine) getMostRecentWorkflowTaskFailureEventID() int
 	failureEventID := m.ms.lastWorkflowTaskFailureEventID
 	timeoutEventID := m.ms.lastWorkflowTaskTimeoutEventID
 
+	fmt.Printf("=== MOST RECENT EVENT ID DEBUG ===\n")
+	fmt.Printf("recent: failureEventID: %d, timeoutEventID: %d\n", failureEventID, timeoutEventID)
+
 	// Return the more recent event ID
 	if failureEventID > timeoutEventID {
+		fmt.Printf("recent: selecting failureEventID: %d (more recent)\n", failureEventID)
+		fmt.Println("=== END MOST RECENT EVENT ID DEBUG ===")
 		return failureEventID
 	}
+	fmt.Printf("recent: selecting timeoutEventID: %d (more recent or equal)\n", timeoutEventID)
+	fmt.Println("=== END MOST RECENT EVENT ID DEBUG ===")
 	return timeoutEventID
 }
 
@@ -1218,9 +1284,15 @@ func (m *workflowTaskStateMachine) getLastWorkflowTaskFailureEvent() (*historypb
 	lastCompletedWorkflowTaskStartedEventID := m.ms.GetLastCompletedWorkflowTaskStartedEventId()
 	fmt.Println("failWorkflowTask: lastCompletedWorkflowTaskStartedEventID", lastCompletedWorkflowTaskStartedEventID)
 
+	fmt.Println("=== CACHE RETRIEVAL ATTEMPT ===")
 	event, err := m.getWorkflowTaskFailureEventFromCache(lastCompletedWorkflowTaskStartedEventID)
 	if err != nil {
-		return nil, err
+		fmt.Printf("failWorkflowTask: cache retrieval failed: %v\n", err)
+		fmt.Println("=== END CACHE RETRIEVAL ATTEMPT ===")
+	} else {
+		fmt.Printf("failWorkflowTask: cache retrieval successful - EventID: %d, Type: %s\n",
+			event.GetEventId(), event.GetEventType())
+		fmt.Println("=== END CACHE RETRIEVAL ATTEMPT ===")
 	}
 
 	// Add more detailed logging
@@ -1237,55 +1309,21 @@ func (m *workflowTaskStateMachine) getLastWorkflowTaskFailureEvent() (*historypb
 	// Print all workflow events for debugging
 	m.printAllWorkflowEvents()
 
+	fmt.Println("=== CACHE RETRIEVAL SUMMARY ===")
+	fmt.Printf("summary: cache retrieval result - success: %t\n", err == nil)
+	if err != nil {
+		fmt.Printf("summary: cache retrieval error: %v\n", err)
+	} else {
+		fmt.Printf("summary: retrieved event - EventID: %d, Type: %s\n",
+			event.GetEventId(), event.GetEventType())
+	}
+	fmt.Printf("summary: tracking state - failureEventID: %d, timeoutEventID: %d\n",
+		m.ms.lastWorkflowTaskFailureEventID, m.ms.lastWorkflowTaskTimeoutEventID)
+	fmt.Printf("summary: workflow state - history size: %d, next event ID: %d\n",
+		history, m.ms.GetNextEventID())
+	fmt.Println("=== END CACHE RETRIEVAL SUMMARY ===")
+
 	return event, nil
-
-	// if lastCompletedWorkflowTaskStartedEventID == common.EmptyEventID {
-	// 	fmt.Println("failWorkflowTask: no prior completed workflow task found")
-	// 	return nil, serviceerror.NewNotFound("no prior workflow task close event found")
-	// }
-
-	// Search through events stored in the history builder's memory
-	// Check memLatestBatch first (current batch being built)
-	// if event := m.findLastWorkflowTaskFailedEventInBatch(m.ms.hBuilder.GetMemLatestBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
-	// 	fmt.Printf("failWorkflowTask: found close event in memLatestBatch - event_id: %d, type: %s\n",
-	// 		event.GetEventId(), event.GetEventType())
-	// 	return event, nil
-	// }
-
-	// // Check memEventsBatches (completed batches)
-	// for i := len(m.ms.hBuilder.GetMemEventsBatches()) - 1; i >= 0; i-- {
-	// 	batch := m.ms.hBuilder.GetMemEventsBatches()[i]
-	// 	if event := m.findLastWorkflowTaskFailedEventInBatch(batch, lastCompletedWorkflowTaskStartedEventID); event != nil {
-	// 		fmt.Printf("failWorkflowTask: found close event in memEventsBatches[%d] - event_id: %d, type: %s\n",
-	// 			i, event.GetEventId(), event.GetEventType())
-	// 		return event, nil
-	// 	}
-	// }
-
-	// // Check memBufferBatch (buffered events)
-	// if event := m.findLastWorkflowTaskFailedEventInBatch(m.ms.hBuilder.GetMemBufferBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
-	// 	fmt.Printf("failWorkflowTask: found close event in memBufferBatch - event_id: %d, type: %s\n",
-	// 		event.GetEventId(), event.GetEventType())
-	// 	return event, nil
-	// }
-
-	// // Check dbBufferBatch (persisted buffer events)
-	// if event := m.findLastWorkflowTaskFailedEventInBatch(m.ms.hBuilder.GetDBBufferBatch(), lastCompletedWorkflowTaskStartedEventID); event != nil {
-	// 	fmt.Printf("failWorkflowTask: found close event in dbBufferBatch - event_id: %d, type: %s\n",
-	// 		event.GetEventId(), event.GetEventType())
-	// 	return event, nil
-	// }
-
-	// fmt.Println("failWorkflowTask: no close events found in any batch")
-
-	// // Print complete workflow history for debugging when no close events are found
-	// fmt.Println("failWorkflowTask: printing complete workflow history for debugging...")
-	// m.printCompleteWorkflowHistory()
-
-	// // This is expected when the last completed workflow task was successful and the current task is failing
-	// // In this case, we don't have a previous close event to reference, which is normal
-	// fmt.Println("failWorkflowTask: this is expected when the last completed workflow task was successful")
-	// return nil, serviceerror.NewNotFound("no prior workflow task close event found")
 }
 
 // findLastWorkflowTaskFailedEventInBatch searches for workflow task close events in a batch of events
