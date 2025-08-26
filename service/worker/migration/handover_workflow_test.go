@@ -72,6 +72,6 @@ func TestHandoverWorkflow_SetTimeout(t *testing.T) {
 
 	var applicationErr *temporal.ApplicationError
 	require.True(t, errors.As(workflowErr, &applicationErr))
-	assert.Equal(t, "InsufficientTimeout", applicationErr.Type())
+	assert.Equal(t, "InvalidTimeout", applicationErr.Type())
 	assert.True(t, applicationErr.NonRetryable())
 }
