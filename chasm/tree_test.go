@@ -2546,7 +2546,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 		ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 			TransitionCount: 1,
 		},
-		Path: "",
+		Path: rootPath,
 		Type: "TestLibrary.test_side_effect_task",
 		Data: &commonpb.DataBlob{
 			Data:         nil,
@@ -2638,7 +2638,7 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 			TransitionCount:          1,
 			NamespaceFailoverVersion: 1,
 		},
-		Path: "",
+		Path: rootPath,
 		Type: "TestLibrary.test_side_effect_task",
 		Data: &commonpb.DataBlob{
 			Data:         nil,
@@ -2684,7 +2684,7 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 
 	// Succeed validation as valid for a sub component.
 	childTaskInfo := taskInfo
-	childTaskInfo.Path = "SubComponent1"
+	childTaskInfo.Path = []string{"SubComponent1"}
 	expectValidate((*TestSubComponent1)(nil), true, nil)
 	task, err = root.ValidateSideEffectTask(ctx, taskAttributes, childTaskInfo)
 	s.NotNil(task)
