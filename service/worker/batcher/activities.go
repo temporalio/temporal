@@ -716,6 +716,11 @@ func startTaskProcessorProtobuf(
 			}
 			var err error
 
+			if task.execution == nil {
+				logger.Error("task execution is nil", tag.WorkflowID(task.execution.WorkflowId), tag.WorkflowRunID(task.execution.RunId))
+				continue
+			}
+
 			switch operation := batchOperation.Request.Operation.(type) {
 			case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 				err = processTask(ctx, limiter, task,
@@ -904,7 +909,6 @@ func processTask(
 	task task,
 	procFn func(*commonpb.WorkflowExecution) error,
 ) error {
-
 	err := limiter.Wait(ctx)
 	if err != nil {
 		return err
