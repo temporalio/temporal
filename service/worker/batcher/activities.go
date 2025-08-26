@@ -717,7 +717,6 @@ func startTaskProcessorProtobuf(
 			var err error
 
 			if task.execution == nil {
-				logger.Error("task execution is nil", tag.WorkflowID(task.execution.WorkflowId), tag.WorkflowRunID(task.execution.RunId))
 				continue
 			}
 
