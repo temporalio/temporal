@@ -63,8 +63,8 @@ func NamespaceHandoverWorkflowV2(ctx workflow.Context, params NamespaceHandoverP
 	workflowInfo := workflow.GetInfo(ctx)
 	if workflowInfo.WorkflowRunTimeout > 0 {
 		return temporal.NewNonRetryableApplicationError(
-			"Workflow run timeout is insufficient for handover process",
-			"InsufficientTimeout",
+			"Workflow run timeout should not be set for handover workflow",
+			"InvalidTimeout",
 			nil,
 		)
 	}
