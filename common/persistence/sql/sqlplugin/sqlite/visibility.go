@@ -190,7 +190,7 @@ func (mdb *db) processRowFromDB(row *sqlplugin.VisibilityRow) error {
 		for saName, saValue := range *row.SearchAttributes {
 			switch typedSaValue := saValue.(type) {
 			case string:
-				if strings.Index(typedSaValue, keywordListSeparator) >= 0 {
+				if strings.Contains(typedSaValue, keywordListSeparator) {
 					// If the string contains the keywordListSeparator, then we need to split it
 					// into a list of keywords.
 					(*row.SearchAttributes)[saName] = strings.Split(typedSaValue, keywordListSeparator)

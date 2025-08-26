@@ -126,15 +126,20 @@ func (c *operationContext) augmentContext(ctx context.Context, header nexus.Head
 		func() string { return c.method },
 	)
 	if userAgent, ok := header[headerUserAgent]; ok {
-		parts := strings.Split(userAgent, clientNameVersionDelim)
-		if len(parts) == 2 {
-			mdIncoming, ok := metadata.FromIncomingContext(ctx)
-			if !ok {
-				mdIncoming = metadata.MD{}
+		// Use SplitN for efficiency but enforce exactly one delimiter to preserve the
+		// original (pre-SplitN) strictness where additional delimiters cause us to ignore
+		// the header instead of coalescing trailing data into the version string.
+		if strings.Count(userAgent, clientNameVersionDelim) == 1 { // exact single occurrence
+			parts := strings.SplitN(userAgent, clientNameVersionDelim, 2)
+			if len(parts) == 2 { // always true given Count==1, kept for defensive clarity
+				mdIncoming, ok := metadata.FromIncomingContext(ctx)
+				if !ok {
+					mdIncoming = metadata.MD{}
+				}
+				mdIncoming.Set(headers.ClientNameHeaderName, parts[0])
+				mdIncoming.Set(headers.ClientVersionHeaderName, parts[1])
+				ctx = metadata.NewIncomingContext(ctx, mdIncoming)
 			}
-			mdIncoming.Set(headers.ClientNameHeaderName, parts[0])
-			mdIncoming.Set(headers.ClientVersionHeaderName, parts[1])
-			ctx = metadata.NewIncomingContext(ctx, mdIncoming)
 		}
 	}
 	return headers.Propagate(ctx)
