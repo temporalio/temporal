@@ -506,6 +506,10 @@ func startTaskProcessor(
 			if isDone(ctx) {
 				return
 			}
+
+			if task.execution == nil {
+				continue
+			}
 			var err error
 
 			switch batchParams.BatchType {
