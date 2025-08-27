@@ -55,7 +55,7 @@ func (s *fileBasedClientSuite) SetupTest() {
 }
 
 func (s *fileBasedClientSuite) TestGetValue() {
-	cvs := s.client.GetValue(testGetBoolPropertyKey)
+	cvs := s.client.GetValue(dynamicconfig.MakeKey(testGetBoolPropertyKey))
 	s.Equal(3, len(cvs))
 	s.ElementsMatch([]dynamicconfig.ConstrainedValue{
 		{Constraints: dynamicconfig.Constraints{}, Value: false},
@@ -65,7 +65,7 @@ func (s *fileBasedClientSuite) TestGetValue() {
 }
 
 func (s *fileBasedClientSuite) TestGetValue_NonExistKey() {
-	cvs := s.client.GetValue(unknownKey)
+	cvs := s.client.GetValue(dynamicconfig.MakeKey(unknownKey))
 	s.Nil(cvs)
 
 	defaultValue := true
@@ -74,7 +74,7 @@ func (s *fileBasedClientSuite) TestGetValue_NonExistKey() {
 }
 
 func (s *fileBasedClientSuite) TestGetValue_CaseInsensitie() {
-	cvs := s.client.GetValue(testCaseInsensitivePropertyKey)
+	cvs := s.client.GetValue(dynamicconfig.MakeKey(testCaseInsensitivePropertyKey))
 	s.Equal(1, len(cvs))
 
 	v := dynamicconfig.NewGlobalBoolSetting(testCaseInsensitivePropertyKey, false, "").Get(s.collection)()
@@ -545,7 +545,7 @@ testGetFloat64PropertyKey:
 func (s *fileBasedClientSuite) TestWarnUnregisteredKey() {
 	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
 
-	lr := dynamicconfig.ValidateFile([]byte(`
+	lr := dynamicconfig.LoadYamlFile([]byte(`
 testGetIntPropertyKey:
 - value: 2000
 testGetFloat64PropertyKey:
@@ -559,7 +559,7 @@ testGetFloat64PropertyKey:
 func (s *fileBasedClientSuite) TestWarnValidationInt() {
 	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
 
-	lr := dynamicconfig.ValidateFile([]byte(`
+	lr := dynamicconfig.LoadYamlFile([]byte(`
 testGetIntPropertyKey:
 - value: not a number
 `))
@@ -571,7 +571,7 @@ testGetIntPropertyKey:
 func (s *fileBasedClientSuite) TestWarnConstraint() {
 	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
 
-	lr := dynamicconfig.ValidateFile([]byte(`
+	lr := dynamicconfig.LoadYamlFile([]byte(`
 testGetIntPropertyKey:
 - value: 5005
   constraints:
@@ -585,7 +585,7 @@ testGetIntPropertyKey:
 func (s *fileBasedClientSuite) TestWarnMultiple() {
 	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
 
-	lr := dynamicconfig.ValidateFile([]byte(`
+	lr := dynamicconfig.LoadYamlFile([]byte(`
 unknownKey:
 - value: "5d"
 testGetIntPropertyKey:
@@ -598,7 +598,7 @@ testGetIntPropertyKey:
 }
 
 func (s *fileBasedClientSuite) TestErrorYamlDecode() {
-	lr := dynamicconfig.ValidateFile([]byte(`}}}}}}}}}`))
+	lr := dynamicconfig.LoadYamlFile([]byte(`}}}}}}}}}`))
 	s.Equal(1, len(lr.Errors))
 	s.ErrorContains(lr.Errors[0], "decode error")
 }
@@ -606,7 +606,7 @@ func (s *fileBasedClientSuite) TestErrorYamlDecode() {
 func (s *fileBasedClientSuite) TestErrorBadConstraint() {
 	dynamicconfig.NewNamespaceBoolSetting(testGetBoolPropertyKey, true, "")
 
-	lr := dynamicconfig.ValidateFile([]byte(`
+	lr := dynamicconfig.LoadYamlFile([]byte(`
 testGetBoolPropertyKey:
 - value: false
   constraints:
@@ -619,7 +619,7 @@ testGetBoolPropertyKey:
 func (s *fileBasedClientSuite) TestErrorBadConstraints() {
 	dynamicconfig.NewTaskQueueBoolSetting(testGetBoolPropertyKey, true, "")
 
-	lr := dynamicconfig.ValidateFile([]byte(`
+	lr := dynamicconfig.LoadYamlFile([]byte(`
 testGetBoolPropertyKey:
 - value: false
   constraints:
