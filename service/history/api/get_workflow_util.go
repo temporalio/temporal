@@ -248,8 +248,6 @@ func GetOrPollMutableState(
 				}
 			case <-longPollCtx.Done():
 				return response, nil
-			case <-ctx.Done():
-				return nil, ctx.Err()
 			}
 		}
 	}
