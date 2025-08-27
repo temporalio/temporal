@@ -3353,7 +3353,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskTimedOutEvent(
 func (ms *MutableStateImpl) ApplyWorkflowTaskTimedOutEvent(
 	timeoutType enumspb.TimeoutType,
 ) error {
-	return ms.workflowTaskManager.ApplyWorkflowTaskTimedOutEventWithoutEvent(timeoutType)
+	return ms.workflowTaskManager.ApplyWorkflowTaskTimedOutEvent(timeoutType)
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskScheduleToStartTimeoutEvent(
@@ -3393,7 +3393,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskFailedEvent() error {
-	return ms.workflowTaskManager.ApplyWorkflowTaskFailedEventWithoutEvent()
+	return ms.workflowTaskManager.ApplyWorkflowTaskFailedEvent()
 }
 
 func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(

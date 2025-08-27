@@ -2451,10 +2451,13 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 		NextPageToken: request.NextPageToken,
 		Query:         request.GetQuery(),
 	}
+	fmt.Println("ListWorkflowExecutions: req", req)
 	persistenceResp, err := wh.visibilityMgr.ListWorkflowExecutions(ctx, req)
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println("ListWorkflowExecutions: persistenceResp.Executions", persistenceResp.Executions)
 
 	return &workflowservice.ListWorkflowExecutionsResponse{
 		Executions:    persistenceResp.Executions,
