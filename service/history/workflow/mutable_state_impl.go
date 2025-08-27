@@ -239,8 +239,8 @@ type (
 		currentTransactionAddedStateMachineEventTypes []enumspb.EventType
 
 		// TODO seankane: store the failure and cause of the last workflow task failure/timedout event
-		lastWorkflowTaskFailureEventID int64
-		lastWorkflowTaskTimeoutEventID int64
+		LastWorkflowTaskFailureCause    string
+		LastWorkflowTaskFailureCategory string
 	}
 
 	lastUpdatedStateTransitionGetter interface {
@@ -5915,6 +5915,9 @@ func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute(
 	if temporalReportedProblems == nil {
 		return nil
 	}
+
+	ms.LastWorkflowTaskFailureCategory = ""
+	ms.LastWorkflowTaskFailureCause = ""
 
 	// Just remove the search attribute entirely for now
 	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: nil})
