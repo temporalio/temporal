@@ -352,7 +352,7 @@ func (s *rescheudulerSuite) TestPriorityOrdering() {
 			return 1
 		case strings.HasPrefix(taskID, "low_"):
 			return 2
-		case strings.HasPrefix(taskID, "preempt"):
+		case strings.HasPrefix(taskID, "preempt_"):
 			return 3
 		default:
 			return 999
