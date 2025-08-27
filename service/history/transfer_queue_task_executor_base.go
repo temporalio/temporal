@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	taskTimeout          = time.Second * 10 * debug.TimeoutMultiplier
+	taskTimeout          = time.Second * 3 * debug.TimeoutMultiplier
 	taskHistoryOpTimeout = 20 * time.Second
 )
 

@@ -270,14 +270,26 @@ func parseCronString(c string) (*schedulepb.StructuredCalendarSpec, *schedulepb.
 
 	// split fields
 	cal := schedulepb.CalendarSpec{Comment: comment}
-	fields := strings.Fields(c)
-	switch len(fields) {
+	// Use FieldsSeq to avoid building an unbounded slice; we only accept 5–7 fields.
+	const maxCronFields = 7
+	var toks [maxCronFields]string
+	n := 0
+	for tok := range strings.FieldsSeq(c) {
+		if n < maxCronFields {
+			toks[n] = tok
+			n++
+			continue
+		}
+		// More than 7 fields → invalid.
+		return nil, nil, "", errors.New("CronString does not have 5-7 fields")
+	}
+	switch n {
 	case 5:
-		cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek = fields[0], fields[1], fields[2], fields[3], fields[4]
+		cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek = toks[0], toks[1], toks[2], toks[3], toks[4]
 	case 6:
-		cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek, cal.Year = fields[0], fields[1], fields[2], fields[3], fields[4], fields[5]
+		cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek, cal.Year = toks[0], toks[1], toks[2], toks[3], toks[4], toks[5]
 	case 7:
-		cal.Second, cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek, cal.Year = fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[6]
+		cal.Second, cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek, cal.Year = toks[0], toks[1], toks[2], toks[3], toks[4], toks[5], toks[6]
 	default:
 		return nil, nil, "", errors.New("CronString does not have 5-7 fields")
 	}
@@ -404,14 +416,22 @@ func makeRange(s, field, def string, minVal, maxVal int, parseMode parseMode) ([
 		return nil, nil // special case for year: all is represented as empty range list
 	}
 	var ranges []*schedulepb.Range
-	for _, part := range strings.Split(s, ",") {
+	for part := range strings.SplitSeq(s, ",") {
 		var err error
 		step := 1
 		hasStep := false
-		if strings.Contains(part, "/") {
-			skipParts := strings.Split(part, "/")
-			if len(skipParts) != 2 {
-				return nil, fmt.Errorf("%s has too many slashes", field)
+		slashes := strings.Count(part, "/")
+		if slashes > 1 {
+			// Inputs like "3/5/7" should yield the canonical "too many slashes" error
+			// (instead of a later strconv parse error) so tests get consistent results.
+			return nil, fmt.Errorf("%s has too many slashes", field)
+		}
+		if slashes == 1 {
+			// A single slash introduces an integer step.
+			skipParts := strings.SplitN(part, "/", 2)
+			// Count==1 guarantees len==2; only need to ensure the right side is non-empty.
+			if skipParts[1] == "" { // e.g. "5/"
+				return nil, fmt.Errorf("%s missing step value", field)
 			}
 			part = skipParts[0]
 			step, err = strconv.Atoi(skipParts[1])
@@ -427,7 +447,13 @@ func makeRange(s, field, def string, minVal, maxVal int, parseMode parseMode) ([
 		start, end := minVal, maxVal
 		if part != "*" {
 			if strings.Contains(part, "-") {
-				rangeParts := strings.Split(part, "-")
+				// Only a single dash is allowed to denote a range (e.g. "1-5").
+				// Inputs with multiple dashes like "1-5-7" should raise the
+				// canonical "too many dashes" error expected by tests.
+				if strings.Count(part, "-") > 1 { // no negative numbers are expected in spec
+					return nil, fmt.Errorf("%s has too many dashes", field)
+				}
+				rangeParts := strings.SplitN(part, "-", 2)
 				if len(rangeParts) != 2 {
 					return nil, fmt.Errorf("%s has too many dashes", field)
 				}

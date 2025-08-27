@@ -1,151 +1,170 @@
-# https://golangci-lint.run/usage/configuration/#config-file
+version: "2"
+
+formatters:
+  enable:
+    - gci
+    - goimports
+
 linters:
-  disable-all: true
+  default: none
   enable:
     - errcheck
-    - goimports
     - importas
-    #  - paralleltest # missing the call to method parallel, but testify does not seem to work well with parallel test: https://github.com/stretchr/testify/issues/187
-    - revive # revive supersedes golint, which is now archived
+    - revive
     - staticcheck
     - govet
     - forbidigo
     - exhaustive
     - godox
-issues:
-  exclude-dirs:
-    - ^api
-    - ^proto
-    - ^.git
-  exclude-rules:
-    - path-except: _test\.go|tests/.+\.go
-      text: "time.Sleep"
-      linters:
-        - forbidigo
-    - path: _test\.go|tests/.+\.go|common/testing/
-      text: "panic"
-      linters:
-        - forbidigo
-    - path: _test\.go|tests/.+\.go|common/testing/
-      text: "(cyclomatic|cognitive)"  # false positives when using subtests
-      linters:
-        - revive
-    - path: _test\.go|tests/.+\.go|common/testing/
-      text: "(dot-imports|unchecked-type-assertion)"  # helpful in tests
-      linters:
-        - revive
-    - path: ^tools\/.+\.go
-      linters:
-        - revive
-linters-settings:
-  godox:
-    keywords:
-      - FIXME # marks TODOs that must be fixed before merging
-  govet:
-    fieldalignment: 0
-  forbidigo:
-    forbid:
-      - p: time.Sleep
-        msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
-      - p: panic
-        msg: "Please avoid using panic in application code"
-  importas:
-    # Enforce the aliases below.
-    no-unaliased: true
-    # Still allow aliases outside of the rules below.
-    no-extra-aliases: false
-    alias:
-      # no pb services (or their mocks) are aliased - must be at the top!
-      - pkg: go.temporal.io(/server)?/api/(\w+)service(mock)?/v1
-        alias: # ie no alias - this can only be specified once!
-      # public API pbs have a suffix
-      - pkg: go.temporal.io/api/(\w+)/v1
-        alias: ${1}pb
-      # internal server pbs have their own suffix to avoid naming conflicts
-      - pkg: go.temporal.io/server/api/(\w+)/v1
-        alias: ${1}spb
-  exhaustive:
-    # Presence of "default" case in switch statements satisfies exhaustiveness,
-    # even if all enum members are not listed.
-    # Default: false
-    default-signifies-exhaustive: true
-  revive:
-    severity: error
-    confidence: 0.8
-    enable-all-rules: true
-    rules:
-      # Disabled rules
-      - name: add-constant
-        disabled: true
-      - name: argument-limit
-        disabled: true
-      - name: bare-return
-        disabled: true
-      - name: banned-characters
-        disabled: true
-      - name: bool-literal-in-expr
-        disabled: true
-      - name: confusing-naming
-        disabled: true
-      - name: empty-lines
-        disabled: true
-      - name: error-naming
-        disabled: true
-      - name: errorf
-        disabled: true
-      - name: exported
-        disabled: true
-      - name: file-header
-        disabled: true
-      - name: function-length
-        disabled: true
-      - name: imports-blacklist
-        disabled: true
-      - name: increment-decrement
-        disabled: true
-      - name: line-length-limit
-        disabled: true
-      - name: max-public-structs
-        disabled: true
-      - name: nested-structs
-        disabled: true
-      - name: package-comments
-        disabled: true
-      - name: string-format
-        disabled: true
-      - name: unexported-naming
-        disabled: true
-      - name: unexported-return
-        disabled: true
-      - name: unused-parameter
-        disabled: true
-      - name: unused-receiver
-        disabled: true
-      - name: use-any
-        disabled: true
-      - name: var-naming
-        disabled: true
-      - name: empty-block
-        disabled: true
-      - name: flag-parameter
-        disabled: true
-      - name: unnecessary-stmt
-        disabled: true
-      - name: range-val-in-closure
-        disabled: true
+  settings:
+    staticcheck:
+      checks:
+        - "all"
+        - "-ST1000" # disable: package comment is missing
+    godox:
+      keywords:
+        - FIXME
+    govet:
+      disable:
+        - fieldalignment
+    forbidigo:
+      forbid:
+        - pattern: time.Sleep
+          msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
+        - pattern: panic
+          msg: "Please avoid using panic in application code"
+    importas:
+      # Enforce the aliases below.
+      no-unaliased: true
+      # Still allow aliases outside of the rules below.
+      no-extra-aliases: false
+      alias:
+        # no pb services (or their mocks) are aliased - must be at the top!
+        - pkg: go.temporal.io(/server)?/api/(\w+)service(mock)?/v1
+          alias: "" # ie no alias - this can only be specified once! public API pbs have a suffix
+        - pkg: go.temporal.io/api/(\w+)/v1
+          alias: ${1}pb
+        # internal server pbs have their own suffix to avoid naming conflicts
+        - pkg: go.temporal.io/server/api/(\w+)/v1
+          alias: ${1}spb
+    exhaustive:
+      # Presence of "default" case in switch statements satisfies exhaustiveness,
+      # even if all enum members are not listed.
+      # Default: false
+      default-signifies-exhaustive: true
+    revive:
+      severity: error
+      confidence: 0.8
+      enable-all-rules: true
+      rules:
+        # Disabled rules
+        - name: add-constant
+          disabled: true
+        - name: argument-limit
+          disabled: true
+        - name: bare-return
+          disabled: true
+        - name: banned-characters
+          disabled: true
+        - name: bool-literal-in-expr
+          disabled: true
+        - name: confusing-naming
+          disabled: true
+        - name: empty-lines
+          disabled: true
+        - name: error-naming
+          disabled: true
+        - name: errorf
+          disabled: true
+        - name: exported
+          disabled: true
+        - name: file-header
+          disabled: true
+        - name: function-length
+          disabled: true
+        - name: imports-blocklist
+          disabled: true
+        - name: increment-decrement
+          disabled: true
+        - name: line-length-limit
+          disabled: true
+        - name: max-public-structs
+          disabled: true
+        - name: nested-structs
+          disabled: true
+        - name: package-comments
+          disabled: true
+        - name: string-format
+          disabled: true
+        - name: unexported-naming
+          disabled: true
+        - name: unexported-return
+          disabled: true
+        - name: unused-parameter
+          disabled: true
+        - name: unused-receiver
+          disabled: true
+        - name: use-any
+          disabled: true
+        - name: var-naming
+          disabled: true
+        - name: empty-block
+          disabled: true
+        - name: flag-parameter
+          disabled: true
+        - name: unnecessary-stmt
+          disabled: true
+        - name: range-val-in-closure
+          disabled: true
 
-      # Rule tuning
-      - name: cognitive-complexity
-        arguments:
-          - 25
-      - name: cyclomatic
-        arguments:
-          - 25
-      - name: function-result-limit
-        arguments:
-          - 5
-      - name: unhandled-error
-        arguments:
-          - "fmt.*"
-          - "bytes.Buffer.*"
-          - "strings.Builder.*"
+        # Rule tuning
+        - name: cognitive-complexity
+          arguments:
+            - 25
+        - name: cyclomatic
+          arguments:
+            - 25
+        - name: function-result-limit
+          arguments:
+            - 5
+        - name: unhandled-error
+          arguments:
+            - "fmt.*"
+            - "bytes.Buffer.*"
+            - "strings.Builder.*"
+  exclusions:
+    paths:
+      - ^api
+      - ^proto
+      - ^.git
+    rules:
+      - path-except: _test\.go|tests/.+\.go
+        text: "time.Sleep"
+        linters:
+          - forbidigo
+      - path: _test\.go|tests/.+\.go|common/testing/
+        text: "panic"
+        linters:
+          - forbidigo
+      - path: _test\.go|tests/.+\.go|common/testing/
+        text: "(cyclomatic|cognitive)" # false positives when using subtests
+        linters:
+          - revive
+      - path: _test\.go|tests/.+\.go|common/testing/
+        text: "(dot-imports|unchecked-type-assertion)" # helpful in tests
+        linters:
+          - revive
+      - path: ^tools\/.+\.go
+        linters:
+          - revive
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+run:
+  timeout: 10m
+  modules-download-mode: readonly
+
+output:
+  sort-order:
+    - file

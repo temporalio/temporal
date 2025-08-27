@@ -426,15 +426,15 @@ func (mr *MockEngineMockRecorder) NotifyNewHistoryEvent(event any) *gomock.Call 
 }
 
 // NotifyNewTasks mocks base method.
-func (m *MockEngine) NotifyNewTasks(tasks map[tasks.Category][]tasks.Task) {
+func (m *MockEngine) NotifyNewTasks(arg0 map[tasks.Category][]tasks.Task) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewTasks", tasks)
+	m.ctrl.Call(m, "NotifyNewTasks", arg0)
 }
 
 // NotifyNewTasks indicates an expected call of NotifyNewTasks.
-func (mr *MockEngineMockRecorder) NotifyNewTasks(tasks any) *gomock.Call {
+func (mr *MockEngineMockRecorder) NotifyNewTasks(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTasks), tasks)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTasks), arg0)
 }
 
 // PauseActivity mocks base method.
@@ -513,17 +513,17 @@ func (mr *MockEngineMockRecorder) QueryWorkflow(ctx, request any) *gomock.Call {
 }
 
 // ReapplyEvents mocks base method.
-func (m *MockEngine) ReapplyEvents(ctx context.Context, namespaceUUID namespace.ID, workflowID, runID string, events []*history.HistoryEvent) error {
+func (m *MockEngine) ReapplyEvents(ctx context.Context, namespaceUUID namespace.ID, workflowID, runID string, arg4 []*history.HistoryEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, namespaceUUID, workflowID, runID, events)
+	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, namespaceUUID, workflowID, runID, arg4)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ReapplyEvents indicates an expected call of ReapplyEvents.
-func (mr *MockEngineMockRecorder) ReapplyEvents(ctx, namespaceUUID, workflowID, runID, events any) *gomock.Call {
+func (mr *MockEngineMockRecorder) ReapplyEvents(ctx, namespaceUUID, workflowID, runID, arg4 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockEngine)(nil).ReapplyEvents), ctx, namespaceUUID, workflowID, runID, events)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockEngine)(nil).ReapplyEvents), ctx, namespaceUUID, workflowID, runID, arg4)
 }
 
 // RebuildMutableState mocks base method.
