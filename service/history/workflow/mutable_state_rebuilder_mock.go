@@ -45,16 +45,16 @@ func (m *MockMutableStateRebuilder) EXPECT() *MockMutableStateRebuilderMockRecor
 }
 
 // ApplyEvents mocks base method.
-func (m *MockMutableStateRebuilder) ApplyEvents(ctx context.Context, namespaceID namespace.ID, requestID string, execution *common.WorkflowExecution, history [][]*history.HistoryEvent, newRunHistory []*history.HistoryEvent, newRunID string) (interfaces.MutableState, error) {
+func (m *MockMutableStateRebuilder) ApplyEvents(ctx context.Context, namespaceID namespace.ID, requestID string, execution *common.WorkflowExecution, arg4 [][]*history.HistoryEvent, newRunHistory []*history.HistoryEvent, newRunID string) (interfaces.MutableState, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ApplyEvents", ctx, namespaceID, requestID, execution, history, newRunHistory, newRunID)
+	ret := m.ctrl.Call(m, "ApplyEvents", ctx, namespaceID, requestID, execution, arg4, newRunHistory, newRunID)
 	ret0, _ := ret[0].(interfaces.MutableState)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ApplyEvents indicates an expected call of ApplyEvents.
-func (mr *MockMutableStateRebuilderMockRecorder) ApplyEvents(ctx, namespaceID, requestID, execution, history, newRunHistory, newRunID any) *gomock.Call {
+func (mr *MockMutableStateRebuilderMockRecorder) ApplyEvents(ctx, namespaceID, requestID, execution, arg4, newRunHistory, newRunID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyEvents", reflect.TypeOf((*MockMutableStateRebuilder)(nil).ApplyEvents), ctx, namespaceID, requestID, execution, history, newRunHistory, newRunID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyEvents", reflect.TypeOf((*MockMutableStateRebuilder)(nil).ApplyEvents), ctx, namespaceID, requestID, execution, arg4, newRunHistory, newRunID)
 }
