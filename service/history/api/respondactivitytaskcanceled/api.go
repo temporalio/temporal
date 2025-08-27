@@ -116,7 +116,7 @@ func Invoke(
 			namespace,
 			taskQueue,
 			workflow.ActivityCompletionMetrics{
-				State:              workflow.ActivityStateCanceled,
+				Status:             workflow.ActivityStatusCanceled,
 				AttemptStartedTime: attemptStartedTime,
 				FirstScheduledTime: firstScheduledTime,
 				Closed:             true,

@@ -135,19 +135,19 @@ func GetPerTaskQueueFamilyScope(
 	)
 }
 
-type ActivityExecutionState int
+type ActivityExecutionStatus int
 
 const (
-	ActivityStateUnknown ActivityExecutionState = iota
-	ActivityStateSucceeded
-	ActivityStateFailed
-	ActivityStateCanceled
-	ActivityStateTimeout
+	ActivityStatusUnknown ActivityExecutionStatus = iota
+	ActivityStatusSucceeded
+	ActivityStatusFailed
+	ActivityStatusCanceled
+	ActivityStatusTimeout
 )
 
 type ActivityCompletionMetrics struct {
-	// State determines whether the activity succeeded, and whether it is/will be retried
-	State ActivityExecutionState
+	// Status determines whether the activity succeeded, and whether it is/will be retried
+	Status ActivityExecutionStatus
 	// AttemptStartedTime is the start time of the current attempt
 	AttemptStartedTime time.Time
 	// FirstScheduledTime is the scheduled time of the first attempt
@@ -162,7 +162,7 @@ func RecordActivityCompletionMetrics(
 	shard historyi.ShardContext,
 	namespaceName namespace.Name,
 	taskQueue string,
-	metricsState ActivityCompletionMetrics,
+	completion ActivityCompletionMetrics,
 	tags ...metrics.Tag,
 ) {
 	metricsHandler := GetPerTaskQueueFamilyScope(
@@ -173,33 +173,33 @@ func RecordActivityCompletionMetrics(
 		tags...,
 	)
 
-	if !metricsState.AttemptStartedTime.IsZero() {
-		latency := time.Since(metricsState.AttemptStartedTime)
+	if !completion.AttemptStartedTime.IsZero() && completion.Status != ActivityStatusTimeout {
+		latency := time.Since(completion.AttemptStartedTime)
 		// ActivityE2ELatency is deprecated due to its inaccurate naming. It captures the attempt duration instead of an end-to-end duration as its name suggests. For now record both metrics
 		metrics.ActivityE2ELatency.With(metricsHandler).Record(latency)
 		metrics.ActivityStartToCloseLatency.With(metricsHandler).Record(latency)
 	}
 
 	// Record true end-to-end duration only for terminal states (includes retries and backoffs)
-	if metricsState.Closed && !metricsState.FirstScheduledTime.IsZero() {
-		scheduleToCloseLatency := time.Since(metricsState.FirstScheduledTime)
+	if completion.Closed && !completion.FirstScheduledTime.IsZero() {
+		scheduleToCloseLatency := time.Since(completion.FirstScheduledTime)
 		metrics.ActivityScheduleToCloseLatency.With(metricsHandler).Record(scheduleToCloseLatency)
 	}
 
-	switch metricsState.State {
-	case ActivityStateFailed:
+	switch completion.Status {
+	case ActivityStatusFailed:
 		metrics.ActivityTaskFail.With(metricsHandler).Record(1)
-		if metricsState.Closed {
+		if completion.Closed {
 			metrics.ActivityFail.With(metricsHandler).Record(1)
 		}
-	case ActivityStateCanceled:
+	case ActivityStatusCanceled:
 		metrics.ActivityCancel.With(metricsHandler).Record(1)
-	case ActivityStateSucceeded:
+	case ActivityStatusSucceeded:
 		metrics.ActivitySuccess.With(metricsHandler).Record(1)
-	case ActivityStateTimeout:
-		metrics.ActivityTaskTimeout.With(metricsHandler).Record(1, metrics.StringTag("timeout_type", metricsState.TimerType.String()))
-		if metricsState.Closed {
-			metrics.ActivityTimeout.With(metricsHandler).Record(1, metrics.StringTag("timeout_type", metricsState.TimerType.String()))
+	case ActivityStatusTimeout:
+		metrics.ActivityTaskTimeout.With(metricsHandler).Record(1, metrics.StringTag("timeout_type", completion.TimerType.String()))
+		if completion.Closed {
+			metrics.ActivityTimeout.With(metricsHandler).Record(1, metrics.StringTag("timeout_type", completion.TimerType.String()))
 		}
 	default:
 		// Do nothing

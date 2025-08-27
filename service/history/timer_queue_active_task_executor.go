@@ -301,7 +301,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		namespace.Name(mutableState.GetNamespaceEntry().Name()),
 		ai.TaskQueue,
 		workflow.ActivityCompletionMetrics{
-			State:              workflow.ActivityStateTimeout,
+			Status:             workflow.ActivityStatusTimeout,
 			AttemptStartedTime: timestamp.TimeValue(ai.StartedTime),
 			FirstScheduledTime: timestamp.TimeValue(ai.FirstScheduledTime),
 			Closed:             retryState != enumspb.RETRY_STATE_IN_PROGRESS,

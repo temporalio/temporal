@@ -131,7 +131,7 @@ func Invoke(
 			workflow.ActivityCompletionMetrics{
 				AttemptStartedTime: attemptStartedTime,
 				FirstScheduledTime: firstScheduledTime,
-				State:              workflow.ActivityStateSucceeded,
+				Status:             workflow.ActivityStatusSucceeded,
 				Closed:             true,
 			},
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope),

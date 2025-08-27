@@ -129,7 +129,7 @@ func Invoke(
 		completionMetrics := workflow.ActivityCompletionMetrics{
 			AttemptStartedTime: attemptStartedTime,
 			FirstScheduledTime: firstScheduledTime,
-			State:              workflow.ActivityStateFailed,
+			Status:             workflow.ActivityStatusFailed,
 			Closed:             closed,
 		}
 
