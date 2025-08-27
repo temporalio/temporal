@@ -3326,9 +3326,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 		return nil, serviceerror.NewInvalidArgument("deployment name cannot be empty")
 	}
 
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	versionStr := request.GetVersion()
-	if versionStr == "" {
+	if request.GetVersion() == "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 		var v *deploymentspb.WorkerDeploymentVersion
 		if request.GetBuildId() != "" { // versioned
 			v = &deploymentspb.WorkerDeploymentVersion{
@@ -3336,10 +3334,10 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 				BuildId:        request.GetBuildId(),
 			}
 		}
-		versionStr = worker_versioning.WorkerDeploymentVersionToStringV31(v)
+		request.Version = worker_versioning.WorkerDeploymentVersionToStringV31(v) //nolint:staticcheck // SA1019: worker versioning v0.31
 	}
 
-	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.Identity, request.IgnoreMissingTaskQueues, request.GetConflictToken())
+	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request)
 	if err != nil {
 		if common.IsResourceExhausted(err) {
 			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManySetCurrentVersionRequests)
@@ -3374,20 +3372,19 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		return nil, err
 	}
 
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	versionStr := request.GetVersion()
-	if versionStr == "" {
+	if request.GetVersion() == "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 		// If v0.31 user is trying to unset the ramp, let them do it until we update the deployment manager.
 		// We know it's unsetting the ramp if Build ID is "" and percentage is 0.
 
 		// This is a v0.32 user trying to ramp to unversioned.
 		if request.GetBuildId() == "" && request.GetPercentage() > 0 {
-			versionStr = worker_versioning.UnversionedVersionId
+			request.Version = worker_versioning.UnversionedVersionId //nolint:staticcheck // SA1019: worker versioning v0.31
 		}
 
 		// This is a v0.32 user trying to ramp up a version. We don't care what percentage it is.
 		if request.GetBuildId() != "" {
-			versionStr = worker_versioning.WorkerDeploymentVersionToStringV31(&deploymentspb.WorkerDeploymentVersion{
+			//nolint:staticcheck // SA1019: worker versioning v0.31
+			request.Version = worker_versioning.WorkerDeploymentVersionToStringV31(&deploymentspb.WorkerDeploymentVersion{
 				DeploymentName: request.GetDeploymentName(),
 				BuildId:        request.GetBuildId(),
 			})
@@ -3398,7 +3395,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		return nil, serviceerror.NewInvalidArgument("Percentage must be between 0 and 100 (inclusive)")
 	}
 
-	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.GetPercentage(), request.GetIdentity(), request.IgnoreMissingTaskQueues, request.GetConflictToken())
+	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request)
 	if err != nil {
 		if common.IsResourceExhausted(err) {
 			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManySetRampingVersionRequests)
