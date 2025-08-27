@@ -9,6 +9,8 @@ mockgen -package "$GOPACKAGE" go.temporal.io/sdk/client Client | \
 mockgen -package "$GOPACKAGE" go.temporal.io/sdk/worker Worker | \
   sed -e 's,internal.RegisterWorkflowOptions,workflow.RegisterOptions,g' \
       -e 's,internal.RegisterActivityOptions,activity.RegisterOptions,g' \
+      -e 's,internal.DynamicRegisterWorkflowOptions,workflow.DynamicRegisterOptions,g' \
+      -e 's,internal.DynamicRegisterActivityOptions,activity.DynamicRegisterOptions,g' \
       -e 's,internal "go.temporal.io/sdk/internal",activity "go.temporal.io/sdk/activity"\n\tworkflow "go.temporal.io/sdk/workflow",' | \
   goimports > worker_mock.go
 

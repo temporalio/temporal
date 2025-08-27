@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	metricsspb "go.temporal.io/server/api/metrics/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/testing/rpctest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -36,7 +37,7 @@ func (s *grpcSuite) TearDownTest() {}
 func (s *grpcSuite) TestMetadataMetricInjection() {
 	logger := log.NewMockLogger(s.controller)
 	ctx := context.Background()
-	ssts := newMockServerTransportStream()
+	ssts := rpctest.NewMockServerTransportStream("/temporal.test/MetadataMetricInjection")
 	ctx = grpc.NewContextWithServerTransportStream(ctx, ssts)
 	anyMetricName := "any_metric_name"
 
@@ -73,8 +74,9 @@ func (s *grpcSuite) TestMetadataMetricInjection() {
 			)
 
 			s.Nil(err)
-			s.Equal(len(ssts.trailers), 1)
-			propagationContextBlobs := ssts.trailers[0].Get(metricsTrailerKey)
+			trailers := ssts.CapturedTrailers()
+			s.Equal(1, len(trailers))
+			propagationContextBlobs := trailers[0].Get(metricsTrailerKey)
 			s.NotNil(propagationContextBlobs)
 			s.Equal(1, len(propagationContextBlobs))
 			baggage := &metricsspb.Baggage{}
@@ -93,7 +95,7 @@ func (s *grpcSuite) TestMetadataMetricInjection() {
 func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 	logger := log.NewMockLogger(s.controller)
 	ctx := context.Background()
-	ssts := newMockServerTransportStream()
+	ssts := rpctest.NewMockServerTransportStream("/temporal.test/MetadataMetricInjectionNoMetric")
 	ctx = grpc.NewContextWithServerTransportStream(ctx, ssts)
 
 	smcii := NewServerMetricsContextInjectorInterceptor()
@@ -128,8 +130,9 @@ func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 			)
 
 			s.Nil(err)
-			s.Equal(len(ssts.trailers), 1)
-			propagationContextBlobs := ssts.trailers[0].Get(metricsTrailerKey)
+			trailers := ssts.CapturedTrailers()
+			s.Equal(1, len(trailers))
+			propagationContextBlobs := trailers[0].Get(metricsTrailerKey)
 			s.NotNil(propagationContextBlobs)
 			s.Equal(1, len(propagationContextBlobs))
 			baggage := &metricsspb.Baggage{}
@@ -161,27 +164,4 @@ func (s *grpcSuite) TestContextCounterAdd() {
 func (s *grpcSuite) TestContextCounterAddNoMetricsContext() {
 	testCounterName := "test_counter"
 	ContextCounterAdd(context.Background(), testCounterName, 3)
-}
-
-func newMockServerTransportStream() *mockServerTransportStream {
-	return &mockServerTransportStream{trailers: []*metadata.MD{}}
-}
-
-type mockServerTransportStream struct {
-	trailers []*metadata.MD
-}
-
-func (s *mockServerTransportStream) Method() string {
-	return "mockssts"
-}
-func (s *mockServerTransportStream) SetHeader(md metadata.MD) error {
-	return nil
-}
-func (s *mockServerTransportStream) SendHeader(md metadata.MD) error {
-	return nil
-}
-func (s *mockServerTransportStream) SetTrailer(md metadata.MD) error {
-	mdCopy := md.Copy()
-	s.trailers = append(s.trailers, &mdCopy)
-	return nil
 }

@@ -3,6 +3,7 @@ package xdc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,6 +25,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -66,10 +69,15 @@ func TestNexusRequestForwardingTestSuite(t *testing.T) {
 }
 
 func (s *NexusRequestForwardingSuite) SetupSuite() {
+	re, err := dynamicconfig.ConvertWildcardStringListToRegexp([]string{"internal-test-*"})
+	if err != nil {
+		panic(err)
+	}
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                               1 * time.Millisecond,
+		dynamicconfig.FrontendNexusRequestHeadersBlacklist.Key():                       dynamicconfig.GetTypedPropertyFn(re),
 		callbacks.AllowedAddresses.Key():                                               []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
 	s.setupSuite()
@@ -86,6 +94,21 @@ func (s *NexusRequestForwardingSuite) TearDownSuite() {
 // Only tests dispatch by namespace+task_queue.
 // TODO: Add test cases for dispatch by endpoint ID once endpoints support replication.
 func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToActive() {
+	// Custom auth logic used to verify that headers removed when processing the initial request are still forwarded.
+	testAuthHeader := "internal-test-auth-header"
+	onAuth := func(ctx context.Context, claims *authorization.Claims, target *authorization.CallTarget) (authorization.Result, error) {
+		dispatchNexusRequest, ok := target.Request.(*matchingservice.DispatchNexusTaskRequest)
+		if ok {
+			if _, set := dispatchNexusRequest.Request.Header[testAuthHeader]; !set {
+				return authorization.Result{}, errors.New("auth header not set")
+			}
+			delete(dispatchNexusRequest.Request.Header, testAuthHeader)
+		}
+		return authorization.Result{Decision: authorization.DecisionAllow}, nil
+	}
+	s.clusters[0].Host().SetOnAuthorize(onAuth)
+	s.clusters[1].Host().SetOnAuthorize(onAuth)
+
 	ns := s.createGlobalNamespace()
 
 	testCases := []struct {
@@ -100,6 +123,8 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				_, ok := res.Request.Header[testAuthHeader]
+				s.Falsef(ok, "expected test auth header to be stripped")
 				return &nexuspb.Response{
 					Variant: &nexuspb.Response_StartOperation{
 						StartOperation: &nexuspb.StartOperationResponse{
@@ -120,6 +145,8 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				_, ok := res.Request.Header[testAuthHeader]
+				s.Falsef(ok, "expected test auth header to be stripped")
 				return &nexuspb.Response{
 					Variant: &nexuspb.Response_StartOperation{
 						StartOperation: &nexuspb.StartOperationResponse{
@@ -154,6 +181,8 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				_, ok := res.Request.Header[testAuthHeader]
+				s.Falsef(ok, "expected test auth header to be stripped")
 				return nil, &nexuspb.HandlerError{
 					ErrorType: string(nexus.HandlerErrorTypeInternal),
 					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
@@ -171,7 +200,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 		{
 			name:      "redirect disabled by header",
 			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
-			header:    nexus.Header{"xdc-redirection": "false"},
+			header:    nexus.Header{"xdc-redirection": "false", testAuthHeader: "stripped"},
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				s.FailNow("nexus task handler invoked when redirection should be disabled")
 				return nil, &nexuspb.HandlerError{
@@ -192,8 +221,12 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
+			caller := func(req *http.Request) (*http.Response, error) {
+				req.Header.Set(testAuthHeader, "stripped")
+				return http.DefaultClient.Do(req)
+			}
 			dispatchURL := fmt.Sprintf("http://%s/%s", s.clusters[1].Host().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
-			nexusClient, err := nexus.NewHTTPClient(nexus.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
+			nexusClient, err := nexus.NewHTTPClient(nexus.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service", HTTPCaller: caller})
 			s.NoError(err)
 
 			activeMetricsHandler, ok := s.clusters[0].Host().GetMetricsHandler().(*metricstest.CaptureHandler)
@@ -224,6 +257,21 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 // Only tests dispatch by namespace+task_queue.
 // TODO: Add test cases for dispatch by endpoint ID once endpoints support replication.
 func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToActive() {
+	// Custom auth logic used to verify that headers removed when processing the initial request are still forwarded.
+	testAuthHeader := "internal-test-auth-header"
+	onAuth := func(ctx context.Context, claims *authorization.Claims, target *authorization.CallTarget) (authorization.Result, error) {
+		dispatchNexusRequest, ok := target.Request.(*matchingservice.DispatchNexusTaskRequest)
+		if ok {
+			if _, set := dispatchNexusRequest.Request.Header[testAuthHeader]; !set {
+				return authorization.Result{}, errors.New("auth header not set")
+			}
+			delete(dispatchNexusRequest.Request.Header, testAuthHeader)
+		}
+		return authorization.Result{Decision: authorization.DecisionAllow}, nil
+	}
+	s.clusters[0].Host().SetOnAuthorize(onAuth)
+	s.clusters[1].Host().SetOnAuthorize(onAuth)
+
 	ns := s.createGlobalNamespace()
 
 	testCases := []struct {
@@ -238,6 +286,8 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				_, ok := res.Request.Header[testAuthHeader]
+				s.Falsef(ok, "expected test auth header to be stripped")
 				return &nexuspb.Response{
 					Variant: &nexuspb.Response_CancelOperation{
 						CancelOperation: &nexuspb.CancelOperationResponse{},
@@ -255,6 +305,8 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				s.Equal("true", res.Request.Header["xdc-redirection-api"])
+				_, ok := res.Request.Header[testAuthHeader]
+				s.Falsef(ok, "expected test auth header to be stripped")
 				return nil, &nexuspb.HandlerError{
 					ErrorType: string(nexus.HandlerErrorTypeInternal),
 					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
@@ -293,8 +345,12 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
+			caller := func(req *http.Request) (*http.Response, error) {
+				req.Header.Set(testAuthHeader, "stripped")
+				return http.DefaultClient.Do(req)
+			}
 			dispatchURL := fmt.Sprintf("http://%s/%s", s.clusters[1].Host().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
-			nexusClient, err := nexus.NewHTTPClient(nexus.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
+			nexusClient, err := nexus.NewHTTPClient(nexus.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service", HTTPCaller: caller})
 			s.NoError(err)
 
 			activeMetricsHandler, ok := s.clusters[0].Host().GetMetricsHandler().(*metricstest.CaptureHandler)

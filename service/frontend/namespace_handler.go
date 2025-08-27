@@ -880,6 +880,7 @@ func (d *namespaceHandler) createResponse(
 	replicationConfigResult := &replicationpb.NamespaceReplicationConfig{
 		ActiveClusterName: replicationConfig.ActiveClusterName,
 		Clusters:          clusters,
+		State:             replicationConfig.State,
 	}
 
 	var failoverHistory []*replicationpb.FailoverStatus

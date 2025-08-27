@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -100,7 +101,6 @@ type (
 	matcherInterface interface {
 		Start()
 		Stop()
-		Rate() float64
 		Poll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		PollForQuery(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		OfferQuery(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error)
@@ -186,7 +186,6 @@ func newPhysicalTaskQueueManager(
 			pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
 		})
 	}
-
 	if fairness {
 		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagFairness)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagFairness)
@@ -224,6 +223,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.taskValidator,
 			pqMgr.logger,
 			newFairMetricsHandler(taggedMetricsHandler),
+			partitionMgr.rateLimitManager,
 			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
@@ -266,6 +266,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.taskValidator,
 			pqMgr.logger,
 			newPriMetricsHandler(taggedMetricsHandler),
+			partitionMgr.rateLimitManager,
 			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
@@ -372,14 +373,6 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	if c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
 		if err = c.ensureRegisteredInDeploymentVersion(ctx, namespaceEntry, pollMetadata); err != nil {
 			return nil, err
-		}
-	}
-
-	// If the priority matcher is enabled, use the rate limiter defined in the priority matcher.
-	// TODO(pri): remove this once we have a way to set the partition-scoped rate limiter for the priority matcher.
-	if rps := pollMetadata.taskQueueMetadata.GetMaxTasksPerSecond(); rps != nil {
-		if c.priMatcher != nil {
-			c.priMatcher.UpdateRatelimit(rps.Value)
 		}
 	}
 
@@ -544,7 +537,9 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	}
 	if includeTaskQueueStatus {
 		response.DescResponse.TaskQueueStatus = c.backlogMgr.BacklogStatus()
-		response.DescResponse.TaskQueueStatus.RatePerSecond = c.matcher.Rate()
+		rps, _ := c.partitionMgr.GetRateLimitManager().GetEffectiveRPSAndSource()
+		//nolint:staticcheck // SA1019: using deprecated TaskQueueStatus for legacy compatibility
+		response.DescResponse.TaskQueueStatus.RatePerSecond = rps
 	}
 	return response
 }
@@ -588,7 +583,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 		return c.priMatcher.Offer(ctx, task)
 	}
 
-	childCtx, cancel := newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
+	childCtx, cancel := contextutil.WithDeadlineBuffer(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 	defer cancel()
 
 	return c.oldMatcher.Offer(childCtx, task)
@@ -697,31 +692,6 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 
 	c.deploymentVersionRegistered = true
 	return nil
-}
-
-// newChildContext creates a child context with desired timeout.
-// if tailroom is non-zero, then child context timeout will be
-// the minOf(parentCtx.Deadline()-tailroom, timeout). Use this
-// method to create child context when childContext cannot use
-// all of parent's deadline but instead there is a need to leave
-// some time for parent to do some post-work
-func newChildContext(
-	parent context.Context,
-	timeout time.Duration,
-	tailroom time.Duration,
-) (context.Context, context.CancelFunc) {
-	if parent.Err() != nil {
-		return parent, func() {}
-	}
-	deadline, ok := parent.Deadline()
-	if !ok {
-		return context.WithTimeout(parent, timeout)
-	}
-	remaining := time.Until(deadline) - tailroom
-	if remaining < timeout {
-		timeout = max(0, remaining)
-	}
-	return context.WithTimeout(parent, timeout)
 }
 
 func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {

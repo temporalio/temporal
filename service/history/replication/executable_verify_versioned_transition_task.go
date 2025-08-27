@@ -119,7 +119,14 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 
 	transitionHistory := ms.GetExecutionInfo().TransitionHistory
 	if len(transitionHistory) == 0 {
-		return nil
+		return serviceerrors.NewSyncState(
+			"mutable state is not up to date",
+			e.NamespaceID,
+			e.WorkflowID,
+			e.RunID,
+			nil,
+			ms.GetExecutionInfo().VersionHistories,
+		)
 	}
 	err = transitionhistory.StalenessCheck(transitionHistory, e.ReplicationTask().VersionedTransition)
 

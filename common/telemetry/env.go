@@ -36,7 +36,7 @@ func SpanExportersFromEnv(
 		return exporters, nil
 	}
 
-	for _, exporterType := range strings.Split(exporterTypes, ",") {
+	for exporterType := range strings.SplitSeq(exporterTypes, ",") {
 		switch SpanExporterType(exporterType) {
 		case OtelTracesOtlpExporterType:
 			// only grpc is supported; fail if user requests a different protocol

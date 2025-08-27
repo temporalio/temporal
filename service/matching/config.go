@@ -45,6 +45,7 @@ type (
 		MaxTaskQueueIdleTime                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		NumTaskqueueWritePartitions              dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		NumTaskqueueReadPartitions               dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		NumTaskqueueReadPartitionsSub            dynamicconfig.TypedSubscribableWithTaskQueueFilter[int]
 		BreakdownMetricsByTaskQueue              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByPartition              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByBuildID                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
@@ -153,6 +154,7 @@ type (
 		MaxTaskBatchSize                func() int
 		NumWritePartitions              func() int
 		NumReadPartitions               func() int
+		NumReadPartitionsSub            func(func(int)) (int, func())
 
 		// partition qps = AdminNamespaceToPartitionDispatchRate(namespace)
 		AdminNamespaceToPartitionDispatchRate func() float64
@@ -252,6 +254,7 @@ func NewConfig(
 		ThrottledLogRPS:                          dynamicconfig.MatchingThrottledLogRPS.Get(dc),
 		NumTaskqueueWritePartitions:              dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(dc),
 		NumTaskqueueReadPartitions:               dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
+		NumTaskqueueReadPartitionsSub:            dynamicconfig.MatchingNumTaskqueueReadPartitions.Subscribe(dc),
 		BreakdownMetricsByTaskQueue:              dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 		BreakdownMetricsByPartition:              dynamicconfig.MetricsBreakdownByPartition.Get(dc),
 		BreakdownMetricsByBuildID:                dynamicconfig.MetricsBreakdownByBuildID.Get(dc),
@@ -379,6 +382,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		NumReadPartitions: func() int {
 			return max(1, config.NumTaskqueueReadPartitions(ns.String(), taskQueueName, taskType))
+		},
+		NumReadPartitionsSub: func(cb func(int)) (int, func()) {
+			return config.NumTaskqueueReadPartitionsSub(ns.String(), taskQueueName, taskType, cb)
 		},
 		BreakdownMetricsByTaskQueue: func() bool {
 			return config.BreakdownMetricsByTaskQueue(ns.String(), taskQueueName, taskType)

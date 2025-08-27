@@ -3,13 +3,10 @@ package rpc
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/rpc/interceptor"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -17,7 +14,6 @@ import (
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -44,14 +40,6 @@ const (
 
 	// maxInternodeRecvPayloadSize indicates the internode max receive payload size.
 	maxInternodeRecvPayloadSize = 128 * 1024 * 1024 // 128 Mb
-
-	// ResourceExhaustedCauseHeader will be added to rpc response if request returns ResourceExhausted error.
-	// Value of this header will be ResourceExhaustedCause.
-	ResourceExhaustedCauseHeader = "X-Resource-Exhausted-Cause"
-
-	// ResourceExhaustedScopeHeader will be added to rpc response if request returns ResourceExhausted error.
-	// Value of this header will be the scope of exhausted resource.
-	ResourceExhaustedScopeHeader = "X-Resource-Exhausted-Scope"
 )
 
 // Dial creates a client connection to the given target with default options.
@@ -120,47 +108,4 @@ func headersInterceptor(
 ) error {
 	ctx = headers.Propagate(ctx)
 	return invoker(ctx, method, req, reply, cc, opts...)
-}
-
-func NewFrontendServiceErrorInterceptor(
-	logger log.Logger,
-) grpc.UnaryServerInterceptor {
-	return func(
-		ctx context.Context,
-		req interface{},
-		_ *grpc.UnaryServerInfo,
-		handler grpc.UnaryHandler,
-	) (interface{}, error) {
-
-		resp, err := handler(ctx, req)
-
-		if err == nil {
-			return resp, err
-		}
-
-		// mask some internal service errors at frontend
-		switch err.(type) {
-		case *serviceerrors.ShardOwnershipLost:
-			err = serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
-		case *serviceerror.DataLoss:
-			err = serviceerror.NewUnavailable("internal history service error")
-		}
-
-		addHeadersForResourceExhausted(ctx, logger, err)
-
-		return resp, err
-	}
-}
-
-func addHeadersForResourceExhausted(ctx context.Context, logger log.Logger, err error) {
-	var reErr *serviceerror.ResourceExhausted
-	if errors.As(err, &reErr) {
-		headerErr := grpc.SetHeader(ctx, metadata.Pairs(
-			ResourceExhaustedCauseHeader, reErr.Cause.String(),
-			ResourceExhaustedScopeHeader, reErr.Scope.String(),
-		))
-		if headerErr != nil {
-			logger.Error("Failed to add Resource-Exhausted headers to response", tag.Error(headerErr))
-		}
-	}
 }

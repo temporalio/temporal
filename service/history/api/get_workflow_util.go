@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
@@ -22,6 +23,8 @@ import (
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
+
+const longPollSoftTimeout = time.Second
 
 func GetOrPollMutableState(
 	ctx context.Context,
@@ -183,8 +186,12 @@ func GetOrPollMutableState(
 		if err != nil {
 			return nil, err
 		}
-		timer := time.NewTimer(shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String()))
-		defer timer.Stop()
+
+		// Send back response just before caller context would time out.
+		longPollInterval := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
+		longPollCtx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, longPollSoftTimeout)
+		defer cancel()
+
 		for {
 			select {
 			case event := <-channel:
@@ -239,10 +246,8 @@ func GetOrPollMutableState(
 				if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 					return response, nil
 				}
-			case <-timer.C:
+			case <-longPollCtx.Done():
 				return response, nil
-			case <-ctx.Done():
-				return nil, ctx.Err()
 			}
 		}
 	}
