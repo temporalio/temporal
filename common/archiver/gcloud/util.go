@@ -152,7 +152,7 @@ func newRunIDPrecondition(runID string) connector.Precondition {
 		}
 
 		if strings.Contains(fileName, runID) {
-			fileNameParts := strings.Split(fileName, "_")
+			fileNameParts := strings.SplitN(fileName, "_", 5)
 			if len(fileNameParts) != 5 {
 				return true
 			}
@@ -176,7 +176,7 @@ func newWorkflowIDPrecondition(workflowID string) connector.Precondition {
 		}
 
 		if strings.Contains(fileName, workflowID) {
-			fileNameParts := strings.Split(fileName, "_")
+			fileNameParts := strings.SplitN(fileName, "_", 5)
 			if len(fileNameParts) != 5 {
 				return true
 			}
@@ -200,7 +200,7 @@ func newWorkflowTypeNamePrecondition(workflowTypeName string) connector.Precondi
 		}
 
 		if strings.Contains(fileName, workflowTypeName) {
-			fileNameParts := strings.Split(fileName, "_")
+			fileNameParts := strings.SplitN(fileName, "_", 5)
 			if len(fileNameParts) != 5 {
 				return true
 			}

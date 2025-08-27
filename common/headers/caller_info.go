@@ -33,7 +33,7 @@ var (
 	}
 	SystemBackgroundLowCallerInfo = CallerInfo{
 		CallerName: CallerNameSystem,
-		CallerType: CallerTypeBackgroundHigh,
+		CallerType: CallerTypeBackgroundLow,
 	}
 	SystemPreemptableCallerInfo = CallerInfo{
 		CallerName: CallerNameSystem,
