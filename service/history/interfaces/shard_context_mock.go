@@ -312,17 +312,17 @@ func (mr *MockShardContextMockRecorder) GetCurrentExecution(ctx, request any) *g
 }
 
 // GetCurrentTime mocks base method.
-func (m *MockShardContext) GetCurrentTime(cluster string) time.Time {
+func (m *MockShardContext) GetCurrentTime(arg0 string) time.Time {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCurrentTime", cluster)
+	ret := m.ctrl.Call(m, "GetCurrentTime", arg0)
 	ret0, _ := ret[0].(time.Time)
 	return ret0
 }
 
 // GetCurrentTime indicates an expected call of GetCurrentTime.
-func (mr *MockShardContextMockRecorder) GetCurrentTime(cluster any) *gomock.Call {
+func (mr *MockShardContextMockRecorder) GetCurrentTime(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentTime", reflect.TypeOf((*MockShardContext)(nil).GetCurrentTime), cluster)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentTime", reflect.TypeOf((*MockShardContext)(nil).GetCurrentTime), arg0)
 }
 
 // GetEngine mocks base method.
@@ -540,9 +540,9 @@ func (mr *MockShardContextMockRecorder) GetRemoteAdminClient(arg0 any) *gomock.C
 }
 
 // GetReplicationStatus mocks base method.
-func (m *MockShardContext) GetReplicationStatus(cluster []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, map[string]*historyservice.HandoverNamespaceInfo, error) {
+func (m *MockShardContext) GetReplicationStatus(arg0 []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, map[string]*historyservice.HandoverNamespaceInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationStatus", cluster)
+	ret := m.ctrl.Call(m, "GetReplicationStatus", arg0)
 	ret0, _ := ret[0].(map[string]*historyservice.ShardReplicationStatusPerCluster)
 	ret1, _ := ret[1].(map[string]*historyservice.HandoverNamespaceInfo)
 	ret2, _ := ret[2].(error)
@@ -550,9 +550,9 @@ func (m *MockShardContext) GetReplicationStatus(cluster []string) (map[string]*h
 }
 
 // GetReplicationStatus indicates an expected call of GetReplicationStatus.
-func (mr *MockShardContextMockRecorder) GetReplicationStatus(cluster any) *gomock.Call {
+func (mr *MockShardContextMockRecorder) GetReplicationStatus(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationStatus", reflect.TypeOf((*MockShardContext)(nil).GetReplicationStatus), cluster)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationStatus", reflect.TypeOf((*MockShardContext)(nil).GetReplicationStatus), arg0)
 }
 
 // GetReplicatorDLQAckLevel mocks base method.
@@ -670,15 +670,15 @@ func (mr *MockShardContextMockRecorder) NewVectorClock() *gomock.Call {
 }
 
 // SetCurrentTime mocks base method.
-func (m *MockShardContext) SetCurrentTime(cluster string, currentTime time.Time) {
+func (m *MockShardContext) SetCurrentTime(arg0 string, currentTime time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetCurrentTime", cluster, currentTime)
+	m.ctrl.Call(m, "SetCurrentTime", arg0, currentTime)
 }
 
 // SetCurrentTime indicates an expected call of SetCurrentTime.
-func (mr *MockShardContextMockRecorder) SetCurrentTime(cluster, currentTime any) *gomock.Call {
+func (mr *MockShardContextMockRecorder) SetCurrentTime(arg0, currentTime any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCurrentTime", reflect.TypeOf((*MockShardContext)(nil).SetCurrentTime), cluster, currentTime)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCurrentTime", reflect.TypeOf((*MockShardContext)(nil).SetCurrentTime), arg0, currentTime)
 }
 
 // SetQueueState mocks base method.
@@ -749,15 +749,15 @@ func (mr *MockShardContextMockRecorder) UpdateHandoverNamespace(ns, deletedFromD
 }
 
 // UpdateRemoteClusterInfo mocks base method.
-func (m *MockShardContext) UpdateRemoteClusterInfo(cluster string, ackTaskID int64, ackTimestamp time.Time) {
+func (m *MockShardContext) UpdateRemoteClusterInfo(arg0 string, ackTaskID int64, ackTimestamp time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateRemoteClusterInfo", cluster, ackTaskID, ackTimestamp)
+	m.ctrl.Call(m, "UpdateRemoteClusterInfo", arg0, ackTaskID, ackTimestamp)
 }
 
 // UpdateRemoteClusterInfo indicates an expected call of UpdateRemoteClusterInfo.
-func (mr *MockShardContextMockRecorder) UpdateRemoteClusterInfo(cluster, ackTaskID, ackTimestamp any) *gomock.Call {
+func (mr *MockShardContextMockRecorder) UpdateRemoteClusterInfo(arg0, ackTaskID, ackTimestamp any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRemoteClusterInfo", reflect.TypeOf((*MockShardContext)(nil).UpdateRemoteClusterInfo), cluster, ackTaskID, ackTimestamp)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRemoteClusterInfo", reflect.TypeOf((*MockShardContext)(nil).UpdateRemoteClusterInfo), arg0, ackTaskID, ackTimestamp)
 }
 
 // UpdateRemoteReaderInfo mocks base method.
@@ -1101,17 +1101,17 @@ func (mr *MockControllableContextMockRecorder) GetCurrentExecution(ctx, request 
 }
 
 // GetCurrentTime mocks base method.
-func (m *MockControllableContext) GetCurrentTime(cluster string) time.Time {
+func (m *MockControllableContext) GetCurrentTime(arg0 string) time.Time {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCurrentTime", cluster)
+	ret := m.ctrl.Call(m, "GetCurrentTime", arg0)
 	ret0, _ := ret[0].(time.Time)
 	return ret0
 }
 
 // GetCurrentTime indicates an expected call of GetCurrentTime.
-func (mr *MockControllableContextMockRecorder) GetCurrentTime(cluster any) *gomock.Call {
+func (mr *MockControllableContextMockRecorder) GetCurrentTime(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentTime", reflect.TypeOf((*MockControllableContext)(nil).GetCurrentTime), cluster)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentTime", reflect.TypeOf((*MockControllableContext)(nil).GetCurrentTime), arg0)
 }
 
 // GetEngine mocks base method.
@@ -1343,9 +1343,9 @@ func (mr *MockControllableContextMockRecorder) GetRemoteAdminClient(arg0 any) *g
 }
 
 // GetReplicationStatus mocks base method.
-func (m *MockControllableContext) GetReplicationStatus(cluster []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, map[string]*historyservice.HandoverNamespaceInfo, error) {
+func (m *MockControllableContext) GetReplicationStatus(arg0 []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, map[string]*historyservice.HandoverNamespaceInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationStatus", cluster)
+	ret := m.ctrl.Call(m, "GetReplicationStatus", arg0)
 	ret0, _ := ret[0].(map[string]*historyservice.ShardReplicationStatusPerCluster)
 	ret1, _ := ret[1].(map[string]*historyservice.HandoverNamespaceInfo)
 	ret2, _ := ret[2].(error)
@@ -1353,9 +1353,9 @@ func (m *MockControllableContext) GetReplicationStatus(cluster []string) (map[st
 }
 
 // GetReplicationStatus indicates an expected call of GetReplicationStatus.
-func (mr *MockControllableContextMockRecorder) GetReplicationStatus(cluster any) *gomock.Call {
+func (mr *MockControllableContextMockRecorder) GetReplicationStatus(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationStatus", reflect.TypeOf((*MockControllableContext)(nil).GetReplicationStatus), cluster)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationStatus", reflect.TypeOf((*MockControllableContext)(nil).GetReplicationStatus), arg0)
 }
 
 // GetReplicatorDLQAckLevel mocks base method.
@@ -1487,15 +1487,15 @@ func (mr *MockControllableContextMockRecorder) NewVectorClock() *gomock.Call {
 }
 
 // SetCurrentTime mocks base method.
-func (m *MockControllableContext) SetCurrentTime(cluster string, currentTime time.Time) {
+func (m *MockControllableContext) SetCurrentTime(arg0 string, currentTime time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetCurrentTime", cluster, currentTime)
+	m.ctrl.Call(m, "SetCurrentTime", arg0, currentTime)
 }
 
 // SetCurrentTime indicates an expected call of SetCurrentTime.
-func (mr *MockControllableContextMockRecorder) SetCurrentTime(cluster, currentTime any) *gomock.Call {
+func (mr *MockControllableContextMockRecorder) SetCurrentTime(arg0, currentTime any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCurrentTime", reflect.TypeOf((*MockControllableContext)(nil).SetCurrentTime), cluster, currentTime)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCurrentTime", reflect.TypeOf((*MockControllableContext)(nil).SetCurrentTime), arg0, currentTime)
 }
 
 // SetQueueState mocks base method.
@@ -1566,15 +1566,15 @@ func (mr *MockControllableContextMockRecorder) UpdateHandoverNamespace(ns, delet
 }
 
 // UpdateRemoteClusterInfo mocks base method.
-func (m *MockControllableContext) UpdateRemoteClusterInfo(cluster string, ackTaskID int64, ackTimestamp time.Time) {
+func (m *MockControllableContext) UpdateRemoteClusterInfo(arg0 string, ackTaskID int64, ackTimestamp time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateRemoteClusterInfo", cluster, ackTaskID, ackTimestamp)
+	m.ctrl.Call(m, "UpdateRemoteClusterInfo", arg0, ackTaskID, ackTimestamp)
 }
 
 // UpdateRemoteClusterInfo indicates an expected call of UpdateRemoteClusterInfo.
-func (mr *MockControllableContextMockRecorder) UpdateRemoteClusterInfo(cluster, ackTaskID, ackTimestamp any) *gomock.Call {
+func (mr *MockControllableContextMockRecorder) UpdateRemoteClusterInfo(arg0, ackTaskID, ackTimestamp any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRemoteClusterInfo", reflect.TypeOf((*MockControllableContext)(nil).UpdateRemoteClusterInfo), cluster, ackTaskID, ackTimestamp)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRemoteClusterInfo", reflect.TypeOf((*MockControllableContext)(nil).UpdateRemoteClusterInfo), arg0, ackTaskID, ackTimestamp)
 }
 
 // UpdateRemoteReaderInfo mocks base method.
