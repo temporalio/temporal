@@ -259,11 +259,6 @@ func (s *rateLimitedSchedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
 }
 
 // Less implements comparison for TaskChannelKey for btree
-// Priority is the primary ordering, NamespaceID is the tie-breaker to ensure unique keys
 func (t TaskChannelKey) Less(other TaskChannelKey) bool {
-	if t.Priority != other.Priority {
-		return t.Priority < other.Priority
-	}
-	// Use NamespaceID as tie-breaker to ensure all keys are distinguishable
-	return t.NamespaceID < other.NamespaceID
+	return t.Priority < other.Priority
 }
