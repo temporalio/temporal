@@ -20,6 +20,7 @@ linters:
     staticcheck:
       checks:
         - "all"
+        - "-ST1000" # disable: package comment is missing
     godox:
       keywords:
         - FIXME
