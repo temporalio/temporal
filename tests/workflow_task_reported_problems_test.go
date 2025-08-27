@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -119,6 +121,41 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 		require.NotEmpty(t, searchVal)
 		require.Equal(t, "category=WorkflowTaskFailed", searchVal.([]string)[0])
 		require.Equal(t, "cause=WorkflowWorkerUnhandledFailure", searchVal.([]string)[1])
+	}, 5*time.Second, 500*time.Millisecond)
+
+	// Check if the search attributes are queryable
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		queriedWorkflows, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("TemporalReportedProblems IS NOT NULL"),
+			PageSize:  100,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(queriedWorkflows.Executions))
+
+		queriedWorkflows, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("TemporalReportedProblems IN ('category=WorkflowTaskFailed', 'cause=WorkflowWorkerUnhandledFailure')"),
+			PageSize:  100,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(queriedWorkflows.Executions))
+
+		queriedWorkflows, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("TemporalReportedProblems IN ('cause=WorkflowWorkerUnhandledFailure')"),
+			PageSize:  100,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(queriedWorkflows.Executions))
+
+		queriedWorkflows, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("TemporalReportedProblems IN ('category=WorkflowTaskFailed', 'cause=WorkflowWorkerUnhandledFailure')"),
+			PageSize:  100,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(queriedWorkflows.Executions))
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// Unblock the workflow
@@ -250,6 +287,41 @@ func (s *WFTTimedOutReportedProblemsTestSuite) TestWFTTimedOutReportedProblems_S
 		require.NotEmpty(t, searchVal)
 		require.Equal(t, "category=WorkflowTaskTimedout", searchVal.([]string)[0])
 		require.Equal(t, "cause=StartToCloseTimeout", searchVal.([]string)[1])
+	}, 5*time.Second, 500*time.Millisecond)
+
+	// Check if the search attributes are queryable
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		queriedWorkflows, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("TemporalReportedProblems IS NOT NULL"),
+			PageSize:  100,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(queriedWorkflows.Executions))
+
+		queriedWorkflows, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("TemporalReportedProblems IN ('category=WorkflowTaskFailed', 'cause=WorkflowWorkerUnhandledFailure')"),
+			PageSize:  100,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(queriedWorkflows.Executions))
+
+		queriedWorkflows, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("TemporalReportedProblems IN ('cause=WorkflowWorkerUnhandledFailure')"),
+			PageSize:  100,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(queriedWorkflows.Executions))
+
+		queriedWorkflows, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("TemporalReportedProblems IN ('category=WorkflowTaskFailed', 'cause=WorkflowWorkerUnhandledFailure')"),
+			PageSize:  100,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(queriedWorkflows.Executions))
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// Unblock the workflow

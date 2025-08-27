@@ -5897,7 +5897,7 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute(
 
 	// This is not guaranteed to be accurate because of ordering non-determinism. Needs to be fixed.
 	if proto.Equal(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], reportedProblemsPayload) {
-		return nil // unchanged
+		return nil
 	}
 
 	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: reportedProblemsPayload})
