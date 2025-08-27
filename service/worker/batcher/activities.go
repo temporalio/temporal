@@ -97,17 +97,11 @@ func (p *page) allSubmitted() bool {
 // nextTask returns the next task to be submitted from this page
 func (p *page) nextTask() task {
 	if p.submittedCount >= len(p.executions) {
-		fmt.Printf("DEBUG: nextTask: No more tasks in page - submittedCount: %d, executions length: %d\n", p.submittedCount, len(p.executions))
 		return task{} // No more tasks in this page
 	}
 
-	execution := p.executions[p.submittedCount]
-	if execution == nil {
-		fmt.Printf("WARN: nextTask: Found nil execution at index %d in page %d\n", p.submittedCount, p.pageNumber)
-	}
-
 	task := task{
-		execution: execution,
+		execution: p.executions[p.submittedCount],
 		attempts:  1,
 		page:      p,
 	}
@@ -148,14 +142,10 @@ func fetchPage(
 		return nil, err
 	}
 
-	fmt.Printf("DEBUG: fetchPage: pageFetches %d, pageSize %d, resp.Executions %d, resp.NextPageToken %d\n", pageFetches.Add(1), defaultPageSize, len(resp.Executions), len(resp.NextPageToken))
-
 	executions := make([]*commonpb.WorkflowExecution, 0, len(resp.Executions))
-	for i, wf := range resp.Executions {
+	for _, wf := range resp.Executions {
 		if wf.Execution != nil {
 			executions = append(executions, wf.Execution)
-		} else {
-			fmt.Printf("WARN: fetchPage: Found nil execution at index %d in response\n", i)
 		}
 	}
 
@@ -199,7 +189,6 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	var p *page
 	if len(config.initialExecutions) > 0 {
 		// Use initial executions
-		fmt.Printf("DEBUG: Using initial executions: %d\n", len(config.initialExecutions))
 		p = &page{
 			executions:    config.initialExecutions,
 			nextPageToken: config.initialPageToken,
@@ -207,7 +196,6 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 		}
 	} else {
 		// Fetch page of executions if needed
-		fmt.Printf("DEBUG: Fetching initial page\n")
 		var err error
 		p, err = fetchPage(ctx, sdkClient, config, config.initialPageToken, hbd.CurrentPage)
 		if err != nil {
@@ -215,12 +203,10 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 			return HeartBeatDetails{}, fmt.Errorf("failed to fetch next page: %w", err)
 		}
 	}
-	fmt.Printf("DEBUG: Initialized page with %d executions\n", len(p.executions))
 
 	for {
 		// Check if we need to fetch next page
 		if p.hasNext() && p.allSubmitted() {
-			fmt.Printf("DEBUG: Fetching next page - current page %d completed\n", p.pageNumber)
 			nextPage, err := fetchPage(ctx, sdkClient, config, p.nextPageToken, p.pageNumber+1)
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
@@ -232,17 +218,10 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 
 			hbd.CurrentPage = p.pageNumber
 			hbd.PageToken = p.nextPageToken
-			fmt.Printf("DEBUG: Switched to page %d with %d executions\n", p.pageNumber, len(p.executions))
 		}
 
 		select {
 		case taskCh <- p.nextTask():
-			nextTask := p.nextTask()
-			if nextTask.execution != nil {
-				fmt.Printf("DEBUG: processWorkflowsWithProactiveFetching: taskCh <- p.nextTask(): %+v\n", nextTask.execution)
-			} else {
-				fmt.Printf("WARN: Skipping task with nil execution - pageNumber: %d, submittedCount: %d, executions length: %d\n", p.pageNumber, p.submittedCount, len(p.executions))
-			}
 			p.submittedCount++
 
 		case result := <-respCh:
@@ -753,10 +732,7 @@ func startTaskProcessorProtobuf(
 			}
 			var err error
 
-			if task.execution != nil {
-				fmt.Printf("DEBUG: startTaskProcessorProtobuf: task.execution %+v\n", task.execution)
-			} else {
-				fmt.Printf("WARN: Skipping task with nil execution in protobuf processor\n")
+			if task.execution == nil {
 				continue
 			}
 
@@ -932,11 +908,6 @@ func startTaskProcessorProtobuf(
 				} else {
 					// put back to the channel if less than attemptsOnError
 					task.attempts++
-					if task.execution != nil {
-						fmt.Printf("DEBUG: startTaskProcessorProtobuf: taskCh <- task: %+v\n", task.execution)
-					} else {
-						fmt.Printf("WARN: startTaskProcessorProtobuf: Attempting to retry task with nil execution\n")
-					}
 					taskCh <- task
 				}
 			} else {
@@ -958,10 +929,6 @@ func processTask(
 		return err
 	}
 
-	if task.execution == nil {
-		fmt.Printf("ERROR: Task execution is nil in processTask\n")
-		return fmt.Errorf("task execution is nil")
-	}
 	err = procFn(task.execution)
 	if err != nil {
 		// NotFound means wf is not running or deleted
