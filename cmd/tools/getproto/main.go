@@ -41,7 +41,7 @@ func findProtoImports() []string {
 		if d.Type().IsRegular() && strings.HasSuffix(path, ".proto") {
 			protoFile, err := os.ReadFile(path)
 			fatalIfErr(err)
-			for _, line := range strings.Split(string(protoFile), "\n") {
+			for line := range strings.SplitSeq(string(protoFile), "\n") {
 				if match := matchImport.FindStringSubmatch(line); len(match) > 0 {
 					i := match[1]
 					if strings.HasPrefix(i, "temporal/api/") ||
