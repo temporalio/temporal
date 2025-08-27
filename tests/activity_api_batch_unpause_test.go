@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 )
@@ -95,25 +96,27 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	batcher.SetPageSizeForTesting(2)
+
 	internalWorkflow := newInternalWorkflow()
 
 	s.Worker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
 	s.Worker().RegisterActivity(internalWorkflow.ActivityFunc)
 
-	workflowRun1 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
-	workflowRun2 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
+	workflowsToStart := 5
+	workflowRuns := make([]sdkclient.WorkflowRun, workflowsToStart)
+	for i := 0; i < workflowsToStart; i++ {
+		workflowRuns[i] = s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
+	}
 
 	// wait for activity to start in both workflows
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
-		require.NoError(t, err)
-		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
-
-		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
-		require.NoError(t, err)
-		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		for _, workflowRun := range workflowRuns {
+			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			require.NoError(t, err)
+			require.Len(t, description.GetPendingActivities(), 1)
+			require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		}
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activities in both workflows
@@ -122,46 +125,44 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 		Execution: &commonpb.WorkflowExecution{},
 		Activity:  &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
 	}
-	pauseRequest.Execution.WorkflowId = workflowRun1.GetID()
-	resp, err := s.FrontendClient().PauseActivity(ctx, pauseRequest)
-	s.NoError(err)
-	s.NotNil(resp)
-
-	pauseRequest.Execution.WorkflowId = workflowRun2.GetID()
-	resp, err = s.FrontendClient().PauseActivity(ctx, pauseRequest)
-	s.NoError(err)
-	s.NotNil(resp)
+	for _, workflowRun := range workflowRuns {
+		pauseRequest.Execution.WorkflowId = workflowRun.GetID()
+		resp, err := s.FrontendClient().PauseActivity(ctx, pauseRequest)
+		s.NoError(err)
+		s.NotNil(resp)
+	}
 
 	// wait for activities to be paused
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
-		require.NoError(t, err)
-		require.Len(t, description.GetPendingActivities(), 1)
-		require.True(t, description.PendingActivities[0].Paused)
+		for _, workflowRun := range workflowRuns {
+			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			require.NoError(t, err)
+			require.Len(t, description.GetPendingActivities(), 1)
+			require.True(t, description.PendingActivities[0].Paused)
+		}
 	}, 5*time.Second, 100*time.Millisecond)
 
 	workflowTypeName := "WorkflowFunc"
 	activityTypeName := "ActivityFunc"
 	// Make sure the activity is in visibility
-	var listResp *workflowservice.ListWorkflowExecutionsResponse
 	searchValue := fmt.Sprintf("property:activityType=%s", activityTypeName)
 	escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
 	unpauseCause := fmt.Sprintf("%s = %s", searchattribute.TemporalPauseInfo, escapedSearchValue)
 	query := fmt.Sprintf("(WorkflowType='%s' AND %s)", workflowTypeName, unpauseCause)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		listResp, err = s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		listResp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
 			PageSize:  10,
 			Query:     query,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, listResp)
-		require.Len(t, listResp.GetExecutions(), 2)
+		require.Len(t, listResp.GetExecutions(), workflowsToStart)
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// unpause the activities in both workflows with batch unpause
-	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+	_, err := s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace: s.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
 			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
@@ -176,25 +177,23 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 
 	// make sure activities are unpaused
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
-		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.False(t, description.PendingActivities[0].Paused)
-		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
-		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.False(t, description.PendingActivities[0].Paused)
+		for _, workflowRun := range workflowRuns {
+			description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			require.NoError(t, err)
+			require.Len(t, description.PendingActivities, 1)
+			require.False(t, description.PendingActivities[0].Paused)
+		}
+
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let both of the activities succeed
 	internalWorkflow.letActivitySucceed.Store(true)
 
 	var out string
-	err = workflowRun1.Get(ctx, &out)
-	s.NoError(err)
-
-	err = workflowRun2.Get(ctx, &out)
-	s.NoError(err)
+	for _, workflowRun := range workflowRuns {
+		err = workflowRun.Get(ctx, &out)
+		s.NoError(err)
+	}
 }
 
 func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed() {
