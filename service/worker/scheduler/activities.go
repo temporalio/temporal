@@ -162,8 +162,13 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedulespb.Watc
 
 	// get last event from history
 	histReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:              a.namespace.String(),
-		Execution:              req.Execution,
+		Namespace: a.namespace.String(),
+
+		// If a workflow is started and completed while we were polling, PollMutableState
+		// may return a different Execution than what we'd requested. Make sure to request
+		// events for the latest.
+		Execution: pollRes.Execution,
+
 		MaximumPageSize:        1,
 		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
 		SkipArchival:           true, // should be recently closed, no need for archival
