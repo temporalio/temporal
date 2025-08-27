@@ -9,21 +9,27 @@ import (
 )
 
 func ConvertPathToCamel(input string) []string {
-	pathParts := strings.Split(input, ".")
-	for i, path := range pathParts {
+	var pathParts []string
+	for path := range strings.SplitSeq(input, ".") {
 		// Split by "_" and convert each word to Title Case (CamelCase)
-		words := strings.Split(path, "_")
-		snakeCase := len(words) > 1
-		for j, word := range words {
-			if snakeCase && j > 0 {
-				words[j] = cases.Title(language.Und).String(strings.ToLower(word))
+		var b strings.Builder
+		j := 0
+		for word := range strings.SplitSeq(path, "_") {
+			if j > 0 {
+				b.WriteString(cases.Title(language.Und).String(strings.ToLower(word)))
 			} else {
 				// lowercase the first letter
-				words[j] = strings.ToLower(word[:1]) + word[1:]
+				if len(word) > 0 {
+					b.WriteString(strings.ToLower(word[:1]))
+					if len(word) > 1 {
+						b.WriteString(word[1:])
+					}
+				}
 			}
+			j++
 		}
 		// Join the words into a CamelCase substring
-		pathParts[i] = strings.Join(words, "")
+		pathParts = append(pathParts, b.String())
 	}
 	// Join all CamelCase substrings back with "."
 	return pathParts
