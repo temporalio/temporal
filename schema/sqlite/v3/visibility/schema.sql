@@ -283,6 +283,7 @@ BEGIN
     BinaryChecksums,
     BuildIds,
     TemporalPauseInfo,
+    TemporalReportedProblems,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -292,6 +293,7 @@ BEGIN
     NEW.BinaryChecksums,
     NEW.BuildIds,
     NEW.TemporalPauseInfo,
+    NEW.TemporalReportedProblems,
     NEW.KeywordList01,
     NEW.KeywordList02,
     NEW.KeywordList03
