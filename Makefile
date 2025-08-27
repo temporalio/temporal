@@ -172,10 +172,10 @@ $(LOCALBIN):
 .PHONY: golangci-lint
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
-GOLANGCI_LINT_VERSION := v1.64.8
+GOLANGCI_LINT_VERSION := v2.4.0
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
-	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
 # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 GCI_VERSION := v0.13.6
@@ -183,7 +183,7 @@ GCI := $(LOCALBIN)/gci-$(GCI_VERSION)
 $(GCI): $(LOCALBIN)
 	$(call go-install-tool,$(GCI),github.com/daixiang0/gci,$(GCI_VERSION))
 
-GOTESTSUM_VER := v1.12.1
+GOTESTSUM_VER := v1.12.3
 GOTESTSUM := $(LOCALBIN)/gotestsum-$(GOTESTSUM_VER)
 $(GOTESTSUM): | $(LOCALBIN)
 	$(call go-install-tool,$(GOTESTSUM),gotest.tools/gotestsum,$(GOTESTSUM_VER))
@@ -209,21 +209,21 @@ ACTIONLINT := $(LOCALBIN)/actionlint-$(ACTIONLINT_VER)
 $(ACTIONLINT): | $(LOCALBIN)
 	$(call go-install-tool,$(ACTIONLINT),github.com/rhysd/actionlint/cmd/actionlint,$(ACTIONLINT_VER))
 
-WORKFLOWCHECK_VER := v0.3.0
+WORKFLOWCHECK_VER := master # TODO: pin this specific version once 0.3.0 follow-up is released
 WORKFLOWCHECK := $(LOCALBIN)/workflowcheck-$(WORKFLOWCHECK_VER)
 $(WORKFLOWCHECK): | $(LOCALBIN)
 	$(call go-install-tool,$(WORKFLOWCHECK),go.temporal.io/sdk/contrib/tools/workflowcheck,$(WORKFLOWCHECK_VER))
 
 # The following tools need to have a consistent name, so we use a versioned stamp file to ensure the version we want is installed
 # while installing to an unversioned binary name.
-GOIMPORTS_VER := v0.31.0
+GOIMPORTS_VER := v0.36.0
 GOIMPORTS := $(LOCALBIN)/goimports
 $(STAMPDIR)/goimports-$(GOIMPORTS_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VER))
 	@touch $@
 $(GOIMPORTS): $(STAMPDIR)/goimports-$(GOIMPORTS_VER)
 
-GOWRAP_VER := v1.4.2
+GOWRAP_VER := v1.4.3
 GOWRAP := $(LOCALBIN)/gowrap
 $(STAMPDIR)/gowrap-$(GOWRAP_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(GOWRAP),github.com/hexdigest/gowrap/cmd/gowrap,$(GOWRAP_VER))
@@ -238,14 +238,14 @@ $(STAMPDIR)/gomajor-$(GOMAJOR_VER): | $(STAMPDIR) $(LOCALBIN)
 $(GOMAJOR): $(STAMPDIR)/gomajor-$(GOMAJOR_VER)
 
 # Mockgen is called by name throughout the codebase, so we need to keep the binary name consistent
-MOCKGEN_VER := v0.5.0
+MOCKGEN_VER := v0.6.0
 MOCKGEN := $(LOCALBIN)/mockgen
 $(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(MOCKGEN),go.uber.org/mock/mockgen,$(MOCKGEN_VER))
 	@touch $@
 $(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
 
-STRINGER_VER := v0.31.0
+STRINGER_VER := v0.36.0
 STRINGER := $(LOCALBIN)/stringer
 $(STAMPDIR)/stringer-$(STRINGER_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(STRINGER),golang.org/x/tools/cmd/stringer,$(STRINGER_VER))

@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/headers"
@@ -544,7 +545,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 
 	if req.WaitNewData {
 		var cancel context.CancelFunc
-		ctx, cancel = newChildContext(ctx, m.config.GetUserDataLongPollTimeout(), m.config.GetUserDataReturnBudget)
+		ctx, cancel = contextutil.WithDeadlineBuffer(ctx, m.config.GetUserDataLongPollTimeout(), m.config.GetUserDataReturnBudget)
 		defer cancel()
 	}
 
