@@ -64,11 +64,7 @@ type Client interface {
 	SetCurrentVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		deploymentName string,
-		version string,
-		identity string,
-		ignoreMissingTaskQueues bool,
-		conflictToken []byte,
+		req *workflowservice.SetWorkerDeploymentCurrentVersionRequest,
 	) (*deploymentspb.SetCurrentVersionResponse, error)
 
 	ListWorkerDeployments(
@@ -96,12 +92,7 @@ type Client interface {
 	SetRampingVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		deploymentName string,
-		version string,
-		percentage float32,
-		identity string,
-		ignoreMissingTaskQueues bool,
-		conflictToken []byte,
+		req *workflowservice.SetWorkerDeploymentRampingVersionRequest,
 	) (*deploymentspb.SetRampingVersionResponse, error)
 
 	UpdateVersionMetadata(
@@ -521,11 +512,7 @@ func (d *ClientImpl) ListWorkerDeployments(
 func (d *ClientImpl) SetCurrentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	deploymentName string,
-	version string,
-	identity string,
-	ignoreMissingTaskQueues bool,
-	conflictToken []byte,
+	req *workflowservice.SetWorkerDeploymentCurrentVersionRequest,
 ) (_ *deploymentspb.SetCurrentVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("SetCurrentVersion", &retErr, namespaceEntry.Name(), version, identity)()
@@ -543,8 +530,6 @@ func (d *ClientImpl) SetCurrentVersion(
 		return nil, err
 	}
 
-	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
-
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentVersionArgs{
 		Identity:                identity,
 		Version:                 version,
@@ -555,17 +540,24 @@ func (d *ClientImpl) SetCurrentVersion(
 		return nil, err
 	}
 
-	// Generating a new updateID for each request. No-ops are handled by the worker-deployment workflow.
+	// Generating a new updateID and requestID for each request. No-ops are handled by the worker-deployment workflow.
 	updateID := uuid.New()
+	requestID := uuid.New()
 
-	outcome, err := d.update(
+	if
+
+	outcome, err := d.updateWithStartWorkerDeployment(
 		ctx,
 		namespaceEntry,
-		workflowID,
+		deploymentName,
+		versionObj.GetBuildId(),
 		&updatepb.Request{
 			Input: &updatepb.Input{Name: SetCurrentVersion, Args: updatePayload},
 			Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
 		},
+		identity,
+		requestID,
+		d.getSyncBatchSize(),
 	)
 	if err != nil {
 		return nil, err
@@ -603,13 +595,15 @@ func (d *ClientImpl) SetCurrentVersion(
 func (d *ClientImpl) SetRampingVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	deploymentName string,
-	version string,
-	percentage float32,
-	identity string,
-	ignoreMissingTaskQueues bool,
-	conflictToken []byte,
+	req *workflowservice.SetWorkerDeploymentRampingVersionRequest,
 ) (_ *deploymentspb.SetRampingVersionResponse, retErr error) {
+	version := req.GetVersion()
+	percentage := req.GetPercentage()
+	identity := req.GetIdentity()
+	deploymentName := req.GetDeploymentName()
+	ignoreMissingTaskQueues := req.GetIgnoreMissingTaskQueues()
+	conflictToken := req.GetConflictToken()
+
 	//revive:disable-next-line:defer
 	defer d.record("SetRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
 
