@@ -100,3 +100,11 @@ func (q *query) Bind(v ...interface{}) Query {
 	q.gocqlQuery.Bind(v...)
 	return newQuery(q.session, q.gocqlQuery)
 }
+
+func (q *query) Idempotent(value bool) Query {
+	return newQuery(q.session, q.gocqlQuery.Idempotent(value))
+}
+
+func (q *query) SetSpeculativeExecutionPolicy(policy SpeculativeExecutionPolicy) Query {
+	return newQuery(q.session, q.gocqlQuery.SetSpeculativeExecutionPolicy(policy))
+}
