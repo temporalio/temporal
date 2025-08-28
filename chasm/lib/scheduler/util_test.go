@@ -11,7 +11,7 @@ import (
 
 func TestGenerateRequestID(t *testing.T) {
 	scheduler := &Scheduler{
-		SchedulerInternal: &schedulespb.SchedulerInternal{
+		SchedulerState: &schedulespb.SchedulerState{
 			Namespace:     "ns",
 			NamespaceId:   "nsid",
 			ScheduleId:    "mysched",
