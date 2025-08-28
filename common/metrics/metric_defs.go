@@ -826,12 +826,29 @@ var (
 		"pending_tasks",
 		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
 	)
-	TaskSchedulerThrottled                               = NewCounterDef("task_scheduler_throttled")
-	QueueScheduleLatency                                 = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
-	QueueReaderCountHistogram                            = NewDimensionlessHistogramDef("queue_reader_count")
-	QueueSliceCountHistogram                             = NewDimensionlessHistogramDef("queue_slice_count")
-	QueueActionCounter                                   = NewCounterDef("queue_actions")
-	ActivityE2ELatency                                   = NewTimerDef("activity_end_to_end_latency")
+	TaskSchedulerThrottled    = NewCounterDef("task_scheduler_throttled")
+	QueueScheduleLatency      = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
+	QueueReaderCountHistogram = NewDimensionlessHistogramDef("queue_reader_count")
+	QueueSliceCountHistogram  = NewDimensionlessHistogramDef("queue_slice_count")
+	QueueActionCounter        = NewCounterDef("queue_actions")
+	ActivityE2ELatency        = NewTimerDef(
+		"activity_end_to_end_latency",
+		WithDescription("DEPRECATED: Will be removed in one of the next releases. Duration of an activity attempt. Use activity_start_to_close_latency instead."),
+	)
+	ActivityStartToCloseLatency = NewTimerDef(
+		"activity_start_to_close_latency",
+		WithDescription("Duration of a single activity attempt. Doesn't include retries or backoffs."),
+	)
+	ActivityScheduleToCloseLatency = NewTimerDef(
+		"activity_schedule_to_close_latency",
+		WithDescription("Duration of activity execution from scheduled time to terminal state. Includes retries and backoffs."),
+	)
+	ActivitySuccess                                      = NewCounterDef("activity_success", WithDescription("Number of activities that succeeded (doesn't include retries)."))
+	ActivityFail                                         = NewCounterDef("activity_fail", WithDescription("Number of activities that failed and won't be retried anymore."))
+	ActivityTaskFail                                     = NewCounterDef("activity_task_fail", WithDescription("Number of activity task failures (includes retries)."))
+	ActivityCancel                                       = NewCounterDef("activity_cancel")
+	ActivityTaskTimeout                                  = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
+	ActivityTimeout                                      = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
 	AckLevelUpdateCounter                                = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                          = NewCounterDef("ack_level_update_failed")
 	CommandCounter                                       = NewCounterDef("command")
