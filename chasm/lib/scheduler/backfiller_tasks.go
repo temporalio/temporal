@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	legacyschedulespb "go.temporal.io/server/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
-	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -40,7 +40,7 @@ func (b *BackfillerTaskExecutor) Validate(
 	ctx chasm.Context,
 	backfiller *Backfiller,
 	attrs chasm.TaskAttributes,
-	_ *schedulespb.BackfillerTask,
+	_ *schedulerpb.BackfillerTask,
 ) (bool, error) {
 	return validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)
 }
@@ -49,14 +49,14 @@ func (b *BackfillerTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	backfiller *Backfiller,
 	_ chasm.TaskAttributes,
-	_ *schedulespb.BackfillerTask,
+	_ *schedulerpb.BackfillerTask,
 ) error {
 	defer func() { backfiller.Attempt++ }()
 
 	scheduler, err := backfiller.Scheduler.Get(ctx)
 	if err != nil {
 		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("Scheduler tree missing node"),
+			serviceerror.NewInternal("scheduler tree missing node"),
 			err)
 	}
 	logger := newTaggedLogger(b.BaseLogger, scheduler)
@@ -64,7 +64,7 @@ func (b *BackfillerTaskExecutor) Execute(
 	invoker, err := scheduler.Invoker.Get(ctx)
 	if err != nil {
 		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("Scheduler tree missing node"),
+			serviceerror.NewInternal("scheduler tree missing node"),
 			err)
 	}
 
@@ -88,9 +88,11 @@ func (b *BackfillerTaskExecutor) Execute(
 		result, err = b.processBackfill(ctx, scheduler, backfiller, limit)
 	case RequestTypeTrigger:
 		result, err = b.processTrigger(ctx, scheduler, backfiller)
+	default:
+		return serviceerror.NewInternalf("unknown backfill type: %v", backfiller.RequestType())
 	}
 	if err != nil {
-		logger.Error("Failed to process backfill", tag.Error(err))
+		logger.Error("failed to process backfill", tag.Error(err))
 		return err
 	}
 
@@ -102,7 +104,7 @@ func (b *BackfillerTaskExecutor) Execute(
 	// If we're complete, we can delete this Backfiller component and return without
 	// any more tasks.
 	if result.Complete {
-		logger.Debug("Backfill complete, deleting Backfiller",
+		logger.Debug("backfill complete, deleting Backfiller",
 			tag.NewStringTag("backfill-id", backfiller.GetBackfillId()))
 		delete(scheduler.Backfillers, backfiller.GetBackfillId())
 		return nil
@@ -119,7 +121,7 @@ func (b *BackfillerTaskExecutor) rescheduleBackfill(ctx chasm.MutableContext, ba
 	backoffTime := ctx.Now(backfiller).Add(b.backoffDelay(backfiller))
 	ctx.AddTask(backfiller, chasm.TaskAttributes{
 		ScheduledTime: backoffTime,
-	}, &schedulespb.BackfillerTask{})
+	}, &schedulerpb.BackfillerTask{})
 }
 
 // processBackfill processes a Backfiller's BackfillRequest.
@@ -192,7 +194,7 @@ func (b *BackfillerTaskExecutor) processTrigger(
 	nowpb := backfiller.GetLastProcessedTime()
 	now := nowpb.AsTime()
 	requestID := generateRequestID(scheduler, backfiller.GetBackfillId(), now, now)
-	result.BufferedStarts = []*legacyschedulespb.BufferedStart{
+	result.BufferedStarts = []*schedulespb.BufferedStart{
 		{
 			NominalTime:   nowpb,
 			ActualTime:    nowpb,
