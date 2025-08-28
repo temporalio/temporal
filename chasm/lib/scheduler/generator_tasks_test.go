@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
-	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/tasks"
@@ -46,7 +46,7 @@ func (s *generatorTasksSuite) TestExecute_ProcessTimeRangeFails() {
 	// Execute the generate task.
 	generator, err := sched.Generator.Get(ctx)
 	s.NoError(err)
-	err = s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulespb.GeneratorTask{})
+	err = s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	s.True(common.IsInternalError(err))
 }
 
@@ -67,7 +67,7 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 	generator.LastProcessedTime = timestamppb.New(highWatermark)
 
 	// Execute the generate task.
-	err = s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulespb.GeneratorTask{})
+	err = s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	s.NoError(err)
 
 	// We expect 5 buffered starts.

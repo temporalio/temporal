@@ -2,11 +2,10 @@ package scheduler
 
 import (
 	"fmt"
-	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
-	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -39,12 +38,12 @@ func (g *GeneratorTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	generator *Generator,
 	_ chasm.TaskAttributes,
-	_ *schedulespb.GeneratorTask,
+	_ *schedulerpb.GeneratorTask,
 ) error {
 	scheduler, err := generator.Scheduler.Get(ctx)
 	if err != nil {
 		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("Scheduler tree missing node"),
+			serviceerror.NewInternal("scheduler tree missing node"),
 			err)
 	}
 	logger := newTaggedLogger(g.BaseLogger, scheduler)
@@ -52,7 +51,7 @@ func (g *GeneratorTaskExecutor) Execute(
 	invoker, err := scheduler.Invoker.Get(ctx)
 	if err != nil {
 		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("Scheduler tree missing node"),
+			serviceerror.NewInternal("scheduler tree missing node"),
 			err)
 	}
 
@@ -62,14 +61,14 @@ func (g *GeneratorTaskExecutor) Execute(
 		generator.LastProcessedTime = createdAt
 		scheduler.Info.CreateTime = createdAt
 
-		g.logSchedule(logger, "Starting schedule", scheduler)
+		g.logSchedule(logger, "starting schedule", scheduler)
 	}
 
 	// Process time range between last high water mark and system time.
 	t1 := generator.LastProcessedTime.AsTime()
 	t2 := ctx.Now(generator).UTC()
 	if t2.Before(t1) {
-		logger.Warn("Time went backwards",
+		logger.Warn("time went backwards",
 			tag.NewStringerTag("time", t1),
 			tag.NewStringerTag("time", t2))
 		t2 = t1
@@ -78,9 +77,9 @@ func (g *GeneratorTaskExecutor) Execute(
 	result, err := g.SpecProcessor.ProcessTimeRange(scheduler, t1, t2, scheduler.overlapPolicy(), "", false, nil)
 	if err != nil {
 		// An error here should be impossible, send to the DLQ.
-		logger.Error("Error processing time range", tag.Error(err))
+		logger.Error("error processing time range", tag.Error(err))
 		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternalf("Failed to process a time range"),
+			serviceerror.NewInternalf("failed to process a time range"),
 			err)
 	}
 
@@ -92,7 +91,9 @@ func (g *GeneratorTaskExecutor) Execute(
 	// Write the new high water mark.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
 
-	idleDuration, isIdle := g.getIdleExpiration(ctx, scheduler, result.NextWakeupTime)
+	// Check if the schedule has gone idle.
+	idleTimeTotal := g.Config.Tweakables(scheduler.Namespace).IdleTime
+	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, result.NextWakeupTime)
 	if isIdle {
 		// Schedule is complete, no need for another buffer task. We keep the schedule's
 		// backing mutable state explicitly open for a the idle period, during which the
@@ -100,8 +101,8 @@ func (g *GeneratorTaskExecutor) Execute(
 		//
 		// Once the idle timer expires, we close the component.
 		ctx.AddTask(scheduler, chasm.TaskAttributes{
-			ScheduledTime: idleDuration,
-		}, &schedulespb.SchedulerIdleTask{})
+			ScheduledTime: idleExpiration,
+		}, &schedulerpb.SchedulerIdleTask{})
 		return nil
 	}
 
@@ -113,7 +114,7 @@ func (g *GeneratorTaskExecutor) Execute(
 	// Another buffering task is added if we aren't completely out of actions or paused.
 	ctx.AddTask(generator, chasm.TaskAttributes{
 		ScheduledTime: result.NextWakeupTime,
-	}, &schedulespb.GeneratorTask{})
+	}, &schedulerpb.GeneratorTask{})
 
 	return nil
 }
@@ -128,28 +129,7 @@ func (g *GeneratorTaskExecutor) Validate(
 	ctx chasm.Context,
 	generator *Generator,
 	_ chasm.TaskAttributes,
-	_ *schedulespb.GeneratorTask,
+	_ *schedulerpb.GeneratorTask,
 ) (bool, error) {
 	return validateTaskHighWaterMark(generator.GetLastProcessedTime(), ctx.Now(generator))
-}
-
-// getIdleExpiration returns an idle close time and the boolean value of 'true'
-// for when a schedule is idle (pending soft delete).
-func (g *GeneratorTaskExecutor) getIdleExpiration(
-	ctx chasm.Context,
-	scheduler *Scheduler,
-	nextWakeup time.Time,
-) (time.Time, bool) {
-	idleTime := g.Config.Tweakables(scheduler.Namespace).IdleTime
-
-	// If RetentionTime is not set or the schedule is paused or nextWakeup time is not zero
-	// or there are more actions to take, there is no need for retention.
-	if idleTime == 0 ||
-		scheduler.Schedule.State.Paused ||
-		(!nextWakeup.IsZero() && scheduler.useScheduledAction(false)) ||
-		scheduler.hasMoreAllowAllBackfills(ctx) {
-		return time.Time{}, false
-	}
-
-	return scheduler.getLastEventTime().Add(idleTime), true
 }
