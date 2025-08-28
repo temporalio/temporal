@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync/atomic"
 
-	"go.temporal.io/server/common/log"
 	"google.golang.org/grpc/stats"
 )
 
@@ -13,16 +12,13 @@ type ServerStatsHandler stats.Handler
 var _ stats.Handler = (*grpcStatsHandler)(nil)
 
 type grpcStatsHandler struct {
-	mh Handler
-	l  log.Logger
-
+	mh          Handler
 	activeConns atomic.Int64
 }
 
-func NewServerStatsHandler(mh Handler, logger log.Logger) ServerStatsHandler {
+func NewServerStatsHandler(mh Handler) ServerStatsHandler {
 	return &grpcStatsHandler{
 		mh: mh,
-		l:  logger,
 	}
 }
 
