@@ -2,7 +2,7 @@ package scheduler
 
 import (
 	"go.temporal.io/server/chasm"
-	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 )
 
 // The Generator component is responsible for buffering actions according
@@ -11,7 +11,7 @@ import (
 type Generator struct {
 	chasm.UnimplementedComponent
 
-	*schedulespb.GeneratorInternal
+	*schedulerpb.GeneratorState
 
 	Scheduler chasm.Field[*Scheduler]
 }
@@ -20,7 +20,7 @@ type Generator struct {
 // be parented under a Scheduler root node.
 func NewGenerator(ctx chasm.MutableContext, scheduler *Scheduler, invoker *Invoker) *Generator {
 	return &Generator{
-		GeneratorInternal: &schedulespb.GeneratorInternal{
+		GeneratorState: &schedulerpb.GeneratorState{
 			LastProcessedTime: nil,
 		},
 		Scheduler: chasm.ComponentPointerTo(ctx, scheduler),
