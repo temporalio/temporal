@@ -150,11 +150,11 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RecordWorkerHeartbeat":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/FetchWorkerConfig":                  4,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerConfig":                 4,
-		// GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API.
+
+		// P5: GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API.
 		// Treat as long-poll but lower priority (5) so spikes don’t block Poll* APIs.
 		PollWorkflowHistoryAPIName: 5,
-
-		// P5: Informational API that aren't required for the temporal service to function
+		// Informational API that aren't required for the temporal service to function
 		OpenAPIV3APIName: 5,
 		OpenAPIV2APIName: 5,
 	}
