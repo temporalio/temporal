@@ -595,6 +595,18 @@ var (
 		"service_error_with_type",
 		WithDescription("The number of all service request errors by error type."),
 	)
+	ServiceConnAccepted = NewCounterDef(
+		"service_grpc_conn_accepted",
+		WithDescription("Number of gRPC's TCP connections accepted by the service."),
+	)
+	ServiceConnClosed = NewCounterDef(
+		"service_grpc_conn_closed",
+		WithDescription("Number of gRPC's TCP connections closed on the service."),
+	)
+	ServiceConnActive = NewGaugeDef(
+		"service_grpc_conn_active",
+		WithDescription("Current number of gRPC's active TCP connections."),
+	)
 	ServiceLatency                           = NewTimerDef("service_latency")
 	ServiceLatencyNoUserLatency              = NewTimerDef("service_latency_nouserlatency")
 	ServiceLatencyUserLatency                = NewTimerDef("service_latency_userlatency")
