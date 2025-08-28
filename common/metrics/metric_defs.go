@@ -597,15 +597,15 @@ var (
 	)
 	ServiceConnAccepted = NewCounterDef(
 		"service_grpc_conn_accepted",
-		WithDescription("Number of gRPC connections accepted by the service."),
+		WithDescription("Number of gRPC's TCP connections accepted by the service."),
 	)
 	ServiceConnClosed = NewCounterDef(
 		"service_grpc_conn_closed",
-		WithDescription("Number of gRPC connections closed on the service."),
+		WithDescription("Number of gRPC's TCP connections closed on the service."),
 	)
 	ServiceConnActive = NewGaugeDef(
 		"service_grpc_conn_active",
-		WithDescription("Current number of active gRPC connections."),
+		WithDescription("Current number of gRPC's active TCP connections."),
 	)
 	ServiceLatency                           = NewTimerDef("service_latency")
 	ServiceLatencyNoUserLatency              = NewTimerDef("service_latency_nouserlatency")
