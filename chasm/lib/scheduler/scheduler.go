@@ -7,7 +7,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/server/chasm"
-	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -23,7 +23,7 @@ type Scheduler struct {
 
 	// Persisted internal state, consisting of state relevant to all components in
 	// the scheduler tree.
-	*schedulespb.SchedulerInternal
+	*schedulerpb.SchedulerState
 
 	Generator   chasm.Field[*Generator]
 	Invoker     chasm.Field[*Invoker]
@@ -31,7 +31,7 @@ type Scheduler struct {
 
 	// Locally-cached state, invalidated whenever cacheConflictToken != ConflictToken.
 	cacheConflictToken int64
-	compiledSpec       *scheduler.CompiledSpec
+	compiledSpec       *scheduler.CompiledSpec // compiledSpec is only ever replaced whole, not mutated.
 }
 
 const (
@@ -49,7 +49,7 @@ func NewScheduler(
 	var zero time.Time
 
 	sched := &Scheduler{
-		SchedulerInternal: &schedulespb.SchedulerInternal{
+		SchedulerState: &schedulerpb.SchedulerState{
 			Schedule: input,
 			Info: &schedulepb.ScheduleInfo{
 				CreateTime: timestamppb.Now(),
@@ -88,7 +88,7 @@ func (s *Scheduler) NewRangeBackfiller(
 	request *schedulepb.BackfillRequest,
 ) *Backfiller {
 	backfiller := newBackfiller(ctx, s)
-	backfiller.BackfillerInternal.Request = &schedulespb.BackfillerInternal_BackfillRequest{
+	backfiller.Request = &schedulerpb.BackfillerState_BackfillRequest{
 		BackfillRequest: request,
 	}
 	s.addBackfiller(ctx, backfiller)
@@ -102,7 +102,7 @@ func (s *Scheduler) NewImmediateBackfiller(
 	request *schedulepb.TriggerImmediatelyRequest,
 ) *Backfiller {
 	backfiller := newBackfiller(ctx, s)
-	backfiller.BackfillerInternal.Request = &schedulespb.BackfillerInternal_TriggerRequest{
+	backfiller.Request = &schedulerpb.BackfillerState_TriggerRequest{
 		TriggerRequest: request,
 	}
 	s.addBackfiller(ctx, backfiller)
@@ -116,7 +116,7 @@ func (s *Scheduler) addBackfiller(
 	backfiller *Backfiller,
 ) {
 	s.Backfillers[backfiller.BackfillId] = chasm.NewComponentField(ctx, backfiller)
-	ctx.AddTask(backfiller, chasm.TaskAttributes{}, &schedulespb.BackfillerTask{})
+	ctx.AddTask(backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
 }
 
 // useScheduledAction returns true when the Scheduler should allow scheduled
@@ -170,15 +170,15 @@ func (s *Scheduler) getCompiledSpec(specBuilder *scheduler.SpecBuilder) (*schedu
 	return s.compiledSpec, nil
 }
 
-func (s Scheduler) jitterSeed() string {
+func (s *Scheduler) jitterSeed() string {
 	return fmt.Sprintf("%s-%s", s.NamespaceId, s.ScheduleId)
 }
 
-func (s Scheduler) identity() string {
+func (s *Scheduler) identity() string {
 	return fmt.Sprintf("temporal-scheduler-%s-%s", s.Namespace, s.ScheduleId)
 }
 
-func (s Scheduler) overlapPolicy() enumspb.ScheduleOverlapPolicy {
+func (s *Scheduler) overlapPolicy() enumspb.ScheduleOverlapPolicy {
 	policy := s.Schedule.Policies.OverlapPolicy
 	if policy == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
 		policy = enumspb.SCHEDULE_OVERLAP_POLICY_SKIP
@@ -186,7 +186,7 @@ func (s Scheduler) overlapPolicy() enumspb.ScheduleOverlapPolicy {
 	return policy
 }
 
-func (s Scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPolicy) enumspb.ScheduleOverlapPolicy {
+func (s *Scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPolicy) enumspb.ScheduleOverlapPolicy {
 	if overlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
 		overlapPolicy = s.overlapPolicy()
 	}
@@ -227,6 +227,25 @@ func (s *Scheduler) getLastEventTime() time.Time {
 	return lastEvent
 }
 
+// getIdleExpiration returns an idle close time and the boolean value of 'true'
+// for when a schedule is idle (pending soft delete).
+func (s *Scheduler) getIdleExpiration(
+	ctx chasm.Context,
+	idleTime time.Duration,
+	nextWakeup time.Time,
+) (time.Time, bool) {
+	// The idle timer to close off the component is started only for schedules with
+	// no more work to do. Paused schedules are held open indefinitely.
+	if idleTime == 0 ||
+		s.Schedule.State.Paused ||
+		(!nextWakeup.IsZero() && s.useScheduledAction(false)) ||
+		s.hasMoreAllowAllBackfills(ctx) {
+		return time.Time{}, false
+	}
+
+	return s.getLastEventTime().Add(idleTime), true
+}
+
 func (s *Scheduler) hasMoreAllowAllBackfills(ctx chasm.Context) bool {
 	for _, field := range s.Backfillers {
 		backfiller, err := field.Get(ctx)
@@ -251,7 +270,6 @@ func (s *Scheduler) hasMoreAllowAllBackfills(ctx chasm.Context) bool {
 
 type schedulerActionResult struct {
 	overlapSkipped      int64
-	bufferDropped       int64
 	missedCatchupWindow int64
 	starts              []*schedulepb.ScheduleActionResult
 }
@@ -260,7 +278,6 @@ type schedulerActionResult struct {
 func (s *Scheduler) recordActionResult(result *schedulerActionResult) {
 	s.Info.ActionCount += int64(len(result.starts))
 	s.Info.OverlapSkipped += result.overlapSkipped
-	s.Info.BufferDropped += result.bufferDropped
 	s.Info.MissedCatchupWindow += result.missedCatchupWindow
 
 	if len(result.starts) > 0 {

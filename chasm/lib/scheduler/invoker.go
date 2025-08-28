@@ -5,9 +5,9 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	legacyschedulespb "go.temporal.io/server/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
-	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -16,7 +16,7 @@ import (
 type Invoker struct {
 	chasm.UnimplementedComponent
 
-	*schedulespb.InvokerInternal
+	*schedulerpb.InvokerState
 
 	Scheduler chasm.Field[*Scheduler]
 }
@@ -25,8 +25,8 @@ type Invoker struct {
 // be parented under a Scheduler root component.
 func NewInvoker(ctx chasm.MutableContext, scheduler *Scheduler) *Invoker {
 	return &Invoker{
-		InvokerInternal: &schedulespb.InvokerInternal{
-			BufferedStarts: []*legacyschedulespb.BufferedStart{},
+		InvokerState: &schedulerpb.InvokerState{
+			BufferedStarts: []*schedulespb.BufferedStart{},
 		},
 		Scheduler: chasm.ComponentPointerTo(ctx, scheduler),
 	}
@@ -34,30 +34,26 @@ func NewInvoker(ctx chasm.MutableContext, scheduler *Scheduler) *Invoker {
 
 // EnqueueBufferedStarts adds new BufferedStarts to the invocation queue,
 // immediately kicking off a processing task.
-func (i *Invoker) EnqueueBufferedStarts(ctx chasm.MutableContext, starts []*legacyschedulespb.BufferedStart) {
+func (i *Invoker) EnqueueBufferedStarts(ctx chasm.MutableContext, starts []*schedulespb.BufferedStart) {
 	i.BufferedStarts = append(i.BufferedStarts, starts...)
 
 	// Immediately begin processing the new starts.
-	ctx.AddTask(i, chasm.TaskAttributes{}, &schedulespb.InvokerProcessBufferTask{})
+	ctx.AddTask(i, chasm.TaskAttributes{}, &schedulerpb.InvokerProcessBufferTask{})
 }
 
 type processBufferResult struct {
-	startWorkflows     []*legacyschedulespb.BufferedStart
+	startWorkflows     []*schedulespb.BufferedStart
 	cancelWorkflows    []*commonpb.WorkflowExecution
 	terminateWorkflows []*commonpb.WorkflowExecution
 
 	// discardStarts will be dropped from the Invoker's BufferedStarts without execution.
-	discardStarts []*legacyschedulespb.BufferedStart
+	discardStarts []*schedulespb.BufferedStart
 
 	// Number of buffered starts dropped due to overlap policy during processing.
 	overlapSkipped int64
 
 	// Nunmber of buffered starts dropped from missing the catchup window.
 	missedCatchupWindow int64
-
-	// Number of buffered starts dropped due to the max buffer size having been exceeded.
-	// TODO - set this from Generator/Backfiller
-	bufferDropped int64
 }
 
 // recordProcessBufferResult updates the Invoker's internal state based on result, as well as the
@@ -73,7 +69,7 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 	}
 
 	// Drop discarded starts, and update requested starts for execution.
-	var starts []*legacyschedulespb.BufferedStart
+	var starts []*schedulespb.BufferedStart
 	for _, start := range i.GetBufferedStarts() {
 		if discards[start.RequestId] {
 			continue
@@ -98,13 +94,13 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 
 type executeResult struct {
 	// Starts that executed successfully can be removed from the buffer.
-	CompletedStarts []*legacyschedulespb.BufferedStart
+	CompletedStarts []*schedulespb.BufferedStart
 
 	// Starts that failed with a retryable error should be updated and kept in the buffer.
-	RetryableStarts []*legacyschedulespb.BufferedStart
+	RetryableStarts []*schedulespb.BufferedStart
 
 	// Starts that failed with a non-retryable error can be removed from the buffer.
-	FailedStarts []*legacyschedulespb.BufferedStart
+	FailedStarts []*schedulespb.BufferedStart
 
 	CompletedCancels    []*commonpb.WorkflowExecution
 	CompletedTerminates []*commonpb.WorkflowExecution
@@ -124,11 +120,11 @@ func (e *executeResult) Append(o executeResult) executeResult {
 // recordExecuteResult updates the Invoker's internal state with the results of a
 // completed InvokerExecuteTask. Tasks to continue execution are added, if needed.
 func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeResult) {
-	completed := make(map[string]bool)                             // request ID -> is present
-	failed := make(map[string]bool)                                // request ID -> is present
-	retryable := make(map[string]*legacyschedulespb.BufferedStart) // request ID -> *BufferedStart
-	canceled := make(map[string]bool)                              // run ID -> is present
-	terminated := make(map[string]bool)                            // run ID -> is present
+	completed := make(map[string]bool)                       // request ID -> is present
+	failed := make(map[string]bool)                          // request ID -> is present
+	retryable := make(map[string]*schedulespb.BufferedStart) // request ID -> *BufferedStart
+	canceled := make(map[string]bool)                        // run ID -> is present
+	terminated := make(map[string]bool)                      // run ID -> is present
 
 	for _, start := range result.CompletedStarts {
 		completed[start.RequestId] = true
@@ -147,7 +143,7 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 	}
 
 	// Update Invoker state to remove completed items from their buffers.
-	i.BufferedStarts = slices.DeleteFunc(i.GetBufferedStarts(), func(start *legacyschedulespb.BufferedStart) bool {
+	i.BufferedStarts = slices.DeleteFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 		return completed[start.RequestId] || failed[start.RequestId]
 	})
 	i.CancelWorkflows = slices.DeleteFunc(i.GetCancelWorkflows(), func(we *commonpb.WorkflowExecution) bool {
@@ -180,13 +176,13 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 	if (totalStarts - eligibleStarts) > 0 {
 		ctx.AddTask(i, chasm.TaskAttributes{
 			ScheduledTime: i.processingDeadline(),
-		}, &schedulespb.InvokerProcessBufferTask{})
+		}, &schedulerpb.InvokerProcessBufferTask{})
 	}
 
 	// Add an Execute side effect task whenever there are any eligible actions
 	// pending execution.
 	if len(i.CancelWorkflows) > 0 || len(i.TerminateWorkflows) > 0 || eligibleStarts > 0 {
-		ctx.AddTask(i, chasm.TaskAttributes{}, &schedulespb.InvokerExecuteTask{})
+		ctx.AddTask(i, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
 	}
 }
 
@@ -211,8 +207,8 @@ func (i *Invoker) processingDeadline() time.Time {
 // getEligibleBufferedStarts returns all BufferedStarts that are marked for
 // execution (Attempt > 0), and aren't presently backing off, based on last
 // processed time.
-func (i *Invoker) getEligibleBufferedStarts() []*legacyschedulespb.BufferedStart {
-	return util.FilterSlice(i.GetBufferedStarts(), func(start *legacyschedulespb.BufferedStart) bool {
+func (i *Invoker) getEligibleBufferedStarts() []*schedulespb.BufferedStart {
+	return util.FilterSlice(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 		return start.Attempt > 0 && start.BackoffTime.AsTime().Before(i.GetLastProcessedTime().AsTime())
 	})
 }
