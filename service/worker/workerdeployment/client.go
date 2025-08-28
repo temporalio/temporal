@@ -64,11 +64,7 @@ type Client interface {
 	SetCurrentVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		deploymentName string,
-		version string,
-		identity string,
-		ignoreMissingTaskQueues bool,
-		conflictToken []byte,
+		req *workflowservice.SetWorkerDeploymentCurrentVersionRequest,
 	) (*deploymentspb.SetCurrentVersionResponse, error)
 
 	ListWorkerDeployments(
@@ -96,12 +92,7 @@ type Client interface {
 	SetRampingVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		deploymentName string,
-		version string,
-		percentage float32,
-		identity string,
-		ignoreMissingTaskQueues bool,
-		conflictToken []byte,
+		req *workflowservice.SetWorkerDeploymentRampingVersionRequest,
 	) (*deploymentspb.SetRampingVersionResponse, error)
 
 	UpdateVersionMetadata(
@@ -113,11 +104,20 @@ type Client interface {
 		identity string,
 	) (*deploymentpb.VersionMetadata, error)
 
-	// Used internally by the Worker Deployment workflow in its StartWorkerDeployment Activity
+	// Used internally by the Worker Deployment Version workflow in its StartWorkerDeployment Activity
 	StartWorkerDeployment(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		deploymentName string,
+		identity string,
+		requestID string,
+	) error
+
+	// Used internally by the Worker Deployment workflow in its StartWorkerDeploymentVersion Activity
+	StartWorkerDeploymentVersion(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName, buildID string,
 		identity string,
 		requestID string,
 	) error
@@ -521,12 +521,15 @@ func (d *ClientImpl) ListWorkerDeployments(
 func (d *ClientImpl) SetCurrentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	deploymentName string,
-	version string,
-	identity string,
-	ignoreMissingTaskQueues bool,
-	conflictToken []byte,
+	req *workflowservice.SetWorkerDeploymentCurrentVersionRequest,
 ) (_ *deploymentspb.SetCurrentVersionResponse, retErr error) {
+	version := req.GetVersion()
+	identity := req.GetIdentity()
+	deploymentName := req.GetDeploymentName()
+	ignoreMissingTaskQueues := req.GetIgnoreMissingTaskQueues()
+	conflictToken := req.GetConflictToken()
+	allowNoPollers := req.GetAllowNoPollers()
+
 	//revive:disable-next-line:defer
 	defer d.record("SetCurrentVersion", &retErr, namespaceEntry.Name(), version, identity)()
 
@@ -543,32 +546,63 @@ func (d *ClientImpl) SetCurrentVersion(
 		return nil, err
 	}
 
-	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
-
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentVersionArgs{
 		Identity:                identity,
 		Version:                 version,
 		IgnoreMissingTaskQueues: ignoreMissingTaskQueues,
 		ConflictToken:           conflictToken,
+		AllowNoPollers:          allowNoPollers,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	// Generating a new updateID for each request. No-ops are handled by the worker-deployment workflow.
+	// Generating a new updateID and requestID for each request. No-ops are handled by the worker-deployment workflow.
 	updateID := uuid.New()
+	requestID := uuid.New()
 
-	outcome, err := d.update(
-		ctx,
-		namespaceEntry,
-		workflowID,
-		&updatepb.Request{
-			Input: &updatepb.Input{Name: SetCurrentVersion, Args: updatePayload},
-			Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
-		},
-	)
-	if err != nil {
-		return nil, err
+	var outcome *updatepb.Outcome
+	if allowNoPollers {
+		// we want to start the Worker Deployment workflow if it hasn't been started by a poller
+		outcome, err = d.updateWithStartWorkerDeployment(
+			ctx,
+			namespaceEntry,
+			deploymentName,
+			versionObj.GetBuildId(),
+			&updatepb.Request{
+				Input: &updatepb.Input{Name: SetCurrentVersion, Args: updatePayload},
+				Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
+			},
+			identity,
+			requestID,
+			d.getSyncBatchSize(),
+		)
+		if err != nil {
+			// TODO(carlydf): handle errTooManyVersions and errTooManyDeployments
+			var notFound *serviceerror.NotFound
+			if errors.As(err, &notFound) {
+				return nil, serviceerror.NewFailedPreconditionf(ErrWorkerDeploymentNotFound, deploymentName)
+			}
+			return nil, err
+		}
+	} else {
+		// we *don't* want to start the Worker Deployment workflow; it should be started by a poller
+		outcome, err = d.update(
+			ctx,
+			namespaceEntry,
+			worker_versioning.GenerateDeploymentWorkflowID(deploymentName),
+			&updatepb.Request{
+				Input: &updatepb.Input{Name: SetCurrentVersion, Args: updatePayload},
+				Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
+			},
+		)
+		if err != nil {
+			var notFound *serviceerror.NotFound
+			if errors.As(err, &notFound) {
+				return nil, serviceerror.NewFailedPreconditionf(ErrWorkerDeploymentNotFound, deploymentName)
+			}
+			return nil, err
+		}
 	}
 
 	var res deploymentspb.SetCurrentVersionResponse
@@ -603,13 +637,15 @@ func (d *ClientImpl) SetCurrentVersion(
 func (d *ClientImpl) SetRampingVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	deploymentName string,
-	version string,
-	percentage float32,
-	identity string,
-	ignoreMissingTaskQueues bool,
-	conflictToken []byte,
+	req *workflowservice.SetWorkerDeploymentRampingVersionRequest,
 ) (_ *deploymentspb.SetRampingVersionResponse, retErr error) {
+	version := req.GetVersion()
+	percentage := req.GetPercentage()
+	identity := req.GetIdentity()
+	deploymentName := req.GetDeploymentName()
+	ignoreMissingTaskQueues := req.GetIgnoreMissingTaskQueues()
+	conflictToken := req.GetConflictToken()
+
 	//revive:disable-next-line:defer
 	defer d.record("SetRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
 
@@ -841,17 +877,42 @@ func (d *ClientImpl) StartWorkerDeployment(
 		return err
 	}
 
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                requestID,
-		Namespace:                namespaceEntry.Name().String(),
-		WorkflowId:               workflowID,
-		WorkflowType:             &commonpb.WorkflowType{Name: WorkerDeploymentWorkflowType},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    input,
-		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		SearchAttributes:         d.buildSearchAttributes(),
+	startReq := d.makeStartRequest(requestID, workflowID, identity, WorkerDeploymentWorkflowType, namespaceEntry, nil, input)
+
+	historyStartReq := &historyservice.StartWorkflowExecutionRequest{
+		NamespaceId:  namespaceEntry.ID().String(),
+		StartRequest: startReq,
 	}
+
+	_, err = d.historyClient.StartWorkflowExecution(ctx, historyStartReq)
+	return err
+}
+
+func (d *ClientImpl) StartWorkerDeploymentVersion(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName, buildID string,
+	identity string,
+	requestID string,
+) (retErr error) {
+	//revive:disable-next-line:defer
+	defer d.record("StartWorkerDeploymentVersion", &retErr, namespaceEntry.Name(), deploymentName, identity)()
+
+	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
+	if err != nil {
+		return err
+	}
+	err = validateVersionWfParams(WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit())
+	if err != nil {
+		return err
+	}
+
+	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, buildID)
+	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry))
+	if err != nil {
+		return err
+	}
+	startReq := d.makeStartRequest(requestID, workflowID, identity, WorkerDeploymentVersionWorkflowType, namespaceEntry, nil, input)
 
 	historyStartReq := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:  namespaceEntry.ID().String(),
@@ -1129,26 +1190,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	}
 
 	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, buildID)
-
-	now := timestamppb.Now()
-	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentVersionWorkflowArgs{
-		NamespaceName: namespaceEntry.Name().String(),
-		NamespaceId:   namespaceEntry.ID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
-				DeploymentName: deploymentName,
-				BuildId:        buildID,
-			},
-			CreateTime:        now,
-			RoutingUpdateTime: nil,
-			CurrentSinceTime:  nil,                                 // not current
-			RampingSinceTime:  nil,                                 // not ramping
-			RampPercentage:    0,                                   // not ramping
-			DrainageInfo:      &deploymentpb.VersionDrainageInfo{}, // not draining or drained
-			Metadata:          nil,                                 // todo
-			SyncBatchSize:     d.getSyncBatchSize(),
-		},
-	})
+	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry))
 	if err != nil {
 		return nil, err
 	}
@@ -1230,19 +1272,7 @@ func (d *ClientImpl) updateWithStart(
 	requestID string,
 ) (*updatepb.Outcome, error) {
 	// Start workflow execution, if it hasn't already
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                requestID,
-		Namespace:                namespaceEntry.Name().String(),
-		WorkflowId:               workflowID,
-		WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    input,
-		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		SearchAttributes:         d.buildSearchAttributes(),
-		Memo:                     memo,
-		Identity:                 identity,
-	}
+	startReq := d.makeStartRequest(requestID, workflowID, identity, workflowType, namespaceEntry, memo, input)
 
 	updateReq := &workflowservice.UpdateWorkflowExecutionRequest{
 		Namespace: namespaceEntry.Name().String(),
@@ -1712,4 +1742,49 @@ func (d *ClientImpl) getSyncBatchSize() int32 {
 		syncBatchSize = int32(n)
 	}
 	return syncBatchSize
+}
+
+func (d *ClientImpl) makeVersionWorkflowArgs(
+	deploymentName, buildID string,
+	namespaceEntry *namespace.Namespace,
+) *deploymentspb.WorkerDeploymentVersionWorkflowArgs {
+	return &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: namespaceEntry.Name().String(),
+		NamespaceId:   namespaceEntry.ID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: deploymentName,
+				BuildId:        buildID,
+			},
+			CreateTime:        timestamppb.Now(),
+			RoutingUpdateTime: nil,
+			CurrentSinceTime:  nil,                                 // not current
+			RampingSinceTime:  nil,                                 // not ramping
+			RampPercentage:    0,                                   // not ramping
+			DrainageInfo:      &deploymentpb.VersionDrainageInfo{}, // not draining or drained
+			Metadata:          nil,
+			SyncBatchSize:     d.getSyncBatchSize(),
+		},
+	}
+}
+
+func (d *ClientImpl) makeStartRequest(
+	requestID, workflowID, identity, workflowType string,
+	namespaceEntry *namespace.Namespace,
+	memo *commonpb.Memo,
+	input *commonpb.Payloads,
+) *workflowservice.StartWorkflowExecutionRequest {
+	return &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                requestID,
+		Namespace:                namespaceEntry.Name().String(),
+		WorkflowId:               workflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                    input,
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+		SearchAttributes:         d.buildSearchAttributes(),
+		Memo:                     memo,
+		Identity:                 identity,
+	}
 }
