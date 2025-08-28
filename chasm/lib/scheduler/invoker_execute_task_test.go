@@ -10,10 +10,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
-	legacyschedulespb "go.temporal.io/server/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
-	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.temporal.io/server/service/history/tasks"
@@ -49,7 +49,7 @@ func (s *invokerExecuteTaskSuite) SetupTest() {
 }
 
 type executeTestCase struct {
-	InitialBufferedStarts     []*legacyschedulespb.BufferedStart
+	InitialBufferedStarts     []*schedulespb.BufferedStart
 	InitialCancelWorkflows    []*commonpb.WorkflowExecution
 	InitialTerminateWorkflows []*commonpb.WorkflowExecution
 	InitialRunningWorkflows   []*commonpb.WorkflowExecution
@@ -68,7 +68,7 @@ type executeTestCase struct {
 // Execute success case.
 func (s *invokerExecuteTaskSuite) TestExecuteTask_Basic() {
 	startTime := timestamppb.New(s.timeSource.Now())
-	bufferedStarts := []*legacyschedulespb.BufferedStart{
+	bufferedStarts := []*schedulespb.BufferedStart{
 		{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
@@ -117,7 +117,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_RetryableFailure() {
 	// Set up the Invoker's buffer with a two starts. One will succeed immediately,
 	// one will fail.
 	startTime := timestamppb.New(s.timeSource.Now())
-	bufferedStarts := []*legacyschedulespb.BufferedStart{
+	bufferedStarts := []*schedulespb.BufferedStart{
 		{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
@@ -140,11 +140,11 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_RetryableFailure() {
 
 	// Fail the first start, and succeed the second.
 	s.mockFrontendClient.EXPECT().
-		StartWorkflowExecution(gomock.Any(), startWorkflowExecutionRequestIdMatches("fail")).
+		StartWorkflowExecution(gomock.Any(), startWorkflowExecutionRequestIDMatches("fail")).
 		Times(1).
 		Return(nil, serviceerror.NewDeadlineExceeded("deadline exceeded"))
 	s.mockFrontendClient.EXPECT().
-		StartWorkflowExecution(gomock.Any(), startWorkflowExecutionRequestIdMatches("pass")).
+		StartWorkflowExecution(gomock.Any(), startWorkflowExecutionRequestIDMatches("pass")).
 		Times(1).
 		Return(&workflowservice.StartWorkflowExecutionResponse{
 			RunId: "run-id",
@@ -168,7 +168,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_RetryableFailure() {
 // A buffered start fails when a duplicate workflow has already been started.
 func (s *invokerExecuteTaskSuite) TestExecuteTask_AlreadyStarted() {
 	startTime := timestamppb.New(s.timeSource.Now())
-	bufferedStarts := []*legacyschedulespb.BufferedStart{
+	bufferedStarts := []*schedulespb.BufferedStart{
 		{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
@@ -197,7 +197,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_AlreadyStarted() {
 // A buffered start fails from having exceeded its maximum retry limit.
 func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxAttempts() {
 	startTime := timestamppb.New(s.timeSource.Now())
-	bufferedStarts := []*legacyschedulespb.BufferedStart{
+	bufferedStarts := []*schedulespb.BufferedStart{
 		{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
@@ -289,11 +289,11 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_CancelTerminateSucceed() {
 // completed work.
 func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxActionsPerExecution() {
 	startTime := timestamppb.New(s.timeSource.Now())
-	var bufferedStarts []*legacyschedulespb.BufferedStart
+	var bufferedStarts []*schedulespb.BufferedStart
 	maxStarts := scheduler.DefaultTweakables.MaxActionsPerExecution
 	for i := range maxStarts * 2 {
 		bufferedStarts = append(bufferedStarts,
-			&legacyschedulespb.BufferedStart{
+			&schedulespb.BufferedStart{
 				NominalTime:   startTime,
 				ActualTime:    startTime,
 				DesiredTime:   startTime,
@@ -304,7 +304,8 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxActionsPerExecution(
 			})
 	}
 
-	// Expect both buffered starts to result in workflow executions.
+	// Expect up to the maximum buffered start limit to result in workflow
+	// executions.
 	s.mockFrontendClient.EXPECT().
 		StartWorkflowExecution(gomock.Any(), gomock.Any()).
 		Times(maxStarts).
@@ -314,9 +315,9 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxActionsPerExecution(
 
 	s.runExecuteTestCase(&executeTestCase{
 		InitialBufferedStarts:    bufferedStarts,
-		ExpectedBufferedStarts:   10,
-		ExpectedRunningWorkflows: 10,
-		ExpectedActionCount:      10,
+		ExpectedBufferedStarts:   maxStarts,
+		ExpectedRunningWorkflows: maxStarts,
+		ExpectedActionCount:      int64(maxStarts),
 	})
 }
 
@@ -344,7 +345,7 @@ func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 
 	// Create engine context for side effect task execution
 	engineCtx := s.newEngineContext()
-	err = s.executor.Execute(engineCtx, chasm.ComponentRef{}, chasm.TaskAttributes{}, &schedulespb.InvokerExecuteTask{})
+	err = s.executor.Execute(engineCtx, chasm.ComponentRef{}, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
 	s.NoError(err)
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
@@ -364,21 +365,21 @@ func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 	}
 }
 
-type startWorkflowExecutionRequestIdMatcher struct {
-	RequestId string
+type startWorkflowExecutionRequestIDMatcher struct {
+	RequestID string
 }
 
-var _ gomock.Matcher = &startWorkflowExecutionRequestIdMatcher{}
+var _ gomock.Matcher = &startWorkflowExecutionRequestIDMatcher{}
 
-func startWorkflowExecutionRequestIdMatches(requestId string) *startWorkflowExecutionRequestIdMatcher {
-	return &startWorkflowExecutionRequestIdMatcher{requestId}
+func startWorkflowExecutionRequestIDMatches(requestID string) *startWorkflowExecutionRequestIDMatcher {
+	return &startWorkflowExecutionRequestIDMatcher{requestID}
 }
 
-func (s *startWorkflowExecutionRequestIdMatcher) String() string {
-	return fmt.Sprintf("StartWorkflowExecutionRequest{RequestId: \"%s\"}", s.RequestId)
+func (s *startWorkflowExecutionRequestIDMatcher) String() string {
+	return fmt.Sprintf("StartWorkflowExecutionRequest{RequestId: \"%s\"}", s.RequestID)
 }
 
-func (s *startWorkflowExecutionRequestIdMatcher) Matches(x any) bool {
+func (s *startWorkflowExecutionRequestIDMatcher) Matches(x any) bool {
 	req, ok := x.(*workflowservice.StartWorkflowExecutionRequest)
-	return ok && req.RequestId == s.RequestId
+	return ok && req.RequestId == s.RequestID
 }

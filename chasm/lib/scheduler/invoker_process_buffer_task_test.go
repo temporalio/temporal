@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	legacyschedulespb "go.temporal.io/server/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
-	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
@@ -37,7 +37,7 @@ func (s *invokerProcessBufferTaskSuite) SetupTest() {
 }
 
 type processBufferTestCase struct {
-	InitialBufferedStarts     []*legacyschedulespb.BufferedStart
+	InitialBufferedStarts     []*schedulespb.BufferedStart
 	InitialCancelWorkflows    []*commonpb.WorkflowExecution
 	InitialTerminateWorkflows []*commonpb.WorkflowExecution
 	InitialRunningWorkflows   []*commonpb.WorkflowExecution
@@ -55,7 +55,7 @@ type processBufferTestCase struct {
 // ProcessBuffer attempts all buffered starts with ALLOW_ALL policy.
 func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_AllowAll() {
 	startTime := timestamppb.New(s.timeSource.Now())
-	bufferedStarts := []*legacyschedulespb.BufferedStart{
+	bufferedStarts := []*schedulespb.BufferedStart{
 		{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
@@ -87,7 +87,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_AllowAll() {
 		ExpectedBufferedStarts: 3,
 		ExpectedOverlapSkipped: 0,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
-			s.Equal(3, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *legacyschedulespb.BufferedStart) bool {
+			s.Equal(3, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 				return start.Attempt > 0
 			})))
 		},
@@ -99,7 +99,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_MissedCatchupWindo
 	now := s.timeSource.Now()
 	startTime := now.Add(-defaultCatchupWindow * 2)
 	startTimestamp := timestamppb.New(startTime)
-	bufferedStarts := []*legacyschedulespb.BufferedStart{
+	bufferedStarts := []*schedulespb.BufferedStart{
 		{
 			NominalTime:   startTimestamp,
 			ActualTime:    startTimestamp,
@@ -121,7 +121,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_MissedCatchupWindo
 // ProcessBuffer defers a start (from overlap policy) by placing it into NewBuffer.
 func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BufferOne() {
 	startTime := timestamppb.New(s.timeSource.Now())
-	bufferedStarts := []*legacyschedulespb.BufferedStart{
+	bufferedStarts := []*schedulespb.BufferedStart{
 		{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
@@ -157,7 +157,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BufferOne() {
 		ExpectedOverlapSkipped: 1,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
 			// Only one start should be set for execution (Attempt > 0)
-			s.Equal(1, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *legacyschedulespb.BufferedStart) bool {
+			s.Equal(1, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 				return start.Attempt > 0
 			})))
 		},
@@ -175,7 +175,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_Empty() {
 func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BackingOff() {
 	startTime := timestamppb.New(s.timeSource.Now())
 	backoffTime := startTime.AsTime().Add(30 * time.Minute)
-	bufferedStarts := []*legacyschedulespb.BufferedStart{
+	bufferedStarts := []*schedulespb.BufferedStart{
 		{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
@@ -208,7 +208,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BackingOff() {
 func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BackingOffReady() {
 	startTime := timestamppb.New(s.timeSource.Now())
 	backoffTime := s.timeSource.Now().Add(-1 * time.Minute)
-	bufferedStarts := []*legacyschedulespb.BufferedStart{
+	bufferedStarts := []*schedulespb.BufferedStart{
 		{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
@@ -226,7 +226,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BackingOffReady() 
 		ExpectedBufferedStarts: 1,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
 			// The start should be ready for execution (Attempt > 0)
-			s.Equal(1, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *legacyschedulespb.BufferedStart) bool {
+			s.Equal(1, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 				return start.Attempt > 0
 			})))
 		},
@@ -243,7 +243,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_NeedsTerminate() {
 
 	// Set up the BufferedStart with a policy that will terminate existing workflows.
 	startTime := timestamppb.New(s.timeSource.Now())
-	bufferedStarts := []*legacyschedulespb.BufferedStart{
+	bufferedStarts := []*schedulespb.BufferedStart{
 		{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
@@ -276,7 +276,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_NeedsCancel() {
 
 	// Set up the BufferedStart with a policy that will cancel existing workflows.
 	startTime := timestamppb.New(s.timeSource.Now())
-	bufferedStarts := []*legacyschedulespb.BufferedStart{
+	bufferedStarts := []*schedulespb.BufferedStart{
 		{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
@@ -316,7 +316,7 @@ func (s *invokerProcessBufferTaskSuite) runProcessBufferTestCase(c *processBuffe
 	// Clear old tasks and run the process buffer task
 	s.addedTasks = make([]tasks.Task, 0)
 
-	err = s.executor.Execute(ctx, invoker, chasm.TaskAttributes{}, &schedulespb.InvokerProcessBufferTask{})
+	err = s.executor.Execute(ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerProcessBufferTask{})
 	s.NoError(err)
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
