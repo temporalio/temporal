@@ -18,7 +18,7 @@ type (
 		IdleTime                          time.Duration // How long to keep schedules after they're done
 	}
 
-	// CHASM Scheduler dynamic config, shared among all sub-components.
+	// Config is the CHASM Scheduler dynamic config, shared among all sub-components.
 	Config struct {
 		Tweakables         dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]
 		ServiceCallTimeout dynamicconfig.DurationPropertyFn
@@ -56,7 +56,7 @@ var (
 		MaxBufferSize:                     1000,
 		CanceledTerminatedCountAsFailures: false,
 		RecentActionCount:                 10,
-		MaxActionsPerExecution:            10,
+		MaxActionsPerExecution:            5,
 		IdleTime:                          7 * 24 * time.Hour,
 	}
 )
