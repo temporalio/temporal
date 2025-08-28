@@ -12,6 +12,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas/calculator"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/telemetry"
 	"go.uber.org/fx"
@@ -43,6 +44,7 @@ type (
 		TelemetryInterceptor   *interceptor.TelemetryInterceptor
 		RateLimitInterceptor   *interceptor.RateLimitInterceptor
 		TracingStatsHandler    telemetry.ServerStatsHandler
+		MetricsStatsHandler    metrics.ServerStatsHandler
 		AdditionalInterceptors []grpc.UnaryServerInterceptor `optional:"true"`
 	}
 )
@@ -124,8 +126,15 @@ func GrpcServerOptionsProvider(
 		params.Logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
 
+	multiStats := rpc.MultiStatsHandler{}
 	if params.TracingStatsHandler != nil {
-		grpcServerOptions = append(grpcServerOptions, grpc.StatsHandler(params.TracingStatsHandler))
+		multiStats = append(multiStats, params.TracingStatsHandler)
+	}
+	if params.MetricsStatsHandler != nil {
+		multiStats = append(multiStats, params.MetricsStatsHandler)
+	}
+	if len(multiStats) > 0 {
+		grpcServerOptions = append(grpcServerOptions, grpc.StatsHandler(multiStats))
 	}
 
 	return append(
