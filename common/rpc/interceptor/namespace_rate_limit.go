@@ -48,13 +48,11 @@ func NewNamespaceRateLimitInterceptor(
 	namespaceRegistry namespace.Registry,
 	rateLimiter quotas.RequestRateLimiter,
 	tokens map[string]int,
-	reducePollWorkflowHistoryPriority dynamicconfig.BoolPropertyFn,
 ) NamespaceRateLimitInterceptor {
 	return &NamespaceRateLimitInterceptorImpl{
-		namespaceRegistry:                 namespaceRegistry,
-		rateLimiter:                       rateLimiter,
-		tokens:                            tokens,
-		reducePollWorkflowHistoryPriority: reducePollWorkflowHistoryPriority,
+		namespaceRegistry: namespaceRegistry,
+		rateLimiter:       rateLimiter,
+		tokens:            tokens,
 	}
 }
 
@@ -66,7 +64,7 @@ func (ni *NamespaceRateLimitInterceptorImpl) Intercept(
 ) (interface{}, error) {
 	if ns := MustGetNamespaceName(ni.namespaceRegistry, req); ns != namespace.EmptyName {
 		method := info.FullMethod
-		if ni.reducePollWorkflowHistoryPriority() && isLongPollGetHistoryRequest(req) {
+		if isLongPollGetHistoryRequest(req) {
 			method = configs.PollWorkflowHistoryAPIName
 		}
 		if err := ni.Allow(ns, method, headers.NewGRPCHeaderGetter(ctx)); err != nil {
