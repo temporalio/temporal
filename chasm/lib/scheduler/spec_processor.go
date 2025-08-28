@@ -4,7 +4,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	legacyschedulespb "go.temporal.io/server/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -49,7 +49,7 @@ type (
 	ProcessedTimeRange struct {
 		NextWakeupTime time.Time
 		LastActionTime time.Time
-		BufferedStarts []*legacyschedulespb.BufferedStart
+		BufferedStarts []*schedulespb.BufferedStart
 	}
 )
 
@@ -93,8 +93,8 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	lastAction := start
 	var next legacyscheduler.GetNextTimeResult
 	var err error
-	var bufferedStarts []*legacyschedulespb.BufferedStart
-	for next, err = s.getNextTime(scheduler, start); err == nil && !(next.Next.IsZero() || next.Next.After(end)); next, err = s.getNextTime(scheduler, next.Next) {
+	var bufferedStarts []*schedulespb.BufferedStart
+	for next, err = s.getNextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.getNextTime(scheduler, next.Next) {
 		if scheduler.Info.UpdateTime.AsTime().After(next.Next) {
 			// If we've received an update that took effect after the LastProcessedTime high
 			// water mark, discard actions that were scheduled to kick off before the update.
@@ -111,7 +111,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			continue
 		}
 
-		bufferedStarts = append(bufferedStarts, &legacyschedulespb.BufferedStart{
+		bufferedStarts = append(bufferedStarts, &schedulespb.BufferedStart{
 			NominalTime:   timestamppb.New(next.Nominal),
 			ActualTime:    timestamppb.New(next.Next),
 			OverlapPolicy: overlapPolicy,
