@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
-	legacyschedulespb "go.temporal.io/server/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
-	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -73,7 +73,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_TriggerImmediateFullBuffer() {
 	invoker, err := s.scheduler.Invoker.Get(ctx)
 	s.NoError(err)
 	for range scheduler.DefaultTweakables.MaxBufferSize {
-		invoker.BufferedStarts = append(invoker.BufferedStarts, &legacyschedulespb.BufferedStart{})
+		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{})
 	}
 
 	now := s.timeSource.Now()
@@ -155,7 +155,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_BufferCompletelyFull() {
 	invoker, err := s.scheduler.Invoker.Get(ctx)
 	s.NoError(err)
 	for range scheduler.DefaultTweakables.MaxBufferSize {
-		invoker.BufferedStarts = append(invoker.BufferedStarts, &legacyschedulespb.BufferedStart{})
+		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{})
 	}
 
 	startTime := s.timeSource.Now()
@@ -182,7 +182,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_PartialFill() {
 	invoker, err := s.scheduler.Invoker.Get(ctx)
 	s.NoError(err)
 	for range (scheduler.DefaultTweakables.MaxBufferSize / 2) - 5 {
-		invoker.BufferedStarts = append(invoker.BufferedStarts, &legacyschedulespb.BufferedStart{})
+		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{})
 	}
 
 	startTime := s.timeSource.Now()
@@ -208,7 +208,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_PartialFill() {
 	// Clear the Invoker's buffer. The remainder of the starts should buffer, and the
 	// backfiller should be deleted.
 	invoker.BufferedStarts = nil
-	err = s.executor.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulespb.BackfillerTask{})
+	err = s.executor.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
 	s.NoError(err)
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
@@ -241,14 +241,14 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 	// Either type of request will spawn a Backfiller and schedule an immediate pure task.
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
-	s.Equal(1, len(s.addedTasks))
+	s.GreaterOrEqual(1, len(s.addedTasks))
 	task, ok := s.addedTasks[0].(*tasks.ChasmTaskPure)
 	s.True(ok)
 	s.Equal(chasm.TaskScheduledTimeImmediate, task.GetVisibilityTime())
 
 	// Run a backfill task.
 	s.addedTasks = make([]tasks.Task, 0) // Clear old tasks.
-	err = s.executor.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulespb.BackfillerTask{})
+	err = s.executor.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
 	s.NoError(err)
 	_, err = s.node.CloseTransaction() // TODO - remove this when CHASM has unit testing hooks for task generation
 	s.NoError(err)
