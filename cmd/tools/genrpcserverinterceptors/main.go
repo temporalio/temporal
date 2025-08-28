@@ -39,10 +39,10 @@ var (
 
 	// List of types for which Workflow tag getters are generated.
 	grpcServers = []reflect.Type{
-		reflect.TypeOf((*workflowservice.WorkflowServiceServer)(nil)).Elem(),
-		reflect.TypeOf((*adminservice.AdminServiceServer)(nil)).Elem(),
-		reflect.TypeOf((*historyservice.HistoryServiceServer)(nil)).Elem(),
-		reflect.TypeOf((*matchingservice.MatchingServiceServer)(nil)).Elem(),
+		reflect.TypeFor[workflowservice.WorkflowServiceServer](),
+		reflect.TypeFor[adminservice.AdminServiceServer](),
+		reflect.TypeFor[historyservice.HistoryServiceServer](),
+		reflect.TypeFor[matchingservice.MatchingServiceServer](),
 	}
 
 	// Only request fields that match the pattern are eligible for deeper inspection.
@@ -50,30 +50,30 @@ var (
 
 	// These types have task_token field, but it is not of type *tokenspb.Task and doesn't have Workflow tags.
 	excludeTaskTokenTypes = []reflect.Type{
-		reflect.TypeOf((*workflowservice.RespondQueryTaskCompletedRequest)(nil)),
-		reflect.TypeOf((*workflowservice.RespondNexusTaskCompletedRequest)(nil)),
-		reflect.TypeOf((*workflowservice.RespondNexusTaskFailedRequest)(nil)),
+		reflect.TypeFor[*workflowservice.RespondQueryTaskCompletedRequest](),
+		reflect.TypeFor[*workflowservice.RespondNexusTaskCompletedRequest](),
+		reflect.TypeFor[*workflowservice.RespondNexusTaskFailedRequest](),
 	}
 
-	executionGetterT = reflect.TypeOf((*interface {
+	executionGetterT = reflect.TypeFor[interface {
 		GetExecution() *commonpb.WorkflowExecution
-	})(nil)).Elem()
+	}]()
 
-	workflowExecutionGetterT = reflect.TypeOf((*interface {
+	workflowExecutionGetterT = reflect.TypeFor[interface {
 		GetWorkflowExecution() *commonpb.WorkflowExecution
-	})(nil)).Elem()
+	}]()
 
-	taskTokenGetterT = reflect.TypeOf((*interface {
+	taskTokenGetterT = reflect.TypeFor[interface {
 		GetTaskToken() []byte
-	})(nil)).Elem()
+	}]()
 
-	workflowIdGetterT = reflect.TypeOf((*interface {
+	workflowIdGetterT = reflect.TypeFor[interface {
 		GetWorkflowId() string
-	})(nil)).Elem()
+	}]()
 
-	runIdGetterT = reflect.TypeOf((*interface {
+	runIdGetterT = reflect.TypeFor[interface {
 		GetRunId() string
-	})(nil)).Elem()
+	}]()
 )
 
 func main() {
