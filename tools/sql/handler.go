@@ -5,7 +5,7 @@ import (
 	"net"
 	"net/url"
 
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -63,7 +63,7 @@ func createDatabase(cli *cli.Context, logger log.Logger) error {
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
-	defaultDb := cli.String(schema.CLIOptDefaultDb)
+	defaultDb := cli.String(schema.CLIFlagDefaultDb)
 	err = DoCreateDatabase(cfg, defaultDb, logger)
 	if err != nil {
 		logger.Error("Unable to create SQL database.", tag.Error(err))
@@ -90,7 +90,7 @@ func dropDatabase(cli *cli.Context, logger log.Logger) error {
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
-	defaultDb := cli.String(schema.CLIOptDefaultDb)
+	defaultDb := cli.String(schema.CLIFlagDefaultDb)
 	err = DoDropDatabase(cfg, defaultDb, logger)
 	if err != nil {
 		logger.Error("Unable to drop SQL database.", tag.Error(err))
@@ -117,18 +117,18 @@ func DoDropDatabase(cfg *config.SQL, defaultDb string, logger log.Logger) error 
 func parseConnectConfig(cli *cli.Context) (*config.SQL, error) {
 	cfg := new(config.SQL)
 
-	host := cli.GlobalString(schema.CLIOptEndpoint)
-	port := cli.GlobalInt(schema.CLIOptPort)
+	host := cli.String(schema.CLIFlagEndpoint)
+	port := cli.Int(schema.CLIFlagPort)
 	cfg.ConnectAddr = fmt.Sprintf("%s:%v", host, port)
-	cfg.User = cli.GlobalString(schema.CLIOptUser)
-	cfg.Password = cli.GlobalString(schema.CLIOptPassword)
-	cfg.DatabaseName = cli.GlobalString(schema.CLIOptDatabase)
-	cfg.PluginName = cli.GlobalString(schema.CLIOptPluginName)
+	cfg.User = cli.String(schema.CLIFlagUser)
+	cfg.Password = cli.String(schema.CLIFlagPassword)
+	cfg.DatabaseName = cli.String(schema.CLIFlagDatabase)
+	cfg.PluginName = cli.String(schema.CLIFlagPluginName)
 
 	if cfg.ConnectAttributes == nil {
 		cfg.ConnectAttributes = map[string]string{}
 	}
-	connectAttributesQueryString := cli.GlobalString(schema.CLIOptConnectAttributes)
+	connectAttributesQueryString := cli.String(schema.CLIFlagConnectAttributes)
 	if connectAttributesQueryString != "" {
 		values, err := url.ParseQuery(connectAttributesQueryString)
 		if err != nil {
@@ -143,14 +143,14 @@ func parseConnectConfig(cli *cli.Context) (*config.SQL, error) {
 		}
 	}
 
-	if cli.GlobalBool(schema.CLIFlagEnableTLS) {
+	if cli.Bool(schema.CLIFlagEnableTLS) {
 		cfg.TLS = &auth.TLS{
 			Enabled:                true,
-			CertFile:               cli.GlobalString(schema.CLIFlagTLSCertFile),
-			KeyFile:                cli.GlobalString(schema.CLIFlagTLSKeyFile),
-			CaFile:                 cli.GlobalString(schema.CLIFlagTLSCaFile),
-			ServerName:             cli.GlobalString(schema.CLIFlagTLSHostName),
-			EnableHostVerification: !cli.GlobalBool(schema.CLIFlagTLSDisableHostVerification),
+			CertFile:               cli.String(schema.CLIFlagTLSCertFile),
+			KeyFile:                cli.String(schema.CLIFlagTLSKeyFile),
+			CaFile:                 cli.String(schema.CLIFlagTLSCaFile),
+			ServerName:             cli.String(schema.CLIFlagTLSHostName),
+			EnableHostVerification: !cli.Bool(schema.CLIFlagTLSDisableHostVerification),
 		}
 	}
 
@@ -168,10 +168,10 @@ func ValidateConnectConfig(cfg *config.SQL) error {
 		return schema.NewConfigError("invalid host and port " + cfg.ConnectAddr)
 	}
 	if len(host) == 0 {
-		return schema.NewConfigError("missing sql endpoint argument " + flag(schema.CLIOptEndpoint))
+		return schema.NewConfigError("missing sql endpoint argument " + flag(schema.CLIFlagEndpoint))
 	}
 	if cfg.DatabaseName == "" {
-		return schema.NewConfigError("missing " + flag(schema.CLIOptDatabase) + " argument")
+		return schema.NewConfigError("missing " + flag(schema.CLIFlagDatabase) + " argument")
 	}
 
 	return nil
