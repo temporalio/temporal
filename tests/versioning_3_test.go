@@ -1373,6 +1373,68 @@ func (s *Versioning3Suite) TestChildWorkflowInheritance_PinnedParent_CrossTQ_Wit
 	s.testChildWorkflowInheritance_ExpectInherit(true, true, vbPinned)
 }
 
+func (s *Versioning3Suite) TestCatchMissingTaskQueuesError() {
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2).WithTaskQueue("other-tq")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	wf1Started := make(chan struct{}, 1)
+
+	wf1 := func(ctx workflow.Context) (string, error) {
+		wf1Started <- struct{}{}
+		return "v1", nil
+	}
+	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:                   tv1.SDKDeploymentVersion(),
+			UseVersioning:             true,
+			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+		},
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf1", VersioningBehavior: workflow.VersioningBehaviorPinned})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+	s.waitForDeploymentVersionCreation(tv1)
+
+	// expect success
+	s.setCurrentDeployment(tv1)
+
+	startOpts := sdkclient.StartWorkflowOptions{
+		ID:                  tv1.WorkflowID(),
+		TaskQueue:           tv1.TaskQueue().GetName(),
+		VersioningOverride:  nil,
+		WorkflowTaskTimeout: 10 * time.Second,
+	}
+	_, err := s.SdkClient().ExecuteWorkflow(ctx, startOpts, "wf1")
+	s.NoError(err)
+	// wait for it to start on v1
+	s.WaitForChannel(ctx, wf1Started)
+	close(wf1Started) // force panic if replayed
+
+	w2 := worker.New(s.SdkClient(), tv2.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:                   tv2.SDKDeploymentVersion(),
+			UseVersioning:             true,
+			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+		},
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+	s.waitForDeploymentVersionCreation(tv2)
+
+	// expect failure with recognized error
+	_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv1.DeploymentSeries(),
+		BuildId:        tv2.BuildID(),
+	})
+	s.NotNil(err)
+	s.True(strings.Contains(err.Error(), workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues))
+}
+
 func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bool, withOverride bool, parentRegistrationBehavior enumspb.VersioningBehavior) {
 	// Child wf of a pinned parent starts on the parents pinned version.
 
@@ -1947,6 +2009,23 @@ func (s *Versioning3Suite) waitForDeploymentVersionCreation(
 				}
 			}
 			a.True(found)
+			if found {
+				versionResp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx,
+					&workflowservice.DescribeWorkerDeploymentVersionRequest{
+						Namespace:         s.Namespace().String(),
+						DeploymentVersion: tv.ExternalDeploymentVersion(),
+					})
+				a.Nil(err)
+				if err != nil {
+					foundTQ := false
+					for _, tqInfo := range versionResp.VersionTaskQueues {
+						if tqInfo.GetName() == tv.TaskQueue().GetName() {
+							foundTQ = true
+						}
+					}
+					a.True(foundTQ)
+				}
+			}
 		}
 	}, 5*time.Second, 100*time.Millisecond)
 }
@@ -1966,7 +2045,7 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
 		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) || errors.Is(err, serviceerror.NewFailedPrecondition(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues)) {
+		if errors.As(err, &notFound) || strings.Contains(err.Error(), workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues) {
 			return false
 		}
 		s.NoError(err)
