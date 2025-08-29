@@ -2,6 +2,7 @@ package headers
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"google.golang.org/grpc/metadata"
@@ -150,11 +151,12 @@ func SetOrigin(
 	return setIncomingMD(ctx, map[string]string{CallOriginHeaderName: callOrigin})
 }
 
+// SetFairnessPriority sets fairness priority in the context.
 func SetFairnessPriority(
 	ctx context.Context,
 	fairnessPriority int64,
 ) context.Context {
-	return setIncomingMD(ctx, map[string]string{FairnessContextKey: strconv.Itoa(int(fairnessPriority))})
+	return setIncomingMD(ctx, map[string]string{FairnessPriorityHeaderName: strconv.Itoa(int(fairnessPriority))})
 }
 
 func setIncomingMD(
@@ -186,4 +188,15 @@ func GetCallerInfo(
 		CallerType: values[1],
 		CallOrigin: values[2],
 	}
+}
+
+// GetFairnessPriority retrieves the fairness priority from the context.
+func GetFairnessPriority(
+	ctx context.Context,
+) (int, error) {
+	v := GetValues(ctx, FairnessPriorityHeaderName)
+	if len(v) == 0 {
+		return 0, fmt.Errorf("fairness priority not found")
+	}
+	return strconv.Atoi(v[0])
 }

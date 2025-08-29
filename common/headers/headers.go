@@ -15,10 +15,10 @@ const (
 	SupportedFeaturesHeaderName       = "supported-features"
 	SupportedFeaturesHeaderDelim      = ","
 
-	CallerNameHeaderName = "caller-name"
-	CallerTypeHeaderName = "caller-type"
-	CallOriginHeaderName = "call-initiation"
-	FairnessContextKey   = "fairness-context-key"
+	CallerNameHeaderName       = "caller-name"
+	CallerTypeHeaderName       = "caller-type"
+	CallOriginHeaderName       = "call-initiation"
+	FairnessPriorityHeaderName = "fairness-priority"
 )
 
 var (
@@ -31,7 +31,7 @@ var (
 		CallerNameHeaderName,
 		CallerTypeHeaderName,
 		CallOriginHeaderName,
-		FairnessContextKey,
+		FairnessPriorityHeaderName,
 	}
 )
 
