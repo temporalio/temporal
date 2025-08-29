@@ -742,6 +742,11 @@ type GlobalTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, fu
 // values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
 // when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewGlobalTypedSetting[T any](key Key, def T, description string) GlobalTypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
 	s := GlobalTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -843,8 +848,21 @@ func (s GlobalTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []Cons
 	)
 }
 
+func (s GlobalTypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribable[T] {
+	return func(callback func(T)) (T, func()) {
+		prec := []Constraints{{}}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+
 func (s GlobalTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	// can't subscribe to constrained default settings
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFn[T any](value T) TypedPropertyFn[T] {
@@ -860,6 +878,11 @@ type NamespaceTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T,
 // values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
 // when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewNamespaceTypedSetting[T any](key Key, def T, description string) NamespaceTypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
 	s := NamespaceTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -961,8 +984,21 @@ func (s NamespaceTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []C
 	)
 }
 
+func (s NamespaceTypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWithNamespaceFilter[T] {
+	return func(namespace string, callback func(T)) (T, func()) {
+		prec := []Constraints{{Namespace: namespace}, {}}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+
 func (s NamespaceTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	// can't subscribe to constrained default settings
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByNamespace[T any](value T) TypedPropertyFnWithNamespaceFilter[T] {
@@ -978,6 +1014,11 @@ type NamespaceIDTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[
 // values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
 // when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewNamespaceIDTypedSetting[T any](key Key, def T, description string) NamespaceIDTypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
 	s := NamespaceIDTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -1079,8 +1120,21 @@ func (s NamespaceIDTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs [
 	)
 }
 
+func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWithNamespaceIDFilter[T] {
+	return func(namespaceID namespace.ID, callback func(T)) (T, func()) {
+		prec := []Constraints{{NamespaceID: namespaceID.String()}, {}}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+
 func (s NamespaceIDTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	// can't subscribe to constrained default settings
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByNamespaceID[T any](value T) TypedPropertyFnWithNamespaceIDFilter[T] {
@@ -1096,6 +1150,11 @@ type TaskQueueTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T,
 // values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
 // when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewTaskQueueTypedSetting[T any](key Key, def T, description string) TaskQueueTypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
 	s := TaskQueueTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -1215,8 +1274,27 @@ func (s TaskQueueTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []C
 	)
 }
 
+func (s TaskQueueTypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWithTaskQueueFilter[T] {
+	return func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType, callback func(T)) (T, func()) {
+		prec := []Constraints{
+			{Namespace: namespace, TaskQueueName: taskQueue, TaskQueueType: taskQueueType},
+			{Namespace: namespace, TaskQueueName: taskQueue},
+			{TaskQueueName: taskQueue},
+			{Namespace: namespace},
+			{},
+		}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+
 func (s TaskQueueTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	// can't subscribe to constrained default settings
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByTaskQueue[T any](value T) TypedPropertyFnWithTaskQueueFilter[T] {
@@ -1232,6 +1310,11 @@ type ShardIDTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, f
 // values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
 // when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewShardIDTypedSetting[T any](key Key, def T, description string) ShardIDTypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
 	s := ShardIDTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -1333,8 +1416,21 @@ func (s ShardIDTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []Con
 	)
 }
 
+func (s ShardIDTypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWithShardIDFilter[T] {
+	return func(shardID int32, callback func(T)) (T, func()) {
+		prec := []Constraints{{ShardID: shardID}, {}}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+
 func (s ShardIDTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	// can't subscribe to constrained default settings
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByShardID[T any](value T) TypedPropertyFnWithShardIDFilter[T] {
@@ -1350,6 +1446,11 @@ type TaskTypeTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, 
 // values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
 // when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewTaskTypeTypedSetting[T any](key Key, def T, description string) TaskTypeTypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
 	s := TaskTypeTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -1451,8 +1552,21 @@ func (s TaskTypeTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []Co
 	)
 }
 
+func (s TaskTypeTypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWithTaskTypeFilter[T] {
+	return func(taskType enumsspb.TaskType, callback func(T)) (T, func()) {
+		prec := []Constraints{{TaskType: taskType}, {}}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+
 func (s TaskTypeTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	// can't subscribe to constrained default settings
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByTaskType[T any](value T) TypedPropertyFnWithTaskTypeFilter[T] {
@@ -1468,6 +1582,11 @@ type DestinationTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[
 // values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
 // when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewDestinationTypedSetting[T any](key Key, def T, description string) DestinationTypedSetting[T] {
+	// Warn on any shared structure used with ConvertStructure, even though we handle it by deep copying.
+	warnDefaultSharedStructure(key, def)
+	// If even deep copy won't even work, we should panic early. Do that by calling deep copy once here.
+	_ = deepCopyForMapstructure(def)
+
 	s := DestinationTypedSetting[T]{
 		key:         key,
 		def:         def,
@@ -1584,8 +1703,26 @@ func (s DestinationTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs [
 	)
 }
 
+func (s DestinationTypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWithDestinationFilter[T] {
+	return func(namespace string, destination string, callback func(T)) (T, func()) {
+		prec := []Constraints{
+			{Namespace: namespace, Destination: destination},
+			{Destination: destination},
+			{Namespace: namespace},
+			{},
+		}
+		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
+	}
+}
+
 func (s DestinationTypedConstrainedDefaultSetting[T]) dispatchUpdate(c *Collection, sub any, cvs []ConstrainedValue) {
-	// can't subscribe to constrained default settings
+	dispatchUpdateWithConstrainedDefault(
+		c,
+		s.key,
+		s.convert,
+		sub.(*subscription[T]),
+		cvs,
+	)
 }
 
 func GetTypedPropertyFnFilteredByDestination[T any](value T) TypedPropertyFnWithDestinationFilter[T] {

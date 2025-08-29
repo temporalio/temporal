@@ -635,12 +635,6 @@ existing deployments even though it is a bit of a misnomer. This does not limit 
 per-_namespace_ limit on the _count_ of long-running requests. Requests are only throttled when the limit is
 exceeded, not when it is only reached.`,
 	)
-	ReducePollWorkflowHistoryRequestPriority = NewGlobalBoolSetting(
-		"frontend.reducePollWorkflowRequestPriority",
-		true,
-		`ReducePollWorkflowRequestPriority decides whether to reduce the priority of GetWorkflowExecutionHistory
-requests if WaitNewEvent is true.`,
-	)
 	FrontendGlobalMaxConcurrentLongRunningRequests = NewNamespaceIntSetting(
 		"frontend.globalNamespaceCount",
 		0,
@@ -900,6 +894,15 @@ used when the first cache layer has a miss. Requires server restart for change t
 		`Nexus request headers to be removed before being sent to a user handler.
 Wildcards (*) are expanded to allow any substring. By default blacklist is empty.
 Concrete type should be list of strings.`,
+	)
+	FrontendNexusForwardRequestUseEndpointDispatch = NewGlobalBoolSetting(
+		"frontend.nexusForwardRequestUseEndpointDispatch",
+		false,
+		`!EXPERIMENTAL! NB: This config will be removed in a future release. Controls whether to use Nexus 
+task dispatch by endpoint URLs for forwarded Nexus requests. If set to true, forwarded requests will use the same 
+dispatch type (by endpoint or by namespace + task queue) as the original request. If false, dispatch by namespace + task
+queue will always be used for forwarded requests. Defaults to false because Nexus endpoints do not support replication, 
+so forwarding by endpoint ID will not work out of the box.`,
 	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",

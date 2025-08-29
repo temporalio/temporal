@@ -14,6 +14,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/sdk/worker"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
@@ -249,6 +250,14 @@ func (tv *TestVars) DeploymentVersion() *deploymentspb.WorkerDeploymentVersion {
 
 func (tv *TestVars) ExternalDeploymentVersion() *deploymentpb.WorkerDeploymentVersion {
 	return &deploymentpb.WorkerDeploymentVersion{
+		BuildId:        tv.BuildID(),
+		DeploymentName: tv.DeploymentSeries(),
+	}
+}
+
+// SDKDeploymentVersion returns SDK worker deployment version
+func (tv *TestVars) SDKDeploymentVersion() worker.WorkerDeploymentVersion {
+	return worker.WorkerDeploymentVersion{
 		BuildId:        tv.BuildID(),
 		DeploymentName: tv.DeploymentSeries(),
 	}

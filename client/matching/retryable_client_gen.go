@@ -352,7 +352,7 @@ func (c *retryableClient) PollActivityTaskQueue(
 		resp, err = c.client.PollActivityTaskQueue(ctx, request, opts...)
 		return err
 	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.pollPolicy, c.isRetryable)
 	return resp, err
 }
 
@@ -367,7 +367,7 @@ func (c *retryableClient) PollNexusTaskQueue(
 		resp, err = c.client.PollNexusTaskQueue(ctx, request, opts...)
 		return err
 	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.pollPolicy, c.isRetryable)
 	return resp, err
 }
 
@@ -382,7 +382,7 @@ func (c *retryableClient) PollWorkflowTaskQueue(
 		resp, err = c.client.PollWorkflowTaskQueue(ctx, request, opts...)
 		return err
 	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.pollPolicy, c.isRetryable)
 	return resp, err
 }
 

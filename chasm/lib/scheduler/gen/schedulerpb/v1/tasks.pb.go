@@ -2,9 +2,9 @@
 // plugins:
 // 	protoc-gen-go
 // 	protoc
-// source: temporal/server/api/schedule/v1/tasks.proto
+// source: temporal/server/chasm/lib/scheduler/proto/v1/tasks.proto
 
-package schedule
+package schedulerpb
 
 import (
 	reflect "reflect"
@@ -22,6 +22,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Buffers actions based on the schedule's specification.
 type GeneratorTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -30,7 +31,7 @@ type GeneratorTask struct {
 
 func (x *GeneratorTask) Reset() {
 	*x = GeneratorTask{}
-	mi := &file_temporal_server_api_schedule_v1_tasks_proto_msgTypes[0]
+	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42,7 +43,7 @@ func (x *GeneratorTask) String() string {
 func (*GeneratorTask) ProtoMessage() {}
 
 func (x *GeneratorTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_tasks_proto_msgTypes[0]
+	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -55,9 +56,10 @@ func (x *GeneratorTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GeneratorTask.ProtoReflect.Descriptor instead.
 func (*GeneratorTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_tasks_proto_rawDescGZIP(), []int{0}
+	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
 }
 
+// Processes buffered actions, deciding whether to execute, delay, or discard.
 type InvokerProcessBufferTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -66,7 +68,7 @@ type InvokerProcessBufferTask struct {
 
 func (x *InvokerProcessBufferTask) Reset() {
 	*x = InvokerProcessBufferTask{}
-	mi := &file_temporal_server_api_schedule_v1_tasks_proto_msgTypes[1]
+	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -78,7 +80,7 @@ func (x *InvokerProcessBufferTask) String() string {
 func (*InvokerProcessBufferTask) ProtoMessage() {}
 
 func (x *InvokerProcessBufferTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_tasks_proto_msgTypes[1]
+	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -91,9 +93,11 @@ func (x *InvokerProcessBufferTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokerProcessBufferTask.ProtoReflect.Descriptor instead.
 func (*InvokerProcessBufferTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_tasks_proto_rawDescGZIP(), []int{1}
+	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{1}
 }
 
+// Drives execution of pending buffered actions to completion by starting,
+// canceling, or terminating workflows.
 type InvokerExecuteTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -102,7 +106,7 @@ type InvokerExecuteTask struct {
 
 func (x *InvokerExecuteTask) Reset() {
 	*x = InvokerExecuteTask{}
-	mi := &file_temporal_server_api_schedule_v1_tasks_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -114,7 +118,7 @@ func (x *InvokerExecuteTask) String() string {
 func (*InvokerExecuteTask) ProtoMessage() {}
 
 func (x *InvokerExecuteTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_tasks_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -127,9 +131,10 @@ func (x *InvokerExecuteTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokerExecuteTask.ProtoReflect.Descriptor instead.
 func (*InvokerExecuteTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_tasks_proto_rawDescGZIP(), []int{2}
+	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
 }
 
+// Buffers actions based on a manually-requested backfill.
 type BackfillerTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -138,7 +143,7 @@ type BackfillerTask struct {
 
 func (x *BackfillerTask) Reset() {
 	*x = BackfillerTask{}
-	mi := &file_temporal_server_api_schedule_v1_tasks_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -150,7 +155,7 @@ func (x *BackfillerTask) String() string {
 func (*BackfillerTask) ProtoMessage() {}
 
 func (x *BackfillerTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_tasks_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -163,39 +168,39 @@ func (x *BackfillerTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackfillerTask.ProtoReflect.Descriptor instead.
 func (*BackfillerTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_tasks_proto_rawDescGZIP(), []int{3}
+	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{3}
 }
 
-var File_temporal_server_api_schedule_v1_tasks_proto protoreflect.FileDescriptor
+var File_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto protoreflect.FileDescriptor
 
-const file_temporal_server_api_schedule_v1_tasks_proto_rawDesc = "" +
+const file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	"+temporal/server/api/schedule/v1/tasks.proto\x12\x1ftemporal.server.api.schedule.v1\"\x0f\n" +
+	"8temporal/server/chasm/lib/scheduler/proto/v1/tasks.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\"\x0f\n" +
 	"\rGeneratorTask\"\x1a\n" +
 	"\x18InvokerProcessBufferTask\"\x14\n" +
 	"\x12InvokerExecuteTask\"\x10\n" +
-	"\x0eBackfillerTaskB0Z.go.temporal.io/server/api/schedule/v1;scheduleb\x06proto3"
+	"\x0eBackfillerTaskBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
 
 var (
-	file_temporal_server_api_schedule_v1_tasks_proto_rawDescOnce sync.Once
-	file_temporal_server_api_schedule_v1_tasks_proto_rawDescData []byte
+	file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescOnce sync.Once
+	file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescData []byte
 )
 
-func file_temporal_server_api_schedule_v1_tasks_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_schedule_v1_tasks_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_schedule_v1_tasks_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_schedule_v1_tasks_proto_rawDesc), len(file_temporal_server_api_schedule_v1_tasks_proto_rawDesc)))
+func file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP() []byte {
+	file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescOnce.Do(func() {
+		file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc)))
 	})
-	return file_temporal_server_api_schedule_v1_tasks_proto_rawDescData
+	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescData
 }
 
-var file_temporal_server_api_schedule_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_temporal_server_api_schedule_v1_tasks_proto_goTypes = []any{
-	(*GeneratorTask)(nil),            // 0: temporal.server.api.schedule.v1.GeneratorTask
-	(*InvokerProcessBufferTask)(nil), // 1: temporal.server.api.schedule.v1.InvokerProcessBufferTask
-	(*InvokerExecuteTask)(nil),       // 2: temporal.server.api.schedule.v1.InvokerExecuteTask
-	(*BackfillerTask)(nil),           // 3: temporal.server.api.schedule.v1.BackfillerTask
+var file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_goTypes = []any{
+	(*GeneratorTask)(nil),            // 0: temporal.server.chasm.lib.scheduler.proto.v1.GeneratorTask
+	(*InvokerProcessBufferTask)(nil), // 1: temporal.server.chasm.lib.scheduler.proto.v1.InvokerProcessBufferTask
+	(*InvokerExecuteTask)(nil),       // 2: temporal.server.chasm.lib.scheduler.proto.v1.InvokerExecuteTask
+	(*BackfillerTask)(nil),           // 3: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerTask
 }
-var file_temporal_server_api_schedule_v1_tasks_proto_depIdxs = []int32{
+var file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
 	0, // [0:0] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
@@ -203,26 +208,26 @@ var file_temporal_server_api_schedule_v1_tasks_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_temporal_server_api_schedule_v1_tasks_proto_init() }
-func file_temporal_server_api_schedule_v1_tasks_proto_init() {
-	if File_temporal_server_api_schedule_v1_tasks_proto != nil {
+func init() { file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_init() }
+func file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_init() {
+	if File_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_schedule_v1_tasks_proto_rawDesc), len(file_temporal_server_api_schedule_v1_tasks_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_temporal_server_api_schedule_v1_tasks_proto_goTypes,
-		DependencyIndexes: file_temporal_server_api_schedule_v1_tasks_proto_depIdxs,
-		MessageInfos:      file_temporal_server_api_schedule_v1_tasks_proto_msgTypes,
+		GoTypes:           file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_goTypes,
+		DependencyIndexes: file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_depIdxs,
+		MessageInfos:      file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_msgTypes,
 	}.Build()
-	File_temporal_server_api_schedule_v1_tasks_proto = out.File
-	file_temporal_server_api_schedule_v1_tasks_proto_goTypes = nil
-	file_temporal_server_api_schedule_v1_tasks_proto_depIdxs = nil
+	File_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto = out.File
+	file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_goTypes = nil
+	file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_depIdxs = nil
 }
