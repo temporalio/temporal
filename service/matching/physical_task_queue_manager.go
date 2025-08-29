@@ -461,18 +461,6 @@ func (c *physicalTaskQueueManagerImpl) AddSpooledTask(task *internalTask) error 
 }
 
 func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) {
-	fmt.Println("=========AddSpooledTaskToMatcher=========")
-	if c != nil {
-		fmt.Println("c: ", c)
-		if c.priMatcher != nil {
-			fmt.Println("c.priMatcher: ", c.priMatcher)
-		} else {
-			fmt.Println("c.priMatcher is nil")
-		}
-	} else {
-		fmt.Println("c is nil")
-	}
-	fmt.Println("task: ", task)
 	c.priMatcher.AddTask(task)
 }
 
