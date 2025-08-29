@@ -189,10 +189,10 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 
 // takeNextAction increments the context's actionTaken counter, returning true if
 // the action should be executed, and false if the task should instead yield.
-func (c *invokerTaskExecutorContext) takeNextAction() bool {
-	allowed := c.actionsTaken < c.maxActions
+func (i *invokerTaskExecutorContext) takeNextAction() bool {
+	allowed := i.actionsTaken < i.maxActions
 	if allowed {
-		c.actionsTaken++
+		i.actionsTaken++
 	}
 	return allowed
 }
@@ -213,8 +213,9 @@ func (e *InvokerExecuteTaskExecutor) cancelWorkflows(
 		}
 
 		// Run all cancels concurrently.
+		newCtx := ctx.Clone()
 		wg.Go(func() {
-			err := e.cancelWorkflow(ctx, scheduler, wf)
+			err := e.cancelWorkflow(newCtx, scheduler, wf)
 
 			resultMutex.Lock()
 			defer resultMutex.Unlock()
@@ -249,8 +250,9 @@ func (e *InvokerExecuteTaskExecutor) terminateWorkflows(
 		}
 
 		// Run all terminates concurrently.
+		newCtx := ctx.Clone()
 		wg.Go(func() {
-			err := e.terminateWorkflow(ctx, scheduler, wf)
+			err := e.terminateWorkflow(newCtx, scheduler, wf)
 
 			resultMutex.Lock()
 			defer resultMutex.Unlock()
@@ -291,8 +293,9 @@ func (e *InvokerExecuteTaskExecutor) startWorkflows(
 		}
 
 		// Run all starts concurrently.
+		newCtx := ctx.Clone()
 		wg.Go(func() {
-			startResult, err := e.startWorkflow(ctx, scheduler, start)
+			startResult, err := e.startWorkflow(newCtx, scheduler, start)
 
 			resultMutex.Lock()
 			defer resultMutex.Unlock()
@@ -634,5 +637,13 @@ func (e *InvokerExecuteTaskExecutor) newInvokerTaskExecutorContext(
 		Context:      ctx,
 		actionsTaken: 0,
 		maxActions:   maxActions,
+	}
+}
+
+func (i invokerTaskExecutorContext) Clone() invokerTaskExecutorContext {
+	return invokerTaskExecutorContext{
+		Context:      i.Context,
+		actionsTaken: i.actionsTaken,
+		maxActions:   i.maxActions,
 	}
 }
