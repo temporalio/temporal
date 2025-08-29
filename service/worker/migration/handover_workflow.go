@@ -132,9 +132,6 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 	}
 
 	defer func() {
-		infiniteRetryOption := workflow.ActivityOptions{StartToCloseTimeout: time.Second * 10}
-		detachCtx, cancel := workflow.NewDisconnectedContext(ctx)
-		resetStateCtx := workflow.WithActivityOptions(detachCtx, infiniteRetryOption)
 		// ** Final Step: Reset namespace state from Handover -> Registered. This helps ensure that whether
 		//                handover failed or succeeded, the namespace (for whichever cluster it is Active on)
 		//                is able to process traffic again.
@@ -144,6 +141,9 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		}
 		var err error
 		if workflow.GetVersion(ctx, "detach-handover-ctx-20250829", workflow.DefaultVersion, 1) > workflow.DefaultVersion {
+			infiniteRetryOption := workflow.ActivityOptions{StartToCloseTimeout: time.Second * 10}
+			detachCtx, cancel := workflow.NewDisconnectedContext(ctx)
+			resetStateCtx := workflow.WithActivityOptions(detachCtx, infiniteRetryOption)
 			err = workflow.ExecuteActivity(resetStateCtx, a.UpdateNamespaceState, resetStateRequest).Get(resetStateCtx, nil)
 			cancel()
 		} else {
