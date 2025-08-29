@@ -273,7 +273,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
-		fmt.Println("newPhysicalTaskQueueManager.priMatcher.priority: ", pqMgr.priMatcher.data)
+		fmt.Println("newPhysicalTaskQueueManager.priMatcher.priority: ", pqMgr.priMatcher)
 		return pqMgr, nil
 	}
 
@@ -301,7 +301,7 @@ func newPhysicalTaskQueueManager(
 	}
 	pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.GetRateLimitManager().GetRateLimiter())
 	pqMgr.matcher = pqMgr.oldMatcher
-	fmt.Println("newPhysicalTaskQueueManager.oldMatcher: ", pqMgr.priMatcher.data)
+	fmt.Println("newPhysicalTaskQueueManager.priMatcher: ", pqMgr.priMatcher)
 	return pqMgr, nil
 }
 
@@ -461,6 +461,9 @@ func (c *physicalTaskQueueManagerImpl) AddSpooledTask(task *internalTask) error 
 }
 
 func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) {
+	fmt.Println("=========AddSpooledTaskToMatcher=========")
+	fmt.Println("c.priMatcher: ", c.priMatcher)
+	fmt.Println("task: ", task)
 	c.priMatcher.AddTask(task)
 }
 
