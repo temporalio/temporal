@@ -543,7 +543,9 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 		},
 	}
 	if includeTaskQueueStatus {
+		//nolint:staticcheck // SA1019
 		response.DescResponse.TaskQueueStatus = c.backlogMgr.BacklogStatus()
+		//nolint:staticcheck // SA1019
 		response.DescResponse.TaskQueueStatus.RatePerSecond = c.matcher.Rate()
 	}
 	return response
