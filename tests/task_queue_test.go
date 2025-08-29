@@ -63,7 +63,7 @@ func (s *TaskQueueSuite) RunTaskQueueRateLimitTest(nPartitions, nWorkers int, ti
 
 func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeToDrain time.Duration, useNewMatching bool) {
 	if useNewMatching {
-		s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false) //true)
+		s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true)
 	}
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, nPartitions)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, nPartitions)

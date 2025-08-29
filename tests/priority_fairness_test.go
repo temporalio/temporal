@@ -34,7 +34,7 @@ func TestPrioritySuite(t *testing.T) {
 
 func (s *PrioritySuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.MatchingUseNewMatcher.Key():     false, //true,
+		dynamicconfig.MatchingUseNewMatcher.Key():     true,
 		dynamicconfig.MatchingGetTasksBatchSize.Key(): 20,
 		dynamicconfig.MatchingGetTasksReloadAt.Key():  5,
 	}
@@ -198,7 +198,7 @@ func (s *PrioritySuite) TestSubqueue_Migration() {
 	}
 
 	s.T().Log("switching to new matcher")
-	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true)
 
 	s.T().Log("processing next 100 activities")
 	for range 100 {
