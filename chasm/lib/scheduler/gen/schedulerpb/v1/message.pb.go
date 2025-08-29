@@ -27,7 +27,7 @@ const (
 )
 
 // CHASM scheduler top-level state.
-type SchedulerInternal struct {
+type SchedulerState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Scheduler request parameters and metadata.
 	Schedule     *v1.Schedule      `protobuf:"bytes,2,opt,name=schedule,proto3" json:"schedule,omitempty"`
@@ -40,24 +40,27 @@ type SchedulerInternal struct {
 	// Implemented as a sequence number. Used for optimistic locking against
 	// update requests.
 	ConflictToken int64 `protobuf:"varint,8,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	// The closed flag is set true after a schedule completes, and the idle timer
+	// expires.
+	Closed        bool `protobuf:"varint,9,opt,name=closed,proto3" json:"closed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SchedulerInternal) Reset() {
-	*x = SchedulerInternal{}
+func (x *SchedulerState) Reset() {
+	*x = SchedulerState{}
 	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SchedulerInternal) String() string {
+func (x *SchedulerState) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SchedulerInternal) ProtoMessage() {}
+func (*SchedulerState) ProtoMessage() {}
 
-func (x *SchedulerInternal) ProtoReflect() protoreflect.Message {
+func (x *SchedulerState) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -69,62 +72,69 @@ func (x *SchedulerInternal) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SchedulerInternal.ProtoReflect.Descriptor instead.
-func (*SchedulerInternal) Descriptor() ([]byte, []int) {
+// Deprecated: Use SchedulerState.ProtoReflect.Descriptor instead.
+func (*SchedulerState) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *SchedulerInternal) GetSchedule() *v1.Schedule {
+func (x *SchedulerState) GetSchedule() *v1.Schedule {
 	if x != nil {
 		return x.Schedule
 	}
 	return nil
 }
 
-func (x *SchedulerInternal) GetInfo() *v1.ScheduleInfo {
+func (x *SchedulerState) GetInfo() *v1.ScheduleInfo {
 	if x != nil {
 		return x.Info
 	}
 	return nil
 }
 
-func (x *SchedulerInternal) GetInitialPatch() *v1.SchedulePatch {
+func (x *SchedulerState) GetInitialPatch() *v1.SchedulePatch {
 	if x != nil {
 		return x.InitialPatch
 	}
 	return nil
 }
 
-func (x *SchedulerInternal) GetNamespace() string {
+func (x *SchedulerState) GetNamespace() string {
 	if x != nil {
 		return x.Namespace
 	}
 	return ""
 }
 
-func (x *SchedulerInternal) GetNamespaceId() string {
+func (x *SchedulerState) GetNamespaceId() string {
 	if x != nil {
 		return x.NamespaceId
 	}
 	return ""
 }
 
-func (x *SchedulerInternal) GetScheduleId() string {
+func (x *SchedulerState) GetScheduleId() string {
 	if x != nil {
 		return x.ScheduleId
 	}
 	return ""
 }
 
-func (x *SchedulerInternal) GetConflictToken() int64 {
+func (x *SchedulerState) GetConflictToken() int64 {
 	if x != nil {
 		return x.ConflictToken
 	}
 	return 0
 }
 
+func (x *SchedulerState) GetClosed() bool {
+	if x != nil {
+		return x.Closed
+	}
+	return false
+}
+
 // CHASM scheduler's Generator internal state.
-type GeneratorInternal struct {
+type GeneratorState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// High water mark.
 	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
@@ -132,20 +142,20 @@ type GeneratorInternal struct {
 	sizeCache         protoimpl.SizeCache
 }
 
-func (x *GeneratorInternal) Reset() {
-	*x = GeneratorInternal{}
+func (x *GeneratorState) Reset() {
+	*x = GeneratorState{}
 	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GeneratorInternal) String() string {
+func (x *GeneratorState) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GeneratorInternal) ProtoMessage() {}
+func (*GeneratorState) ProtoMessage() {}
 
-func (x *GeneratorInternal) ProtoReflect() protoreflect.Message {
+func (x *GeneratorState) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -157,12 +167,12 @@ func (x *GeneratorInternal) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GeneratorInternal.ProtoReflect.Descriptor instead.
-func (*GeneratorInternal) Descriptor() ([]byte, []int) {
+// Deprecated: Use GeneratorState.ProtoReflect.Descriptor instead.
+func (*GeneratorState) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *GeneratorInternal) GetLastProcessedTime() *timestamppb.Timestamp {
+func (x *GeneratorState) GetLastProcessedTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.LastProcessedTime
 	}
@@ -170,7 +180,7 @@ func (x *GeneratorInternal) GetLastProcessedTime() *timestamppb.Timestamp {
 }
 
 // CHASM scheduler's Invoker internal state.
-type InvokerInternal struct {
+type InvokerState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Buffered starts that will be started by the Invoker.
 	BufferedStarts []*v11.BufferedStart `protobuf:"bytes,2,rep,name=buffered_starts,json=bufferedStarts,proto3" json:"buffered_starts,omitempty"`
@@ -188,20 +198,20 @@ type InvokerInternal struct {
 	sizeCache         protoimpl.SizeCache
 }
 
-func (x *InvokerInternal) Reset() {
-	*x = InvokerInternal{}
+func (x *InvokerState) Reset() {
+	*x = InvokerState{}
 	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *InvokerInternal) String() string {
+func (x *InvokerState) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*InvokerInternal) ProtoMessage() {}
+func (*InvokerState) ProtoMessage() {}
 
-func (x *InvokerInternal) ProtoReflect() protoreflect.Message {
+func (x *InvokerState) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -213,33 +223,33 @@ func (x *InvokerInternal) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InvokerInternal.ProtoReflect.Descriptor instead.
-func (*InvokerInternal) Descriptor() ([]byte, []int) {
+// Deprecated: Use InvokerState.ProtoReflect.Descriptor instead.
+func (*InvokerState) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *InvokerInternal) GetBufferedStarts() []*v11.BufferedStart {
+func (x *InvokerState) GetBufferedStarts() []*v11.BufferedStart {
 	if x != nil {
 		return x.BufferedStarts
 	}
 	return nil
 }
 
-func (x *InvokerInternal) GetCancelWorkflows() []*v12.WorkflowExecution {
+func (x *InvokerState) GetCancelWorkflows() []*v12.WorkflowExecution {
 	if x != nil {
 		return x.CancelWorkflows
 	}
 	return nil
 }
 
-func (x *InvokerInternal) GetTerminateWorkflows() []*v12.WorkflowExecution {
+func (x *InvokerState) GetTerminateWorkflows() []*v12.WorkflowExecution {
 	if x != nil {
 		return x.TerminateWorkflows
 	}
 	return nil
 }
 
-func (x *InvokerInternal) GetLastProcessedTime() *timestamppb.Timestamp {
+func (x *InvokerState) GetLastProcessedTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.LastProcessedTime
 	}
@@ -248,13 +258,13 @@ func (x *InvokerInternal) GetLastProcessedTime() *timestamppb.Timestamp {
 
 // CHASM scheduler's Backfiller internal state. Backfill requests are 1:1
 // with Backfiller nodes. Backfiller nodes also handle immediate trigger requests.
-type BackfillerInternal struct {
+type BackfillerState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Request:
 	//
-	//	*BackfillerInternal_BackfillRequest
-	//	*BackfillerInternal_TriggerRequest
-	Request isBackfillerInternal_Request `protobuf_oneof:"request"`
+	//	*BackfillerState_BackfillRequest
+	//	*BackfillerState_TriggerRequest
+	Request isBackfillerState_Request `protobuf_oneof:"request"`
 	// Every Backfiller should be assigned a unique ID upon creation, used
 	// for deduplication.
 	BackfillId string `protobuf:"bytes,6,opt,name=backfill_id,json=backfillId,proto3" json:"backfill_id,omitempty"`
@@ -267,20 +277,20 @@ type BackfillerInternal struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *BackfillerInternal) Reset() {
-	*x = BackfillerInternal{}
+func (x *BackfillerState) Reset() {
+	*x = BackfillerState{}
 	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BackfillerInternal) String() string {
+func (x *BackfillerState) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BackfillerInternal) ProtoMessage() {}
+func (*BackfillerState) ProtoMessage() {}
 
-func (x *BackfillerInternal) ProtoReflect() protoreflect.Message {
+func (x *BackfillerState) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -292,80 +302,80 @@ func (x *BackfillerInternal) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BackfillerInternal.ProtoReflect.Descriptor instead.
-func (*BackfillerInternal) Descriptor() ([]byte, []int) {
+// Deprecated: Use BackfillerState.ProtoReflect.Descriptor instead.
+func (*BackfillerState) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *BackfillerInternal) GetRequest() isBackfillerInternal_Request {
+func (x *BackfillerState) GetRequest() isBackfillerState_Request {
 	if x != nil {
 		return x.Request
 	}
 	return nil
 }
 
-func (x *BackfillerInternal) GetBackfillRequest() *v1.BackfillRequest {
+func (x *BackfillerState) GetBackfillRequest() *v1.BackfillRequest {
 	if x != nil {
-		if x, ok := x.Request.(*BackfillerInternal_BackfillRequest); ok {
+		if x, ok := x.Request.(*BackfillerState_BackfillRequest); ok {
 			return x.BackfillRequest
 		}
 	}
 	return nil
 }
 
-func (x *BackfillerInternal) GetTriggerRequest() *v1.TriggerImmediatelyRequest {
+func (x *BackfillerState) GetTriggerRequest() *v1.TriggerImmediatelyRequest {
 	if x != nil {
-		if x, ok := x.Request.(*BackfillerInternal_TriggerRequest); ok {
+		if x, ok := x.Request.(*BackfillerState_TriggerRequest); ok {
 			return x.TriggerRequest
 		}
 	}
 	return nil
 }
 
-func (x *BackfillerInternal) GetBackfillId() string {
+func (x *BackfillerState) GetBackfillId() string {
 	if x != nil {
 		return x.BackfillId
 	}
 	return ""
 }
 
-func (x *BackfillerInternal) GetLastProcessedTime() *timestamppb.Timestamp {
+func (x *BackfillerState) GetLastProcessedTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.LastProcessedTime
 	}
 	return nil
 }
 
-func (x *BackfillerInternal) GetAttempt() int64 {
+func (x *BackfillerState) GetAttempt() int64 {
 	if x != nil {
 		return x.Attempt
 	}
 	return 0
 }
 
-type isBackfillerInternal_Request interface {
-	isBackfillerInternal_Request()
+type isBackfillerState_Request interface {
+	isBackfillerState_Request()
 }
 
-type BackfillerInternal_BackfillRequest struct {
+type BackfillerState_BackfillRequest struct {
 	BackfillRequest *v1.BackfillRequest `protobuf:"bytes,1,opt,name=backfill_request,json=backfillRequest,proto3,oneof"`
 }
 
-type BackfillerInternal_TriggerRequest struct {
+type BackfillerState_TriggerRequest struct {
 	// When set, immediately buffer a single manual action.
 	TriggerRequest *v1.TriggerImmediatelyRequest `protobuf:"bytes,2,opt,name=trigger_request,json=triggerRequest,proto3,oneof"`
 }
 
-func (*BackfillerInternal_BackfillRequest) isBackfillerInternal_Request() {}
+func (*BackfillerState_BackfillRequest) isBackfillerState_Request() {}
 
-func (*BackfillerInternal_TriggerRequest) isBackfillerInternal_Request() {}
+func (*BackfillerState_TriggerRequest) isBackfillerState_Request() {}
 
 var File_temporal_server_chasm_lib_scheduler_proto_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	":temporal/server/chasm/lib/scheduler/proto/v1/message.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a-temporal/server/api/schedule/v1/message.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe6\x02\n" +
-	"\x11SchedulerInternal\x12>\n" +
+	":temporal/server/chasm/lib/scheduler/proto/v1/message.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a-temporal/server/api/schedule/v1/message.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xfb\x02\n" +
+	"\x0eSchedulerState\x12>\n" +
 	"\bschedule\x18\x02 \x01(\v2\".temporal.api.schedule.v1.ScheduleR\bschedule\x12:\n" +
 	"\x04info\x18\x03 \x01(\v2&.temporal.api.schedule.v1.ScheduleInfoR\x04info\x12L\n" +
 	"\rinitial_patch\x18\x04 \x01(\v2'.temporal.api.schedule.v1.SchedulePatchR\finitialPatch\x12\x1c\n" +
@@ -373,15 +383,16 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc = 
 	"\fnamespace_id\x18\x06 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vschedule_id\x18\a \x01(\tR\n" +
 	"scheduleId\x12%\n" +
-	"\x0econflict_token\x18\b \x01(\x03R\rconflictToken\"_\n" +
-	"\x11GeneratorInternal\x12J\n" +
-	"\x13last_processed_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\"\xe8\x02\n" +
-	"\x0fInvokerInternal\x12W\n" +
+	"\x0econflict_token\x18\b \x01(\x03R\rconflictToken\x12\x16\n" +
+	"\x06closed\x18\t \x01(\bR\x06closed\"\\\n" +
+	"\x0eGeneratorState\x12J\n" +
+	"\x13last_processed_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\"\xe5\x02\n" +
+	"\fInvokerState\x12W\n" +
 	"\x0fbuffered_starts\x18\x02 \x03(\v2..temporal.server.api.schedule.v1.BufferedStartR\x0ebufferedStarts\x12T\n" +
 	"\x10cancel_workflows\x18\x03 \x03(\v2).temporal.api.common.v1.WorkflowExecutionR\x0fcancelWorkflows\x12Z\n" +
 	"\x13terminate_workflows\x18\x04 \x03(\v2).temporal.api.common.v1.WorkflowExecutionR\x12terminateWorkflows\x12J\n" +
-	"\x13last_processed_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\"\xde\x02\n" +
-	"\x12BackfillerInternal\x12V\n" +
+	"\x13last_processed_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\"\xdb\x02\n" +
+	"\x0fBackfillerState\x12V\n" +
 	"\x10backfill_request\x18\x01 \x01(\v2).temporal.api.schedule.v1.BackfillRequestH\x00R\x0fbackfillRequest\x12^\n" +
 	"\x0ftrigger_request\x18\x02 \x01(\v23.temporal.api.schedule.v1.TriggerImmediatelyRequestH\x00R\x0etriggerRequest\x12\x1f\n" +
 	"\vbackfill_id\x18\x06 \x01(\tR\n" +
@@ -404,10 +415,10 @@ func file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescGZIP
 
 var file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_goTypes = []any{
-	(*SchedulerInternal)(nil),            // 0: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerInternal
-	(*GeneratorInternal)(nil),            // 1: temporal.server.chasm.lib.scheduler.proto.v1.GeneratorInternal
-	(*InvokerInternal)(nil),              // 2: temporal.server.chasm.lib.scheduler.proto.v1.InvokerInternal
-	(*BackfillerInternal)(nil),           // 3: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerInternal
+	(*SchedulerState)(nil),               // 0: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerState
+	(*GeneratorState)(nil),               // 1: temporal.server.chasm.lib.scheduler.proto.v1.GeneratorState
+	(*InvokerState)(nil),                 // 2: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState
+	(*BackfillerState)(nil),              // 3: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerState
 	(*v1.Schedule)(nil),                  // 4: temporal.api.schedule.v1.Schedule
 	(*v1.ScheduleInfo)(nil),              // 5: temporal.api.schedule.v1.ScheduleInfo
 	(*v1.SchedulePatch)(nil),             // 6: temporal.api.schedule.v1.SchedulePatch
@@ -418,17 +429,17 @@ var file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_goTypes = []
 	(*v1.TriggerImmediatelyRequest)(nil), // 11: temporal.api.schedule.v1.TriggerImmediatelyRequest
 }
 var file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_depIdxs = []int32{
-	4,  // 0: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerInternal.schedule:type_name -> temporal.api.schedule.v1.Schedule
-	5,  // 1: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerInternal.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
-	6,  // 2: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerInternal.initial_patch:type_name -> temporal.api.schedule.v1.SchedulePatch
-	7,  // 3: temporal.server.chasm.lib.scheduler.proto.v1.GeneratorInternal.last_processed_time:type_name -> google.protobuf.Timestamp
-	8,  // 4: temporal.server.chasm.lib.scheduler.proto.v1.InvokerInternal.buffered_starts:type_name -> temporal.server.api.schedule.v1.BufferedStart
-	9,  // 5: temporal.server.chasm.lib.scheduler.proto.v1.InvokerInternal.cancel_workflows:type_name -> temporal.api.common.v1.WorkflowExecution
-	9,  // 6: temporal.server.chasm.lib.scheduler.proto.v1.InvokerInternal.terminate_workflows:type_name -> temporal.api.common.v1.WorkflowExecution
-	7,  // 7: temporal.server.chasm.lib.scheduler.proto.v1.InvokerInternal.last_processed_time:type_name -> google.protobuf.Timestamp
-	10, // 8: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerInternal.backfill_request:type_name -> temporal.api.schedule.v1.BackfillRequest
-	11, // 9: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerInternal.trigger_request:type_name -> temporal.api.schedule.v1.TriggerImmediatelyRequest
-	7,  // 10: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerInternal.last_processed_time:type_name -> google.protobuf.Timestamp
+	4,  // 0: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerState.schedule:type_name -> temporal.api.schedule.v1.Schedule
+	5,  // 1: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerState.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
+	6,  // 2: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerState.initial_patch:type_name -> temporal.api.schedule.v1.SchedulePatch
+	7,  // 3: temporal.server.chasm.lib.scheduler.proto.v1.GeneratorState.last_processed_time:type_name -> google.protobuf.Timestamp
+	8,  // 4: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.buffered_starts:type_name -> temporal.server.api.schedule.v1.BufferedStart
+	9,  // 5: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.cancel_workflows:type_name -> temporal.api.common.v1.WorkflowExecution
+	9,  // 6: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.terminate_workflows:type_name -> temporal.api.common.v1.WorkflowExecution
+	7,  // 7: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.last_processed_time:type_name -> google.protobuf.Timestamp
+	10, // 8: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerState.backfill_request:type_name -> temporal.api.schedule.v1.BackfillRequest
+	11, // 9: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerState.trigger_request:type_name -> temporal.api.schedule.v1.TriggerImmediatelyRequest
+	7,  // 10: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerState.last_processed_time:type_name -> google.protobuf.Timestamp
 	11, // [11:11] is the sub-list for method output_type
 	11, // [11:11] is the sub-list for method input_type
 	11, // [11:11] is the sub-list for extension type_name
@@ -442,8 +453,8 @@ func file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_init() {
 		return
 	}
 	file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes[3].OneofWrappers = []any{
-		(*BackfillerInternal_BackfillRequest)(nil),
-		(*BackfillerInternal_TriggerRequest)(nil),
+		(*BackfillerState_BackfillRequest)(nil),
+		(*BackfillerState_TriggerRequest)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
