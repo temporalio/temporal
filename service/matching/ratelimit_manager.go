@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -73,6 +74,8 @@ func newRateLimitManager(userDataManager userDataManager,
 		taskQueueType:   taskQueueType,
 		perKeyReady:     cache.New(config.FairnessKeyRateLimitCacheSize(), nil),
 		timeSource:      clock.NewRealTimeSource(),
+		effectiveRPS:    math.MaxFloat64,
+		rateLimitSource: enumspb.RATE_LIMIT_SOURCE_SYSTEM,
 	}
 	r.dynamicRateBurst = quotas.NewMutableRateBurst(
 		defaultTaskDispatchRPS,
@@ -127,46 +130,50 @@ func (r *rateLimitManager) computeEffectiveRPSAndSource() {
 // - Else if a worker-level RPS is configured, effectiveRPS = min(system default RPS, worker-configured RPS)
 // - Otherwise, fall back to the system default RPS from dynamic config.
 func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
+	fmt.Println("=========rateLimitManager.computeEffectiveRPSAndSourceLocked=========")
+	fmt.Println("effectiveRPS", r.effectiveRPS, "systemRPS", r.systemRPS, "rateLimitSource", r.rateLimitSource)
+	return
 
-	var (
-		effectiveRPS    = math.Inf(1)
-		rateLimitSource enumspb.RateLimitSource
-	)
-	// Overall system rate limit will be the min of the two configs that are partition wise times the number of partions.
-	systemRPS := min(
-		r.adminNsRate,
-		r.adminTqRate,
-	)
-	r.systemRPS = systemRPS
-	switch {
-	case r.apiConfigRPS != nil:
-		effectiveRPS = *r.apiConfigRPS / float64(r.numReadPartitions)
-		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_API
-	case r.workerRPS != nil:
-		effectiveRPS = *r.workerRPS / float64(r.numReadPartitions)
-		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_WORKER
-	}
+	// var (
+	// 	effectiveRPS    = math.Inf(1)
+	// 	rateLimitSource enumspb.RateLimitSource
+	// )
+	// // Overall system rate limit will be the min of the two configs that are partition wise times the number of partions.
+	// systemRPS := min(
+	// 	r.adminNsRate,
+	// 	r.adminTqRate,
+	// )
+	// r.systemRPS = systemRPS
+	// switch {
+	// case r.apiConfigRPS != nil:
+	// 	effectiveRPS = *r.apiConfigRPS / float64(r.numReadPartitions)
+	// 	rateLimitSource = enumspb.RATE_LIMIT_SOURCE_API
+	// case r.workerRPS != nil:
+	// 	effectiveRPS = *r.workerRPS / float64(r.numReadPartitions)
+	// 	rateLimitSource = enumspb.RATE_LIMIT_SOURCE_WORKER
+	// }
 
-	if effectiveRPS < r.systemRPS {
-		r.effectiveRPS = effectiveRPS
-		r.rateLimitSource = rateLimitSource
-	} else {
-		r.effectiveRPS = r.systemRPS
-		r.rateLimitSource = enumspb.RATE_LIMIT_SOURCE_SYSTEM
-	}
+	// if effectiveRPS < r.systemRPS {
+	// 	r.effectiveRPS = effectiveRPS
+	// 	r.rateLimitSource = rateLimitSource
+	// } else {
+	// 	r.effectiveRPS = r.systemRPS
+	// 	r.rateLimitSource = enumspb.RATE_LIMIT_SOURCE_SYSTEM
+	// }
 }
 
 func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
-	oldRPS := r.effectiveRPS
-	r.computeEffectiveRPSAndSourceLocked()
-	newRPS := r.effectiveRPS
-	// If the effective RPS has changed, we need to update the rate limiters.
-	if oldRPS != newRPS {
-		r.updateRatelimitLocked()
-		r.updateSimpleRateLimitLocked(defaultBurstDuration)
-	}
-	// Internally, checks if the per-key rate limit has changed and updates it accordingly.
-	r.updatePerKeySimpleRateLimitLocked(defaultBurstDuration)
+	return
+	// oldRPS := r.effectiveRPS
+	// r.computeEffectiveRPSAndSourceLocked()
+	// newRPS := r.effectiveRPS
+	// // If the effective RPS has changed, we need to update the rate limiters.
+	// if oldRPS != newRPS {
+	// 	r.updateRatelimitLocked()
+	// 	r.updateSimpleRateLimitLocked(defaultBurstDuration)
+	// }
+	// // Internally, checks if the per-key rate limit has changed and updates it accordingly.
+	// r.updatePerKeySimpleRateLimitLocked(defaultBurstDuration)
 }
 
 // Lazy injection of poll metadata.
@@ -238,21 +245,25 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 
 // updateRatelimitLocked checks and updates the overall queue rate limit if changed.
 func (r *rateLimitManager) updateRatelimitLocked() {
-	newRPS := r.effectiveRPS
-	// If the effective RPS is zero, we set the burst to zero as well.
-	// This prevents any initial tasks from executing immediately.
-	// Allows pausing of the task queue by setting the RPS to zero.
-	var burst int
-	if newRPS != 0 {
-		// If the effective RPS is non-zero, we can set a burst based on the effective RPS.
-		burst = max(int(math.Ceil(newRPS)), r.config.MinTaskThrottlingBurstSize())
-	}
-	r.dynamicRateBurst.SetRPS(newRPS)
-	r.dynamicRateBurst.SetBurst(burst)
-	// updateRatelimitLocked is invoked whenever the effective RPS value changes.
-	// At this point, the dynamicRateLimiter is always updated with the latest rate and burst values,
-	// ensuring that the new rate limit takes effect immediately.
-	r.dynamicRateLimiter.Refresh()
+	fmt.Println("=========rateLimitManager.updateRatelimitLocked=========")
+	fmt.Println("effectiveRPS", r.effectiveRPS, "systemRPS", r.systemRPS, "rateLimitSource", r.rateLimitSource)
+	return
+
+	// newRPS := r.effectiveRPS
+	// // If the effective RPS is zero, we set the burst to zero as well.
+	// // This prevents any initial tasks from executing immediately.
+	// // Allows pausing of the task queue by setting the RPS to zero.
+	// var burst int
+	// if newRPS != 0 {
+	// 	// If the effective RPS is non-zero, we can set a burst based on the effective RPS.
+	// 	burst = max(int(math.Ceil(newRPS)), r.config.MinTaskThrottlingBurstSize())
+	// }
+	// r.dynamicRateBurst.SetRPS(newRPS)
+	// r.dynamicRateBurst.SetBurst(burst)
+	// // updateRatelimitLocked is invoked whenever the effective RPS value changes.
+	// // At this point, the dynamicRateLimiter is always updated with the latest rate and burst values,
+	// // ensuring that the new rate limit takes effect immediately.
+	// r.dynamicRateLimiter.Refresh()
 }
 
 // UpdateSimpleRateLimit updates the overall queue rate limits for the simpleRateLimiter implementation
