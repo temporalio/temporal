@@ -142,8 +142,13 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 			Namespace: params.Namespace,
 			NewState:  enumspb.REPLICATION_STATE_NORMAL,
 		}
-		err := workflow.ExecuteActivity(resetStateCtx, a.UpdateNamespaceState, resetStateRequest).Get(resetStateCtx, nil)
-		cancel()
+		var err error
+		if workflow.GetVersion(ctx, "detach-handover-ctx-20250829", workflow.DefaultVersion, 1) > workflow.DefaultVersion {
+			err = workflow.ExecuteActivity(resetStateCtx, a.UpdateNamespaceState, resetStateRequest).Get(resetStateCtx, nil)
+			cancel()
+		} else {
+			err = workflow.ExecuteActivity(ctx, a.UpdateNamespaceState, resetStateRequest).Get(ctx, nil)
+		}
 		if err != nil {
 			retErr = err
 			return
