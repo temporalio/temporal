@@ -21,6 +21,10 @@ type Invoker struct {
 	Scheduler chasm.Field[*Scheduler]
 }
 
+func (i *Invoker) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
+}
+
 // NewInvoker returns an intialized Invoker component, which should
 // be parented under a Scheduler root component.
 func NewInvoker(ctx chasm.MutableContext, scheduler *Scheduler) *Invoker {
