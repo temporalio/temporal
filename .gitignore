@@ -1,7 +1,7 @@
 .tmp/
 .bin/
 .stamp/
-
+.zed/
 .idea/
 .vscode/settings.json
 .vscode
@@ -9,7 +9,7 @@
 .DS_Store
 .coverage
 .testoutput
-
+__debug*
 *.out
 *.test
 *.xml

@@ -1,0 +1,2 @@
+# go.temporal.io/server/tools/tdbg
+tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)

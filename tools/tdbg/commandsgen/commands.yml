@@ -1,0 +1,892 @@
+# This document is automatically parsed.
+# Follow these rules.
+
+# IN-HOUSE STYLE
+
+# * Wording and grammar:
+#   * Run a spell check.
+#   * Be clear and concise.
+#   * Don't reword the command in the summary. Use distinct supplementary language.
+#     * Yes: temporal workflow delete: Remove Workflow Execution
+#     * No: temporal workflow delete: Delete Workflow
+#   * Re-use and adapt existing wording and phrases wherever possible.
+#   * Word command summaries as if they began "This command will..."
+#     Use sentence casing for the summary.
+#   * ID is fully capitalized in text ("the Workflow ID") and Id in
+#     [metasyntax](https://en.wikipedia.org/wiki/Metasyntactic_variable) (YourWorkflowId).
+# * Avoid parentheticals unless absolutely necessary.
+
+# * Wrapping:
+#   * Assume a user-visible line length of 80 characters max. `fmt -w 78` can help.
+#     * Long descriptions must be pre-wrapped.
+#   * When declaring Options follow the wrapping style used elsewhere in this file.
+#     Splitting the items into multiple lines improves maintainability with clearer diffs.
+
+# * Punctuation:
+#   * End description blocks with a period.
+#     Do _not_ use periods for summaries.
+#   * Introduce triple-quoted code-fenced samples with a colons.
+#     Avoid using 'for example' unless there's no other way to introduce code.
+
+# * Code, flags, and keys:
+#   * Demonstrate at least one example invocation of the command in every long description.
+#   * Include the most commonly used patterns in long descriptions so users don't
+#     have to call help at multiple invocation levels.
+#   * Avoid deprecated period-delineated versions of environment-specific keys.
+#     * Yes:
+#           ```
+#           temporal env set \
+#               --env prod \
+#               --key tls-cert-path \
+#               --value /home/my-user/certs/cluster.cert`
+#           ```
+#     * No: `temporal env set prod.tls-cert-path /home/my-user/certs/cluster.cert`.
+#   * Split invocation samples to multiple lines.
+#     Use one option or flag per line, as in the above example.
+#     Use a single space and a backslash to continue the invocation.
+#     Use 4-space indentation.
+#   * Always use long options and flags for invocation examples.
+#     * Yes: `--namespace`
+#     * No:  `-n`
+#   * When commands have a single command-level option, include it the mandatory example.
+#   * Use square bracket overviews to present how complex commands will be used.
+#     * Yes: temporal operator [command] [subcommand] [options]
+#     Commands with subcommands can't be run on their own unless
+#     subcommands-optional is set to true.
+#     Because of this, always use full command examples.
+#   * Use square brackets to highlight optional elements, especially when long
+#     descriptions would suffer from two very similar command invocations.
+#     * Yes: temporal operator cluster describe [--detail]
+#   * Use YourEnvironment, YourNamespace, etc. as unquoted metasyntactic variable
+#     stand-ins.
+#     Respectful metasyntax describes the role of the stand-in.
+#     * Yes: --workflow-id YourWorkflowId
+#     * No: --workflow-id your-work-id, --workflow-id "
+#   * For JSON input, use single quotes to encase interior double quotes.
+#     Otherwise, in the rare case it is needed, prefer double quotes.
+#   * When presenting options use a space rather than equal to set them.
+#     This is more universally supported and consistent with POSIX guidelines.
+#     * Yes: `temporal command --namespace YourNamespace`.
+#     * No: `temporal command --namespace=YourNamespace`.
+#     Note: in this utility's current incarnation, Boolean options must be
+#     set with an equal sign.
+#     Since Booleans can be treated like flags, avoid using assigned values in samples.
+#     * Yes: `--detail`
+#     * No: `--detail=true`
+
+# For options and flags:
+
+# * When options and flags can be passed multiple times, say so explicitly in
+#   the usage text: "Can be passed multiple times."
+# * Never rely on the flag type (e.g. `string`, `bool`, etc.) being shown to the user.
+#   It is replaced/hidden when a `META-VARIABLE` is used.
+# * Where possible, use a `META-VARIABLE` (all caps and wrapped in `\``s) to
+#   describe/reference content passed to an option.
+# * Limit `code spans` to meta-variables.
+#   To reference other options or specify literal values, use double quotes.
+
+# COMMAND ENTRY OVERVIEW
+
+# A Command entry uses the following format:
+# - name: The full command path with parent commands. (string)
+#   summary: A concise command explanation. (string)
+#   description: A detailed command explanation. (string)
+#   has-init: invokes `initCommand` method. (bool)
+#   exact-args: Require this exact number of args. (int)
+#   maximum-args: Require this maximum number of args. (int)
+#   ignores-missing-env: Ignore missing environment variables. (bool)
+#   subcommands-optional: Allow command to be run even when it has subcommands. (bool)
+#   options: A list of options. (Option[])
+#     - name: The option name. (string)
+#       type: The option type. (string)
+#       description: The option description. (string)
+#       required: Whether the option is required. (bool)
+#       short: The single letter short version of name (i.e. a for address). (string)
+#       env: Binds the environment variable to this flag. (string)
+#       implied-env: Documents the environment variable as bound to the flag,
+#         but doesn't actually bind it.
+#       default: The default value. No default means zero value of the type. (string)
+#       enum-values: A list of possible values for the string-enum type. (string[])
+#       aliases: A list of aliases for the option. (string[])
+#   option-sets: A list of option sets. (string[])
+
+# * name, summary, and descrption are required fields. All other fields are optional.
+# * Available option types are `bool`, `duration`, `int`, `float`, `string`, `string[]`,
+#   `string-enum`, string-enum[], or `timestamp`.
+# * Include a new-line after each command entry.
+
+# OPTION SET OVERVIEW
+
+# An options set declaration is the equivalent of pasting those options into the
+# bulleted options list.
+
+# - name: The name of the option set. (string)
+#   options: A list of options. Same template as Command options above (Option[])
+
+# Options that are similar but slightly different don't need to be in option sets.
+# Reserve option sets for when the behavior of the option is the same across commands.
+
+# * Include a new-line after each option set.
+
+commands:
+  - name: tdbg
+    description: A command-line tool for Temporal server debugging
+    summary: Run admin operation on Temporal server
+    has-init: true
+    options:
+      - name: address
+        type: string
+        description: Host:port for Temporal frontend service.
+        env: TEMPORAL_CLI_ADDRESS
+
+      - name: namespace
+        type: string
+        description: Temporal Workflow namespace.
+        default: default
+        env: TEMPORAL_CLI_NAMESPACE
+        aliases:
+          - n
+
+      - name: context-timeout
+        type: int
+        description: Timeout in seconds for RPC calls.
+        default: 5
+        env: TEMPORAL_CONTEXT_TIMEOUT
+        aliases:
+          - ct
+
+      - name: yes
+        type: bool
+        description: Automatically confirm all prompts.
+
+      - name: tls-cert-path
+        type: string
+        description: Path to x509 certificate.
+        env: TEMPORAL_CLI_TLS_CERT
+
+      - name: tls-key-path
+        type: string
+        description: Path to private key.
+        env: TEMPORAL_CLI_TLS_KEY
+
+      - name: tls-ca-path
+        type: string
+        description: Path to server CA certificate.
+        env: TEMPORAL_CLI_TLS_CA
+
+      - name: tls-disable-host-verification
+        type: bool
+        description: Disable TLS hostname verification (TLS must be enabled).
+        env: TEMPORAL_CLI_TLS_DISABLE_HOST_VERIFICATION
+
+      - name: tls-server-name
+        type: string
+        description: Override for target server name.
+        env: TEMPORAL_CLI_TLS_SERVER_NAME
+
+      - name: color
+        type: string-enum
+        description: When to use color auto, always, never.
+        default: auto
+        enum-values:
+          - auto
+          - always
+          - never
+
+  - name: tdbg workflow
+    summary: Run admin operations on a workflow
+    description: |
+      This command will run admin operations on a workflow.
+    docs:
+      description-header: >-
+        This command will run admin operations on a workflow.
+      keywords:
+        - workflow show
+        - workflow import
+        - workflow describe
+        - workflow refresh-tasks
+        - workflow rebuild
+        - workflow replicate
+        - workflow delete
+      tags:
+        - workflow
+        - tdbg
+    aliases:
+      - w
+
+  - name: tdbg workflow import
+    summary: Import workflow history to database
+    description: This command will import workflow history to the database.
+    options:
+      - name: workflow-id
+        type: string
+        description: Workflow ID to import history for.
+        required: true
+      - name: run-id
+        type: string
+        description: Run ID to import history for.
+      - name: input-file
+        type: string
+        description: Input file to import history from.
+        required: true
+
+  - name: tdbg workflow show
+    summary: Show workflow history from the database
+    description: This command will show workflow history from the database.
+    options:
+      - name: workflow-id
+        type: string
+        description: Workflow ID to retrieve history for.
+        required: true
+      - name: run-id
+        type: string
+        description: Run ID to retrieve history for.
+      - name: min-event-id
+        type: int
+        description: Minimum event ID to be included in the history.
+      - name: max-event-id
+        type: int
+        description: Maximum event ID to be included in the history.
+        default: 9223372036854775807
+      - name: min-event-version
+        type: int
+        default: 0
+        description: Start event version to be included in the history.
+      - name: max-event-version
+        type: int
+        description: End event version to be included in the history.
+        default: 0
+      - name: output-file
+        type: string
+        description: Output file to store the workflow history.
+
+  - name: tdbg workflow describe
+    summary: Describe internal information of workflow execution
+    description: This command will describe internal information of workflow execution.
+    aliases:
+      - d
+    options:
+      - name: workflow-id
+        type: string
+        description: Workflow ID to describe.
+        required: true
+      - name: run-id
+        type: string
+        description: Run ID to describe.
+
+  - name: tdbg workflow refresh-tasks
+    summary: Refresh all tasks of a workflow
+    description: This command will refresh all tasks of a workflow.
+    aliases:
+      - rt
+    options:
+      - name: workflow-id
+        type: string
+        description: Workflow ID to refresh tasks for.
+        required: true
+      - name: run-id
+        type: string
+        description: Run ID to refresh tasks for.
+
+  - name: tdbg workflow rebuild
+    summary: Rebuild a workflow mutable state using persisted history events
+    description: This command will rebuild a workflow mutable state using persisted history events.
+    options:
+      - name: workflow-id
+        type: string
+        description: Workflow ID to rebuild.
+        required: true
+      - name: run-id
+        type: string
+        description: Run ID to rebuild.
+
+  - name: tdbg workflow replicate
+    summary: Force replicate a workflow by generating replication tasks
+    description: This command will force replicate a workflow by generating replication tasks.
+    options:
+      - name: workflow-id
+        type: string
+        description: Workflow ID to replicate.
+        required: true
+      - name: run-id
+        type: string
+        description: Run ID to replicate.
+
+  - name: tdbg workflow delete
+    summary: Delete the current workflow execution and mutable state record
+    description: This command will delete the current workflow execution and the mutable state record.
+    aliases:
+      - del
+    options:
+      - name: workflow-id
+        type: string
+        description: Workflow ID to delete.
+        required: true
+      - name: run-id
+        type: string
+        description: Run ID to delete.
+
+  - name: tdbg shard
+    summary: Run admin operations on a specific shard
+    description: This command will run admin operations on a specific shard.
+    docs:
+      keywords:
+        - shard describe
+        - shard list-tasks
+        - shard close-shard
+        - shard remove-task
+      description-header: >-
+        Run admin operations on a specific shard.
+      tags:
+        - shard
+        - tdbg
+    aliases:
+      - s
+  - name: tdbg shard describe
+    summary: Describe shard by ID
+    description: This command will describe a shard by its ID.
+    aliases:
+      - d
+    options:
+      - name: shard-id
+        type: int
+        description: The ID of the shard to describe.
+        required: true
+
+  - name: tdbg shard list-tasks
+    summary: List tasks for a shard and task category
+    description: This command will list tasks for the given shard ID and task category.
+    options:
+      - name: more
+        type: bool
+        description: List more pages. Default is to list one page of default size 10.
+      - name: page-size
+        type: int
+        description: Result page size.
+        default: 1000
+      - name: shard-id
+        type: int
+        description: The ID of the shard.
+        required: true
+      - name: task-category
+        type: string
+        description: The task category to list (e.g. transfer, timer, replication, visibility).
+        required: true
+      - name: min-task-id
+        type: int
+        description: Inclusive min task ID. Optional for transfer, replication, visibility. Not allowed for timer tasks.
+      - name: max-task-id
+        type: int
+        description: Exclusive max task ID. Required for transfer, replication, visibility. Not allowed for timer tasks.
+      - name: min-visibility-timestamp
+        type: string
+        description: >
+          Inclusive min task fire timestamp. Optional for timer tasks. Not allowed for transfer, replication, visibility tasks.
+          Supported formats: '2006-01-02T15:04:05+07:00', raw UnixNano, or time range (e.g. '15m', '1h').
+      - name: max-visibility-timestamp
+        type: string
+        description: >
+          Exclusive max task fire timestamp. Required for timer tasks. Not allowed for transfer, replication, visibility tasks.
+          Supported formats: '2006-01-02T15:04:05+07:00', raw UnixNano, or time range (e.g. '15m', '1h').
+      - name: print-json
+        type: bool
+        description: Print in raw JSON format.
+
+  - name: tdbg shard close-shard
+    summary: Close a shard by ID
+    description: This command will close a shard given a shard ID.
+    options:
+      - name: shard-id
+        type: int
+        description: Shard ID for the Temporal cluster to manage.
+        required: true
+
+  - name: tdbg shard remove-task
+    summary: Remove a task by shard ID, task category, task ID, and visibility timestamp
+    description: >
+      This command will remove a task using the shard ID, task category, task ID, and visibility timestamp.
+    aliases:
+      - rmtk
+    options:
+      - name: shard-id
+        type: int
+        description: The ID of the shard.
+        required: true
+      - name: task-id
+        type: int
+        description: The ID of the task.
+        required: true
+      - name: task-category
+        type: string
+        description: The task category (e.g. transfer, timer, replication, visibility).
+      - name: task-visibility-timestamp
+        type: int
+        description: >
+          Task visibility timestamp in nanoseconds (required for removing a timer task).
+
+  - name: tdbg history-host
+    summary: Run admin operations on a history host
+    description: This command will run admin operations on a history host.
+    docs:
+      keywords:
+        - history-host describe
+        - history-host get-shardid
+      description-header: >
+        Run admin operations on a history host.
+      tags:
+        - history-host
+        - tdbg
+    aliases:
+      - hh
+  - name: tdbg history-host describe
+    summary: Describe internal information of history host
+    description: This command will describe the internal information of a history host.
+    aliases:
+      - d
+    options:
+      - name: workflow-id
+        type: string
+        description: The ID of the workflow.
+      - name: history-address
+        type: string
+        description: History Host address (IP:PORT).
+      - name: shard-id
+        type: int
+        description: The ID of the shard.
+      - name: print-fully-detail
+        type: bool
+        description: Print fully detailed information.
+
+  - name: tdbg history-host get-shard-id
+    summary: Get shard ID for a namespace ID and workflow ID combination
+    description: This command will retrieve the shard ID for a given namespace ID and workflow ID combination.
+    options:
+      - name: namespace-id
+        type: string
+        description: The ID of the namespace.
+      - name: workflow-id
+        type: string
+        description: The ID of the workflow.
+      - name: number-of-shards
+        type: int
+        description: Number of shards for the Temporal cluster (check config for `numHistoryShards`).
+
+  - name: tdbg taskqueue
+    summary: Run admin operations on a task queue
+    description: This command will run admin operations on a task queue.
+    docs:
+      keywords:
+        - taskqueue
+        - taskqueue list-tasks
+        - taskqueue describe-task-queue-partition
+        - taskqueue force-unload-task-queue-partition
+      description-header: >-
+        Run admin operations on a task queue.
+      tags:
+        - taskqueue
+        - tdbg
+    aliases:
+      - tq
+  - name: tdbg taskqueue list-tasks
+    summary: List tasks of a task queue. Use --fair to list fairness tasks
+    description: This command will list tasks of a task queue. Use the `--fair` flag to list fairness tasks.
+    options:
+      - name: more
+        type: bool
+        description: List more pages, default is to list one page of default page size 10.
+      - name: page-size
+        type: int
+        description: Result page size. Default is 10.
+      - name: task-queue-type
+        type: string
+        description: Task Queue type (activity, workflow).
+        default: activity
+      - name: task-queue
+        type: string
+        description: Task Queue name.
+      - name: min-task-id
+        type: int
+        description: Minimum task ID. Default is -12346.
+      - name: max-task-id
+        type: int
+        description: Maximum task ID.
+      - name: subqueue
+        type: int
+        description: Subqueue to query. Default is 0.
+      - name: print-json
+        type: bool
+        description: Print in raw JSON format.
+      - name: fair
+        type: bool
+        description: Query fairness tasks.
+      - name: min-pass
+        type: int
+        description: Minimum pass for fairness tasks. Default is 1.
+
+  - name: tdbg taskqueue describe-task-queue-partition
+    summary: Describe information related to a task queue partition
+    description: This command will describe the partition information for a given task queue.
+    options:
+      - name: namespace-id
+        type: string
+        description: Namespace ID.
+        default: default
+      - name: task-queue
+        type: string
+        description: Task Queue name. Required.
+      - name: task-queue-type
+        type: string
+        description: Task Queue type (activity, workflow, nexus).
+        default: TASK_QUEUE_TYPE_WORKFLOW
+      - name: partition-id
+        type: int
+        description: Partition ID. Default is 0.
+      - name: sticky-name
+        type: string
+        description: Sticky Name for a task queue partition.
+      - name: build-ids
+        type: string[]
+        description: List of Build IDs.
+      - name: unversioned
+        type: bool
+        description: Whether the task queue partition is unversioned. Default is true.
+      - name: all-active
+        type: bool
+        description: Whether to include all active task queue versions. Default is true.
+
+  - name: tdbg taskqueue force-unload-task-queue-partition
+    summary: Forcefully unload a task queue partition
+    description: This command will forcefully unload a task queue partition.
+    options:
+      - name: namespace-id
+        type: string
+        description: Namespace ID.
+        default: default
+      - name: task-queue
+        type: string
+        description: Task Queue name. Required.
+      - name: task-queue-type
+        type: string
+        description: "Task Queue type: activity, workflow, nexus(experimental)."
+        default: TASK_QUEUE_TYPE_WORKFLOW
+      - name: partition-id
+        type: int
+        default: 0
+        description: Partition ID.
+      - name: sticky-name
+        type: string
+        description: Sticky Name for a task queue partition.
+
+  - name: tdbg membership
+    summary: Run admin operations on cluster membership
+    description: This command will run admin operations on cluster membership.
+    docs:
+      keywords:
+        - membership
+        - membership list-db
+        - membership list-gossip
+        - membership list
+      description-header: >-
+        Membership management commands.
+      tags:
+        - membership
+        - tdbg
+    aliases:
+      - m
+  - name: tdbg membership list-gossip
+    summary: List ringpop membership items
+    description: This command lists Ringpop gossip-based membership items for Temporal cluster nodes.
+    options:
+      - name: role
+        type: string
+        description: Membership role filter (frontend, history, matching, worker, or all).
+        default: all
+
+  - name: tdbg membership list-db
+    summary: List cluster membership items
+    description: This command lists cluster membership records from the database for Temporal nodes.
+    options:
+      - name: heartbeated-within
+        type: string
+        description: |
+          Filter by last heartbeat time. Supported formats:
+            - '2006-01-02T15:04:05+07:00'
+            - raw UnixNano
+            - time range (e.g., '15m', '1h', '7d').
+          Default is '15m' (last 15 minutes).
+        default: 15m
+      - name: role
+        type: string
+        description: Membership role filter (frontend, history, matching, worker, or all).
+        default: all
+
+  - name: tdbg dlq
+    summary: Run admin operations on the DLQ
+    description: This command will run admin operations on the DLQ.
+    docs:
+      keywords:
+        - dlq
+        - dlq read
+        - dlq purge
+        - dlq merge
+        - dlq list
+        - dlq job
+      description-header: DLQ Operations
+      tags:
+        - dlq
+        - tdbg
+    options:
+      - name: dlq-version
+        type: string-enum
+        description: Version of DLQ to manage. Options "v1", "v2".
+        default: v2
+        enum-values:
+          - v1
+          - v2
+
+  - name: tdbg dlq read
+    summary: Read DLQ Messages
+    description: Read messages from the Dead Letter Queue (DLQ). Supports pagination and writing output to a file or stdout.
+    options:
+      - name: source-cluster
+        type: string
+        description: Source cluster for the DLQ.
+      - name: target-cluster
+        type: string
+        description: Target cluster for the DLQ.
+      - name: shard-id
+        type: int
+        description: Shard ID of the DLQ message.
+      - name: max-message-count
+        type: int
+        default: 100
+        description: Max number of messages to fetch. Only applicable to v2.
+      - name: output-file
+        type: string
+        description: File to write output to (defaults to stdout if not specified).
+      - name: page-size
+        type: int
+        description: Page size to use when reading messages from DB (v2 only).
+        default: 10
+      - name: last-message-id
+        type: int
+        description: The upper boundary of messages to operate on. If not provided, all messages will be operated on. However, you will be prompted for confirmation unless the --yes flag is also provided.
+      - name: dlq-type
+        type: string-enum
+        description: Type of DLQ to manage.
+        required: true
+        enum-values:
+          - namespace
+          - history
+          - transfer
+          - timer
+          - replication
+          - visibility
+
+  - name: tdbg dlq purge
+    summary: Delete DLQ messages
+    description: Delete DLQ messages with equal or smaller IDs than the specified task ID.
+    options:
+      - name: source-cluster
+        type: string
+        description: Source cluster for the DLQ.
+      - name: target-cluster
+        type: string
+        description: Target cluster for the DLQ.
+      - name: shard-id
+        type: int
+        description: Shard ID of the DLQ message.
+      - name: last-message-id
+        type: int
+        description: The upper boundary of messages to operate on. If not provided, all messages will be operated on. However, you will be prompted for confirmation unless the --yes flag is also provided.
+      - name: dlq-type
+        type: string-enum
+        description: Type of DLQ to purge.
+        required: true
+        enum-values:
+          - namespace
+          - history
+          - transfer
+          - timer
+          - replication
+          - visibility
+
+  - name: tdbg dlq merge
+    summary: Merge DLQ messages
+    description: Merge (i.e., re-enqueue then delete) DLQ messages with equal or smaller task IDs. Requires v2 DLQ.
+    options:
+      - name: source-cluster
+        type: string
+        description: Source cluster for the DLQ.
+      - name: target-cluster
+        type: string
+        description: Target cluster for the DLQ.
+      - name: shard-id
+        type: int
+        description: Shard ID of the DLQ message.
+      - name: page-size
+        type: int
+        description: Batch size used during message purging.
+      - name: last-message-id
+        type: int
+        description: The upper boundary of messages to operate on. If not provided, all messages will be operated on. However, you will be prompted for confirmation unless the --yes flag is also provided.
+      - name: dlq-type
+        type: string-enum
+        description: Type of DLQ to merge.
+        required: true
+        enum-values:
+          - namespace
+          - history
+          - transfer
+          - timer
+          - replication
+          - visibility
+
+  - name: tdbg dlq list
+    summary: List all DLQs,only supported for v2
+    description: List all DLQs (only supported for v2). Outputs JSON and supports pagination.
+    options:
+      - name: output-file
+        type: string
+        description: Output file path. Defaults to stdout.
+      - name: page-size
+        type: int
+        description: Page size when listing queues from the DB.
+        default: 10
+      - name: print-json
+        type: bool
+        description: Print raw JSON output.
+
+  - name: tdbg dlq job
+    summary: Run admin operation on DLQ Job
+    description: Execute operations on a DLQ Job. See subcommands under this command for job-level controls.
+
+  - name: tdbg dlq job describe
+    summary: Get details of the DLQ job with provided job token
+    description: >
+      This command will get details of the DLQ job with the provided job token
+      if using v2.
+
+      The token can be obtained from the output of the `merge` or `purge` DLQ
+      commands.
+
+      Example invocation:
+      ```
+      tdbg dlq job describe \
+          --job-token YourJobToken
+      ```
+    options:
+      - name: job-token
+        type: string
+        description: Token of the DLQ job. This token will be printed in the output of merge and purge commands.
+        required: true
+    docs:
+      keywords:
+        - describe
+      description-header: >-
+        Retrieve information about a DLQ job by providing its job token. This
+        token is generated by the system when merge or purge operations are
+        triggered.
+      tags:
+        - describe
+        - dlq
+        - job
+        - tdbg
+
+  - name: tdbg dlq job cancel
+    summary: Cancel the DLQ job with provided job token
+    description: >
+      This command will cancel the DLQ job with the provided job token.
+
+      A reason for cancellation must also be provided to explain why the job is
+      being terminated. Both values are required.
+
+      The job token can be obtained from the output of a previous `merge` or
+      `purge` command.
+
+      Example invocation:
+      ```
+      tdbg dlq job cancel \
+          --job-token YourJobToken \
+          --reason "Manual cancellation due to task failure"
+      ```
+    options:
+      - name: job-token
+        type: string
+        description: Token of the DLQ job. This token will be printed in the output of merge and purge commands.
+        required: true
+      - name: reason
+        type: string
+        description: Reason for job cancellation.
+        required: true
+    docs:
+      keywords:
+        - cancel
+      description-header: >-
+        Cancel a DLQ job by supplying a valid job token and a reason for the
+        cancellation.
+      tags:
+        - cancel
+        - dlq
+        - job
+        - tdbg
+
+  - name: tdbg decode
+    summary: Decode payload
+    description: This command will decode payloads.
+    docs:
+      keywords:
+        - decode
+        - decode proto
+        - decode base64
+        - decode task
+      description-header: >-
+        This command will decode payloads.
+      tags:
+        - decode
+        - tdbg
+
+  - name: tdbg decode proto
+    summary: Decode proto payload
+    description: Decode a hex or binary encoded proto payload into a structured message.
+    options:
+      - name: proto-type
+        type: string
+        description: Full name of the proto type to decode to (e.g. temporal.server.api.persistence.v1.WorkflowExecutionInfo).
+      - name: hex-data
+        type: string
+        description: Data in hex format (e.g. 0x0a243462613036633466...).
+      - name: hex-file
+        type: string
+        description: Path to a file with data in hex format.
+      - name: binary-file
+        type: string
+        description: Path to a file with data in binary format.
+
+  - name: tdbg decode base64
+    summary: Decode base64 payload
+    description: Decode base64-encoded data into raw or human-readable output.
+    options:
+      - name: base64-data
+        type: string
+        description: Data in base64 format (e.g. anNvbi9wbGFpbg==).
+      - name: base64-file
+        type: string
+        description: Path to a file with base64 encoded data.
+
+  - name: tdbg decode task
+    summary: Decode a history task blob
+    description: Decode a history task blob in binary format into a JSON message.
+    options:
+      - name: binary-file
+        type: string
+        description: Path to a binary file containing the task blob.
+        required: true
+      - name: task-category-id
+        type: int
+        description: Task category ID (see the history/tasks package).
+        required: true
+      - name: encoding
+        type: string
+        description: Encoding type (see temporal.api.enums.v1.EncodingType).
+        required: true
