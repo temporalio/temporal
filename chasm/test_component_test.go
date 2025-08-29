@@ -86,8 +86,20 @@ func (tc *TestComponent) Fail(_ MutableContext) {
 	tc.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 }
 
+func (tsc1 *TestSubComponent1) LifecycleState(_ Context) LifecycleState {
+	return LifecycleStateRunning
+}
+
 func (tsc1 *TestSubComponent1) GetData() string {
 	return tsc1.SubComponent1Data.GetCreateRequestId()
+}
+
+func (tsc11 *TestSubComponent11) LifecycleState(_ Context) LifecycleState {
+	return LifecycleStateRunning
+}
+
+func (tsc2 *TestSubComponent2) LifecycleState(_ Context) LifecycleState {
+	return LifecycleStateRunning
 }
 
 func setTestComponentFields(c *TestComponent) {
