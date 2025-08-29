@@ -187,6 +187,7 @@ func newPhysicalTaskQueueManager(
 		})
 	}
 	if fairness {
+		fmt.Println("=========fairness=========")
 		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagFairness)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagFairness)
 
@@ -227,6 +228,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
+		fmt.Println("newPhysicalTaskQueueManager.priMatcher.fairness: ", pqMgr.priMatcher.data)
 		return pqMgr, nil
 	}
 
@@ -236,6 +238,7 @@ func newPhysicalTaskQueueManager(
 	})
 
 	if newMatcher {
+		fmt.Println("=========priority=========")
 		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagPriority)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagPriority)
 
@@ -270,6 +273,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
+		fmt.Println("newPhysicalTaskQueueManager.priMatcher.priority: ", pqMgr.priMatcher.data)
 		return pqMgr, nil
 	}
 
@@ -297,6 +301,7 @@ func newPhysicalTaskQueueManager(
 	}
 	pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.GetRateLimitManager().GetRateLimiter())
 	pqMgr.matcher = pqMgr.oldMatcher
+	fmt.Println("newPhysicalTaskQueueManager.oldMatcher: ", pqMgr.priMatcher.data)
 	return pqMgr, nil
 }
 
