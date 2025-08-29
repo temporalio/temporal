@@ -132,6 +132,9 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 	}
 
 	defer func() {
+		infiniteRetryOption := workflow.ActivityOptions{StartToCloseTimeout: time.Second * 10}
+		detachCtx, cancel := workflow.NewDisconnectedContext(ctx)
+		resetStateCtx := workflow.WithActivityOptions(detachCtx, infiniteRetryOption)
 		// ** Final Step: Reset namespace state from Handover -> Registered. This helps ensure that whether
 		//                handover failed or succeeded, the namespace (for whichever cluster it is Active on)
 		//                is able to process traffic again.
@@ -139,7 +142,8 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 			Namespace: params.Namespace,
 			NewState:  enumspb.REPLICATION_STATE_NORMAL,
 		}
-		err := workflow.ExecuteActivity(ctx, a.UpdateNamespaceState, resetStateRequest).Get(ctx, nil)
+		err := workflow.ExecuteActivity(resetStateCtx, a.UpdateNamespaceState, resetStateRequest).Get(resetStateCtx, nil)
+		cancel()
 		if err != nil {
 			retErr = err
 			return
@@ -154,7 +158,6 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 			MaximumAttempts: 1,
 		},
 	}
-
 	ctx3 := workflow.WithActivityOptions(ctx, ao3)
 	waitHandover := waitHandoverRequest{
 		ShardCount:    metadataResp.ShardCount,
