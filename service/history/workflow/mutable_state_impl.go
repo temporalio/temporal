@@ -5896,7 +5896,7 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute(
 	}
 
 	// This is not guaranteed to be accurate because of ordering non-determinism. Needs to be fixed.
-	if proto.Equal(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], reportedProblemsPayload) {
+	if areKeywordListsEqual(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], reportedProblemsPayload) {
 		return nil
 	}
 
@@ -5904,9 +5904,52 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute(
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
-func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute(
-	reportedProbs ...string,
-) error {
+func areKeywordListsEqual(a, b *commonpb.Payload) bool {
+	if a == nil && b == nil {
+		return true
+	}
+
+	// Decode both to keyword lists
+	decodedA, err := searchattribute.DecodeValue(a, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	if err != nil {
+		return false
+	}
+
+	decodedB, err := searchattribute.DecodeValue(b, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	if err != nil {
+		return false
+	}
+
+	keywordListA, ok := decodedA.([]string)
+	if !ok {
+		return false
+	}
+
+	keywordListB, ok := decodedB.([]string)
+	if !ok {
+		return false
+	}
+
+	if len(keywordListA) != len(keywordListB) {
+		return false
+	}
+
+	// any ordering is fine
+	keywordMapA := make(map[string]struct{})
+	for _, v := range keywordListA {
+		keywordMapA[v] = struct{}{}
+	}
+
+	for _, v := range keywordListB {
+		if _, ok := keywordMapA[v]; !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
 	if ms.executionInfo.SearchAttributes == nil {
 		return nil
 	}

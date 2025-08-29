@@ -5164,3 +5164,337 @@ func (s *mutableStateSuite) TestHasRequestID_EmptyExecutionState() {
 		s.False(s.mutableState.HasRequestID(requestID), "Should return false for request ID: %s", requestID)
 	}
 }
+
+func (s *mutableStateSuite) TestAreKeywordListsEqual() {
+	// Helper function to create a payload from a string slice
+	createPayload := func(values []string) *commonpb.Payload {
+		if values == nil {
+			return nil
+		}
+		encoded, err := searchattribute.EncodeValue(values, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+		s.NoError(err)
+		return encoded
+	}
+
+	// Helper function to create an invalid payload
+	createInvalidPayload := func() *commonpb.Payload {
+		return &commonpb.Payload{
+			Data: []byte("invalid data"),
+		}
+	}
+
+	testCases := []struct {
+		name     string
+		a        *commonpb.Payload
+		b        *commonpb.Payload
+		expected bool
+	}{
+		// Test case 1: Both nil
+		{
+			name:     "both_nil",
+			a:        nil,
+			b:        nil,
+			expected: true,
+		},
+		// Test case 2: One nil, one not nil
+		{
+			name:     "a_nil_b_not_nil",
+			a:        nil,
+			b:        createPayload([]string{"test"}),
+			expected: false,
+		},
+		{
+			name:     "a_not_nil_b_nil",
+			a:        createPayload([]string{"test"}),
+			b:        nil,
+			expected: false,
+		},
+		// Test case 3: Both empty
+		{
+			name:     "both_empty",
+			a:        createPayload([]string{}),
+			b:        createPayload([]string{}),
+			expected: true,
+		},
+		// Test case 4: Same elements, same order
+		{
+			name:     "same_elements_same_order",
+			a:        createPayload([]string{"a", "b", "c"}),
+			b:        createPayload([]string{"a", "b", "c"}),
+			expected: true,
+		},
+		// Test case 5: Same elements, different order
+		{
+			name:     "same_elements_different_order",
+			a:        createPayload([]string{"a", "b", "c"}),
+			b:        createPayload([]string{"c", "a", "b"}),
+			expected: true,
+		},
+		// Test case 6: Different elements
+		{
+			name:     "different_elements",
+			a:        createPayload([]string{"a", "b", "c"}),
+			b:        createPayload([]string{"a", "b", "d"}),
+			expected: false,
+		},
+		// Test case 7: Different lengths
+		{
+			name:     "different_lengths",
+			a:        createPayload([]string{"a", "b"}),
+			b:        createPayload([]string{"a", "b", "c"}),
+			expected: false,
+		},
+		// Test case 8: Duplicate elements in one list
+		{
+			name:     "duplicate_elements_in_a",
+			a:        createPayload([]string{"a", "a", "b"}),
+			b:        createPayload([]string{"a", "b"}),
+			expected: false,
+		},
+		{
+			name:     "duplicate_elements_in_b",
+			a:        createPayload([]string{"a", "b"}),
+			b:        createPayload([]string{"a", "a", "b"}),
+			expected: false,
+		},
+		// Test case 9: Both have duplicates but different counts
+		{
+			name:     "different_duplicate_counts",
+			a:        createPayload([]string{"a", "a", "b"}),
+			b:        createPayload([]string{"a", "b", "b"}),
+			expected: false,
+		},
+		// Test case 10: Single element
+		{
+			name:     "single_element_same",
+			a:        createPayload([]string{"test"}),
+			b:        createPayload([]string{"test"}),
+			expected: true,
+		},
+		{
+			name:     "single_element_different",
+			a:        createPayload([]string{"test1"}),
+			b:        createPayload([]string{"test2"}),
+			expected: false,
+		},
+		// Test case 11: Case sensitivity
+		{
+			name:     "case_sensitive",
+			a:        createPayload([]string{"Test", "Value"}),
+			b:        createPayload([]string{"test", "value"}),
+			expected: false,
+		},
+		// Test case 12: Special characters
+		{
+			name:     "special_characters_same",
+			a:        createPayload([]string{"test@123", "value#456", "key$789"}),
+			b:        createPayload([]string{"test@123", "value#456", "key$789"}),
+			expected: true,
+		},
+		{
+			name:     "special_characters_different",
+			a:        createPayload([]string{"test@123", "value#456"}),
+			b:        createPayload([]string{"test@123", "value%456"}),
+			expected: false,
+		},
+		// Test case 13: Empty string elements
+		{
+			name:     "empty_string_elements",
+			a:        createPayload([]string{"", "test", ""}),
+			b:        createPayload([]string{"test", "", ""}),
+			expected: true,
+		},
+		// Test case 14: Large lists
+		{
+			name:     "large_lists_same",
+			a:        createPayload([]string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}),
+			b:        createPayload([]string{"j", "i", "h", "g", "f", "e", "d", "c", "b", "a"}),
+			expected: true,
+		},
+		{
+			name:     "large_lists_different",
+			a:        createPayload([]string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}),
+			b:        createPayload([]string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "k"}),
+			expected: false,
+		},
+		// Test case 15: Invalid payloads
+		{
+			name:     "invalid_payload_a",
+			a:        createInvalidPayload(),
+			b:        createPayload([]string{"test"}),
+			expected: false,
+		},
+		{
+			name:     "invalid_payload_b",
+			a:        createPayload([]string{"test"}),
+			b:        createInvalidPayload(),
+			expected: false,
+		},
+		{
+			name:     "both_invalid_payloads",
+			a:        createInvalidPayload(),
+			b:        createInvalidPayload(),
+			expected: false,
+		},
+		// Test case 16: Unicode characters
+		{
+			name:     "unicode_characters_same",
+			a:        createPayload([]string{"测试", "тест", "test"}),
+			b:        createPayload([]string{"test", "测试", "тест"}),
+			expected: true,
+		},
+		{
+			name:     "unicode_characters_different",
+			a:        createPayload([]string{"测试", "тест"}),
+			b:        createPayload([]string{"测试", "тест", "test"}),
+			expected: false,
+		},
+		// Test case 17: Whitespace handling
+		{
+			name:     "whitespace_different",
+			a:        createPayload([]string{" test ", "value"}),
+			b:        createPayload([]string{"test", "value"}),
+			expected: false,
+		},
+		// Test case 18: Numbers as strings
+		{
+			name:     "numbers_as_strings_same",
+			a:        createPayload([]string{"123", "456", "789"}),
+			b:        createPayload([]string{"789", "123", "456"}),
+			expected: true,
+		},
+		{
+			name:     "numbers_as_strings_different",
+			a:        createPayload([]string{"123", "456"}),
+			b:        createPayload([]string{"123", "456", "789"}),
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			result := areKeywordListsEqual(tc.a, tc.b)
+			s.Equal(tc.expected, result, "Test case: %s", tc.name)
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestAreKeywordListsEqual_Comprehensive() {
+	// Test all combinations systematically
+	createPayload := func(values []string) *commonpb.Payload {
+		if values == nil {
+			return nil
+		}
+		encoded, err := searchattribute.EncodeValue(values, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+		s.NoError(err)
+		return encoded
+	}
+
+	// Test data sets
+	testSets := [][]string{
+		nil,                       // nil
+		{},                        // empty
+		{"a"},                     // single element
+		{"a", "b"},                // two elements
+		{"a", "b", "c"},           // three elements
+		{"a", "a", "b"},           // with duplicates
+		{"", "test", ""},          // with empty strings
+		{"test@123", "value#456"}, // with special characters
+		{"测试", "тест", "test"},    // with unicode
+		{"123", "456", "789"},     // numbers as strings
+	}
+
+	// Test all combinations
+	for i, setA := range testSets {
+		for j, setB := range testSets {
+			payloadA := createPayload(setA)
+			payloadB := createPayload(setB)
+
+			// Calculate expected result
+			expected := false
+			if setA == nil && setB == nil {
+				expected = true
+			} else if setA != nil && setB != nil {
+				// Convert to maps for comparison
+				mapA := make(map[string]int)
+				mapB := make(map[string]int)
+
+				for _, v := range setA {
+					mapA[v]++
+				}
+				for _, v := range setB {
+					mapB[v]++
+				}
+
+				expected = reflect.DeepEqual(mapA, mapB)
+			}
+
+			testName := fmt.Sprintf("combination_%d_%d", i, j)
+			s.Run(testName, func() {
+				result := areKeywordListsEqual(payloadA, payloadB)
+				s.Equal(expected, result,
+					"Set A: %v, Set B: %v, Expected: %v, Got: %v",
+					setA, setB, expected, result)
+			})
+		}
+	}
+}
+
+func (s *mutableStateSuite) TestAreKeywordListsEqual_EdgeCases() {
+	createPayload := func(values []string) *commonpb.Payload {
+		if values == nil {
+			return nil
+		}
+		encoded, err := searchattribute.EncodeValue(values, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+		s.NoError(err)
+		return encoded
+	}
+
+	// Test very long strings
+	longString := strings.Repeat("very_long_string_", 100)
+	s.Run("very_long_strings", func() {
+		a := createPayload([]string{longString, "normal"})
+		b := createPayload([]string{"normal", longString})
+		s.True(areKeywordListsEqual(a, b))
+	})
+
+	// Test with only empty strings
+	s.Run("only_empty_strings", func() {
+		a := createPayload([]string{"", "", ""})
+		b := createPayload([]string{"", "", ""})
+		s.True(areKeywordListsEqual(a, b))
+	})
+
+	// Test with mixed empty and non-empty
+	s.Run("mixed_empty_and_non_empty", func() {
+		a := createPayload([]string{"", "test", ""})
+		b := createPayload([]string{"test", "", ""})
+		s.True(areKeywordListsEqual(a, b))
+	})
+
+	// Test with very large lists
+	s.Run("very_large_lists", func() {
+		largeListA := make([]string, 1000)
+		largeListB := make([]string, 1000)
+		for i := 0; i < 1000; i++ {
+			largeListA[i] = fmt.Sprintf("item_%d", i)
+			largeListB[999-i] = fmt.Sprintf("item_%d", i) // reverse order
+		}
+		a := createPayload(largeListA)
+		b := createPayload(largeListB)
+		s.True(areKeywordListsEqual(a, b))
+	})
+
+	// Test with payload that can't be decoded as keyword list
+	s.Run("non_keyword_list_payload", func() {
+		// Create a payload that's not a keyword list
+		nonKeywordPayload := &commonpb.Payload{
+			Data: []byte("not a keyword list"),
+		}
+		validPayload := createPayload([]string{"test"})
+
+		s.False(areKeywordListsEqual(nonKeywordPayload, validPayload))
+		s.False(areKeywordListsEqual(validPayload, nonKeywordPayload))
+		s.False(areKeywordListsEqual(nonKeywordPayload, nonKeywordPayload))
+	})
+}

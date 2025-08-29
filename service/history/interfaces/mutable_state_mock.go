@@ -3480,13 +3480,9 @@ func (mr *MockMutableStateMockRecorder) UpdateReportedProblemsSearchAttribute(re
 }
 
 // RemoveReportedProblemsSearchAttribute mocks base method.
-func (m *MockMutableState) RemoveReportedProblemsSearchAttribute(reportedProblems ...string) error {
+func (m *MockMutableState) RemoveReportedProblemsSearchAttribute() error {
 	m.ctrl.T.Helper()
-	varargs := []any{}
-	for _, a := range reportedProblems {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "RemoveReportedProblemsSearchAttribute", varargs...)
+	ret := m.ctrl.Call(m, "RemoveReportedProblemsSearchAttribute")
 	ret0, _ := ret[0].(error)
 	return ret0
 }

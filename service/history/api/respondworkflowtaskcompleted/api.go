@@ -299,7 +299,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 
 		if handler.config.EnableReportedProblemsSearchAttribute(nsName) {
-			if err := ms.RemoveReportedProblemsSearchAttribute("category=WorkflowTaskFailed", "cause=WorkflowWorkerUnhandledFailure"); err != nil {
+			if err := ms.RemoveReportedProblemsSearchAttribute(); err != nil {
 				return nil, err
 			}
 		}

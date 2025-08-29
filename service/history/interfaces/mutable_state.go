@@ -364,6 +364,6 @@ type (
 		SetSuccessorRunID(runID string)
 
 		UpdateReportedProblemsSearchAttribute(reportedProblemCategory, reportedCause string) error
-		RemoveReportedProblemsSearchAttribute(reportedProblems ...string) error
+		RemoveReportedProblemsSearchAttribute() error
 	}
 )
