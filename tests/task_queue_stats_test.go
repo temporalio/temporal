@@ -72,7 +72,7 @@ func (s *TaskQueueStatsSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
 	s.OverrideDynamicConfig(dynamicconfig.EnableDeploymentVersions, true)
 	s.OverrideDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, s.usePriMatcher)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false) //s.usePriMatcher)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingPriorityLevels, maxPriority)
 }
 

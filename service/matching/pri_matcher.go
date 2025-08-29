@@ -84,6 +84,7 @@ func newPriTaskMatcher(
 	rateLimitManager *rateLimitManager,
 	markAlive func(),
 ) *priTaskMatcher {
+	panic("=====newPriTaskMatcher: nothing should be using this=====")
 	tm := &priTaskMatcher{
 		config:           config,
 		data:             newMatcherData(config, logger, clock.NewRealTimeSource(), fwdr != nil, rateLimitManager),
