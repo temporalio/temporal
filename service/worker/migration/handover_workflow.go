@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	namespaceHandoverWorkflowName = "namespace-handover"
+	namespaceHandoverWorkflowName   = "namespace-handover"
+	namespaceHandoverWorkflowV2Name = "namespace-handover-v2"
 
 	minimumAllowedLaggingSeconds  = 5
 	maximumAllowedLaggingSeconds  = 120
@@ -58,11 +59,22 @@ type (
 	}
 )
 
+func NamespaceHandoverWorkflowV2(ctx workflow.Context, params NamespaceHandoverParams) (retErr error) {
+	workflowInfo := workflow.GetInfo(ctx)
+	if workflowInfo.WorkflowRunTimeout > 0 {
+		return temporal.NewNonRetryableApplicationError(
+			"Workflow run timeout should not be set for handover workflow",
+			"InvalidTimeout",
+			nil,
+		)
+	}
+	return NamespaceHandoverWorkflow(ctx, params)
+}
+
 func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverParams) (retErr error) {
 	if err := validateAndSetNamespaceHandoverParams(&params); err != nil {
 		return err
 	}
-
 	retryPolicy := &temporal.RetryPolicy{
 		InitialInterval:    time.Second,
 		MaximumInterval:    time.Second,
