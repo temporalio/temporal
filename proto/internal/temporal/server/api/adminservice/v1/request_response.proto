@@ -5,6 +5,7 @@ option go_package = "go.temporal.io/server/api/adminservice/v1;adminservice";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
 
 import "temporal/api/enums/v1/common.proto";
 import "temporal/api/enums/v1/task_queue.proto";
@@ -601,4 +602,10 @@ message ForceUnloadTaskQueuePartitionRequest {
 
 message ForceUnloadTaskQueuePartitionResponse {
   bool was_loaded = 1;
+}
+
+message GetConfigurationsRequest {}
+message GetConfigurationsResponse{
+  string cluster_name = 1;
+  map<string, google.protobuf.Value> config_values = 2;
 }
