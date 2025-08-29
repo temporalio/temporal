@@ -11,7 +11,7 @@ import "temporal/server/api/schedule/v1/message.proto";
 import "google/protobuf/timestamp.proto";
 
 // CHASM scheduler top-level state.
-message SchedulerInternal {
+message SchedulerState {
     // Scheduler request parameters and metadata. 
     temporal.api.schedule.v1.Schedule schedule = 2;
     temporal.api.schedule.v1.ScheduleInfo info = 3;
@@ -25,16 +25,20 @@ message SchedulerInternal {
     // Implemented as a sequence number. Used for optimistic locking against
     // update requests.
     int64 conflict_token = 8;
+
+    // The closed flag is set true after a schedule completes, and the idle timer
+    // expires.
+    bool closed = 9;
 }
 
 // CHASM scheduler's Generator internal state.
-message GeneratorInternal {
+message GeneratorState {
     // High water mark.
     google.protobuf.Timestamp last_processed_time = 3;
 }
 
 // CHASM scheduler's Invoker internal state.
-message InvokerInternal {
+message InvokerState {
     // Buffered starts that will be started by the Invoker.
     repeated temporal.server.api.schedule.v1.BufferedStart buffered_starts = 2;
 
@@ -54,7 +58,7 @@ message InvokerInternal {
 
 // CHASM scheduler's Backfiller internal state. Backfill requests are 1:1
 // with Backfiller nodes. Backfiller nodes also handle immediate trigger requests.
-message BackfillerInternal {
+message BackfillerState {
     oneof request {
         temporal.api.schedule.v1.BackfillRequest backfill_request = 1;
 
