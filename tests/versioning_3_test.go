@@ -2016,7 +2016,7 @@ func (s *Versioning3Suite) waitForDeploymentVersionCreation(
 						DeploymentVersion: tv.ExternalDeploymentVersion(),
 					})
 				a.Nil(err)
-				if err != nil {
+				if err == nil {
 					foundTQ := false
 					for _, tqInfo := range versionResp.VersionTaskQueues {
 						if tqInfo.GetName() == tv.TaskQueue().GetName() {
