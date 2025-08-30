@@ -3,8 +3,8 @@ package tests
 import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -27,7 +27,7 @@ type (
 	PayloadStore struct {
 		chasm.UnimplementedComponent
 
-		State *persistencespb.TestPayloadStore
+		State *testspb.TestPayloadStore
 
 		Payloads   chasm.Map[string, *commonpb.Payload]
 		Visibility chasm.Field[*chasm.Visibility]
@@ -38,7 +38,7 @@ func NewPayloadStore(
 	mutableContext chasm.MutableContext,
 ) (*PayloadStore, error) {
 	store := &PayloadStore{
-		State: &persistencespb.TestPayloadStore{
+		State: &testspb.TestPayloadStore{
 			TotalCount:      0,
 			TotalSize:       0,
 			ExpirationTimes: make(map[string]*timestamppb.Timestamp),
@@ -57,7 +57,7 @@ func NewPayloadStore(
 func (s *PayloadStore) Describe(
 	_ chasm.Context,
 	_ DescribePayloadStoreRequest,
-) (*persistencespb.TestPayloadStore, error) {
+) (*testspb.TestPayloadStore, error) {
 	return common.CloneProto(s.State), nil
 }
 
@@ -72,7 +72,7 @@ func (s *PayloadStore) Close(
 func (s *PayloadStore) AddPayload(
 	mutableContext chasm.MutableContext,
 	request AddPayloadRequest,
-) (*persistencespb.TestPayloadStore, error) {
+) (*testspb.TestPayloadStore, error) {
 	if _, ok := s.Payloads[request.PayloadKey]; ok {
 		return nil, serviceerror.NewAlreadyExistsf("payload already exists with key: %s", request.PayloadKey)
 	}
@@ -94,7 +94,7 @@ func (s *PayloadStore) AddPayload(
 			s,
 			chasm.TaskAttributes{ScheduledTime: expirationTime},
 			// You can switch between TestPayloadTTLPureTask & TestPayloadTTLSideEffectTask
-			&persistencespb.TestPayloadTTLPureTask{
+			&testspb.TestPayloadTTLPureTask{
 				PayloadKey: request.PayloadKey,
 			},
 		)
@@ -120,7 +120,7 @@ func (s *PayloadStore) GetPayload(
 func (s *PayloadStore) RemovePayload(
 	mutableContext chasm.MutableContext,
 	key string,
-) (*persistencespb.TestPayloadStore, error) {
+) (*testspb.TestPayloadStore, error) {
 	if _, ok := s.Payloads[key]; !ok {
 		return nil, serviceerror.NewNotFoundf("payload not found with key: %s", key)
 	}
