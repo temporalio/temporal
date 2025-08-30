@@ -112,7 +112,7 @@ func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
-		&persistence.HistoryBranchUtilImpl{},
+		persistence.NewHistoryBranchUtil(),
 		logger,
 	)
 	suite.Run(t, s)
@@ -313,7 +313,7 @@ func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
-		&persistence.HistoryBranchUtilImpl{},
+		persistence.NewHistoryBranchUtil(),
 		logger,
 	)
 	suite.Run(t, s)

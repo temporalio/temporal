@@ -27,10 +27,7 @@ func newTaskPersistence(
 	logger log.Logger,
 	enableFairness bool,
 ) (persistence.TaskStore, error) {
-	store := SqlStore{
-		Db:     db,
-		logger: logger,
-	}
+	store := NewSqlStore(db, logger)
 	userDataStore := userDataStore{SqlStore: store}
 	taskQueueStore := taskQueueStore{
 		SqlStore:           store,

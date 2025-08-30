@@ -133,6 +133,7 @@ func HistoryScavengerActivity(
 		ctx.cfg.HistoryScannerVerifyRetention,
 		ctx.metricsHandler,
 		ctx.logger,
+		ctx.serializer,
 	)
 	return scavenger.Run(activityCtx)
 }
