@@ -53,6 +53,7 @@ type (
 	}
 
 	RateLimitedSchedulerOptions struct {
+		Enabled          dynamicconfig.BoolPropertyFn
 		EnableShadowMode dynamicconfig.BoolPropertyFn
 		StartupDelay     dynamicconfig.DurationPropertyFn
 	}
@@ -234,7 +235,8 @@ func NewRateLimitedScheduler(
 		taskQuotaRequestFn,
 		taskMetricsTagsFn,
 		tasks.RateLimitedSchedulerOptions{
-			EnableShadowMode: options.EnableShadowMode(),
+			Enabled:          options.Enabled,
+			EnableShadowMode: options.EnableShadowMode,
 		},
 		logger,
 		metricsHandler,
