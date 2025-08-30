@@ -4,6 +4,7 @@ package workflow
 
 import (
 	"cmp"
+	"fmt"
 	"math"
 	"time"
 
@@ -240,20 +241,14 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskCompletedEvent(
 }
 
 func (m *workflowTaskStateMachine) ApplyWorkflowTaskFailedEvent() error {
-	m.failWorkflowTask(true)
-	return nil
+	return m.failWorkflowTask(true)
 }
 
-func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(
-	timeoutType enumspb.TimeoutType,
-) error {
-	incrementAttempt := true
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(timeoutType enumspb.TimeoutType) error {
 	// Do not increment workflow task attempt in the case of sticky timeout to prevent creating next workflow task as transient.
-	if timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
-		incrementAttempt = false
-	}
-	m.failWorkflowTask(incrementAttempt)
-	return nil
+	incrementAttempt := timeoutType != enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
+
+	return m.failWorkflowTask(incrementAttempt)
 }
 
 func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
@@ -808,6 +803,11 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			forkEventVersion,
 			binaryChecksum,
 		)
+
+		if event != nil {
+			m.ms.LastWorkflowTaskFailureCategory = "WorkflowTaskFailed"
+			m.ms.LastWorkflowTaskFailureCause = cause.String()
+		}
 	}
 
 	if err := m.ApplyWorkflowTaskFailedEvent(); err != nil {
@@ -867,6 +867,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 			workflowTask.StartedEventID,
 			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		)
+
+		if m.ms.LastWorkflowTaskFailureCategory == "" {
+			m.ms.LastWorkflowTaskFailureCategory = "WorkflowTaskTimedOut"
+		}
+		if m.ms.LastWorkflowTaskFailureCause == "" {
+			m.ms.LastWorkflowTaskFailureCause = enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()
+		}
 	}
 
 	if err := m.ApplyWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
@@ -877,7 +884,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 
 func (m *workflowTaskStateMachine) failWorkflowTask(
 	incrementAttempt bool,
-) {
+) error {
 	// Increment attempts only if workflow task is failing on non-sticky task queue.
 	// If it was sticky task queue, clear sticky task queue first and try again before creating transient workflow task.
 	if m.ms.IsStickyTaskQueueSet() {
@@ -907,6 +914,20 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	}
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
+
+	if failWorkflowTaskInfo.Attempt == 2 {
+		fmt.Println("failWorkflowTask: LastWorkflowTaskFailureCategory", m.ms.LastWorkflowTaskFailureCategory)
+		fmt.Println("failWorkflowTask: LastWorkflowTaskFailureCause", m.ms.LastWorkflowTaskFailureCause)
+
+		err := m.ms.UpdateReportedProblemsSearchAttribute(
+			m.ms.LastWorkflowTaskFailureCategory,
+			m.ms.LastWorkflowTaskFailureCause,
+		)
+		if err != nil {
+			return fmt.Errorf("failWorkflowTask: updateReportedProblemsSearchAttribute error: %v", err)
+		}
+	}
+	return nil
 }
 
 // deleteWorkflowTask deletes a workflow task.

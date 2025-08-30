@@ -161,6 +161,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
+	fmt.Println("ListWorkflowExecutions: request", request)
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
 	if err != nil {
 		return nil, err
@@ -180,6 +181,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		request.Query,
 	)
 	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken)
+	fmt.Println("ListWorkflowExecutions: selectFilter", selectFilter)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
 		var converterErr *query.ConverterError

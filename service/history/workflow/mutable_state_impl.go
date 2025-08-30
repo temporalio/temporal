@@ -237,6 +237,10 @@ type (
 
 		// Tracks all events added via the AddHistoryEvent method that is used by the state machine framework.
 		currentTransactionAddedStateMachineEventTypes []enumspb.EventType
+
+		// TODO seankane: store the failure and cause of the last workflow task failure/timedout event
+		LastWorkflowTaskFailureCause    string
+		LastWorkflowTaskFailureCategory string
 	}
 
 	lastUpdatedStateTransitionGetter interface {
@@ -5869,6 +5873,97 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 	}
 
 	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalPauseInfo: pauseInfoPayload})
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+}
+
+func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute(
+	reportedProblemCategory, reportedCause string,
+) error {
+	fmt.Println("updateReportedProblemsSearchAttribute:", reportedProblemCategory, reportedCause)
+	reportedProblems := []string{
+		fmt.Sprintf("category=%s", reportedProblemCategory),
+		fmt.Sprintf("cause=%s", reportedCause),
+	}
+
+	reportedProblemsPayload, err := searchattribute.EncodeValue(reportedProblems, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	if err != nil {
+		return err
+	}
+
+	exeInfo := ms.executionInfo
+	if exeInfo.SearchAttributes == nil {
+		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
+	}
+
+	// This is not guaranteed to be accurate because of ordering non-determinism. Needs to be fixed.
+	if areKeywordListsEqual(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], reportedProblemsPayload) {
+		return nil
+	}
+
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: reportedProblemsPayload})
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+}
+
+func areKeywordListsEqual(a, b *commonpb.Payload) bool {
+	if a == nil && b == nil {
+		return true
+	}
+
+	// Decode both to keyword lists
+	decodedA, err := searchattribute.DecodeValue(a, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	if err != nil {
+		return false
+	}
+
+	decodedB, err := searchattribute.DecodeValue(b, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	if err != nil {
+		return false
+	}
+
+	keywordListA, ok := decodedA.([]string)
+	if !ok {
+		return false
+	}
+
+	keywordListB, ok := decodedB.([]string)
+	if !ok {
+		return false
+	}
+
+	if len(keywordListA) != len(keywordListB) {
+		return false
+	}
+
+	// any ordering is fine
+	keywordMapA := make(map[string]struct{})
+	for _, v := range keywordListA {
+		keywordMapA[v] = struct{}{}
+	}
+
+	for _, v := range keywordListB {
+		if _, ok := keywordMapA[v]; !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
+	if ms.executionInfo.SearchAttributes == nil {
+		return nil
+	}
+
+	temporalReportedProblems := ms.executionInfo.SearchAttributes[searchattribute.TemporalReportedProblems]
+	if temporalReportedProblems == nil {
+		return nil
+	}
+
+	ms.LastWorkflowTaskFailureCategory = ""
+	ms.LastWorkflowTaskFailureCause = ""
+
+	// Just remove the search attribute entirely for now
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: nil})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
