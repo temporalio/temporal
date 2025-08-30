@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 var _ historyi.ChasmTree = (*noopChasmTree)(nil)
@@ -74,8 +75,7 @@ func (*noopChasmTree) ExecuteSideEffectTask(
 	ctx context.Context,
 	registry *chasm.Registry,
 	entityKey chasm.EntityKey,
-	taskAttributes chasm.TaskAttributes,
-	taskInfo *persistencespb.ChasmTaskInfo,
+	task *tasks.ChasmTask,
 	validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
 ) error {
 	return nil
@@ -83,8 +83,7 @@ func (*noopChasmTree) ExecuteSideEffectTask(
 
 func (*noopChasmTree) ValidateSideEffectTask(
 	ctx context.Context,
-	taskAttributes chasm.TaskAttributes,
-	taskInfo *persistencespb.ChasmTaskInfo,
-) (any, error) {
-	return nil, nil
+	task *tasks.ChasmTask,
+) (bool, error) {
+	return false, nil
 }
