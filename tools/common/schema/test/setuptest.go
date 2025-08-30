@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -48,7 +48,8 @@ func (tb *SetupSchemaTestBase) TearDownSuiteBase() {
 
 // RunSetupTest exercises the SetupSchema task
 func (tb *SetupSchemaTestBase) RunSetupTest(
-	app *cli.App, db DB, dbNameFlag string, sqlFileContent string, expectedTables []string) {
+	app *cli.App, db DB, dbNameFlag string, sqlFileContent string, expectedTables []string,
+) {
 	// test command fails without required arguments
 	command := append(tb.getCommandBase(), []string{
 		dbNameFlag, tb.DBName,

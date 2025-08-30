@@ -53,103 +53,103 @@ type (
 )
 
 const (
-	// CLIOptEndpoint is the cli option for endpoint
-	CLIOptEndpoint = "endpoint"
-	// CLIOptPort is the cli option for port
-	CLIOptPort = "port"
-	// CLIOptUser is the cli option for user
-	CLIOptUser = "user"
-	// CLIOptPassword is the cli option for password
-	CLIOptPassword = "password"
+	// CLIFlagEndpoint is the cli option for endpoint
+	CLIFlagEndpoint = "endpoint"
+	// CLIFlagEndpointAlias is the cli flag alias for endpoint
+	CLIFlagEndpointAlias = "ep"
+	// CLIFlagPort is the cli option for port
+	CLIFlagPort = "port"
+	// CLIFlagPortAlias is the cli flag alias for port
+	CLIFlagPortAlias = "p"
+	// CLIFlagUser is the cli option for user
+	CLIFlagUser = "user"
+	// CLIFlagUserAlias is the cli flag alias for user
+	CLIFlagUserAlias = "u"
+	// CLIFlagPassword is the cli option for password
+	CLIFlagPassword = "password"
+	// CLIFlagPasswordAlias is the cli flag alias for password
+	CLIFlagPasswordAlias = "pw"
 	// CLIOptAuthenticator is the cli option for allowed authenticator settings
-	CLIOptAllowedAuthenticators = "allowed-authenticators"
-	// CLIOptTimeout is the cli option for timeout
-	CLIOptTimeout = "timeout"
-	// CLIOptKeyspace is the cli option for keyspace
-	CLIOptKeyspace = "keyspace"
-	// CLIOptDatabase is the cli option for database
-	CLIOptDatabase = "database"
-	// CLIOptDefaultDb is the cli option used as defaultdb to connect to
-	CLIOptDefaultDb = "defaultdb"
-	// CLIOptPluginName is the cli option for plugin name
-	CLIOptPluginName = "plugin"
-	// CLIOptConnectAttributes is the cli option for connect attributes (key/values via a url query string)
-	CLIOptConnectAttributes = "connect-attributes"
-	// CLIOptVersion is the cli option for version
-	CLIOptVersion = "version"
-	// CLIOptSchemaFile is the cli option for schema file
-	CLIOptSchemaFile = "schema-file"
-	// CLIOptOverwrite is the cli option for overwrite
-	CLIOptOverwrite = "overwrite"
-	// CLIOptDisableVersioning is the cli option to disabling versioning
-	CLIOptDisableVersioning = "disable-versioning"
-	// CLIOptTargetVersion is the cli option for target version
-	CLIOptTargetVersion = "version"
-	// CLIOptSchemaDir is the cli option for schema directory
-	CLIOptSchemaDir = "schema-dir"
-	// CLIOptSchemaName is the cli option for which pre-embedded schema to use
-	CLIOptSchemaName = "schema-name"
-	// CLIOptReplicationFactor is the cli option for replication factor
-	CLIOptReplicationFactor = "replication-factor"
-	// CLIOptDatacenter is the cli option for NetworkTopologyStrategy datacenter
-	CLIOptDatacenter = "datacenter"
+	CLIFlagAllowedAuthenticators = "allowed-authenticators"
+	// CLIFlagAllowedAuthenticatorsAlias is the cli flag alias for allowed authenticators
+	CLIFlagAllowedAuthenticatorsAlias = "aa"
+	// CLIFlagTimeout is the cli option for timeout
+	CLIFlagTimeout = "timeout"
+	// CLIFlagTimeoutAlias is the cli flag alias for timeout
+	CLIFlagTimeoutAlias = "t"
+	// CLIFlagKeyspace is the cli option for keyspace
+	CLIFlagKeyspace = "keyspace"
+	// CLIFlagKeyspaceAlias is the cli flag alias for keyspace
+	CLIFlagKeyspaceAlias = "k"
+	// CLIFlagDatabase is the cli option for database
+	CLIFlagDatabase = "database"
+	// CLIFlagDatabaseAlias is the cli flag alias for database
+	CLIFlagDatabaseAlias = "db"
+	// CLIFlagDefaultDb is the cli option used as defaultdb to connect to
+	CLIFlagDefaultDb = "defaultdb"
+	// CLIFlagPluginName is the cli option for plugin name
+	CLIFlagPluginName = "plugin"
+	// CLIFlagPluginNameAlias is the cli flag alias for plugin name
+	CLIFlagPluginNameAlias = "pl"
+	// CLIFlagConnectAttributes is the cli option for connect attributes (key/values via a url query string)
+	CLIFlagConnectAttributes = "connect-attributes"
+	// CLIFlagConnectAttributesAlias is the cli flag alias for connect attributes
+	CLIFlagConnectAttributesAlias = "ca"
+	// CLIFlagVersion is the cli option for version
+	CLIFlagVersion = "version"
+	// CLIFlagVersionAlias is the cli flag alias for version
+	CLIFlagVersionAlias = "v"
+	// CLIFlagSchemaFile is the cli option for schema file
+	CLIFlagSchemaFile = "schema-file"
+	// CLIFlagSchemaFileAlias is the cli flag alias for schema file
+	CLIFlagSchemaFileAlias = "f"
+	// CLIFlagOverwrite is the cli option for overwrite
+	CLIFlagOverwrite = "overwrite"
+	// CLIFlagOverwriteAlias is the cli flag alias for overwrite
+	CLIFlagOverwriteAlias = "o"
+	// CLIFlagDisableVersioning is the cli option to disabling versioning
+	CLIFlagDisableVersioning = "disable-versioning"
+	// CLIFlagDisableVersioningAlias is the cli flag alias to disabling versioning
+	CLIFlagDisableVersioningAlias = "d"
+	// CLIFlagTargetVersion is the cli option for target version
+	CLIFlagTargetVersion = "version"
+	// CLIFlagTargetVersionAlias is the cli flag alias for target version
+	CLIFlagTargetVersionAlias = "v"
+	// CLIFlagSchemaDir is the cli option for schema directory
+	CLIFlagSchemaDir = "schema-dir"
+	// CLIFlagSchemaDirAlias is the cli flag alias for schema directory
+	CLIFlagSchemaDirAlias = "d"
+	// CLIFlagSchemaName is the cli option for which pre-embedded schema to use
+	CLIFlagSchemaName = "schema-name"
+	// CLIFlagSchemaNameAlias is the cli flag alias for which pre-embedded schema to use
+	CLIFlagSchemaNameAlias = "s"
+	// CLIFlagReplicationFactor is the cli option for replication factor
+	CLIFlagReplicationFactor = "replication-factor"
+	// CLIFlagReplicationFactorAlias is the cli flag alias for replication factor
+	CLIFlagReplicationFactorAlias = "rf"
+	// CLIFlagDatacenter is the cli option for NetworkTopologyStrategy datacenter
+	CLIFlagDatacenter = "datacenter"
+	// CLIFlagDatacenterAlias is the cli flag alias for NetworkTopologyStrategy datacenter
+	CLIFlagDatacenterAlias = "dc"
 	// CLIOptConsistency is the cli option for consistency settings
 	CLIOptConsistency = "consistency"
 	// CLIOptAddressTranslator is the cli option for address translator for Cassandra
 	CLIOptAddressTranslator = "address-translator"
+	// CLIFlagAddressTranslatorAlias is the cli flag alias for address translator
+	CLIFlagAddressTranslatorAlias = "at"
 	// CLIOptAddressTranslatorOptions is the cli option for options for address translator
 	CLIOptAddressTranslatorOptions = "address-translator-options"
-	// CLIOptQuiet is the cli option for quiet mode
-	CLIOptQuiet = "quiet"
-	// CLIOptForce is the cli option for force mode
-	CLIOptForce = "force"
+	// CLIFlagQuiet is the cli option for quiet mode
+	CLIFlagQuiet = "quiet"
+	// CLIFlagQuietAlias is the cli flag alias for quiet mode
+	CLIFlagQuietAlias = "q"
+	// CLIFlagForce is the cli flag for force mode
+	CLIFlagForce = "force"
+	// CLIFlagForceAlias is the cli flag alias for force mode
+	CLIFlagForceAlias = "f"
 
-	// CLIFlagEndpoint is the cli flag for endpoint
-	CLIFlagEndpoint = CLIOptEndpoint + ", ep"
-	// CLIFlagPort is the cli flag for port
-	CLIFlagPort = CLIOptPort + ", p"
-	// CLIFlagUser is the cli flag for user
-	CLIFlagUser = CLIOptUser + ", u"
-	// CLIFlagPassword is the cli flag for password
-	CLIFlagPassword = CLIOptPassword + ", pw"
-	// CLIFlagAllowedAuthenticators is the cli flag for allowed authenticators
-	CLIFlagAllowedAuthenticators = CLIOptAllowedAuthenticators + ", aa"
-	// CLIFlagTimeout is the cli flag for timeout
-	CLIFlagTimeout = CLIOptTimeout + ", t"
-	// CLIFlagKeyspace is the cli flag for keyspace
-	CLIFlagKeyspace = CLIOptKeyspace + ", k"
-	// CLIFlagDatabase is the cli flag for database
-	CLIFlagDatabase = CLIOptDatabase + ", db"
-	// CLIFlagPluginName is the cli flag for plugin name
-	CLIFlagPluginName = CLIOptPluginName + ", pl"
-	// CLIFlagConnectAttributes allows arbitrary connect attributes
-	CLIFlagConnectAttributes = CLIOptConnectAttributes + ", ca"
-	// CLIFlagVersion is the cli flag for version
-	CLIFlagVersion = CLIOptVersion + ", v"
-	// CLIFlagSchemaFile is the cli flag for schema file
-	CLIFlagSchemaFile = CLIOptSchemaFile + ", f"
-	// CLIFlagOverwrite is the cli flag for overwrite
-	CLIFlagOverwrite = CLIOptOverwrite + ", o"
-	// CLIFlagDisableVersioning is the cli flag for disabling versioning
-	CLIFlagDisableVersioning = CLIOptDisableVersioning + ", d"
-	// CLIFlagTargetVersion is the cli flag for target version
-	CLIFlagTargetVersion = CLIOptTargetVersion + ", v"
-	// CLIFlagSchemaDir is the cli flag for schema directory
-	CLIFlagSchemaDir = CLIOptSchemaDir + ", d"
-	// CLIFlagSchemaName is the cli flag that says which pre-embedded schema to use
-	CLIFlagSchemaName = CLIOptSchemaName + ", s"
-	// CLIFlagReplicationFactor is the cli flag for replication factor
-	CLIFlagReplicationFactor = CLIOptReplicationFactor + ", rf"
-	// CLIFlagDatacenter is the cli option for NetworkTopologyStrategy datacenter
-	CLIFlagDatacenter = CLIOptDatacenter + ", dc"
-	// CLIFlagAddressTranslator is the cli option for address translator for Cassandra
-	CLIFlagAddressTranslator = CLIOptAddressTranslator + ", at"
 	// CLIFlagAddressTranslatorOptions is the cli option for address translator of Cassandra
 	CLIFlagAddressTranslatorOptions
-	// CLIFlagQuiet is the cli flag for quiet mode
-	CLIFlagQuiet = CLIOptQuiet + ", q"
-	// CLIFlagForce is the cli flag for force mode
-	CLIFlagForce = CLIOptForce + ", f"
 	// CLIFlagDisableInitialHostLookup is the cli flag for only using supplied hosts to connect to the database
 	CLIFlagDisableInitialHostLookup = "disable-initial-host-lookup"
 

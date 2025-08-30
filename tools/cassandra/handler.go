@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/auth"
 	c "go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -70,9 +70,9 @@ func createKeyspace(cli *cli.Context, logger log.Logger) error {
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
-	keyspace := cli.String(schema.CLIOptKeyspace)
+	keyspace := cli.String(schema.CLIFlagKeyspace)
 	if keyspace == "" {
-		err := fmt.Errorf("missing %s argument", flag(schema.CLIOptKeyspace))
+		err := fmt.Errorf("missing %s argument", flag(schema.CLIFlagKeyspace))
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
@@ -90,9 +90,9 @@ func dropKeyspace(cli *cli.Context, logger log.Logger) error {
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
-	keyspace := cli.String(schema.CLIOptKeyspace)
+	keyspace := cli.String(schema.CLIFlagKeyspace)
 	if keyspace == "" {
-		err := fmt.Errorf("missing %s argument", flag(schema.CLIOptKeyspace))
+		err := fmt.Errorf("missing %s argument", flag(schema.CLIFlagKeyspace))
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
@@ -143,35 +143,35 @@ func doDropKeyspace(cfg *CQLClientConfig, name string, logger log.Logger) error 
 	return client.dropKeyspace(name)
 }
 
-func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {
+func newCQLClientConfig(ctx *cli.Context) (*CQLClientConfig, error) {
 	config := &CQLClientConfig{
-		Hosts:                    cli.GlobalString(schema.CLIOptEndpoint),
-		Port:                     cli.GlobalInt(schema.CLIOptPort),
-		User:                     cli.GlobalString(schema.CLIOptUser),
-		Password:                 cli.GlobalString(schema.CLIOptPassword),
-		AllowedAuthenticators:    cli.GlobalStringSlice(schema.CLIOptAllowedAuthenticators),
-		Timeout:                  cli.GlobalInt(schema.CLIOptTimeout),
-		Keyspace:                 cli.GlobalString(schema.CLIOptKeyspace),
-		numReplicas:              cli.Int(schema.CLIOptReplicationFactor),
-		Datacenter:               cli.String(schema.CLIOptDatacenter),
-		Consistency:              cli.String(schema.CLIOptConsistency),
-		DisableInitialHostLookup: cli.GlobalBool(schema.CLIFlagDisableInitialHostLookup),
+		Hosts:                    ctx.String(schema.CLIFlagEndpoint),
+		Port:                     ctx.Int(schema.CLIFlagPort),
+		User:                     ctx.String(schema.CLIFlagUser),
+		Password:                 ctx.String(schema.CLIFlagPassword),
+		AllowedAuthenticators:    cli.NewStringSlice(schema.CLIFlagAllowedAuthenticators).Value(),
+		Timeout:                  ctx.Int(schema.CLIFlagTimeout),
+		Keyspace:                 ctx.String(schema.CLIFlagKeyspace),
+		numReplicas:              ctx.Int(schema.CLIFlagReplicationFactor),
+		Datacenter:               ctx.String(schema.CLIFlagDatacenter),
+		Consistency:              ctx.String(schema.CLIOptConsistency),
+		DisableInitialHostLookup: ctx.Bool(schema.CLIFlagDisableInitialHostLookup),
 	}
 
-	if cli.GlobalBool(schema.CLIFlagEnableTLS) {
+	if ctx.Bool(schema.CLIFlagEnableTLS) {
 		config.TLS = &auth.TLS{
 			Enabled:                true,
-			CertFile:               cli.GlobalString(schema.CLIFlagTLSCertFile),
-			KeyFile:                cli.GlobalString(schema.CLIFlagTLSKeyFile),
-			CaFile:                 cli.GlobalString(schema.CLIFlagTLSCaFile),
-			ServerName:             cli.GlobalString(schema.CLIFlagTLSHostName),
-			EnableHostVerification: !cli.GlobalBool(schema.CLIFlagTLSDisableHostVerification),
+			CertFile:               ctx.String(schema.CLIFlagTLSCertFile),
+			KeyFile:                ctx.String(schema.CLIFlagTLSKeyFile),
+			CaFile:                 ctx.String(schema.CLIFlagTLSCaFile),
+			ServerName:             ctx.String(schema.CLIFlagTLSHostName),
+			EnableHostVerification: !ctx.Bool(schema.CLIFlagTLSDisableHostVerification),
 		}
 	}
 
 	config.AddressTranslator = &c.CassandraAddressTranslator{
-		Translator: cli.GlobalString(schema.CLIOptAddressTranslator),
-		Options:    parseOptionsMap(cli.GlobalString(schema.CLIOptAddressTranslatorOptions)),
+		Translator: ctx.String(schema.CLIOptAddressTranslator),
+		Options:    parseOptionsMap(ctx.String(schema.CLIOptAddressTranslatorOptions)),
 	}
 
 	if err := validateCQLClientConfig(config); err != nil {
@@ -207,10 +207,10 @@ func parseOptionsMap(value string) map[string]string {
 
 func validateCQLClientConfig(config *CQLClientConfig) error {
 	if len(config.Hosts) == 0 {
-		return schema.NewConfigError("missing cassandra endpoint argument " + flag(schema.CLIOptEndpoint))
+		return schema.NewConfigError("missing cassandra endpoint argument " + flag(schema.CLIFlagEndpoint))
 	}
 	if config.Keyspace == "" {
-		return schema.NewConfigError("missing " + flag(schema.CLIOptKeyspace) + " argument ")
+		return schema.NewConfigError("missing " + flag(schema.CLIFlagKeyspace) + " argument ")
 	}
 	if config.Port == 0 {
 		config.Port = environment.GetCassandraPort()
