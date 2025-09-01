@@ -455,6 +455,15 @@ func (c *physicalTaskQueueManagerImpl) AddSpooledTask(task *internalTask) error 
 }
 
 func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) {
+	// Debug instrumentation for investigating nil priMatcher panics (priTaskMatcher.AddTask on nil receiver).
+	if c.priMatcher == nil {
+		c.logger.Error("priMatcher is nil in AddSpooledTaskToMatcher (debug instrumentation)")
+		if c.oldMatcher != nil {
+			c.logger.Info("oldMatcher is non-nil while priMatcher is nil (mixed matcher mode?)")
+		}
+		// We intentionally return early to avoid nil dereference panic.
+		return
+	}
 	c.priMatcher.AddTask(task)
 }
 

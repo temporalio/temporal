@@ -424,6 +424,21 @@ func (tm *priTaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask
 }
 
 func (tm *priTaskMatcher) AddTask(task *internalTask) {
+	// Debug instrumentation to help diagnose rare nil dereference panics observed in CI.
+	// Guard against nil receiver or nil task and emit diagnostic logs.
+	if tm == nil {
+		// Can't log (no receiver), just return to avoid panic.
+		return
+	}
+	if task == nil {
+		tm.logger.Error("AddTask called with nil task (debug instrumentation)")
+		return
+	}
+	// If task has unexpected nil internals, log (these should normally be set for backlog tasks).
+	if task.event == nil {
+		tm.logger.Warn("AddTask received task with nil event (debug instrumentation)")
+	}
+
 	if !task.setRemoveFunc(func() { tm.data.RemoveTask(task) }) {
 		return // handle race where task is evicted from reader before being added
 	}

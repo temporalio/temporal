@@ -467,6 +467,14 @@ func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
 		task.finish(nil, false)
 		return nil
 	}
+	if pq, ok := syncMatchQueue.(*physicalTaskQueueManagerImpl); ok && pq.priMatcher == nil {
+		pm.logger.Error("debug: priMatcher nil before AddSpooledTaskToMatcher",
+			tag.WorkflowNamespaceID(taskInfo.NamespaceId),
+			tag.WorkflowTaskQueueName(syncMatchQueue.QueueKey().PersistenceName()),
+			tag.WorkflowRunID(taskInfo.GetRunId()),
+			tag.WorkflowID(taskInfo.GetWorkflowId()),
+		)
+	}
 	syncMatchQueue.AddSpooledTaskToMatcher(task)
 	return nil
 }
