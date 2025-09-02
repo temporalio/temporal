@@ -280,7 +280,21 @@ func (ac *DLQV2Service) getLastMessageID(c *cli.Context, action string) (int64, 
 			action,
 		)
 		ac.prompter.Prompt(msg)
-		return persistence.MaxQueueMessageID, nil
+
+		_, _ = fmt.Fprintf(c.App.Writer, "Warning: No last message ID provided. Reading all messages to find the last message ID.\n")
+
+		lastMessageID, err := ac.findLastMessageID(c)
+		if err != nil {
+			return 0, fmt.Errorf("failed to find last message ID: %w", err)
+		}
+
+		if lastMessageID == 0 {
+			_, _ = fmt.Fprintf(c.App.Writer, "DLQ is empty, nothing to %s.\n", action)
+			return 0, nil
+		}
+
+		_, _ = fmt.Fprintf(c.App.Writer, "Found last message ID: %d. Using this as the upper bound for %s operation.\n", lastMessageID, action)
+		return lastMessageID, nil
 	}
 	lastMessageID := c.Int64(FlagLastMessageID)
 	if lastMessageID < persistence.FirstQueueMessageID {
@@ -291,6 +305,46 @@ func (ac *DLQV2Service) getLastMessageID(c *cli.Context, action string) (int64, 
 			lastMessageID,
 		)
 	}
+	return lastMessageID, nil
+}
+
+func (ac *DLQV2Service) findLastMessageID(c *cli.Context) (int64, error) {
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	adminClient := ac.clientFactory.AdminClient(c)
+	var lastMessageID int64 = 0
+	var paginationToken []byte
+
+	for {
+		request := &adminservice.GetDLQTasksRequest{
+			DlqKey: &commonspb.HistoryDLQKey{
+				TaskCategory:  int32(ac.category.ID()),
+				SourceCluster: ac.sourceCluster,
+				TargetCluster: ac.targetCluster,
+			},
+			PageSize:      int32(defaultPageSize),
+			NextPageToken: paginationToken,
+		}
+
+		res, err := adminClient.GetDLQTasks(ctx, request)
+		if err != nil {
+			if strings.Contains(err.Error(), "queue not found:") {
+				return 0, nil
+			}
+			return 0, fmt.Errorf("call to GetDLQTasks from findLastMessageID failed: %w", err)
+		}
+
+		if len(res.DlqTasks) > 0 {
+			lastMessageID = res.DlqTasks[len(res.DlqTasks)-1].Metadata.MessageId
+		}
+
+		if len(res.NextPageToken) == 0 {
+			break
+		}
+		paginationToken = res.NextPageToken
+	}
+
 	return lastMessageID, nil
 }
 

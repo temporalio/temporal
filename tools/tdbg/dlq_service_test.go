@@ -12,6 +12,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tools/tdbg"
 	"go.temporal.io/server/tools/tdbg/tdbgtest"
@@ -52,6 +53,10 @@ type (
 		nextListQueueResponse int
 		previousPageToken     []byte
 		listQueueResponses    []*adminservice.ListQueuesResponse
+
+		// GetDLQTasks (for V2)
+		getDLQTasksResponses    []*adminservice.GetDLQTasksResponse
+		nextGetDLQTasksResponse int
 	}
 )
 
@@ -176,6 +181,7 @@ func TestDLQCommand_V2(t *testing.T) {
 			override: func(p *dlqTestParams) {
 				p.command = "read"
 				p.outputFileName = "\\0/"
+				p.lastMessageID = "100" // Provide a valid last message ID to avoid findLastMessageID
 				p.expectedErrSubstrings = []string{"output file", "\\0/"}
 			},
 		},
@@ -207,6 +213,7 @@ func TestDLQCommand_V2(t *testing.T) {
 			name: "purge client err",
 			override: func(p *dlqTestParams) {
 				p.command = "purge"
+				p.lastMessageID = "100" // Provide last message ID so we reach PurgeDLQTasks
 				p.adminClient.err = errors.New("some error")
 				p.expectedErrSubstrings = []string{"some error", "PurgeDLQTasks"}
 			},
@@ -223,6 +230,7 @@ func TestDLQCommand_V2(t *testing.T) {
 			name: "merge client err",
 			override: func(p *dlqTestParams) {
 				p.command = "merge"
+				p.lastMessageID = "100" // Provide last message ID so we reach MergeDLQTasks
 				p.adminClient.err = errors.New("some error")
 				p.expectedErrSubstrings = []string{"some error", "MergeDLQTasks"}
 			},
@@ -271,6 +279,110 @@ func TestDLQCommand_V2(t *testing.T) {
 
 			},
 		},
+		{
+			name: "purge without last message ID",
+			override: func(p *dlqTestParams) {
+				p.command = "purge"
+				p.lastMessageID = "" // No last message ID provided
+				p.adminClient.err = nil
+				// Set up mock responses with messages at IDs 100, 200, 300
+				p.adminClient.getDLQTasksResponses = []*adminservice.GetDLQTasksResponse{
+					{
+						DlqTasks: []*commonspb.HistoryDLQTask{
+							{Metadata: &commonspb.HistoryDLQTaskMetadata{MessageId: 100}},
+							{Metadata: &commonspb.HistoryDLQTaskMetadata{MessageId: 200}},
+						},
+						NextPageToken: []byte("page2"),
+					},
+					{
+						DlqTasks: []*commonspb.HistoryDLQTask{
+							{Metadata: &commonspb.HistoryDLQTaskMetadata{MessageId: 300}},
+						},
+						NextPageToken: nil, // Last page
+					},
+				}
+			},
+			validateStdout: func(t *testing.T, b *bytes.Buffer) {
+				output := b.String()
+				assert.Contains(t, output, "Warning: No last message ID provided")
+				assert.Contains(t, output, "Found last message ID: 300")
+				assert.Contains(t, output, "upper bound for purge operation")
+			},
+		},
+		{
+			name: "merge without last message ID",
+			override: func(p *dlqTestParams) {
+				p.command = "merge"
+				p.lastMessageID = "" // No last message ID provided
+				p.adminClient.err = nil
+				// Set up mock responses with messages at IDs 50, 150
+				p.adminClient.getDLQTasksResponses = []*adminservice.GetDLQTasksResponse{
+					{
+						DlqTasks: []*commonspb.HistoryDLQTask{
+							{Metadata: &commonspb.HistoryDLQTaskMetadata{MessageId: 50}},
+							{Metadata: &commonspb.HistoryDLQTaskMetadata{MessageId: 150}},
+						},
+						NextPageToken: nil, // Only one page
+					},
+				}
+			},
+			validateStdout: func(t *testing.T, b *bytes.Buffer) {
+				output := b.String()
+				assert.Contains(t, output, "Warning: No last message ID provided")
+				assert.Contains(t, output, "Found last message ID: 150")
+				assert.Contains(t, output, "upper bound for merge operation")
+			},
+		},
+		{
+			name: "purge without last message ID - empty DLQ",
+			override: func(p *dlqTestParams) {
+				p.command = "purge"
+				p.lastMessageID = "" // No last message ID provided
+				p.adminClient.err = nil
+				// Set up mock response with no messages
+				p.adminClient.getDLQTasksResponses = []*adminservice.GetDLQTasksResponse{
+					{
+						DlqTasks:      nil, // No messages
+						NextPageToken: nil,
+					},
+				}
+			},
+			validateStdout: func(t *testing.T, b *bytes.Buffer) {
+				output := b.String()
+				assert.Contains(t, output, "Warning: No last message ID provided")
+				assert.Contains(t, output, "DLQ is empty, nothing to purge")
+			},
+		},
+		{
+			name: "merge without last message ID - empty DLQ",
+			override: func(p *dlqTestParams) {
+				p.command = "merge"
+				p.lastMessageID = "" // No last message ID provided
+				p.adminClient.err = nil
+				// Set up mock response with no messages
+				p.adminClient.getDLQTasksResponses = []*adminservice.GetDLQTasksResponse{
+					{
+						DlqTasks:      nil, // No messages
+						NextPageToken: nil,
+					},
+				}
+			},
+			validateStdout: func(t *testing.T, b *bytes.Buffer) {
+				output := b.String()
+				assert.Contains(t, output, "Warning: No last message ID provided")
+				assert.Contains(t, output, "DLQ is empty, nothing to merge")
+			},
+		},
+		{
+			name: "purge without last message ID - error",
+			override: func(p *dlqTestParams) {
+				p.command = "purge"
+				p.lastMessageID = "" // No last message ID provided
+				// Set error that will be triggered when finding last message ID
+				p.adminClient.err = errors.New("connection failed")
+				p.expectedErrSubstrings = []string{"failed to find last message ID", "connection failed"}
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.version = "v2"
@@ -309,7 +421,7 @@ func (f *fakeAdminClient) ListQueues(_ context.Context, req *adminservice.ListQu
 func (f *fakeAdminClient) DescribeCluster(
 	context.Context,
 	*adminservice.DescribeClusterRequest,
-	...grpc.CallOption,
+...grpc.CallOption,
 ) (*adminservice.DescribeClusterResponse, error) {
 	if f.err != nil {
 		return nil, f.err
@@ -321,18 +433,29 @@ func (f *fakeAdminClient) DescribeCluster(
 func (f *fakeAdminClient) GetDLQTasks(
 	context.Context,
 	*adminservice.GetDLQTasksRequest,
-	...grpc.CallOption,
+...grpc.CallOption,
 ) (*adminservice.GetDLQTasksResponse, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
+
+	if len(f.getDLQTasksResponses) > 0 {
+		if f.nextGetDLQTasksResponse >= len(f.getDLQTasksResponses) {
+			// Return empty response if we've exhausted all responses
+			return &adminservice.GetDLQTasksResponse{}, nil
+		}
+		response := f.getDLQTasksResponses[f.nextGetDLQTasksResponse]
+		f.nextGetDLQTasksResponse++
+		return response, nil
+	}
+
 	return &adminservice.GetDLQTasksResponse{}, nil
 }
 
 func (f *fakeAdminClient) PurgeDLQTasks(
 	context.Context,
 	*adminservice.PurgeDLQTasksRequest,
-	...grpc.CallOption,
+...grpc.CallOption,
 ) (*adminservice.PurgeDLQTasksResponse, error) {
 	if f.err != nil {
 		return nil, f.err
@@ -343,7 +466,7 @@ func (f *fakeAdminClient) PurgeDLQTasks(
 func (f *fakeAdminClient) MergeDLQTasks(
 	context.Context,
 	*adminservice.MergeDLQTasksRequest,
-	...grpc.CallOption,
+...grpc.CallOption,
 ) (*adminservice.MergeDLQTasksResponse, error) {
 	if f.err != nil {
 		return nil, f.err
