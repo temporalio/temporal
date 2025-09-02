@@ -312,7 +312,7 @@ func TestDLQCommand_V2(t *testing.T) {
 			},
 		},
 		{
-			name: "purge without last message ID - empty DLQ - uses prompter",
+			name: "purge without last message ID",
 			override: func(p *dlqTestParams) {
 				p.command = "purge"
 				p.lastMessageID = "" // No last message ID provided
