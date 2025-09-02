@@ -201,6 +201,7 @@ func GrpcServerOptionsProvider(
 	healthInterceptor *interceptor.HealthInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	traceStatsHandler telemetry.ServerStatsHandler,
+	metricsStatsHandler metrics.ServerStatsHandler,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
@@ -276,8 +277,16 @@ func GrpcServerOptionsProvider(
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),
 		grpc.ChainStreamInterceptor(streamInterceptor...),
 	)
+
+	multiStats := rpc.MultiStatsHandler{}
 	if traceStatsHandler != nil {
-		grpcServerOptions = append(grpcServerOptions, grpc.StatsHandler(traceStatsHandler))
+		multiStats = append(multiStats, traceStatsHandler)
+	}
+	if metricsStatsHandler != nil {
+		multiStats = append(multiStats, metricsStatsHandler)
+	}
+	if len(multiStats) > 0 {
+		grpcServerOptions = append(grpcServerOptions, grpc.StatsHandler(multiStats))
 	}
 	return GrpcServerOptions{Options: grpcServerOptions, UnaryInterceptors: unaryInterceptors}
 }

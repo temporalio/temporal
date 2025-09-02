@@ -987,6 +987,7 @@ var ServiceTracingModule = fx.Options(
 	fx.Provide(func() propagation.TextMapPropagator { return propagation.TraceContext{} }),
 	fx.Provide(telemetry.NewServerStatsHandler),
 	fx.Provide(telemetry.NewClientStatsHandler),
+	fx.Provide(metrics.NewServerStatsHandler),
 )
 
 func startAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {
