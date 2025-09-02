@@ -5908,6 +5908,10 @@ func areKeywordListsEqual(a, b *commonpb.Payload) bool {
 	if a == nil && b == nil {
 		return true
 	}
+	// If exactly one is nil, they're not equal
+	if (a == nil) != (b == nil) {
+		return false
+	}
 
 	// Decode both to keyword lists
 	decodedA, err := searchattribute.DecodeValue(a, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
@@ -5930,22 +5934,26 @@ func areKeywordListsEqual(a, b *commonpb.Payload) bool {
 		return false
 	}
 
+	// Compare as multisets (element counts), order does not matter but counts must match
 	if len(keywordListA) != len(keywordListB) {
 		return false
 	}
 
-	// any ordering is fine
-	keywordMapA := make(map[string]struct{})
-	for _, v := range keywordListA {
-		keywordMapA[v] = struct{}{}
+	counts := make(map[string]int, len(keywordListA))
+	for _, value := range keywordListA {
+		counts[value]++
 	}
-
-	for _, v := range keywordListB {
-		if _, ok := keywordMapA[v]; !ok {
+	for _, value := range keywordListB {
+		if counts[value] == 0 {
+			return false
+		}
+		counts[value]--
+	}
+	for _, remaining := range counts {
+		if remaining != 0 {
 			return false
 		}
 	}
-
 	return true
 }
 
