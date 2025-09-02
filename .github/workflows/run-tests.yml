@@ -400,13 +400,11 @@ jobs:
 
   functional-test:
     if: ${{ inputs.run_single_unit_test != true }}
-    name: Functional test (${{ matrix.name }}, shard ${{ matrix.shard_index }})
+    name: Functional test (${{ matrix.name }}, chunk ${{ matrix.shard_index }})
     needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
       matrix:
-        runs-on: ${{ fromJson(needs.set-up-single-test.outputs.runs_on) }}
-        shard_index: ${{ fromJson(needs.set-up-single-test.outputs.shard_indices) }}
         name:
           - cass_es
           - cass_es8
@@ -415,6 +413,8 @@ jobs:
           - mysql8
           - postgres12
           - postgres12_pgx
+        shard_index: ${{ fromJson(needs.set-up-single-test.outputs.shard_indices) }}
+        runs-on: ${{ fromJson(needs.set-up-single-test.outputs.runs_on) }}
         include:
           - name: cass_es
             persistence_type: nosql
