@@ -141,7 +141,7 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) (err error) {
 			return fmt.Errorf("--%s must be positive but was %d", FlagMaxMessageCount, remainingMessageCount)
 		}
 	}
-	maxMessageID, err := ac.getLastMessageID(c, "read")
+	maxMessageID, err := ac.getLastMessageID(c, "read", false)
 	if err != nil {
 		return err
 	}
@@ -216,7 +216,7 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) (err error) {
 
 func (ac *DLQV2Service) PurgeMessages(c *cli.Context) error {
 	adminClient := ac.clientFactory.AdminClient(c)
-	lastMessageID, err := ac.getLastMessageID(c, "purge")
+	lastMessageID, err := ac.getLastMessageID(c, "purge", false)
 	if err != nil {
 		return err
 	}
@@ -240,7 +240,7 @@ func (ac *DLQV2Service) PurgeMessages(c *cli.Context) error {
 
 func (ac *DLQV2Service) MergeMessages(c *cli.Context) error {
 	adminClient := ac.clientFactory.AdminClient(c)
-	lastMessageID, err := ac.getLastMessageID(c, "merge")
+	lastMessageID, err := ac.getLastMessageID(c, "merge", true)
 	if err != nil {
 		return err
 	}
@@ -272,7 +272,7 @@ func (ac *DLQV2Service) getDLQKey() *commonspb.HistoryDLQKey {
 	}
 }
 
-func (ac *DLQV2Service) getLastMessageID(c *cli.Context, action string) (int64, error) {
+func (ac *DLQV2Service) getLastMessageID(c *cli.Context, action string, findLastMessageID bool) (int64, error) {
 	if !c.IsSet(FlagLastMessageID) {
 		msg := fmt.Sprintf(
 			"You did not set --%s. Are you sure you want to %s all messages without an upper bound?",
@@ -280,9 +280,11 @@ func (ac *DLQV2Service) getLastMessageID(c *cli.Context, action string) (int64, 
 			action,
 		)
 		ac.prompter.Prompt(msg)
+		if !findLastMessageID {
+			return persistence.MaxQueueMessageID, nil
+		}
 
 		_, _ = fmt.Fprintf(c.App.Writer, "Warning: No last message ID provided. Reading all messages to find the last message ID.\n")
-
 		lastMessageID, err := ac.findLastMessageID(c)
 		if err != nil {
 			return 0, fmt.Errorf("failed to find last message ID: %w", err)
@@ -344,7 +346,6 @@ func (ac *DLQV2Service) findLastMessageID(c *cli.Context) (int64, error) {
 		}
 		paginationToken = res.NextPageToken
 	}
-
 	return lastMessageID, nil
 }
 

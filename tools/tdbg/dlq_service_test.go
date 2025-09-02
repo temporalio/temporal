@@ -280,36 +280,6 @@ func TestDLQCommand_V2(t *testing.T) {
 			},
 		},
 		{
-			name: "purge without last message ID",
-			override: func(p *dlqTestParams) {
-				p.command = "purge"
-				p.lastMessageID = "" // No last message ID provided
-				p.adminClient.err = nil
-				// Set up mock responses with messages at IDs 100, 200, 300
-				p.adminClient.getDLQTasksResponses = []*adminservice.GetDLQTasksResponse{
-					{
-						DlqTasks: []*commonspb.HistoryDLQTask{
-							{Metadata: &commonspb.HistoryDLQTaskMetadata{MessageId: 100}},
-							{Metadata: &commonspb.HistoryDLQTaskMetadata{MessageId: 200}},
-						},
-						NextPageToken: []byte("page2"),
-					},
-					{
-						DlqTasks: []*commonspb.HistoryDLQTask{
-							{Metadata: &commonspb.HistoryDLQTaskMetadata{MessageId: 300}},
-						},
-						NextPageToken: nil, // Last page
-					},
-				}
-			},
-			validateStdout: func(t *testing.T, b *bytes.Buffer) {
-				output := b.String()
-				assert.Contains(t, output, "Warning: No last message ID provided")
-				assert.Contains(t, output, "Found last message ID: 300")
-				assert.Contains(t, output, "upper bound for purge operation")
-			},
-		},
-		{
 			name: "merge without last message ID",
 			override: func(p *dlqTestParams) {
 				p.command = "merge"
@@ -334,26 +304,6 @@ func TestDLQCommand_V2(t *testing.T) {
 			},
 		},
 		{
-			name: "purge without last message ID - empty DLQ",
-			override: func(p *dlqTestParams) {
-				p.command = "purge"
-				p.lastMessageID = "" // No last message ID provided
-				p.adminClient.err = nil
-				// Set up mock response with no messages
-				p.adminClient.getDLQTasksResponses = []*adminservice.GetDLQTasksResponse{
-					{
-						DlqTasks:      nil, // No messages
-						NextPageToken: nil,
-					},
-				}
-			},
-			validateStdout: func(t *testing.T, b *bytes.Buffer) {
-				output := b.String()
-				assert.Contains(t, output, "Warning: No last message ID provided")
-				assert.Contains(t, output, "DLQ is empty, nothing to purge")
-			},
-		},
-		{
 			name: "merge without last message ID - empty DLQ",
 			override: func(p *dlqTestParams) {
 				p.command = "merge"
@@ -374,9 +324,9 @@ func TestDLQCommand_V2(t *testing.T) {
 			},
 		},
 		{
-			name: "purge without last message ID - error",
+			name: "merge without last message ID - error while finding",
 			override: func(p *dlqTestParams) {
-				p.command = "purge"
+				p.command = "merge"
 				p.lastMessageID = "" // No last message ID provided
 				// Set error that will be triggered when finding last message ID
 				p.adminClient.err = errors.New("connection failed")
