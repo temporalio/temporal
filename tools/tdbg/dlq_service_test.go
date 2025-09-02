@@ -181,7 +181,7 @@ func TestDLQCommand_V2(t *testing.T) {
 			override: func(p *dlqTestParams) {
 				p.command = "read"
 				p.outputFileName = "\\0/"
-				p.lastMessageID = "100" // Provide a valid last message ID to avoid findLastMessageID
+				p.lastMessageID = "100"
 				p.expectedErrSubstrings = []string{"output file", "\\0/"}
 			},
 		},
@@ -213,7 +213,7 @@ func TestDLQCommand_V2(t *testing.T) {
 			name: "purge client err",
 			override: func(p *dlqTestParams) {
 				p.command = "purge"
-				p.lastMessageID = "100" // Provide last message ID so we reach PurgeDLQTasks
+				p.lastMessageID = "100"
 				p.adminClient.err = errors.New("some error")
 				p.expectedErrSubstrings = []string{"some error", "PurgeDLQTasks"}
 			},
@@ -230,7 +230,7 @@ func TestDLQCommand_V2(t *testing.T) {
 			name: "merge client err",
 			override: func(p *dlqTestParams) {
 				p.command = "merge"
-				p.lastMessageID = "100" // Provide last message ID so we reach MergeDLQTasks
+				p.lastMessageID = "100"
 				p.adminClient.err = errors.New("some error")
 				p.expectedErrSubstrings = []string{"some error", "MergeDLQTasks"}
 			},
@@ -280,6 +280,14 @@ func TestDLQCommand_V2(t *testing.T) {
 			},
 		},
 		{
+			name: "purge without last message ID",
+			override: func(p *dlqTestParams) {
+				p.command = "purge"
+				p.lastMessageID = "" // No last message ID provided
+				p.adminClient.err = nil
+			},
+		},
+		{
 			name: "merge without last message ID",
 			override: func(p *dlqTestParams) {
 				p.command = "merge"
@@ -301,6 +309,14 @@ func TestDLQCommand_V2(t *testing.T) {
 				assert.Contains(t, output, "Warning: No last message ID provided")
 				assert.Contains(t, output, "Found last message ID: 150")
 				assert.Contains(t, output, "upper bound for merge operation")
+			},
+		},
+		{
+			name: "purge without last message ID - empty DLQ - uses prompter",
+			override: func(p *dlqTestParams) {
+				p.command = "purge"
+				p.lastMessageID = "" // No last message ID provided
+				p.adminClient.err = nil
 			},
 		},
 		{
