@@ -3,8 +3,8 @@ package tests
 import (
 	"context"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
 )
 
 type (
@@ -16,7 +16,7 @@ func (e *PayloadTTLPureTaskExecutor) Execute(
 	mutableContext chasm.MutableContext,
 	store *PayloadStore,
 	_ chasm.TaskAttributes,
-	task *persistencespb.TestPayloadTTLPureTask,
+	task *testspb.TestPayloadTTLPureTask,
 ) error {
 	_, err := store.RemovePayload(mutableContext, task.PayloadKey)
 	return err
@@ -26,7 +26,7 @@ func (v *PayloadTTLPureTaskValidator) Validate(
 	_ chasm.Context,
 	store *PayloadStore,
 	attributes chasm.TaskAttributes,
-	task *persistencespb.TestPayloadTTLPureTask,
+	task *testspb.TestPayloadTTLPureTask,
 ) (bool, error) {
 	return validateTask(store, attributes, task.PayloadKey)
 }
@@ -40,7 +40,7 @@ func (e *PayloadTTLSideEffectTaskExecutor) Execute(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	_ chasm.TaskAttributes,
-	task *persistencespb.TestPayloadTTLSideEffectTask,
+	task *testspb.TestPayloadTTLSideEffectTask,
 ) error {
 	_, _, err := chasm.UpdateComponent(
 		ctx,
@@ -55,7 +55,7 @@ func (v *PayloadTTLSideEffectTaskValidator) Validate(
 	_ chasm.Context,
 	store *PayloadStore,
 	attributes chasm.TaskAttributes,
-	task *persistencespb.TestPayloadTTLSideEffectTask,
+	task *testspb.TestPayloadTTLSideEffectTask,
 ) (bool, error) {
 	return validateTask(store, attributes, task.PayloadKey)
 }
