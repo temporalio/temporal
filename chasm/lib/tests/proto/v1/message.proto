@@ -1,7 +1,8 @@
 syntax = "proto3";
 
-package temporal.server.api.persistence.v1;
-option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+package temporal.server.chasm.lib.tests.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/tests/gen/testspb;testspb";
 
 import "google/protobuf/timestamp.proto";
 
@@ -20,3 +21,4 @@ message TestPayloadTTLPureTask {
 message TestPayloadTTLSideEffectTask {
     string payload_key = 1;
 }
+
