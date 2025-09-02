@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -127,7 +126,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		queriedWorkflows, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
-			Query:     fmt.Sprintf("TemporalReportedProblems IS NOT NULL"),
+			Query:     "TemporalReportedProblems IS NOT NULL",
 			PageSize:  100,
 		})
 		require.NoError(t, err)
@@ -135,7 +134,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 
 		queriedWorkflows, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
-			Query:     fmt.Sprintf("TemporalReportedProblems IN ('category=WorkflowTaskFailed', 'cause=WorkflowWorkerUnhandledFailure')"),
+			Query:     "TemporalReportedProblems IN ('category=WorkflowTaskFailed', 'cause=WorkflowWorkerUnhandledFailure')",
 			PageSize:  100,
 		})
 		require.NoError(t, err)
@@ -143,7 +142,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 
 		queriedWorkflows, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
-			Query:     fmt.Sprintf("TemporalReportedProblems IN ('cause=WorkflowWorkerUnhandledFailure')"),
+			Query:     "TemporalReportedProblems IN ('cause=WorkflowWorkerUnhandledFailure')",
 			PageSize:  100,
 		})
 		require.NoError(t, err)
@@ -151,7 +150,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 
 		queriedWorkflows, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
-			Query:     fmt.Sprintf("TemporalReportedProblems IN ('category=WorkflowTaskFailed', 'cause=WorkflowWorkerUnhandledFailure')"),
+			Query:     "TemporalReportedProblems IN ('category=WorkflowTaskFailed', 'cause=WorkflowWorkerUnhandledFailure')",
 			PageSize:  100,
 		})
 		require.NoError(t, err)
@@ -293,7 +292,7 @@ func (s *WFTTimedOutReportedProblemsTestSuite) TestWFTTimedOutReportedProblems_S
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		queriedWorkflows, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
-			Query:     fmt.Sprintf("TemporalReportedProblems IS NOT NULL"),
+			Query:     "TemporalReportedProblems IS NOT NULL",
 			PageSize:  100,
 		})
 		require.NoError(t, err)
@@ -301,7 +300,7 @@ func (s *WFTTimedOutReportedProblemsTestSuite) TestWFTTimedOutReportedProblems_S
 
 		queriedWorkflows, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
-			Query:     fmt.Sprintf("TemporalReportedProblems IN ('category=WorkflowTaskFailed', 'cause=WorkflowWorkerUnhandledFailure')"),
+			Query:     "TemporalReportedProblems IN ('category=WorkflowTaskFailed', 'cause=WorkflowWorkerUnhandledFailure')",
 			PageSize:  100,
 		})
 		require.NoError(t, err)
@@ -309,7 +308,7 @@ func (s *WFTTimedOutReportedProblemsTestSuite) TestWFTTimedOutReportedProblems_S
 
 		queriedWorkflows, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
-			Query:     fmt.Sprintf("TemporalReportedProblems IN ('cause=WorkflowWorkerUnhandledFailure')"),
+			Query:     "TemporalReportedProblems IN ('cause=WorkflowWorkerUnhandledFailure')",
 			PageSize:  100,
 		})
 		require.NoError(t, err)
@@ -317,7 +316,7 @@ func (s *WFTTimedOutReportedProblemsTestSuite) TestWFTTimedOutReportedProblems_S
 
 		queriedWorkflows, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
-			Query:     fmt.Sprintf("TemporalReportedProblems IN ('category=WorkflowTaskFailed', 'cause=WorkflowWorkerUnhandledFailure')"),
+			Query:     "TemporalReportedProblems IN ('category=WorkflowTaskFailed', 'cause=WorkflowWorkerUnhandledFailure')",
 			PageSize:  100,
 		})
 		require.NoError(t, err)
