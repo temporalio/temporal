@@ -97,7 +97,7 @@
         "type": "keyword"
       },
       "TemporalReportedProblems": {
-        "type": "keyword_list"
+        "type": "keyword"
       },
       "TemporalWorkerDeploymentVersion": {
         "type": "keyword"
