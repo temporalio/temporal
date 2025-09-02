@@ -1,2 +1,13 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+NAME:
+   tdbg taskqueue force-unload-task-queue-partition - Forcefully unload a task queue partition
+
+USAGE:
+   tdbg taskqueue force-unload-task-queue-partition [command options]
+
+OPTIONS:
+   --namespace-id value     NamespaceId (default: "default")
+   --task-queue value       Task Queue name
+   --task-queue-type value  Task Queue type: activity, workflow, nexus (experimental) (default: "TASK_QUEUE_TYPE_WORKFLOW")
+   --partition-id value     Partition ID (default: 0)
+   --sticky-name value      Sticky Name for a task queue partition, if present
+   --help, -h               show help

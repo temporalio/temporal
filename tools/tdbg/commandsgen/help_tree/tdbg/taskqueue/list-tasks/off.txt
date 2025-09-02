@@ -1,2 +1,18 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+NAME:
+   tdbg taskqueue list-tasks - List tasks of a task queue. Use --fair to list fairness tasks.
+
+USAGE:
+   tdbg taskqueue list-tasks [command options]
+
+OPTIONS:
+   --more                   List more pages, default is to list one page of default page size 10 (default: false)
+   --pagesize value         Result page size (default: 10)
+   --task-queue-type value  Task Queue type: activity, workflow (default: "activity")
+   --task-queue value       Task Queue name
+   --min-task-id value      Minimum task ID (default: -12346)
+   --max-task-id value      Maximum task ID (default: 0)
+   --subqueue value         Subqueue to query (default: 0)
+   --print-json             Print in raw json format (default: false)
+   --fair                   Query fairness tasks (default: false)
+   --min-pass value         Minimum pass (fairness task only) (default: 1)
+   --help, -h               show help

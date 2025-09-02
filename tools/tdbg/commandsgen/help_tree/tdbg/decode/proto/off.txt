@@ -1,2 +1,12 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+NAME:
+   tdbg decode proto - Decode proto payload
+
+USAGE:
+   tdbg decode proto [command options]
+
+OPTIONS:
+   --type value         full name of proto type to decode to (i.e. temporal.server.api.persistence.v1.WorkflowExecutionInfo).
+   --hex-data value     data in hex format (i.e. 0x0a243462613036633466...).
+   --hex-file value     file with data in hex format (i.e. 0x0a243462613036633466...).
+   --binary-file value  file with data in binary format.
+   --help, -h           show help

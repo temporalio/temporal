@@ -1,2 +1,28 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+This command will list tasks for the given shard ID and task category.
+
+Usage:
+  tdbg shard list-tasks [flags]
+
+Flags:
+  -h, --help                              help for list-tasks
+      --max-task-id int                   Exclusive max task ID. Required for transfer, replication, visibility. Not allowed for timer tasks.
+      --max-visibility-timestamp string   Exclusive max task fire timestamp. Required for timer tasks. Not allowed for transfer, replication, visibility tasks. Supported formats: '2006-01-02T15:04:05+07:00', raw UnixNano, or time range (e.g. '15m', '1h').
+      --min-task-id int                   Inclusive min task ID. Optional for transfer, replication, visibility. Not allowed for timer tasks.
+      --min-visibility-timestamp string   Inclusive min task fire timestamp. Optional for timer tasks. Not allowed for transfer, replication, visibility tasks. Supported formats: '2006-01-02T15:04:05+07:00', raw UnixNano, or time range (e.g. '15m', '1h').
+      --more                              List more pages. Default is to list one page of default size 10.
+      --page-size int                     Result page size. (default 1000)
+      --print-json                        Print in raw JSON format.
+      --shard-id int                      The ID of the shard. Required.
+      --task-category string              The task category to list (e.g. transfer, timer, replication, visibility). Required.
+
+Global Flags:
+      --address string                  Host:port for Temporal frontend service.
+      --color string                    When to use color auto, always, never. Accepted values: auto, always, never. (default "auto")
+      --context-timeout int             Timeout in seconds for RPC calls. Aliased as "--ct". (default 5)
+      --namespace string                Temporal Workflow namespace. Aliased as "--n". (default "default")
+      --tls-ca-path string              Path to server CA certificate.
+      --tls-cert-path string            Path to x509 certificate.
+      --tls-disable-host-verification   Disable TLS hostname verification (TLS must be enabled).
+      --tls-key-path string             Path to private key.
+      --tls-server-name string          Override for target server name.
+      --yes                             Automatically confirm all prompts.

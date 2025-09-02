@@ -1,2 +1,13 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+NAME:
+   tdbg dlq job cancel - Cancel the DLQ job with provided job token
+
+USAGE:
+   tdbg dlq job cancel [command options]
+
+DESCRIPTION:
+   This command will cancel the DLQ job with provided job token
+
+OPTIONS:
+   --job-token value  Token of the DLQ job. This token will be printed in the output of merge and purge commands
+   --reason value     Reason for job cancellation
+   --help, -h         show help

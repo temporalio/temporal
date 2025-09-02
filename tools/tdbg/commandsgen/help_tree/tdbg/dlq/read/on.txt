@@ -1,2 +1,28 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+Read messages from the Dead Letter Queue (DLQ). Supports pagination and writing output to a file or stdout.
+
+Usage:
+  tdbg dlq read [flags]
+
+Flags:
+      --dlq-type string         Type of DLQ to manage. Accepted values: namespace, history, transfer, timer, replication, visibility. Required.
+  -h, --help                    help for read
+      --last-message-id int     The upper boundary of messages to operate on. If not provided, all messages will be operated on. However, you will be prompted for confirmation unless the --yes flag is also provided.
+      --max-message-count int   Max number of messages to fetch. Only applicable to v2. (default 100)
+      --output-file string      File to write output to (defaults to stdout if not specified).
+      --page-size int           Page size to use when reading messages from DB (v2 only). (default 10)
+      --shard-id int            Shard ID of the DLQ message.
+      --source-cluster string   Source cluster for the DLQ.
+      --target-cluster string   Target cluster for the DLQ.
+
+Global Flags:
+      --address string                  Host:port for Temporal frontend service.
+      --color string                    When to use color auto, always, never. Accepted values: auto, always, never. (default "auto")
+      --context-timeout int             Timeout in seconds for RPC calls. Aliased as "--ct". (default 5)
+      --dlq-version string              Version of DLQ to manage. Options "v1", "v2". Accepted values: v1, v2. (default "v2")
+      --namespace string                Temporal Workflow namespace. Aliased as "--n". (default "default")
+      --tls-ca-path string              Path to server CA certificate.
+      --tls-cert-path string            Path to x509 certificate.
+      --tls-disable-host-verification   Disable TLS hostname verification (TLS must be enabled).
+      --tls-key-path string             Path to private key.
+      --tls-server-name string          Override for target server name.
+      --yes                             Automatically confirm all prompts.

@@ -1,2 +1,29 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+This command will list tasks of a task queue. Use the `--fair` flag to list fairness tasks.
+
+Usage:
+  tdbg taskqueue list-tasks [flags]
+
+Flags:
+      --fair                     Query fairness tasks.
+  -h, --help                     help for list-tasks
+      --max-task-id int          Maximum task ID.
+      --min-pass int             Minimum pass for fairness tasks. Default is 1.
+      --min-task-id int          Minimum task ID. Default is -12346.
+      --more                     List more pages, default is to list one page of default page size 10.
+      --page-size int            Result page size. Default is 10.
+      --print-json               Print in raw JSON format.
+      --subqueue int             Subqueue to query. Default is 0.
+      --task-queue string        Task Queue name.
+      --task-queue-type string   Task Queue type (activity, workflow). (default "activity")
+
+Global Flags:
+      --address string                  Host:port for Temporal frontend service.
+      --color string                    When to use color auto, always, never. Accepted values: auto, always, never. (default "auto")
+      --context-timeout int             Timeout in seconds for RPC calls. Aliased as "--ct". (default 5)
+      --namespace string                Temporal Workflow namespace. Aliased as "--n". (default "default")
+      --tls-ca-path string              Path to server CA certificate.
+      --tls-cert-path string            Path to x509 certificate.
+      --tls-disable-host-verification   Disable TLS hostname verification (TLS must be enabled).
+      --tls-key-path string             Path to private key.
+      --tls-server-name string          Override for target server name.
+      --yes                             Automatically confirm all prompts.

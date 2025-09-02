@@ -1,2 +1,13 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+NAME:
+   tdbg dlq job - Run admin operation on DLQ Job
+
+USAGE:
+   tdbg dlq job command [command options]
+
+COMMANDS:
+   describe, d  Get details of the DLQ job with provided job token
+   cancel, c    Cancel the DLQ job with provided job token
+   help, h      Shows a list of commands or help for one command
+
+OPTIONS:
+   --help, -h  show help

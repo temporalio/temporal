@@ -1,2 +1,12 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+NAME:
+   tdbg shard remove-task - remove a task based on shardId, task category, taskId, and task visibility timestamp
+
+USAGE:
+   tdbg shard remove-task [command options]
+
+OPTIONS:
+   --shard-id value        shardId (default: 0)
+   --task-id value         taskId (default: 0)
+   --task-category value   Task category: replication, memory-timer, outbound, transfer, timer, visibility
+   --task-timestamp value  task visibility timestamp in nano (required for removing timer task) (default: 0)
+   --help, -h              show help

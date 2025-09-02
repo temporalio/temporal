@@ -1,2 +1,13 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+NAME:
+   tdbg history-host - Run admin operation on history host
+
+USAGE:
+   tdbg history-host command [command options]
+
+COMMANDS:
+   describe, d  Describe internal information of history host
+   get-shardid  Get shardId for a namespaceId and workflowId combination
+   help, h      Shows a list of commands or help for one command
+
+OPTIONS:
+   --help, -h  show help

@@ -1,2 +1,27 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+This command will describe the partition information for a given task queue.
+
+Usage:
+  tdbg taskqueue describe-task-queue-partition [flags]
+
+Flags:
+      --all-active               Whether to include all active task queue versions. Default is true.
+      --build-ids stringArray    List of Build IDs.
+  -h, --help                     help for describe-task-queue-partition
+      --namespace-id string      Namespace ID. (default "default")
+      --partition-id int         Partition ID. Default is 0.
+      --sticky-name string       Sticky Name for a task queue partition.
+      --task-queue string        Task Queue name. Required.
+      --task-queue-type string   Task Queue type (activity, workflow, nexus). (default "TASK_QUEUE_TYPE_WORKFLOW")
+      --unversioned              Whether the task queue partition is unversioned. Default is true.
+
+Global Flags:
+      --address string                  Host:port for Temporal frontend service.
+      --color string                    When to use color auto, always, never. Accepted values: auto, always, never. (default "auto")
+      --context-timeout int             Timeout in seconds for RPC calls. Aliased as "--ct". (default 5)
+      --namespace string                Temporal Workflow namespace. Aliased as "--n". (default "default")
+      --tls-ca-path string              Path to server CA certificate.
+      --tls-cert-path string            Path to x509 certificate.
+      --tls-disable-host-verification   Disable TLS hostname verification (TLS must be enabled).
+      --tls-key-path string             Path to private key.
+      --tls-server-name string          Override for target server name.
+      --yes                             Automatically confirm all prompts.

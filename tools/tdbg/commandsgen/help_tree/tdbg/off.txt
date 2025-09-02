@@ -1,2 +1,32 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+NAME:
+   tdbg - A command-line tool for Temporal server debugging
+
+USAGE:
+   tdbg [global options] command [command options]
+
+VERSION:
+   1.29.0
+
+COMMANDS:
+   workflow, w       Run admin operation on workflow
+   shard, s          Run admin operation on specific shard
+   history-host, hh  Run admin operation on history host
+   taskqueue, tq     Run admin operation on taskQueue
+   membership, m     Run admin operation on membership
+   dlq               Run admin operation on DLQ
+   decode            Decode payload
+   help, h           Shows a list of commands or help for one command
+
+GLOBAL OPTIONS:
+   --address value                      host:port for Temporal frontend service [$TEMPORAL_CLI_ADDRESS]
+   --namespace value, -n value          Temporal workflow namespace (default: "default") [$TEMPORAL_CLI_NAMESPACE]
+   --context-timeout value, --ct value  Optional timeout for context of RPC call in seconds (default: 5) [$TEMPORAL_CONTEXT_TIMEOUT]
+   --yes                                Automatically confirm all prompts (default: false)
+   --tls-cert-path value                Path to x509 certificate [$TEMPORAL_CLI_TLS_CERT]
+   --tls-key-path value                 Path to private key [$TEMPORAL_CLI_TLS_KEY]
+   --tls-ca-path value                  Path to server CA certificate [$TEMPORAL_CLI_TLS_CA]
+   --tls-disable-host-verification      Disable tls host name verification (tls must be enabled) (default: false) [$TEMPORAL_CLI_TLS_DISABLE_HOST_VERIFICATION]
+   --tls-server-name value              Override for target server name [$TEMPORAL_CLI_TLS_SERVER_NAME]
+   --color value                        When to use color: auto, always, never. (default: "auto")
+   --help, -h                           show help
+   --version, -v                        print the version

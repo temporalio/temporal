@@ -1,2 +1,23 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+Decode a hex or binary encoded proto payload into a structured message.
+
+Usage:
+  tdbg decode proto [flags]
+
+Flags:
+      --binary-file string   Path to a file with data in binary format.
+  -h, --help                 help for proto
+      --hex-data string      Data in hex format (e.g. 0x0a243462613036633466...).
+      --hex-file string      Path to a file with data in hex format.
+      --proto-type string    Full name of the proto type to decode to (e.g. temporal.server.api.persistence.v1.WorkflowExecutionInfo).
+
+Global Flags:
+      --address string                  Host:port for Temporal frontend service.
+      --color string                    When to use color auto, always, never. Accepted values: auto, always, never. (default "auto")
+      --context-timeout int             Timeout in seconds for RPC calls. Aliased as "--ct". (default 5)
+      --namespace string                Temporal Workflow namespace. Aliased as "--n". (default "default")
+      --tls-ca-path string              Path to server CA certificate.
+      --tls-cert-path string            Path to x509 certificate.
+      --tls-disable-host-verification   Disable TLS hostname verification (TLS must be enabled).
+      --tls-key-path string             Path to private key.
+      --tls-server-name string          Override for target server name.
+      --yes                             Automatically confirm all prompts.

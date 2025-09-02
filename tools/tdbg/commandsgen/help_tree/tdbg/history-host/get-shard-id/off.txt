@@ -1,2 +1,3 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+Error: No help topic for 'get-shard-id'
+('export TEMPORAL_CLI_SHOW_STACKS=1' to see stack traces)
+exit status 1

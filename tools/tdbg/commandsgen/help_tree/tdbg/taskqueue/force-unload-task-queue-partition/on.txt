@@ -1,2 +1,24 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+This command will forcefully unload a task queue partition.
+
+Usage:
+  tdbg taskqueue force-unload-task-queue-partition [flags]
+
+Flags:
+  -h, --help                     help for force-unload-task-queue-partition
+      --namespace-id string      Namespace ID. (default "default")
+      --partition-id int         Partition ID.
+      --sticky-name string       Sticky Name for a task queue partition.
+      --task-queue string        Task Queue name. Required.
+      --task-queue-type string   Task Queue type: activity, workflow, nexus(experimental). (default "TASK_QUEUE_TYPE_WORKFLOW")
+
+Global Flags:
+      --address string                  Host:port for Temporal frontend service.
+      --color string                    When to use color auto, always, never. Accepted values: auto, always, never. (default "auto")
+      --context-timeout int             Timeout in seconds for RPC calls. Aliased as "--ct". (default 5)
+      --namespace string                Temporal Workflow namespace. Aliased as "--n". (default "default")
+      --tls-ca-path string              Path to server CA certificate.
+      --tls-cert-path string            Path to x509 certificate.
+      --tls-disable-host-verification   Disable TLS hostname verification (TLS must be enabled).
+      --tls-key-path string             Path to private key.
+      --tls-server-name string          Override for target server name.
+      --yes                             Automatically confirm all prompts.

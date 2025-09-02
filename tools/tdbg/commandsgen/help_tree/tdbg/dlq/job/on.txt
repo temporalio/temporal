@@ -1,2 +1,26 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+Execute operations on a DLQ Job. See subcommands under this command for job-level controls.
+
+Usage:
+  tdbg dlq job [command]
+
+Available Commands:
+  cancel      Cancel the DLQ job with provided job token
+  describe    Get details of the DLQ job with provided job token
+
+Flags:
+  -h, --help   help for job
+
+Global Flags:
+      --address string                  Host:port for Temporal frontend service.
+      --color string                    When to use color auto, always, never. Accepted values: auto, always, never. (default "auto")
+      --context-timeout int             Timeout in seconds for RPC calls. Aliased as "--ct". (default 5)
+      --dlq-version string              Version of DLQ to manage. Options "v1", "v2". Accepted values: v1, v2. (default "v2")
+      --namespace string                Temporal Workflow namespace. Aliased as "--n". (default "default")
+      --tls-ca-path string              Path to server CA certificate.
+      --tls-cert-path string            Path to x509 certificate.
+      --tls-disable-host-verification   Disable TLS hostname verification (TLS must be enabled).
+      --tls-key-path string             Path to private key.
+      --tls-server-name string          Override for target server name.
+      --yes                             Automatically confirm all prompts.
+
+Use "tdbg dlq job [command] --help" for more information about a command.

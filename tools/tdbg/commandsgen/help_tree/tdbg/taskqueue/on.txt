@@ -1,2 +1,26 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+This command will run admin operations on a task queue.
+
+Usage:
+  tdbg taskqueue [command]
+
+Available Commands:
+  describe-task-queue-partition     Describe information related to a task queue partition
+  force-unload-task-queue-partition Forcefully unload a task queue partition
+  list-tasks                        List tasks of a task queue. Use --fair to list fairness tasks
+
+Flags:
+  -h, --help   help for taskqueue
+
+Global Flags:
+      --address string                  Host:port for Temporal frontend service.
+      --color string                    When to use color auto, always, never. Accepted values: auto, always, never. (default "auto")
+      --context-timeout int             Timeout in seconds for RPC calls. Aliased as "--ct". (default 5)
+      --namespace string                Temporal Workflow namespace. Aliased as "--n". (default "default")
+      --tls-ca-path string              Path to server CA certificate.
+      --tls-cert-path string            Path to x509 certificate.
+      --tls-disable-host-verification   Disable TLS hostname verification (TLS must be enabled).
+      --tls-key-path string             Path to private key.
+      --tls-server-name string          Override for target server name.
+      --yes                             Automatically confirm all prompts.
+
+Use "tdbg taskqueue [command] --help" for more information about a command.

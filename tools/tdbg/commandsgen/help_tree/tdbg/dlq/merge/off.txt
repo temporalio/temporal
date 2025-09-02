@@ -1,2 +1,17 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+NAME:
+   tdbg dlq merge - Merge DLQ messages with equal or smaller ids than the provided task id
+
+USAGE:
+   tdbg dlq merge [command options]
+
+DESCRIPTION:
+   This command will delete messages after they've been re-enqueued if using v2.
+
+OPTIONS:
+   --dlq-type value         Type of DLQ to manage, options: namespace, history for v1; 1 (transfer), 2 (timer), 3 (replication), 4 (visibility) and 7 (outbound) for v2
+   --cluster value          Source cluster
+   --shard-id value         ShardId, v1 only (default: 0)
+   --last-message-id value  The upper boundary of messages to operate on. If not provided, all messages will be operated on. However, you will be prompted for confirmation unless the --yes flag is also provided. (default: 0)
+   --target-cluster value   Target cluster, v2 only. If not provided, current cluster is used.
+   --pagesize value         Batch size to use when purging messages from the DB, v2 only. Will use server default if not provided. (default: 0)
+   --help, -h               show help

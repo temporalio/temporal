@@ -1,2 +1,18 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+NAME:
+   tdbg workflow - Run admin operation on workflow
+
+USAGE:
+   tdbg workflow command [command options]
+
+COMMANDS:
+   import             import workflow history to database
+   show               show workflow history from database
+   describe, d        Describe internal information of workflow execution
+   refresh-tasks, rt  Refreshes all the tasks of a workflow
+   rebuild            Rebuild a workflow mutable state using persisted history events
+   replicate          Force replicate a workflow by generating replication tasks
+   delete, del        Delete current workflow execution and the mutableState record
+   help, h            Shows a list of commands or help for one command
+
+OPTIONS:
+   --help, -h  show help

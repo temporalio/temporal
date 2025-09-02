@@ -1,2 +1,12 @@
-# go.temporal.io/server/tools/tdbg
-tools/tdbg/commands.gen.go:470:15: s.run undefined (type TdbgHistoryHostGetShardIdCommand has no field or method run)
+NAME:
+   tdbg history-host describe - Describe internal information of history host
+
+USAGE:
+   tdbg history-host describe [command options]
+
+OPTIONS:
+   --workflow-id value, --wid value  Workflow ID
+   --history-address value           History Host address(IP:PORT)
+   --shard-id value                  ShardId (default: 0)
+   --print-full                      Print fully detail (default: false)
+   --help, -h                        show help

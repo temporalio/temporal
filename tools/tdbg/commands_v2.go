@@ -464,3 +464,7 @@ func (c TdbgDlqJobCancelCommand) run(cctx *CommandContext, args []string) error 
 func (c TdbgDlqJobDescribeCommand) run(cctx *CommandContext, args []string) error {
 	return nil
 }
+
+func (c TdbgHistoryHostGetShardIdCommand) run(cctx *CommandContext, args []string) error {
+	return nil
+}
