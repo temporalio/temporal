@@ -400,7 +400,7 @@ jobs:
 
   functional-test:
     if: ${{ inputs.run_single_unit_test != true }}
-    name: Functional test (${{ matrix.name }}, chunk ${{ matrix.shard_index }})
+    name: Functional test (${{ matrix.name }}, shard ${{ matrix.shard_index }})
     needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
