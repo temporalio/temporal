@@ -3,6 +3,7 @@ package printer
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -13,7 +14,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/temporalproto"
 	"google.golang.org/protobuf/proto"
 )
@@ -38,7 +39,7 @@ type Printer struct {
 	listModeFirstJSON bool // True until first JSON printed
 }
 
-// Ignored during JSON output
+// Print is ignored during JSON output
 func (p *Printer) Print(s ...string) {
 	if !p.JSON {
 		for _, v := range s {
@@ -47,17 +48,17 @@ func (p *Printer) Print(s ...string) {
 	}
 }
 
-// Ignored during JSON output
+// Println is ignored during JSON output
 func (p *Printer) Println(s ...string) {
 	p.Print(append(append([]string{}, s...), "\n")...)
 }
 
-// Ignored during JSON output
+// Printlnf is ignored during JSON output
 func (p *Printer) Printlnf(s string, v ...any) {
 	p.Println(fmt.Sprintf(s, v...))
 }
 
-// When called for JSON with indent, this will create an initial bracket and
+// StartList is called for JSON with indent, this will create an initial bracket and
 // make sure all [Printer.PrintStructured] calls get commas properly to appear
 // as a list (but the indention and multiline posture of the JSON remains). When
 // called for JSON without indent, this will make sure all
@@ -68,28 +69,32 @@ func (p *Printer) Printlnf(s string, v ...any) {
 // panic. This and the end call are not safe for concurrent use.
 func (p *Printer) StartList() {
 	if p.listMode {
-		panic("already in list mode")
+		panic("already in list mode") //nolint:forbidigo // engineer-run command codegen; not server runtime
 	}
 	p.listMode, p.listModeFirstJSON = true, true
 	// Write initial bracket when non-jsonl
 	if p.JSON && p.JSONIndent != "" {
 		// Don't need newline, we count on initial object to do that
-		p.Output.Write([]byte("["))
+		if _, err := p.Output.Write([]byte("[")); err != nil {
+			panic(err) //nolint:forbidigo // engineer-run command codegen; not server runtime
+		}
 	}
 }
 
-// Must be called after [Printer.StartList] or will panic. See Godoc on that
+// EndList must be called after [Printer.StartList] or it will panic. See Godoc on that
 // function for more details.
 func (p *Printer) EndList() {
 	if !p.listMode {
-		panic("not in list mode")
+		panic("not in list mode") //nolint:forbidigo // engineer-run command codegen; not server runtime
 	}
 	p.listMode, p.listModeFirstJSON = false, false
 	// Write ending bracket when non-jsonl
 	if p.JSON && p.JSONIndent != "" {
 		// We prepend a newline because non-jsonl list mode doesn't do so after each
 		// line to help with commas
-		p.Output.Write([]byte("\n]\n"))
+		if _, err := p.Output.Write([]byte("\n]\n")); err != nil {
+			panic(err) //nolint:forbidigo // engineer-run command codegen; not server runtime
+		}
 	}
 }
 
@@ -124,7 +129,7 @@ type TableOptions struct {
 	NoHeader   bool
 }
 
-// For JSON, if v is a proto message, protojson encoding is used
+// PrintStructured prints structured output. For JSON, if v is a proto message, protojson encoding is used
 func (p *Printer) PrintStructured(v any, options StructuredOptions) error {
 	// JSON
 	if p.JSON {
@@ -156,14 +161,14 @@ type PrintStructuredIter interface {
 	Next() (any, error)
 }
 
-// Fields must be present for table
+// PrintStructuredTableIter fields must be present for table
 func (p *Printer) PrintStructuredTableIter(
 	typ reflect.Type,
 	iter PrintStructuredIter,
 	options StructuredOptions,
 ) error {
 	if options.Table == nil {
-		return fmt.Errorf("must be table")
+		return errors.New("must be table")
 	}
 	cols := options.toPredefinedCols()
 	if len(cols) == 0 {
@@ -191,7 +196,7 @@ func (p *Printer) PrintStructuredTableIter(
 
 func (p *Printer) write(b []byte) {
 	if _, err := p.Output.Write(b); err != nil {
-		panic(err)
+		panic(err) //nolint:forbidigo // engineer-run command codegen; not server runtime
 	}
 }
 
@@ -201,7 +206,7 @@ func (p *Printer) writeStr(s string) {
 
 func (p *Printer) writef(s string, v ...any) {
 	if _, err := fmt.Fprintf(p.Output, s, v...); err != nil {
-		panic(err)
+		panic(err) //nolint:forbidigo // engineer-run command codegen; not server runtime
 	}
 }
 
@@ -247,7 +252,7 @@ func (p *Printer) jsonVal(v any, indent string, shorthandPayloads bool) ([]byte,
 	if protoMessage, ok := v.(proto.Message); ok {
 		opts := temporalproto.CustomJSONMarshalOptions{Indent: indent}
 		if shorthandPayloads {
-			opts.Metadata = map[string]any{common.EnablePayloadShorthandMetadataKey: true}
+			opts.Metadata = map[string]any{commonpb.EnablePayloadShorthandMetadataKey: true}
 		}
 		return opts.Marshal(protoMessage)
 	}
@@ -413,6 +418,7 @@ func (p *Printer) printCard(cols []*col, row map[string]colVal) {
 
 var jsonMarshalerType = reflect.TypeOf((*json.Marshaler)(nil)).Elem()
 
+//nolint:revive // acceptable nesting
 func (p *Printer) textVal(v any) string {
 	if ref := reflect.Indirect(reflect.ValueOf(v)); ref.IsValid() {
 		if ref.Type() == reflect.TypeOf(time.Time{}) {
@@ -430,7 +436,10 @@ func (p *Printer) textVal(v any) string {
 			}
 			return string(b)
 		} else if ref.Kind() == reflect.Slice && ref.Type().Elem().Kind() == reflect.Uint8 {
-			b, _ := ref.Interface().([]byte)
+			b, ok := ref.Interface().([]byte)
+			if !ok {
+				return "<failed converting to []byte>"
+			}
 			return "bytes(" + base64.StdEncoding.EncodeToString(b) + ")"
 		} else if ref.Kind() == reflect.Slice {
 			// We don't want to reimplement all of fmt.Sprintf, but expanding one level of
@@ -533,7 +542,7 @@ func colValGetterForType(t reflect.Type) (func(col *col, v reflect.Value) any, e
 func deriveCols(t reflect.Type) ([]*col, error) {
 	switch t.Kind() {
 	case reflect.Map:
-		return nil, fmt.Errorf("cannot derive fields from map")
+		return nil, errors.New("cannot derive fields from map")
 	case reflect.Pointer:
 		if t.Elem().Kind() != reflect.Struct {
 			return nil, fmt.Errorf("expected map, struct, or pointer to struct, got: %v", t)
@@ -565,6 +574,9 @@ func deriveColFromField(f reflect.StructField) *col {
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
 		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
 		col.align = AlignRight
+	default:
+		// engineer-run command codegen; no live server panics
+		panic(fmt.Sprintf("unsupported type: %v", f.Type.Kind())) //nolint:forbidigo
 	}
 	// Handle tag
 	for i, tagPart := range strings.Split(f.Tag.Get("cli"), ",") {
@@ -572,7 +584,7 @@ func deriveColFromField(f reflect.StructField) *col {
 		case i == 0:
 			// Don't allow name customization currently
 			if tagPart != "" {
-				panic("expected cli tag to have empty name")
+				panic("expected cli tag to have empty name") //nolint:forbidigo // engineer-run command codegen; not server runtime
 			}
 		case tagPart == "omit":
 			return nil
@@ -581,7 +593,7 @@ func deriveColFromField(f reflect.StructField) *col {
 		case strings.HasPrefix(tagPart, "width="):
 			var err error
 			if col.width, err = strconv.Atoi(strings.TrimPrefix(tagPart, "width=")); err != nil {
-				panic(err)
+				panic(err) //nolint:forbidigo // engineer-run command codegen; not server runtime
 			}
 		case strings.HasPrefix(tagPart, "align="):
 			switch align := strings.TrimPrefix(tagPart, "align="); align {
@@ -594,16 +606,15 @@ func deriveColFromField(f reflect.StructField) *col {
 			case "left":
 				col.align = AlignLeft
 			default:
-				panic("unrecognized align: " + align)
+				panic("unrecognized align: " + align) //nolint:forbidigo // engineer-run command codegen; not server runtime
 			}
 		default:
-			panic("unrecognized CLI tag: " + tagPart)
+			panic("unrecognized CLI tag: " + tagPart) //nolint:forbidigo // engineer-run command codegen; not server runtime
 		}
 	}
 	// Also consider json tags to allow omitting empty cards if the json field would also be omitted
 	for _, tagPart := range strings.Split(f.Tag.Get("json"), ",") {
-		switch tagPart {
-		case "omitempty":
+		if tagPart == "omitempty" {
 			col.cardOmitEmpty = true
 		}
 	}

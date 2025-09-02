@@ -7,6 +7,6 @@ USAGE:
 OPTIONS:
    --shard-id value        shardId (default: 0)
    --task-id value         taskId (default: 0)
-   --task-category value   Task category: replication, memory-timer, outbound, transfer, timer, visibility
+   --task-category value   Task category: transfer, timer, visibility, replication, memory-timer, outbound
    --task-timestamp value  task visibility timestamp in nano (required for removing timer task) (default: 0)
    --help, -h              show help

@@ -3,6 +3,7 @@ package tdbg
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -16,8 +17,8 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"go.temporal.io/api/common/v1"
-	"go.temporal.io/api/failure/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/server/tools/tdbg/printer"
 	"google.golang.org/grpc"
@@ -104,7 +105,7 @@ func Execute(ctx context.Context, options CommandOptions) {
 		}) {
 			return
 		}
-		cctx.Options.Fail(fmt.Errorf("unknown command"))
+		cctx.Options.Fail(errors.New("unknown command"))
 	}
 }
 
@@ -147,14 +148,14 @@ func (c *CommandContext) preprocessOptions() error {
 			// If context is closed, say that the program was interrupted and ignore
 			// the actual error
 			if c.Err() != nil {
-				err = fmt.Errorf("program interrupted")
+				err = errors.New("program interrupted")
 			}
 			if c.Logger != nil {
 				c.Logger.Error(err.Error())
 			} else {
 				fmt.Fprintln(os.Stderr, err)
 			}
-			os.Exit(1)
+			os.Exit(1) //nolint:revive // fail means indicates a process failure
 		}
 	}
 	return nil
@@ -173,7 +174,7 @@ func (c *CommandContext) BindFlagEnvVar(flag *pflag.Flag, envVar string) {
 	c.FlagsWithEnvVars = append(c.FlagsWithEnvVars, flag)
 }
 
-func (c *CommandContext) MarshalFriendlyJSONPayloads(m *common.Payloads) (json.RawMessage, error) {
+func (c *CommandContext) MarshalFriendlyJSONPayloads(m *commonpb.Payloads) (json.RawMessage, error) {
 	if m == nil {
 		return []byte("null"), nil
 	}
@@ -184,8 +185,7 @@ func (c *CommandContext) MarshalFriendlyJSONPayloads(m *common.Payloads) (json.R
 	return c.MarshalProtoJSON(m)
 }
 
-// Starts with newline
-func (c *CommandContext) MarshalFriendlyFailureBodyText(f *failure.Failure, indent string) (s string) {
+func (c *CommandContext) MarshalFriendlyFailureBodyText(f *failurepb.Failure, indent string) (s string) {
 	for f != nil {
 		s += "\n" + indent + "Message: " + f.Message
 		if f.StackTrace != "" {
@@ -200,8 +200,6 @@ func (c *CommandContext) MarshalFriendlyFailureBodyText(f *failure.Failure, inde
 	return
 }
 
-// Takes payload shorthand into account, can use
-// MarshalProtoJSONNoPayloadShorthand if needed
 func (c *CommandContext) MarshalProtoJSON(m proto.Message) ([]byte, error) {
 	return c.MarshalProtoJSONWithOptions(m, c.JSONShorthandPayloads)
 }
@@ -209,7 +207,7 @@ func (c *CommandContext) MarshalProtoJSON(m proto.Message) ([]byte, error) {
 func (c *CommandContext) MarshalProtoJSONWithOptions(m proto.Message, jsonShorthandPayloads bool) ([]byte, error) {
 	opts := temporalproto.CustomJSONMarshalOptions{Indent: c.Printer.JSONIndent}
 	if jsonShorthandPayloads {
-		opts.Metadata = map[string]any{common.EnablePayloadShorthandMetadataKey: true}
+		opts.Metadata = map[string]any{commonpb.EnablePayloadShorthandMetadataKey: true}
 	}
 	return opts.Marshal(m)
 }
@@ -221,7 +219,7 @@ func (c *CommandContext) UnmarshalProtoJSON(b []byte, m proto.Message) error {
 func UnmarshalProtoJSONWithOptions(b []byte, m proto.Message, jsonShorthandPayloads bool) error {
 	opts := temporalproto.CustomJSONUnmarshalOptions{DiscardUnknown: true}
 	if jsonShorthandPayloads {
-		opts.Metadata = map[string]any{common.EnablePayloadShorthandMetadataKey: true}
+		opts.Metadata = map[string]any{commonpb.EnablePayloadShorthandMetadataKey: true}
 	}
 	return opts.Unmarshal(b, m)
 }
@@ -289,7 +287,8 @@ func VersionString() string {
 	if bi != "" {
 		bi = fmt.Sprintf(", %s", bi)
 	}
-	return fmt.Sprintf("%s ", "TODO")
+	// TODO: fix this method
+	return fmt.Sprintf("%s ", bi)
 }
 func (c *TdbgCommand) initCommand(cctx *CommandContext) {
 	c.Command.Version = "TODO"

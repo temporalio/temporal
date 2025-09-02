@@ -5,6 +5,7 @@ package commandsgen
 import (
 	"bytes"
 	_ "embed"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -114,7 +115,7 @@ const ansiBold = "\033[1m"
 
 func (o OptionSets) processSection() error {
 	if o.Name == "" {
-		return fmt.Errorf("missing option set name")
+		return errors.New("missing option set name")
 	}
 
 	for i, option := range o.Options {
@@ -128,19 +129,19 @@ func (o OptionSets) processSection() error {
 
 func (c *Command) processSection() error {
 	if c.FullName == "" {
-		return fmt.Errorf("missing command name")
+		return errors.New("missing command name")
 	}
 	c.NamePath = strings.Split(c.FullName, " ")
 
 	if c.Summary == "" {
-		return fmt.Errorf("missing summary for command")
+		return errors.New("missing summary for command")
 	}
 	if c.Summary[len(c.Summary)-1] == '.' {
-		return fmt.Errorf("summary should not end in a '.'")
+		return errors.New("summary should not end in a '.'")
 	}
 
 	if c.MaximumArgs != 0 && c.ExactArgs != 0 {
-		return fmt.Errorf("cannot have both maximum-args and exact-args")
+		return errors.New("cannot have both maximum-args and exact-args")
 	}
 
 	if c.Description == "" {
@@ -209,11 +210,11 @@ func (c *Command) depth() int {
 
 func (o *Option) processSection() error {
 	if o.Name == "" {
-		return fmt.Errorf("missing option name")
+		return errors.New("missing option name")
 	}
 
 	if o.Type == "" {
-		return fmt.Errorf("missing option type")
+		return errors.New("missing option type")
 	}
 
 	if o.Description == "" {
@@ -225,16 +226,16 @@ func (o *Option) processSection() error {
 
 	// Check that description ends in a "."
 	if o.Description[len(o.Description)-1] != '.' {
-		return fmt.Errorf("description should end in a '.'")
+		return errors.New("description should end in a '.'")
 	}
 
 	if o.Env != strings.ToUpper(o.Env) {
-		return fmt.Errorf("env variables must be in all caps")
+		return errors.New("env variables must be in all caps")
 	}
 
 	if len(o.EnumValues) != 0 {
 		if o.Type != "string-enum" && o.Type != "string-enum[]" {
-			return fmt.Errorf("enum-values can only specified for string-enum and string-enum[] types")
+			return errors.New("enum-values can only specified for string-enum and string-enum[] types")
 		}
 		// Check default enum values
 		if o.Default != "" && !slices.Contains(o.EnumValues, o.Default) {

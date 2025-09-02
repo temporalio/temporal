@@ -43,7 +43,9 @@ type docWriter struct {
 }
 
 func (c *Command) writeDoc(w *docWriter) error {
-	w.processOptions(c)
+	if err := w.processOptions(c); err != nil {
+		return fmt.Errorf("processing options: %w", err)
+	}
 
 	// If this is a root command, write a new file
 	depth := c.depth()
@@ -120,15 +122,15 @@ func (w *docWriter) writeOptions(prefix string, options []Option, c *Command) {
 
 	fileName := c.fileName()
 
-	w.fileMap[fileName].WriteString(fmt.Sprintf("**%s:**\n\n", prefix))
+	fmt.Fprintf(w.fileMap[fileName], "**%s:**\n\n", prefix)
 
 	for _, o := range options {
 		// option name and alias
-		w.fileMap[fileName].WriteString(fmt.Sprintf("**--%s**", o.Name))
+		fmt.Fprintf(w.fileMap[fileName], "**--%s**", o.Name)
 		if len(o.Short) > 0 {
-			w.fileMap[fileName].WriteString(fmt.Sprintf(", **-%s**", o.Short))
+			fmt.Fprintf(w.fileMap[fileName], ", **-%s**", o.Short)
 		}
-		w.fileMap[fileName].WriteString(fmt.Sprintf(" _%s_\n\n", o.Type))
+		fmt.Fprintf(w.fileMap[fileName], " _%s_\n\n", o.Type)
 
 		// description
 		w.fileMap[fileName].WriteString(encodeJSONExample(o.Description))
@@ -136,10 +138,10 @@ func (w *docWriter) writeOptions(prefix string, options []Option, c *Command) {
 			w.fileMap[fileName].WriteString(" Required.")
 		}
 		if len(o.EnumValues) > 0 {
-			w.fileMap[fileName].WriteString(fmt.Sprintf(" Accepted values: %s.", strings.Join(o.EnumValues, ", ")))
+			fmt.Fprintf(w.fileMap[fileName], " Accepted values: %s.", strings.Join(o.EnumValues, ", "))
 		}
 		if len(o.Default) > 0 {
-			w.fileMap[fileName].WriteString(fmt.Sprintf(` (default "%s")`, o.Default))
+			fmt.Fprintf(w.fileMap[fileName], ` (default "%s")`, o.Default)
 		}
 		w.fileMap[fileName].WriteString("\n\n")
 
@@ -151,7 +153,7 @@ func (w *docWriter) writeOptions(prefix string, options []Option, c *Command) {
 	}
 }
 
-func (w *docWriter) processOptions(c *Command) {
+func (w *docWriter) processOptions(c *Command) error {
 	// Pop options from stack if we are moving up a level
 	if len(w.optionsStack) >= len(strings.Split(c.FullName, " ")) {
 		w.optionsStack = w.optionsStack[:len(w.optionsStack)-1]
@@ -163,13 +165,14 @@ func (w *docWriter) processOptions(c *Command) {
 	for _, set := range c.OptionSets {
 		optionSet, ok := w.optionSetMap[set]
 		if !ok {
-			panic(fmt.Sprintf("invalid option set %v used", set))
+			return fmt.Errorf("invalid option set %v used", set)
 		}
 		optionSetOptions := optionSet.Options
 		options = append(options, optionSetOptions...)
 	}
 
 	w.optionsStack = append(w.optionsStack, options)
+	return nil
 }
 
 func (w *docWriter) isLeafCommand(c *Command) bool {

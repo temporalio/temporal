@@ -137,6 +137,7 @@ linters:
       - ^api
       - ^proto
       - ^.git
+      - ./tools/tdbg/commands_gen.go
     rules:
       - path-except: _test\.go|tests/.+\.go
         text: "time.Sleep"

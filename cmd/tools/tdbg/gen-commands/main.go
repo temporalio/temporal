@@ -34,7 +34,7 @@ func run() error {
 	}
 
 	// Write
-	if err := os.WriteFile(filepath.Join(commandsDir, "commands.gen.go"), b, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(commandsDir, "commands_gen.go"), b, 0644); err != nil {
 		return fmt.Errorf("failed writing file: %w", err)
 	}
 	return nil
