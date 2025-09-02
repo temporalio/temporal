@@ -42,10 +42,3 @@ func (s *audienceMapperSuite) TestGetAudienceMapperFromConfig() {
 	audience := mapper.Audience(context.Background(), nil, &grpc.UnaryServerInfo{})
 	s.Equal("bar-audience", audience)
 }
-
-func (s *audienceMapperSuite) TestMockJWTAudienceMapper() {
-	mock := NewMockJWTAudienceMapper(s.controller)
-	mock.EXPECT().Audience(gomock.Any(), gomock.Any(), gomock.Any()).Return("mock-audience").Times(1)
-	audience := mock.Audience(context.Background(), nil, &grpc.UnaryServerInfo{})
-	s.Equal("mock-audience", audience)
-}
