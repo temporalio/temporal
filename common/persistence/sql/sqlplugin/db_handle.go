@@ -62,7 +62,9 @@ func NewDatabaseHandle(
 		logger:       logger,
 		timeSource:   timeSource,
 	}
-	withDBMetricReporter(dbKind, handle)
+	reporter := newDBMetricReporter(dbKind, handle)
+	handle.reporter = reporter
+	go handle.reporter.Start()
 	handle.reconnect(true)
 	return handle
 }

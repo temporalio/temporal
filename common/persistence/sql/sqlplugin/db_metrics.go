@@ -13,15 +13,14 @@ type DBMetricsReporter struct {
 	quit     chan struct{}
 }
 
-func withDBMetricReporter(dbKind DbKind, handle *DatabaseHandle) {
+func newDBMetricReporter(dbKind DbKind, handle *DatabaseHandle) *DBMetricsReporter {
 	reporter := &DBMetricsReporter{
 		interval: time.Minute,
 		handle:   handle,
 		metrics:  handle.metrics.WithTags(metrics.PersistenceDBKindTag(dbKind.String())),
 		quit:     make(chan struct{}),
 	}
-	handle.reporter = reporter
-	go reporter.Start()
+	return reporter
 }
 
 func (r *DBMetricsReporter) Start() {
