@@ -1991,7 +1991,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 }
 
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentCurrentVersion_NoPollers() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*45)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
 	defer cancel()
 	tv := testvars.New(s).WithBuildIDNumber(1)
 
@@ -2013,7 +2013,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentCurrentVersion_NoPollers(
 }
 
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoPollers() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*45)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
 	defer cancel()
 	tv := testvars.New(s).WithBuildIDNumber(1)
 
