@@ -438,8 +438,9 @@ func (q *queueV2) ListQueues(
 func (q *queueV2) getMessageCountAndLastID(
 	ctx context.Context,
 	row *sqlplugin.QueueV2MetadataRow,
-) (int64, int64, error) {
-	lastMessageID, ok, err := q.getMaxMessageID(ctx, row.QueueType, row.QueueName, q.Db)
+) (messageCount int64, lastMessageID int64, err error) {
+	var ok bool
+	lastMessageID, ok, err = q.getMaxMessageID(ctx, row.QueueType, row.QueueName, q.Db)
 	if err != nil {
 		return 0, 0, serviceerror.NewUnavailablef(
 			"getLastMessageID operation failed for queue with type %v and name %v. Error: %v",
@@ -459,6 +460,6 @@ func (q *queueV2) getMessageCountAndLastID(
 	if err != nil {
 		return 0, 0, err
 	}
-	messageCount := lastMessageID - partition.MinMessageId + 1
+	messageCount = lastMessageID - partition.MinMessageId + 1
 	return messageCount, lastMessageID, nil
 }
