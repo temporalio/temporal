@@ -128,7 +128,7 @@ func (h *DatabaseHandle) Close() {
 			db.Close()
 		}
 		if h.reporter != nil {
-			h.reporter.Stop()
+			go h.reporter.Stop()
 		}
 	}
 }

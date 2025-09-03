@@ -1,8 +1,10 @@
 package sqlplugin
 
 import (
+	"sync"
 	"time"
 
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -11,6 +13,9 @@ type DBMetricsReporter struct {
 	handle   *DatabaseHandle
 	metrics  metrics.Handler
 	quit     chan struct{}
+	wg       sync.WaitGroup
+
+	logger log.Logger
 }
 
 func newDBMetricReporter(dbKind DbKind, handle *DatabaseHandle) *DBMetricsReporter {
@@ -19,6 +24,7 @@ func newDBMetricReporter(dbKind DbKind, handle *DatabaseHandle) *DBMetricsReport
 		handle:   handle,
 		metrics:  handle.metrics.WithTags(metrics.PersistenceDBKindTag(dbKind.String())),
 		quit:     make(chan struct{}),
+		logger:   handle.logger,
 	}
 	return reporter
 }
@@ -26,6 +32,9 @@ func newDBMetricReporter(dbKind DbKind, handle *DatabaseHandle) *DBMetricsReport
 func (r *DBMetricsReporter) Start() {
 	ticker := time.NewTicker(r.interval)
 	defer ticker.Stop()
+
+	r.wg.Add(1)
+	defer r.wg.Done()
 
 	for {
 		select {
@@ -51,4 +60,6 @@ func (r *DBMetricsReporter) report() {
 
 func (r *DBMetricsReporter) Stop() {
 	close(r.quit)
+	// assuming Start is already called
+	r.wg.Wait()
 }
