@@ -2934,7 +2934,7 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 }
 
 func (s *WorkerDeploymentSuite) setCurrentVersion(ctx context.Context, tv *testvars.TestVars, previousCurrent string, ignoreMissingTaskQueues bool, expectedError string) {
-	s.setCurrentVersionUnversionedOption(ctx, tv, false, previousCurrent, ignoreMissingTaskQueues, false, false, expectedError)
+	s.setCurrentVersionUnversionedOption(ctx, tv, false, previousCurrent, ignoreMissingTaskQueues, false, true, expectedError)
 }
 
 func (s *WorkerDeploymentSuite) setCurrentVersionAllowNoPollersOption(ctx context.Context, tv *testvars.TestVars, previousCurrent string, ignoreMissingTaskQueues, allowNoPollers, ensureSystemWorkflowsExist bool, expectedError string) {
