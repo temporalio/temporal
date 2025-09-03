@@ -433,15 +433,21 @@ func getQueueFromMetadata(
 	}, nil
 }
 
-func (s *queueV2Store) getMessageCountAndLastID(ctx context.Context, queueType persistence.QueueV2Type, queueName string, partition *persistencespb.QueuePartition) (int64, int64, error) {
-	maxMessageID, ok, err := s.getMaxMessageID(ctx, queueType, queueName)
+func (s *queueV2Store) getMessageCountAndLastID(
+	ctx context.Context,
+	queueType persistence.QueueV2Type,
+	queueName string,
+	partition *persistencespb.QueuePartition,
+) (messageCount int64, maxMessageID int64, err error) {
+	var ok bool
+	maxMessageID, ok, err = s.getMaxMessageID(ctx, queueType, queueName)
 	if err != nil {
 		return 0, 0, err
 	}
 	if !ok {
 		return 0, -1, nil // No messages
 	}
-	messageCount := maxMessageID - partition.MinMessageId + 1
+	messageCount = maxMessageID - partition.MinMessageId + 1
 	return messageCount, maxMessageID, nil
 }
 
