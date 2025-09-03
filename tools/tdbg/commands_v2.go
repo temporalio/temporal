@@ -155,7 +155,8 @@ func (c *CommandContext) preprocessOptions() error {
 			} else {
 				fmt.Fprintln(os.Stderr, err)
 			}
-			os.Exit(1) //nolint:revive // fail means indicates a process failure
+			// call to fatal signals the cli program should exit
+			os.Exit(1) //nolint:revive
 		}
 	}
 	return nil
