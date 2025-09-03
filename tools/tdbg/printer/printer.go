@@ -575,8 +575,6 @@ func deriveColFromField(f reflect.StructField) *col {
 		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
 		col.align = AlignRight
 	default:
-		// engineer-run command codegen; no live server panics
-		panic(fmt.Sprintf("unsupported type: %v", f.Type.Kind())) //nolint:forbidigo
 	}
 	// Handle tag
 	for i, tagPart := range strings.Split(f.Tag.Get("cli"), ",") {
