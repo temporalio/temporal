@@ -681,6 +681,7 @@ func (d *ClientImpl) SetRampingVersion(
 		Percentage:              percentage,
 		IgnoreMissingTaskQueues: ignoreMissingTaskQueues,
 		ConflictToken:           conflictToken,
+		AllowNoPollers:          allowNoPollers,
 	})
 	if err != nil {
 		return nil, err
@@ -706,6 +707,9 @@ func (d *ClientImpl) SetRampingVersion(
 			requestID,
 			d.getSyncBatchSize(),
 		)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		outcome, err = d.update(
 			ctx,
@@ -716,9 +720,13 @@ func (d *ClientImpl) SetRampingVersion(
 				Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
 			},
 		)
-	}
-	if err != nil {
-		return nil, err
+		if err != nil {
+			var notFound *serviceerror.NotFound
+			if errors.As(err, &notFound) {
+				return nil, serviceerror.NewFailedPreconditionf(ErrWorkerDeploymentNotFound, deploymentName)
+			}
+			return nil, err
+		}
 	}
 
 	var res deploymentspb.SetRampingVersionResponse
@@ -804,15 +812,8 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 		return err
 	}
 
-	if failure := outcome.GetFailure(); failure != nil {
-		if failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
-			return nil
-		} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
-			return serviceerror.NewFailedPrecondition(failure.GetMessage()) // non-retryable error to stop multiple activity attempts
-		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == errFailedPrecondition {
-			return serviceerror.NewFailedPrecondition(failure.GetCause().GetMessage())
-		}
-		return serviceerror.NewInternal(failure.Message)
+	if updateErr := d.handleUpdateVersionFailures(outcome); updateErr != nil {
+		return updateErr
 	}
 
 	success := outcome.GetSuccess()

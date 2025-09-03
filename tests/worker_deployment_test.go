@@ -1339,7 +1339,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 
 	// set ramp to unversioned which should trigger a batch of SyncDeploymentVersionUserData requests.
 	setRampingUpdateTime := timestamppb.Now()
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, "", nil)
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, false, true, "", nil)
 
 	// check that the current version's task queues have ramping version == __unversioned__
 	for i := 0; i < taskQueues; i++ {
@@ -1632,7 +1632,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_PromoteUnversi
 	// make the current version versioned, so that we can set ramp to unversioned
 	s.setCurrentVersion(ctx, currentVars, worker_versioning.UnversionedVersionId, true, "")
 	// set ramp to unversioned
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, "", nil)
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, false, true, "", nil)
 	// check that the current version's task queues have ramping version == __unversioned__
 	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
 
@@ -1958,7 +1958,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 	tv := testvars.New(s)
 	rampingVars := tv.WithBuildIDNumber(1)
 	s.startVersionWorkflow(ctx, rampingVars)
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, rampingVars, true, false, 50, true, "ramping version __unversioned__ is already current", nil)
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, rampingVars, true, false, 50, true, false, true, "ramping version __unversioned__ is already current", nil)
 }
 
 // Should see that the ramping version of the task queues in the current version is unversioned
@@ -1976,7 +1976,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), "", 0)
 
 	// set ramp to unversioned
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, "", nil)
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, false, true, "", nil)
 
 	// check that deployment has ramping version == __unversioned__
 	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -1993,24 +1993,45 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentCurrentVersion_NoPollers() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*45)
 	defer cancel()
-	tv := testvars.New(s)
-	currentVars := tv.WithBuildIDNumber(1)
+	tv := testvars.New(s).WithBuildIDNumber(1)
 
 	// try to set current with allowNoPollers=false --> error
 	allowNoPollers := false
-	expectedErr := fmt.Sprintf(workerdeployment.ErrWorkerDeploymentNotFound, currentVars.DeploymentVersion().GetDeploymentName())
-	s.setCurrentVersionAllowNoPollersOption(ctx, currentVars, worker_versioning.UnversionedVersionId, true, allowNoPollers, false, expectedErr)
+	expectedErr := fmt.Sprintf(workerdeployment.ErrWorkerDeploymentNotFound, tv.DeploymentVersion().GetDeploymentName())
+	s.setCurrentVersionAllowNoPollersOption(ctx, tv, worker_versioning.UnversionedVersionId, true, allowNoPollers, false, expectedErr)
 
 	// try to set current with allowNoPollers=true --> success
 	allowNoPollers = true
 	expectedErr = ""
-	s.setCurrentVersionAllowNoPollersOption(ctx, currentVars, worker_versioning.UnversionedVersionId, true, allowNoPollers, false, expectedErr)
+	s.setCurrentVersionAllowNoPollersOption(ctx, tv, worker_versioning.UnversionedVersionId, true, allowNoPollers, false, expectedErr)
 
 	// let a poller arrive with that version
-	s.pollFromDeployment(ctx, currentVars)
+	s.pollFromDeployment(ctx, tv)
 
 	// that poller's task queue should have the current versioning info
-	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), "", 0)
+	s.verifyTaskQueueVersioningInfo(ctx, tv.TaskQueue(), tv.DeploymentVersionString(), "", 0)
+}
+
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoPollers() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*45)
+	defer cancel()
+	tv := testvars.New(s).WithBuildIDNumber(1)
+
+	// try to set ramping with allowNoPollers=false --> error
+	allowNoPollers := false
+	expectedErr := fmt.Sprintf(workerdeployment.ErrWorkerDeploymentNotFound, tv.DeploymentVersion().GetDeploymentName())
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, false, false, 5, true, allowNoPollers, false, expectedErr, nil)
+
+	// try to set ramping with allowNoPollers=true --> success
+	allowNoPollers = true
+	expectedErr = ""
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, false, false, 5, true, allowNoPollers, false, expectedErr, &workflowservice.SetWorkerDeploymentRampingVersionResponse{})
+
+	// let a poller arrive with that version
+	s.pollFromDeployment(ctx, tv)
+
+	// that poller's task queue should have the current versioning info
+	s.verifyTaskQueueVersioningInfo(ctx, tv.TaskQueue(), tv.DeploymentVersionString(), "", 0)
 }
 
 func (s *WorkerDeploymentSuite) TestTwoPollers_EnsureCreateVersion() {
@@ -2858,7 +2879,7 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersion(
 	expectedError string,
 	expectedResp *workflowservice.SetWorkerDeploymentRampingVersionResponse,
 ) {
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, false, unset, percentage, ignoreMissingTaskQueues, expectedError, expectedResp)
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, false, unset, percentage, ignoreMissingTaskQueues, false, true, expectedError, expectedResp)
 }
 
 func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
@@ -2867,7 +2888,7 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 	unversioned bool,
 	unset bool,
 	percentage int,
-	ignoreMissingTaskQueues bool,
+	ignoreMissingTaskQueues, allowNoPollers, ensureSystemWorkflowsExist bool,
 	expectedError string,
 	expectedResp *workflowservice.SetWorkerDeploymentRampingVersionResponse,
 ) {
@@ -2879,10 +2900,12 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 		version = ""
 		percentage = 0
 	}
-	if !unversioned && !unset {
-		s.ensureCreateVersionInDeployment(tv)
-	} else {
-		s.ensureCreateDeployment(tv)
+	if !allowNoPollers && ensureSystemWorkflowsExist {
+		if !unversioned && !unset {
+			s.ensureCreateVersionInDeployment(tv)
+		} else {
+			s.ensureCreateDeployment(tv)
+		}
 	}
 	resp, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 		Namespace:               s.Namespace().String(),
@@ -2891,6 +2914,7 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 		Percentage:              float32(percentage),
 		Identity:                tv.ClientIdentity(),
 		IgnoreMissingTaskQueues: ignoreMissingTaskQueues,
+		AllowNoPollers:          allowNoPollers,
 	})
 	if expectedError != "" {
 		s.Error(err)
