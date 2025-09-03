@@ -266,7 +266,7 @@ func (ac *DLQV2Service) MergeMessages(c *cli.Context) error {
 			_, _ = fmt.Fprint(c.App.Writer, "DLQ is empty, nothing to merge.\n")
 			return nil
 		}
-		
+
 		_, _ = fmt.Fprintf(c.App.Writer, "Found last message ID: %d. Using this as the upper bound for merge operation.\n", lastMessageID)
 	}
 	ctx, cancel := newContext(c)
