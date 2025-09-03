@@ -819,8 +819,15 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 		return err
 	}
 
-	if updateErr := d.handleUpdateVersionFailures(outcome); updateErr != nil {
-		return updateErr
+	if failure := outcome.GetFailure(); failure != nil {
+		if failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
+			return nil
+		} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
+			return serviceerror.NewFailedPrecondition(failure.GetMessage()) // non-retryable error to stop multiple activity attempts
+		} else if failure.GetCause().GetApplicationFailureInfo().GetType() == errFailedPrecondition {
+			return serviceerror.NewFailedPrecondition(failure.GetCause().GetMessage())
+		}
+		return serviceerror.NewInternal(failure.Message)
 	}
 
 	success := outcome.GetSuccess()
