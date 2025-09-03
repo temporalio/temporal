@@ -88,7 +88,6 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes)
-		require.GreaterOrEqual(t, description.GetPendingWorkflowTask().Attempt, int32(2))
 		require.NotEmpty(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields)
 		require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems])
 
@@ -99,6 +98,9 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 		require.NotEmpty(t, searchVal)
 		require.Equal(t, "category=WorkflowTaskFailed", searchVal.([]string)[0])
 		require.Equal(t, "cause=WorkflowWorkerUnhandledFailure", searchVal.([]string)[1])
+
+		// Validate attempt number after verifying search attribute values
+		require.GreaterOrEqual(t, description.GetPendingWorkflowTask().Attempt, int32(2))
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// Check if the search attributes are queryable

@@ -81,6 +81,9 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) checkReportedProblemsSear
 			require.Len(t, searchValList, 2)
 			require.Equal(t, "category="+expectedCategory, searchValList[0])
 			require.Equal(t, "cause="+expectedCause, searchValList[1])
+
+			// Validate attempt number after verifying search attribute values
+			require.GreaterOrEqual(t, description.GetPendingWorkflowTask().Attempt, int32(2))
 		} else {
 			// Check that the search attribute is not present or is nil
 			if description.WorkflowExecutionInfo.SearchAttributes != nil &&
