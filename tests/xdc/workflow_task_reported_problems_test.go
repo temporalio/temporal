@@ -35,13 +35,14 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) SetupSuite() {
 	if s.dynamicConfigOverrides == nil {
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]any)
 	}
+	s.dynamicConfigOverrides[dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute.Key()] = 2
 	s.enableTransitionHistory = true
 	s.setupSuite()
 }
 
 func (s *WorkflowTaskReportedProblemsReplicationSuite) SetupTest() {
 	s.setupTest()
-	s.shouldFail.Store(false)
+	s.shouldFail.Store(true)
 }
 
 func (s *WorkflowTaskReportedProblemsReplicationSuite) TearDownSuite() {
@@ -97,10 +98,6 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) checkReportedProblemsSear
 func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedProblemsReplication() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	// Set dynamic config to 2
-	s.dynamicConfigOverrides[dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute.Key()] = 2
-	s.shouldFail.Store(true)
 
 	ns := s.createGlobalNamespace()
 	activeSDKClient, err := sdkclient.Dial(sdkclient.Options{
