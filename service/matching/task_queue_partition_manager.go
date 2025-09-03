@@ -134,6 +134,7 @@ func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager
 func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.versionedQueuesLock.Lock()
 	defer pm.versionedQueuesLock.Unlock()
+	pm.rateLimitManager.Stop()
 	for _, vq := range pm.versionedQueues {
 		vq.Stop(unloadCause)
 	}
