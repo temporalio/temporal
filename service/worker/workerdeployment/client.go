@@ -236,7 +236,10 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	if err != nil {
 		return err
 	}
+	return d.handleRegisterVersionFailures(outcome)
+}
 
+func (d *ClientImpl) handleRegisterVersionFailures(outcome *updatepb.Outcome) error {
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
 		// translate to client-side error type
 		return ErrMaxTaskQueuesInVersion{error: errors.New(failure.Message)}
@@ -247,7 +250,17 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	} else if failure != nil {
 		return ErrRegister{error: errors.New(failure.Message)}
 	}
+	return nil
+}
 
+func (d *ClientImpl) handleUpdateVersionFailures(outcome *updatepb.Outcome) error {
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
+		return serviceerror.NewNotFound(errVersionNotFound)
+	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
+		return serviceerror.NewFailedPrecondition(failure.Message)
+	} else if failure != nil {
+		return serviceerror.NewInternal(failure.Message)
+	}
 	return nil
 }
 
@@ -578,11 +591,6 @@ func (d *ClientImpl) SetCurrentVersion(
 			d.getSyncBatchSize(),
 		)
 		if err != nil {
-			// TODO(carlydf): handle errTooManyVersions and errTooManyDeployments
-			var notFound *serviceerror.NotFound
-			if errors.As(err, &notFound) {
-				return nil, serviceerror.NewFailedPreconditionf(ErrWorkerDeploymentNotFound, deploymentName)
-			}
 			return nil, err
 		}
 	} else {
@@ -614,12 +622,10 @@ func (d *ClientImpl) SetCurrentVersion(
 			res.ConflictToken = details[0].GetData()
 		}
 		return &res, nil
-	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
-		return nil, serviceerror.NewNotFound(errVersionNotFound)
-	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
-		return nil, serviceerror.NewFailedPrecondition(failure.Message)
-	} else if failure != nil {
-		return nil, serviceerror.NewInternal(failure.Message)
+	} else if updateErr := d.handleUpdateVersionFailures(outcome); updateErr != nil {
+		return nil, updateErr
+	} else if registerErr := d.handleRegisterVersionFailures(outcome); registerErr != nil {
+		return nil, registerErr
 	}
 
 	success := outcome.GetSuccess()
@@ -645,13 +651,14 @@ func (d *ClientImpl) SetRampingVersion(
 	deploymentName := req.GetDeploymentName()
 	ignoreMissingTaskQueues := req.GetIgnoreMissingTaskQueues()
 	conflictToken := req.GetConflictToken()
+	allowNoPollers := req.GetAllowNoPollers()
 
 	//revive:disable-next-line:defer
 	defer d.record("SetRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
 
 	var err error
+	var versionObj *deploymentspb.WorkerDeploymentVersion
 	if version != "" {
-		var versionObj *deploymentspb.WorkerDeploymentVersion
 		versionObj, err = worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 		if err != nil {
 			return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
@@ -681,16 +688,35 @@ func (d *ClientImpl) SetRampingVersion(
 
 	// Generating a new updateID for each request. No-ops are handled by the worker-deployment workflow.
 	updateID := uuid.New()
+	requestID := uuid.New()
 
-	outcome, err := d.update(
-		ctx,
-		namespaceEntry,
-		workflowID,
-		&updatepb.Request{
-			Input: &updatepb.Input{Name: SetRampingVersion, Args: updatePayload},
-			Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
-		},
-	)
+	var outcome *updatepb.Outcome
+	if allowNoPollers {
+		// we want to start the Worker Deployment workflow if it hasn't been started by a poller
+		outcome, err = d.updateWithStartWorkerDeployment(
+			ctx,
+			namespaceEntry,
+			deploymentName,
+			versionObj.GetBuildId(),
+			&updatepb.Request{
+				Input: &updatepb.Input{Name: SetRampingVersion, Args: updatePayload},
+				Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
+			},
+			identity,
+			requestID,
+			d.getSyncBatchSize(),
+		)
+	} else {
+		outcome, err = d.update(
+			ctx,
+			namespaceEntry,
+			workflowID,
+			&updatepb.Request{
+				Input: &updatepb.Input{Name: SetRampingVersion, Args: updatePayload},
+				Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
+			},
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -707,12 +733,10 @@ func (d *ClientImpl) SetRampingVersion(
 		}
 
 		return &res, nil
-	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
-		return nil, serviceerror.NewNotFound(errVersionNotFound)
-	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
-		return nil, serviceerror.NewFailedPrecondition(failure.Message)
-	} else if failure != nil {
-		return nil, serviceerror.NewInternal(failure.Message)
+	} else if updateErr := d.handleUpdateVersionFailures(outcome); updateErr != nil {
+		return nil, updateErr
+	} else if registerErr := d.handleRegisterVersionFailures(outcome); registerErr != nil {
+		return nil, registerErr
 	}
 
 	success := outcome.GetSuccess()

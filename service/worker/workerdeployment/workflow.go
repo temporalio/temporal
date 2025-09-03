@@ -414,7 +414,10 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s is already current", args.Version), errFailedPrecondition)
 	}
 
-	if _, ok := d.State.GetVersions()[args.Version]; !ok && args.Version != "" && args.Version != worker_versioning.UnversionedVersionId {
+	if _, ok := d.State.GetVersions()[args.Version]; !ok &&
+		args.Version != worker_versioning.UnversionedVersionId &&
+		args.Version != "" &&
+		!args.GetAllowNoPollers() {
 		d.logger.Info("version not found in deployment")
 		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s not found in deployment", args.Version), errVersionNotFound)
 	}
@@ -455,6 +458,27 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 	newRampingVersion := args.Version
 	routingUpdateTime := timestamppb.New(workflow.Now(ctx))
+
+	if _, ok := d.State.Versions[args.Version]; !ok &&
+		args.Version != worker_versioning.UnversionedVersionId &&
+		args.Version != "" &&
+		args.GetAllowNoPollers() {
+		d.logger.Info("version not found in deployment, but AllowNoPollers is true, so we will create the version")
+		if err := d.addVersionToWorkerDeployment(ctx, &deploymentspb.AddVersionUpdateArgs{Version: newRampingVersion, CreateTime: routingUpdateTime}); err != nil {
+			return nil, err // only possible error is errTooManyVersions
+		}
+		v, err := worker_versioning.WorkerDeploymentVersionFromStringV31(newRampingVersion)
+		if err != nil {
+			return nil, err // this would never happen, because version string formatting was already checked earlier
+		}
+		if err := d.startVersion(ctx, &deploymentspb.StartWorkerDeploymentVersionRequest{
+			DeploymentName: v.GetDeploymentName(),
+			BuildId:        v.GetBuildId(),
+			RequestId:      d.newUUID(ctx),
+		}); err != nil {
+			return nil, err
+		}
+	}
 
 	var rampingSinceTime *timestamppb.Timestamp
 	var rampingVersionUpdateTime *timestamppb.Timestamp
