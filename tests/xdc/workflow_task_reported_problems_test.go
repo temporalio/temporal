@@ -34,7 +34,7 @@ func TestWorkflowTaskReportedProblemsReplicationSuite(t *testing.T) {
 
 func (s *WorkflowTaskReportedProblemsReplicationSuite) SetupSuite() {
 	if s.dynamicConfigOverrides == nil {
-		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
+		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]any)
 	}
 	s.enableTransitionHistory = true
 	s.setupSuite()
@@ -88,6 +88,10 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) checkReportedProblemsSear
 func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedProblemsReplication() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	// Set dynamic config to 2
+	s.dynamicConfigOverrides[dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute.Key()] = 2
+	s.shouldFail.Store(true)
 
 	activityFunction := func() (string, error) {
 		return "done!", nil

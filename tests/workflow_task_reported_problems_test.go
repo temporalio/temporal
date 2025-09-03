@@ -14,6 +14,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -52,15 +53,6 @@ func (s *WFTFailureReportedProblemsTestSuite) SetupTest() {
 
 func (s *WFTFailureReportedProblemsTestSuite) makeWorkflowFunc(activityFunction ActivityFunctions) WorkflowFunction {
 	return func(ctx workflow.Context) error {
-		// var ret string
-		// err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		// 	ActivityID:             "activity-id",
-		// 	DisableEagerExecution:  true,
-		// 	StartToCloseTimeout:    s.startToCloseTimeout,
-		// 	ScheduleToCloseTimeout: s.scheduleToCloseTimeout,
-		// 	RetryPolicy:            s.activityRetryPolicy,
-		// }), activityFunction).Get(ctx, &ret)
-
 		if s.shouldFail.Load() {
 			panic("forced-panic-to-fail-wft")
 		}
@@ -72,6 +64,8 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Set dynamic config to 2
+	s.OverrideDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 2)
 	s.shouldFail.Store(true)
 
 	activityFunction := func() (string, error) {
