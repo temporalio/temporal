@@ -48,6 +48,7 @@ type nexusContext struct {
 	namespaceName                        string
 	taskQueue                            string
 	endpointName                         string
+	endpointID                           string
 	claims                               *authorization.Claims
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
 	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
@@ -55,6 +56,7 @@ type nexusContext struct {
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
 	responseHeaders                      map[string]string
 	responseHeadersMutex                 sync.Mutex
+	originalRequestHeaders               http.Header // Original HTTP request headers to be used for forwarded requests.
 }
 
 // Context for a specific Nexus operation, includes a resolved namespace, and a bound metrics handler and logger.
@@ -73,8 +75,8 @@ type operationContext struct {
 	telemetryInterceptor          *interceptor.TelemetryInterceptor
 	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	headersBlacklist              *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
-	metricTagConfig               *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
+	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	metricTagConfig               dynamicconfig.TypedPropertyFn[nexusoperations.NexusMetricTagConfig]
 	cleanupFunctions              []func(map[string]string, error)
 }
 
@@ -124,15 +126,20 @@ func (c *operationContext) augmentContext(ctx context.Context, header nexus.Head
 		func() string { return c.method },
 	)
 	if userAgent, ok := header[headerUserAgent]; ok {
-		parts := strings.Split(userAgent, clientNameVersionDelim)
-		if len(parts) == 2 {
-			mdIncoming, ok := metadata.FromIncomingContext(ctx)
-			if !ok {
-				mdIncoming = metadata.MD{}
+		// Use SplitN for efficiency but enforce exactly one delimiter to preserve the
+		// original (pre-SplitN) strictness where additional delimiters cause us to ignore
+		// the header instead of coalescing trailing data into the version string.
+		if strings.Count(userAgent, clientNameVersionDelim) == 1 { // exact single occurrence
+			parts := strings.SplitN(userAgent, clientNameVersionDelim, 2)
+			if len(parts) == 2 { // always true given Count==1, kept for defensive clarity
+				mdIncoming, ok := metadata.FromIncomingContext(ctx)
+				if !ok {
+					mdIncoming = metadata.MD{}
+				}
+				mdIncoming.Set(headers.ClientNameHeaderName, parts[0])
+				mdIncoming.Set(headers.ClientVersionHeaderName, parts[1])
+				ctx = metadata.NewIncomingContext(ctx, mdIncoming)
 			}
-			mdIncoming.Set(headers.ClientNameHeaderName, parts[0])
-			mdIncoming.Set(headers.ClientVersionHeaderName, parts[1])
-			ctx = metadata.NewIncomingContext(ctx, mdIncoming)
 		}
 	}
 	return headers.Propagate(ctx)
@@ -226,7 +233,7 @@ func (c *operationContext) interceptRequest(
 	if request.GetRequest().GetHeader() != nil {
 		// Making a copy to ensure the original map is not modified as it might be used somewhere else.
 		sanitizedHeaders := make(map[string]string, len(request.Request.Header))
-		headersBlacklist := c.headersBlacklist.Get()
+		headersBlacklist := c.headersBlacklist()
 		for name, value := range request.Request.Header {
 			if !headersBlacklist.MatchString(name) {
 				sanitizedHeaders[name] = value
@@ -259,10 +266,7 @@ func (c *operationContext) shouldForwardRequest(ctx context.Context, header nexu
 
 // enrichNexusOperationMetrics enhances metrics with additional Nexus operation context based on configuration.
 func (c *operationContext) enrichNexusOperationMetrics(service, operation string, requestHeader nexus.Header) {
-	conf := c.metricTagConfig.Get()
-	if conf == nil {
-		return
-	}
+	conf := c.metricTagConfig()
 
 	var tags []metrics.Tag
 
@@ -301,8 +305,9 @@ type nexusHandler struct {
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	forwardingClients             *cluster.FrontendHTTPClientCache
 	payloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	headersBlacklist              *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
-	metricTagConfig               *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
+	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	useForwardByEndpoint          dynamicconfig.BoolPropertyFn
+	metricTagConfig               dynamicconfig.TypedPropertyFn[nexusoperations.NexusMetricTagConfig]
 	httpTraceProvider             commonnexus.HTTPClientTraceProvider
 }
 
@@ -658,25 +663,27 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed")
 	}
 
-	wrappedHttpDo := func(req *http.Request) (*http.Response, error) {
-		response, err := httpClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-
-		if failureSource := response.Header.Get(commonnexus.FailureSourceHeaderName); failureSource != "" {
-			oc.nexusContext.setFailureSource(failureSource)
-		}
-
-		return response, nil
+	httpCaller := &forwardingHttpHeaderWrapper{
+		client:                 httpClient,
+		nc:                     oc.nexusContext,
+		originalRequestHeaders: oc.originalRequestHeaders,
 	}
 
-	baseURL, err := url.JoinPath(
-		httpClient.BaseURL(),
-		commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(commonnexus.NamespaceAndTaskQueue{
-			Namespace: oc.namespaceName,
-			TaskQueue: oc.taskQueue,
-		}))
+	var baseURL string
+	if h.useForwardByEndpoint() && oc.endpointID != "" {
+		// If the request was originally dispatched by endpoint, forward by endpoint as well.
+		baseURL, err = url.JoinPath(httpClient.BaseURL(),
+			commonnexus.RouteDispatchNexusTaskByEndpoint.Path(oc.endpointID))
+	} else {
+		// Fallback to dispatch by namespace and task queue since those have already been resolved by this point.
+		baseURL, err = url.JoinPath(
+			httpClient.BaseURL(),
+			commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(commonnexus.NamespaceAndTaskQueue{
+				Namespace: oc.namespaceName,
+				TaskQueue: oc.taskQueue,
+			}))
+	}
+
 	if err != nil {
 		oc.logger.Error("failed to forward Nexus request. error constructing ServiceBaseURL",
 			tag.URL(httpClient.BaseURL()),
@@ -688,7 +695,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 	}
 
 	return nexus.NewHTTPClient(nexus.HTTPClientOptions{
-		HTTPCaller: wrappedHttpDo,
+		HTTPCaller: httpCaller.Do,
 		BaseURL:    baseURL,
 		Service:    service,
 	})
@@ -732,4 +739,30 @@ func (nc *nexusContext) setFailureSource(source string) {
 	nc.responseHeadersMutex.Lock()
 	defer nc.responseHeadersMutex.Unlock()
 	nc.responseHeaders[commonnexus.FailureSourceHeaderName] = source
+}
+
+type forwardingHttpHeaderWrapper struct {
+	client                 *common.FrontendHTTPClient
+	nc                     *nexusContext
+	originalRequestHeaders http.Header
+}
+
+func (f *forwardingHttpHeaderWrapper) Do(req *http.Request) (*http.Response, error) {
+	// For forwarded requests, copy the original HTTP headers without sanitization.
+	for k, v := range f.originalRequestHeaders {
+		if req.Header.Get(k) == "" {
+			req.Header.Set(k, v[0])
+		}
+	}
+
+	response, err := f.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if failureSource := response.Header.Get(commonnexus.FailureSourceHeaderName); failureSource != "" {
+		f.nc.setFailureSource(failureSource)
+	}
+
+	return response, nil
 }

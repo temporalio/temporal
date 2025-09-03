@@ -202,10 +202,17 @@ func buildCLI() *cli.App {
 					)
 				}
 
+				// Authorization mappers: claim and audience
 				claimMapper, err := authorization.GetClaimMapperFromConfig(&cfg.Global.Authorization, logger)
 				if err != nil {
 					return cli.Exit(fmt.Sprintf("Unable to instantiate claim mapper: %v.", err), 1)
 				}
+
+				audienceMapper, err := authorization.GetAudienceMapperFromConfig(&cfg.Global.Authorization)
+				if err != nil {
+					return cli.Exit(fmt.Sprintf("Unable to instantiate audience mapper: %v.", err), 1)
+				}
+
 				s, err := temporal.NewServer(
 					temporal.ForServices(services),
 					temporal.WithConfig(cfg),
@@ -215,6 +222,9 @@ func buildCLI() *cli.App {
 					temporal.WithAuthorizer(authorizer),
 					temporal.WithClaimMapper(func(cfg *config.Config) authorization.ClaimMapper {
 						return claimMapper
+					}),
+					temporal.WithAudienceGetter(func(cfg *config.Config) authorization.JWTAudienceMapper {
+						return audienceMapper
 					}),
 				)
 				if err != nil {

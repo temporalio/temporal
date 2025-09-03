@@ -68,7 +68,7 @@ func allowedAddressConverter(val any) ([]AddressMatchRule, error) {
 		Pattern       string
 		AllowInsecure bool
 	}
-	intermediate, err := dynamicconfig.ConvertStructure([]entry{})(val)
+	intermediate, err := dynamicconfig.ConvertStructure[[]entry](nil)(val)
 	if err != nil {
 		return nil, err
 	}
@@ -95,12 +95,14 @@ func allowedAddressConverter(val any) ([]AddressMatchRule, error) {
 func addressPatternToRegexp(pattern string) string {
 	var result strings.Builder
 	result.WriteString("^")
-	for i, literal := range strings.Split(pattern, "*") {
-		if i > 0 {
+	first := true
+	for literal := range strings.SplitSeq(pattern, "*") {
+		if !first {
 			// Replace * with .*
 			result.WriteString(".*")
 		}
 		result.WriteString(regexp.QuoteMeta(literal))
+		first = false
 	}
 	result.WriteString("$")
 	return result.String()

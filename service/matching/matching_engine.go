@@ -34,6 +34,7 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -383,6 +384,8 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	create bool,
 	loadCause loadCause,
 ) (retPM taskQueuePartitionManager, retCreated bool, retErr error) {
+	var newPM *taskQueuePartitionManagerImpl
+
 	defer func() {
 		if retErr != nil || retPM == nil {
 			return
@@ -390,6 +393,17 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 
 		if retErr = retPM.WaitUntilInitialized(ctx); retErr != nil {
 			e.unloadTaskQueuePartition(retPM, unloadCauseInitError)
+			return
+		}
+
+		if retCreated {
+			// Whenever a root partition is loaded, we need to force all child partitions to load.
+			// If there is a backlog of tasks on any child partitions, force loading will ensure
+			// that they can forward their tasks the poller which caused the root partition to be
+			// loaded. These partitions could be managed by this matchingEngineImpl, but are most
+			// likely not. We skip checking and just make gRPC requests to force loading them all.
+			// Note that if retCreated is true, retPM must be newPM, so we can use newPM here.
+			newPM.ForceLoadAllChildPartitions()
 		}
 	}()
 
@@ -414,7 +428,6 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, nsName)
 	tqConfig.loadCause = loadCause
 	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(nsName, partition, tqConfig)
-	var newPM *taskQueuePartitionManagerImpl
 	onFatalErr := func(cause unloadCause) { newPM.unloadFromEngine(cause) }
 	onUserDataChanged := func() { newPM.userDataChanged() }
 	userDataManager := newUserDataManager(
@@ -453,15 +466,6 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	e.partitionsLock.Unlock()
 
 	newPM.Start()
-	if newPM.Partition().IsRoot() {
-		// Whenever a root partition is loaded we need to force all other partitions to load.
-		// If there is a backlog of tasks on any child partitions force loading will ensure that they
-		// can forward their tasks the poller which caused the root partition to be loaded.
-		// These partitions could be managed by this matchingEngineImpl, but are most likely not.
-		// We skip checking and just make gRPC requests to force loading them all.
-
-		newPM.ForceLoadAllNonRootPartitions()
-	}
 	return newPM, true, nil
 }
 
@@ -2413,7 +2417,7 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 		request.LastKnownTableVersion = 0
 
 		var cancel context.CancelFunc
-		ctx, cancel = newChildContext(ctx, e.config.ListNexusEndpointsLongPollTimeout(), returnEmptyTaskTimeBudget)
+		ctx, cancel = contextutil.WithDeadlineBuffer(ctx, e.config.ListNexusEndpointsLongPollTimeout(), returnEmptyTaskTimeBudget)
 		defer cancel()
 	}
 
@@ -2545,7 +2549,7 @@ func (e *matchingEngineImpl) pollTask(
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
 	// returned to the handler before a context timeout error is generated.
-	ctx, cancel := newChildContext(ctx, pm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, pm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
 	defer cancel()
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
