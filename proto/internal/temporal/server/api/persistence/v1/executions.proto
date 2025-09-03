@@ -276,6 +276,10 @@ message WorkflowExecutionInfo {
 
     // Pause info contains the details of the request to pause the workflow.
     WorkflowPauseInfo pause_info = 106;
+
+    // Last workflow task failure category and cause are used to track the last workflow task failure category and cause.
+    string last_workflow_task_failure_category = 107;
+    string last_workflow_task_failure_cause = 108;
 }
 
 message ExecutionStats {

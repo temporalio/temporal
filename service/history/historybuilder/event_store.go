@@ -591,23 +591,3 @@ func deleteTimerFiredEvent(
 	timerEvent := events[timerFiredIdx]
 	return append(events[:timerFiredIdx], events[timerFiredIdx+1:]...), timerEvent
 }
-
-// GetMemLatestBatch returns the current batch of events being built in memory
-func (b *EventStore) GetMemLatestBatch() []*historypb.HistoryEvent {
-	return b.memLatestBatch
-}
-
-// GetMemEventsBatches returns all completed event batches in memory
-func (b *EventStore) GetMemEventsBatches() [][]*historypb.HistoryEvent {
-	return b.memEventsBatches
-}
-
-// GetMemBufferBatch returns the buffered events in memory
-func (b *EventStore) GetMemBufferBatch() []*historypb.HistoryEvent {
-	return b.memBufferBatch
-}
-
-// GetDBBufferBatch returns the buffered events from the database
-func (b *EventStore) GetDBBufferBatch() []*historypb.HistoryEvent {
-	return b.dbBufferBatch
-}

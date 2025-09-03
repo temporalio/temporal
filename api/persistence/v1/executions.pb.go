@@ -332,9 +332,12 @@ type WorkflowExecutionInfo struct {
 	// Run ID of the execution that supersedes this one (via terminate or continue-as-new).
 	SuccessorRunId string `protobuf:"bytes,105,opt,name=successor_run_id,json=successorRunId,proto3" json:"successor_run_id,omitempty"`
 	// Pause info contains the details of the request to pause the workflow.
-	PauseInfo     *WorkflowPauseInfo `protobuf:"bytes,106,opt,name=pause_info,json=pauseInfo,proto3" json:"pause_info,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	PauseInfo *WorkflowPauseInfo `protobuf:"bytes,106,opt,name=pause_info,json=pauseInfo,proto3" json:"pause_info,omitempty"`
+	// Last workflow task failure category and cause are used to track the last workflow task failure category and cause.
+	LastWorkflowTaskFailureCategory string `protobuf:"bytes,107,opt,name=last_workflow_task_failure_category,json=lastWorkflowTaskFailureCategory,proto3" json:"last_workflow_task_failure_category,omitempty"`
+	LastWorkflowTaskFailureCause    string `protobuf:"bytes,108,opt,name=last_workflow_task_failure_cause,json=lastWorkflowTaskFailureCause,proto3" json:"last_workflow_task_failure_cause,omitempty"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *WorkflowExecutionInfo) Reset() {
@@ -1037,6 +1040,20 @@ func (x *WorkflowExecutionInfo) GetPauseInfo() *WorkflowPauseInfo {
 		return x.PauseInfo
 	}
 	return nil
+}
+
+func (x *WorkflowExecutionInfo) GetLastWorkflowTaskFailureCategory() string {
+	if x != nil {
+		return x.LastWorkflowTaskFailureCategory
+	}
+	return ""
+}
+
+func (x *WorkflowExecutionInfo) GetLastWorkflowTaskFailureCause() string {
+	if x != nil {
+		return x.LastWorkflowTaskFailureCause
+	}
+	return ""
 }
 
 type ExecutionStats struct {
@@ -4465,7 +4482,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12D\n" +
 	"\x05value\x18\x02 \x01(\v2..temporal.server.api.persistence.v1.QueueStateR\x05value:\x028\x01J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xc7;\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xdd<\n" +
 	"\x15WorkflowExecutionInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -4569,7 +4586,9 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\bpriority\x18h \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12(\n" +
 	"\x10successor_run_id\x18i \x01(\tR\x0esuccessorRunId\x12T\n" +
 	"\n" +
-	"pause_info\x18j \x01(\v25.temporal.server.api.persistence.v1.WorkflowPauseInfoR\tpauseInfo\x1ad\n" +
+	"pause_info\x18j \x01(\v25.temporal.server.api.persistence.v1.WorkflowPauseInfoR\tpauseInfo\x12L\n" +
+	"#last_workflow_task_failure_category\x18k \x01(\tR\x1flastWorkflowTaskFailureCategory\x12F\n" +
+	" last_workflow_task_failure_cause\x18l \x01(\tR\x1clastWorkflowTaskFailureCause\x1ad\n" +
 	"\x15SearchAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
 	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\x1aX\n" +

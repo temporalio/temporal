@@ -297,12 +297,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if err != nil {
 			return nil, err
 		}
-
-		if handler.config.EnableReportedProblemsSearchAttribute(nsName) {
-			if err := ms.RemoveReportedProblemsSearchAttribute(); err != nil {
-				return nil, err
-			}
-		}
 	}
 	// NOTE: completedEvent might be nil if WT was speculative and request has only `update.Rejection` messages.
 	// See workflowTaskStateMachine.skipWorkflowTaskCompletedEvent for more details.

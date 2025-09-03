@@ -4,7 +4,6 @@ package workflow
 
 import (
 	"cmp"
-	"fmt"
 	"math"
 	"time"
 
@@ -747,6 +746,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		metrics.FirstAttemptTag(workflowTask.Attempt),
 	)
 
+	numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())
+	if numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0 {
+		if err := m.ms.RemoveReportedProblemsSearchAttribute(); err != nil {
+			return nil, err
+		}
+	}
+
 	return event, nil
 }
 
@@ -872,7 +878,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 			m.ms.LastWorkflowTaskFailureCategory = "WorkflowTaskTimedOut"
 		}
 		if m.ms.LastWorkflowTaskFailureCause == "" {
-			m.ms.LastWorkflowTaskFailureCause = enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()
+			m.ms.LastWorkflowTaskFailureCause = "WorkflowTaskStartToCloseTimeout"
 		}
 	}
 
@@ -915,16 +921,10 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
 
-	if failWorkflowTaskInfo.Attempt == 2 {
-		fmt.Println("failWorkflowTask: LastWorkflowTaskFailureCategory", m.ms.LastWorkflowTaskFailureCategory)
-		fmt.Println("failWorkflowTask: LastWorkflowTaskFailureCause", m.ms.LastWorkflowTaskFailureCause)
-
-		err := m.ms.UpdateReportedProblemsSearchAttribute(
-			m.ms.LastWorkflowTaskFailureCategory,
-			m.ms.LastWorkflowTaskFailureCause,
-		)
-		if err != nil {
-			return fmt.Errorf("failWorkflowTask: updateReportedProblemsSearchAttribute error: %v", err)
+	consecutiveFailuresRequired := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())
+	if consecutiveFailuresRequired > 0 && failWorkflowTaskInfo.Attempt == int32(consecutiveFailuresRequired) {
+		if err := m.ms.UpdateReportedProblemsSearchAttribute(); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -5876,13 +5876,10 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
-func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute(
-	reportedProblemCategory, reportedCause string,
-) error {
-	fmt.Println("updateReportedProblemsSearchAttribute:", reportedProblemCategory, reportedCause)
+func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 	reportedProblems := []string{
-		fmt.Sprintf("category=%s", reportedProblemCategory),
-		fmt.Sprintf("cause=%s", reportedCause),
+		fmt.Sprintf("category=%s", ms.LastWorkflowTaskFailureCategory),
+		fmt.Sprintf("cause=%s", ms.LastWorkflowTaskFailureCause),
 	}
 
 	reportedProblemsPayload, err := searchattribute.EncodeValue(reportedProblems, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
@@ -5939,19 +5936,19 @@ func areKeywordListsEqual(a, b *commonpb.Payload) bool {
 		return false
 	}
 
-	counts := make(map[string]int, len(keywordListA))
+	counts := make(map[string]struct{}, len(keywordListA))
 	for _, value := range keywordListA {
-		counts[value]++
+		counts[value] = struct{}{}
 	}
 	for _, value := range keywordListB {
-		if counts[value] == 0 {
-			return false
+		if _, ok := counts[value]; !ok {
+			return true
 		}
-		counts[value]--
+		delete(counts, value)
 	}
-	for _, remaining := range counts {
-		if remaining != 0 {
-			return false
+	for remaining := range counts {
+		if remaining != "" {
+			return true
 		}
 	}
 	return true

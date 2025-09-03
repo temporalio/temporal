@@ -276,10 +276,10 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 		`How many extra goroutines can be created per root.`,
 	)
 
-	EnableReportedProblemsSearchAttribute = NewNamespaceBoolSetting(
-		"system.enableReportedProblemsSearchAttribute",
-		true,
-		`FrontendEnableReportedProblemsSearchAttribute enables the TemporalReportedProblems search attribute in the frontend.`,
+	NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute = NewNamespaceIntSetting(
+		"system.numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute",
+		0,
+		`NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute is the number of consecutive workflow task problems to trigger the TemporalReportedProblems search attribute.`,
 	)
 
 	// keys for size limit

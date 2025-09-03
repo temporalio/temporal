@@ -362,8 +362,5 @@ type (
 
 		HasRequestID(requestID string) bool
 		SetSuccessorRunID(runID string)
-
-		UpdateReportedProblemsSearchAttribute(reportedProblemCategory, reportedCause string) error
-		RemoveReportedProblemsSearchAttribute() error
 	}
 )

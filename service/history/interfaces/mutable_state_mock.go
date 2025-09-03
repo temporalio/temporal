@@ -3412,20 +3412,6 @@ func (mr *MockMutableStateMockRecorder) UpdateDuplicatedResource(resourceDedupKe
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDuplicatedResource", reflect.TypeOf((*MockMutableState)(nil).UpdateDuplicatedResource), resourceDedupKey)
 }
 
-// UpdateReportedProblemsSearchAttribute mocks base method.
-func (m *MockMutableState) UpdateReportedProblemsSearchAttribute(reportedProblemCategory, reportedCause string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateReportedProblemsSearchAttribute", reportedProblemCategory, reportedCause)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateReportedProblemsSearchAttribute indicates an expected call of UpdateReportedProblemsSearchAttribute.
-func (mr *MockMutableStateMockRecorder) UpdateReportedProblemsSearchAttribute(reportedProblemCategory, reportedCause any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReportedProblemsSearchAttribute", reflect.TypeOf((*MockMutableState)(nil).UpdateReportedProblemsSearchAttribute), reportedProblemCategory, reportedCause)
-}
-
 // UpdateResetRunID mocks base method.
 func (m *MockMutableState) UpdateResetRunID(runID string) {
 	m.ctrl.T.Helper()
