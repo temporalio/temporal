@@ -406,11 +406,6 @@ func (tm *TaskMatcher) ReprocessAllTasks() {
 	// unused in old matcher
 }
 
-// Rate returns the current rate at which tasks are dispatched
-func (tm *TaskMatcher) Rate() float64 {
-	return tm.rateLimiter.Rate()
-}
-
 func (tm *TaskMatcher) poll(
 	ctx context.Context, pollMetadata *pollMetadata, queryOnly bool,
 ) (task *internalTask, forwardedPoll bool, err error) {

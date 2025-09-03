@@ -115,6 +115,9 @@ type Config struct {
 	// EnableTokenNamespaceEnforcement enables enforcement that namespace in completion token matches namespace of the request
 	EnableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
 
+	// ExposeAuthorizerErrors controls whether errors returned by the Authorizer will be wrapped with a PermissionDenied error.
+	ExposeAuthorizerErrors dynamicconfig.BoolPropertyFn
+
 	// gRPC keep alive options
 	// If a client pings too frequently, terminate the connection.
 	KeepAliveMinTime dynamicconfig.DurationPropertyFn
@@ -285,6 +288,7 @@ func NewConfig(
 		DefaultWorkflowTaskTimeout:               dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
 		EnableServerVersionCheck:                 dynamicconfig.EnableServerVersionCheck.Get(dc),
 		EnableTokenNamespaceEnforcement:          dynamicconfig.EnableTokenNamespaceEnforcement.Get(dc),
+		ExposeAuthorizerErrors:                   dynamicconfig.ExposeAuthorizerErrors.Get(dc),
 		KeepAliveMinTime:                         dynamicconfig.KeepAliveMinTime.Get(dc),
 		KeepAlivePermitWithoutStream:             dynamicconfig.KeepAlivePermitWithoutStream.Get(dc),
 		KeepAliveMaxConnectionIdle:               dynamicconfig.KeepAliveMaxConnectionIdle.Get(dc),
