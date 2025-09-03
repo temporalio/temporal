@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -73,6 +74,7 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 		nil,
 		"",
 		"",
+		dynamicconfig.GetBoolPropertyFn(false),
 	)
 	s.handler = func(ctx context.Context, req interface{}) (interface{}, error) { return true, nil }
 }
@@ -155,6 +157,7 @@ func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
 		nil,
 		"",
 		"",
+		dynamicconfig.GetBoolPropertyFn(false),
 	)
 	_, err := interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 	s.NoError(err)
@@ -170,6 +173,7 @@ func (s *authorizerInterceptorSuite) TestAlternateHeaders() {
 		nil,
 		"custom-header",
 		"custom-extra-header",
+		dynamicconfig.GetBoolPropertyFn(false),
 	)
 
 	cases := []struct {
