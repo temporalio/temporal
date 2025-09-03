@@ -5889,65 +5889,12 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 	}
 
 	// This is not guaranteed to be accurate because of ordering non-determinism. Needs to be fixed.
-	if areKeywordListsEqual(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], reportedProblemsPayload) {
+	if searchattribute.AreKeywordListPayloadsEqual(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], reportedProblemsPayload) {
 		return nil
 	}
 
 	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: reportedProblemsPayload})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
-}
-
-func areKeywordListsEqual(a, b *commonpb.Payload) bool {
-	if a == nil && b == nil {
-		return true
-	}
-	// If exactly one is nil, they're not equal
-	if (a == nil) != (b == nil) {
-		return false
-	}
-
-	// Decode both to keyword lists
-	decodedA, err := searchattribute.DecodeValue(a, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
-	if err != nil {
-		return false
-	}
-
-	decodedB, err := searchattribute.DecodeValue(b, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
-	if err != nil {
-		return false
-	}
-
-	keywordListA, ok := decodedA.([]string)
-	if !ok {
-		return false
-	}
-
-	keywordListB, ok := decodedB.([]string)
-	if !ok {
-		return false
-	}
-
-	// Compare as multisets (element counts), order does not matter but counts must match
-	if len(keywordListA) != len(keywordListB) {
-		return false
-	}
-
-	counts := make(map[string]struct{}, len(keywordListA))
-	for _, value := range keywordListA {
-		counts[value] = struct{}{}
-	}
-	for _, value := range keywordListB {
-		if _, ok := counts[value]; !ok {
-			return true
-		}
-		delete(counts, value)
-	}
-	for remaining := range counts {
-		if remaining != "" {
-			return true
-		}
-	}
-	return true
 }
 
 func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
