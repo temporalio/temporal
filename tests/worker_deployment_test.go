@@ -1157,7 +1157,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 			Name:       tv.DeploymentSeries(),
 			CreateTime: versionCreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
-				RampingVersion:                      "",
+				RampingVersion:                      worker_versioning.UnversionedVersionId, //nolint:staticcheck // SA1019: worker versioning v0.31
 				RampingVersionPercentage:            0,
 				RampingVersionChangedTime:           unsetRampingUpdateTime,
 				RampingVersionPercentageChangedTime: unsetRampingUpdateTime,
