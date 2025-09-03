@@ -46,11 +46,11 @@ func (q *queueV2) EnqueueMessage(
 	request *persistence.InternalEnqueueMessageRequest,
 ) (*persistence.InternalEnqueueMessageResponse, error) {
 
-	_, err := q.getQueueMetadata(ctx, q.Db, request.QueueType, request.QueueName)
+	_, err := q.getQueueMetadata(ctx, q.DB, request.QueueType, request.QueueName)
 	if err != nil {
 		return nil, err
 	}
-	tx, err := q.Db.BeginTx(ctx)
+	tx, err := q.DB.BeginTx(ctx)
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef(
 			"EnqueueMessage failed for queue with type: %v and name: %v. BeginTx operation failed. Error: %v",
@@ -107,7 +107,7 @@ func (q *queueV2) ReadMessages(
 	if request.PageSize <= 0 {
 		return nil, persistence.ErrNonPositiveReadQueueMessagesPageSize
 	}
-	qm, err := q.getQueueMetadata(ctx, q.Db, request.QueueType, request.QueueName)
+	qm, err := q.getQueueMetadata(ctx, q.DB, request.QueueType, request.QueueName)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (q *queueV2) ReadMessages(
 	if err != nil {
 		return nil, err
 	}
-	rows, err := q.Db.RangeSelectFromQueueV2Messages(ctx, sqlplugin.QueueV2MessagesFilter{
+	rows, err := q.DB.RangeSelectFromQueueV2Messages(ctx, sqlplugin.QueueV2MessagesFilter{
 		QueueType:    request.QueueType,
 		QueueName:    request.QueueName,
 		Partition:    defaultPartition,
@@ -194,8 +194,8 @@ func (q *queueV2) CreateQueue(
 		MetadataPayload:  bytes,
 		MetadataEncoding: enumspb.ENCODING_TYPE_PROTO3.String(),
 	}
-	_, err := q.Db.InsertIntoQueueV2Metadata(ctx, &row)
-	if q.Db.IsDupEntryError(err) {
+	_, err := q.DB.InsertIntoQueueV2Metadata(ctx, &row)
+	if q.DB.IsDupEntryError(err) {
 		return nil, fmt.Errorf(
 			"%w: queue type %v and name %v",
 			persistence.ErrQueueAlreadyExists,
@@ -406,7 +406,7 @@ func (q *queueV2) ListQueues(
 	if offset < 0 {
 		return nil, persistence.ErrNegativeListQueuesOffset
 	}
-	rows, err := q.Db.SelectNameFromQueueV2Metadata(ctx, sqlplugin.QueueV2MetadataTypeFilter{
+	rows, err := q.DB.SelectNameFromQueueV2Metadata(ctx, sqlplugin.QueueV2MetadataTypeFilter{
 		QueueType:  request.QueueType,
 		PageSize:   request.PageSize,
 		PageOffset: offset,
@@ -445,7 +445,7 @@ func (q *queueV2) getMessageCount(
 	ctx context.Context,
 	row *sqlplugin.QueueV2MetadataRow,
 ) (int64, error) {
-	nextMessageID, err := q.getNextMessageID(ctx, row.QueueType, row.QueueName, q.Db)
+	nextMessageID, err := q.getNextMessageID(ctx, row.QueueType, row.QueueName, q.DB)
 	if err != nil {
 		return 0, serviceerror.NewUnavailablef(
 			"getNextMessageID operation failed for queue with type %v and name %v. Error: %v",
