@@ -251,19 +251,22 @@ func TestDLQCommand_V2(t *testing.T) {
 					{
 						Queues: []*adminservice.ListQueuesResponse_QueueInfo{
 							{
-								QueueName:    "queueOne",
-								MessageCount: 13,
+								QueueName:     "queueOne",
+								MessageCount:  13,
+								LastMessageId: 12, // MessageCount=13 means last message ID should be 12
 							}, {
-								QueueName:    "queueTwo",
-								MessageCount: 42,
+								QueueName:     "queueTwo",
+								MessageCount:  42,
+								LastMessageId: 41, // MessageCount=42 means last message ID should be 41
 							},
 						},
 						NextPageToken: []byte{0x41, 0x41, 0x41},
 					}, {
 						Queues: []*adminservice.ListQueuesResponse_QueueInfo{
 							{
-								QueueName:    "queueThree",
-								MessageCount: 0,
+								QueueName:     "queueThree",
+								MessageCount:  0,
+								LastMessageId: -1, // Empty queue
 							},
 						},
 						NextPageToken: nil,

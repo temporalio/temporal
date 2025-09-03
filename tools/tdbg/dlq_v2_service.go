@@ -253,7 +253,6 @@ func (ac *DLQV2Service) MergeMessages(c *cli.Context) error {
 			)
 		}
 	} else {
-		// For merge command, automatically find the last message ID
 		_, _ = fmt.Fprintf(c.App.Writer, "Warning: No last message ID provided. Using ListQueues to find the last message ID.\n")
 
 		var err error
@@ -331,7 +330,6 @@ func (ac *DLQV2Service) findLastMessageIDFromListQueues(c *cli.Context) (int64, 
 	dlqKey := ac.getDLQKey()
 	queueName := persistence.GetHistoryTaskQueueName(int(dlqKey.TaskCategory), dlqKey.SourceCluster, dlqKey.TargetCluster)
 
-	// We need to paginate through the queues to find our specific queue
 	var nextPageToken []byte
 	for {
 		resp, err := adminClient.ListQueues(ctx, &adminservice.ListQueuesRequest{
@@ -343,14 +341,12 @@ func (ac *DLQV2Service) findLastMessageIDFromListQueues(c *cli.Context) (int64, 
 			return 0, false, fmt.Errorf("call to ListQueues from findLastMessageIDFromListQueues failed: %w", err)
 		}
 
-		// Look for our specific queue
 		for _, queueInfo := range resp.Queues {
 			if queueInfo.QueueName == queueName {
 				return queueInfo.LastMessageId, queueInfo.MessageCount > 0, nil
 			}
 		}
 
-		// If there are no more pages, the queue doesn't exist (empty)
 		if len(resp.NextPageToken) == 0 {
 			break
 		}

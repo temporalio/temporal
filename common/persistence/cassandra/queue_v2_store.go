@@ -439,7 +439,7 @@ func (s *queueV2Store) getMessageCountAndLastID(ctx context.Context, queueType p
 		return 0, 0, err
 	}
 	if !ok {
-		return 0, -1, nil // No messages, return -1 for empty queue
+		return 0, -1, nil // No messages
 	}
 	messageCount := maxMessageID - partition.MinMessageId + 1
 	return messageCount, maxMessageID, nil
