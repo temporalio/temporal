@@ -113,6 +113,12 @@ type Client interface {
 		identity string,
 	) (*deploymentpb.VersionMetadata, error)
 
+	SetManager(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		request *workflowservice.SetWorkerDeploymentManagerRequest,
+	) (*workflowservice.SetWorkerDeploymentManagerResponse, error)
+
 	// Used internally by the Worker Deployment workflow in its StartWorkerDeployment Activity
 	StartWorkerDeployment(
 		ctx context.Context,
@@ -194,6 +200,22 @@ type ClientImpl struct {
 	maxTaskQueuesInDeploymentVersion dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxDeployments                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	testHooks                        testhooks.TestHooks
+}
+
+func (d *ClientImpl) SetManager(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	request *workflowservice.SetWorkerDeploymentManagerRequest,
+) (_ *workflowservice.SetWorkerDeploymentManagerResponse, retErr error) {
+	var newManagerID string
+	if request.GetSelf() {
+		newManagerID = request.GetIdentity()
+	} else {
+		newManagerID = request.GetManagerIdentity()
+	}
+	//revive:disable-next-line:defer
+	defer d.record("SetManager", &retErr, newManagerID, request.GetIdentity())()
+	return nil, nil
 }
 
 var _ Client = (*ClientImpl)(nil)
