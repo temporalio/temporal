@@ -253,7 +253,7 @@ func (ac *DLQV2Service) MergeMessages(c *cli.Context) error {
 			)
 		}
 	} else {
-		_, _ = fmt.Fprintf(c.App.Writer, "Warning: No last message ID provided. Using ListQueues to find the last message ID.\n")
+		_, _ = fmt.Fprint(c.App.Writer, "Warning: No last message ID provided. Using ListQueues to find the last message ID.\n")
 
 		var err error
 		var ok bool
@@ -263,12 +263,11 @@ func (ac *DLQV2Service) MergeMessages(c *cli.Context) error {
 		}
 
 		if !ok {
-			_, _ = fmt.Fprintf(c.App.Writer, "DLQ is empty, nothing to merge.\n")
+			_, _ = fmt.Fprint(c.App.Writer, "DLQ is empty, nothing to merge.\n")
 			return nil
 		}
-
+		
 		_, _ = fmt.Fprintf(c.App.Writer, "Found last message ID: %d. Using this as the upper bound for merge operation.\n", lastMessageID)
-		lastMessageID = lastMessageID
 	}
 	ctx, cancel := newContext(c)
 	defer cancel()
@@ -326,7 +325,7 @@ func (ac *DLQV2Service) findLastMessageIDFromListQueues(c *cli.Context) (int64, 
 
 	adminClient := ac.clientFactory.AdminClient(c)
 
-	// Use ListQueues to find our specific DLQ and get its LastMessageId
+	// Use ListQueues to find our specific DLQ and get its LastMessageID
 	dlqKey := ac.getDLQKey()
 	queueName := persistence.GetHistoryTaskQueueName(int(dlqKey.TaskCategory), dlqKey.SourceCluster, dlqKey.TargetCluster)
 

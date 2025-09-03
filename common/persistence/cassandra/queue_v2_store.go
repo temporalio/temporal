@@ -496,7 +496,7 @@ func (s *queueV2Store) ListQueues(
 		queues = append(queues, persistence.QueueInfo{
 			QueueName:     queueName,
 			MessageCount:  messageCount,
-			LastMessageId: lastMessageID,
+			LastMessageID: lastMessageID,
 		})
 	}
 	if err := iter.Close(); err != nil {

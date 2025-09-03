@@ -885,7 +885,7 @@ type (
 	QueueInfo struct {
 		QueueName     string
 		MessageCount  int64
-		LastMessageId int64
+		LastMessageID int64
 	}
 
 	InternalListQueuesResponse struct {

@@ -421,7 +421,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 		require.Equal(t, 1, len(response.Queues))
 		require.Equal(t, queueName, response.Queues[0].QueueName)
 		require.Equal(t, int64(0), response.Queues[0].MessageCount)
-		require.Equal(t, int64(-1), response.Queues[0].LastMessageId)
+		require.Equal(t, int64(-1), response.Queues[0].LastMessageID)
 
 		// List multiple queues.
 		queueName = "test-queue-" + t.Name() + "second"
@@ -440,7 +440,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 		require.Equal(t, 2, len(response.Queues))
 		require.Contains(t, []string{response.Queues[0].QueueName, response.Queues[1].QueueName}, queueName)
 		require.Equal(t, int64(0), response.Queues[0].MessageCount)
-		require.Equal(t, int64(-1), response.Queues[0].LastMessageId)
+		require.Equal(t, int64(-1), response.Queues[0].LastMessageID)
 		require.Equal(t, int64(0), response.Queues[1].MessageCount)
 
 		// List multiple queues in pages.
@@ -464,7 +464,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 		require.Equal(t, 1, len(response.Queues))
 		listedQueueNames = append(listedQueueNames, response.Queues[0].QueueName)
 		require.Equal(t, int64(0), response.Queues[0].MessageCount)
-		require.Equal(t, int64(-1), response.Queues[0].LastMessageId)
+		require.Equal(t, int64(-1), response.Queues[0].LastMessageID)
 		response, err = queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
 			QueueType:     queueType,
 			PageSize:      1,
@@ -474,7 +474,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 		require.Equal(t, 1, len(response.Queues))
 		listedQueueNames = append(listedQueueNames, response.Queues[0].QueueName)
 		require.Equal(t, int64(0), response.Queues[0].MessageCount)
-		require.Equal(t, int64(-1), response.Queues[0].LastMessageId)
+		require.Equal(t, int64(-1), response.Queues[0].LastMessageID)
 		response, err = queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
 			QueueType:     queueType,
 			PageSize:      3,
@@ -485,7 +485,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 		for _, queue := range response.Queues {
 			listedQueueNames = append(listedQueueNames, queue.QueueName)
 			require.Equal(t, int64(0), queue.MessageCount)
-			require.Equal(t, int64(-1), queue.LastMessageId)
+			require.Equal(t, int64(-1), queue.LastMessageID)
 		}
 		response, err = queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
 			QueueType:     queueType,
@@ -535,7 +535,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			queueNames = append(queueNames, queue.QueueName)
 			if queue.QueueName == queueName {
 				assert.Equal(t, int64(1), queue.MessageCount)
-				assert.Equal(t, int64(0), queue.LastMessageId)
+				assert.Equal(t, int64(0), queue.LastMessageID)
 			}
 		}
 		require.Contains(t, queueNames, queueName)
@@ -553,7 +553,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			queueNames = append(queueNames, queue.QueueName)
 			if queue.QueueName == queueName {
 				assert.Equal(t, int64(2), queue.MessageCount)
-				assert.Equal(t, int64(1), queue.LastMessageId)
+				assert.Equal(t, int64(1), queue.LastMessageID)
 			}
 		}
 		require.Contains(t, queueNames, queueName)
@@ -577,7 +577,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			queueNames = append(queueNames, queue.QueueName)
 			if queue.QueueName == queueName {
 				assert.Equal(t, int64(1), queue.MessageCount)
-				assert.Equal(t, int64(1), queue.LastMessageId)
+				assert.Equal(t, int64(1), queue.LastMessageID)
 			}
 		}
 		require.Contains(t, queueNames, queueName)
@@ -601,7 +601,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			queueNames = append(queueNames, queue.QueueName)
 			if queue.QueueName == queueName {
 				assert.Equal(t, int64(0), queue.MessageCount)
-				assert.Equal(t, int64(1), queue.LastMessageId)
+				assert.Equal(t, int64(1), queue.LastMessageID)
 			}
 		}
 		require.Contains(t, queueNames, queueName)

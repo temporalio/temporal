@@ -296,7 +296,7 @@ func TestDLQCommand_V2(t *testing.T) {
 				p.command = "merge"
 				p.lastMessageID = "" // No last message ID provided
 				p.adminClient.err = nil
-				// Set up mock ListQueues response with our target DLQ containing LastMessageId = 150
+				// Set up mock ListQueues response with our target DLQ containing LastMessageID = 150
 				queueName := persistence.GetHistoryTaskQueueName(tasks.CategoryTransfer.ID(), "test-source-cluster", "test-target-cluster")
 				p.adminClient.listQueueResponses = []*adminservice.ListQueuesResponse{
 					{
@@ -332,7 +332,7 @@ func TestDLQCommand_V2(t *testing.T) {
 				p.command = "merge"
 				p.lastMessageID = "" // No last message ID provided
 				p.adminClient.err = nil
-				// Set up mock ListQueues response with empty queue (LastMessageId = -1)
+				// Set up mock ListQueues response with empty queue (LastMessageID = -1)
 				queueName := persistence.GetHistoryTaskQueueName(tasks.CategoryTransfer.ID(), "test-source-cluster", "test-target-cluster")
 				p.adminClient.listQueueResponses = []*adminservice.ListQueuesResponse{
 					{
@@ -401,7 +401,7 @@ func (f *fakeAdminClient) ListQueues(_ context.Context, req *adminservice.ListQu
 func (f *fakeAdminClient) DescribeCluster(
 	context.Context,
 	*adminservice.DescribeClusterRequest,
-	...grpc.CallOption,
+...grpc.CallOption,
 ) (*adminservice.DescribeClusterResponse, error) {
 	if f.err != nil {
 		return nil, f.err
@@ -413,7 +413,7 @@ func (f *fakeAdminClient) DescribeCluster(
 func (f *fakeAdminClient) GetDLQTasks(
 	context.Context,
 	*adminservice.GetDLQTasksRequest,
-	...grpc.CallOption,
+...grpc.CallOption,
 ) (*adminservice.GetDLQTasksResponse, error) {
 	if f.err != nil {
 		return nil, f.err
@@ -435,7 +435,7 @@ func (f *fakeAdminClient) GetDLQTasks(
 func (f *fakeAdminClient) PurgeDLQTasks(
 	context.Context,
 	*adminservice.PurgeDLQTasksRequest,
-	...grpc.CallOption,
+...grpc.CallOption,
 ) (*adminservice.PurgeDLQTasksResponse, error) {
 	if f.err != nil {
 		return nil, f.err
@@ -446,7 +446,7 @@ func (f *fakeAdminClient) PurgeDLQTasks(
 func (f *fakeAdminClient) MergeDLQTasks(
 	context.Context,
 	*adminservice.MergeDLQTasksRequest,
-	...grpc.CallOption,
+...grpc.CallOption,
 ) (*adminservice.MergeDLQTasksResponse, error) {
 	if f.err != nil {
 		return nil, f.err

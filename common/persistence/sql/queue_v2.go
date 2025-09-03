@@ -420,7 +420,7 @@ func (q *queueV2) ListQueues(
 		queues = append(queues, persistence.QueueInfo{
 			QueueName:     row.QueueName,
 			MessageCount:  messageCount,
-			LastMessageId: lastMessageID,
+			LastMessageID: lastMessageID,
 		})
 	}
 	lastReadQueueNumber := offset + int64(len(queues))

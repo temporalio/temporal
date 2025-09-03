@@ -34,7 +34,7 @@ func Invoke(
 		queues = append(queues, &historyservice.ListQueuesResponse_QueueInfo{
 			QueueName:     queue.QueueName,
 			MessageCount:  queue.MessageCount,
-			LastMessageId: queue.LastMessageId,
+			LastMessageId: queue.LastMessageID,
 		})
 	}
 	return &historyservice.ListQueuesResponse{
