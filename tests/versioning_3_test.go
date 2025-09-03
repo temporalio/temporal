@@ -1926,31 +1926,6 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 	}, data)
 }
 
-func (s *Versioning3Suite) waitForDeploymentVersionCreation(
-	tv *testvars.TestVars,
-) {
-	v := tv.DeploymentVersionString()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		res, _ := s.FrontendClient().DescribeWorkerDeployment(ctx,
-			&workflowservice.DescribeWorkerDeploymentRequest{
-				Namespace:      s.Namespace().String(),
-				DeploymentName: tv.DeploymentSeries(),
-			})
-		if res != nil {
-			found := false
-			for _, vs := range res.GetWorkerDeploymentInfo().GetVersionSummaries() {
-				if vs.GetVersion() == v {
-					found = true
-				}
-			}
-			a.True(found)
-		}
-	}, 5*time.Second, 100*time.Millisecond)
-}
-
 func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -1966,7 +1941,7 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
 		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) || errors.Is(err, serviceerror.NewFailedPrecondition(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues)) {
+		if errors.As(err, &notFound) || (err != nil && strings.Contains(err.Error(), workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues)) {
 			return false
 		}
 		s.NoError(err)

@@ -8,7 +8,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	scheduler1 "go.temporal.io/server/service/worker/scheduler"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -28,7 +28,7 @@ type (
 		//
 		// If backfillID is set, it will be used to generate request IDs.
 		ProcessTimeRange(
-			scheduler Scheduler,
+			scheduler *Scheduler,
 			start, end time.Time,
 			overlapPolicy enumspb.ScheduleOverlapPolicy,
 			backfillID string,
@@ -43,7 +43,7 @@ type (
 		Config         *Config
 		MetricsHandler metrics.Handler
 		Logger         log.Logger
-		SpecBuilder    *scheduler1.SpecBuilder
+		SpecBuilder    *legacyscheduler.SpecBuilder
 	}
 
 	ProcessedTimeRange struct {
@@ -53,8 +53,8 @@ type (
 	}
 )
 
-func (s SpecProcessorImpl) ProcessTimeRange(
-	scheduler Scheduler,
+func (s *SpecProcessorImpl) ProcessTimeRange(
+	scheduler *Scheduler,
 	start, end time.Time,
 	overlapPolicy enumspb.ScheduleOverlapPolicy,
 	backfillID string,
@@ -91,10 +91,10 @@ func (s SpecProcessorImpl) ProcessTimeRange(
 
 	catchupWindow := catchupWindow(scheduler, tweakables)
 	lastAction := start
-	var next scheduler1.GetNextTimeResult
+	var next legacyscheduler.GetNextTimeResult
 	var err error
 	var bufferedStarts []*schedulespb.BufferedStart
-	for next, err = s.getNextTime(scheduler, start); err == nil && !(next.Next.IsZero() || next.Next.After(end)); next, err = s.getNextTime(scheduler, next.Next) {
+	for next, err = s.getNextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.getNextTime(scheduler, next.Next) {
 		if scheduler.Info.UpdateTime.AsTime().After(next.Next) {
 			// If we've received an update that took effect after the LastProcessedTime high
 			// water mark, discard actions that were scheduled to kick off before the update.
@@ -107,9 +107,7 @@ func (s SpecProcessorImpl) ProcessTimeRange(
 				tag.NewTimeTag("time", next.Next))
 			s.MetricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
 
-			// TODO - update Info.MissedCatchupWindow
-			// s.Info.MissedCatchupWindow++
-			// or write that to the generator's persisted state?
+			scheduler.Info.MissedCatchupWindow++
 			continue
 		}
 
@@ -136,7 +134,7 @@ func (s SpecProcessorImpl) ProcessTimeRange(
 	}, nil
 }
 
-func catchupWindow(s Scheduler, tweakables Tweakables) time.Duration {
+func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {
 	cw := s.Schedule.Policies.CatchupWindow
 	if cw == nil {
 		return tweakables.DefaultCatchupWindow
@@ -146,11 +144,11 @@ func catchupWindow(s Scheduler, tweakables Tweakables) time.Duration {
 }
 
 // getNextTime returns the next time result, or an error if the schedule cannot be compiled.
-func (s SpecProcessorImpl) getNextTime(scheduler Scheduler, after time.Time) (scheduler1.GetNextTimeResult, error) {
+func (s *SpecProcessorImpl) getNextTime(scheduler *Scheduler, after time.Time) (legacyscheduler.GetNextTimeResult, error) {
 	spec, err := scheduler.getCompiledSpec(s.SpecBuilder)
 	if err != nil {
 		s.Logger.Error("Invalid schedule", tag.Error(err))
-		return scheduler1.GetNextTimeResult{}, err
+		return legacyscheduler.GetNextTimeResult{}, err
 	}
 
 	return spec.GetNextTime(scheduler.jitterSeed(), after), nil

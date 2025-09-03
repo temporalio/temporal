@@ -42,7 +42,7 @@ func (m *MockSpecProcessor) EXPECT() *MockSpecProcessorMockRecorder {
 }
 
 // ProcessTimeRange mocks base method.
-func (m *MockSpecProcessor) ProcessTimeRange(scheduler Scheduler, start, end time.Time, overlapPolicy enums.ScheduleOverlapPolicy, backfillID string, manual bool, limit *int) (*ProcessedTimeRange, error) {
+func (m *MockSpecProcessor) ProcessTimeRange(scheduler *Scheduler, start, end time.Time, overlapPolicy enums.ScheduleOverlapPolicy, backfillID string, manual bool, limit *int) (*ProcessedTimeRange, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ProcessTimeRange", scheduler, start, end, overlapPolicy, backfillID, manual, limit)
 	ret0, _ := ret[0].(*ProcessedTimeRange)

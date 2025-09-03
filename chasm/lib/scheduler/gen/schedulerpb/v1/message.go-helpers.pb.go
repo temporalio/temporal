@@ -5,35 +5,35 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Marshal an object of type SchedulerInternal to the protobuf v3 wire format
-func (val *SchedulerInternal) Marshal() ([]byte, error) {
+// Marshal an object of type SchedulerState to the protobuf v3 wire format
+func (val *SchedulerState) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type SchedulerInternal from the protobuf v3 wire format
-func (val *SchedulerInternal) Unmarshal(buf []byte) error {
+// Unmarshal an object of type SchedulerState from the protobuf v3 wire format
+func (val *SchedulerState) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *SchedulerInternal) Size() int {
+func (val *SchedulerState) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two SchedulerInternal values are equivalent by recursively
+// Equal returns whether two SchedulerState values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *SchedulerInternal) Equal(that interface{}) bool {
+func (this *SchedulerState) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *SchedulerInternal
+	var that1 *SchedulerState
 	switch t := that.(type) {
-	case *SchedulerInternal:
+	case *SchedulerState:
 		that1 = t
-	case SchedulerInternal:
+	case SchedulerState:
 		that1 = &t
 	default:
 		return false
@@ -42,35 +42,35 @@ func (this *SchedulerInternal) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type GeneratorInternal to the protobuf v3 wire format
-func (val *GeneratorInternal) Marshal() ([]byte, error) {
+// Marshal an object of type GeneratorState to the protobuf v3 wire format
+func (val *GeneratorState) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type GeneratorInternal from the protobuf v3 wire format
-func (val *GeneratorInternal) Unmarshal(buf []byte) error {
+// Unmarshal an object of type GeneratorState from the protobuf v3 wire format
+func (val *GeneratorState) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *GeneratorInternal) Size() int {
+func (val *GeneratorState) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two GeneratorInternal values are equivalent by recursively
+// Equal returns whether two GeneratorState values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *GeneratorInternal) Equal(that interface{}) bool {
+func (this *GeneratorState) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *GeneratorInternal
+	var that1 *GeneratorState
 	switch t := that.(type) {
-	case *GeneratorInternal:
+	case *GeneratorState:
 		that1 = t
-	case GeneratorInternal:
+	case GeneratorState:
 		that1 = &t
 	default:
 		return false
@@ -79,35 +79,35 @@ func (this *GeneratorInternal) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type InvokerInternal to the protobuf v3 wire format
-func (val *InvokerInternal) Marshal() ([]byte, error) {
+// Marshal an object of type InvokerState to the protobuf v3 wire format
+func (val *InvokerState) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type InvokerInternal from the protobuf v3 wire format
-func (val *InvokerInternal) Unmarshal(buf []byte) error {
+// Unmarshal an object of type InvokerState from the protobuf v3 wire format
+func (val *InvokerState) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *InvokerInternal) Size() int {
+func (val *InvokerState) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two InvokerInternal values are equivalent by recursively
+// Equal returns whether two InvokerState values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *InvokerInternal) Equal(that interface{}) bool {
+func (this *InvokerState) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *InvokerInternal
+	var that1 *InvokerState
 	switch t := that.(type) {
-	case *InvokerInternal:
+	case *InvokerState:
 		that1 = t
-	case InvokerInternal:
+	case InvokerState:
 		that1 = &t
 	default:
 		return false
@@ -116,35 +116,35 @@ func (this *InvokerInternal) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type BackfillerInternal to the protobuf v3 wire format
-func (val *BackfillerInternal) Marshal() ([]byte, error) {
+// Marshal an object of type BackfillerState to the protobuf v3 wire format
+func (val *BackfillerState) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type BackfillerInternal from the protobuf v3 wire format
-func (val *BackfillerInternal) Unmarshal(buf []byte) error {
+// Unmarshal an object of type BackfillerState from the protobuf v3 wire format
+func (val *BackfillerState) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *BackfillerInternal) Size() int {
+func (val *BackfillerState) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two BackfillerInternal values are equivalent by recursively
+// Equal returns whether two BackfillerState values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *BackfillerInternal) Equal(that interface{}) bool {
+func (this *BackfillerState) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *BackfillerInternal
+	var that1 *BackfillerState
 	switch t := that.(type) {
-	case *BackfillerInternal:
+	case *BackfillerState:
 		that1 = t
-	case BackfillerInternal:
+	case BackfillerState:
 		that1 = &t
 	default:
 		return false
