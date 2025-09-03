@@ -15,11 +15,10 @@ type (
 		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
 		RecentActionCount                 int           // Number of recent actions taken (workflow execution results) recorded in the ScheduleInfo metadata.
 		MaxActionsPerExecution            int           // Limits the number of actions (startWorkflow, terminate/cancel) taken by ExecuteTask in a single iteration
-
-		// TODO - incomplete tweakables list
+		IdleTime                          time.Duration // How long to keep schedules after they're done
 	}
 
-	// State Machine Scheduler dynamic config, shared among all sub state machines.
+	// Config is the CHASM Scheduler dynamic config, shared among all sub-components.
 	Config struct {
 		Tweakables         dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]
 		ServiceCallTimeout dynamicconfig.DurationPropertyFn
@@ -29,24 +28,24 @@ type (
 
 var (
 	CurrentTweakables = dynamicconfig.NewNamespaceTypedSetting(
-		"component.scheduler.tweakables",
+		"chasm.scheduler.tweakables",
 		DefaultTweakables,
-		"A set of tweakable parameters for the state machine scheduler.")
+		"A set of tweakable parameters for the CHASM scheduler.")
 
 	RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
-		"component.scheduler.retryPolicy.initialInterval",
+		"chasm.scheduler.retryPolicy.initialInterval",
 		time.Second,
 		`The initial backoff interval when retrying a failed task.`,
 	)
 
 	RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
-		"component.scheduler.retryPolicy.maxInterval",
+		"chasm.scheduler.retryPolicy.maxInterval",
 		time.Minute,
 		`The maximum backoff interval when retrying a failed task.`,
 	)
 
 	ServiceCallTimeout = dynamicconfig.NewGlobalDurationSetting(
-		"component.scheduler.serviceCallTimeout",
+		"chasm.scheduler.serviceCallTimeout",
 		2*time.Second,
 		`The upper bound on how long a service call can take before being timed out.`,
 	)
@@ -57,7 +56,8 @@ var (
 		MaxBufferSize:                     1000,
 		CanceledTerminatedCountAsFailures: false,
 		RecentActionCount:                 10,
-		MaxActionsPerExecution:            10,
+		MaxActionsPerExecution:            5,
+		IdleTime:                          7 * 24 * time.Hour,
 	}
 )
 

@@ -152,6 +152,7 @@ type GrpcServerOptions struct {
 
 func AuthorizationInterceptorProvider(
 	cfg *config.Config,
+	serviceConfig *Config,
 	logger log.Logger,
 	namespaceChecker authorization.NamespaceChecker,
 	metricsHandler metrics.Handler,
@@ -168,6 +169,7 @@ func AuthorizationInterceptorProvider(
 		audienceGetter,
 		cfg.Global.Authorization.AuthHeaderName,
 		cfg.Global.Authorization.AuthExtraHeaderName,
+		serviceConfig.ExposeAuthorizerErrors,
 	)
 }
 

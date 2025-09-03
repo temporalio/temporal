@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	schedulespb "go.temporal.io/server/api/schedule/v1"
+	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 )
 
 func TestGenerateRequestID(t *testing.T) {
-	scheduler := Scheduler{
-		SchedulerInternal: &schedulespb.SchedulerInternal{
+	scheduler := &Scheduler{
+		SchedulerState: &schedulespb.SchedulerState{
 			Namespace:     "ns",
 			NamespaceId:   "nsid",
 			ScheduleId:    "mysched",
