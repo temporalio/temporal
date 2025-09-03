@@ -141,7 +141,7 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) (err error) {
 			return fmt.Errorf("--%s must be positive but was %d", FlagMaxMessageCount, remainingMessageCount)
 		}
 	}
-	maxMessageID, err := ac.getLastMessageID(c, "read", false)
+	maxMessageID, err := ac.getLastMessageID(c, "read")
 	if err != nil {
 		return err
 	}
@@ -216,7 +216,7 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) (err error) {
 
 func (ac *DLQV2Service) PurgeMessages(c *cli.Context) error {
 	adminClient := ac.clientFactory.AdminClient(c)
-	lastMessageID, err := ac.getLastMessageID(c, "purge", false)
+	lastMessageID, err := ac.getLastMessageID(c, "purge")
 	if err != nil {
 		return err
 	}
@@ -240,9 +240,36 @@ func (ac *DLQV2Service) PurgeMessages(c *cli.Context) error {
 
 func (ac *DLQV2Service) MergeMessages(c *cli.Context) error {
 	adminClient := ac.clientFactory.AdminClient(c)
-	lastMessageID, err := ac.getLastMessageID(c, "merge", true)
-	if err != nil {
-		return err
+
+	var lastMessageID int64
+	if c.IsSet(FlagLastMessageID) {
+		lastMessageID = c.Int64(FlagLastMessageID)
+		if lastMessageID < persistence.FirstQueueMessageID {
+			return fmt.Errorf(
+				"--%s must be at least %d but was %d",
+				FlagLastMessageID,
+				persistence.FirstQueueMessageID,
+				lastMessageID,
+			)
+		}
+	} else {
+		// For merge command, automatically find the last message ID
+		_, _ = fmt.Fprintf(c.App.Writer, "Warning: No last message ID provided. Using ListQueues to find the last message ID.\n")
+
+		var err error
+		var ok bool
+		lastMessageID, ok, err = ac.findLastMessageIDFromListQueues(c)
+		if err != nil {
+			return fmt.Errorf("failed to find last message ID: %w", err)
+		}
+
+		if !ok {
+			_, _ = fmt.Fprintf(c.App.Writer, "DLQ is empty, nothing to merge.\n")
+			return nil
+		}
+
+		_, _ = fmt.Fprintf(c.App.Writer, "Found last message ID: %d. Using this as the upper bound for merge operation.\n", lastMessageID)
+		lastMessageID = lastMessageID
 	}
 	ctx, cancel := newContext(c)
 	defer cancel()
@@ -272,7 +299,7 @@ func (ac *DLQV2Service) getDLQKey() *commonspb.HistoryDLQKey {
 	}
 }
 
-func (ac *DLQV2Service) getLastMessageID(c *cli.Context, action string, findLastMessageID bool) (int64, error) {
+func (ac *DLQV2Service) getLastMessageID(c *cli.Context, action string) (int64, error) {
 	if !c.IsSet(FlagLastMessageID) {
 		msg := fmt.Sprintf(
 			"You did not set --%s. Are you sure you want to %s all messages without an upper bound?",
@@ -280,23 +307,7 @@ func (ac *DLQV2Service) getLastMessageID(c *cli.Context, action string, findLast
 			action,
 		)
 		ac.prompter.Prompt(msg)
-		if !findLastMessageID {
-			return persistence.MaxQueueMessageID, nil
-		}
-
-		_, _ = fmt.Fprintf(c.App.Writer, "Warning: No last message ID provided. Reading all messages to find the last message ID.\n")
-		lastMessageID, err := ac.findLastMessageID(c)
-		if err != nil {
-			return 0, fmt.Errorf("failed to find last message ID: %w", err)
-		}
-
-		if lastMessageID == 0 {
-			_, _ = fmt.Fprintf(c.App.Writer, "DLQ is empty, nothing to %s.\n", action)
-			return 0, nil
-		}
-
-		_, _ = fmt.Fprintf(c.App.Writer, "Found last message ID: %d. Using this as the upper bound for %s operation.\n", lastMessageID, action)
-		return lastMessageID, nil
+		return persistence.MaxQueueMessageID, nil
 	}
 	lastMessageID := c.Int64(FlagLastMessageID)
 	if lastMessageID < persistence.FirstQueueMessageID {
@@ -310,43 +321,44 @@ func (ac *DLQV2Service) getLastMessageID(c *cli.Context, action string, findLast
 	return lastMessageID, nil
 }
 
-func (ac *DLQV2Service) findLastMessageID(c *cli.Context) (int64, error) {
+func (ac *DLQV2Service) findLastMessageIDFromListQueues(c *cli.Context) (int64, bool, error) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
 	adminClient := ac.clientFactory.AdminClient(c)
-	var lastMessageID int64 = 0
-	var paginationToken []byte
 
+	// Use ListQueues to find our specific DLQ and get its LastMessageId
+	dlqKey := ac.getDLQKey()
+	queueName := persistence.GetHistoryTaskQueueName(int(dlqKey.TaskCategory), dlqKey.SourceCluster, dlqKey.TargetCluster)
+
+	// We need to paginate through the queues to find our specific queue
+	var nextPageToken []byte
 	for {
-		request := &adminservice.GetDLQTasksRequest{
-			DlqKey: &commonspb.HistoryDLQKey{
-				TaskCategory:  int32(ac.category.ID()),
-				SourceCluster: ac.sourceCluster,
-				TargetCluster: ac.targetCluster,
-			},
+		resp, err := adminClient.ListQueues(ctx, &adminservice.ListQueuesRequest{
+			QueueType:     int32(persistence.QueueTypeHistoryDLQ),
 			PageSize:      int32(defaultPageSize),
-			NextPageToken: paginationToken,
-		}
-
-		res, err := adminClient.GetDLQTasks(ctx, request)
+			NextPageToken: nextPageToken,
+		})
 		if err != nil {
-			if strings.Contains(err.Error(), "queue not found:") {
-				return 0, nil
+			return 0, false, fmt.Errorf("call to ListQueues from findLastMessageIDFromListQueues failed: %w", err)
+		}
+
+		// Look for our specific queue
+		for _, queueInfo := range resp.Queues {
+			if queueInfo.QueueName == queueName {
+				return queueInfo.LastMessageId, queueInfo.MessageCount > 0, nil
 			}
-			return 0, fmt.Errorf("call to GetDLQTasks from findLastMessageID failed: %w", err)
 		}
 
-		if len(res.DlqTasks) > 0 {
-			lastMessageID = res.DlqTasks[len(res.DlqTasks)-1].Metadata.MessageId
-		}
-
-		if len(res.NextPageToken) == 0 {
+		// If there are no more pages, the queue doesn't exist (empty)
+		if len(resp.NextPageToken) == 0 {
 			break
 		}
-		paginationToken = res.NextPageToken
+		nextPageToken = resp.NextPageToken
 	}
-	return lastMessageID, nil
+
+	// Queue not found, it's empty
+	return 0, false, nil
 }
 
 func getSupportedDLQTaskCategories(taskCategoryRegistry tasks.TaskCategoryRegistry) []tasks.Category {

@@ -59,18 +59,22 @@ func (q *queueV2) EnqueueMessage(
 			err,
 		)
 	}
-	nextMessageID, err := q.getNextMessageID(ctx, request.QueueType, request.QueueName, tx)
+	lastMessageID, ok, err := q.getMaxMessageID(ctx, request.QueueType, request.QueueName, tx)
 	if err != nil {
 		rollBackErr := tx.Rollback()
 		if rollBackErr != nil {
 			q.SqlStore.logger.Error("transaction rollback error", tag.Error(rollBackErr))
 		}
 		return nil, serviceerror.NewUnavailablef(
-			"EnqueueMessage failed for queue with type: %v and name: %v. failed to get next messageId. Error: %v",
+			"EnqueueMessage failed for queue with type: %v and name: %v. failed to get last messageId. Error: %v",
 			request.QueueType,
 			request.QueueName,
 			err,
 		)
+	}
+	nextMessageID := int64(persistence.FirstQueueMessageID)
+	if ok {
+		nextMessageID = lastMessageID + 1
 	}
 	_, err = tx.InsertIntoQueueV2Messages(ctx, []sqlplugin.QueueV2MessageRow{
 		newQueueV2Row(request.QueueType, request.QueueName, nextMessageID, request.Blob),
@@ -381,17 +385,6 @@ func (q *queueV2) getMaxMessageID(ctx context.Context, queueType persistence.Que
 	}
 }
 
-func (q *queueV2) getNextMessageID(ctx context.Context, queueType persistence.QueueV2Type, queueName string, tc sqlplugin.TableCRUD) (int64, error) {
-	maxMessageID, ok, err := q.getMaxMessageID(ctx, queueType, queueName, tc)
-	if err != nil {
-		return 0, err
-	}
-	if !ok {
-		return persistence.FirstQueueMessageID, nil
-	}
-	return maxMessageID + 1, nil
-}
-
 func (q *queueV2) ListQueues(
 	ctx context.Context,
 	request *persistence.InternalListQueuesRequest,
@@ -420,13 +413,14 @@ func (q *queueV2) ListQueues(
 	}
 	var queues []persistence.QueueInfo
 	for _, row := range rows {
-		messageCount, err := q.getMessageCount(ctx, &row)
+		messageCount, lastMessageID, err := q.getMessageCountAndLastID(ctx, &row)
 		if err != nil {
 			return nil, err
 		}
 		queues = append(queues, persistence.QueueInfo{
-			QueueName:    row.QueueName,
-			MessageCount: messageCount,
+			QueueName:     row.QueueName,
+			MessageCount:  messageCount,
+			LastMessageId: lastMessageID,
 		})
 	}
 	lastReadQueueNumber := offset + int64(len(queues))
@@ -441,26 +435,30 @@ func (q *queueV2) ListQueues(
 	return response, nil
 }
 
-func (q *queueV2) getMessageCount(
+func (q *queueV2) getMessageCountAndLastID(
 	ctx context.Context,
 	row *sqlplugin.QueueV2MetadataRow,
-) (int64, error) {
-	nextMessageID, err := q.getNextMessageID(ctx, row.QueueType, row.QueueName, q.Db)
+) (int64, int64, error) {
+	lastMessageID, ok, err := q.getMaxMessageID(ctx, row.QueueType, row.QueueName, q.Db)
 	if err != nil {
-		return 0, serviceerror.NewUnavailablef(
-			"getNextMessageID operation failed for queue with type %v and name %v. Error: %v",
+		return 0, 0, serviceerror.NewUnavailablef(
+			"getLastMessageID operation failed for queue with type %v and name %v. Error: %v",
 			row.QueueType,
 			row.QueueName,
 			err,
 		)
 	}
+	if !ok {
+		return 0, -1, nil // Empty queue
+	}
 	qm, err := q.extractQueueMetadata(row)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	partition, err := persistence.GetPartitionForQueueV2(row.QueueType, row.QueueName, qm)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return nextMessageID - partition.MinMessageId, nil
+	messageCount := lastMessageID - partition.MinMessageId + 1
+	return messageCount, lastMessageID, nil
 }

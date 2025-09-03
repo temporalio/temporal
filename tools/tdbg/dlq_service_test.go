@@ -12,7 +12,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	commonspb "go.temporal.io/server/api/common/v1"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tools/tdbg"
 	"go.temporal.io/server/tools/tdbg/tdbgtest"
@@ -293,14 +293,18 @@ func TestDLQCommand_V2(t *testing.T) {
 				p.command = "merge"
 				p.lastMessageID = "" // No last message ID provided
 				p.adminClient.err = nil
-				// Set up mock responses with messages at IDs 50, 150
-				p.adminClient.getDLQTasksResponses = []*adminservice.GetDLQTasksResponse{
+				// Set up mock ListQueues response with our target DLQ containing LastMessageId = 150
+				queueName := persistence.GetHistoryTaskQueueName(tasks.CategoryTransfer.ID(), "test-source-cluster", "test-target-cluster")
+				p.adminClient.listQueueResponses = []*adminservice.ListQueuesResponse{
 					{
-						DlqTasks: []*commonspb.HistoryDLQTask{
-							{Metadata: &commonspb.HistoryDLQTaskMetadata{MessageId: 50}},
-							{Metadata: &commonspb.HistoryDLQTaskMetadata{MessageId: 150}},
+						Queues: []*adminservice.ListQueuesResponse_QueueInfo{
+							{
+								QueueName:     queueName,
+								MessageCount:  10,
+								LastMessageId: 150,
+							},
 						},
-						NextPageToken: nil, // Only one page
+						NextPageToken: nil,
 					},
 				}
 			},
@@ -325,10 +329,17 @@ func TestDLQCommand_V2(t *testing.T) {
 				p.command = "merge"
 				p.lastMessageID = "" // No last message ID provided
 				p.adminClient.err = nil
-				// Set up mock response with no messages
-				p.adminClient.getDLQTasksResponses = []*adminservice.GetDLQTasksResponse{
+				// Set up mock ListQueues response with empty queue (LastMessageId = -1)
+				queueName := persistence.GetHistoryTaskQueueName(tasks.CategoryTransfer.ID(), "test-source-cluster", "test-target-cluster")
+				p.adminClient.listQueueResponses = []*adminservice.ListQueuesResponse{
 					{
-						DlqTasks:      nil, // No messages
+						Queues: []*adminservice.ListQueuesResponse_QueueInfo{
+							{
+								QueueName:     queueName,
+								MessageCount:  0,
+								LastMessageId: -1, // Empty queue
+							},
+						},
 						NextPageToken: nil,
 					},
 				}
@@ -344,7 +355,7 @@ func TestDLQCommand_V2(t *testing.T) {
 			override: func(p *dlqTestParams) {
 				p.command = "merge"
 				p.lastMessageID = "" // No last message ID provided
-				// Set error that will be triggered when finding last message ID
+				// Set error that will be triggered when calling ListQueues
 				p.adminClient.err = errors.New("connection failed")
 				p.expectedErrSubstrings = []string{"failed to find last message ID", "connection failed"}
 			},
