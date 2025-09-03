@@ -1265,6 +1265,7 @@ var (
 	PersistenceSQLMaxOpenConn              = NewGaugeDef("persistence_sql_max_open_conn")
 	PersistenceSQLOpenConn                 = NewGaugeDef("persistence_sql_open_conn")
 	PersistenceSQLIdleConn                 = NewGaugeDef("persistence_sql_idle_conn")
+	PersistenceSQLInUse                    = NewGaugeDef("persistence_sql_in_use")
 
 	// Common service base metrics
 	RestartCount           = NewCounterDef("restarts")

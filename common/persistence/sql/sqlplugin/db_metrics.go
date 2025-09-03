@@ -47,6 +47,7 @@ func (r *DBMetricsReporter) report() {
 	metrics.PersistenceSQLMaxOpenConn.With(r.metrics).Record(float64(s.MaxOpenConnections))
 	metrics.PersistenceSQLOpenConn.With(r.metrics).Record(float64(s.OpenConnections))
 	metrics.PersistenceSQLIdleConn.With(r.metrics).Record(float64(s.Idle))
+	metrics.PersistenceSQLInUse.With(r.metrics).Record(float64(s.InUse))
 }
 
 func (r *DBMetricsReporter) Stop() {
