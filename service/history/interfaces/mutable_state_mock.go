@@ -3105,20 +3105,6 @@ func (mr *MockMutableStateMockRecorder) RejectWorkflowExecutionUpdate(protocolIn
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RejectWorkflowExecutionUpdate", reflect.TypeOf((*MockMutableState)(nil).RejectWorkflowExecutionUpdate), protocolInstanceID, updRejection)
 }
 
-// RemoveReportedProblemsSearchAttribute mocks base method.
-func (m *MockMutableState) RemoveReportedProblemsSearchAttribute() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveReportedProblemsSearchAttribute")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RemoveReportedProblemsSearchAttribute indicates an expected call of RemoveReportedProblemsSearchAttribute.
-func (mr *MockMutableStateMockRecorder) RemoveReportedProblemsSearchAttribute() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveReportedProblemsSearchAttribute", reflect.TypeOf((*MockMutableState)(nil).RemoveReportedProblemsSearchAttribute))
-}
-
 // RemoveSpeculativeWorkflowTaskTimeoutTask mocks base method.
 func (m *MockMutableState) RemoveSpeculativeWorkflowTaskTimeoutTask() {
 	m.ctrl.T.Helper()

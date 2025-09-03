@@ -811,8 +811,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 		)
 
 		if event != nil {
-			m.ms.LastWorkflowTaskFailureCategory = "WorkflowTaskFailed"
-			m.ms.LastWorkflowTaskFailureCause = cause.String()
+			m.ms.executionInfo.LastWorkflowTaskFailureCategory = "WorkflowTaskFailed"
+			m.ms.executionInfo.LastWorkflowTaskFailureCause = cause.String()
 		}
 	}
 
@@ -874,11 +874,11 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		)
 
-		if m.ms.LastWorkflowTaskFailureCategory == "" {
-			m.ms.LastWorkflowTaskFailureCategory = "WorkflowTaskTimedOut"
+		if m.ms.executionInfo.LastWorkflowTaskFailureCategory == "" {
+			m.ms.executionInfo.LastWorkflowTaskFailureCategory = "WorkflowTaskTimedOut"
 		}
-		if m.ms.LastWorkflowTaskFailureCause == "" {
-			m.ms.LastWorkflowTaskFailureCause = "WorkflowTaskStartToCloseTimeout"
+		if m.ms.executionInfo.LastWorkflowTaskFailureCause == "" {
+			m.ms.executionInfo.LastWorkflowTaskFailureCause = "WorkflowTaskStartToCloseTimeout"
 		}
 	}
 

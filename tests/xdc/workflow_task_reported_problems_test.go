@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -47,6 +46,13 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) SetupTest() {
 
 func (s *WorkflowTaskReportedProblemsReplicationSuite) TearDownSuite() {
 	s.tearDownSuite()
+}
+
+func (s *WorkflowTaskReportedProblemsReplicationSuite) simpleWorkflow(ctx workflow.Context) (string, error) {
+	if s.shouldFail.Load() {
+		panic("forced-panic-to-fail-wft")
+	}
+	return "done!", nil
 }
 
 // checkReportedProblemsSearchAttribute is a helper function to verify reported problems search attributes
@@ -93,29 +99,6 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	s.dynamicConfigOverrides[dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute.Key()] = 2
 	s.shouldFail.Store(true)
 
-	activityFunction := func() (string, error) {
-		return "done!", nil
-	}
-
-	workflowFn := func(ctx workflow.Context) error {
-		var ret string
-		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-			ActivityID:             "activity-id",
-			DisableEagerExecution:  true,
-			StartToCloseTimeout:    15 * time.Minute,
-			ScheduleToCloseTimeout: 30 * time.Minute,
-			RetryPolicy: &temporal.RetryPolicy{
-				InitialInterval:    1 * time.Second,
-				BackoffCoefficient: 1,
-			},
-		}), activityFunction).Get(ctx, &ret)
-
-		if !s.shouldFail.Load() {
-			panic("forced-panic-to-fail-wft")
-		}
-		return err
-	}
-
 	ns := s.createGlobalNamespace()
 	activeSDKClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
@@ -127,8 +110,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	taskQueue := testcore.RandomizeStr("tq")
 	worker1 := sdkworker.New(activeSDKClient, taskQueue, sdkworker.Options{})
 
-	worker1.RegisterWorkflow(workflowFn)
-	worker1.RegisterActivity(activityFunction)
+	worker1.RegisterWorkflow(s.simpleWorkflow)
 
 	s.NoError(worker1.Start())
 	defer worker1.Stop()
@@ -139,7 +121,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 		TaskQueue: taskQueue,
 	}
 
-	workflowRun, err := activeSDKClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := activeSDKClient.ExecuteWorkflow(ctx, workflowOptions, s.simpleWorkflow)
 	s.NoError(err)
 
 	// wait for workflow to start and fail
@@ -158,12 +140,6 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 		"WorkflowWorkerUnhandledFailure",
 		true,
 	)
-
-	// stop worker1 so cluster0 won't make any progress
-	// worker1.Stop()
-
-	// failover to standby cluster
-	// s.failover(ns, 0, s.clusters[1].ClusterName(), 2)
 
 	// get standby client
 	standbyClient, err := sdkclient.Dial(sdkclient.Options{
@@ -185,13 +161,12 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 
 	// start worker2 in cluster1
 	worker2 := sdkworker.New(standbyClient, taskQueue, sdkworker.Options{})
-	worker2.RegisterWorkflow(workflowFn)
-	worker2.RegisterActivity(activityFunction)
+	worker2.RegisterWorkflow(s.simpleWorkflow)
 	s.NoError(worker2.Start())
 	defer worker2.Stop()
 
 	// allow the workflow to succeed
-	s.shouldFail.Store(true)
+	s.shouldFail.Store(false)
 
 	// wait for workflow to complete
 	var out string

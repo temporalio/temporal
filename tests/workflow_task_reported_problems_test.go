@@ -51,13 +51,11 @@ func (s *WFTFailureReportedProblemsTestSuite) SetupTest() {
 	}
 }
 
-func (s *WFTFailureReportedProblemsTestSuite) makeWorkflowFunc(activityFunction ActivityFunctions) WorkflowFunction {
-	return func(ctx workflow.Context) error {
-		if s.shouldFail.Load() {
-			panic("forced-panic-to-fail-wft")
-		}
-		return nil
+func (s *WFTFailureReportedProblemsTestSuite) simpleWorkflow(ctx workflow.Context) (string, error) {
+	if s.shouldFail.Load() {
+		panic("forced-panic-to-fail-wft")
 	}
+	return "done!", nil
 }
 
 func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_SetAndClear() {
@@ -68,21 +66,14 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 	s.OverrideDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 2)
 	s.shouldFail.Store(true)
 
-	activityFunction := func() (string, error) {
-		return "done!", nil
-	}
-
-	workflowFn := s.makeWorkflowFunc(activityFunction)
-
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.Worker().RegisterWorkflow(s.simpleWorkflow)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 		TaskQueue: s.TaskQueue(),
 	}
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, s.simpleWorkflow)
 	s.NoError(err)
 
 	// Make sure the workflow has started and had an activity task scheduled and finished

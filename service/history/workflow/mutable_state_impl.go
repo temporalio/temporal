@@ -237,10 +237,6 @@ type (
 
 		// Tracks all events added via the AddHistoryEvent method that is used by the state machine framework.
 		currentTransactionAddedStateMachineEventTypes []enumspb.EventType
-
-		// TODO seankane: store the failure and cause of the last workflow task failure/timedout event
-		LastWorkflowTaskFailureCause    string
-		LastWorkflowTaskFailureCategory string
 	}
 
 	lastUpdatedStateTransitionGetter interface {
@@ -5878,8 +5874,8 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 
 func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 	reportedProblems := []string{
-		fmt.Sprintf("category=%s", ms.LastWorkflowTaskFailureCategory),
-		fmt.Sprintf("cause=%s", ms.LastWorkflowTaskFailureCause),
+		fmt.Sprintf("category=%s", ms.executionInfo.LastWorkflowTaskFailureCategory),
+		fmt.Sprintf("cause=%s", ms.executionInfo.LastWorkflowTaskFailureCause),
 	}
 
 	reportedProblemsPayload, err := searchattribute.EncodeValue(reportedProblems, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
@@ -5964,8 +5960,8 @@ func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
 		return nil
 	}
 
-	ms.LastWorkflowTaskFailureCategory = ""
-	ms.LastWorkflowTaskFailureCause = ""
+	ms.executionInfo.LastWorkflowTaskFailureCategory = ""
+	ms.executionInfo.LastWorkflowTaskFailureCause = ""
 
 	// Just remove the search attribute entirely for now
 	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: nil})
