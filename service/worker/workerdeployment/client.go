@@ -64,7 +64,12 @@ type Client interface {
 	SetCurrentVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		req *workflowservice.SetWorkerDeploymentCurrentVersionRequest,
+		deploymentName string,
+		version string,
+		identity string,
+		ignoreMissingTaskQueues bool,
+		conflictToken []byte,
+		allowNoPollers bool,
 	) (*deploymentspb.SetCurrentVersionResponse, error)
 
 	ListWorkerDeployments(
@@ -92,7 +97,13 @@ type Client interface {
 	SetRampingVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		req *workflowservice.SetWorkerDeploymentRampingVersionRequest,
+		deploymentName string,
+		version string,
+		percentage float32,
+		identity string,
+		ignoreMissingTaskQueues bool,
+		conflictToken []byte,
+		allowNoPollers bool,
 	) (*deploymentspb.SetRampingVersionResponse, error)
 
 	UpdateVersionMetadata(
@@ -534,15 +545,13 @@ func (d *ClientImpl) ListWorkerDeployments(
 func (d *ClientImpl) SetCurrentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	req *workflowservice.SetWorkerDeploymentCurrentVersionRequest,
+	deploymentName string,
+	version string,
+	identity string,
+	ignoreMissingTaskQueues bool,
+	conflictToken []byte,
+	allowNoPollers bool,
 ) (_ *deploymentspb.SetCurrentVersionResponse, retErr error) {
-	version := req.GetVersion()
-	identity := req.GetIdentity()
-	deploymentName := req.GetDeploymentName()
-	ignoreMissingTaskQueues := req.GetIgnoreMissingTaskQueues()
-	conflictToken := req.GetConflictToken()
-	allowNoPollers := req.GetAllowNoPollers()
-
 	//revive:disable-next-line:defer
 	defer d.record("SetCurrentVersion", &retErr, namespaceEntry.Name(), version, identity)()
 
@@ -643,16 +652,14 @@ func (d *ClientImpl) SetCurrentVersion(
 func (d *ClientImpl) SetRampingVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	req *workflowservice.SetWorkerDeploymentRampingVersionRequest,
+	deploymentName string,
+	version string,
+	percentage float32,
+	identity string,
+	ignoreMissingTaskQueues bool,
+	conflictToken []byte,
+	allowNoPollers bool,
 ) (_ *deploymentspb.SetRampingVersionResponse, retErr error) {
-	version := req.GetVersion()
-	percentage := req.GetPercentage()
-	identity := req.GetIdentity()
-	deploymentName := req.GetDeploymentName()
-	ignoreMissingTaskQueues := req.GetIgnoreMissingTaskQueues()
-	conflictToken := req.GetConflictToken()
-	allowNoPollers := req.GetAllowNoPollers()
-
 	//revive:disable-next-line:defer
 	defer d.record("SetRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
 
