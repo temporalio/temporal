@@ -909,14 +909,17 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs) error {
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 
-	// DescribeVersion activity to get all the task queues in the current version
+	// DescribeVersion activity to get all the task queues in the current version, or the ramping version if current is nil
+	version := d.State.RoutingConfig.CurrentVersion //nolint:staticcheck // SA1019: worker versioning v0.31
+	if version == worker_versioning.UnversionedVersionId {
+		version = d.State.RoutingConfig.RampingVersion //nolint:staticcheck // SA1019: worker versioning v0.31
+	}
 	var res deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult
 	err := workflow.ExecuteActivity(
 		activityCtx,
 		d.a.DescribeVersionFromWorkerDeployment,
 		&deploymentspb.DescribeVersionFromWorkerDeploymentActivityArgs{
-			Version: d.State.RoutingConfig.CurrentVersion, //nolint:staticcheck // SA1019: worker versioning v0.31
-
+			Version: version,
 		}).Get(ctx, &res)
 	if err != nil {
 		return err
