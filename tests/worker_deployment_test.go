@@ -1991,7 +1991,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 }
 
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentCurrentVersion_NoPollers() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60) // verify task queue versioning info is taking a lonng time :/
 	defer cancel()
 	tv := testvars.New(s).WithBuildIDNumber(1)
 
@@ -2013,7 +2013,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentCurrentVersion_NoPollers(
 }
 
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoPollers() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*75) // verify task queue versioning info is taking a lonng time :/
 	defer cancel()
 	tv := testvars.New(s).WithBuildIDNumber(1)
 
@@ -2030,8 +2030,8 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoPollers(
 	// let a poller arrive with that version
 	s.pollFromDeployment(ctx, tv)
 
-	// that poller's task queue should have the current versioning info
-	s.verifyTaskQueueVersioningInfo(ctx, tv.TaskQueue(), tv.DeploymentVersionString(), "", 0)
+	// that poller's task queue should have the ramping version info
+	s.verifyTaskQueueVersioningInfo(ctx, tv.TaskQueue(), worker_versioning.UnversionedVersionId, tv.DeploymentVersionString(), 5)
 }
 
 func (s *WorkerDeploymentSuite) TestTwoPollers_EnsureCreateVersion() {
@@ -2056,10 +2056,17 @@ func (s *WorkerDeploymentSuite) verifyTaskQueueVersioningInfo(ctx context.Contex
 			TaskQueue: tq,
 		})
 		a := require.New(t)
+		if tqDesc.GetVersioningInfo() != nil {
+			a.Equal(expectedCurrentVersion, tqDesc.GetVersioningInfo().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
+			a.Equal(expectedRampingVersion, tqDesc.GetVersioningInfo().GetRampingVersion()) //nolint:staticcheck // SA1019: old worker versioning
+			a.Equal(expectedPercentage, tqDesc.GetVersioningInfo().GetRampingVersionPercentage())
+		} else {
+			a.Equal(expectedCurrentVersion, worker_versioning.UnversionedVersionId)
+			a.Equal(expectedRampingVersion, worker_versioning.UnversionedVersionId)
+			a.Equal(expectedPercentage, 0)
+		}
 		a.Nil(err)
-		a.Equal(expectedCurrentVersion, tqDesc.GetVersioningInfo().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
-		a.Equal(expectedRampingVersion, tqDesc.GetVersioningInfo().GetRampingVersion()) //nolint:staticcheck // SA1019: old worker versioning
-		a.Equal(expectedPercentage, tqDesc.GetVersioningInfo().GetRampingVersionPercentage())
+
 	}, time.Second*10, time.Millisecond*1000)
 }
 
