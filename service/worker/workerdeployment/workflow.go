@@ -397,9 +397,23 @@ func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
 	return nil
 }
 
+func (d *WorkflowRunner) rampingVersionStringsEqual(a, b string) bool {
+	if a == worker_versioning.UnversionedVersionId && b == "" {
+		return true
+	}
+	if b == worker_versioning.UnversionedVersionId && a == "" {
+		return true
+	}
+	return a == b
+}
+
+func (d *WorkflowRunner) rampingVersionStringUnversioned(s string) bool {
+	return s == worker_versioning.UnversionedVersionId || s == ""
+}
+
 func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploymentspb.SetRampingVersionArgs) error {
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if args.Version == d.State.GetRoutingConfig().GetRampingVersion() &&
+	if d.rampingVersionStringsEqual(args.Version, d.State.GetRoutingConfig().GetRampingVersion()) &&
 		args.Percentage == d.State.GetRoutingConfig().GetRampingVersionPercentage() &&
 		args.Identity == d.State.GetLastModifierIdentity() {
 		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType, d.State.GetConflictToken())
@@ -469,8 +483,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			RampPercentage:    0,   // remove ramp
 		}
 
-		// TODO (Shivam): remove the empty string check once canary stops flaking out
-		if prevRampingVersion != worker_versioning.UnversionedVersionId && prevRampingVersion != "" {
+		if !d.rampingVersionStringUnversioned(prevRampingVersion) {
 			if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs, false); err != nil {
 				return nil, err
 			}
@@ -519,8 +532,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			RampingSinceTime:  rampingSinceTime,
 			RampPercentage:    args.Percentage,
 		}
-		// TODO (Shivam): remove the empty string check once canary stops flaking out
-		if newRampingVersion != worker_versioning.UnversionedVersionId && newRampingVersion != "" {
+		if !d.rampingVersionStringUnversioned(newRampingVersion) {
 			if _, err := d.syncVersion(ctx, newRampingVersion, setRampUpdateArgs, true); err != nil {
 				return nil, err
 			}
@@ -537,8 +549,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 				RampingSinceTime:  nil, // remove ramp
 				RampPercentage:    0,   // remove ramp
 			}
-			// TODO (Shivam): remove the empty string check once canary stops flaking out
-			if prevRampingVersion != worker_versioning.UnversionedVersionId && prevRampingVersion != "" {
+			if !d.rampingVersionStringUnversioned(prevRampingVersion) {
 				if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs, false); err != nil {
 					return nil, err
 				}
@@ -914,6 +925,11 @@ func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdate
 	if version == worker_versioning.UnversionedVersionId {
 		version = d.State.RoutingConfig.RampingVersion //nolint:staticcheck // SA1019: worker versioning v0.31
 	}
+
+	if d.rampingVersionStringUnversioned(version) {
+		return nil
+	}
+
 	var res deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult
 	err := workflow.ExecuteActivity(
 		activityCtx,

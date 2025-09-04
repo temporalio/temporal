@@ -974,7 +974,13 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Valid_SetN
 	tv := testvars.New(s).WithBuildIDNumber(1)
 	s.startVersionWorkflow(ctx, tv)
 
-	s.setAndVerifyRampingVersion(ctx, tv, false, 5, false, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{})
+	// set ramping version to unversioned will change the modifier identity, so it's not a no-op
+	s.setAndVerifyRampingVersion(ctx, tv, true, 0, false, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{})
+
+	// set a non-nil ramping version so that we can unset it in the next step
+	s.setAndVerifyRampingVersion(ctx, tv, false, 5, false, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
+		PreviousVersion: worker_versioning.UnversionedVersionId,
+	})
 
 	// should be able to unset ramping version while current version is nil with no error
 	s.setAndVerifyRampingVersion(ctx, tv, true, 0, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
