@@ -73,6 +73,7 @@ const (
 
 	ErrRampingVersionDoesNotHaveAllTaskQueues = "proposed ramping version is missing active task queues from the current version; these would become unversioned if it is set as the ramping version"
 	ErrCurrentVersionDoesNotHaveAllTaskQueues = "proposed current version is missing active task queues from the current version; these would become unversioned if it is set as the current version"
+	ErrWorkerDeploymentNotFound               = "no Worker Deployment found with name %s; does your Worker Deployment have pollers?"
 )
 
 var (
