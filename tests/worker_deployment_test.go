@@ -967,6 +967,29 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_Se
 	})
 }
 
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Valid_SetNilCurrent_To_Ramping() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	tv := testvars.New(s).WithBuildIDNumber(1)
+	s.startVersionWorkflow(ctx, tv)
+
+	// set ramping version to unversioned will change the modifier identity, so it's not a no-op
+	s.setAndVerifyRampingVersion(ctx, tv, true, 0, false, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{})
+
+	// set a non-nil ramping version so that we can unset it in the next step
+	s.setAndVerifyRampingVersion(ctx, tv, false, 5, false, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
+		PreviousVersion: worker_versioning.UnversionedVersionId,
+	})
+
+	// should be able to unset ramping version while current version is nil with no error
+	s.setAndVerifyRampingVersion(ctx, tv, true, 0, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
+		PreviousVersion:           tv.DeploymentVersionString(), //nolint:staticcheck // SA1019: worker versioning v0.31
+		PreviousDeploymentVersion: tv.ExternalDeploymentVersion(),
+		PreviousPercentage:        5,
+	})
+}
+
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_ModifyExistingRampVersionPercentage() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -1140,7 +1163,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 			Name:       tv.DeploymentSeries(),
 			CreateTime: versionCreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
-				RampingVersion:                      "",
+				RampingVersion:                      worker_versioning.UnversionedVersionId, //nolint:staticcheck // SA1019: worker versioning v0.31
 				RampingVersionPercentage:            0,
 				RampingVersionChangedTime:           unsetRampingUpdateTime,
 				RampingVersionPercentageChangedTime: unsetRampingUpdateTime,
@@ -2970,7 +2993,7 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 		version = worker_versioning.UnversionedVersionId
 	}
 	if unset {
-		version = ""
+		version = worker_versioning.UnversionedVersionId
 		percentage = 0
 	}
 	if !allowNoPollers && ensureSystemWorkflowsExist {
