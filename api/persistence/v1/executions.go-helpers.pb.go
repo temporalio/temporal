@@ -2,6 +2,8 @@
 package persistence
 
 import (
+	"fmt"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -1002,4 +1004,22 @@ func (this *ActivityPauseInfo) Equal(that interface{}) bool {
 	}
 
 	return proto.Equal(this, that1)
+}
+
+var (
+	WorkflowTaskTimedOutType_shorthandValue = map[string]int32{
+		"Unspecified":     0,
+		"ScheduleToClose": 1,
+	}
+)
+
+// WorkflowTaskTimedOutTypeFromString parses a WorkflowTaskTimedOutType value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to WorkflowTaskTimedOutType
+func WorkflowTaskTimedOutTypeFromString(s string) (WorkflowTaskTimedOutType, error) {
+	if v, ok := WorkflowTaskTimedOutType_value[s]; ok {
+		return WorkflowTaskTimedOutType(v), nil
+	} else if v, ok := WorkflowTaskTimedOutType_shorthandValue[s]; ok {
+		return WorkflowTaskTimedOutType(v), nil
+	}
+	return WorkflowTaskTimedOutType(0), fmt.Errorf("%s is not a valid WorkflowTaskTimedOutType", s)
 }

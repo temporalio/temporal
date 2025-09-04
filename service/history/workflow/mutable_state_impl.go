@@ -5873,9 +5873,18 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 }
 
 func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
-	reportedProblems := []string{
-		fmt.Sprintf("category=%s", ms.executionInfo.LastWorkflowTaskFailureCategory),
-		fmt.Sprintf("cause=%s", ms.executionInfo.LastWorkflowTaskFailureCause),
+	var reportedProblems []string
+	switch wftFailure := ms.executionInfo.LastWorkflowTaskFailure.(type) {
+	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause:
+		reportedProblems = []string{
+			fmt.Sprintf("category=WorkflowTaskFailed"),
+			fmt.Sprintf("cause=%s", wftFailure.LastWorkflowTaskFailureCause.String()),
+		}
+	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType:
+		reportedProblems = []string{
+			fmt.Sprintf("category=WorkflowTaskTimedOut"),
+			fmt.Sprintf("cause=%s", wftFailure.LastWorkflowTaskTimedOutType.String()),
+		}
 	}
 
 	reportedProblemsPayload, err := searchattribute.EncodeValue(reportedProblems, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
@@ -5907,8 +5916,7 @@ func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
 		return nil
 	}
 
-	ms.executionInfo.LastWorkflowTaskFailureCategory = ""
-	ms.executionInfo.LastWorkflowTaskFailureCause = ""
+	ms.executionInfo.LastWorkflowTaskFailure = nil
 
 	// Just remove the search attribute entirely for now
 	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: nil})

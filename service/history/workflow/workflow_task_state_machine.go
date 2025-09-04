@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -811,8 +812,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 		)
 
 		if event != nil {
-			m.ms.executionInfo.LastWorkflowTaskFailureCategory = "WorkflowTaskFailed"
-			m.ms.executionInfo.LastWorkflowTaskFailureCause = cause.String()
+			m.ms.executionInfo.LastWorkflowTaskFailure = &persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause{
+				LastWorkflowTaskFailureCause: cause,
+			}
 		}
 	}
 
@@ -874,12 +876,12 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		)
 
-		if m.ms.executionInfo.LastWorkflowTaskFailureCategory == "" {
-			m.ms.executionInfo.LastWorkflowTaskFailureCategory = "WorkflowTaskTimedOut"
+		if m.ms.executionInfo.LastWorkflowTaskFailure == nil {
+			m.ms.executionInfo.LastWorkflowTaskFailure = &persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType{
+				LastWorkflowTaskTimedOutType: persistencespb.WORKFLOW_TASK_TIMED_OUT_TYPE_SCHEDULE_TO_CLOSE,
+			}
 		}
-		if m.ms.executionInfo.LastWorkflowTaskFailureCause == "" {
-			m.ms.executionInfo.LastWorkflowTaskFailureCause = "WorkflowTaskStartToCloseTimeout"
-		}
+
 	}
 
 	if err := m.ApplyWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
