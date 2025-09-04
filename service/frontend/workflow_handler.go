@@ -3024,7 +3024,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			SdkMetadata:                     true,
 			BuildIdBasedVersioning:          true,
 			CountGroupByExecutionStatus:     true,
-			Nexus:                           wh.httpEnabled && wh.config.EnableNexusAPIs(),
+			Nexus:                           wh.httpEnabled && wh.config.EnableNexus(),
 		},
 	}, nil
 }
@@ -5213,6 +5213,10 @@ func (wh *WorkflowHandler) StartNexusOperation(ctx context.Context, request *wor
 	if request == nil {
 		return nil, errRequestNotSet
 	}
+	if !wh.config.EnableNexus() || !wh.config.EnableNexusGRPC(request.Namespace) {
+		return nil, errNexusGRPCNotAllowed
+	}
+
 	ns, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.Namespace))
 	if err != nil {
 		return nil, err
@@ -5319,6 +5323,10 @@ func (wh *WorkflowHandler) RequestCancelNexusOperation(ctx context.Context, requ
 	if request == nil {
 		return nil, errRequestNotSet
 	}
+	if !wh.config.EnableNexus() || !wh.config.EnableNexusGRPC(request.Namespace) {
+		return nil, errNexusGRPCNotAllowed
+	}
+
 	ns, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.Namespace))
 	if err != nil {
 		return nil, err
@@ -5365,6 +5373,10 @@ func (wh *WorkflowHandler) FetchNexusOperationInfo(ctx context.Context, request 
 	if request == nil {
 		return nil, errRequestNotSet
 	}
+	if !wh.config.EnableNexus() || !wh.config.EnableNexusGRPC(request.Namespace) {
+		return nil, errNexusGRPCNotAllowed
+	}
+
 	ns, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.Namespace))
 	if err != nil {
 		return nil, err
@@ -5420,6 +5432,10 @@ func (wh *WorkflowHandler) FetchNexusOperationResult(ctx context.Context, reques
 	if request == nil {
 		return nil, errRequestNotSet
 	}
+	if !wh.config.EnableNexus() || !wh.config.EnableNexusGRPC(request.Namespace) {
+		return nil, errNexusGRPCNotAllowed
+	}
+
 	ns, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.Namespace))
 	if err != nil {
 		return nil, err
@@ -5630,7 +5646,7 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 	ns namespace.Name,
 	callbacks []*commonpb.Callback,
 ) error {
-	if len(callbacks) > 0 && !wh.config.EnableNexusAPIs() {
+	if len(callbacks) > 0 && !wh.config.EnableNexus() {
 		return status.Error(
 			codes.InvalidArgument,
 			"attaching workflow callbacks is disabled for this namespace",

@@ -181,8 +181,10 @@ type Config struct {
 	EnableWorkerVersioningWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioningRules    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	// EnableNexusAPIs controls whether to allow invoking Nexus related APIs.
-	EnableNexusAPIs dynamicconfig.BoolPropertyFn
+	// EnableNexus controls whether Nexus is enabled for this host.
+	EnableNexus dynamicconfig.BoolPropertyFn
+	// EnableNexusGRPC controls whether to accept Nexus requests over gRPC.
+	EnableNexusGRPC dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	CallbackURLMaxLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackHeaderMaxSize   dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -325,7 +327,8 @@ func NewConfig(
 		EnableWorkerVersioningWorkflow: dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Get(dc),
 		EnableWorkerVersioningRules:    dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Get(dc),
 
-		EnableNexusAPIs:              dynamicconfig.EnableNexus.Get(dc),
+		EnableNexus:                  dynamicconfig.EnableNexus.Get(dc),
+		EnableNexusGRPC:              dynamicconfig.EnableNexusGRPC.Get(dc),
 		CallbackURLMaxLength:         dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		CallbackHeaderMaxSize:        dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
 		MaxCallbacksPerWorkflow:      dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
@@ -458,7 +461,7 @@ func (s *Service) Start() {
 				s.logger.Fatal("Failed to serve HTTP API server", tag.Error(err))
 			}
 		}()
-	} else if s.config.EnableNexusAPIs() {
+	} else if s.config.EnableNexus() {
 		var action string
 		if os.Args[0] == "temporal" {
 			action = "To enable Nexus, start the server with: `temporal server start-dev --http-port 7243 --dynamic-config-value system.enableNexus=true`."

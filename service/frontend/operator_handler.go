@@ -779,7 +779,7 @@ func (h *OperatorHandlerImpl) CreateNexusEndpoint(
 	request *operatorservice.CreateNexusEndpointRequest,
 ) (_ *operatorservice.CreateNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
+	if !h.config.EnableNexus() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
 	return h.nexusEndpointClient.Create(ctx, request)
@@ -790,7 +790,7 @@ func (h *OperatorHandlerImpl) UpdateNexusEndpoint(
 	request *operatorservice.UpdateNexusEndpointRequest,
 ) (_ *operatorservice.UpdateNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
+	if !h.config.EnableNexus() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
 	return h.nexusEndpointClient.Update(ctx, request)
@@ -801,7 +801,7 @@ func (h *OperatorHandlerImpl) DeleteNexusEndpoint(
 	request *operatorservice.DeleteNexusEndpointRequest,
 ) (_ *operatorservice.DeleteNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
+	if !h.config.EnableNexus() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
 	return h.nexusEndpointClient.Delete(ctx, request)
@@ -812,7 +812,7 @@ func (h *OperatorHandlerImpl) GetNexusEndpoint(
 	request *operatorservice.GetNexusEndpointRequest,
 ) (_ *operatorservice.GetNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
+	if !h.config.EnableNexus() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
 	return h.nexusEndpointClient.Get(ctx, request)
@@ -823,7 +823,7 @@ func (h *OperatorHandlerImpl) ListNexusEndpoints(
 	request *operatorservice.ListNexusEndpointsRequest,
 ) (_ *operatorservice.ListNexusEndpointsResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
+	if !h.config.EnableNexus() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
 	return h.nexusEndpointClient.List(ctx, request)

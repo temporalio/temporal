@@ -862,6 +862,11 @@ and deployment interaction in matching and history.`,
 		`Toggles all Nexus functionality on the server. Note that toggling this requires restarting server hosts for it
 		to take effect.`,
 	)
+	EnableNexusGRPC = NewNamespaceBoolSetting(
+		"frontend.enableNexusGRPC",
+		false,
+		`Toggles whether the server will accept requests for Nexus gRPC APIs. Default disabled. Requires system.enableNexus config to be true.`,
+	)
 
 	AllowDeleteNamespaceIfNexusEndpointTarget = NewGlobalBoolSetting(
 		"frontend.allowDeleteNamespaceIfNexusEndpointTarget",

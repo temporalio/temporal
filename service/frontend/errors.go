@@ -128,4 +128,6 @@ var (
 	errWorkerVersioningWorkflowAPIsNotAllowed = serviceerror.NewPermissionDenied("Worker versioning in workflow progress APIs is disabled on this namespace.", "")
 
 	errListHistoryTasksNotAllowed = serviceerror.NewPermissionDenied("ListHistoryTasks feature is disabled on this cluster.", "")
+
+	errNexusGRPCNotAllowed = serviceerror.NewPermissionDenied("Nexus over gRPC is disabled on this namespace", "")
 )
