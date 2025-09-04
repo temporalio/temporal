@@ -35,6 +35,7 @@ const (
 	AddVersionToWorkerDeployment      = "add-version-to-worker-deployment" // for Worker Deployment wfs
 	DeleteVersion                     = "delete-version"                   // for WorkerDeployment wfs
 	DeleteDeployment                  = "delete-deployment"                // for WorkerDeployment wfs
+	SetManagerIdentity                = "set-manager-identity"             // for WorkerDeployment wfs
 
 	// Signals
 	ForceCANSignalName       = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs

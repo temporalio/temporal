@@ -1564,6 +1564,31 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 
 }
 
+func (s *WorkerDeploymentSuite) TestSetManagerIdentity() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	tv := testvars.New(s).WithBuildIDNumber(1)
+
+	go s.pollFromDeployment(ctx, tv)
+	s.ensureCreateVersionInDeployment(tv)
+
+	// set identity to self
+	s.setAndValidateManagerIdentity(ctx, tv, true, false, "", "", "")
+
+	// set identity to other
+	s.setAndValidateManagerIdentity(ctx, tv, false, false, "other", tv.ClientIdentity(), "")
+
+	// set identity to other again (should be idempotent except for previousManager)
+	s.setAndValidateManagerIdentity(ctx, tv, false, false, "other", "other", "")
+
+	// unset identity
+	s.setAndValidateManagerIdentity(ctx, tv, false, false, "", "other", "")
+
+	// set identity with bad conflict token
+	s.setAndValidateManagerIdentity(ctx, tv, true, true, "", "", "conflict token mismatch")
+
+}
+
 // Should see that the current version of the task queues becomes unversioned
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
@@ -2907,6 +2932,58 @@ func (s *WorkerDeploymentSuite) setCurrentVersionUnversionedOption(ctx context.C
 	s.NoError(err)
 	s.NotNil(resp.PreviousVersion)
 	s.Equal(previousCurrent, resp.PreviousVersion)
+}
+
+func (s *WorkerDeploymentSuite) setAndValidateManagerIdentity(ctx context.Context, tv *testvars.TestVars, self, useWrongConflictToken bool, newManager, prevManager, expectedError string) {
+	s.ensureCreateDeployment(tv)
+	s.ensureCreateVersionInDeployment(tv)
+
+	var cT []byte
+	if useWrongConflictToken {
+		cT, _ = time.Now().MarshalBinary()
+	} else {
+		desc, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentVersion().GetDeploymentName(),
+		})
+		s.NoError(err)
+		cT = desc.GetConflictToken()
+	}
+
+	req := &workflowservice.SetWorkerDeploymentManagerRequest{
+		Namespace:          s.Namespace().String(),
+		DeploymentName:     tv.DeploymentVersion().GetDeploymentName(),
+		NewManagerIdentity: &workflowservice.SetWorkerDeploymentManagerRequest_ManagerIdentity{},
+		Identity:           tv.ClientIdentity(),
+		ConflictToken:      cT,
+	}
+	var expectedManagerIdentity string
+	if self {
+		req.NewManagerIdentity = &workflowservice.SetWorkerDeploymentManagerRequest_Self{
+			Self: true,
+		}
+		expectedManagerIdentity = tv.ClientIdentity()
+	} else {
+		req.NewManagerIdentity = &workflowservice.SetWorkerDeploymentManagerRequest_ManagerIdentity{
+			ManagerIdentity: newManager,
+		}
+		expectedManagerIdentity = newManager
+	}
+	resp, err := s.FrontendClient().SetWorkerDeploymentManager(ctx, req)
+	if expectedError != "" {
+		s.Error(err)
+		s.Contains(err.Error(), expectedError)
+		return
+	}
+	s.NoError(err)
+	s.Equal(prevManager, resp.GetPreviousManagerIdentity())
+
+	desc, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentVersion().GetDeploymentName(),
+	})
+	s.NoError(err)
+	s.Equal(expectedManagerIdentity, desc.GetWorkerDeploymentInfo().GetManagerIdentity())
 }
 
 func (s *WorkerDeploymentSuite) createVersionsInDeployments(ctx context.Context, tv *testvars.TestVars, n int) []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary {
