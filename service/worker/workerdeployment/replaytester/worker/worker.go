@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -20,6 +21,7 @@ func main() {
 	}
 	defer c.Close()
 
+	identity := "test-identity"
 	deploymentName := "foo"
 	build1 := "1.0"
 	v1 := worker.WorkerDeploymentVersion{
@@ -69,6 +71,17 @@ func main() {
 	deploymentClient := c.WorkerDeploymentClient()
 	dHandle := deploymentClient.GetHandle(deploymentName)
 
+	// Set Client as the ManagerIdentity so that those validators are exercised
+	_, err = c.WorkflowService().SetWorkerDeploymentManager(context.Background(), &workflowservice.SetWorkerDeploymentManagerRequest{
+		Namespace:          client.DefaultNamespace,
+		DeploymentName:     deploymentName,
+		NewManagerIdentity: &workflowservice.SetWorkerDeploymentManagerRequest_Self{Self: true},
+		Identity:           identity,
+	})
+	if err != nil {
+		log.Fatalln("Unable to set deployment manager", err)
+	}
+
 	// Update version metadata
 	_, err = dHandle.UpdateVersionMetadata(context.Background(), client.WorkerDeploymentUpdateVersionMetadataOptions{
 		Version: v1,
@@ -86,6 +99,7 @@ func main() {
 	_, err = dHandle.SetRampingVersion(context.Background(), client.WorkerDeploymentSetRampingVersionOptions{
 		BuildID:    build1,
 		Percentage: 1,
+		Identity:   identity,
 	})
 	if err != nil {
 		log.Fatalln("Unable to set ramping version", err)
@@ -97,6 +111,7 @@ func main() {
 	_, err = dHandle.SetRampingVersion(context.Background(), client.WorkerDeploymentSetRampingVersionOptions{
 		BuildID:    build1,
 		Percentage: 0,
+		Identity:   identity,
 	})
 	if err != nil {
 		log.Fatalln("Unable to set ramping version to zero", err)
@@ -107,6 +122,7 @@ func main() {
 	_, err = dHandle.SetCurrentVersion(context.Background(), client.WorkerDeploymentSetCurrentVersionOptions{
 		BuildID:                 build1,
 		IgnoreMissingTaskQueues: true,
+		Identity:                identity,
 	})
 	if err != nil {
 		log.Fatalln("Unable to set current version", err)
@@ -118,6 +134,7 @@ func main() {
 		BuildID:                 "",
 		Percentage:              20,
 		IgnoreMissingTaskQueues: true,
+		Identity:                identity,
 	})
 	if err != nil {
 		log.Fatalln("Unable to set ramping version", err)
@@ -128,6 +145,7 @@ func main() {
 	_, err = dHandle.SetCurrentVersion(context.Background(), client.WorkerDeploymentSetCurrentVersionOptions{
 		BuildID:                 "",
 		IgnoreMissingTaskQueues: true,
+		Identity:                identity,
 	})
 	if err != nil {
 		log.Fatalln("Unable to set current version", err)
@@ -145,6 +163,7 @@ func main() {
 	_, err = dHandle.SetCurrentVersion(context.Background(), client.WorkerDeploymentSetCurrentVersionOptions{
 		BuildID:                 build1,
 		IgnoreMissingTaskQueues: true,
+		Identity:                identity,
 	})
 	if err != nil {
 		log.Fatalln("Unable to set current version", err)
@@ -155,6 +174,7 @@ func main() {
 	_, err = dHandle.SetCurrentVersion(context.Background(), client.WorkerDeploymentSetCurrentVersionOptions{
 		BuildID:                 "",
 		IgnoreMissingTaskQueues: true,
+		Identity:                identity,
 	})
 	if err != nil {
 		log.Fatalln("Unable to set current version", err)
@@ -176,6 +196,7 @@ func main() {
 	_, err = dHandle.DeleteVersion(context.Background(), client.WorkerDeploymentDeleteVersionOptions{
 		BuildID:      build1,
 		SkipDrainage: true,
+		Identity:     identity,
 	})
 	if err != nil {
 		log.Fatalln("Unable to delete version", err)
@@ -183,7 +204,8 @@ func main() {
 
 	// Delete the deployment
 	_, err = deploymentClient.Delete(context.Background(), client.WorkerDeploymentDeleteOptions{
-		Name: deploymentName,
+		Name:     deploymentName,
+		Identity: identity,
 	})
 	if err != nil {
 		log.Fatalln("Unable to delete deployment", err)

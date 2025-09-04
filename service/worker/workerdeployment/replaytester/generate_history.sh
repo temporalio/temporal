@@ -19,7 +19,7 @@ version="1.0"
 # Expected workflow counts - users can override these if their changes are expected to generate more workflows which will be true when a breaking change to 
 # these workflows is introduced.
 # These values are used by the replay tester to validate that your workflow changes haven't accidentally created additional executions.
-EXPECTED_DEPLOYMENT_WORKFLOWS=${EXPECTED_DEPLOYMENT_WORKFLOWS:-12}
+EXPECTED_DEPLOYMENT_WORKFLOWS=${EXPECTED_DEPLOYMENT_WORKFLOWS:-13}
 EXPECTED_VERSION_WORKFLOWS=${EXPECTED_VERSION_WORKFLOWS:-14}
 
 echo "📋 Expected workflow counts:"
