@@ -32,7 +32,7 @@ new_mapping='
 {
   "properties": {
     "TemporalReportedProblems": {
-      "type": "keyword_list"
+      "type": "keyword"
     }
   }
 }
