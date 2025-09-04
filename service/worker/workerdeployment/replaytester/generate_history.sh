@@ -35,7 +35,7 @@ temporal operator namespace create default
 echo "Running the Go program..."
 go run "$(dirname "$0")/worker/worker.go"
 
-if [ $? -ne 0 ]; then
+if [ ! go run "$(dirname "$0")/worker/worker.go" ]; then
   echo "Go program exited with an error. Exiting bash script." >&2
   exit 1
 fi
