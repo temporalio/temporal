@@ -66,8 +66,9 @@ type runner struct {
 
 func newRunner(command string) *runner {
 	return &runner{
-		command:  command,
-		attempts: make([]*attempt, 0),
+		command:     command,
+		attempts:    make([]*attempt, 0),
+		maxAttempts: 1,
 	}
 }
 
@@ -117,9 +118,6 @@ func (r *runner) sanitizeAndParseArgs(args []string) ([]string, error) {
 	default: // ie gotestsum
 		if r.coverProfilePath == "" {
 			return nil, fmt.Errorf("missing required argument %q", coverProfileFlag)
-		}
-		if r.maxAttempts == 0 {
-			return nil, fmt.Errorf("missing required argument %q", maxAttemptsFlag)
 		}
 	}
 
