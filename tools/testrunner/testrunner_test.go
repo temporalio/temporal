@@ -9,8 +9,9 @@ import (
 
 func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("Passthrough", func(t *testing.T) {
-		r := newRunner("gotestsum")
-		args, err := r.sanitizeAndParseArgs([]string{
+		r := newRunner()
+		args, err := r.sanitizeAndParseArgs(testCommand, []string{
+			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
@@ -34,9 +35,9 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		require.Equal(t, "test.cover.out", r.coverProfilePath)
 	})
 
-	t.Run("AttemptsMissing", func(t *testing.T) {
-		r := newRunner("gotestsum")
-		_, err := r.sanitizeAndParseArgs([]string{
+	t.Run("GoTestSumPathMissing", func(t *testing.T) {
+		r := newRunner()
+		_, err := r.sanitizeAndParseArgs(testCommand, []string{
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
@@ -46,11 +47,13 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
-		require.ErrorContains(t, err, `missing required argument "--max-attempts="`)
+		require.ErrorContains(t, err, `missing required argument "--gotestsum-path="`)
 	})
+
 	t.Run("AttemptsInvalid1", func(t *testing.T) {
-		r := newRunner("gotestsum")
-		_, err := r.sanitizeAndParseArgs([]string{
+		r := newRunner()
+		_, err := r.sanitizeAndParseArgs(testCommand, []string{
+			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
@@ -61,9 +64,11 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		})
 		require.ErrorContains(t, err, `invalid argument "--max-attempts=": must be greater than zero`)
 	})
+
 	t.Run("AttemptsInvalid2", func(t *testing.T) {
-		r := newRunner("gotestsum")
-		_, err := r.sanitizeAndParseArgs([]string{
+		r := newRunner()
+		_, err := r.sanitizeAndParseArgs(testCommand, []string{
+			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
@@ -76,8 +81,8 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	})
 
 	t.Run("JunitfileMissing", func(t *testing.T) {
-		r := newRunner("gotestsum")
-		_, err := r.sanitizeAndParseArgs([]string{
+		r := newRunner()
+		_, err := r.sanitizeAndParseArgs(testCommand, []string{
 			// missing:
 			// "--junitfile=test.xml"
 			"-foo",
@@ -91,8 +96,9 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	})
 
 	t.Run("CoverprofileMissing", func(t *testing.T) {
-		r := newRunner("gotestsum")
-		_, err := r.sanitizeAndParseArgs([]string{
+		r := newRunner()
+		_, err := r.sanitizeAndParseArgs(testCommand, []string{
+			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
@@ -121,10 +127,10 @@ func TestStripRunFromArgs(t *testing.T) {
 func TestRunnerReportCrash(t *testing.T) {
 	out, err := os.CreateTemp("", "junit-report-*.xml")
 	require.NoError(t, err)
-	defer os.Remove(out.Name())
+	defer func() { _ = os.Remove(out.Name()) }()
 
-	r := newRunner(crashReportCommand)
-	_, err = r.sanitizeAndParseArgs([]string{
+	r := newRunner()
+	_, err = r.sanitizeAndParseArgs(crashReportCommand, []string{
 		"--junitfile=" + out.Name(),
 		"--crashreportname=my-test",
 	})

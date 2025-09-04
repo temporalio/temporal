@@ -23,6 +23,7 @@ const (
 	coverProfileFlag      = "-coverprofile="
 	junitReportFlag       = "--junitfile="
 	crashReportNameFlag   = "--crashreportname="
+	gotestsumPathFlag     = "--gotestsum-path="
 )
 
 const (
@@ -47,8 +48,8 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 		}
 	}
 	log.Printf("starting test attempt #%d: %v %v",
-		a.number, a.runner.command, strings.Join(args, " "))
-	cmd := exec.CommandContext(ctx, a.runner.command, args...)
+		a.number, a.runner.gotestsumPath, strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, a.runner.gotestsumPath, args...)
 	var output strings.Builder
 	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
 	cmd.Stderr = os.Stderr
@@ -60,7 +61,7 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 }
 
 type runner struct {
-	command          string
+	gotestsumPath    string
 	junitOutputPath  string
 	coverProfilePath string
 	attempts         []*attempt
@@ -68,15 +69,15 @@ type runner struct {
 	crashName        string
 }
 
-func newRunner(command string) *runner {
+func newRunner() *runner {
 	return &runner{
-		command:     command,
 		attempts:    make([]*attempt, 0),
 		maxAttempts: 1,
 	}
 }
 
-func (r *runner) sanitizeAndParseArgs(args []string) ([]string, error) {
+// nolint:revive,cognitive-complexity
+func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, error) {
 	var sanitizedArgs []string
 	for _, arg := range args {
 		if strings.HasPrefix(arg, maxAttemptsFlag) {
@@ -91,12 +92,17 @@ func (r *runner) sanitizeAndParseArgs(args []string) ([]string, error) {
 			continue // this is a `testrunner` only arg and not passed through
 		}
 
+		if strings.HasPrefix(arg, gotestsumPathFlag) {
+			r.gotestsumPath = strings.Split(arg, "=")[1]
+			continue
+		}
+
 		if strings.HasPrefix(arg, crashReportNameFlag) {
 			r.crashName = strings.Split(arg, "=")[1]
 			if r.crashName == "" {
 				return nil, fmt.Errorf("invalid argument %q: must not be empty", crashReportNameFlag)
 			}
-			if r.command != crashReportCommand {
+			if command != crashReportCommand {
 				return nil, fmt.Errorf("argument %q is only valid for command %q", crashReportNameFlag, crashReportCommand)
 			}
 			continue // this is a `testrunner` only arg and not passed through
@@ -116,15 +122,23 @@ func (r *runner) sanitizeAndParseArgs(args []string) ([]string, error) {
 		return nil, fmt.Errorf("missing required argument %q", junitReportFlag)
 	}
 
-	switch r.command {
-	case crashReportCommand:
-		// nothing else to verify
+	switch command {
 	case testCommand:
 		if r.coverProfilePath == "" {
 			return nil, fmt.Errorf("missing required argument %q", coverProfileFlag)
 		}
+		if r.junitOutputPath == "" {
+			return nil, fmt.Errorf("missing required argument %q", junitReportFlag)
+		}
+		if r.gotestsumPath == "" {
+			return nil, fmt.Errorf("missing required argument %q", gotestsumPathFlag)
+		}
+	case crashReportCommand:
+		if r.crashName == "" {
+			return nil, fmt.Errorf("missing required argument %q", crashReportNameFlag)
+		}
 	default:
-		return nil, fmt.Errorf("unknown command %q", r.command)
+		return nil, fmt.Errorf("unknown command %q", command)
 	}
 
 	return sanitizedArgs, nil
@@ -155,26 +169,34 @@ func (r *runner) allReports() []*junitReport {
 	return reports
 }
 
+// Main is the entry point for the testrunner tool.
+// nolint:revive,deep-exit
 func Main() {
 	log.SetPrefix("[testrunner] ")
 	ctx := context.Background()
+
 	if len(os.Args) < 2 {
 		log.Fatalf("expected at least 2 arguments")
 	}
-	r := newRunner(os.Args[1])
-	args, err := r.sanitizeAndParseArgs(os.Args[2:])
+	r := newRunner()
+
+	command := os.Args[1]
+	args, err := r.sanitizeAndParseArgs(command, os.Args[2:])
 	if err != nil {
 		log.Fatalf("failed to parse command line options: %v", err)
 	}
 
-	switch r.command {
+	switch command {
+	case testCommand:
+		r.runTests(ctx, args)
 	case crashReportCommand:
 		r.reportCrash()
 	default:
-		r.runTests(ctx, args)
+		log.Fatalf("unknown command %q", command)
 	}
 }
 
+// nolint:revive,deep-exit
 func (r *runner) reportCrash() {
 	jr := generateStatic([]string{r.crashName}, "crash", "Crash")
 	jr.path = r.junitOutputPath
