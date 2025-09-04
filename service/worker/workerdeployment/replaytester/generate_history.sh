@@ -33,7 +33,6 @@ temporal operator namespace create default
 
 # Run the worker which shall start the deployment entity workflows....
 echo "Running the Go program..."
-go run "$(dirname "$0")/worker/worker.go"
 
 if ! go run "$(dirname "$0")/worker/worker.go"; then
   echo "Go program exited with an error. Exiting bash script." >&2
