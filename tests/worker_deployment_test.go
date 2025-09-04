@@ -2965,7 +2965,7 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 		s.Equal(prevVersion.GetBuildId(), resp.GetPreviousDeploymentVersion().GetBuildId())
 		s.Equal(prevVersion.GetDeploymentName(), resp.GetPreviousDeploymentVersion().GetDeploymentName())
 	} else {
-		s.Equal(expectedResp.GetPreviousVersion(), resp.GetPreviousVersion())
+		s.Equal(expectedResp.GetPreviousVersion(), resp.GetPreviousVersion()) // nolint:staticcheck // SA1019: version v0.31
 	}
 	s.Equal(expectedResp.GetPreviousPercentage(), resp.GetPreviousPercentage())
 }
