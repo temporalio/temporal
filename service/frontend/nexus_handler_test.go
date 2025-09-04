@@ -117,7 +117,7 @@ func newOperationContext(options contextOptions) *operationContext {
 	)
 
 	checker := mockNamespaceChecker(oc.namespace.Name())
-	oc.auth = authorization.NewInterceptor(nil, mockAuthorizer{}, oc.metricsHandler, oc.logger, checker, nil, "", "")
+	oc.auth = authorization.NewInterceptor(nil, mockAuthorizer{}, oc.metricsHandler, oc.logger, checker, nil, "", "", dynamicconfig.GetBoolPropertyFn(false))
 	oc.namespaceConcurrencyLimitInterceptor = interceptor.NewConcurrentRequestLimitInterceptor(
 		nil,
 		nil,

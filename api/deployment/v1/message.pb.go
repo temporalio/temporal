@@ -1402,6 +1402,67 @@ func (x *StartWorkerDeploymentRequest) GetRequestId() string {
 	return ""
 }
 
+// used as Worker Deployment workflow activity input:
+type StartWorkerDeploymentVersionRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentName string                 `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
+	BuildId        string                 `protobuf:"bytes,2,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
+	RequestId      string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *StartWorkerDeploymentVersionRequest) Reset() {
+	*x = StartWorkerDeploymentVersionRequest{}
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartWorkerDeploymentVersionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartWorkerDeploymentVersionRequest) ProtoMessage() {}
+
+func (x *StartWorkerDeploymentVersionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartWorkerDeploymentVersionRequest.ProtoReflect.Descriptor instead.
+func (*StartWorkerDeploymentVersionRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *StartWorkerDeploymentVersionRequest) GetDeploymentName() string {
+	if x != nil {
+		return x.DeploymentName
+	}
+	return ""
+}
+
+func (x *StartWorkerDeploymentVersionRequest) GetBuildId() string {
+	if x != nil {
+		return x.BuildId
+	}
+	return ""
+}
+
+func (x *StartWorkerDeploymentVersionRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
 // used as Worker Deployment Version workflow activity input:
 type SyncDeploymentVersionUserDataRequest struct {
 	state   protoimpl.MessageState                               `protogen:"open.v1"`
@@ -1415,7 +1476,7 @@ type SyncDeploymentVersionUserDataRequest struct {
 
 func (x *SyncDeploymentVersionUserDataRequest) Reset() {
 	*x = SyncDeploymentVersionUserDataRequest{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[20]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1427,7 +1488,7 @@ func (x *SyncDeploymentVersionUserDataRequest) String() string {
 func (*SyncDeploymentVersionUserDataRequest) ProtoMessage() {}
 
 func (x *SyncDeploymentVersionUserDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[20]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1440,7 +1501,7 @@ func (x *SyncDeploymentVersionUserDataRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use SyncDeploymentVersionUserDataRequest.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentVersionUserDataRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{20}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SyncDeploymentVersionUserDataRequest) GetVersion() *WorkerDeploymentVersion {
@@ -1474,7 +1535,7 @@ type SyncDeploymentVersionUserDataResponse struct {
 
 func (x *SyncDeploymentVersionUserDataResponse) Reset() {
 	*x = SyncDeploymentVersionUserDataResponse{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[21]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1486,7 +1547,7 @@ func (x *SyncDeploymentVersionUserDataResponse) String() string {
 func (*SyncDeploymentVersionUserDataResponse) ProtoMessage() {}
 
 func (x *SyncDeploymentVersionUserDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[21]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1499,7 +1560,7 @@ func (x *SyncDeploymentVersionUserDataResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use SyncDeploymentVersionUserDataResponse.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentVersionUserDataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{21}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SyncDeploymentVersionUserDataResponse) GetTaskQueueMaxVersions() map[string]int64 {
@@ -1519,7 +1580,7 @@ type CheckWorkerDeploymentUserDataPropagationRequest struct {
 
 func (x *CheckWorkerDeploymentUserDataPropagationRequest) Reset() {
 	*x = CheckWorkerDeploymentUserDataPropagationRequest{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[22]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1531,7 +1592,7 @@ func (x *CheckWorkerDeploymentUserDataPropagationRequest) String() string {
 func (*CheckWorkerDeploymentUserDataPropagationRequest) ProtoMessage() {}
 
 func (x *CheckWorkerDeploymentUserDataPropagationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[22]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1544,7 +1605,7 @@ func (x *CheckWorkerDeploymentUserDataPropagationRequest) ProtoReflect() protore
 
 // Deprecated: Use CheckWorkerDeploymentUserDataPropagationRequest.ProtoReflect.Descriptor instead.
 func (*CheckWorkerDeploymentUserDataPropagationRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{22}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CheckWorkerDeploymentUserDataPropagationRequest) GetTaskQueueMaxVersions() map[string]int64 {
@@ -1565,7 +1626,7 @@ type SyncUnversionedRampActivityArgs struct {
 
 func (x *SyncUnversionedRampActivityArgs) Reset() {
 	*x = SyncUnversionedRampActivityArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[23]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1577,7 +1638,7 @@ func (x *SyncUnversionedRampActivityArgs) String() string {
 func (*SyncUnversionedRampActivityArgs) ProtoMessage() {}
 
 func (x *SyncUnversionedRampActivityArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[23]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1590,7 +1651,7 @@ func (x *SyncUnversionedRampActivityArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncUnversionedRampActivityArgs.ProtoReflect.Descriptor instead.
 func (*SyncUnversionedRampActivityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{23}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SyncUnversionedRampActivityArgs) GetCurrentVersion() string {
@@ -1617,7 +1678,7 @@ type SyncUnversionedRampActivityResponse struct {
 
 func (x *SyncUnversionedRampActivityResponse) Reset() {
 	*x = SyncUnversionedRampActivityResponse{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[24]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1629,7 +1690,7 @@ func (x *SyncUnversionedRampActivityResponse) String() string {
 func (*SyncUnversionedRampActivityResponse) ProtoMessage() {}
 
 func (x *SyncUnversionedRampActivityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[24]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1642,7 +1703,7 @@ func (x *SyncUnversionedRampActivityResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use SyncUnversionedRampActivityResponse.ProtoReflect.Descriptor instead.
 func (*SyncUnversionedRampActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{24}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *SyncUnversionedRampActivityResponse) GetTaskQueueMaxVersions() map[string]int64 {
@@ -1664,7 +1725,7 @@ type UpdateVersionMetadataArgs struct {
 
 func (x *UpdateVersionMetadataArgs) Reset() {
 	*x = UpdateVersionMetadataArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[25]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1676,7 +1737,7 @@ func (x *UpdateVersionMetadataArgs) String() string {
 func (*UpdateVersionMetadataArgs) ProtoMessage() {}
 
 func (x *UpdateVersionMetadataArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[25]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1689,7 +1750,7 @@ func (x *UpdateVersionMetadataArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateVersionMetadataArgs.ProtoReflect.Descriptor instead.
 func (*UpdateVersionMetadataArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{25}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *UpdateVersionMetadataArgs) GetUpsertEntries() map[string]*v12.Payload {
@@ -1723,7 +1784,7 @@ type UpdateVersionMetadataResponse struct {
 
 func (x *UpdateVersionMetadataResponse) Reset() {
 	*x = UpdateVersionMetadataResponse{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[26]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1735,7 +1796,7 @@ func (x *UpdateVersionMetadataResponse) String() string {
 func (*UpdateVersionMetadataResponse) ProtoMessage() {}
 
 func (x *UpdateVersionMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[26]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1748,7 +1809,7 @@ func (x *UpdateVersionMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateVersionMetadataResponse.ProtoReflect.Descriptor instead.
 func (*UpdateVersionMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{26}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *UpdateVersionMetadataResponse) GetMetadata() *v11.VersionMetadata {
@@ -1765,13 +1826,14 @@ type SetCurrentVersionArgs struct {
 	Version                 string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
 	IgnoreMissingTaskQueues bool                   `protobuf:"varint,3,opt,name=ignore_missing_task_queues,json=ignoreMissingTaskQueues,proto3" json:"ignore_missing_task_queues,omitempty"`
 	ConflictToken           []byte                 `protobuf:"bytes,4,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	AllowNoPollers          bool                   `protobuf:"varint,5,opt,name=allow_no_pollers,json=allowNoPollers,proto3" json:"allow_no_pollers,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
 
 func (x *SetCurrentVersionArgs) Reset() {
 	*x = SetCurrentVersionArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[27]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1783,7 +1845,7 @@ func (x *SetCurrentVersionArgs) String() string {
 func (*SetCurrentVersionArgs) ProtoMessage() {}
 
 func (x *SetCurrentVersionArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[27]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1796,7 +1858,7 @@ func (x *SetCurrentVersionArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCurrentVersionArgs.ProtoReflect.Descriptor instead.
 func (*SetCurrentVersionArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{27}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *SetCurrentVersionArgs) GetIdentity() string {
@@ -1827,6 +1889,13 @@ func (x *SetCurrentVersionArgs) GetConflictToken() []byte {
 	return nil
 }
 
+func (x *SetCurrentVersionArgs) GetAllowNoPollers() bool {
+	if x != nil {
+		return x.AllowNoPollers
+	}
+	return false
+}
+
 // used as Worker Deployment update response:
 type SetCurrentVersionResponse struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
@@ -1838,7 +1907,7 @@ type SetCurrentVersionResponse struct {
 
 func (x *SetCurrentVersionResponse) Reset() {
 	*x = SetCurrentVersionResponse{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[28]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1850,7 +1919,7 @@ func (x *SetCurrentVersionResponse) String() string {
 func (*SetCurrentVersionResponse) ProtoMessage() {}
 
 func (x *SetCurrentVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[28]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1863,7 +1932,7 @@ func (x *SetCurrentVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCurrentVersionResponse.ProtoReflect.Descriptor instead.
 func (*SetCurrentVersionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{28}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *SetCurrentVersionResponse) GetPreviousVersion() string {
@@ -1892,7 +1961,7 @@ type DeleteVersionArgs struct {
 
 func (x *DeleteVersionArgs) Reset() {
 	*x = DeleteVersionArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[29]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1904,7 +1973,7 @@ func (x *DeleteVersionArgs) String() string {
 func (*DeleteVersionArgs) ProtoMessage() {}
 
 func (x *DeleteVersionArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[29]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1917,7 +1986,7 @@ func (x *DeleteVersionArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteVersionArgs.ProtoReflect.Descriptor instead.
 func (*DeleteVersionArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{29}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *DeleteVersionArgs) GetIdentity() string {
@@ -1955,7 +2024,7 @@ type DeleteVersionActivityArgs struct {
 
 func (x *DeleteVersionActivityArgs) Reset() {
 	*x = DeleteVersionActivityArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[30]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1967,7 +2036,7 @@ func (x *DeleteVersionActivityArgs) String() string {
 func (*DeleteVersionActivityArgs) ProtoMessage() {}
 
 func (x *DeleteVersionActivityArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[30]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1980,7 +2049,7 @@ func (x *DeleteVersionActivityArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteVersionActivityArgs.ProtoReflect.Descriptor instead.
 func (*DeleteVersionActivityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{30}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *DeleteVersionActivityArgs) GetIdentity() string {
@@ -2030,7 +2099,7 @@ type CheckTaskQueuesHavePollersActivityArgs struct {
 
 func (x *CheckTaskQueuesHavePollersActivityArgs) Reset() {
 	*x = CheckTaskQueuesHavePollersActivityArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[31]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2042,7 +2111,7 @@ func (x *CheckTaskQueuesHavePollersActivityArgs) String() string {
 func (*CheckTaskQueuesHavePollersActivityArgs) ProtoMessage() {}
 
 func (x *CheckTaskQueuesHavePollersActivityArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[31]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2055,7 +2124,7 @@ func (x *CheckTaskQueuesHavePollersActivityArgs) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use CheckTaskQueuesHavePollersActivityArgs.ProtoReflect.Descriptor instead.
 func (*CheckTaskQueuesHavePollersActivityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{31}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *CheckTaskQueuesHavePollersActivityArgs) GetTaskQueuesAndTypes() map[string]*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes {
@@ -2082,7 +2151,7 @@ type DeleteDeploymentArgs struct {
 
 func (x *DeleteDeploymentArgs) Reset() {
 	*x = DeleteDeploymentArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[32]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2094,7 +2163,7 @@ func (x *DeleteDeploymentArgs) String() string {
 func (*DeleteDeploymentArgs) ProtoMessage() {}
 
 func (x *DeleteDeploymentArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[32]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2107,7 +2176,7 @@ func (x *DeleteDeploymentArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDeploymentArgs.ProtoReflect.Descriptor instead.
 func (*DeleteDeploymentArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{32}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *DeleteDeploymentArgs) GetIdentity() string {
@@ -2129,7 +2198,7 @@ type SetRampingVersionResponse struct {
 
 func (x *SetRampingVersionResponse) Reset() {
 	*x = SetRampingVersionResponse{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[33]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2141,7 +2210,7 @@ func (x *SetRampingVersionResponse) String() string {
 func (*SetRampingVersionResponse) ProtoMessage() {}
 
 func (x *SetRampingVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[33]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2154,7 +2223,7 @@ func (x *SetRampingVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRampingVersionResponse.ProtoReflect.Descriptor instead.
 func (*SetRampingVersionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{33}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *SetRampingVersionResponse) GetPreviousVersion() string {
@@ -2186,13 +2255,14 @@ type SetRampingVersionArgs struct {
 	Percentage              float32                `protobuf:"fixed32,3,opt,name=percentage,proto3" json:"percentage,omitempty"`
 	IgnoreMissingTaskQueues bool                   `protobuf:"varint,4,opt,name=ignore_missing_task_queues,json=ignoreMissingTaskQueues,proto3" json:"ignore_missing_task_queues,omitempty"`
 	ConflictToken           []byte                 `protobuf:"bytes,5,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	AllowNoPollers          bool                   `protobuf:"varint,6,opt,name=allow_no_pollers,json=allowNoPollers,proto3" json:"allow_no_pollers,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
 
 func (x *SetRampingVersionArgs) Reset() {
 	*x = SetRampingVersionArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[34]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2204,7 +2274,7 @@ func (x *SetRampingVersionArgs) String() string {
 func (*SetRampingVersionArgs) ProtoMessage() {}
 
 func (x *SetRampingVersionArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[34]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2217,7 +2287,7 @@ func (x *SetRampingVersionArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRampingVersionArgs.ProtoReflect.Descriptor instead.
 func (*SetRampingVersionArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{34}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *SetRampingVersionArgs) GetIdentity() string {
@@ -2255,6 +2325,13 @@ func (x *SetRampingVersionArgs) GetConflictToken() []byte {
 	return nil
 }
 
+func (x *SetRampingVersionArgs) GetAllowNoPollers() bool {
+	if x != nil {
+		return x.AllowNoPollers
+	}
+	return false
+}
+
 // used as Worker Deployment activity input:
 type SyncVersionStateActivityArgs struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -2269,7 +2346,7 @@ type SyncVersionStateActivityArgs struct {
 
 func (x *SyncVersionStateActivityArgs) Reset() {
 	*x = SyncVersionStateActivityArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[35]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2281,7 +2358,7 @@ func (x *SyncVersionStateActivityArgs) String() string {
 func (*SyncVersionStateActivityArgs) ProtoMessage() {}
 
 func (x *SyncVersionStateActivityArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[35]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2294,7 +2371,7 @@ func (x *SyncVersionStateActivityArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncVersionStateActivityArgs.ProtoReflect.Descriptor instead.
 func (*SyncVersionStateActivityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{35}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SyncVersionStateActivityArgs) GetDeploymentName() string {
@@ -2335,7 +2412,7 @@ type SyncVersionStateActivityResult struct {
 
 func (x *SyncVersionStateActivityResult) Reset() {
 	*x = SyncVersionStateActivityResult{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[36]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2347,7 +2424,7 @@ func (x *SyncVersionStateActivityResult) String() string {
 func (*SyncVersionStateActivityResult) ProtoMessage() {}
 
 func (x *SyncVersionStateActivityResult) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[36]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2360,7 +2437,7 @@ func (x *SyncVersionStateActivityResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncVersionStateActivityResult.ProtoReflect.Descriptor instead.
 func (*SyncVersionStateActivityResult) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{36}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *SyncVersionStateActivityResult) GetVersionState() *VersionLocalState {
@@ -2381,7 +2458,7 @@ type IsVersionMissingTaskQueuesArgs struct {
 
 func (x *IsVersionMissingTaskQueuesArgs) Reset() {
 	*x = IsVersionMissingTaskQueuesArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[37]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2393,7 +2470,7 @@ func (x *IsVersionMissingTaskQueuesArgs) String() string {
 func (*IsVersionMissingTaskQueuesArgs) ProtoMessage() {}
 
 func (x *IsVersionMissingTaskQueuesArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[37]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2406,7 +2483,7 @@ func (x *IsVersionMissingTaskQueuesArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsVersionMissingTaskQueuesArgs.ProtoReflect.Descriptor instead.
 func (*IsVersionMissingTaskQueuesArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{37}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *IsVersionMissingTaskQueuesArgs) GetPrevCurrentVersion() string {
@@ -2433,7 +2510,7 @@ type IsVersionMissingTaskQueuesResult struct {
 
 func (x *IsVersionMissingTaskQueuesResult) Reset() {
 	*x = IsVersionMissingTaskQueuesResult{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[38]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2445,7 +2522,7 @@ func (x *IsVersionMissingTaskQueuesResult) String() string {
 func (*IsVersionMissingTaskQueuesResult) ProtoMessage() {}
 
 func (x *IsVersionMissingTaskQueuesResult) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[38]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2458,7 +2535,7 @@ func (x *IsVersionMissingTaskQueuesResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsVersionMissingTaskQueuesResult.ProtoReflect.Descriptor instead.
 func (*IsVersionMissingTaskQueuesResult) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{38}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *IsVersionMissingTaskQueuesResult) GetIsMissingTaskQueues() bool {
@@ -2483,7 +2560,7 @@ type WorkerDeploymentWorkflowMemo struct {
 
 func (x *WorkerDeploymentWorkflowMemo) Reset() {
 	*x = WorkerDeploymentWorkflowMemo{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[39]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2495,7 +2572,7 @@ func (x *WorkerDeploymentWorkflowMemo) String() string {
 func (*WorkerDeploymentWorkflowMemo) ProtoMessage() {}
 
 func (x *WorkerDeploymentWorkflowMemo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[39]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2508,7 +2585,7 @@ func (x *WorkerDeploymentWorkflowMemo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerDeploymentWorkflowMemo.ProtoReflect.Descriptor instead.
 func (*WorkerDeploymentWorkflowMemo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{39}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *WorkerDeploymentWorkflowMemo) GetDeploymentName() string {
@@ -2568,7 +2645,7 @@ type WorkerDeploymentSummary struct {
 
 func (x *WorkerDeploymentSummary) Reset() {
 	*x = WorkerDeploymentSummary{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[40]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2580,7 +2657,7 @@ func (x *WorkerDeploymentSummary) String() string {
 func (*WorkerDeploymentSummary) ProtoMessage() {}
 
 func (x *WorkerDeploymentSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[40]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2593,7 +2670,7 @@ func (x *WorkerDeploymentSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerDeploymentSummary.ProtoReflect.Descriptor instead.
 func (*WorkerDeploymentSummary) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{40}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *WorkerDeploymentSummary) GetName() string {
@@ -2650,7 +2727,7 @@ type AddVersionToWorkerDeploymentRequest struct {
 
 func (x *AddVersionToWorkerDeploymentRequest) Reset() {
 	*x = AddVersionToWorkerDeploymentRequest{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[41]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2662,7 +2739,7 @@ func (x *AddVersionToWorkerDeploymentRequest) String() string {
 func (*AddVersionToWorkerDeploymentRequest) ProtoMessage() {}
 
 func (x *AddVersionToWorkerDeploymentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[41]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2675,7 +2752,7 @@ func (x *AddVersionToWorkerDeploymentRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use AddVersionToWorkerDeploymentRequest.ProtoReflect.Descriptor instead.
 func (*AddVersionToWorkerDeploymentRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{41}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *AddVersionToWorkerDeploymentRequest) GetDeploymentName() string {
@@ -2708,7 +2785,7 @@ type AddVersionToWorkerDeploymentResponse struct {
 
 func (x *AddVersionToWorkerDeploymentResponse) Reset() {
 	*x = AddVersionToWorkerDeploymentResponse{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[42]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2720,7 +2797,7 @@ func (x *AddVersionToWorkerDeploymentResponse) String() string {
 func (*AddVersionToWorkerDeploymentResponse) ProtoMessage() {}
 
 func (x *AddVersionToWorkerDeploymentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[42]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2733,7 +2810,7 @@ func (x *AddVersionToWorkerDeploymentResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use AddVersionToWorkerDeploymentResponse.ProtoReflect.Descriptor instead.
 func (*AddVersionToWorkerDeploymentResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{42}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{43}
 }
 
 // ////////////////////////////////////////////////////////////////////////
@@ -2751,7 +2828,7 @@ type TaskQueueData struct {
 
 func (x *TaskQueueData) Reset() {
 	*x = TaskQueueData{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[43]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2763,7 +2840,7 @@ func (x *TaskQueueData) String() string {
 func (*TaskQueueData) ProtoMessage() {}
 
 func (x *TaskQueueData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[43]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2776,7 +2853,7 @@ func (x *TaskQueueData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskQueueData.ProtoReflect.Descriptor instead.
 func (*TaskQueueData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{43}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *TaskQueueData) GetFirstPollerTime() *timestamppb.Timestamp {
@@ -2808,7 +2885,7 @@ type DeploymentLocalState struct {
 
 func (x *DeploymentLocalState) Reset() {
 	*x = DeploymentLocalState{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[44]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2820,7 +2897,7 @@ func (x *DeploymentLocalState) String() string {
 func (*DeploymentLocalState) ProtoMessage() {}
 
 func (x *DeploymentLocalState) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[44]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2833,7 +2910,7 @@ func (x *DeploymentLocalState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeploymentLocalState.ProtoReflect.Descriptor instead.
 func (*DeploymentLocalState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{44}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *DeploymentLocalState) GetDeployment() *v11.Deployment {
@@ -2897,7 +2974,7 @@ type DeploymentWorkflowArgs struct {
 
 func (x *DeploymentWorkflowArgs) Reset() {
 	*x = DeploymentWorkflowArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[45]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2909,7 +2986,7 @@ func (x *DeploymentWorkflowArgs) String() string {
 func (*DeploymentWorkflowArgs) ProtoMessage() {}
 
 func (x *DeploymentWorkflowArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[45]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2922,7 +2999,7 @@ func (x *DeploymentWorkflowArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeploymentWorkflowArgs.ProtoReflect.Descriptor instead.
 func (*DeploymentWorkflowArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{45}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *DeploymentWorkflowArgs) GetNamespaceName() string {
@@ -2959,7 +3036,7 @@ type DeploymentSeriesWorkflowArgs struct {
 
 func (x *DeploymentSeriesWorkflowArgs) Reset() {
 	*x = DeploymentSeriesWorkflowArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[46]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2971,7 +3048,7 @@ func (x *DeploymentSeriesWorkflowArgs) String() string {
 func (*DeploymentSeriesWorkflowArgs) ProtoMessage() {}
 
 func (x *DeploymentSeriesWorkflowArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[46]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2984,7 +3061,7 @@ func (x *DeploymentSeriesWorkflowArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeploymentSeriesWorkflowArgs.ProtoReflect.Descriptor instead.
 func (*DeploymentSeriesWorkflowArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{46}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *DeploymentSeriesWorkflowArgs) GetNamespaceName() string {
@@ -3025,7 +3102,7 @@ type SeriesLocalState struct {
 
 func (x *SeriesLocalState) Reset() {
 	*x = SeriesLocalState{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[47]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3037,7 +3114,7 @@ func (x *SeriesLocalState) String() string {
 func (*SeriesLocalState) ProtoMessage() {}
 
 func (x *SeriesLocalState) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[47]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3050,7 +3127,7 @@ func (x *SeriesLocalState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SeriesLocalState.ProtoReflect.Descriptor instead.
 func (*SeriesLocalState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{47}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *SeriesLocalState) GetCurrentBuildId() string {
@@ -3080,7 +3157,7 @@ type RegisterWorkerInDeploymentArgs struct {
 
 func (x *RegisterWorkerInDeploymentArgs) Reset() {
 	*x = RegisterWorkerInDeploymentArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[48]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3092,7 +3169,7 @@ func (x *RegisterWorkerInDeploymentArgs) String() string {
 func (*RegisterWorkerInDeploymentArgs) ProtoMessage() {}
 
 func (x *RegisterWorkerInDeploymentArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[48]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3105,7 +3182,7 @@ func (x *RegisterWorkerInDeploymentArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterWorkerInDeploymentArgs.ProtoReflect.Descriptor instead.
 func (*RegisterWorkerInDeploymentArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{48}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *RegisterWorkerInDeploymentArgs) GetTaskQueueName() string {
@@ -3149,7 +3226,7 @@ type SyncDeploymentStateArgs struct {
 
 func (x *SyncDeploymentStateArgs) Reset() {
 	*x = SyncDeploymentStateArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[49]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3161,7 +3238,7 @@ func (x *SyncDeploymentStateArgs) String() string {
 func (*SyncDeploymentStateArgs) ProtoMessage() {}
 
 func (x *SyncDeploymentStateArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[49]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3174,7 +3251,7 @@ func (x *SyncDeploymentStateArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncDeploymentStateArgs.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentStateArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{49}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *SyncDeploymentStateArgs) GetSetCurrent() *SyncDeploymentStateArgs_SetCurrent {
@@ -3201,7 +3278,7 @@ type SyncDeploymentStateResponse struct {
 
 func (x *SyncDeploymentStateResponse) Reset() {
 	*x = SyncDeploymentStateResponse{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[50]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3213,7 +3290,7 @@ func (x *SyncDeploymentStateResponse) String() string {
 func (*SyncDeploymentStateResponse) ProtoMessage() {}
 
 func (x *SyncDeploymentStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[50]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3226,7 +3303,7 @@ func (x *SyncDeploymentStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncDeploymentStateResponse.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{50}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *SyncDeploymentStateResponse) GetDeploymentLocalState() *DeploymentLocalState {
@@ -3246,7 +3323,7 @@ type QueryDescribeDeploymentResponse struct {
 
 func (x *QueryDescribeDeploymentResponse) Reset() {
 	*x = QueryDescribeDeploymentResponse{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[51]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3258,7 +3335,7 @@ func (x *QueryDescribeDeploymentResponse) String() string {
 func (*QueryDescribeDeploymentResponse) ProtoMessage() {}
 
 func (x *QueryDescribeDeploymentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[51]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3271,7 +3348,7 @@ func (x *QueryDescribeDeploymentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryDescribeDeploymentResponse.ProtoReflect.Descriptor instead.
 func (*QueryDescribeDeploymentResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{51}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *QueryDescribeDeploymentResponse) GetDeploymentLocalState() *DeploymentLocalState {
@@ -3293,7 +3370,7 @@ type DeploymentWorkflowMemo struct {
 
 func (x *DeploymentWorkflowMemo) Reset() {
 	*x = DeploymentWorkflowMemo{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[52]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3305,7 +3382,7 @@ func (x *DeploymentWorkflowMemo) String() string {
 func (*DeploymentWorkflowMemo) ProtoMessage() {}
 
 func (x *DeploymentWorkflowMemo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[52]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3318,7 +3395,7 @@ func (x *DeploymentWorkflowMemo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeploymentWorkflowMemo.ProtoReflect.Descriptor instead.
 func (*DeploymentWorkflowMemo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{52}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *DeploymentWorkflowMemo) GetDeployment() *v11.Deployment {
@@ -3353,7 +3430,7 @@ type StartDeploymentSeriesRequest struct {
 
 func (x *StartDeploymentSeriesRequest) Reset() {
 	*x = StartDeploymentSeriesRequest{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[53]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3365,7 +3442,7 @@ func (x *StartDeploymentSeriesRequest) String() string {
 func (*StartDeploymentSeriesRequest) ProtoMessage() {}
 
 func (x *StartDeploymentSeriesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[53]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3378,7 +3455,7 @@ func (x *StartDeploymentSeriesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartDeploymentSeriesRequest.ProtoReflect.Descriptor instead.
 func (*StartDeploymentSeriesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{53}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *StartDeploymentSeriesRequest) GetSeriesName() string {
@@ -3406,7 +3483,7 @@ type SyncUserDataRequest struct {
 
 func (x *SyncUserDataRequest) Reset() {
 	*x = SyncUserDataRequest{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[54]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3418,7 +3495,7 @@ func (x *SyncUserDataRequest) String() string {
 func (*SyncUserDataRequest) ProtoMessage() {}
 
 func (x *SyncUserDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[54]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3431,7 +3508,7 @@ func (x *SyncUserDataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncUserDataRequest.ProtoReflect.Descriptor instead.
 func (*SyncUserDataRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{54}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *SyncUserDataRequest) GetDeployment() *v11.Deployment {
@@ -3458,7 +3535,7 @@ type SyncUserDataResponse struct {
 
 func (x *SyncUserDataResponse) Reset() {
 	*x = SyncUserDataResponse{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[55]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3470,7 +3547,7 @@ func (x *SyncUserDataResponse) String() string {
 func (*SyncUserDataResponse) ProtoMessage() {}
 
 func (x *SyncUserDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[55]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3483,7 +3560,7 @@ func (x *SyncUserDataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncUserDataResponse.ProtoReflect.Descriptor instead.
 func (*SyncUserDataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{55}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *SyncUserDataResponse) GetTaskQueueMaxVersions() map[string]int64 {
@@ -3503,7 +3580,7 @@ type CheckUserDataPropagationRequest struct {
 
 func (x *CheckUserDataPropagationRequest) Reset() {
 	*x = CheckUserDataPropagationRequest{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[56]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3515,7 +3592,7 @@ func (x *CheckUserDataPropagationRequest) String() string {
 func (*CheckUserDataPropagationRequest) ProtoMessage() {}
 
 func (x *CheckUserDataPropagationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[56]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3528,7 +3605,7 @@ func (x *CheckUserDataPropagationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckUserDataPropagationRequest.ProtoReflect.Descriptor instead.
 func (*CheckUserDataPropagationRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{56}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *CheckUserDataPropagationRequest) GetTaskQueueMaxVersions() map[string]int64 {
@@ -3551,7 +3628,7 @@ type SetCurrentDeploymentArgs struct {
 
 func (x *SetCurrentDeploymentArgs) Reset() {
 	*x = SetCurrentDeploymentArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[57]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3563,7 +3640,7 @@ func (x *SetCurrentDeploymentArgs) String() string {
 func (*SetCurrentDeploymentArgs) ProtoMessage() {}
 
 func (x *SetCurrentDeploymentArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[57]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3576,7 +3653,7 @@ func (x *SetCurrentDeploymentArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCurrentDeploymentArgs.ProtoReflect.Descriptor instead.
 func (*SetCurrentDeploymentArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{57}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *SetCurrentDeploymentArgs) GetIdentity() string {
@@ -3618,7 +3695,7 @@ type SetCurrentDeploymentResponse struct {
 
 func (x *SetCurrentDeploymentResponse) Reset() {
 	*x = SetCurrentDeploymentResponse{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[58]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3630,7 +3707,7 @@ func (x *SetCurrentDeploymentResponse) String() string {
 func (*SetCurrentDeploymentResponse) ProtoMessage() {}
 
 func (x *SetCurrentDeploymentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[58]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3643,7 +3720,7 @@ func (x *SetCurrentDeploymentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCurrentDeploymentResponse.ProtoReflect.Descriptor instead.
 func (*SetCurrentDeploymentResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{58}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *SetCurrentDeploymentResponse) GetCurrentDeploymentState() *DeploymentLocalState {
@@ -3672,7 +3749,7 @@ type SyncDeploymentStateActivityArgs struct {
 
 func (x *SyncDeploymentStateActivityArgs) Reset() {
 	*x = SyncDeploymentStateActivityArgs{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[59]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3684,7 +3761,7 @@ func (x *SyncDeploymentStateActivityArgs) String() string {
 func (*SyncDeploymentStateActivityArgs) ProtoMessage() {}
 
 func (x *SyncDeploymentStateActivityArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[59]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3697,7 +3774,7 @@ func (x *SyncDeploymentStateActivityArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncDeploymentStateActivityArgs.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentStateActivityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{59}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *SyncDeploymentStateActivityArgs) GetDeployment() *v11.Deployment {
@@ -3731,7 +3808,7 @@ type SyncDeploymentStateActivityResult struct {
 
 func (x *SyncDeploymentStateActivityResult) Reset() {
 	*x = SyncDeploymentStateActivityResult{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[60]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3743,7 +3820,7 @@ func (x *SyncDeploymentStateActivityResult) String() string {
 func (*SyncDeploymentStateActivityResult) ProtoMessage() {}
 
 func (x *SyncDeploymentStateActivityResult) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[60]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3756,7 +3833,7 @@ func (x *SyncDeploymentStateActivityResult) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use SyncDeploymentStateActivityResult.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentStateActivityResult) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{60}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *SyncDeploymentStateActivityResult) GetState() *DeploymentLocalState {
@@ -3778,7 +3855,7 @@ type DeploymentSeriesWorkflowMemo struct {
 
 func (x *DeploymentSeriesWorkflowMemo) Reset() {
 	*x = DeploymentSeriesWorkflowMemo{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[61]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3790,7 +3867,7 @@ func (x *DeploymentSeriesWorkflowMemo) String() string {
 func (*DeploymentSeriesWorkflowMemo) ProtoMessage() {}
 
 func (x *DeploymentSeriesWorkflowMemo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[61]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3803,7 +3880,7 @@ func (x *DeploymentSeriesWorkflowMemo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeploymentSeriesWorkflowMemo.ProtoReflect.Descriptor instead.
 func (*DeploymentSeriesWorkflowMemo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{61}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *DeploymentSeriesWorkflowMemo) GetSeriesName() string {
@@ -3837,7 +3914,7 @@ type VersionLocalState_TaskQueueFamilyData struct {
 
 func (x *VersionLocalState_TaskQueueFamilyData) Reset() {
 	*x = VersionLocalState_TaskQueueFamilyData{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[63]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3849,7 +3926,7 @@ func (x *VersionLocalState_TaskQueueFamilyData) String() string {
 func (*VersionLocalState_TaskQueueFamilyData) ProtoMessage() {}
 
 func (x *VersionLocalState_TaskQueueFamilyData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[63]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3883,7 +3960,7 @@ type SyncDeploymentVersionUserDataRequest_SyncUserData struct {
 
 func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) Reset() {
 	*x = SyncDeploymentVersionUserDataRequest_SyncUserData{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[66]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3895,7 +3972,7 @@ func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) String() string {
 func (*SyncDeploymentVersionUserDataRequest_SyncUserData) ProtoMessage() {}
 
 func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[66]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3908,7 +3985,7 @@ func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) ProtoReflect() proto
 
 // Deprecated: Use SyncDeploymentVersionUserDataRequest_SyncUserData.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentVersionUserDataRequest_SyncUserData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{20, 0}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{21, 0}
 }
 
 func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) GetName() string {
@@ -3941,7 +4018,7 @@ type CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes struct {
 
 func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) Reset() {
 	*x = CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[72]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3953,7 +4030,7 @@ func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) String() string 
 func (*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) ProtoMessage() {}
 
 func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[72]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3966,7 +4043,7 @@ func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) ProtoReflect() p
 
 // Deprecated: Use CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes.ProtoReflect.Descriptor instead.
 func (*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{31, 1}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{32, 1}
 }
 
 func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) GetTypes() []v1.TaskQueueType {
@@ -3988,7 +4065,7 @@ type DeploymentLocalState_TaskQueueFamilyData struct {
 
 func (x *DeploymentLocalState_TaskQueueFamilyData) Reset() {
 	*x = DeploymentLocalState_TaskQueueFamilyData{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[75]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4000,7 +4077,7 @@ func (x *DeploymentLocalState_TaskQueueFamilyData) String() string {
 func (*DeploymentLocalState_TaskQueueFamilyData) ProtoMessage() {}
 
 func (x *DeploymentLocalState_TaskQueueFamilyData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[75]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4013,7 +4090,7 @@ func (x *DeploymentLocalState_TaskQueueFamilyData) ProtoReflect() protoreflect.M
 
 // Deprecated: Use DeploymentLocalState_TaskQueueFamilyData.ProtoReflect.Descriptor instead.
 func (*DeploymentLocalState_TaskQueueFamilyData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{44, 2}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{45, 2}
 }
 
 func (x *DeploymentLocalState_TaskQueueFamilyData) GetTaskQueues() map[int32]*TaskQueueData {
@@ -4035,7 +4112,7 @@ type SyncDeploymentStateArgs_SetCurrent struct {
 
 func (x *SyncDeploymentStateArgs_SetCurrent) Reset() {
 	*x = SyncDeploymentStateArgs_SetCurrent{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[77]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4047,7 +4124,7 @@ func (x *SyncDeploymentStateArgs_SetCurrent) String() string {
 func (*SyncDeploymentStateArgs_SetCurrent) ProtoMessage() {}
 
 func (x *SyncDeploymentStateArgs_SetCurrent) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[77]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4060,7 +4137,7 @@ func (x *SyncDeploymentStateArgs_SetCurrent) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use SyncDeploymentStateArgs_SetCurrent.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentStateArgs_SetCurrent) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{49, 0}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{50, 0}
 }
 
 func (x *SyncDeploymentStateArgs_SetCurrent) GetLastBecameCurrentTime() *timestamppb.Timestamp {
@@ -4081,7 +4158,7 @@ type SyncUserDataRequest_SyncUserData struct {
 
 func (x *SyncUserDataRequest_SyncUserData) Reset() {
 	*x = SyncUserDataRequest_SyncUserData{}
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[78]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4093,7 +4170,7 @@ func (x *SyncUserDataRequest_SyncUserData) String() string {
 func (*SyncUserDataRequest_SyncUserData) ProtoMessage() {}
 
 func (x *SyncUserDataRequest_SyncUserData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[78]
+	mi := &file_temporal_server_api_deployment_v1_message_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4106,7 +4183,7 @@ func (x *SyncUserDataRequest_SyncUserData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncUserDataRequest_SyncUserData.ProtoReflect.Descriptor instead.
 func (*SyncUserDataRequest_SyncUserData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{54, 0}
+	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{55, 0}
 }
 
 func (x *SyncUserDataRequest_SyncUserData) GetName() string {
@@ -4242,7 +4319,12 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x1cStartWorkerDeploymentRequest\x12'\n" +
 	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x02 \x01(\tR\trequestId\"\xbc\x03\n" +
+	"request_id\x18\x02 \x01(\tR\trequestId\"\x88\x01\n" +
+	"#StartWorkerDeploymentVersionRequest\x12'\n" +
+	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x19\n" +
+	"\bbuild_id\x18\x02 \x01(\tR\abuildId\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x03 \x01(\tR\trequestId\"\xbc\x03\n" +
 	"$SyncDeploymentVersionUserDataRequest\x12T\n" +
 	"\aversion\x18\x01 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12h\n" +
 	"\x04sync\x18\x02 \x03(\v2T.temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserDataR\x04sync\x12%\n" +
@@ -4278,12 +4360,13 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
 	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\"h\n" +
 	"\x1dUpdateVersionMetadataResponse\x12G\n" +
-	"\bmetadata\x18\x01 \x01(\v2+.temporal.api.deployment.v1.VersionMetadataR\bmetadata\"\xb1\x01\n" +
+	"\bmetadata\x18\x01 \x01(\v2+.temporal.api.deployment.v1.VersionMetadataR\bmetadata\"\xdb\x01\n" +
 	"\x15SetCurrentVersionArgs\x12\x1a\n" +
 	"\bidentity\x18\x01 \x01(\tR\bidentity\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12;\n" +
 	"\x1aignore_missing_task_queues\x18\x03 \x01(\bR\x17ignoreMissingTaskQueues\x12%\n" +
-	"\x0econflict_token\x18\x04 \x01(\fR\rconflictToken\"m\n" +
+	"\x0econflict_token\x18\x04 \x01(\fR\rconflictToken\x12(\n" +
+	"\x10allow_no_pollers\x18\x05 \x01(\bR\x0eallowNoPollers\"m\n" +
 	"\x19SetCurrentVersionResponse\x12)\n" +
 	"\x10previous_version\x18\x01 \x01(\tR\x0fpreviousVersion\x12%\n" +
 	"\x0econflict_token\x18\x02 \x01(\fR\rconflictToken\"n\n" +
@@ -4311,7 +4394,7 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x19SetRampingVersionResponse\x12)\n" +
 	"\x10previous_version\x18\x01 \x01(\tR\x0fpreviousVersion\x12/\n" +
 	"\x13previous_percentage\x18\x02 \x01(\x02R\x12previousPercentage\x12%\n" +
-	"\x0econflict_token\x18\x03 \x01(\fR\rconflictToken\"\xd1\x01\n" +
+	"\x0econflict_token\x18\x03 \x01(\fR\rconflictToken\"\xfb\x01\n" +
 	"\x15SetRampingVersionArgs\x12\x1a\n" +
 	"\bidentity\x18\x01 \x01(\tR\bidentity\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1e\n" +
@@ -4319,7 +4402,8 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"percentage\x18\x03 \x01(\x02R\n" +
 	"percentage\x12;\n" +
 	"\x1aignore_missing_task_queues\x18\x04 \x01(\bR\x17ignoreMissingTaskQueues\x12%\n" +
-	"\x0econflict_token\x18\x05 \x01(\fR\rconflictToken\"\xe0\x01\n" +
+	"\x0econflict_token\x18\x05 \x01(\fR\rconflictToken\x12(\n" +
+	"\x10allow_no_pollers\x18\x06 \x01(\bR\x0eallowNoPollers\"\xe0\x01\n" +
 	"\x1cSyncVersionStateActivityArgs\x12'\n" +
 	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12^\n" +
@@ -4480,7 +4564,7 @@ func file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP() []byte {
 	return file_temporal_server_api_deployment_v1_message_proto_rawDescData
 }
 
-var file_temporal_server_api_deployment_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 81)
+var file_temporal_server_api_deployment_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 82)
 var file_temporal_server_api_deployment_v1_message_proto_goTypes = []any{
 	(*WorkerDeploymentVersion)(nil),                           // 0: temporal.server.api.deployment.v1.WorkerDeploymentVersion
 	(*DeploymentVersionData)(nil),                             // 1: temporal.server.api.deployment.v1.DeploymentVersionData
@@ -4502,192 +4586,193 @@ var file_temporal_server_api_deployment_v1_message_proto_goTypes = []any{
 	(*QueryDescribeVersionResponse)(nil),                      // 17: temporal.server.api.deployment.v1.QueryDescribeVersionResponse
 	(*QueryDescribeWorkerDeploymentResponse)(nil),             // 18: temporal.server.api.deployment.v1.QueryDescribeWorkerDeploymentResponse
 	(*StartWorkerDeploymentRequest)(nil),                      // 19: temporal.server.api.deployment.v1.StartWorkerDeploymentRequest
-	(*SyncDeploymentVersionUserDataRequest)(nil),              // 20: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest
-	(*SyncDeploymentVersionUserDataResponse)(nil),             // 21: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse
-	(*CheckWorkerDeploymentUserDataPropagationRequest)(nil),   // 22: temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest
-	(*SyncUnversionedRampActivityArgs)(nil),                   // 23: temporal.server.api.deployment.v1.SyncUnversionedRampActivityArgs
-	(*SyncUnversionedRampActivityResponse)(nil),               // 24: temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse
-	(*UpdateVersionMetadataArgs)(nil),                         // 25: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs
-	(*UpdateVersionMetadataResponse)(nil),                     // 26: temporal.server.api.deployment.v1.UpdateVersionMetadataResponse
-	(*SetCurrentVersionArgs)(nil),                             // 27: temporal.server.api.deployment.v1.SetCurrentVersionArgs
-	(*SetCurrentVersionResponse)(nil),                         // 28: temporal.server.api.deployment.v1.SetCurrentVersionResponse
-	(*DeleteVersionArgs)(nil),                                 // 29: temporal.server.api.deployment.v1.DeleteVersionArgs
-	(*DeleteVersionActivityArgs)(nil),                         // 30: temporal.server.api.deployment.v1.DeleteVersionActivityArgs
-	(*CheckTaskQueuesHavePollersActivityArgs)(nil),            // 31: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs
-	(*DeleteDeploymentArgs)(nil),                              // 32: temporal.server.api.deployment.v1.DeleteDeploymentArgs
-	(*SetRampingVersionResponse)(nil),                         // 33: temporal.server.api.deployment.v1.SetRampingVersionResponse
-	(*SetRampingVersionArgs)(nil),                             // 34: temporal.server.api.deployment.v1.SetRampingVersionArgs
-	(*SyncVersionStateActivityArgs)(nil),                      // 35: temporal.server.api.deployment.v1.SyncVersionStateActivityArgs
-	(*SyncVersionStateActivityResult)(nil),                    // 36: temporal.server.api.deployment.v1.SyncVersionStateActivityResult
-	(*IsVersionMissingTaskQueuesArgs)(nil),                    // 37: temporal.server.api.deployment.v1.IsVersionMissingTaskQueuesArgs
-	(*IsVersionMissingTaskQueuesResult)(nil),                  // 38: temporal.server.api.deployment.v1.IsVersionMissingTaskQueuesResult
-	(*WorkerDeploymentWorkflowMemo)(nil),                      // 39: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo
-	(*WorkerDeploymentSummary)(nil),                           // 40: temporal.server.api.deployment.v1.WorkerDeploymentSummary
-	(*AddVersionToWorkerDeploymentRequest)(nil),               // 41: temporal.server.api.deployment.v1.AddVersionToWorkerDeploymentRequest
-	(*AddVersionToWorkerDeploymentResponse)(nil),              // 42: temporal.server.api.deployment.v1.AddVersionToWorkerDeploymentResponse
-	(*TaskQueueData)(nil),                                     // 43: temporal.server.api.deployment.v1.TaskQueueData
-	(*DeploymentLocalState)(nil),                              // 44: temporal.server.api.deployment.v1.DeploymentLocalState
-	(*DeploymentWorkflowArgs)(nil),                            // 45: temporal.server.api.deployment.v1.DeploymentWorkflowArgs
-	(*DeploymentSeriesWorkflowArgs)(nil),                      // 46: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowArgs
-	(*SeriesLocalState)(nil),                                  // 47: temporal.server.api.deployment.v1.SeriesLocalState
-	(*RegisterWorkerInDeploymentArgs)(nil),                    // 48: temporal.server.api.deployment.v1.RegisterWorkerInDeploymentArgs
-	(*SyncDeploymentStateArgs)(nil),                           // 49: temporal.server.api.deployment.v1.SyncDeploymentStateArgs
-	(*SyncDeploymentStateResponse)(nil),                       // 50: temporal.server.api.deployment.v1.SyncDeploymentStateResponse
-	(*QueryDescribeDeploymentResponse)(nil),                   // 51: temporal.server.api.deployment.v1.QueryDescribeDeploymentResponse
-	(*DeploymentWorkflowMemo)(nil),                            // 52: temporal.server.api.deployment.v1.DeploymentWorkflowMemo
-	(*StartDeploymentSeriesRequest)(nil),                      // 53: temporal.server.api.deployment.v1.StartDeploymentSeriesRequest
-	(*SyncUserDataRequest)(nil),                               // 54: temporal.server.api.deployment.v1.SyncUserDataRequest
-	(*SyncUserDataResponse)(nil),                              // 55: temporal.server.api.deployment.v1.SyncUserDataResponse
-	(*CheckUserDataPropagationRequest)(nil),                   // 56: temporal.server.api.deployment.v1.CheckUserDataPropagationRequest
-	(*SetCurrentDeploymentArgs)(nil),                          // 57: temporal.server.api.deployment.v1.SetCurrentDeploymentArgs
-	(*SetCurrentDeploymentResponse)(nil),                      // 58: temporal.server.api.deployment.v1.SetCurrentDeploymentResponse
-	(*SyncDeploymentStateActivityArgs)(nil),                   // 59: temporal.server.api.deployment.v1.SyncDeploymentStateActivityArgs
-	(*SyncDeploymentStateActivityResult)(nil),                 // 60: temporal.server.api.deployment.v1.SyncDeploymentStateActivityResult
-	(*DeploymentSeriesWorkflowMemo)(nil),                      // 61: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowMemo
-	nil,                                                       // 62: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntry
-	(*VersionLocalState_TaskQueueFamilyData)(nil),             // 63: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData
-	nil, // 64: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.TaskQueuesEntry
-	nil, // 65: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.VersionsEntry
-	(*SyncDeploymentVersionUserDataRequest_SyncUserData)(nil), // 66: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserData
-	nil, // 67: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse.TaskQueueMaxVersionsEntry
-	nil, // 68: temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest.TaskQueueMaxVersionsEntry
-	nil, // 69: temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse.TaskQueueMaxVersionsEntry
-	nil, // 70: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.UpsertEntriesEntry
-	nil, // 71: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueuesAndTypesEntry
-	(*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes)(nil), // 72: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypes
-	nil, // 73: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamiliesEntry
-	nil, // 74: temporal.server.api.deployment.v1.DeploymentLocalState.MetadataEntry
-	(*DeploymentLocalState_TaskQueueFamilyData)(nil), // 75: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData
-	nil, // 76: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.TaskQueuesEntry
-	(*SyncDeploymentStateArgs_SetCurrent)(nil), // 77: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.SetCurrent
-	(*SyncUserDataRequest_SyncUserData)(nil),   // 78: temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData
-	nil,                                        // 79: temporal.server.api.deployment.v1.SyncUserDataResponse.TaskQueueMaxVersionsEntry
-	nil,                                        // 80: temporal.server.api.deployment.v1.CheckUserDataPropagationRequest.TaskQueueMaxVersionsEntry
-	(*timestamppb.Timestamp)(nil),              // 81: google.protobuf.Timestamp
-	(v1.WorkerDeploymentVersionStatus)(0),      // 82: temporal.api.enums.v1.WorkerDeploymentVersionStatus
-	(*v11.VersionDrainageInfo)(nil),            // 83: temporal.api.deployment.v1.VersionDrainageInfo
-	(*v11.VersionMetadata)(nil),                // 84: temporal.api.deployment.v1.VersionMetadata
-	(*v11.RoutingConfig)(nil),                  // 85: temporal.api.deployment.v1.RoutingConfig
-	(v1.VersionDrainageStatus)(0),              // 86: temporal.api.enums.v1.VersionDrainageStatus
-	(v1.TaskQueueType)(0),                      // 87: temporal.api.enums.v1.TaskQueueType
-	(*v11.WorkerDeploymentVersionInfo_VersionTaskQueueInfo)(nil),    // 88: temporal.api.deployment.v1.WorkerDeploymentVersionInfo.VersionTaskQueueInfo
-	(*v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary)(nil), // 89: temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
-	(*v11.Deployment)(nil),               // 90: temporal.api.deployment.v1.Deployment
-	(*v11.UpdateDeploymentMetadata)(nil), // 91: temporal.api.deployment.v1.UpdateDeploymentMetadata
-	(*v12.Payload)(nil),                  // 92: temporal.api.common.v1.Payload
+	(*StartWorkerDeploymentVersionRequest)(nil),               // 20: temporal.server.api.deployment.v1.StartWorkerDeploymentVersionRequest
+	(*SyncDeploymentVersionUserDataRequest)(nil),              // 21: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest
+	(*SyncDeploymentVersionUserDataResponse)(nil),             // 22: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse
+	(*CheckWorkerDeploymentUserDataPropagationRequest)(nil),   // 23: temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest
+	(*SyncUnversionedRampActivityArgs)(nil),                   // 24: temporal.server.api.deployment.v1.SyncUnversionedRampActivityArgs
+	(*SyncUnversionedRampActivityResponse)(nil),               // 25: temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse
+	(*UpdateVersionMetadataArgs)(nil),                         // 26: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs
+	(*UpdateVersionMetadataResponse)(nil),                     // 27: temporal.server.api.deployment.v1.UpdateVersionMetadataResponse
+	(*SetCurrentVersionArgs)(nil),                             // 28: temporal.server.api.deployment.v1.SetCurrentVersionArgs
+	(*SetCurrentVersionResponse)(nil),                         // 29: temporal.server.api.deployment.v1.SetCurrentVersionResponse
+	(*DeleteVersionArgs)(nil),                                 // 30: temporal.server.api.deployment.v1.DeleteVersionArgs
+	(*DeleteVersionActivityArgs)(nil),                         // 31: temporal.server.api.deployment.v1.DeleteVersionActivityArgs
+	(*CheckTaskQueuesHavePollersActivityArgs)(nil),            // 32: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs
+	(*DeleteDeploymentArgs)(nil),                              // 33: temporal.server.api.deployment.v1.DeleteDeploymentArgs
+	(*SetRampingVersionResponse)(nil),                         // 34: temporal.server.api.deployment.v1.SetRampingVersionResponse
+	(*SetRampingVersionArgs)(nil),                             // 35: temporal.server.api.deployment.v1.SetRampingVersionArgs
+	(*SyncVersionStateActivityArgs)(nil),                      // 36: temporal.server.api.deployment.v1.SyncVersionStateActivityArgs
+	(*SyncVersionStateActivityResult)(nil),                    // 37: temporal.server.api.deployment.v1.SyncVersionStateActivityResult
+	(*IsVersionMissingTaskQueuesArgs)(nil),                    // 38: temporal.server.api.deployment.v1.IsVersionMissingTaskQueuesArgs
+	(*IsVersionMissingTaskQueuesResult)(nil),                  // 39: temporal.server.api.deployment.v1.IsVersionMissingTaskQueuesResult
+	(*WorkerDeploymentWorkflowMemo)(nil),                      // 40: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo
+	(*WorkerDeploymentSummary)(nil),                           // 41: temporal.server.api.deployment.v1.WorkerDeploymentSummary
+	(*AddVersionToWorkerDeploymentRequest)(nil),               // 42: temporal.server.api.deployment.v1.AddVersionToWorkerDeploymentRequest
+	(*AddVersionToWorkerDeploymentResponse)(nil),              // 43: temporal.server.api.deployment.v1.AddVersionToWorkerDeploymentResponse
+	(*TaskQueueData)(nil),                                     // 44: temporal.server.api.deployment.v1.TaskQueueData
+	(*DeploymentLocalState)(nil),                              // 45: temporal.server.api.deployment.v1.DeploymentLocalState
+	(*DeploymentWorkflowArgs)(nil),                            // 46: temporal.server.api.deployment.v1.DeploymentWorkflowArgs
+	(*DeploymentSeriesWorkflowArgs)(nil),                      // 47: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowArgs
+	(*SeriesLocalState)(nil),                                  // 48: temporal.server.api.deployment.v1.SeriesLocalState
+	(*RegisterWorkerInDeploymentArgs)(nil),                    // 49: temporal.server.api.deployment.v1.RegisterWorkerInDeploymentArgs
+	(*SyncDeploymentStateArgs)(nil),                           // 50: temporal.server.api.deployment.v1.SyncDeploymentStateArgs
+	(*SyncDeploymentStateResponse)(nil),                       // 51: temporal.server.api.deployment.v1.SyncDeploymentStateResponse
+	(*QueryDescribeDeploymentResponse)(nil),                   // 52: temporal.server.api.deployment.v1.QueryDescribeDeploymentResponse
+	(*DeploymentWorkflowMemo)(nil),                            // 53: temporal.server.api.deployment.v1.DeploymentWorkflowMemo
+	(*StartDeploymentSeriesRequest)(nil),                      // 54: temporal.server.api.deployment.v1.StartDeploymentSeriesRequest
+	(*SyncUserDataRequest)(nil),                               // 55: temporal.server.api.deployment.v1.SyncUserDataRequest
+	(*SyncUserDataResponse)(nil),                              // 56: temporal.server.api.deployment.v1.SyncUserDataResponse
+	(*CheckUserDataPropagationRequest)(nil),                   // 57: temporal.server.api.deployment.v1.CheckUserDataPropagationRequest
+	(*SetCurrentDeploymentArgs)(nil),                          // 58: temporal.server.api.deployment.v1.SetCurrentDeploymentArgs
+	(*SetCurrentDeploymentResponse)(nil),                      // 59: temporal.server.api.deployment.v1.SetCurrentDeploymentResponse
+	(*SyncDeploymentStateActivityArgs)(nil),                   // 60: temporal.server.api.deployment.v1.SyncDeploymentStateActivityArgs
+	(*SyncDeploymentStateActivityResult)(nil),                 // 61: temporal.server.api.deployment.v1.SyncDeploymentStateActivityResult
+	(*DeploymentSeriesWorkflowMemo)(nil),                      // 62: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowMemo
+	nil,                                                       // 63: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntry
+	(*VersionLocalState_TaskQueueFamilyData)(nil),             // 64: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData
+	nil, // 65: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.TaskQueuesEntry
+	nil, // 66: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.VersionsEntry
+	(*SyncDeploymentVersionUserDataRequest_SyncUserData)(nil), // 67: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserData
+	nil, // 68: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse.TaskQueueMaxVersionsEntry
+	nil, // 69: temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest.TaskQueueMaxVersionsEntry
+	nil, // 70: temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse.TaskQueueMaxVersionsEntry
+	nil, // 71: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.UpsertEntriesEntry
+	nil, // 72: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueuesAndTypesEntry
+	(*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes)(nil), // 73: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypes
+	nil, // 74: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamiliesEntry
+	nil, // 75: temporal.server.api.deployment.v1.DeploymentLocalState.MetadataEntry
+	(*DeploymentLocalState_TaskQueueFamilyData)(nil), // 76: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData
+	nil, // 77: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.TaskQueuesEntry
+	(*SyncDeploymentStateArgs_SetCurrent)(nil), // 78: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.SetCurrent
+	(*SyncUserDataRequest_SyncUserData)(nil),   // 79: temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData
+	nil,                                        // 80: temporal.server.api.deployment.v1.SyncUserDataResponse.TaskQueueMaxVersionsEntry
+	nil,                                        // 81: temporal.server.api.deployment.v1.CheckUserDataPropagationRequest.TaskQueueMaxVersionsEntry
+	(*timestamppb.Timestamp)(nil),              // 82: google.protobuf.Timestamp
+	(v1.WorkerDeploymentVersionStatus)(0),      // 83: temporal.api.enums.v1.WorkerDeploymentVersionStatus
+	(*v11.VersionDrainageInfo)(nil),            // 84: temporal.api.deployment.v1.VersionDrainageInfo
+	(*v11.VersionMetadata)(nil),                // 85: temporal.api.deployment.v1.VersionMetadata
+	(*v11.RoutingConfig)(nil),                  // 86: temporal.api.deployment.v1.RoutingConfig
+	(v1.VersionDrainageStatus)(0),              // 87: temporal.api.enums.v1.VersionDrainageStatus
+	(v1.TaskQueueType)(0),                      // 88: temporal.api.enums.v1.TaskQueueType
+	(*v11.WorkerDeploymentVersionInfo_VersionTaskQueueInfo)(nil),    // 89: temporal.api.deployment.v1.WorkerDeploymentVersionInfo.VersionTaskQueueInfo
+	(*v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary)(nil), // 90: temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
+	(*v11.Deployment)(nil),               // 91: temporal.api.deployment.v1.Deployment
+	(*v11.UpdateDeploymentMetadata)(nil), // 92: temporal.api.deployment.v1.UpdateDeploymentMetadata
+	(*v12.Payload)(nil),                  // 93: temporal.api.common.v1.Payload
 }
 var file_temporal_server_api_deployment_v1_message_proto_depIdxs = []int32{
 	0,   // 0: temporal.server.api.deployment.v1.DeploymentVersionData.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	81,  // 1: temporal.server.api.deployment.v1.DeploymentVersionData.routing_update_time:type_name -> google.protobuf.Timestamp
-	81,  // 2: temporal.server.api.deployment.v1.DeploymentVersionData.current_since_time:type_name -> google.protobuf.Timestamp
-	81,  // 3: temporal.server.api.deployment.v1.DeploymentVersionData.ramping_since_time:type_name -> google.protobuf.Timestamp
-	82,  // 4: temporal.server.api.deployment.v1.DeploymentVersionData.status:type_name -> temporal.api.enums.v1.WorkerDeploymentVersionStatus
+	82,  // 1: temporal.server.api.deployment.v1.DeploymentVersionData.routing_update_time:type_name -> google.protobuf.Timestamp
+	82,  // 2: temporal.server.api.deployment.v1.DeploymentVersionData.current_since_time:type_name -> google.protobuf.Timestamp
+	82,  // 3: temporal.server.api.deployment.v1.DeploymentVersionData.ramping_since_time:type_name -> google.protobuf.Timestamp
+	83,  // 4: temporal.server.api.deployment.v1.DeploymentVersionData.status:type_name -> temporal.api.enums.v1.WorkerDeploymentVersionStatus
 	0,   // 5: temporal.server.api.deployment.v1.VersionLocalState.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	81,  // 6: temporal.server.api.deployment.v1.VersionLocalState.create_time:type_name -> google.protobuf.Timestamp
-	81,  // 7: temporal.server.api.deployment.v1.VersionLocalState.routing_update_time:type_name -> google.protobuf.Timestamp
-	81,  // 8: temporal.server.api.deployment.v1.VersionLocalState.current_since_time:type_name -> google.protobuf.Timestamp
-	81,  // 9: temporal.server.api.deployment.v1.VersionLocalState.ramping_since_time:type_name -> google.protobuf.Timestamp
-	81,  // 10: temporal.server.api.deployment.v1.VersionLocalState.first_activation_time:type_name -> google.protobuf.Timestamp
-	81,  // 11: temporal.server.api.deployment.v1.VersionLocalState.last_deactivation_time:type_name -> google.protobuf.Timestamp
-	83,  // 12: temporal.server.api.deployment.v1.VersionLocalState.drainage_info:type_name -> temporal.api.deployment.v1.VersionDrainageInfo
-	84,  // 13: temporal.server.api.deployment.v1.VersionLocalState.metadata:type_name -> temporal.api.deployment.v1.VersionMetadata
-	62,  // 14: temporal.server.api.deployment.v1.VersionLocalState.task_queue_families:type_name -> temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntry
-	82,  // 15: temporal.server.api.deployment.v1.VersionLocalState.status:type_name -> temporal.api.enums.v1.WorkerDeploymentVersionStatus
+	82,  // 6: temporal.server.api.deployment.v1.VersionLocalState.create_time:type_name -> google.protobuf.Timestamp
+	82,  // 7: temporal.server.api.deployment.v1.VersionLocalState.routing_update_time:type_name -> google.protobuf.Timestamp
+	82,  // 8: temporal.server.api.deployment.v1.VersionLocalState.current_since_time:type_name -> google.protobuf.Timestamp
+	82,  // 9: temporal.server.api.deployment.v1.VersionLocalState.ramping_since_time:type_name -> google.protobuf.Timestamp
+	82,  // 10: temporal.server.api.deployment.v1.VersionLocalState.first_activation_time:type_name -> google.protobuf.Timestamp
+	82,  // 11: temporal.server.api.deployment.v1.VersionLocalState.last_deactivation_time:type_name -> google.protobuf.Timestamp
+	84,  // 12: temporal.server.api.deployment.v1.VersionLocalState.drainage_info:type_name -> temporal.api.deployment.v1.VersionDrainageInfo
+	85,  // 13: temporal.server.api.deployment.v1.VersionLocalState.metadata:type_name -> temporal.api.deployment.v1.VersionMetadata
+	63,  // 14: temporal.server.api.deployment.v1.VersionLocalState.task_queue_families:type_name -> temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntry
+	83,  // 15: temporal.server.api.deployment.v1.VersionLocalState.status:type_name -> temporal.api.enums.v1.WorkerDeploymentVersionStatus
 	2,   // 16: temporal.server.api.deployment.v1.WorkerDeploymentVersionWorkflowArgs.version_state:type_name -> temporal.server.api.deployment.v1.VersionLocalState
 	6,   // 17: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowArgs.state:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentLocalState
-	81,  // 18: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.create_time:type_name -> google.protobuf.Timestamp
-	85,  // 19: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
-	65,  // 20: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.versions:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentLocalState.VersionsEntry
-	81,  // 21: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.create_time:type_name -> google.protobuf.Timestamp
-	86,  // 22: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.drainage_status:type_name -> temporal.api.enums.v1.VersionDrainageStatus
-	83,  // 23: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.drainage_info:type_name -> temporal.api.deployment.v1.VersionDrainageInfo
-	81,  // 24: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.routing_update_time:type_name -> google.protobuf.Timestamp
-	81,  // 25: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.current_since_time:type_name -> google.protobuf.Timestamp
-	81,  // 26: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.ramping_since_time:type_name -> google.protobuf.Timestamp
-	81,  // 27: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.first_activation_time:type_name -> google.protobuf.Timestamp
-	81,  // 28: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.last_deactivation_time:type_name -> google.protobuf.Timestamp
-	82,  // 29: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.status:type_name -> temporal.api.enums.v1.WorkerDeploymentVersionStatus
-	87,  // 30: temporal.server.api.deployment.v1.RegisterWorkerInVersionArgs.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	87,  // 31: temporal.server.api.deployment.v1.RegisterWorkerInWorkerDeploymentArgs.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	82,  // 18: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.create_time:type_name -> google.protobuf.Timestamp
+	86,  // 19: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
+	66,  // 20: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.versions:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentLocalState.VersionsEntry
+	82,  // 21: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.create_time:type_name -> google.protobuf.Timestamp
+	87,  // 22: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.drainage_status:type_name -> temporal.api.enums.v1.VersionDrainageStatus
+	84,  // 23: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.drainage_info:type_name -> temporal.api.deployment.v1.VersionDrainageInfo
+	82,  // 24: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.routing_update_time:type_name -> google.protobuf.Timestamp
+	82,  // 25: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.current_since_time:type_name -> google.protobuf.Timestamp
+	82,  // 26: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.ramping_since_time:type_name -> google.protobuf.Timestamp
+	82,  // 27: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.first_activation_time:type_name -> google.protobuf.Timestamp
+	82,  // 28: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.last_deactivation_time:type_name -> google.protobuf.Timestamp
+	83,  // 29: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.status:type_name -> temporal.api.enums.v1.WorkerDeploymentVersionStatus
+	88,  // 30: temporal.server.api.deployment.v1.RegisterWorkerInVersionArgs.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	88,  // 31: temporal.server.api.deployment.v1.RegisterWorkerInWorkerDeploymentArgs.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
 	0,   // 32: temporal.server.api.deployment.v1.RegisterWorkerInWorkerDeploymentArgs.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	88,  // 33: temporal.server.api.deployment.v1.DescribeVersionFromWorkerDeploymentActivityResult.task_queue_infos:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersionInfo.VersionTaskQueueInfo
-	81,  // 34: temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs.routing_update_time:type_name -> google.protobuf.Timestamp
-	81,  // 35: temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs.current_since_time:type_name -> google.protobuf.Timestamp
-	81,  // 36: temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs.ramping_since_time:type_name -> google.protobuf.Timestamp
+	89,  // 33: temporal.server.api.deployment.v1.DescribeVersionFromWorkerDeploymentActivityResult.task_queue_infos:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersionInfo.VersionTaskQueueInfo
+	82,  // 34: temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs.routing_update_time:type_name -> google.protobuf.Timestamp
+	82,  // 35: temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs.current_since_time:type_name -> google.protobuf.Timestamp
+	82,  // 36: temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs.ramping_since_time:type_name -> google.protobuf.Timestamp
 	2,   // 37: temporal.server.api.deployment.v1.SyncVersionStateResponse.version_state:type_name -> temporal.server.api.deployment.v1.VersionLocalState
-	81,  // 38: temporal.server.api.deployment.v1.AddVersionUpdateArgs.create_time:type_name -> google.protobuf.Timestamp
-	83,  // 39: temporal.server.api.deployment.v1.SyncDrainageInfoSignalArgs.drainage_info:type_name -> temporal.api.deployment.v1.VersionDrainageInfo
-	86,  // 40: temporal.server.api.deployment.v1.SyncDrainageStatusSignalArgs.drainage_status:type_name -> temporal.api.enums.v1.VersionDrainageStatus
+	82,  // 38: temporal.server.api.deployment.v1.AddVersionUpdateArgs.create_time:type_name -> google.protobuf.Timestamp
+	84,  // 39: temporal.server.api.deployment.v1.SyncDrainageInfoSignalArgs.drainage_info:type_name -> temporal.api.deployment.v1.VersionDrainageInfo
+	87,  // 40: temporal.server.api.deployment.v1.SyncDrainageStatusSignalArgs.drainage_status:type_name -> temporal.api.enums.v1.VersionDrainageStatus
 	2,   // 41: temporal.server.api.deployment.v1.QueryDescribeVersionResponse.version_state:type_name -> temporal.server.api.deployment.v1.VersionLocalState
 	6,   // 42: temporal.server.api.deployment.v1.QueryDescribeWorkerDeploymentResponse.state:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentLocalState
 	0,   // 43: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	66,  // 44: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.sync:type_name -> temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserData
-	67,  // 45: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse.TaskQueueMaxVersionsEntry
-	68,  // 46: temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest.TaskQueueMaxVersionsEntry
+	67,  // 44: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.sync:type_name -> temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserData
+	68,  // 45: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataResponse.TaskQueueMaxVersionsEntry
+	69,  // 46: temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.CheckWorkerDeploymentUserDataPropagationRequest.TaskQueueMaxVersionsEntry
 	12,  // 47: temporal.server.api.deployment.v1.SyncUnversionedRampActivityArgs.update_args:type_name -> temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs
-	69,  // 48: temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse.TaskQueueMaxVersionsEntry
-	70,  // 49: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.upsert_entries:type_name -> temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.UpsertEntriesEntry
-	84,  // 50: temporal.server.api.deployment.v1.UpdateVersionMetadataResponse.metadata:type_name -> temporal.api.deployment.v1.VersionMetadata
-	71,  // 51: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.task_queues_and_types:type_name -> temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueuesAndTypesEntry
+	70,  // 48: temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.SyncUnversionedRampActivityResponse.TaskQueueMaxVersionsEntry
+	71,  // 49: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.upsert_entries:type_name -> temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.UpsertEntriesEntry
+	85,  // 50: temporal.server.api.deployment.v1.UpdateVersionMetadataResponse.metadata:type_name -> temporal.api.deployment.v1.VersionMetadata
+	72,  // 51: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.task_queues_and_types:type_name -> temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueuesAndTypesEntry
 	0,   // 52: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.worker_deployment_version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
 	12,  // 53: temporal.server.api.deployment.v1.SyncVersionStateActivityArgs.update_args:type_name -> temporal.server.api.deployment.v1.SyncVersionStateUpdateArgs
 	2,   // 54: temporal.server.api.deployment.v1.SyncVersionStateActivityResult.version_state:type_name -> temporal.server.api.deployment.v1.VersionLocalState
-	81,  // 55: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo.create_time:type_name -> google.protobuf.Timestamp
-	85,  // 56: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo.routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
-	89,  // 57: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo.latest_version_summary:type_name -> temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
-	89,  // 58: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo.current_version_summary:type_name -> temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
-	89,  // 59: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo.ramping_version_summary:type_name -> temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
-	81,  // 60: temporal.server.api.deployment.v1.WorkerDeploymentSummary.create_time:type_name -> google.protobuf.Timestamp
-	85,  // 61: temporal.server.api.deployment.v1.WorkerDeploymentSummary.routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
-	89,  // 62: temporal.server.api.deployment.v1.WorkerDeploymentSummary.latest_version_summary:type_name -> temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
-	89,  // 63: temporal.server.api.deployment.v1.WorkerDeploymentSummary.current_version_summary:type_name -> temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
-	89,  // 64: temporal.server.api.deployment.v1.WorkerDeploymentSummary.ramping_version_summary:type_name -> temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
+	82,  // 55: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo.create_time:type_name -> google.protobuf.Timestamp
+	86,  // 56: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo.routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
+	90,  // 57: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo.latest_version_summary:type_name -> temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
+	90,  // 58: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo.current_version_summary:type_name -> temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
+	90,  // 59: temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo.ramping_version_summary:type_name -> temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
+	82,  // 60: temporal.server.api.deployment.v1.WorkerDeploymentSummary.create_time:type_name -> google.protobuf.Timestamp
+	86,  // 61: temporal.server.api.deployment.v1.WorkerDeploymentSummary.routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
+	90,  // 62: temporal.server.api.deployment.v1.WorkerDeploymentSummary.latest_version_summary:type_name -> temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
+	90,  // 63: temporal.server.api.deployment.v1.WorkerDeploymentSummary.current_version_summary:type_name -> temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
+	90,  // 64: temporal.server.api.deployment.v1.WorkerDeploymentSummary.ramping_version_summary:type_name -> temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary
 	14,  // 65: temporal.server.api.deployment.v1.AddVersionToWorkerDeploymentRequest.update_args:type_name -> temporal.server.api.deployment.v1.AddVersionUpdateArgs
-	81,  // 66: temporal.server.api.deployment.v1.TaskQueueData.first_poller_time:type_name -> google.protobuf.Timestamp
-	81,  // 67: temporal.server.api.deployment.v1.TaskQueueData.last_became_current_time:type_name -> google.protobuf.Timestamp
-	90,  // 68: temporal.server.api.deployment.v1.DeploymentLocalState.deployment:type_name -> temporal.api.deployment.v1.Deployment
-	73,  // 69: temporal.server.api.deployment.v1.DeploymentLocalState.task_queue_families:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamiliesEntry
-	81,  // 70: temporal.server.api.deployment.v1.DeploymentLocalState.last_became_current_time:type_name -> google.protobuf.Timestamp
-	81,  // 71: temporal.server.api.deployment.v1.DeploymentLocalState.create_time:type_name -> google.protobuf.Timestamp
-	74,  // 72: temporal.server.api.deployment.v1.DeploymentLocalState.metadata:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.MetadataEntry
-	44,  // 73: temporal.server.api.deployment.v1.DeploymentWorkflowArgs.state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
-	47,  // 74: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowArgs.state:type_name -> temporal.server.api.deployment.v1.SeriesLocalState
-	81,  // 75: temporal.server.api.deployment.v1.SeriesLocalState.current_changed_time:type_name -> google.protobuf.Timestamp
-	87,  // 76: temporal.server.api.deployment.v1.RegisterWorkerInDeploymentArgs.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	81,  // 77: temporal.server.api.deployment.v1.RegisterWorkerInDeploymentArgs.first_poller_time:type_name -> google.protobuf.Timestamp
-	77,  // 78: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.set_current:type_name -> temporal.server.api.deployment.v1.SyncDeploymentStateArgs.SetCurrent
-	91,  // 79: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.update_metadata:type_name -> temporal.api.deployment.v1.UpdateDeploymentMetadata
-	44,  // 80: temporal.server.api.deployment.v1.SyncDeploymentStateResponse.deployment_local_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
-	44,  // 81: temporal.server.api.deployment.v1.QueryDescribeDeploymentResponse.deployment_local_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
-	90,  // 82: temporal.server.api.deployment.v1.DeploymentWorkflowMemo.deployment:type_name -> temporal.api.deployment.v1.Deployment
-	81,  // 83: temporal.server.api.deployment.v1.DeploymentWorkflowMemo.create_time:type_name -> google.protobuf.Timestamp
-	90,  // 84: temporal.server.api.deployment.v1.SyncUserDataRequest.deployment:type_name -> temporal.api.deployment.v1.Deployment
-	78,  // 85: temporal.server.api.deployment.v1.SyncUserDataRequest.sync:type_name -> temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData
-	79,  // 86: temporal.server.api.deployment.v1.SyncUserDataResponse.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.SyncUserDataResponse.TaskQueueMaxVersionsEntry
-	80,  // 87: temporal.server.api.deployment.v1.CheckUserDataPropagationRequest.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.CheckUserDataPropagationRequest.TaskQueueMaxVersionsEntry
-	91,  // 88: temporal.server.api.deployment.v1.SetCurrentDeploymentArgs.update_metadata:type_name -> temporal.api.deployment.v1.UpdateDeploymentMetadata
-	44,  // 89: temporal.server.api.deployment.v1.SetCurrentDeploymentResponse.current_deployment_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
-	44,  // 90: temporal.server.api.deployment.v1.SetCurrentDeploymentResponse.previous_deployment_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
-	90,  // 91: temporal.server.api.deployment.v1.SyncDeploymentStateActivityArgs.deployment:type_name -> temporal.api.deployment.v1.Deployment
-	49,  // 92: temporal.server.api.deployment.v1.SyncDeploymentStateActivityArgs.args:type_name -> temporal.server.api.deployment.v1.SyncDeploymentStateArgs
-	44,  // 93: temporal.server.api.deployment.v1.SyncDeploymentStateActivityResult.state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
-	81,  // 94: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowMemo.current_changed_time:type_name -> google.protobuf.Timestamp
-	63,  // 95: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntry.value:type_name -> temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData
-	64,  // 96: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.task_queues:type_name -> temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.TaskQueuesEntry
+	82,  // 66: temporal.server.api.deployment.v1.TaskQueueData.first_poller_time:type_name -> google.protobuf.Timestamp
+	82,  // 67: temporal.server.api.deployment.v1.TaskQueueData.last_became_current_time:type_name -> google.protobuf.Timestamp
+	91,  // 68: temporal.server.api.deployment.v1.DeploymentLocalState.deployment:type_name -> temporal.api.deployment.v1.Deployment
+	74,  // 69: temporal.server.api.deployment.v1.DeploymentLocalState.task_queue_families:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamiliesEntry
+	82,  // 70: temporal.server.api.deployment.v1.DeploymentLocalState.last_became_current_time:type_name -> google.protobuf.Timestamp
+	82,  // 71: temporal.server.api.deployment.v1.DeploymentLocalState.create_time:type_name -> google.protobuf.Timestamp
+	75,  // 72: temporal.server.api.deployment.v1.DeploymentLocalState.metadata:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.MetadataEntry
+	45,  // 73: temporal.server.api.deployment.v1.DeploymentWorkflowArgs.state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
+	48,  // 74: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowArgs.state:type_name -> temporal.server.api.deployment.v1.SeriesLocalState
+	82,  // 75: temporal.server.api.deployment.v1.SeriesLocalState.current_changed_time:type_name -> google.protobuf.Timestamp
+	88,  // 76: temporal.server.api.deployment.v1.RegisterWorkerInDeploymentArgs.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	82,  // 77: temporal.server.api.deployment.v1.RegisterWorkerInDeploymentArgs.first_poller_time:type_name -> google.protobuf.Timestamp
+	78,  // 78: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.set_current:type_name -> temporal.server.api.deployment.v1.SyncDeploymentStateArgs.SetCurrent
+	92,  // 79: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.update_metadata:type_name -> temporal.api.deployment.v1.UpdateDeploymentMetadata
+	45,  // 80: temporal.server.api.deployment.v1.SyncDeploymentStateResponse.deployment_local_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
+	45,  // 81: temporal.server.api.deployment.v1.QueryDescribeDeploymentResponse.deployment_local_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
+	91,  // 82: temporal.server.api.deployment.v1.DeploymentWorkflowMemo.deployment:type_name -> temporal.api.deployment.v1.Deployment
+	82,  // 83: temporal.server.api.deployment.v1.DeploymentWorkflowMemo.create_time:type_name -> google.protobuf.Timestamp
+	91,  // 84: temporal.server.api.deployment.v1.SyncUserDataRequest.deployment:type_name -> temporal.api.deployment.v1.Deployment
+	79,  // 85: temporal.server.api.deployment.v1.SyncUserDataRequest.sync:type_name -> temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData
+	80,  // 86: temporal.server.api.deployment.v1.SyncUserDataResponse.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.SyncUserDataResponse.TaskQueueMaxVersionsEntry
+	81,  // 87: temporal.server.api.deployment.v1.CheckUserDataPropagationRequest.task_queue_max_versions:type_name -> temporal.server.api.deployment.v1.CheckUserDataPropagationRequest.TaskQueueMaxVersionsEntry
+	92,  // 88: temporal.server.api.deployment.v1.SetCurrentDeploymentArgs.update_metadata:type_name -> temporal.api.deployment.v1.UpdateDeploymentMetadata
+	45,  // 89: temporal.server.api.deployment.v1.SetCurrentDeploymentResponse.current_deployment_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
+	45,  // 90: temporal.server.api.deployment.v1.SetCurrentDeploymentResponse.previous_deployment_state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
+	91,  // 91: temporal.server.api.deployment.v1.SyncDeploymentStateActivityArgs.deployment:type_name -> temporal.api.deployment.v1.Deployment
+	50,  // 92: temporal.server.api.deployment.v1.SyncDeploymentStateActivityArgs.args:type_name -> temporal.server.api.deployment.v1.SyncDeploymentStateArgs
+	45,  // 93: temporal.server.api.deployment.v1.SyncDeploymentStateActivityResult.state:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState
+	82,  // 94: temporal.server.api.deployment.v1.DeploymentSeriesWorkflowMemo.current_changed_time:type_name -> google.protobuf.Timestamp
+	64,  // 95: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamiliesEntry.value:type_name -> temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData
+	65,  // 96: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.task_queues:type_name -> temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.TaskQueuesEntry
 	3,   // 97: temporal.server.api.deployment.v1.VersionLocalState.TaskQueueFamilyData.TaskQueuesEntry.value:type_name -> temporal.server.api.deployment.v1.TaskQueueVersionData
 	7,   // 98: temporal.server.api.deployment.v1.WorkerDeploymentLocalState.VersionsEntry.value:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary
-	87,  // 99: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserData.types:type_name -> temporal.api.enums.v1.TaskQueueType
+	88,  // 99: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserData.types:type_name -> temporal.api.enums.v1.TaskQueueType
 	1,   // 100: temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserData.data:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
-	92,  // 101: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.UpsertEntriesEntry.value:type_name -> temporal.api.common.v1.Payload
-	72,  // 102: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueuesAndTypesEntry.value:type_name -> temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypes
-	87,  // 103: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypes.types:type_name -> temporal.api.enums.v1.TaskQueueType
-	75,  // 104: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamiliesEntry.value:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData
-	92,  // 105: temporal.server.api.deployment.v1.DeploymentLocalState.MetadataEntry.value:type_name -> temporal.api.common.v1.Payload
-	76,  // 106: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.task_queues:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.TaskQueuesEntry
-	43,  // 107: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.TaskQueuesEntry.value:type_name -> temporal.server.api.deployment.v1.TaskQueueData
-	81,  // 108: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.SetCurrent.last_became_current_time:type_name -> google.protobuf.Timestamp
-	87,  // 109: temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData.type:type_name -> temporal.api.enums.v1.TaskQueueType
-	43,  // 110: temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData.data:type_name -> temporal.server.api.deployment.v1.TaskQueueData
+	93,  // 101: temporal.server.api.deployment.v1.UpdateVersionMetadataArgs.UpsertEntriesEntry.value:type_name -> temporal.api.common.v1.Payload
+	73,  // 102: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueuesAndTypesEntry.value:type_name -> temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypes
+	88,  // 103: temporal.server.api.deployment.v1.CheckTaskQueuesHavePollersActivityArgs.TaskQueueTypes.types:type_name -> temporal.api.enums.v1.TaskQueueType
+	76,  // 104: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamiliesEntry.value:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData
+	93,  // 105: temporal.server.api.deployment.v1.DeploymentLocalState.MetadataEntry.value:type_name -> temporal.api.common.v1.Payload
+	77,  // 106: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.task_queues:type_name -> temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.TaskQueuesEntry
+	44,  // 107: temporal.server.api.deployment.v1.DeploymentLocalState.TaskQueueFamilyData.TaskQueuesEntry.value:type_name -> temporal.server.api.deployment.v1.TaskQueueData
+	82,  // 108: temporal.server.api.deployment.v1.SyncDeploymentStateArgs.SetCurrent.last_became_current_time:type_name -> google.protobuf.Timestamp
+	88,  // 109: temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData.type:type_name -> temporal.api.enums.v1.TaskQueueType
+	44,  // 110: temporal.server.api.deployment.v1.SyncUserDataRequest.SyncUserData.data:type_name -> temporal.server.api.deployment.v1.TaskQueueData
 	111, // [111:111] is the sub-list for method output_type
 	111, // [111:111] is the sub-list for method input_type
 	111, // [111:111] is the sub-list for extension type_name
@@ -4706,7 +4791,7 @@ func file_temporal_server_api_deployment_v1_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_deployment_v1_message_proto_rawDesc), len(file_temporal_server_api_deployment_v1_message_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   81,
+			NumMessages:   82,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
