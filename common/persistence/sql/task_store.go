@@ -28,7 +28,7 @@ func newTaskPersistence(
 	enableFairness bool,
 ) (persistence.TaskStore, error) {
 	store := SqlStore{
-		Db:     db,
+		DB:     db,
 		logger: logger,
 	}
 	userDataStore := userDataStore{SqlStore: store}

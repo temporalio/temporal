@@ -256,6 +256,13 @@ message StartWorkerDeploymentRequest {
     string request_id = 2;
 }
 
+// used as Worker Deployment workflow activity input:
+message StartWorkerDeploymentVersionRequest {
+    string deployment_name = 1;
+    string build_id = 2;
+    string request_id = 3;
+}
+
 // used as Worker Deployment Version workflow activity input:
 message SyncDeploymentVersionUserDataRequest {
     WorkerDeploymentVersion version = 1;
@@ -309,6 +316,7 @@ message SetCurrentVersionArgs {
     string version = 2;
     bool ignore_missing_task_queues = 3;
     bytes conflict_token = 4;
+    bool allow_no_pollers = 5;
 }
 
 // used as Worker Deployment update response:
@@ -364,6 +372,7 @@ message SetRampingVersionArgs {
     float percentage = 3;
     bool ignore_missing_task_queues = 4;
     bytes conflict_token = 5;
+    bool allow_no_pollers = 6;
 }
 
 // used as Worker Deployment workflow update input:

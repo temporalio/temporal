@@ -426,7 +426,10 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s is already current", args.Version), errFailedPrecondition)
 	}
 
-	if _, ok := d.State.GetVersions()[args.Version]; !ok && args.Version != "" && args.Version != worker_versioning.UnversionedVersionId {
+	if _, ok := d.State.GetVersions()[args.Version]; !ok &&
+		args.Version != worker_versioning.UnversionedVersionId &&
+		args.Version != "" &&
+		!args.GetAllowNoPollers() {
 		d.logger.Info("version not found in deployment")
 		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s not found in deployment", args.Version), errVersionNotFound)
 	}
@@ -470,6 +473,27 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 	newRampingVersion := args.Version
 	routingUpdateTime := timestamppb.New(workflow.Now(ctx))
+
+	if _, ok := d.State.Versions[args.Version]; !ok &&
+		args.Version != worker_versioning.UnversionedVersionId &&
+		args.Version != "" &&
+		args.GetAllowNoPollers() {
+		d.logger.Info("version not found in deployment, but AllowNoPollers is true, so we will create the version")
+		if err := d.addVersionToWorkerDeployment(ctx, &deploymentspb.AddVersionUpdateArgs{Version: newRampingVersion, CreateTime: routingUpdateTime}); err != nil {
+			return nil, err // only possible error is errTooManyVersions
+		}
+		v, err := worker_versioning.WorkerDeploymentVersionFromStringV31(newRampingVersion)
+		if err != nil {
+			return nil, err // this would never happen, because version string formatting was already checked earlier
+		}
+		if err := d.startVersion(ctx, &deploymentspb.StartWorkerDeploymentVersionRequest{
+			DeploymentName: v.GetDeploymentName(),
+			BuildId:        v.GetBuildId(),
+			RequestId:      d.newUUID(ctx),
+		}); err != nil {
+			return nil, err
+		}
+	}
 
 	var rampingSinceTime *timestamppb.Timestamp
 	var rampingVersionUpdateTime *timestamppb.Timestamp
@@ -720,7 +744,9 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deployment
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
 		return temporal.NewApplicationError("conflict token mismatch", errFailedPrecondition)
 	}
-	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != worker_versioning.UnversionedVersionId {
+	if _, ok := d.State.Versions[args.Version]; !ok &&
+		args.Version != worker_versioning.UnversionedVersionId &&
+		!args.GetAllowNoPollers() {
 		d.logger.Info("version not found in deployment")
 		return temporal.NewApplicationError(fmt.Sprintf("version %s not found in deployment", args.Version), errVersionNotFound)
 	}
@@ -768,6 +794,26 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	prevCurrentVersion := d.State.RoutingConfig.CurrentVersion
 	newCurrentVersion := args.Version
 	updateTime := timestamppb.New(workflow.Now(ctx))
+
+	if _, ok := d.State.Versions[args.Version]; !ok &&
+		args.Version != worker_versioning.UnversionedVersionId &&
+		args.GetAllowNoPollers() {
+		d.logger.Info("version not found in deployment, but AllowNoPollers is true, so we will create the version")
+		if err := d.addVersionToWorkerDeployment(ctx, &deploymentspb.AddVersionUpdateArgs{Version: newCurrentVersion, CreateTime: updateTime}); err != nil {
+			return nil, err // only possible error is errTooManyVersions
+		}
+		v, err := worker_versioning.WorkerDeploymentVersionFromStringV31(newCurrentVersion)
+		if err != nil {
+			return nil, err // this would never happen, because version string formatting was already checked earlier
+		}
+		if err := d.startVersion(ctx, &deploymentspb.StartWorkerDeploymentVersionRequest{
+			DeploymentName: v.GetDeploymentName(),
+			BuildId:        v.GetBuildId(),
+			RequestId:      d.newUUID(ctx),
+		}); err != nil {
+			return nil, err
+		}
+	}
 
 	if !args.IgnoreMissingTaskQueues &&
 		prevCurrentVersion != worker_versioning.UnversionedVersionId &&
@@ -1062,6 +1108,11 @@ func (d *WorkflowRunner) isVersionMissingTaskQueues(ctx workflow.Context, prevCu
 		NewCurrentVersion:  newCurrentVersion,
 	}).Get(ctx, &res)
 	return res.IsMissingTaskQueues, err
+}
+
+func (d *WorkflowRunner) startVersion(ctx workflow.Context, args *deploymentspb.StartWorkerDeploymentVersionRequest) error {
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	return workflow.ExecuteActivity(activityCtx, d.a.StartWorkerDeploymentVersionWorkflow, args).Get(ctx, nil)
 }
 
 func (d *WorkflowRunner) newUUID(ctx workflow.Context) string {

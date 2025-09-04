@@ -49,7 +49,7 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 	}
 
 	if !request.IsNewBranch {
-		_, err = m.Db.InsertIntoHistoryNode(ctx, nodeRow)
+		_, err = m.DB.InsertIntoHistoryNode(ctx, nodeRow)
 		switch err {
 		case nil:
 			return nil
@@ -58,7 +58,7 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 				Msg: err.Error(),
 			}
 		default:
-			if m.Db.IsDupEntryError(err) {
+			if m.DB.IsDupEntryError(err) {
 				return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryNodes: row already exist: %v", err)}
 			}
 			return serviceerror.NewUnavailablef("AppendHistoryNodes: %v", err)
@@ -140,7 +140,7 @@ func (m *sqlExecutionStore) DeleteHistoryNodes(
 		ShardID:  shardID,
 	}
 
-	_, err = m.Db.DeleteFromHistoryNode(ctx, nodeRow)
+	_, err = m.DB.DeleteFromHistoryNode(ctx, nodeRow)
 	if err != nil {
 		return serviceerror.NewUnavailablef("DeleteHistoryNodes: %v", err)
 	}
@@ -194,7 +194,7 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 		minTxnId = token.LastTxnID
 	}
 
-	rows, err := m.Db.RangeSelectFromHistoryNode(ctx, sqlplugin.HistoryNodeSelectFilter{
+	rows, err := m.DB.RangeSelectFromHistoryNode(ctx, sqlplugin.HistoryNodeSelectFilter{
 		ShardID:      request.ShardID,
 		TreeID:       treeIDBytes,
 		BranchID:     branchIDBytes,
@@ -315,7 +315,7 @@ func (m *sqlExecutionStore) ForkHistoryBranch(
 		DataEncoding: treeInfoBlob.EncodingType.String(),
 	}
 
-	result, err := m.Db.InsertIntoHistoryTree(ctx, row)
+	result, err := m.DB.InsertIntoHistoryTree(ctx, row)
 	if err != nil {
 		return err
 	}
@@ -406,7 +406,7 @@ func (m *sqlExecutionStore) GetAllHistoryTreeBranches(
 		page.BranchID = token.BranchID
 	}
 
-	rows, err := m.Db.PaginateBranchesFromHistoryTree(ctx, page)
+	rows, err := m.DB.PaginateBranchesFromHistoryTree(ctx, page)
 	if err != nil {
 		return nil, err
 	}
@@ -459,7 +459,7 @@ func (m *sqlExecutionStore) GetHistoryTreeContainingBranch(
 		return nil, err
 	}
 
-	rows, err := m.Db.SelectFromHistoryTree(ctx, sqlplugin.HistoryTreeSelectFilter{
+	rows, err := m.DB.SelectFromHistoryTree(ctx, sqlplugin.HistoryTreeSelectFilter{
 		TreeID:  treeID,
 		ShardID: request.ShardID,
 	})
