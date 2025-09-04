@@ -397,23 +397,13 @@ func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
 	return nil
 }
 
-func (d *WorkflowRunner) rampingVersionStringsEqual(a, b string) bool {
-	if a == worker_versioning.UnversionedVersionId && b == "" {
-		return true
-	}
-	if b == worker_versioning.UnversionedVersionId && a == "" {
-		return true
-	}
-	return a == b
-}
-
 func (d *WorkflowRunner) rampingVersionStringUnversioned(s string) bool {
 	return s == worker_versioning.UnversionedVersionId || s == ""
 }
 
 func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploymentspb.SetRampingVersionArgs) error {
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if d.rampingVersionStringsEqual(args.Version, d.State.GetRoutingConfig().GetRampingVersion()) &&
+	if args.Version == d.State.GetRoutingConfig().GetRampingVersion() &&
 		args.Percentage == d.State.GetRoutingConfig().GetRampingVersionPercentage() &&
 		args.Identity == d.State.GetLastModifierIdentity() {
 		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType, d.State.GetConflictToken())
