@@ -23,7 +23,11 @@ const (
 	coverProfileFlag      = "-coverprofile="
 	junitReportFlag       = "--junitfile="
 	crashReportNameFlag   = "--crashreportname="
-	crashReportCommand    = "report-crash"
+)
+
+const (
+	testCommand        = "test"
+	crashReportCommand = "report-crash"
 )
 
 type attempt struct {
@@ -115,10 +119,12 @@ func (r *runner) sanitizeAndParseArgs(args []string) ([]string, error) {
 	switch r.command {
 	case crashReportCommand:
 		// nothing else to verify
-	default: // ie gotestsum
+	case testCommand:
 		if r.coverProfilePath == "" {
 			return nil, fmt.Errorf("missing required argument %q", coverProfileFlag)
 		}
+	default:
+		return nil, fmt.Errorf("unknown command %q", r.command)
 	}
 
 	return sanitizedArgs, nil
