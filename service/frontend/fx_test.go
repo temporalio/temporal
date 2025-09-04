@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/testing/nettest"
 	"go.uber.org/mock/gomock"
@@ -227,7 +226,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
 				interceptor.ServiceErrorInterceptor,
-				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
+				interceptor.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
 			))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
@@ -279,10 +278,10 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, resourceExhausted.Cause)
 				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM, resourceExhausted.Scope)
 
-				assert.Len(t, header.Get(rpc.ResourceExhaustedCauseHeader), 1)
-				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT.String(), header.Get(rpc.ResourceExhaustedCauseHeader)[0])
-				assert.Len(t, header.Get(rpc.ResourceExhaustedScopeHeader), 1)
-				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM.String(), header.Get(rpc.ResourceExhaustedScopeHeader)[0])
+				assert.Len(t, header.Get(interceptor.ResourceExhaustedCauseHeader), 1)
+				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT.String(), header.Get(interceptor.ResourceExhaustedCauseHeader)[0])
+				assert.Len(t, header.Get(interceptor.ResourceExhaustedScopeHeader), 1)
+				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM.String(), header.Get(interceptor.ResourceExhaustedScopeHeader)[0])
 			} else {
 				assert.NoError(t, err)
 			}
@@ -583,7 +582,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
 				interceptor.ServiceErrorInterceptor,
-				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
+				interceptor.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
 			))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
@@ -624,10 +623,10 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, resourceExhausted.Cause)
 					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, resourceExhausted.Scope)
 
-					assert.Len(t, header.Get(rpc.ResourceExhaustedCauseHeader), 1)
-					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT.String(), header.Get(rpc.ResourceExhaustedCauseHeader)[0])
-					assert.Len(t, header.Get(rpc.ResourceExhaustedScopeHeader), 1)
-					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE.String(), header.Get(rpc.ResourceExhaustedScopeHeader)[0])
+					assert.Len(t, header.Get(interceptor.ResourceExhaustedCauseHeader), 1)
+					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT.String(), header.Get(interceptor.ResourceExhaustedCauseHeader)[0])
+					assert.Len(t, header.Get(interceptor.ResourceExhaustedScopeHeader), 1)
+					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE.String(), header.Get(interceptor.ResourceExhaustedScopeHeader)[0])
 				} else {
 					assert.NoError(t, err)
 				}
@@ -708,9 +707,6 @@ func getTestConfig(tc namespaceRateLimitInterceptorTestCase) Config {
 		MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: func(namespace string) float64 {
 			return getOrDefaultLimit(tc.maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance)
 		},
-		ReducePollWorkflowHistoryRequestPriority: func() bool {
-			return true
-		},
 	}
 }
 
@@ -773,7 +769,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
 				interceptor.ServiceErrorInterceptor,
-				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
+				interceptor.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
 			))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)

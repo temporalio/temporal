@@ -42,6 +42,16 @@ func TestProtoDecode(t *testing.T) {
 		assert.Contains(t, err.Error(), "cannot decode nil")
 	})
 
+	t.Run("empty data blob", func(t *testing.T) {
+		blob := &commonpb.DataBlob{}
+
+		var result persistencespb.ShardInfo
+		err := Decode(blob, &result)
+		require.Error(t, err)
+		assert.IsType(t, &UnknownEncodingTypeError{}, err)
+		assert.Contains(t, err.Error(), "unknown or unsupported encoding type Unspecified")
+	})
+
 	t.Run("nil data field", func(t *testing.T) {
 		blob := &commonpb.DataBlob{
 			Data:         nil,

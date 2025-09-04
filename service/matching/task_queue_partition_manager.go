@@ -134,6 +134,7 @@ func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager
 func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.versionedQueuesLock.Lock()
 	defer pm.versionedQueuesLock.Unlock()
+	pm.rateLimitManager.Stop()
 	for _, vq := range pm.versionedQueues {
 		vq.Stop(unloadCause)
 	}
@@ -737,10 +738,9 @@ func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) 
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundHighCallerInfo(pm.ns.Name().String()))
 }
 
-// ForceLoadAllNonRootPartitions spins off go routines which make RPC calls to all the
-func (pm *taskQueuePartitionManagerImpl) ForceLoadAllNonRootPartitions() {
+// ForceLoadAllChildPartitions spins off go routines which make RPC calls to all the
+func (pm *taskQueuePartitionManagerImpl) ForceLoadAllChildPartitions() {
 	if !pm.partition.IsRoot() {
-		pm.logger.Info("ForceLoadAllNonRootPartitions called on non-root partition. Prevented circular keep alive (loading) of partitions.")
 		return
 	}
 

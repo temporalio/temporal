@@ -57,7 +57,6 @@ type Config struct {
 	MaxNamespaceRPSPerInstance                                        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstRatioPerInstance                                 dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	MaxConcurrentLongRunningRequestsPerInstance                       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	ReducePollWorkflowHistoryRequestPriority                          dynamicconfig.BoolPropertyFn
 	MaxGlobalConcurrentLongRunningRequests                            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityRPSPerInstance                              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityBurstRatioPerInstance                       dynamicconfig.FloatPropertyFnWithNamespaceFilter
@@ -115,6 +114,9 @@ type Config struct {
 
 	// EnableTokenNamespaceEnforcement enables enforcement that namespace in completion token matches namespace of the request
 	EnableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
+
+	// ExposeAuthorizerErrors controls whether errors returned by the Authorizer will be wrapped with a PermissionDenied error.
+	ExposeAuthorizerErrors dynamicconfig.BoolPropertyFn
 
 	// gRPC keep alive options
 	// If a client pings too frequently, terminate the connection.
@@ -185,6 +187,7 @@ type Config struct {
 
 	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NexusRequestHeadersBlacklist   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	NexusForwardRequestUseEndpoint dynamicconfig.BoolPropertyFn
 	NexusOperationsMetricTagConfig dynamicconfig.TypedPropertyFn[nexusoperations.NexusMetricTagConfig]
 
 	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -247,7 +250,6 @@ func NewConfig(
 		MaxNamespaceRPSPerInstance:                                        dynamicconfig.FrontendMaxNamespaceRPSPerInstance.Get(dc),
 		MaxNamespaceBurstRatioPerInstance:                                 dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance.Get(dc),
 		MaxConcurrentLongRunningRequestsPerInstance:                       dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance.Get(dc),
-		ReducePollWorkflowHistoryRequestPriority:                          dynamicconfig.ReducePollWorkflowHistoryRequestPriority.Get(dc),
 		MaxGlobalConcurrentLongRunningRequests:                            dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests.Get(dc),
 		MaxNamespaceVisibilityRPSPerInstance:                              dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Get(dc),
 		MaxNamespaceVisibilityBurstRatioPerInstance:                       dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Get(dc),
@@ -286,6 +288,7 @@ func NewConfig(
 		DefaultWorkflowTaskTimeout:               dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
 		EnableServerVersionCheck:                 dynamicconfig.EnableServerVersionCheck.Get(dc),
 		EnableTokenNamespaceEnforcement:          dynamicconfig.EnableTokenNamespaceEnforcement.Get(dc),
+		ExposeAuthorizerErrors:                   dynamicconfig.ExposeAuthorizerErrors.Get(dc),
 		KeepAliveMinTime:                         dynamicconfig.KeepAliveMinTime.Get(dc),
 		KeepAlivePermitWithoutStream:             dynamicconfig.KeepAlivePermitWithoutStream.Get(dc),
 		KeepAliveMaxConnectionIdle:               dynamicconfig.KeepAliveMaxConnectionIdle.Get(dc),
@@ -325,6 +328,7 @@ func NewConfig(
 		MaxCallbacksPerWorkflow:        dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 		MaxNexusOperationTokenLength:   nexusoperations.MaxOperationTokenLength.Get(dc),
 		NexusRequestHeadersBlacklist:   dynamicconfig.FrontendNexusRequestHeadersBlacklist.Get(dc),
+		NexusForwardRequestUseEndpoint: dynamicconfig.FrontendNexusForwardRequestUseEndpointDispatch.Get(dc),
 		NexusOperationsMetricTagConfig: nexusoperations.MetricTagConfiguration.Get(dc),
 
 		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),

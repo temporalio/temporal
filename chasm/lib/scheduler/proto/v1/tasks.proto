@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.scheduler.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpb";
+
+// Fires when the scheduler's idle period has lapsed, and the scheduler should
+// be closed.
+message SchedulerIdleTask {}
+
+// Buffers actions based on the schedule's specification.
+message GeneratorTask {}
+
+// Processes buffered actions, deciding whether to execute, delay, or discard.
+message InvokerProcessBufferTask {}
+
+// Drives execution of pending buffered actions to completion by starting,
+// canceling, or terminating workflows.
+message InvokerExecuteTask {}
+
+// Buffers actions based on a manually-requested backfill.
+message BackfillerTask {}

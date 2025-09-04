@@ -5,7 +5,6 @@
 # To use it, run a local server (any backend) and ensure the following dynamic configs are enabled 
 # in the dynamic config file (config/dynamicconfig/development-sql.yaml):
 #
-# system.enableDeploymentVersions=true
 # matching.PollerHistoryTTL=1s
 # matching.wv.VersionDrainageStatusVisibilityGracePeriod=5s
 # matching.wv.VersionDrainageStatusRefreshInterval=5s
@@ -18,7 +17,7 @@ deploymentName="foo"
 version="1.0"
 
 # Expected workflow counts - users can override these if their changes are expected to generate more workflows which will be true when a breaking change to 
-# these worfklows is introduced.
+# these workflows is introduced.
 # These values are used by the replay tester to validate that your workflow changes haven't accidentally created additional executions.
 EXPECTED_DEPLOYMENT_WORKFLOWS=${EXPECTED_DEPLOYMENT_WORKFLOWS:-12}
 EXPECTED_VERSION_WORKFLOWS=${EXPECTED_VERSION_WORKFLOWS:-14}

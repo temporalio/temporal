@@ -30,10 +30,6 @@ type TerminateComponentResponse struct{}
 // Embed UnimplementedComponent to get forward compatibility
 type UnimplementedComponent struct{}
 
-func (UnimplementedComponent) LifecycleState(Context) LifecycleState {
-	return LifecycleStateUnspecified
-}
-
 func (UnimplementedComponent) Terminate(MutableContext, TerminateComponentRequest) (TerminateComponentResponse, error) {
 	return TerminateComponentResponse{}, nil
 }
@@ -59,18 +55,14 @@ const (
 	// LifecycleStateTerminated
 	// LifecycleStateTimedout
 	// LifecycleStateReset
-
-	LifecycleStateUnspecified = LifecycleState(0)
 )
 
 func (s LifecycleState) IsClosed() bool {
-	return s == LifecycleStateCompleted || s == LifecycleStateFailed
+	return s >= LifecycleStateCompleted
 }
 
 func (s LifecycleState) String() string {
 	switch s {
-	case LifecycleStateUnspecified:
-		return "Unspecified"
 	case LifecycleStateRunning:
 		return "Running"
 	case LifecycleStateCompleted:

@@ -185,11 +185,9 @@ func parseOptionsMap(value string) map[string]string {
 		return make(map[string]string)
 	}
 
-	split := strings.Split(value, ",")
-
 	parsedMap := make(map[string]string)
 
-	for _, pair := range split {
+	for pair := range strings.SplitSeq(value, ",") {
 		trimmedPair := strings.ReplaceAll(pair, " ", "")
 		if len(trimmedPair) == 0 {
 			continue
