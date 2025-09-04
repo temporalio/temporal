@@ -878,7 +878,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 
 		if m.ms.executionInfo.LastWorkflowTaskFailure == nil {
 			m.ms.executionInfo.LastWorkflowTaskFailure = &persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType{
-				LastWorkflowTaskTimedOutType: persistencespb.WORKFLOW_TASK_TIMED_OUT_TYPE_SCHEDULE_TO_CLOSE,
+				LastWorkflowTaskTimedOutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 			}
 		}
 

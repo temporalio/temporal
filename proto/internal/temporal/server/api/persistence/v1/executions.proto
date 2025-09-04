@@ -279,11 +279,9 @@ message WorkflowExecutionInfo {
     WorkflowPauseInfo pause_info = 106;
 
     // Last workflow task failure category and cause are used to track the last workflow task failure category and cause.
-    // string last_workflow_task_failure_category = 107;
-    // string last_workflow_task_failure_cause = 108;
     oneof last_workflow_task_failure {
         temporal.api.enums.v1.WorkflowTaskFailedCause last_workflow_task_failure_cause = 107;
-        WorkflowTaskTimedOutType last_workflow_task_timed_out_type = 108;
+        temporal.api.enums.v1.TimeoutType last_workflow_task_timed_out_type = 108;
     }
 }
 
@@ -849,9 +847,4 @@ message ActivityPauseInfo {
 
     // The reason for the pause.
     string reason = 5;
-}
-
-enum WorkflowTaskTimedOutType {
-    WORKFLOW_TASK_TIMED_OUT_TYPE_UNSPECIFIED = 0;
-    WORKFLOW_TASK_TIMED_OUT_TYPE_SCHEDULE_TO_CLOSE = 1;
 }
