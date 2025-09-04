@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"crypto/tls"
+	"net"
 	"time"
 
 	"go.temporal.io/server/common/headers"
@@ -46,7 +47,13 @@ const (
 // The hostName syntax is defined in
 // https://github.com/grpc/grpc/blob/master/doc/naming.md.
 // dns resolver is used by default
-func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+func Dial(
+	hostName string,
+	tlsConfig *tls.Config,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+	opts ...grpc.DialOption,
+) (*grpc.ClientConn, error) {
 	var grpcSecureOpt grpc.DialOption
 	if tlsConfig == nil {
 		grpcSecureOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
@@ -65,8 +72,27 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, opts ...grp
 	}
 	cp.Backoff.MaxDelay = MaxBackoffDelay
 
+	dtrace := newDialTracer(hostName, metricsHandler, logger)
+
+	contextDialer := func(ctx context.Context, s string) (net.Conn, error) {
+		// Keep the existing gRPC behavior by using OS defaults for TCP keepalive settings.
+		// We are on Go 1.23+ and can use KeepAliveConfig directly instead of the old KeepAlive/Control hacks.
+		dialer := &net.Dialer{
+			KeepAliveConfig: net.KeepAliveConfig{
+				Enable: true,
+			},
+		}
+
+		var ndt *networkDialTrace
+		ctx, ndt = dtrace.beginNetworkDial(ctx)
+		conn, dialErr := dialer.DialContext(ctx, "tcp", s)
+		dtrace.endNetworkDial(ndt, dialErr)
+		return conn, dialErr
+	}
+
 	dialOptions := []grpc.DialOption{
 		grpcSecureOpt,
+		grpc.WithContextDialer(contextDialer),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxInternodeRecvPayloadSize)),
 		grpc.WithChainUnaryInterceptor(
 			headersInterceptor,
