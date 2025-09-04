@@ -30,7 +30,7 @@ func TestGenerateJUnitReportForTimedoutTests(t *testing.T) {
 	j := generateStatic(testNames, "timeout", "Timeout")
 	j.path = out.Name()
 	require.NoError(t, j.write())
-	requireReportEquals(t, out.Name(), "testdata/junit-timeout-output.xml")
+	requireReportEquals(t, "testdata/junit-timeout-output.xml", out.Name())
 }
 
 func TestNode(t *testing.T) {
@@ -125,7 +125,7 @@ func collectTestNames(suites []junit.Testsuite) []string {
 	return testNames
 }
 
-func requireReportEquals(t *testing.T, actualFile string, expectedFile string) {
+func requireReportEquals(t *testing.T, expectedFile, actualFile string) {
 	expectedReport, err := os.ReadFile(expectedFile)
 	require.NoError(t, err)
 

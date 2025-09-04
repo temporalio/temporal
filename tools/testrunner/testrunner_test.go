@@ -131,5 +131,5 @@ func TestRunnerReportCrash(t *testing.T) {
 	require.NoError(t, err)
 
 	r.reportCrash()
-	requireReportEquals(t, out.Name(), "testdata/junit-crash-output.xml")
+	requireReportEquals(t, "testdata/junit-crash-output.xml", out.Name())
 }
