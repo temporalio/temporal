@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"time"
 
 	"github.com/pborman/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -727,7 +726,7 @@ func (d *WorkflowRunner) handleSetManager(ctx workflow.Context, args *deployment
 	// update local state
 	d.State.ManagerIdentity = args.ManagerIdentity
 	d.State.LastModifierIdentity = args.Identity
-	d.State.ConflictToken, _ = time.Now().MarshalBinary()
+	d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
 
 	// no need to update memo because identity and manager identity are not in it
 	return &deploymentspb.SetManagerIdentityResponse{
