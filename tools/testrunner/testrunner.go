@@ -185,7 +185,7 @@ func (r *runner) reportCrash() {
 
 func (r *runner) runTests(ctx context.Context, args []string) {
 	var currentAttempt *attempt
-	for attempt := 1; attempt <= r.maxAttempts; attempt++ {
+	for a := 1; a <= r.maxAttempts; a++ {
 		currentAttempt = r.newAttempt()
 
 		// Run tests.
@@ -222,7 +222,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		}
 
 		// Rerun all tests from previous attempt if there's more than 10 failures in a single suite.
-		if len(failures) > 10 && attempt < r.maxAttempts {
+		if len(failures) > 10 && a < r.maxAttempts {
 			log.Printf(
 				"number of failures exceeds configured threshold (%d/%d) for narrowing down tests to retry, retrying with previous attempt's args",
 				len(failures), 10)
