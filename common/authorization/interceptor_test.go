@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -136,6 +137,29 @@ func (s *authorizerInterceptorSuite) TestAuthorizationFailed() {
 	res, err := s.interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 	s.Nil(res)
 	s.Error(err)
+}
+
+func (s *authorizerInterceptorSuite) TestAuthorizationFailedExposed() {
+	interceptor := NewInterceptor(
+		s.mockClaimMapper,
+		s.mockAuthorizer,
+		s.mockMetricsHandler,
+		log.NewNoopLogger(),
+		mockNamespaceChecker(testNamespace),
+		nil,
+		"",
+		"",
+		dynamicconfig.GetBoolPropertyFn(true),
+	)
+
+	authErr := serviceerror.NewInternal("intentional test failure")
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceTarget).
+		Return(Result{Decision: DecisionDeny}, authErr)
+	s.mockMetricsHandler.EXPECT().Counter(metrics.ServiceErrAuthorizeFailedCounter.Name()).Return(metrics.NoopCounterMetricFunc)
+
+	res, err := interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
+	s.Nil(res)
+	s.ErrorIs(err, authErr)
 }
 
 func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
