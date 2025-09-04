@@ -1564,7 +1564,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 
 }
 
-func (s *WorkerDeploymentSuite) TestSetManagerIdentity() {
+func (s *WorkerDeploymentSuite) TestSetManagerIdentity_RW() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 	tv := testvars.New(s).WithBuildIDNumber(1)
@@ -1586,7 +1586,65 @@ func (s *WorkerDeploymentSuite) TestSetManagerIdentity() {
 
 	// set identity with bad conflict token
 	s.setAndValidateManagerIdentity(ctx, tv, true, true, "", "", "conflict token mismatch")
+}
 
+func (s *WorkerDeploymentSuite) TestSetManagerIdentity_WithSetRampSetCurrent() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	tv := testvars.New(s).WithBuildIDNumber(1)
+
+	go s.pollFromDeployment(ctx, tv)
+	s.ensureCreateVersionInDeployment(tv)
+
+	// set identity to self
+	s.setAndValidateManagerIdentity(ctx, tv, true, false, "", "", "")
+	// -> self can successfully set ramp
+	s.setAndVerifyRampingVersion(ctx, tv, false, 1, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{})
+
+	// set identity to other
+	s.setAndValidateManagerIdentity(ctx, tv, false, false, "other", tv.ClientIdentity(), "")
+	// -> self cannot set ramp
+	s.setAndVerifyRampingVersion(ctx, tv, false, 2, true,
+		fmt.Sprintf(workerdeployment.ErrManagerIdentityMismatch, "other", tv.ClientIdentity()), nil)
+	// -> self cannot set current
+	s.setCurrentVersion(ctx, tv, "", true, fmt.Sprintf(workerdeployment.ErrManagerIdentityMismatch, "other", tv.ClientIdentity()))
+
+	// unset identity
+	s.setAndValidateManagerIdentity(ctx, tv, false, false, "", "other", "")
+	// -> self can now set ramp
+	s.setAndVerifyRampingVersion(ctx, tv, false, 2, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
+		PreviousDeploymentVersion: tv.ExternalDeploymentVersion(),
+		PreviousPercentage:        1,
+	})
+
+	// set identity to self
+	s.setAndValidateManagerIdentity(ctx, tv, true, false, "", "", "")
+	// -> self can now set current
+	s.setCurrentVersion(ctx, tv, worker_versioning.UnversionedVersionId, true, "")
+}
+
+func (s *WorkerDeploymentSuite) TestSetManagerIdentity_WithDeleteVersion() {
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	tv := testvars.New(s).WithBuildIDNumber(1)
+
+	// start and stop polling so that version is eligible for deletion
+	pollerCtx, pollerCancel := context.WithCancel(ctx)
+	go s.pollFromDeployment(pollerCtx, tv)
+	s.ensureCreateVersionInDeployment(tv)
+	pollerCancel()
+
+	// set identity to other
+	s.setAndValidateManagerIdentity(ctx, tv, false, false, "other", "", "")
+	// -> self cannot delete version
+	s.tryDeleteVersion(ctx, tv, fmt.Sprintf(workerdeployment.ErrManagerIdentityMismatch, "other", tv.ClientIdentity()))
+
+	// set identity to self
+	s.setAndValidateManagerIdentity(ctx, tv, true, false, "", "other", "")
+	// -> self can now delete version
+	s.tryDeleteVersion(ctx, tv, "")
 }
 
 // Should see that the current version of the task queues becomes unversioned
@@ -2665,7 +2723,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 	}, 5*time.Second, time.Second)
 
 	// delete succeeds
-	s.tryDeleteVersion(ctx, tv1, true)
+	s.tryDeleteVersion(ctx, tv1, "")
 
 	// deployment version does not exist in the deployment list
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -2772,16 +2830,18 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_InvalidDelete() {
 func (s *WorkerDeploymentSuite) tryDeleteVersion(
 	ctx context.Context,
 	tv *testvars.TestVars,
-	expectSuccess bool,
+	expectedError string,
 ) {
 	_, err := s.FrontendClient().DeleteWorkerDeploymentVersion(ctx, &workflowservice.DeleteWorkerDeploymentVersionRequest{
 		Namespace: s.Namespace().String(),
 		Version:   tv.DeploymentVersionString(),
+		Identity:  tv.ClientIdentity(),
 	})
-	if expectSuccess {
+	if expectedError == "" {
 		s.Nil(err)
 	} else {
 		s.Error(err)
+		s.Contains(err.Error(), expectedError)
 	}
 }
 
@@ -2900,7 +2960,13 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 		return
 	}
 	s.NoError(err)
-	s.Equal(expectedResp.GetPreviousVersion(), resp.GetPreviousVersion())
+
+	if prevVersion := expectedResp.GetPreviousDeploymentVersion(); prevVersion != nil {
+		s.Equal(prevVersion.GetBuildId(), resp.GetPreviousDeploymentVersion().GetBuildId())
+		s.Equal(prevVersion.GetDeploymentName(), resp.GetPreviousDeploymentVersion().GetDeploymentName())
+	} else {
+		s.Equal(expectedResp.GetPreviousVersion(), resp.GetPreviousVersion())
+	}
 	s.Equal(expectedResp.GetPreviousPercentage(), resp.GetPreviousPercentage())
 }
 

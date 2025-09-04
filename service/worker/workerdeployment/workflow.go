@@ -431,6 +431,9 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s not found in deployment", args.Version), errVersionNotFound)
 	}
 
+	if d.State.ManagerIdentity != "" && d.State.ManagerIdentity != args.Identity {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf(ErrManagerIdentityMismatch, d.State.ManagerIdentity, args.Identity))
+	}
 	return nil
 }
 
@@ -609,6 +612,10 @@ func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersion
 		// activity won't retry on this error since version not eligible for deletion
 		return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping)
 	}
+
+	if d.State.ManagerIdentity != "" && d.State.ManagerIdentity != args.Identity {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf(ErrManagerIdentityMismatch, d.State.ManagerIdentity, args.Identity))
+	}
 	return nil
 }
 
@@ -716,6 +723,9 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deployment
 	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != worker_versioning.UnversionedVersionId {
 		d.logger.Info("version not found in deployment")
 		return temporal.NewApplicationError(fmt.Sprintf("version %s not found in deployment", args.Version), errVersionNotFound)
+	}
+	if d.State.ManagerIdentity != "" && d.State.ManagerIdentity != args.Identity {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf(ErrManagerIdentityMismatch, d.State.ManagerIdentity, args.Identity))
 	}
 	return nil
 }
