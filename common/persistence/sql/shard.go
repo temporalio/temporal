@@ -36,7 +36,7 @@ func (m *sqlShardStore) GetOrCreateShard(
 	ctx context.Context,
 	request *persistence.InternalGetOrCreateShardRequest,
 ) (*persistence.InternalGetOrCreateShardResponse, error) {
-	row, err := m.Db.SelectFromShards(ctx, sqlplugin.ShardsFilter{
+	row, err := m.DB.SelectFromShards(ctx, sqlplugin.ShardsFilter{
 		ShardID: request.ShardID,
 	})
 	switch err {
@@ -63,12 +63,12 @@ func (m *sqlShardStore) GetOrCreateShard(
 		Data:         shardInfo.Data,
 		DataEncoding: shardInfo.EncodingType.String(),
 	}
-	_, err = m.Db.InsertIntoShards(ctx, row)
+	_, err = m.DB.InsertIntoShards(ctx, row)
 	if err == nil {
 		return &persistence.InternalGetOrCreateShardResponse{
 			ShardInfo: shardInfo,
 		}, nil
-	} else if m.Db.IsDupEntryError(err) {
+	} else if m.DB.IsDupEntryError(err) {
 		// conflict, try again
 		request.CreateShardInfo = nil // prevent loop
 		return m.GetOrCreateShard(ctx, request)
