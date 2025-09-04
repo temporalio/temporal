@@ -32,8 +32,9 @@ func Invoke(
 	var queues []*historyservice.ListQueuesResponse_QueueInfo
 	for _, queue := range resp.Queues {
 		queues = append(queues, &historyservice.ListQueuesResponse_QueueInfo{
-			QueueName:    queue.QueueName,
-			MessageCount: queue.MessageCount,
+			QueueName:     queue.QueueName,
+			MessageCount:  queue.MessageCount,
+			LastMessageId: queue.LastMessageID,
 		})
 	}
 	return &historyservice.ListQueuesResponse{

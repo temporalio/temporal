@@ -337,7 +337,7 @@ func testGetLastMessageIDFails(ctx context.Context, t *testing.T, baseDB sqlplug
 	require.NoError(t, err)
 	_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "failed to get next messageId")
+	assert.ErrorContains(t, err, "failed to get last messageId")
 	assert.Equal(t, db.commitCalls, 0)
 }
 
@@ -660,6 +660,8 @@ func testListQueuesGetPartitionFails(ctx context.Context, t *testing.T, baseDB s
 	}
 	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
 	require.NoError(t, err)
+	_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
+	require.NoError(t, err)
 	_, err = q.ListQueues(context.Background(), &persistence.InternalListQueuesRequest{
 		QueueType: queueType,
 		PageSize:  100,
@@ -704,10 +706,7 @@ func testListQueueFailsToExtractQueueMetadata(ctx context.Context, t *testing.T,
 	}
 	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
 	assert.NoError(t, err)
-	_, err = q.ListQueues(ctx, &persistence.InternalListQueuesRequest{
-		QueueType: queueType,
-		PageSize:  100,
-	})
+	_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
 	assert.Error(t, err)
 	assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
 }
