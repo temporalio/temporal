@@ -726,18 +726,12 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	switch err.(type) {
 	case nil:
 		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion() {
-			if !e.ProcessToolBox.Config.EnableReplicationEagerRefreshNamespace() {
-				return "", false, serviceerror.NewInternalf("cannot process task because namespace failover version is not up to date, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion())
-			}
 			_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 			if err != nil {
 				return "", false, err
 			}
 		}
 	case *serviceerror.NamespaceNotFound:
-		if !e.ProcessToolBox.Config.EnableReplicationEagerRefreshNamespace() {
-			return "", false, nil
-		}
 		_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 		if err != nil {
 			e.Logger.Info("Failed to SyncNamespaceFromSourceCluster", tag.Error(err))
