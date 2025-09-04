@@ -110,6 +110,15 @@
             "TemporalPauseInfo": {
                 "type": "keyword"
             },
+            "TemporalWorkerDeploymentVersion": {
+                "type": "keyword"
+            },
+            "TemporalWorkflowVersioningBehavior": {
+                "type": "keyword"
+            },
+            "TemporalWorkerDeployment": {
+                "type": "keyword"
+            },
             "TemporalReportedProblems": {
                 "type": "keyword_list"
             }
