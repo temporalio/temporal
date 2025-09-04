@@ -35,6 +35,13 @@ temporal operator namespace create default
 echo "Running the Go program..."
 go run "$(dirname "$0")/worker/worker.go"
 
+if [ $? -ne 0 ]; then
+  echo "Go program exited with an error. Exiting bash script." >&2
+  exit 1
+fi
+
+echo "Go program completed successfully."
+
 echo "Waiting 5 seconds for all workflows to show up in visibility..."
 sleep 5
 
