@@ -77,9 +77,10 @@ func (g *GeneratorTaskExecutor) Execute(
 	result, err := g.SpecProcessor.ProcessTimeRange(scheduler, t1, t2, scheduler.overlapPolicy(), "", false, nil)
 	if err != nil {
 		// An error here should be impossible, send to the DLQ.
-		logger.Error("error processing time range", tag.Error(err))
+		msg := "failed to process a time range"
+		logger.Error(msg, tag.Error(err))
 		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternalf("failed to process a time range"),
+			serviceerror.NewInternal(msg),
 			err)
 	}
 
@@ -90,6 +91,16 @@ func (g *GeneratorTaskExecutor) Execute(
 
 	// Write the new high water mark.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
+
+	// Update visibility, since future action times may have changed.
+	err = scheduler.UpdateVisibility(ctx, g.SpecProcessor, nil)
+	if err != nil {
+		msg := "failed to update visibility"
+		logger.Error(msg, tag.Error(err))
+		return fmt.Errorf("%w: %w",
+			serviceerror.NewInternal(msg),
+			err)
+	}
 
 	// Check if the schedule has gone idle.
 	idleTimeTotal := g.Config.Tweakables(scheduler.Namespace).IdleTime

@@ -1,13 +1,19 @@
 package scheduler
 
 import (
+	"bytes"
 	"fmt"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -29,6 +35,8 @@ type Scheduler struct {
 	Invoker     chasm.Field[*Invoker]
 	Backfillers chasm.Map[string, *Backfiller] // Backfill ID => *Backfiller
 
+	Visibility chasm.Field[*chasm.Visibility]
+
 	// Locally-cached state, invalidated whenever cacheConflictToken != ConflictToken.
 	cacheConflictToken int64
 	compiledSpec       *scheduler.CompiledSpec // compiledSpec is only ever replaced whole, not mutated.
@@ -37,6 +45,12 @@ type Scheduler struct {
 const (
 	// How many recent actions to keep on the Info.RecentActions list.
 	recentActionCount = 10
+
+	// Item limit per spec field on the ScheduleInfo memo.
+	listInfoSpecFieldLimit = 10
+
+	// Field in which the schedule's memo is stored.
+	visibilityMemoFieldInfo = "ScheduleInfo"
 )
 
 // NewScheduler returns an initialized CHASM scheduler root component.
@@ -66,9 +80,13 @@ func NewScheduler(
 	}
 
 	invoker := NewInvoker(ctx, sched)
-	generator := NewGenerator(ctx, sched, invoker)
 	sched.Invoker = chasm.NewComponentField(ctx, invoker)
+
+	generator := NewGenerator(ctx, sched, invoker)
 	sched.Generator = chasm.NewComponentField(ctx, generator)
+
+	visibility := chasm.NewVisibility(ctx)
+	sched.Visibility = chasm.NewComponentField(ctx, visibility)
 
 	return sched
 }
@@ -289,4 +307,166 @@ func (s *Scheduler) recordActionResult(result *schedulerActionResult) {
 			s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, start.StartWorkflowResult)
 		}
 	}
+}
+
+// UpdateVisibility updates the schedule's visibility record, including memo
+// and search attributes. customSearchAttributes is optional, and custom search
+// attributes will be left as-is with it unset.
+//
+// See mergeCustomSearchAttributes for how custom search attributes are merged.
+func (s *Scheduler) UpdateVisibility(
+	ctx chasm.MutableContext,
+	specProcessor SpecProcessor,
+	customSearchAttributes *commonpb.SearchAttributes,
+) error {
+	needsTask := false // Set to true if we need to write anything to Visibility.
+	visibility, err := s.Visibility.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Update the schedule's search attributes. This includes both Temporal-managed
+	// fields (paused state), as well as upserts for customer-specified fields.
+	upsertAttrs := make(map[string]any)
+	currentAttrs, err := visibility.GetSearchAttributes(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Only attempt to merge additional search attributes if any are given, otherwise
+	// we'll unset existing attributes.
+	if customSearchAttributes != nil &&
+		len(customSearchAttributes.GetIndexedFields()) > 0 {
+		mergeCustomSearchAttributes(
+			currentAttrs,
+			customSearchAttributes.GetIndexedFields(),
+			upsertAttrs,
+		)
+	}
+
+	// Update Paused status.
+	var currentPaused bool
+	currentPausedPayload, ok := currentAttrs[searchattribute.TemporalSchedulePaused]
+	if ok {
+		err = payload.Decode(currentPausedPayload, &currentPaused)
+		if err != nil {
+			return err
+		}
+	}
+	if !ok || currentPaused != s.Schedule.State.Paused {
+		upsertAttrs[searchattribute.TemporalSchedulePaused] = s.Schedule.State.Paused
+	}
+
+	if len(upsertAttrs) > 0 {
+		err = visibility.UpsertSearchAttributes(ctx, upsertAttrs)
+		if err != nil {
+			return err
+		}
+		needsTask = true
+	}
+
+	newInfo, err := s.GetListInfo(ctx, specProcessor)
+	if err != nil {
+		return err
+	}
+	newInfoPayload, err := newInfo.Marshal()
+	if err != nil {
+		return err
+	}
+	currentMemo, err := visibility.GetMemo(ctx)
+	if err != nil {
+		return err
+	}
+	currentInfoPayload := currentMemo[visibilityMemoFieldInfo]
+
+	// Update visibility if the memo is out-of-date or absent.
+	if currentInfoPayload == nil ||
+		!bytes.Equal(currentInfoPayload.Data, newInfoPayload) {
+		newMemo := map[string]any{visibilityMemoFieldInfo: newInfoPayload}
+		err = visibility.UpsertMemo(ctx, newMemo)
+		if err != nil {
+			return err
+		}
+		needsTask = true
+	}
+
+	if needsTask {
+		visibility.GenerateTask(ctx)
+	}
+
+	return nil
+}
+
+// GetListInfo returns the ScheduleListInfo, used as the visibility memo, and to
+// answer List queries.
+func (s *Scheduler) GetListInfo(
+	ctx chasm.Context,
+	specProcessor SpecProcessor,
+) (*schedulepb.ScheduleListInfo, error) {
+	spec := common.CloneProto(s.Schedule.Spec)
+
+	// Clear fields that are too large/not useful for the list view.
+	spec.TimezoneData = nil
+
+	// Limit the number of specs and exclusions stored on the memo.
+	spec.ExcludeStructuredCalendar = util.SliceHead(spec.ExcludeStructuredCalendar, listInfoSpecFieldLimit)
+	spec.Interval = util.SliceHead(spec.Interval, listInfoSpecFieldLimit)
+	spec.StructuredCalendar = util.SliceHead(spec.StructuredCalendar, listInfoSpecFieldLimit)
+
+	futureActionTimes, err := s.getFutureActionTimes(ctx, specProcessor)
+	if err != nil {
+		return nil, err
+	}
+
+	return &schedulepb.ScheduleListInfo{
+		Spec:              spec,
+		WorkflowType:      s.Schedule.Action.GetStartWorkflow().GetWorkflowType(),
+		Notes:             s.Schedule.State.Notes,
+		Paused:            s.Schedule.State.Paused,
+		RecentActions:     util.SliceTail(s.Info.RecentActions, recentActionCount),
+		FutureActionTimes: futureActionTimes,
+	}, nil
+}
+
+// getFutureActionTimes returns up to min(`recentActionCount`, `RemainingActions`)
+// future action times. Future action times that precede the schedule's UpdateTime
+// are not included.
+func (s *Scheduler) getFutureActionTimes(
+	ctx chasm.Context,
+	specProcessor SpecProcessor,
+) ([]*timestamppb.Timestamp, error) {
+	generator, err := s.Generator.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	nextTime := func(t time.Time) (time.Time, error) {
+		res, err := specProcessor.GetNextTime(s, t)
+		return res.Next, err
+	}
+
+	count := recentActionCount
+	if s.Schedule.State.LimitedActions {
+		count = min(int(s.Schedule.State.RemainingActions), recentActionCount)
+	}
+	out := make([]*timestamppb.Timestamp, 0, count)
+	t := timestamp.TimeValue(generator.LastProcessedTime)
+	for len(out) < count {
+		t, err = nextTime(t)
+		if err != nil {
+			return nil, err
+		}
+		if t.IsZero() {
+			break
+		}
+
+		if s.Info.UpdateTime.AsTime().After(t) {
+			// Skip action times whose nominal times are prior to the schedule's update time.
+			continue
+		}
+
+		out = append(out, timestamppb.New(t))
+	}
+
+	return out, nil
 }

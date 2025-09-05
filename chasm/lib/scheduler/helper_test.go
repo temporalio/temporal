@@ -3,6 +3,7 @@ package scheduler_test
 import (
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/chasm/lib/scheduler"
@@ -34,7 +35,8 @@ func defaultSchedule() *schedulepb.Schedule {
 		Action: &schedulepb.ScheduleAction{
 			Action: &schedulepb.ScheduleAction_StartWorkflow{
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-					WorkflowId: "scheduled-wf",
+					WorkflowId:   "scheduled-wf",
+					WorkflowType: &commonpb.WorkflowType{Name: "scheduled-wf-type"},
 				},
 			},
 		},

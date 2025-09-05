@@ -34,6 +34,7 @@ type (
 		Config         *Config
 		MetricsHandler metrics.Handler
 		BaseLogger     log.Logger
+		SpecProcessor  SpecProcessor
 
 		HistoryClient resource.HistoryClient
 
@@ -175,6 +176,12 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 
 			i.recordExecuteResult(ctx, &result)
 			s.recordActionResult(&schedulerActionResult{starts: startResults})
+
+			// Update visibility, since RecentActions may have been updated.
+			err = s.UpdateVisibility(ctx, e.SpecProcessor, nil)
+			if err != nil {
+				return struct{}{}, err
+			}
 
 			return struct{}{}, nil
 		},
