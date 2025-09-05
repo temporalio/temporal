@@ -44,8 +44,7 @@ type (
 
 		// cache converted values. use weak pointers to avoid holding on to values in the cache
 		// that are no longer in use.
-		convertCacheLock sync.Mutex
-		convertCache     map[weak.Pointer[ConstrainedValue]]any
+		convertCache sync.Map // map[weak.Pointer[ConstrainedValue]]any
 	}
 
 	subscription[T any] struct {
@@ -110,7 +109,6 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 		logger:        logger,
 		errCount:      -1,
 		subscriptions: make(map[Key]map[int]any),
-		convertCache:  make(map[weak.Pointer[ConstrainedValue]]any),
 	}
 }
 
@@ -522,33 +520,25 @@ func dispatchUpdateWithConstrainedDefault[T any](
 func convertWithCache[T any](c *Collection, key Key, convert func(any) (T, error), cvp *ConstrainedValue) (T, error) {
 	weakcvp := weak.Make(cvp)
 
-	c.convertCacheLock.Lock()
-	if converted, ok := c.convertCache[weakcvp]; ok {
+	if converted, ok := c.convertCache.Load(weakcvp); ok {
 		if t, ok := converted.(T); ok {
-			c.convertCacheLock.Unlock()
 			return t, nil
 		}
 		// Each key can only be used with a single type, so this shouldn't happen
 		c.logger.Warn("Cached converted value has wrong type", tag.Key(key.String()))
 		// Fall through to regular conversion
 	}
-	c.convertCacheLock.Unlock()
 
-	// unlock around convert
 	t, err := convert(cvp.Value)
 	if err != nil {
 		var zero T
 		return zero, err
 	}
 
-	c.convertCacheLock.Lock()
-	c.convertCache[weakcvp] = t
-	c.convertCacheLock.Unlock()
+	c.convertCache.Store(weakcvp, t)
 
 	runtime.AddCleanup(cvp, func(w weak.Pointer[ConstrainedValue]) {
-		c.convertCacheLock.Lock()
-		delete(c.convertCache, w)
-		c.convertCacheLock.Unlock()
+		c.convertCache.Delete(w)
 	}, weakcvp)
 
 	return t, nil
