@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tidwall/btree"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -46,7 +47,7 @@ type (
 		Stop()
 	}
 
-	rescheduledExecuable struct {
+	rescheduledExecutable struct {
 		executable     Executable
 		rescheduleTime time.Time
 	}
@@ -65,7 +66,8 @@ type (
 		taskChannelKeyFn TaskChannelKeyFn
 
 		sync.Mutex
-		pqMap          map[TaskChannelKey]collection.Queue[rescheduledExecuable]
+		pqMap          map[TaskChannelKey]collection.Queue[rescheduledExecutable]
+		keyBTree       *btree.BTreeG[TaskChannelKey] // Maintains TaskChannelKeys in priority order
 		numExecutables int
 	}
 )
@@ -88,7 +90,8 @@ func NewRescheduler(
 		timerGate:        timer.NewLocalGate(timeSource),
 		taskChannelKeyFn: scheduler.TaskChannelKeyFn(),
 
-		pqMap: make(map[TaskChannelKey]collection.Queue[rescheduledExecuable]),
+		pqMap:    make(map[TaskChannelKey]collection.Queue[rescheduledExecutable]),
+		keyBTree: btree.NewBTreeG[TaskChannelKey](TaskChannelKey.Less),
 	}
 }
 
@@ -124,7 +127,7 @@ func (r *reschedulerImpl) Add(
 ) {
 	r.Lock()
 	pq := r.getOrCreatePQLocked(r.taskChannelKeyFn(executable))
-	pq.Add(rescheduledExecuable{
+	pq.Add(rescheduledExecutable{
 		executable:     executable,
 		rescheduleTime: rescheduleTime,
 	})
@@ -145,14 +148,17 @@ func (r *reschedulerImpl) Reschedule(
 
 	now := r.timeSource.Now()
 	updatedRescheduleTime := false
-	for key, pq := range r.pqMap {
+
+	// Process keys in decreasing order of priority
+	r.keyBTree.Scan(func(key TaskChannelKey) bool {
 		if key.NamespaceID != namespaceID {
-			continue
+			return true
 		}
 
+		pq := r.pqMap[key]
 		updatedRescheduleTime = true
 		// set reschedule time for all tasks in this pq to be now
-		items := make([]rescheduledExecuable, 0, pq.Len())
+		items := make([]rescheduledExecutable, 0, pq.Len())
 		for !pq.IsEmpty() {
 			rescheduled := pq.Remove()
 			// scheduled queue pre-fetches tasks,
@@ -164,7 +170,8 @@ func (r *reschedulerImpl) Reschedule(
 			items = append(items, rescheduled)
 		}
 		r.pqMap[key] = r.newPriorityQueue(items)
-	}
+		return true
+	})
 
 	// then update timer gate to trigger the actual reschedule
 	if updatedRescheduleTime {
@@ -212,7 +219,10 @@ func (r *reschedulerImpl) reschedule() {
 
 	metrics.TaskReschedulerPendingTasks.With(r.metricsHandler).Record(int64(r.numExecutables))
 	now := r.timeSource.Now()
-	for _, pq := range r.pqMap {
+
+	// Process keys in decreasing order of priority
+	r.keyBTree.Scan(func(key TaskChannelKey) bool {
+		pq := r.pqMap[key]
 		for !pq.IsEmpty() {
 			rescheduled := pq.Peek()
 
@@ -238,7 +248,8 @@ func (r *reschedulerImpl) reschedule() {
 			pq.Remove()
 			r.numExecutables--
 		}
-	}
+		return true
+	})
 }
 
 func (r *reschedulerImpl) cleanupPQ() {
@@ -248,6 +259,7 @@ func (r *reschedulerImpl) cleanupPQ() {
 	for key, pq := range r.pqMap {
 		if pq.IsEmpty() {
 			delete(r.pqMap, key)
+			r.keyBTree.Delete(key)
 		}
 	}
 }
@@ -261,6 +273,7 @@ func (r *reschedulerImpl) drain() {
 			pq.Remove()
 		}
 		delete(r.pqMap, key)
+		r.keyBTree.Delete(key)
 	}
 
 	r.numExecutables = 0
@@ -272,29 +285,30 @@ func (r *reschedulerImpl) isStopped() bool {
 
 func (r *reschedulerImpl) getOrCreatePQLocked(
 	key TaskChannelKey,
-) collection.Queue[rescheduledExecuable] {
+) collection.Queue[rescheduledExecutable] {
 	if pq, ok := r.pqMap[key]; ok {
 		return pq
 	}
 
 	pq := r.newPriorityQueue(nil)
 	r.pqMap[key] = pq
+	r.keyBTree.Set(key)
 	return pq
 }
 
 func (r *reschedulerImpl) newPriorityQueue(
-	items []rescheduledExecuable,
-) collection.Queue[rescheduledExecuable] {
+	items []rescheduledExecutable,
+) collection.Queue[rescheduledExecutable] {
 	if items == nil {
-		return collection.NewPriorityQueue(r.rescheduledExecuableCompareLess)
+		return collection.NewPriorityQueue(r.rescheduledExecutableCompareLess)
 	}
 
-	return collection.NewPriorityQueueWithItems(r.rescheduledExecuableCompareLess, items)
+	return collection.NewPriorityQueueWithItems(r.rescheduledExecutableCompareLess, items)
 }
 
-func (r *reschedulerImpl) rescheduledExecuableCompareLess(
-	this rescheduledExecuable,
-	that rescheduledExecuable,
+func (r *reschedulerImpl) rescheduledExecutableCompareLess(
+	this rescheduledExecutable,
+	that rescheduledExecutable,
 ) bool {
 	return this.rescheduleTime.Before(that.rescheduleTime)
 }
