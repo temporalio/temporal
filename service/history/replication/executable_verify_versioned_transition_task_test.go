@@ -112,7 +112,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) SetupTest() {
 		NamespaceCache:          s.namespaceCache,
 		MetricsHandler:          s.metricsHandler,
 		Logger:                  s.logger,
-		EventSerializer:         s.eventSerializer,
+		Serializer:              s.eventSerializer,
 		EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
 		Config:                  s.config,
