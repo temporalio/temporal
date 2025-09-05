@@ -408,6 +408,10 @@ func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
 	return nil
 }
 
+func (d *WorkflowRunner) rampingVersionStringUnversioned(s string) bool {
+	return s == worker_versioning.UnversionedVersionId || s == ""
+}
+
 func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploymentspb.SetRampingVersionArgs) error {
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if args.Version == d.State.GetRoutingConfig().GetRampingVersion() &&
@@ -420,7 +424,8 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 		return temporal.NewApplicationError("conflict token mismatch", errFailedPrecondition)
 	}
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if args.Version == d.State.GetRoutingConfig().GetCurrentVersion() {
+	if args.Version == d.State.GetRoutingConfig().GetCurrentVersion() &&
+		!(args.Version == worker_versioning.UnversionedVersionId && args.Percentage == 0) {
 		d.logger.Info("version can't be set to ramping since it is already current")
 		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s is already current", args.Version), errFailedPrecondition)
 	}
@@ -506,8 +511,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			RampPercentage:    0,   // remove ramp
 		}
 
-		// TODO (Shivam): remove the empty string check once canary stops flaking out
-		if prevRampingVersion != worker_versioning.UnversionedVersionId && prevRampingVersion != "" {
+		if !d.rampingVersionStringUnversioned(prevRampingVersion) {
 			if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs, false); err != nil {
 				return nil, err
 			}
@@ -556,8 +560,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			RampingSinceTime:  rampingSinceTime,
 			RampPercentage:    args.Percentage,
 		}
-		// TODO (Shivam): remove the empty string check once canary stops flaking out
-		if newRampingVersion != worker_versioning.UnversionedVersionId && newRampingVersion != "" {
+		if !d.rampingVersionStringUnversioned(newRampingVersion) {
 			if _, err := d.syncVersion(ctx, newRampingVersion, setRampUpdateArgs, true); err != nil {
 				return nil, err
 			}
@@ -574,8 +577,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 				RampingSinceTime:  nil, // remove ramp
 				RampPercentage:    0,   // remove ramp
 			}
-			// TODO (Shivam): remove the empty string check once canary stops flaking out
-			if prevRampingVersion != worker_versioning.UnversionedVersionId && prevRampingVersion != "" {
+			if !d.rampingVersionStringUnversioned(prevRampingVersion) {
 				if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs, false); err != nil {
 					return nil, err
 				}
@@ -1021,14 +1023,22 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs) error {
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 
-	// DescribeVersion activity to get all the task queues in the current version
+	// DescribeVersion activity to get all the task queues in the current version, or the ramping version if current is nil
+	version := d.State.RoutingConfig.CurrentVersion //nolint:staticcheck // SA1019: worker versioning v0.31
+	if version == worker_versioning.UnversionedVersionId {
+		version = d.State.RoutingConfig.RampingVersion //nolint:staticcheck // SA1019: worker versioning v0.31
+	}
+
+	if d.rampingVersionStringUnversioned(version) {
+		return nil
+	}
+
 	var res deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult
 	err := workflow.ExecuteActivity(
 		activityCtx,
 		d.a.DescribeVersionFromWorkerDeployment,
 		&deploymentspb.DescribeVersionFromWorkerDeploymentActivityArgs{
-			Version: d.State.RoutingConfig.CurrentVersion, //nolint:staticcheck // SA1019: worker versioning v0.31
-
+			Version: version,
 		}).Get(ctx, &res)
 	if err != nil {
 		return err

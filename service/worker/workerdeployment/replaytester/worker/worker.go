@@ -106,17 +106,16 @@ func main() {
 	}
 	verifyDeployment(dHandle, "", build1, 1, client.WorkerDeploymentVersionDrainageStatusUnspecified)
 
-	// Set the ramp percent to 0
-	// TODO(carlydf): Once we allow it, test setting ramping version to nil while current version is also nil
+	// Unset the ramping version
 	_, err = dHandle.SetRampingVersion(context.Background(), client.WorkerDeploymentSetRampingVersionOptions{
-		BuildID:    build1,
+		BuildID:    "",
 		Percentage: 0,
 		Identity:   identity,
 	})
 	if err != nil {
 		log.Fatalln("Unable to set ramping version to zero", err)
 	}
-	verifyDeployment(dHandle, "", build1, 0, client.WorkerDeploymentVersionDrainageStatusUnspecified)
+	verifyDeployment(dHandle, "", "", 0, client.WorkerDeploymentVersionDrainageStatusDraining)
 
 	// Set current version to 1.0
 	_, err = dHandle.SetCurrentVersion(context.Background(), client.WorkerDeploymentSetCurrentVersionOptions{
