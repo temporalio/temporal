@@ -64,7 +64,7 @@ func NewDatabaseHandle(
 	}
 	reporter := newDBMetricReporter(dbKind, handle)
 	handle.reporter = reporter
-	go handle.reporter.Start()
+	handle.reporter.Start()
 	handle.reconnect(true)
 	return handle
 }
@@ -123,12 +123,12 @@ func (h *DatabaseHandle) Close() {
 
 	if h.running {
 		h.running = false
+		if h.reporter != nil {
+			h.reporter.Stop()
+		}
 		db := h.db.Swap(nil)
 		if db != nil {
 			db.Close()
-		}
-		if h.reporter != nil {
-			go h.reporter.Stop()
 		}
 	}
 }

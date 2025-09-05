@@ -2,6 +2,7 @@ package sqlplugin
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/common/log"
@@ -14,6 +15,9 @@ type DBMetricsReporter struct {
 	metrics  metrics.Handler
 	quit     chan struct{}
 	wg       sync.WaitGroup
+
+	started int32
+	stopped int32
 
 	logger log.Logger
 }
@@ -29,18 +33,30 @@ func newDBMetricReporter(dbKind DbKind, handle *DatabaseHandle) *DBMetricsReport
 	return reporter
 }
 
+// Start run metrics report in background
+// yield control immediately without blocking
+// safe to called multiple time
 func (r *DBMetricsReporter) Start() {
+	if !atomic.CompareAndSwapInt32(&r.started, 0, 1) {
+		return
+	}
+	r.wg.Add(1)
+	go r.run()
+}
+
+func (r *DBMetricsReporter) run() {
+	defer r.wg.Done()
 	ticker := time.NewTicker(r.interval)
 	defer ticker.Stop()
-
-	r.wg.Add(1)
-	defer r.wg.Done()
 
 	for {
 		select {
 		case <-r.quit:
 			return
 		case <-ticker.C:
+			if atomic.LoadInt32(&r.stopped) == 1 {
+				return
+			}
 			r.report()
 		}
 	}
@@ -58,8 +74,13 @@ func (r *DBMetricsReporter) report() {
 	metrics.PersistenceSQLInUse.With(r.metrics).Record(float64(s.InUse))
 }
 
+// Stop signal background reporter to stop
+// and wait for reporter to completely stopped
+// safe to call multiple time
 func (r *DBMetricsReporter) Stop() {
+	if !atomic.CompareAndSwapInt32(&r.stopped, 0, 1) {
+		return
+	}
 	close(r.quit)
-	// assuming Start is already called
 	r.wg.Wait()
 }
