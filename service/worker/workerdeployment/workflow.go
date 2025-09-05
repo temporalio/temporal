@@ -213,6 +213,17 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		SetManagerIdentity,
+		d.handleSetManager,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateSetManager,
+		},
+	); err != nil {
+		return err
+	}
+
 	// to-be-deprecated
 	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
@@ -427,6 +438,9 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 		return temporal.NewApplicationError(fmt.Sprintf("requested ramping version %s not found in deployment", args.Version), errVersionNotFound)
 	}
 
+	if d.State.ManagerIdentity != "" && d.State.ManagerIdentity != args.Identity {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf(ErrManagerIdentityMismatch, d.State.ManagerIdentity, args.Identity))
+	}
 	return nil
 }
 
@@ -623,6 +637,10 @@ func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersion
 		// activity won't retry on this error since version not eligible for deletion
 		return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping)
 	}
+
+	if d.State.ManagerIdentity != "" && d.State.ManagerIdentity != args.Identity {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf(ErrManagerIdentityMismatch, d.State.ManagerIdentity, args.Identity))
+	}
 	return nil
 }
 
@@ -673,6 +691,52 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 	return d.deleteVersion(ctx, args)
 }
 
+func (d *WorkflowRunner) validateStateBeforeAcceptingSetManager(args *deploymentspb.SetManagerIdentityArgs) error {
+	if d.State.GetManagerIdentity() == args.ManagerIdentity && d.State.GetLastModifierIdentity() == args.Identity {
+		return temporal.NewApplicationError("no change", errNoChangeType, d.State.ConflictToken)
+	}
+	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
+		return temporal.NewApplicationError("conflict token mismatch", errFailedPrecondition)
+	}
+	return nil
+}
+
+func (d *WorkflowRunner) validateSetManager(args *deploymentspb.SetManagerIdentityArgs) error {
+	return d.validateStateBeforeAcceptingSetManager(args)
+}
+
+func (d *WorkflowRunner) handleSetManager(ctx workflow.Context, args *deploymentspb.SetManagerIdentityArgs) (*deploymentspb.SetManagerIdentityResponse, error) {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	defer func() {
+		// Even if the update doesn't change the state we mark it as dirty because of created history events.
+		d.setStateChanged()
+		d.lock.Unlock()
+	}()
+
+	err = d.validateStateBeforeAcceptingSetManager(args)
+	if err != nil {
+		return nil, err
+	}
+
+	prevManager := d.State.ManagerIdentity
+
+	// update local state
+	d.State.ManagerIdentity = args.ManagerIdentity
+	d.State.LastModifierIdentity = args.Identity
+	d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
+
+	// no need to update memo because identity and manager identity are not in it
+	return &deploymentspb.SetManagerIdentityResponse{
+		PreviousManagerIdentity: prevManager,
+		ConflictToken:           d.State.ConflictToken,
+	}, nil
+}
+
 func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if d.State.GetRoutingConfig().GetCurrentVersion() == args.Version && d.State.GetLastModifierIdentity() == args.Identity {
@@ -686,6 +750,9 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deployment
 		!args.GetAllowNoPollers() {
 		d.logger.Info("version not found in deployment")
 		return temporal.NewApplicationError(fmt.Sprintf("version %s not found in deployment", args.Version), errVersionNotFound)
+	}
+	if d.State.ManagerIdentity != "" && d.State.ManagerIdentity != args.Identity {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf(ErrManagerIdentityMismatch, d.State.ManagerIdentity, args.Identity))
 	}
 	return nil
 }

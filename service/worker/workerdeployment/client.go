@@ -115,6 +115,12 @@ type Client interface {
 		identity string,
 	) (*deploymentpb.VersionMetadata, error)
 
+	SetManager(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		request *workflowservice.SetWorkerDeploymentManagerRequest,
+	) (*workflowservice.SetWorkerDeploymentManagerResponse, error)
+
 	// Used internally by the Worker Deployment Version workflow in its StartWorkerDeployment Activity
 	StartWorkerDeployment(
 		ctx context.Context,
@@ -205,6 +211,81 @@ type ClientImpl struct {
 	maxTaskQueuesInDeploymentVersion dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxDeployments                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	testHooks                        testhooks.TestHooks
+}
+
+func (d *ClientImpl) SetManager(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	request *workflowservice.SetWorkerDeploymentManagerRequest,
+) (_ *workflowservice.SetWorkerDeploymentManagerResponse, retErr error) {
+	var newManagerID string
+	if request.GetSelf() {
+		newManagerID = request.GetIdentity()
+	} else {
+		newManagerID = request.GetManagerIdentity()
+	}
+	//revive:disable-next-line:defer
+	defer d.record("SetManager", &retErr, newManagerID, request.GetIdentity())()
+
+	// validating params
+	err := validateVersionWfParams(WorkerDeploymentNameFieldName, request.GetDeploymentName(), d.maxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+
+	requestID := uuid.New()
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetManagerIdentityArgs{
+		Identity:        request.GetIdentity(),
+		ManagerIdentity: newManagerID,
+		ConflictToken:   request.GetConflictToken(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	outcome, err := d.update(
+		ctx,
+		namespaceEntry,
+		worker_versioning.GenerateDeploymentWorkflowID(request.GetDeploymentName()),
+		&updatepb.Request{
+			Input: &updatepb.Input{Name: SetManagerIdentity, Args: updatePayload},
+			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: request.GetIdentity()},
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var res deploymentspb.SetManagerIdentityResponse
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
+		res.PreviousManagerIdentity = newManagerID
+		// Returning the latest conflict token
+		details := failure.GetApplicationFailureInfo().GetDetails().GetPayloads()
+		if len(details) > 0 {
+			res.ConflictToken = details[0].GetData()
+		}
+		return &workflowservice.SetWorkerDeploymentManagerResponse{
+			ConflictToken:           res.GetConflictToken(),
+			PreviousManagerIdentity: res.GetPreviousManagerIdentity(),
+		}, nil
+	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
+		return nil, serviceerror.NewFailedPrecondition(failure.Message)
+	} else if failure != nil {
+		return nil, serviceerror.NewInternal(failure.Message)
+	}
+
+	success := outcome.GetSuccess()
+	if success == nil {
+		return nil, serviceerror.NewInternal("outcome missing success and failure")
+	}
+
+	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
+		return nil, err
+	}
+	return &workflowservice.SetWorkerDeploymentManagerResponse{
+		ConflictToken:           res.GetConflictToken(),
+		PreviousManagerIdentity: res.GetPreviousManagerIdentity(),
+	}, nil
 }
 
 var _ Client = (*ClientImpl)(nil)
@@ -1554,6 +1635,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 	workerDeploymentInfo.CreateTime = state.CreateTime
 	workerDeploymentInfo.RoutingConfig = state.RoutingConfig
 	workerDeploymentInfo.LastModifierIdentity = state.LastModifierIdentity
+	workerDeploymentInfo.ManagerIdentity = state.ManagerIdentity
 
 	for _, v := range state.Versions {
 		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{

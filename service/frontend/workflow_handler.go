@@ -3493,6 +3493,25 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 	}, nil
 }
 
+func (wh *WorkflowHandler) SetWorkerDeploymentManager(ctx context.Context, request *workflowservice.SetWorkerDeploymentManagerRequest) (_ *workflowservice.SetWorkerDeploymentManagerResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if request.GetIdentity() == "" {
+		return nil, serviceerror.NewInvalidArgument("Identity is required")
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	return wh.workerDeploymentClient.SetManager(ctx, namespaceEntry, request)
+}
+
 func (wh *WorkflowHandler) DeleteWorkerDeployment(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentRequest) (_ *workflowservice.DeleteWorkerDeploymentResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
