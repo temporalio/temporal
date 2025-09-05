@@ -1430,6 +1430,12 @@ timeout timer when execution timeout is specified when starting a workflow.`,
 		`EnableUpdateWorkflowModeIgnoreCurrent controls whether to enable the new logic for updating closed workflow execution
 by mutation using UpdateWorkflowModeIgnoreCurrent`,
 	)
+	EnableReturnNewWorkflowTaskUnconditionally = NewGlobalBoolSetting(
+		"history.enableNewWorkflowTaskUnconditionally",
+		false,
+		`enableNewWorkflowTaskUnconditionally controls whether the history service should return the next workflow task as part
+		of the response even if the SDK has set return_new_workflow_task to false. See OSS-2055.`,
+	)
 	EnableTransitionHistory = NewGlobalBoolSetting(
 		"history.enableTransitionHistory",
 		false,
