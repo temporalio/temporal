@@ -47,6 +47,14 @@ func ExtractIntValue(s string) (int, error) {
 	return intValue, nil
 }
 
+func ExtractFloatValue(s string) (float64, error) {
+	floatValue, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	return floatValue, nil
+}
+
 // ParseValue returns a string, int64 or float64 if the parsing succeeds.
 func ParseValue(sqlValue string) (interface{}, error) {
 	if sqlValue == "" {
