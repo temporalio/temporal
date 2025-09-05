@@ -154,6 +154,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
+		f.SchedulerRateLimiter,
 	)
 	return queues.NewImmediateQueue(
 		shardContext,
