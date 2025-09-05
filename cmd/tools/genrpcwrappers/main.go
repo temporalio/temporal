@@ -43,22 +43,22 @@ var (
 	services = []service{
 		{
 			name:            "frontend",
-			clientType:      reflect.TypeOf((*workflowservice.WorkflowServiceClient)(nil)),
+			clientType:      reflect.TypeFor[*workflowservice.WorkflowServiceClient](),
 			clientGenerator: generateFrontendOrAdminClient,
 		},
 		{
 			name:            "admin",
-			clientType:      reflect.TypeOf((*adminservice.AdminServiceClient)(nil)),
+			clientType:      reflect.TypeFor[*adminservice.AdminServiceClient](),
 			clientGenerator: generateFrontendOrAdminClient,
 		},
 		{
 			name:            "history",
-			clientType:      reflect.TypeOf((*historyservice.HistoryServiceClient)(nil)),
+			clientType:      reflect.TypeFor[*historyservice.HistoryServiceClient](),
 			clientGenerator: generateHistoryClient,
 		},
 		{
 			name:            "matching",
-			clientType:      reflect.TypeOf((*matchingservice.MatchingServiceClient)(nil)),
+			clientType:      reflect.TypeFor[*matchingservice.MatchingServiceClient](),
 			clientGenerator: generateMatchingClient,
 		},
 	}
