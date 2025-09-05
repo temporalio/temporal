@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -38,6 +39,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -615,4 +617,84 @@ func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVa
 	}
 
 	return updRequestMsg, upd, serializedTaskToken
+}
+
+func TestShouldBypassTaskGeneration_DefaultCase_DoesNotBypass(t *testing.T) {
+	// Default case: flag disabled, client not requesting, no failures -> should not bypass
+	handler := &WorkflowTaskCompletedHandler{
+		config: &configs.Config{
+			EnableReturnNewWorkflowTaskUnconditionally: dynamicconfig.GetBoolPropertyFn(false),
+		},
+	}
+
+	request := &historyservice.RespondWorkflowTaskCompletedRequest{
+		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			ReturnNewWorkflowTask: false,
+		},
+	}
+
+	result := handler.shouldBypassTaskGeneration(request, nil)
+
+	require.False(t, result, "Should not bypass when flag is disabled and client not requesting")
+}
+
+func TestShouldBypassTaskGeneration_ClientRequests_Bypasses(t *testing.T) {
+	// Flag disabled, client requesting, no failures -> should honor client request
+	handler := &WorkflowTaskCompletedHandler{
+		config: &configs.Config{
+			EnableReturnNewWorkflowTaskUnconditionally: dynamicconfig.GetBoolPropertyFn(false),
+		},
+	}
+
+	request := &historyservice.RespondWorkflowTaskCompletedRequest{
+		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			ReturnNewWorkflowTask: true,
+		},
+	}
+
+	result := handler.shouldBypassTaskGeneration(request, nil)
+
+	require.True(t, result, "Should bypass when client requests it")
+}
+
+func TestShouldBypassTaskGeneration_FlagEnabled_BypassesUnconditionally(t *testing.T) {
+	// Flag enabled, client not requesting, no failures -> should bypass (unconditional)
+	handler := &WorkflowTaskCompletedHandler{
+		config: &configs.Config{
+			EnableReturnNewWorkflowTaskUnconditionally: dynamicconfig.GetBoolPropertyFn(true),
+		},
+	}
+
+	request := &historyservice.RespondWorkflowTaskCompletedRequest{
+		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			ReturnNewWorkflowTask: false,
+		},
+	}
+
+	result := handler.shouldBypassTaskGeneration(request, nil)
+
+	require.True(t, result, "Should bypass unconditionally when flag is enabled")
+}
+
+func TestShouldBypassTaskGeneration_WithFailures_NeverBypasses(t *testing.T) {
+	// Flag enabled, client requesting, but has failures -> should not bypass
+	handler := &WorkflowTaskCompletedHandler{
+		config: &configs.Config{
+			EnableReturnNewWorkflowTaskUnconditionally: dynamicconfig.GetBoolPropertyFn(true),
+		},
+	}
+
+	request := &historyservice.RespondWorkflowTaskCompletedRequest{
+		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			ReturnNewWorkflowTask: true,
+		},
+	}
+
+	wtFailedCause := &workflowTaskFailedCause{
+		failedCause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND,
+	}
+
+	result := handler.shouldBypassTaskGeneration(request, wtFailedCause)
+
+	require.False(t, result, "Should never bypass when there are workflow task failures")
 }
