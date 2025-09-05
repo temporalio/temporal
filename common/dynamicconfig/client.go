@@ -36,17 +36,13 @@ type (
 	NotifyingClient interface {
 		// Adds a subscription to all updates from this Client. `update` will be called on any
 		// change to the current value set. The caller should call `cancel` to cancel the
-		// subscription. Calls to `update` will not be made concurrently.
+		// subscription.
 		Subscribe(update ClientUpdateFunc) (cancel func())
 	}
 
 	// Called with modified keys on any change to the current value set.
 	// Deleted keys/constraints will get a nil value.
 	ClientUpdateFunc func(map[Key][]ConstrainedValue)
-
-	// Key is a key/property stored in dynamic config. For convenience, it is recommended that
-	// you treat keys as case-insensitive.
-	Key string
 
 	// ConstrainedValue is a value plus associated constraints.
 	//
@@ -98,7 +94,3 @@ type (
 		Destination   string
 	}
 )
-
-func (k Key) String() string {
-	return string(k)
-}
