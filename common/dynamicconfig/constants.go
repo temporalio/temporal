@@ -2380,11 +2380,6 @@ that task will be sent to DLQ.`,
 		`ReplicationLowPriorityTaskParallelism is the number of executions' low priority replication tasks that can be processed in parallel`,
 	)
 
-	EnableEagerNamespaceRefresher = NewGlobalBoolSetting(
-		"history.EnableEagerNamespaceRefresher",
-		false,
-		`EnableEagerNamespaceRefresher is a feature flag for eagerly refresh namespace during processing replication task`,
-	)
 	EnableReplicationTaskBatching = NewGlobalBoolSetting(
 		"history.EnableReplicationTaskBatching",
 		false,
