@@ -92,6 +92,7 @@ func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -112,7 +113,6 @@ func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
-		&persistence.HistoryBranchUtilImpl{},
 		logger,
 	)
 	suite.Run(t, s)
@@ -125,6 +125,7 @@ func TestSQLiteExecutionMutableStateTaskStoreSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -157,6 +158,7 @@ func TestSQLiteHistoryStoreSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -179,6 +181,7 @@ func TestSQLiteTaskQueueSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -201,6 +204,7 @@ func TestSQLiteFairTaskQueueSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -223,6 +227,7 @@ func TestSQLiteTaskQueueTaskSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -245,6 +250,7 @@ func TestSQLiteTaskQueueFairTaskSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -267,6 +273,7 @@ func TestSQLiteTaskQueueUserDataSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -293,6 +300,7 @@ func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -313,7 +321,6 @@ func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
-		&persistence.HistoryBranchUtilImpl{},
 		logger,
 	)
 	suite.Run(t, s)
@@ -330,6 +337,7 @@ func TestSQLiteFileExecutionMutableStateTaskStoreSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -366,6 +374,7 @@ func TestSQLiteFileHistoryStoreSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -392,6 +401,7 @@ func TestSQLiteFileTaskQueueSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -418,6 +428,7 @@ func TestSQLiteFileFairTaskQueueSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -444,6 +455,7 @@ func TestSQLiteFileTaskQueueTaskSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -470,6 +482,7 @@ func TestSQLiteFileTaskQueueFairTaskSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -496,6 +509,7 @@ func TestSQLiteFileTaskQueueUserDataSuite(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -1274,6 +1288,7 @@ func TestSQLiteQueueV2(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -1292,6 +1307,7 @@ func TestSQLiteNexusEndpointPersistence(t *testing.T) {
 		*cfg,
 		resolver.NewNoopResolver(),
 		testSQLiteClusterName,
+		serialization.NewSerializer(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)

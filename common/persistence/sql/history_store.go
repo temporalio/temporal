@@ -157,7 +157,7 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 	ctx context.Context,
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
-	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	branch, err := m.ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
 		return nil, err
 	}
@@ -449,7 +449,7 @@ func (m *sqlExecutionStore) GetHistoryTreeContainingBranch(
 	ctx context.Context,
 	request *p.InternalGetHistoryTreeContainingBranchRequest,
 ) (*p.InternalGetHistoryTreeContainingBranchResponse, error) {
-	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	branch, err := m.ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
 		return nil, err
 	}

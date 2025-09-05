@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
 )
@@ -19,6 +20,7 @@ type (
 		mainDBConn  DbConn
 		clusterName string
 		logger      log.Logger
+		serializer  serialization.Serializer
 	}
 
 	// DbConn represents a logical mysql connection - its a
@@ -44,6 +46,7 @@ func NewFactory(
 	cfg config.SQL,
 	r resolver.ServiceResolver,
 	clusterName string,
+	serializer serialization.Serializer,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *Factory {
@@ -51,6 +54,7 @@ func NewFactory(
 		cfg:         cfg,
 		clusterName: clusterName,
 		logger:      logger,
+		serializer:  serializer,
 		mainDBConn:  NewRefCountedDBConn(sqlplugin.DbKindMain, &cfg, r, logger, metricsHandler),
 	}
 }
@@ -115,7 +119,7 @@ func (f *Factory) NewExecutionStore() (p.ExecutionStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewSQLExecutionStore(conn, f.logger)
+	return NewSQLExecutionStore(conn, f.logger, f.serializer)
 }
 
 // NewQueue returns a new queue backed by sql

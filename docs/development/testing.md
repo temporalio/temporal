@@ -13,6 +13,7 @@ This document describes the project's testing setup, utilities and best practice
 - `TEMPORAL_TEST_LOG_FORMAT`: Controls the output format for test logs. Available options: `json` or `console`
 - `TEMPORAL_TEST_LOG_LEVEL`:  Sets the verbosity level for test logging. Available levels: `debug`, `info`, `warn`, `error`, `fatal`
 - `TEMPORAL_TEST_OTEL_OUTPUT`: Enables OpenTelemetry (OTEL) trace output for failed tests to the provided file path.
+- `TEMPORAL_TEST_DATA_ENCODING`: If set, overrides the default data blob encoding. Available options: `json`, `proto3`.
 
 ## Test helpers
 

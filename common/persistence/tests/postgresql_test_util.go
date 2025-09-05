@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
@@ -57,6 +58,7 @@ func setUpPostgreSQLTest(t *testing.T, pluginName string) (PostgreSQLTestData, f
 		*testData.Cfg,
 		resolver.NewNoopResolver(),
 		testPostgreSQLClusterName,
+		serialization.NewSerializer(),
 		testData.Logger,
 		mh,
 	)
