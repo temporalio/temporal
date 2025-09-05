@@ -165,7 +165,6 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 					ValidateSideEffectTask(
 						gomock.Any(),
 						gomock.Any(),
-						gomock.Any(),
 					)
 			},
 			expectHandlerCalled: true,
