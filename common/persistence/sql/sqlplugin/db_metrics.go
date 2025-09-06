@@ -16,8 +16,8 @@ type DBMetricsReporter struct {
 	quit     chan struct{}
 	wg       sync.WaitGroup
 
-	started int32
-	stopped int32
+	started atomic.Bool
+	stopped atomic.Bool
 
 	logger log.Logger
 }
@@ -30,6 +30,8 @@ func newDBMetricReporter(dbKind DbKind, handle *DatabaseHandle) *DBMetricsReport
 		quit:     make(chan struct{}),
 		logger:   handle.logger,
 	}
+	reporter.started.Store(false)
+	reporter.stopped.Store(false)
 	return reporter
 }
 
@@ -37,7 +39,7 @@ func newDBMetricReporter(dbKind DbKind, handle *DatabaseHandle) *DBMetricsReport
 // yield control immediately without blocking
 // safe to called multiple time
 func (r *DBMetricsReporter) Start() {
-	if !atomic.CompareAndSwapInt32(&r.started, 0, 1) {
+	if !r.started.CompareAndSwap(false, true) {
 		return
 	}
 	r.wg.Add(1)
@@ -54,7 +56,7 @@ func (r *DBMetricsReporter) run() {
 		case <-r.quit:
 			return
 		case <-ticker.C:
-			if atomic.LoadInt32(&r.stopped) == 1 {
+			if r.stopped.Load() {
 				return
 			}
 			r.report()
@@ -78,7 +80,7 @@ func (r *DBMetricsReporter) report() {
 // and wait for reporter to completely stopped
 // safe to call multiple time
 func (r *DBMetricsReporter) Stop() {
-	if atomic.CompareAndSwapInt32(&r.stopped, 0, 1) {
+	if r.stopped.CompareAndSwap(false, true) {
 		close(r.quit)
 	}
 	r.wg.Wait()
