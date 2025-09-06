@@ -78,9 +78,8 @@ func (r *DBMetricsReporter) report() {
 // and wait for reporter to completely stopped
 // safe to call multiple time
 func (r *DBMetricsReporter) Stop() {
-	if !atomic.CompareAndSwapInt32(&r.stopped, 0, 1) {
-		return
+	if atomic.CompareAndSwapInt32(&r.stopped, 0, 1) {
+		close(r.quit)
 	}
-	close(r.quit)
 	r.wg.Wait()
 }
