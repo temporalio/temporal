@@ -18,6 +18,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/temporal/environment"
@@ -61,6 +62,7 @@ func setUpCassandraTest(t *testing.T) (CassandraTestData, func()) {
 		testCassandraClusterName,
 		testData.Logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 
 	tearDown := func() {

@@ -51,7 +51,6 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	outputFileName := c.String(FlagOutputFilename)
 
 	client := clientFactory.AdminClient(c)
-
 	serializer := serialization.NewSerializer()
 
 	ctx, cancel := newContext(c)
@@ -151,7 +150,6 @@ func AdminImportWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	inputFileName := c.String(FlagInputFilename)
 
 	client := clientFactory.AdminClient(c)
-
 	serializer := serialization.NewSerializer()
 
 	ctx, cancel := newContext(c)

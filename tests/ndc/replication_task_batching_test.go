@@ -169,11 +169,10 @@ func (s *NDCReplicationTaskBatchingTestSuite) assertHistoryEvents(
 		Return(s.passtiveCluster.AdminClient(), nil).
 		AnyTimes()
 
-	serializer := serialization.NewSerializer()
 	passiveClusterFetcher := eventhandler.NewHistoryPaginatedFetcher(
 		nil,
 		mockClientBean,
-		serializer,
+		s.serializer,
 		s.logger,
 	)
 

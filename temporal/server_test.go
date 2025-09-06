@@ -3,6 +3,7 @@ package temporal_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"strings"
 	"sync/atomic"
@@ -11,21 +12,27 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence/serialization"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite" // needed to register the sqlite plugin
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // TestNewServer verifies that NewServer doesn't cause any fx errors, and that there are no unexpected error logs after
 // running for a few seconds.
 func TestNewServer(t *testing.T) {
-	startAndStopServer(t)
+	startAndVerifyServer(t)
 }
 
 // TestNewServerWithOTEL verifies that NewServer doesn't cause any fx errors when OTEL is enabled.
@@ -38,21 +45,24 @@ func TestNewServerWithOTEL(t *testing.T) {
 		collector, err := testtelemetry.StartMemoryCollector(t)
 		require.NoError(t, err)
 		t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", collector.Addr())
-		startAndStopServer(t)
+		startAndVerifyServer(t)
 		require.NotEmpty(t, collector.Spans(), "expected at least one OTEL span")
 	})
 
 	t.Run("without OTEL Collector running", func(t *testing.T) {
-		startAndStopServer(t)
+		startAndVerifyServer(t)
 	})
 }
 
-func startAndStopServer(t *testing.T) {
+// TestNewServerWithJSONEncoding verifies that NewServer doesn't cause any fx errors when JSON encoding is enabled.
+func TestNewServerWithJSONEncoding(t *testing.T) {
+	t.Setenv(serialization.SerializerDataEncodingEnvVar, "json")
+	startAndVerifyServer(t)
+}
+
+func startAndVerifyServer(t *testing.T) {
 	cfg := loadConfig(t)
-	// The prometheus reporter does not shut down in-between test runs.
-	// This will assign a random port to the prometheus reporter,
-	// so that it doesn't conflict with other tests.
-	cfg.Global.Metrics.Prometheus.ListenAddress = ":0"
+
 	logDetector := newErrorLogDetector(t, log.NewTestLogger())
 	logDetector.Start()
 
@@ -70,13 +80,45 @@ func startAndStopServer(t *testing.T) {
 	})
 
 	require.NoError(t, server.Start())
-	time.Sleep(10 * time.Second) //nolint:forbidigo
+
+	// Create SDK client and test simple workflow
+	frontendHostPort := fmt.Sprintf("127.0.0.1:%d", cfg.Services["frontend"].RPC.GRPCPort)
+	c, err := client.Dial(client.Options{
+		HostPort:  frontendHostPort,
+		Namespace: "default",
+	})
+	require.NoError(t, err)
+	defer c.Close()
+
+	// Register the default namespace
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err = c.WorkflowService().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        "default",
+		WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
+	})
+	require.NoError(t, err)
+
+	// Create a worker
+	w := worker.New(c, "test-task-queue", worker.Options{})
+	w.RegisterWorkflow(SimpleWorkflow)
+	err = w.Start()
+	require.NoError(t, err)
+	defer w.Stop()
+
+	// Execute workflow
+	run, err := c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: "test-task-queue"}, SimpleWorkflow)
+	require.NoError(t, err)
+
+	var result string
+	err = run.Get(ctx, &result)
+	require.NoError(t, err)
+	assert.Equal(t, "Hello World", result)
 }
 
 func loadConfig(t *testing.T) *config.Config {
 	cfg := loadSQLiteConfig(t)
 	setTestPorts(cfg)
-
 	return cfg
 }
 
@@ -89,23 +131,42 @@ func loadSQLiteConfig(t *testing.T) *config.Config {
 
 	cfg.DynamicConfigClient.Filepath = path.Join(configDir, "dynamicconfig", "development-sql.yaml")
 
+	// Use a unique temporary file for each test to avoid conflicts
+	tmpFile := fmt.Sprintf("/tmp/temporal_test_%d.db", time.Now().UnixNano())
+	t.Cleanup(func() {
+		_ = os.Remove(tmpFile)
+	})
+	for name, store := range cfg.Persistence.DataStores {
+		store.SQL.DatabaseName = tmpFile
+		cfg.Persistence.DataStores[name] = store
+	}
+
 	return cfg
 }
 
-// setTestPorts sets the ports of all services to something different from the default ports, so that we can run the
-// tests in parallel.
+// setTestPorts sets the ports of all services to something different from the default ports.
 func setTestPorts(cfg *config.Config) {
 	port := 10000
 
+	// The prometheus reporter does not shut down in-between test runs.
+	// This will assign a random port to the prometheus reporter,
+	// so that it doesn't conflict with other tests.
+	cfg.Global.Metrics.Prometheus.ListenAddress = ":0"
+
 	for k, v := range cfg.Services {
-		rpc := v.RPC
-		rpc.GRPCPort = port
+		v.RPC.GRPCPort = port
 		port++
-		rpc.MembershipPort = port
+
+		v.RPC.MembershipPort = port
 		port++
-		v.RPC = rpc
+
+		v.RPC.HTTPPort = port
+		port++
+
 		cfg.Services[k] = v
 	}
+
+	cfg.Global.PProf.Port = port
 }
 
 func getFrontendInterceptors() func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
@@ -178,6 +239,7 @@ func (d *errorLogDetector) Error(msg string, tags ...tag.Tag) {
 		"Unable to process new range",
 		"Unable to call",
 		"service failures",
+		"unable to retrieve tasks", // normal during startup
 	} {
 		if strings.Contains(msg, s) {
 			return
@@ -247,4 +309,8 @@ func TestErrorLogDetector(t *testing.T) {
 	d.Panic("panic")
 	d.Fatal("fatal")
 	assert.Empty(t, f.errorLogs, "should not fail the test if the detector is stopped")
+}
+
+func SimpleWorkflow(ctx workflow.Context) (string, error) {
+	return "Hello World", nil
 }
