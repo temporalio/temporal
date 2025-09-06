@@ -3297,3 +3297,77 @@ func (this *ForceUnloadTaskQueuePartitionResponse) Equal(that interface{}) bool 
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type GetConfigurationsRequest to the protobuf v3 wire format
+func (val *GetConfigurationsRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GetConfigurationsRequest from the protobuf v3 wire format
+func (val *GetConfigurationsRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GetConfigurationsRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GetConfigurationsRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GetConfigurationsRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GetConfigurationsRequest
+	switch t := that.(type) {
+	case *GetConfigurationsRequest:
+		that1 = t
+	case GetConfigurationsRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type GetConfigurationsResponse to the protobuf v3 wire format
+func (val *GetConfigurationsResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GetConfigurationsResponse from the protobuf v3 wire format
+func (val *GetConfigurationsResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GetConfigurationsResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GetConfigurationsResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GetConfigurationsResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GetConfigurationsResponse
+	switch t := that.(type) {
+	case *GetConfigurationsResponse:
+		that1 = t
+	case GetConfigurationsResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
