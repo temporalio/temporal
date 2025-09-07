@@ -1066,7 +1066,7 @@ func (handler *WorkflowTaskCompletedHandler) shouldBypassTaskGeneration(
 ) bool {
 	unconditionallyEnable := handler.config.EnableReturnNewWorkflowTaskUnconditionally()
 
-	// TODO(OSS-2055): Stop honoring the client option once we roll out the unconditionallyEnable flag.
+	// TODO: Stop honoring the client option once we roll out the unconditionallyEnable flag.
 	// Today, the SDK can set this to false when the worker is not configured to cache history.
 	// We want to standardize the behavior by always returning the next task and let the worker get the full history.
 	clientRequested := request.CompleteRequest.GetReturnNewWorkflowTask()
