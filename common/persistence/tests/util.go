@@ -48,7 +48,7 @@ func RandomSnapshot(
 ) (*p.WorkflowSnapshot, []*p.WorkflowEvents) {
 	snapshot := &p.WorkflowSnapshot{
 		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, eventID, lastWriteVersion, branchToken),
-		ExecutionState: RandomExecutionState(runID, state, status),
+		ExecutionState: RandomExecutionState(runID, state, status, lastWriteVersion),
 
 		NextEventID: eventID + 1, // NOTE: RandomSnapshot generates a single history event, hence NextEventID is plus 1
 
@@ -98,7 +98,7 @@ func RandomMutation(
 ) (*p.WorkflowMutation, []*p.WorkflowEvents) {
 	mutation := &p.WorkflowMutation{
 		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, eventID, lastWriteVersion, branchToken),
-		ExecutionState: RandomExecutionState(runID, state, status),
+		ExecutionState: RandomExecutionState(runID, state, status, lastWriteVersion),
 
 		NextEventID: eventID + 1, // NOTE: RandomMutation generates a single history event, hence NextEventID is plus 1
 
@@ -167,7 +167,7 @@ func RandomChasmNode() *persistencespb.ChasmNode {
 	// Some arbitrary random data to ensure the chasm node's attributes are preserved.
 	var blobInfo persistencespb.WorkflowExecutionInfo
 	_ = fakedata.FakeStruct(&blobInfo)
-	blob, _ := serialization.ProtoEncodeBlob(&blobInfo, enumspb.ENCODING_TYPE_PROTO3)
+	blob, _ := serialization.ProtoEncode(&blobInfo)
 
 	var versionedTransition persistencespb.VersionedTransition
 	_ = fakedata.FakeStruct(&versionedTransition)
@@ -210,6 +210,7 @@ func RandomExecutionState(
 	runID string,
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
+	lastWriteVersion int64,
 ) *persistencespb.WorkflowExecutionState {
 	createRequestID := uuid.NewString()
 	return &persistencespb.WorkflowExecutionState{
@@ -217,6 +218,10 @@ func RandomExecutionState(
 		RunId:           runID,
 		State:           state,
 		Status:          status,
+		LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: lastWriteVersion,
+			TransitionCount:          rand.Int63(),
+		},
 		RequestIds: map[string]*persistencespb.RequestIDInfo{
 			createRequestID: {
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,

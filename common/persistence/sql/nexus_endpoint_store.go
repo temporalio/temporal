@@ -57,7 +57,7 @@ func (s *sqlNexusEndpointStore) CreateOrUpdateNexusEndpoint(
 		}
 
 		err = checkUpdateResult(result, err, p.ErrNexusTableVersionConflict)
-		if s.Db.IsDupEntryError(err) {
+		if s.DB.IsDupEntryError(err) {
 			return &p.ConditionFailedError{Msg: err.Error()}
 		}
 		if err != nil {
@@ -78,7 +78,7 @@ func (s *sqlNexusEndpointStore) CreateOrUpdateNexusEndpoint(
 			result, err = tx.UpdateNexusEndpoint(ctx, &row)
 		}
 		err = checkUpdateResult(result, err, p.ErrNexusEndpointVersionConflict)
-		if s.Db.IsDupEntryError(err) {
+		if s.DB.IsDupEntryError(err) {
 			return p.ErrNexusEndpointVersionConflict
 		}
 
@@ -96,7 +96,7 @@ func (s *sqlNexusEndpointStore) GetNexusEndpoint(
 		return nil, serviceerror.NewInternalf("unable to parse endpoint ID as UUID: %v", err)
 	}
 
-	row, err := s.Db.GetNexusEndpointByID(ctx, id)
+	row, err := s.DB.GetNexusEndpointByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, serviceerror.NewNotFoundf("Nexus endpoint with ID `%v` not found", request.ID)

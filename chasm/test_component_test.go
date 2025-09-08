@@ -20,21 +20,28 @@ type (
 	TestComponent    struct {
 		UnimplementedComponent
 
-		ComponentData         *protoMessageType
-		SubComponent1         Field[*TestSubComponent1]
-		SubComponent2         Field[*TestSubComponent2]
-		SubData1              Field[*protoMessageType]
-		SubComponents         Map[string, *TestSubComponent1]
-		PendingActivities     Map[int, *TestSubComponent1]
-		SubComponent11Pointer Field[*TestSubComponent11]
+		ComponentData                *protoMessageType
+		SubComponent1                Field[*TestSubComponent1]
+		SubComponent2                Field[*TestSubComponent2]
+		SubData1                     Field[*protoMessageType]
+		SubComponents                Map[string, *TestSubComponent1]
+		PendingActivities            Map[int, *TestSubComponent1]
+		SubComponent11Pointer        Field[*TestSubComponent11]
+		SubComponent11Pointer2       Field[*TestSubComponent11]
+		SubComponentInterfacePointer Field[Component]
+
+		Visibility Field[*Visibility]
 	}
 
 	TestSubComponent1 struct {
 		UnimplementedComponent
 
-		SubComponent1Data *protoMessageType
-		SubComponent11    Field[*TestSubComponent11]
-		SubData11         Field[*protoMessageType] // Random proto message.
+		SubComponent1Data    *protoMessageType
+		SubComponent11       Field[*TestSubComponent11]
+		SubComponent11_2     Field[*TestSubComponent11]
+		SubData11            Field[*protoMessageType] // Random proto message.
+		SubComponent2Pointer Field[*TestSubComponent2]
+		DataPointer          Field[*protoMessageType]
 	}
 
 	TestSubComponent11 struct {
@@ -80,8 +87,20 @@ func (tc *TestComponent) Fail(_ MutableContext) {
 	tc.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 }
 
+func (tsc1 *TestSubComponent1) LifecycleState(_ Context) LifecycleState {
+	return LifecycleStateRunning
+}
+
 func (tsc1 *TestSubComponent1) GetData() string {
 	return tsc1.SubComponent1Data.GetCreateRequestId()
+}
+
+func (tsc11 *TestSubComponent11) LifecycleState(_ Context) LifecycleState {
+	return LifecycleStateRunning
+}
+
+func (tsc2 *TestSubComponent2) LifecycleState(_ Context) LifecycleState {
+	return LifecycleStateRunning
 }
 
 func setTestComponentFields(c *TestComponent) {

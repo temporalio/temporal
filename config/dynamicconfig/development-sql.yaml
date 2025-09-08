@@ -1,6 +1,3 @@
-#frontend.enableClientVersionCheck:
-#- value: true
-#  constraints: {}
 #history.persistenceMaxQPS:
 #- value: 3000
 #  constraints: {}
@@ -32,6 +29,10 @@
 #  - value: true
 # matching.PollerHistoryTTL:
 #   - value: 1s
+# matching.wv.VersionDrainageStatusVisibilityGracePeriod:
+#   - value: 5s
+# matching.wv.VersionDrainageStatusRefreshInterval:
+#   - value: 5s
 limit.maxIDLength:
   - value: 255
     constraints: {}

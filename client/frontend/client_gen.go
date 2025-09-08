@@ -149,6 +149,16 @@ func (c *clientImpl) DescribeTaskQueue(
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeWorker(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkerRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeWorkerResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeWorker(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeWorkerDeployment(
 	ctx context.Context,
 	request *workflowservice.DescribeWorkerDeploymentRequest,
@@ -727,6 +737,16 @@ func (c *clientImpl) SetWorkerDeploymentCurrentVersion(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.SetWorkerDeploymentCurrentVersion(ctx, request, opts...)
+}
+
+func (c *clientImpl) SetWorkerDeploymentManager(
+	ctx context.Context,
+	request *workflowservice.SetWorkerDeploymentManagerRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.SetWorkerDeploymentManagerResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.SetWorkerDeploymentManager(ctx, request, opts...)
 }
 
 func (c *clientImpl) SetWorkerDeploymentRampingVersion(

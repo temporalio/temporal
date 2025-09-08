@@ -30,7 +30,7 @@ func (s *sqlClusterMetadataManager) ListClusterMetadata(
 		}
 	}
 
-	rows, err := s.Db.ListClusterMetadata(ctx, &sqlplugin.ClusterMetadataFilter{ClusterName: clusterName, PageSize: &request.PageSize})
+	rows, err := s.DB.ListClusterMetadata(ctx, &sqlplugin.ClusterMetadataFilter{ClusterName: clusterName, PageSize: &request.PageSize})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return &p.InternalListClusterMetadataResponse{}, nil
@@ -65,7 +65,7 @@ func (s *sqlClusterMetadataManager) GetClusterMetadata(
 	ctx context.Context,
 	request *p.InternalGetClusterMetadataRequest,
 ) (*p.InternalGetClusterMetadataResponse, error) {
-	row, err := s.Db.GetClusterMetadata(ctx, &sqlplugin.ClusterMetadataFilter{ClusterName: request.ClusterName})
+	row, err := s.DB.GetClusterMetadata(ctx, &sqlplugin.ClusterMetadataFilter{ClusterName: request.ClusterName})
 
 	if err != nil {
 		return nil, convertCommonErrors("GetClusterMetadata", err)
@@ -119,7 +119,7 @@ func (s *sqlClusterMetadataManager) DeleteClusterMetadata(
 	ctx context.Context,
 	request *p.InternalDeleteClusterMetadataRequest,
 ) error {
-	_, err := s.Db.DeleteClusterMetadata(ctx, &sqlplugin.ClusterMetadataFilter{ClusterName: request.ClusterName})
+	_, err := s.DB.DeleteClusterMetadata(ctx, &sqlplugin.ClusterMetadataFilter{ClusterName: request.ClusterName})
 
 	if err != nil {
 		return convertCommonErrors("DeleteClusterMetadata", err)
@@ -159,7 +159,7 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(
 		filter.RPCAddressEquals = request.RPCAddressEquals.String()
 	}
 
-	rows, err := s.Db.GetClusterMembers(ctx, filter)
+	rows, err := s.DB.GetClusterMembers(ctx, filter)
 
 	if err != nil {
 		return nil, convertCommonErrors("GetClusterMembers", err)
@@ -193,7 +193,7 @@ func (s *sqlClusterMetadataManager) UpsertClusterMembership(
 ) error {
 	now := time.Now().UTC()
 	recordExpiry := now.Add(request.RecordExpiry)
-	_, err := s.Db.UpsertClusterMembership(ctx, &sqlplugin.ClusterMembershipRow{
+	_, err := s.DB.UpsertClusterMembership(ctx, &sqlplugin.ClusterMembershipRow{
 		Role:          request.Role,
 		HostID:        request.HostID,
 		RPCAddress:    request.RPCAddress.String(),
@@ -213,7 +213,7 @@ func (s *sqlClusterMetadataManager) PruneClusterMembership(
 	ctx context.Context,
 	request *p.PruneClusterMembershipRequest,
 ) error {
-	_, err := s.Db.PruneClusterMembership(
+	_, err := s.DB.PruneClusterMembership(
 		ctx,
 		&sqlplugin.PruneClusterMembershipFilter{
 			PruneRecordsBefore: time.Now().UTC(),

@@ -45,6 +45,7 @@ type (
 		MaxTaskQueueIdleTime                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		NumTaskqueueWritePartitions              dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		NumTaskqueueReadPartitions               dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		NumTaskqueueReadPartitionsSub            dynamicconfig.TypedSubscribableWithTaskQueueFilter[int]
 		BreakdownMetricsByTaskQueue              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByPartition              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByBuildID                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
@@ -140,7 +141,7 @@ type (
 		MinTaskThrottlingBurstSize func() int
 		MaxTaskDeleteBatchSize     func() int
 		TaskDeleteInterval         func() time.Duration
-		PriorityLevels             func() int32
+		PriorityLevels             func() priorityKey
 
 		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
 		GetUserDataMinWaitTime     time.Duration
@@ -153,6 +154,7 @@ type (
 		MaxTaskBatchSize                func() int
 		NumWritePartitions              func() int
 		NumReadPartitions               func() int
+		NumReadPartitionsSub            func(func(int)) (int, func())
 
 		// partition qps = AdminNamespaceToPartitionDispatchRate(namespace)
 		AdminNamespaceToPartitionDispatchRate func() float64
@@ -252,6 +254,7 @@ func NewConfig(
 		ThrottledLogRPS:                          dynamicconfig.MatchingThrottledLogRPS.Get(dc),
 		NumTaskqueueWritePartitions:              dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(dc),
 		NumTaskqueueReadPartitions:               dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
+		NumTaskqueueReadPartitionsSub:            dynamicconfig.MatchingNumTaskqueueReadPartitions.Subscribe(dc),
 		BreakdownMetricsByTaskQueue:              dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 		BreakdownMetricsByPartition:              dynamicconfig.MetricsBreakdownByPartition.Get(dc),
 		BreakdownMetricsByBuildID:                dynamicconfig.MetricsBreakdownByBuildID.Get(dc),
@@ -360,8 +363,8 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		TaskDeleteInterval: func() time.Duration {
 			return config.TaskDeleteInterval(ns.String(), taskQueueName, taskType)
 		},
-		PriorityLevels: func() int32 {
-			return int32(config.PriorityLevels(ns.String(), taskQueueName, taskType))
+		PriorityLevels: func() priorityKey {
+			return priorityKey(config.PriorityLevels(ns.String(), taskQueueName, taskType))
 		},
 		GetUserDataLongPollTimeout: config.GetUserDataLongPollTimeout,
 		GetUserDataMinWaitTime:     1 * time.Second,
@@ -379,6 +382,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		NumReadPartitions: func() int {
 			return max(1, config.NumTaskqueueReadPartitions(ns.String(), taskQueueName, taskType))
+		},
+		NumReadPartitionsSub: func(cb func(int)) (int, func()) {
+			return config.NumTaskqueueReadPartitionsSub(ns.String(), taskQueueName, taskType, cb)
 		},
 		BreakdownMetricsByTaskQueue: func() bool {
 			return config.BreakdownMetricsByTaskQueue(ns.String(), taskQueueName, taskType)
@@ -441,6 +447,6 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 	}
 }
 
-func defaultPriorityLevel(priorityLevels int32) int32 {
-	return (priorityLevels + 1) / 2
+func defaultPriorityLevel(priorityLevels priorityKey) priorityKey {
+	return priorityKey(priorityLevels+1) / 2
 }

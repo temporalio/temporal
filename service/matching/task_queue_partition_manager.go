@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"math"
 	"sync"
 	"time"
 
@@ -22,7 +21,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -64,14 +62,8 @@ type (
 		// TODO(stephanos): move cache out of partition manager
 		cache cache.Cache // non-nil for root-partition
 
-		// dynamicRate is the dynamic rate & burst for rate limiter
-		dynamicRateBurst quotas.MutableRateBurst
-		// dynamicRateLimiter is the dynamic rate limiter that can be used to force refresh on new rates.
-		dynamicRateLimiter *quotas.DynamicRateLimiterImpl
-		// forceRefreshRateOnce is used to force refresh rate limit for first time
-		forceRefreshRateOnce sync.Once
-		// rateLimiter that limits the rate at which tasks can be dispatched to consumers
-		rateLimiter quotas.RateLimiter
+		// rateLimitManager is used to manage the rate limit for task queues.
+		rateLimitManager *rateLimitManager
 	}
 )
 
@@ -95,17 +87,22 @@ func newTaskQueuePartitionManager(
 	metricsHandler metrics.Handler,
 	userDataManager userDataManager,
 ) (*taskQueuePartitionManagerImpl, error) {
+	rateLimitManager := newRateLimitManager(
+		userDataManager,
+		tqConfig,
+		partition.TaskQueue().TaskType())
 	pm := &taskQueuePartitionManagerImpl{
-		engine:          e,
-		partition:       partition,
-		ns:              ns,
-		config:          tqConfig,
-		logger:          logger,
-		throttledLogger: throttledLogger,
-		matchingClient:  e.matchingRawClient,
-		metricsHandler:  metricsHandler,
-		versionedQueues: make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
-		userDataManager: userDataManager,
+		engine:           e,
+		partition:        partition,
+		ns:               ns,
+		config:           tqConfig,
+		logger:           logger,
+		throttledLogger:  throttledLogger,
+		matchingClient:   e.matchingRawClient,
+		metricsHandler:   metricsHandler,
+		versionedQueues:  make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
+		userDataManager:  userDataManager,
+		rateLimitManager: rateLimitManager,
 	}
 
 	if pm.partition.IsRoot() {
@@ -113,24 +110,6 @@ func newTaskQueuePartitionManager(
 			TTL: max(1, tqConfig.TaskQueueInfoByBuildIdTTL())}, // ensure TTL is never zero (which would disable TTL)
 		)
 	}
-
-	pm.dynamicRateBurst = quotas.NewMutableRateBurst(
-		defaultTaskDispatchRPS,
-		int(defaultTaskDispatchRPS),
-	)
-	pm.dynamicRateLimiter = quotas.NewDynamicRateLimiter(
-		pm.dynamicRateBurst,
-		tqConfig.RateLimiterRefreshInterval,
-	)
-	pm.rateLimiter = quotas.NewMultiRateLimiter([]quotas.RateLimiter{
-		pm.dynamicRateLimiter,
-		quotas.NewDefaultOutgoingRateLimiter(
-			tqConfig.AdminNamespaceTaskQueueToPartitionDispatchRate,
-		),
-		quotas.NewDefaultOutgoingRateLimiter(
-			tqConfig.AdminNamespaceToPartitionDispatchRate,
-		),
-	})
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
 	if err != nil {
@@ -140,34 +119,14 @@ func newTaskQueuePartitionManager(
 	return pm, nil
 }
 
-// UpdateRatelimit updates the task dispatch rate
-func (pm *taskQueuePartitionManagerImpl) UpdateRatelimit(rps float64) {
-	nPartitions := float64(pm.config.NumReadPartitions())
-	if nPartitions > 0 {
-		// divide the rate equally across all partitions
-		rps = rps / nPartitions
-	}
-	burst := int(math.Ceil(rps))
-
-	minTaskThrottlingBurstSize := pm.config.MinTaskThrottlingBurstSize()
-	if burst < minTaskThrottlingBurstSize {
-		burst = minTaskThrottlingBurstSize
-	}
-
-	pm.dynamicRateBurst.SetRPS(rps)
-	pm.dynamicRateBurst.SetBurst(burst)
-	pm.forceRefreshRateOnce.Do(func() {
-		// Dynamic rate limiter only refresh its rate every 1m. Before that initial 1m interval, it uses default rate
-		// which is 10K and is too large in most cases. We need to force refresh for the first time this rate is set
-		// by poller. Only need to do that once. If the rate change later, it will be refresh in 1m.
-		pm.dynamicRateLimiter.Refresh()
-	})
-}
-
 func (pm *taskQueuePartitionManagerImpl) Start() {
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
 	pm.userDataManager.Start()
 	pm.defaultQueue.Start()
+}
+
+func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager {
+	return pm.rateLimitManager
 }
 
 // Stop does not unload the partition from matching engine. It is intended to be called by matching engine when
@@ -175,6 +134,7 @@ func (pm *taskQueuePartitionManagerImpl) Start() {
 func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.versionedQueuesLock.Lock()
 	defer pm.versionedQueuesLock.Unlock()
+	pm.rateLimitManager.Stop()
 	for _, vq := range pm.versionedQueues {
 		vq.Stop(unloadCause)
 	}
@@ -381,14 +341,16 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		defer dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
-	// The desired global rate limit for the task queue comes from the
-	// poller, which lives inside the client side worker. There is
-	// one rateLimiter for this entire task queue and as we get polls,
-	// we update the ratelimiter rps if it has changed from the last
-	// value. Last poller wins if different pollers provide different values
-	if rps := pollMetadata.taskQueueMetadata.GetMaxTasksPerSecond(); rps != nil {
-		pm.UpdateRatelimit(rps.Value)
-	}
+	// The desired global rate limit for the task queue can come from multiple sources:
+	// UpdateTaskQueueConfig API call, poller metadata, or system default.
+	// In the case of worker set rate limits at the time of poll task :
+	// we update the ratelimiter rps if it has changed from the previous poll.
+	// Last poller wins if different pollers provide different values
+	// Highest priority is given to the rate limit set by the UpdateTaskQueueConfig api call.
+	// Followed by the rate limit set by the poller.
+	// UpdateRateLimit implicitly handles whether an update is required or not,
+	// based on whether the effectiveRPS has changed.
+	pm.rateLimitManager.InjectWorkerRPS(pollMetadata)
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
 
@@ -590,6 +552,12 @@ func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.Polle
 	for _, vq := range pm.versionedQueues {
 		info := vq.GetAllPollerInfo()
 		ret = append(ret, info...)
+
+		// We want DescribeTaskQueue to count for task queue liveness for all loaded versioned
+		// queues, and this is the most convenient place to mark liveness, since it's called by
+		// LegacyDescribeTaskQueue (and also getPhysicalQueuesForAdd, but that's versioning 1
+		// and will be removed soon).
+		vq.MarkAlive()
 	}
 	return ret
 }
@@ -662,7 +630,8 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 func (pm *taskQueuePartitionManagerImpl) Describe(
 	ctx context.Context,
 	buildIds map[string]bool,
-	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool,
+) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 
 	versions := make(map[PhysicalTaskQueueVersion]bool)
@@ -744,6 +713,8 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			bid = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(v.Deployment()))
 		}
 		versionsInfo[bid] = vInfo
+
+		physicalQueue.MarkAlive() // Count Describe for liveness
 	}
 
 	return &matchingservice.DescribeTaskQueuePartitionResponse{
@@ -767,10 +738,9 @@ func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) 
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundHighCallerInfo(pm.ns.Name().String()))
 }
 
-// ForceLoadAllNonRootPartitions spins off go routines which make RPC calls to all the
-func (pm *taskQueuePartitionManagerImpl) ForceLoadAllNonRootPartitions() {
+// ForceLoadAllChildPartitions spins off go routines which make RPC calls to all the
+func (pm *taskQueuePartitionManagerImpl) ForceLoadAllChildPartitions() {
 	if !pm.partition.IsRoot() {
-		pm.logger.Info("ForceLoadAllNonRootPartitions called on non-root partition. Prevented circular keep alive (loading) of partitions.")
 		return
 	}
 
@@ -1224,6 +1194,9 @@ func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.T
 }
 
 func (pm *taskQueuePartitionManagerImpl) userDataChanged() {
+	// Update rateLimits if any change is userData.
+	pm.rateLimitManager.UserDataChanged()
+
 	// Notify all queues so they can re-evaluate their backlog.
 	pm.versionedQueuesLock.RLock()
 	for _, vq := range pm.versionedQueues {

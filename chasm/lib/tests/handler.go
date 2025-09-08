@@ -5,8 +5,8 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -26,7 +26,7 @@ type (
 	}
 
 	DescribePayloadStoreResponse struct {
-		State *persistencespb.TestPayloadStore
+		State *testspb.TestPayloadStore
 	}
 
 	ClosePayloadStoreRequest struct {
@@ -45,7 +45,7 @@ type (
 	}
 
 	AddPayloadResponse struct {
-		State *persistencespb.TestPayloadStore
+		State *testspb.TestPayloadStore
 	}
 
 	GetPayloadRequest struct {
@@ -65,7 +65,7 @@ type (
 	}
 
 	RemovePayloadResponse struct {
-		State *persistencespb.TestPayloadStore
+		State *testspb.TestPayloadStore
 	}
 )
 
@@ -79,8 +79,9 @@ func NewPayloadStoreHandler(
 			NamespaceID: request.NamespaceID.String(),
 			BusinessID:  request.StoreID,
 		},
-		func(_ chasm.MutableContext, _ any) (*PayloadStore, any, error) {
-			return NewPayloadStore(), nil, nil
+		func(mutableContext chasm.MutableContext, _ any) (*PayloadStore, any, error) {
+			store, err := NewPayloadStore(mutableContext)
+			return store, nil, err
 		},
 		nil,
 	)

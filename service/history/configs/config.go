@@ -54,6 +54,7 @@ type Config struct {
 	HistoryHostLevelCacheMaxSizeBytes     dynamicconfig.IntPropertyFn
 	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
 	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
+	HistoryCacheBackgroundEvict           dynamicconfig.TypedPropertyFn[dynamicconfig.CacheBackgroundEvictSettings]
 	EnableNexus                           dynamicconfig.BoolPropertyFn
 	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
 	EnableUpdateWorkflowModeIgnoreCurrent dynamicconfig.BoolPropertyFn
@@ -265,7 +266,6 @@ type Config struct {
 	ReplicationProcessorSchedulerWorkerCount            dynamicconfig.TypedSubscribable[int]
 	ReplicationLowPriorityProcessorSchedulerWorkerCount dynamicconfig.TypedSubscribable[int]
 	ReplicationLowPriorityTaskParallelism               dynamicconfig.IntPropertyFn
-	EnableReplicationEagerRefreshNamespace              dynamicconfig.BoolPropertyFn
 	EnableReplicationTaskBatching                       dynamicconfig.BoolPropertyFn
 	EnableReplicationTaskTieredProcessing               dynamicconfig.BoolPropertyFn
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
@@ -414,6 +414,7 @@ func NewConfig(
 		HistoryHostLevelCacheMaxSizeBytes:     dynamicconfig.HistoryCacheHostLevelMaxSizeBytes.Get(dc),
 		HistoryCacheTTL:                       dynamicconfig.HistoryCacheTTL.Get(dc),
 		HistoryCacheNonUserContextLockTimeout: dynamicconfig.HistoryCacheNonUserContextLockTimeout.Get(dc),
+		HistoryCacheBackgroundEvict:           dynamicconfig.HistoryCacheBackgroundEvict.Get(dc),
 		EnableNexus:                           dynamicconfig.EnableNexus.Get(dc),
 		EnableWorkflowExecutionTimeoutTimer:   dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
 		EnableUpdateWorkflowModeIgnoreCurrent: dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),
@@ -526,7 +527,6 @@ func NewConfig(
 		ReplicationProcessorSchedulerWorkerCount:            dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Subscribe(dc),
 		ReplicationLowPriorityProcessorSchedulerWorkerCount: dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount.Subscribe(dc),
 		ReplicationLowPriorityTaskParallelism:               dynamicconfig.ReplicationLowPriorityTaskParallelism.Get(dc),
-		EnableReplicationEagerRefreshNamespace:              dynamicconfig.EnableEagerNamespaceRefresher.Get(dc),
 		EnableReplicationTaskBatching:                       dynamicconfig.EnableReplicationTaskBatching.Get(dc),
 		EnableReplicationTaskTieredProcessing:               dynamicconfig.EnableReplicationTaskTieredProcessing.Get(dc),
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),

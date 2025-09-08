@@ -74,6 +74,17 @@ var (
 		DispatchNexusTaskByNamespaceAndTaskQueueAPIName:                                     1,
 		DispatchNexusTaskByEndpointAPIName:                                                  1,
 
+		// P1: Progress APIs for reporting heartbeats and task completions.
+		// Rejecting them could result in more load to retry the workflow/activity/nexus tasks.
+		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeat":      1,
+		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeatById":  1,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompleted":     1,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompletedById": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskCompleted":     1,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondQueryTaskCompleted":        1,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskCompleted":        1,
+		CompleteNexusOperation: 1,
+
 		// P2: Change State APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution":        2,
 		"/temporal.api.workflowservice.v1.WorkflowService/TerminateWorkflowExecution":            2,
@@ -93,6 +104,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeploymentVersion":           2, // [cleanup-wv-pre-release]
 		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentCurrentVersion":     2,
 		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentRampingVersion":     2,
+		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentManager":            2,
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeployment":                2,
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeploymentVersion":         2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerDeploymentVersionMetadata": 2,
@@ -119,43 +131,36 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":        3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":           3,
 
-		// P4: Progress APIs
-		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeat":      4,
-		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeatById":  4,
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCanceled":      4,
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCanceledById":  4,
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskFailed":        4,
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskFailedById":    4,
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompleted":     4,
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompletedById": 4,
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskCompleted":     4,
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskFailed":        4,
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondQueryTaskCompleted":        4,
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskCompleted":        4,
-		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed":           4,
-		CompleteNexusOperation: 4,
+		// P3: Progress APIs for reporting cancellations and failures.
+		// They are relatively low priority as the tasks need to be retried anyway.
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCanceled":     3,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCanceledById": 3,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskFailed":       3,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskFailedById":   3,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskFailed":       3,
+		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed":          3,
 
-		// P5: Poll APIs and other low priority APIs
-		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":              5,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":              5,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":        5,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":                 5,
-		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":               5,
-		"/temporal.api.workflowservice.v1.WorkflowService/ShutdownWorker":                     5,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": 5,
-		"/temporal.api.workflowservice.v1.WorkflowService/RecordWorkerHeartbeat":              5,
-		"/temporal.api.workflowservice.v1.WorkflowService/FetchWorkerConfig":                  5,
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerConfig":                 5,
+		// P4: Poll APIs and other low priority APIs
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":              4,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":              4,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":        4,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":                 4,
+		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":               4,
+		"/temporal.api.workflowservice.v1.WorkflowService/ShutdownWorker":                     4,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": 4,
+		"/temporal.api.workflowservice.v1.WorkflowService/RecordWorkerHeartbeat":              4,
+		"/temporal.api.workflowservice.v1.WorkflowService/FetchWorkerConfig":                  4,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerConfig":                 4,
 
-		// GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API. Consider it as any other poll API.
+		// P5: GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API.
+		// Treat as long-poll but lower priority (5) so spikes don’t block Poll* APIs.
 		PollWorkflowHistoryAPIName: 5,
-
-		// P6: Informational API that aren't required for the temporal service to function
-		OpenAPIV3APIName: 6,
-		OpenAPIV2APIName: 6,
+		// Informational API that aren't required for the temporal service to function
+		OpenAPIV3APIName: 5,
+		OpenAPIV2APIName: 5,
 	}
 
-	ExecutionAPIPrioritiesOrdered = []int{0, 1, 2, 3, 4, 5, 6}
+	ExecutionAPIPrioritiesOrdered = []int{0, 1, 2, 3, 4, 5}
 
 	VisibilityAPIToPriority = map[string]int{
 		"/temporal.api.workflowservice.v1.WorkflowService/CountWorkflowExecutions":        1,
@@ -165,6 +170,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                    1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorker":                 1,
 
 		// APIs that rely on visibility
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         1,

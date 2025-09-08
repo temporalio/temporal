@@ -16,7 +16,6 @@ import (
 	v13 "go.temporal.io/api/failure/v1"
 	v11 "go.temporal.io/api/schedule/v1"
 	v14 "go.temporal.io/api/workflowservice/v1"
-	v15 "go.temporal.io/server/api/enums/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -937,371 +936,11 @@ func (x *NextTimeCache) GetCompleted() bool {
 	return false
 }
 
-// State machine scheduler internal state.
-type SchedulerInternal struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Scheduler request parameters and metadata.
-	Schedule     *v11.Schedule      `protobuf:"bytes,2,opt,name=schedule,proto3" json:"schedule,omitempty"`
-	Info         *v11.ScheduleInfo  `protobuf:"bytes,3,opt,name=info,proto3" json:"info,omitempty"`
-	InitialPatch *v11.SchedulePatch `protobuf:"bytes,4,opt,name=initial_patch,json=initialPatch,proto3" json:"initial_patch,omitempty"`
-	// State common to all generators is stored in the top-level machine.
-	Namespace   string `protobuf:"bytes,5,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	NamespaceId string `protobuf:"bytes,6,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	ScheduleId  string `protobuf:"bytes,7,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
-	// Implemented as a sequence number. Used for optimistic locking against
-	// update requests.
-	ConflictToken int64 `protobuf:"varint,8,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SchedulerInternal) Reset() {
-	*x = SchedulerInternal{}
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SchedulerInternal) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SchedulerInternal) ProtoMessage() {}
-
-func (x *SchedulerInternal) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SchedulerInternal.ProtoReflect.Descriptor instead.
-func (*SchedulerInternal) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *SchedulerInternal) GetSchedule() *v11.Schedule {
-	if x != nil {
-		return x.Schedule
-	}
-	return nil
-}
-
-func (x *SchedulerInternal) GetInfo() *v11.ScheduleInfo {
-	if x != nil {
-		return x.Info
-	}
-	return nil
-}
-
-func (x *SchedulerInternal) GetInitialPatch() *v11.SchedulePatch {
-	if x != nil {
-		return x.InitialPatch
-	}
-	return nil
-}
-
-func (x *SchedulerInternal) GetNamespace() string {
-	if x != nil {
-		return x.Namespace
-	}
-	return ""
-}
-
-func (x *SchedulerInternal) GetNamespaceId() string {
-	if x != nil {
-		return x.NamespaceId
-	}
-	return ""
-}
-
-func (x *SchedulerInternal) GetScheduleId() string {
-	if x != nil {
-		return x.ScheduleId
-	}
-	return ""
-}
-
-func (x *SchedulerInternal) GetConflictToken() int64 {
-	if x != nil {
-		return x.ConflictToken
-	}
-	return 0
-}
-
-// State machine scheduler's Generator internal state.
-type GeneratorInternal struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Generator waits for the next_invocation_time before buffering more actions.
-	NextInvocationTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=next_invocation_time,json=nextInvocationTime,proto3" json:"next_invocation_time,omitempty"`
-	// High water mark.
-	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
-}
-
-func (x *GeneratorInternal) Reset() {
-	*x = GeneratorInternal{}
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GeneratorInternal) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GeneratorInternal) ProtoMessage() {}
-
-func (x *GeneratorInternal) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GeneratorInternal.ProtoReflect.Descriptor instead.
-func (*GeneratorInternal) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *GeneratorInternal) GetNextInvocationTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.NextInvocationTime
-	}
-	return nil
-}
-
-func (x *GeneratorInternal) GetLastProcessedTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.LastProcessedTime
-	}
-	return nil
-}
-
-// State machine scheduler's Invoker internal state.
-type InvokerInternal struct {
-	state protoimpl.MessageState    `protogen:"open.v1"`
-	State v15.SchedulerInvokerState `protobuf:"varint,1,opt,name=state,proto3,enum=temporal.server.api.enums.v1.SchedulerInvokerState" json:"state,omitempty"`
-	// Buffered starts that will be started by the Invoker.
-	BufferedStarts []*BufferedStart `protobuf:"bytes,2,rep,name=buffered_starts,json=bufferedStarts,proto3" json:"buffered_starts,omitempty"`
-	// Workflow executions that will be cancelled due to overlap policy.
-	CancelWorkflows []*v12.WorkflowExecution `protobuf:"bytes,3,rep,name=cancel_workflows,json=cancelWorkflows,proto3" json:"cancel_workflows,omitempty"`
-	// Workflow executions that will be terminated due to overlap policy.
-	TerminateWorkflows []*v12.WorkflowExecution `protobuf:"bytes,4,rep,name=terminate_workflows,json=terminateWorkflows,proto3" json:"terminate_workflows,omitempty"`
-	// High water mark, used for evaluating when to fire tasks that are backing
-	// off from a retry. LastProcessedTime is stored as state so that task
-	// generation will be consistent, regardless of when generation occurs, such
-	// as after applying a replicated state (as opposed to evaluating based on
-	// present time).
-	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
-}
-
-func (x *InvokerInternal) Reset() {
-	*x = InvokerInternal{}
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *InvokerInternal) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*InvokerInternal) ProtoMessage() {}
-
-func (x *InvokerInternal) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use InvokerInternal.ProtoReflect.Descriptor instead.
-func (*InvokerInternal) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *InvokerInternal) GetState() v15.SchedulerInvokerState {
-	if x != nil {
-		return x.State
-	}
-	return v15.SchedulerInvokerState(0)
-}
-
-func (x *InvokerInternal) GetBufferedStarts() []*BufferedStart {
-	if x != nil {
-		return x.BufferedStarts
-	}
-	return nil
-}
-
-func (x *InvokerInternal) GetCancelWorkflows() []*v12.WorkflowExecution {
-	if x != nil {
-		return x.CancelWorkflows
-	}
-	return nil
-}
-
-func (x *InvokerInternal) GetTerminateWorkflows() []*v12.WorkflowExecution {
-	if x != nil {
-		return x.TerminateWorkflows
-	}
-	return nil
-}
-
-func (x *InvokerInternal) GetLastProcessedTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.LastProcessedTime
-	}
-	return nil
-}
-
-// State machine scheduler's Backfiller internal state. Backfill requests are 1:1
-// with Backfiller nodes. Backfiller nodes also handle immediate trigger requests.
-type BackfillerInternal struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Request:
-	//
-	//	*BackfillerInternal_BackfillRequest
-	//	*BackfillerInternal_TriggerRequest
-	Request isBackfillerInternal_Request `protobuf_oneof:"request"`
-	// Every Backfiller should be assigned a unique ID upon creation, used
-	// for deduplication.
-	BackfillId string `protobuf:"bytes,5,opt,name=backfill_id,json=backfillId,proto3" json:"backfill_id,omitempty"`
-	// Backfiller waits for the next_invocation_time before buffering more actions.
-	NextInvocationTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=next_invocation_time,json=nextInvocationTime,proto3" json:"next_invocation_time,omitempty"`
-	// High water mark.
-	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
-	// Attempt count, incremented when the buffer is full and the Backfiller
-	// needs to back off before retrying to fill.
-	Attempt       int64 `protobuf:"varint,8,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BackfillerInternal) Reset() {
-	*x = BackfillerInternal{}
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[15]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BackfillerInternal) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BackfillerInternal) ProtoMessage() {}
-
-func (x *BackfillerInternal) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[15]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BackfillerInternal.ProtoReflect.Descriptor instead.
-func (*BackfillerInternal) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{15}
-}
-
-func (x *BackfillerInternal) GetRequest() isBackfillerInternal_Request {
-	if x != nil {
-		return x.Request
-	}
-	return nil
-}
-
-func (x *BackfillerInternal) GetBackfillRequest() *v11.BackfillRequest {
-	if x != nil {
-		if x, ok := x.Request.(*BackfillerInternal_BackfillRequest); ok {
-			return x.BackfillRequest
-		}
-	}
-	return nil
-}
-
-func (x *BackfillerInternal) GetTriggerRequest() *v11.TriggerImmediatelyRequest {
-	if x != nil {
-		if x, ok := x.Request.(*BackfillerInternal_TriggerRequest); ok {
-			return x.TriggerRequest
-		}
-	}
-	return nil
-}
-
-func (x *BackfillerInternal) GetBackfillId() string {
-	if x != nil {
-		return x.BackfillId
-	}
-	return ""
-}
-
-func (x *BackfillerInternal) GetNextInvocationTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.NextInvocationTime
-	}
-	return nil
-}
-
-func (x *BackfillerInternal) GetLastProcessedTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.LastProcessedTime
-	}
-	return nil
-}
-
-func (x *BackfillerInternal) GetAttempt() int64 {
-	if x != nil {
-		return x.Attempt
-	}
-	return 0
-}
-
-type isBackfillerInternal_Request interface {
-	isBackfillerInternal_Request()
-}
-
-type BackfillerInternal_BackfillRequest struct {
-	BackfillRequest *v11.BackfillRequest `protobuf:"bytes,1,opt,name=backfill_request,json=backfillRequest,proto3,oneof"`
-}
-
-type BackfillerInternal_TriggerRequest struct {
-	// When set, immediately buffer a single manual action.
-	TriggerRequest *v11.TriggerImmediatelyRequest `protobuf:"bytes,2,opt,name=trigger_request,json=triggerRequest,proto3,oneof"`
-}
-
-func (*BackfillerInternal_BackfillRequest) isBackfillerInternal_Request() {}
-
-func (*BackfillerInternal_TriggerRequest) isBackfillerInternal_Request() {}
-
 var File_temporal_server_api_schedule_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"-temporal/server/api/schedule/v1/message.proto\x12\x1ftemporal.server.api.schedule.v1\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/enums/v1/schedule.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a)temporal/server/api/enums/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xaf\x03\n" +
+	"-temporal/server/api/schedule/v1/message.proto\x12\x1ftemporal.server.api.schedule.v1\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/enums/v1/schedule.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xaf\x03\n" +
 	"\rBufferedStart\x12=\n" +
 	"\fnominal_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vnominalTime\x12;\n" +
 	"\vactual_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -1375,34 +1014,7 @@ const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"\n" +
 	"next_times\x18\x03 \x03(\x03R\tnextTimes\x12#\n" +
 	"\rnominal_times\x18\x04 \x03(\x03R\fnominalTimes\x12\x1c\n" +
-	"\tcompleted\x18\x05 \x01(\bR\tcompleted\"\xe6\x02\n" +
-	"\x11SchedulerInternal\x12>\n" +
-	"\bschedule\x18\x02 \x01(\v2\".temporal.api.schedule.v1.ScheduleR\bschedule\x12:\n" +
-	"\x04info\x18\x03 \x01(\v2&.temporal.api.schedule.v1.ScheduleInfoR\x04info\x12L\n" +
-	"\rinitial_patch\x18\x04 \x01(\v2'.temporal.api.schedule.v1.SchedulePatchR\finitialPatch\x12\x1c\n" +
-	"\tnamespace\x18\x05 \x01(\tR\tnamespace\x12!\n" +
-	"\fnamespace_id\x18\x06 \x01(\tR\vnamespaceId\x12\x1f\n" +
-	"\vschedule_id\x18\a \x01(\tR\n" +
-	"scheduleId\x12%\n" +
-	"\x0econflict_token\x18\b \x01(\x03R\rconflictToken\"\xad\x01\n" +
-	"\x11GeneratorInternal\x12L\n" +
-	"\x14next_invocation_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x12nextInvocationTime\x12J\n" +
-	"\x13last_processed_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\"\xb3\x03\n" +
-	"\x0fInvokerInternal\x12I\n" +
-	"\x05state\x18\x01 \x01(\x0e23.temporal.server.api.enums.v1.SchedulerInvokerStateR\x05state\x12W\n" +
-	"\x0fbuffered_starts\x18\x02 \x03(\v2..temporal.server.api.schedule.v1.BufferedStartR\x0ebufferedStarts\x12T\n" +
-	"\x10cancel_workflows\x18\x03 \x03(\v2).temporal.api.common.v1.WorkflowExecutionR\x0fcancelWorkflows\x12Z\n" +
-	"\x13terminate_workflows\x18\x04 \x03(\v2).temporal.api.common.v1.WorkflowExecutionR\x12terminateWorkflows\x12J\n" +
-	"\x13last_processed_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\"\xac\x03\n" +
-	"\x12BackfillerInternal\x12V\n" +
-	"\x10backfill_request\x18\x01 \x01(\v2).temporal.api.schedule.v1.BackfillRequestH\x00R\x0fbackfillRequest\x12^\n" +
-	"\x0ftrigger_request\x18\x02 \x01(\v23.temporal.api.schedule.v1.TriggerImmediatelyRequestH\x00R\x0etriggerRequest\x12\x1f\n" +
-	"\vbackfill_id\x18\x05 \x01(\tR\n" +
-	"backfillId\x12L\n" +
-	"\x14next_invocation_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x12nextInvocationTime\x12J\n" +
-	"\x13last_processed_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\x12\x18\n" +
-	"\aattempt\x18\b \x01(\x03R\aattemptB\t\n" +
-	"\arequestB0Z.go.temporal.io/server/api/schedule/v1;scheduleb\x06proto3"
+	"\tcompleted\x18\x05 \x01(\bR\tcompletedB0Z.go.temporal.io/server/api/schedule/v1;scheduleb\x06proto3"
 
 var (
 	file_temporal_server_api_schedule_v1_message_proto_rawDescOnce sync.Once
@@ -1416,7 +1028,7 @@ func file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP() []byte {
 	return file_temporal_server_api_schedule_v1_message_proto_rawDescData
 }
 
-var file_temporal_server_api_schedule_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_temporal_server_api_schedule_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_temporal_server_api_schedule_v1_message_proto_goTypes = []any{
 	(*BufferedStart)(nil),                     // 0: temporal.server.api.schedule.v1.BufferedStart
 	(*InternalState)(nil),                     // 1: temporal.server.api.schedule.v1.InternalState
@@ -1430,73 +1042,53 @@ var file_temporal_server_api_schedule_v1_message_proto_goTypes = []any{
 	(*CancelWorkflowRequest)(nil),             // 9: temporal.server.api.schedule.v1.CancelWorkflowRequest
 	(*TerminateWorkflowRequest)(nil),          // 10: temporal.server.api.schedule.v1.TerminateWorkflowRequest
 	(*NextTimeCache)(nil),                     // 11: temporal.server.api.schedule.v1.NextTimeCache
-	(*SchedulerInternal)(nil),                 // 12: temporal.server.api.schedule.v1.SchedulerInternal
-	(*GeneratorInternal)(nil),                 // 13: temporal.server.api.schedule.v1.GeneratorInternal
-	(*InvokerInternal)(nil),                   // 14: temporal.server.api.schedule.v1.InvokerInternal
-	(*BackfillerInternal)(nil),                // 15: temporal.server.api.schedule.v1.BackfillerInternal
-	(*timestamppb.Timestamp)(nil),             // 16: google.protobuf.Timestamp
-	(v1.ScheduleOverlapPolicy)(0),             // 17: temporal.api.enums.v1.ScheduleOverlapPolicy
-	(*v11.BackfillRequest)(nil),               // 18: temporal.api.schedule.v1.BackfillRequest
-	(*v12.Payloads)(nil),                      // 19: temporal.api.common.v1.Payloads
-	(*v13.Failure)(nil),                       // 20: temporal.api.failure.v1.Failure
-	(*v11.Schedule)(nil),                      // 21: temporal.api.schedule.v1.Schedule
-	(*v11.ScheduleInfo)(nil),                  // 22: temporal.api.schedule.v1.ScheduleInfo
-	(*v11.SchedulePatch)(nil),                 // 23: temporal.api.schedule.v1.SchedulePatch
-	(*v12.SearchAttributes)(nil),              // 24: temporal.api.common.v1.SearchAttributes
-	(*v12.WorkflowExecution)(nil),             // 25: temporal.api.common.v1.WorkflowExecution
-	(v1.WorkflowExecutionStatus)(0),           // 26: temporal.api.enums.v1.WorkflowExecutionStatus
-	(*v14.StartWorkflowExecutionRequest)(nil), // 27: temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
-	(v15.SchedulerInvokerState)(0),            // 28: temporal.server.api.enums.v1.SchedulerInvokerState
-	(*v11.TriggerImmediatelyRequest)(nil),     // 29: temporal.api.schedule.v1.TriggerImmediatelyRequest
+	(*timestamppb.Timestamp)(nil),             // 12: google.protobuf.Timestamp
+	(v1.ScheduleOverlapPolicy)(0),             // 13: temporal.api.enums.v1.ScheduleOverlapPolicy
+	(*v11.BackfillRequest)(nil),               // 14: temporal.api.schedule.v1.BackfillRequest
+	(*v12.Payloads)(nil),                      // 15: temporal.api.common.v1.Payloads
+	(*v13.Failure)(nil),                       // 16: temporal.api.failure.v1.Failure
+	(*v11.Schedule)(nil),                      // 17: temporal.api.schedule.v1.Schedule
+	(*v11.ScheduleInfo)(nil),                  // 18: temporal.api.schedule.v1.ScheduleInfo
+	(*v11.SchedulePatch)(nil),                 // 19: temporal.api.schedule.v1.SchedulePatch
+	(*v12.SearchAttributes)(nil),              // 20: temporal.api.common.v1.SearchAttributes
+	(*v12.WorkflowExecution)(nil),             // 21: temporal.api.common.v1.WorkflowExecution
+	(v1.WorkflowExecutionStatus)(0),           // 22: temporal.api.enums.v1.WorkflowExecutionStatus
+	(*v14.StartWorkflowExecutionRequest)(nil), // 23: temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
 }
 var file_temporal_server_api_schedule_v1_message_proto_depIdxs = []int32{
-	16, // 0: temporal.server.api.schedule.v1.BufferedStart.nominal_time:type_name -> google.protobuf.Timestamp
-	16, // 1: temporal.server.api.schedule.v1.BufferedStart.actual_time:type_name -> google.protobuf.Timestamp
-	16, // 2: temporal.server.api.schedule.v1.BufferedStart.desired_time:type_name -> google.protobuf.Timestamp
-	17, // 3: temporal.server.api.schedule.v1.BufferedStart.overlap_policy:type_name -> temporal.api.enums.v1.ScheduleOverlapPolicy
-	16, // 4: temporal.server.api.schedule.v1.BufferedStart.backoff_time:type_name -> google.protobuf.Timestamp
-	16, // 5: temporal.server.api.schedule.v1.InternalState.last_processed_time:type_name -> google.protobuf.Timestamp
+	12, // 0: temporal.server.api.schedule.v1.BufferedStart.nominal_time:type_name -> google.protobuf.Timestamp
+	12, // 1: temporal.server.api.schedule.v1.BufferedStart.actual_time:type_name -> google.protobuf.Timestamp
+	12, // 2: temporal.server.api.schedule.v1.BufferedStart.desired_time:type_name -> google.protobuf.Timestamp
+	13, // 3: temporal.server.api.schedule.v1.BufferedStart.overlap_policy:type_name -> temporal.api.enums.v1.ScheduleOverlapPolicy
+	12, // 4: temporal.server.api.schedule.v1.BufferedStart.backoff_time:type_name -> google.protobuf.Timestamp
+	12, // 5: temporal.server.api.schedule.v1.InternalState.last_processed_time:type_name -> google.protobuf.Timestamp
 	0,  // 6: temporal.server.api.schedule.v1.InternalState.buffered_starts:type_name -> temporal.server.api.schedule.v1.BufferedStart
-	18, // 7: temporal.server.api.schedule.v1.InternalState.ongoing_backfills:type_name -> temporal.api.schedule.v1.BackfillRequest
-	19, // 8: temporal.server.api.schedule.v1.InternalState.last_completion_result:type_name -> temporal.api.common.v1.Payloads
-	20, // 9: temporal.server.api.schedule.v1.InternalState.continued_failure:type_name -> temporal.api.failure.v1.Failure
-	21, // 10: temporal.server.api.schedule.v1.StartScheduleArgs.schedule:type_name -> temporal.api.schedule.v1.Schedule
-	22, // 11: temporal.server.api.schedule.v1.StartScheduleArgs.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
-	23, // 12: temporal.server.api.schedule.v1.StartScheduleArgs.initial_patch:type_name -> temporal.api.schedule.v1.SchedulePatch
+	14, // 7: temporal.server.api.schedule.v1.InternalState.ongoing_backfills:type_name -> temporal.api.schedule.v1.BackfillRequest
+	15, // 8: temporal.server.api.schedule.v1.InternalState.last_completion_result:type_name -> temporal.api.common.v1.Payloads
+	16, // 9: temporal.server.api.schedule.v1.InternalState.continued_failure:type_name -> temporal.api.failure.v1.Failure
+	17, // 10: temporal.server.api.schedule.v1.StartScheduleArgs.schedule:type_name -> temporal.api.schedule.v1.Schedule
+	18, // 11: temporal.server.api.schedule.v1.StartScheduleArgs.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
+	19, // 12: temporal.server.api.schedule.v1.StartScheduleArgs.initial_patch:type_name -> temporal.api.schedule.v1.SchedulePatch
 	1,  // 13: temporal.server.api.schedule.v1.StartScheduleArgs.state:type_name -> temporal.server.api.schedule.v1.InternalState
-	21, // 14: temporal.server.api.schedule.v1.FullUpdateRequest.schedule:type_name -> temporal.api.schedule.v1.Schedule
-	24, // 15: temporal.server.api.schedule.v1.FullUpdateRequest.search_attributes:type_name -> temporal.api.common.v1.SearchAttributes
-	21, // 16: temporal.server.api.schedule.v1.DescribeResponse.schedule:type_name -> temporal.api.schedule.v1.Schedule
-	22, // 17: temporal.server.api.schedule.v1.DescribeResponse.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
-	25, // 18: temporal.server.api.schedule.v1.WatchWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	26, // 19: temporal.server.api.schedule.v1.WatchWorkflowResponse.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
-	19, // 20: temporal.server.api.schedule.v1.WatchWorkflowResponse.result:type_name -> temporal.api.common.v1.Payloads
-	20, // 21: temporal.server.api.schedule.v1.WatchWorkflowResponse.failure:type_name -> temporal.api.failure.v1.Failure
-	16, // 22: temporal.server.api.schedule.v1.WatchWorkflowResponse.close_time:type_name -> google.protobuf.Timestamp
-	27, // 23: temporal.server.api.schedule.v1.StartWorkflowRequest.request:type_name -> temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
-	16, // 24: temporal.server.api.schedule.v1.StartWorkflowResponse.real_start_time:type_name -> google.protobuf.Timestamp
-	25, // 25: temporal.server.api.schedule.v1.CancelWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	25, // 26: temporal.server.api.schedule.v1.TerminateWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	16, // 27: temporal.server.api.schedule.v1.NextTimeCache.start_time:type_name -> google.protobuf.Timestamp
-	21, // 28: temporal.server.api.schedule.v1.SchedulerInternal.schedule:type_name -> temporal.api.schedule.v1.Schedule
-	22, // 29: temporal.server.api.schedule.v1.SchedulerInternal.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
-	23, // 30: temporal.server.api.schedule.v1.SchedulerInternal.initial_patch:type_name -> temporal.api.schedule.v1.SchedulePatch
-	16, // 31: temporal.server.api.schedule.v1.GeneratorInternal.next_invocation_time:type_name -> google.protobuf.Timestamp
-	16, // 32: temporal.server.api.schedule.v1.GeneratorInternal.last_processed_time:type_name -> google.protobuf.Timestamp
-	28, // 33: temporal.server.api.schedule.v1.InvokerInternal.state:type_name -> temporal.server.api.enums.v1.SchedulerInvokerState
-	0,  // 34: temporal.server.api.schedule.v1.InvokerInternal.buffered_starts:type_name -> temporal.server.api.schedule.v1.BufferedStart
-	25, // 35: temporal.server.api.schedule.v1.InvokerInternal.cancel_workflows:type_name -> temporal.api.common.v1.WorkflowExecution
-	25, // 36: temporal.server.api.schedule.v1.InvokerInternal.terminate_workflows:type_name -> temporal.api.common.v1.WorkflowExecution
-	16, // 37: temporal.server.api.schedule.v1.InvokerInternal.last_processed_time:type_name -> google.protobuf.Timestamp
-	18, // 38: temporal.server.api.schedule.v1.BackfillerInternal.backfill_request:type_name -> temporal.api.schedule.v1.BackfillRequest
-	29, // 39: temporal.server.api.schedule.v1.BackfillerInternal.trigger_request:type_name -> temporal.api.schedule.v1.TriggerImmediatelyRequest
-	16, // 40: temporal.server.api.schedule.v1.BackfillerInternal.next_invocation_time:type_name -> google.protobuf.Timestamp
-	16, // 41: temporal.server.api.schedule.v1.BackfillerInternal.last_processed_time:type_name -> google.protobuf.Timestamp
-	42, // [42:42] is the sub-list for method output_type
-	42, // [42:42] is the sub-list for method input_type
-	42, // [42:42] is the sub-list for extension type_name
-	42, // [42:42] is the sub-list for extension extendee
-	0,  // [0:42] is the sub-list for field type_name
+	17, // 14: temporal.server.api.schedule.v1.FullUpdateRequest.schedule:type_name -> temporal.api.schedule.v1.Schedule
+	20, // 15: temporal.server.api.schedule.v1.FullUpdateRequest.search_attributes:type_name -> temporal.api.common.v1.SearchAttributes
+	17, // 16: temporal.server.api.schedule.v1.DescribeResponse.schedule:type_name -> temporal.api.schedule.v1.Schedule
+	18, // 17: temporal.server.api.schedule.v1.DescribeResponse.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
+	21, // 18: temporal.server.api.schedule.v1.WatchWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	22, // 19: temporal.server.api.schedule.v1.WatchWorkflowResponse.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
+	15, // 20: temporal.server.api.schedule.v1.WatchWorkflowResponse.result:type_name -> temporal.api.common.v1.Payloads
+	16, // 21: temporal.server.api.schedule.v1.WatchWorkflowResponse.failure:type_name -> temporal.api.failure.v1.Failure
+	12, // 22: temporal.server.api.schedule.v1.WatchWorkflowResponse.close_time:type_name -> google.protobuf.Timestamp
+	23, // 23: temporal.server.api.schedule.v1.StartWorkflowRequest.request:type_name -> temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
+	12, // 24: temporal.server.api.schedule.v1.StartWorkflowResponse.real_start_time:type_name -> google.protobuf.Timestamp
+	21, // 25: temporal.server.api.schedule.v1.CancelWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	21, // 26: temporal.server.api.schedule.v1.TerminateWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	12, // 27: temporal.server.api.schedule.v1.NextTimeCache.start_time:type_name -> google.protobuf.Timestamp
+	28, // [28:28] is the sub-list for method output_type
+	28, // [28:28] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_schedule_v1_message_proto_init() }
@@ -1508,17 +1100,13 @@ func file_temporal_server_api_schedule_v1_message_proto_init() {
 		(*WatchWorkflowResponse_Result)(nil),
 		(*WatchWorkflowResponse_Failure)(nil),
 	}
-	file_temporal_server_api_schedule_v1_message_proto_msgTypes[15].OneofWrappers = []any{
-		(*BackfillerInternal_BackfillRequest)(nil),
-		(*BackfillerInternal_TriggerRequest)(nil),
-	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_schedule_v1_message_proto_rawDesc), len(file_temporal_server_api_schedule_v1_message_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

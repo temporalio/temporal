@@ -81,7 +81,9 @@ func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 		return &claims, nil
 	}
 
-	parts := strings.Split(authInfo.AuthToken, " ")
+	// We use strings.SplitN even though we check the length later, to avoid
+	// unnecessary allocations if the format is correct.
+	parts := strings.SplitN(authInfo.AuthToken, " ", 2)
 	if len(parts) != 2 {
 		return nil, serviceerror.NewPermissionDenied("unexpected authorization token format", "")
 	}
@@ -123,7 +125,7 @@ func (a *defaultJWTClaimMapper) extractPermissions(permissions []interface{}, cl
 			}
 			parts = []string{match[a.matchNamespaceIndex], match[a.matchRoleIndex]}
 		} else {
-			parts = strings.Split(p, ":")
+			parts = strings.SplitN(p, ":", 2)
 			if len(parts) != 2 {
 				a.logger.Warn(fmt.Sprintf("ignoring permission in unexpected format: %v", permission))
 				continue

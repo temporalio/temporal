@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"weak"
 
 	"github.com/mitchellh/mapstructure"
 	"go.temporal.io/server/common/clock"
@@ -39,6 +41,10 @@ type (
 		callbackPool     *goro.AdaptivePool
 
 		poller goro.Group
+
+		// cache converted values. use weak pointers to avoid holding on to values in the cache
+		// that are no longer in use.
+		convertCache sync.Map // map[weak.Pointer[ConstrainedValue]]any
 	}
 
 	subscription[T any] struct {
@@ -46,9 +52,9 @@ type (
 		prec []Constraints
 		f    func(T)
 		def  T
-		cdef *[]TypedConstrainedValue[T]
+		cdef []TypedConstrainedValue[T] // nil for regular settings, populated for constrained default settings
 		// protected by subscriptionLock in Collection:
-		prev T
+		raw any // raw value that last sent value was converted from
 	}
 
 	subscriptionCallbackSettings struct {
@@ -57,6 +63,9 @@ type (
 		TargetDelay  time.Duration
 		ShrinkFactor float64
 	}
+
+	// sentinel type that doesn't compare equal to anything else
+	defaultValue struct{}
 
 	// These function types follow a similar pattern:
 	//   {X}PropertyFn - returns a value of type X that is global (no filters)
@@ -88,6 +97,8 @@ var (
 	errorType     = reflect.TypeOf((*error)(nil)).Elem()
 	durationType  = reflect.TypeOf(time.Duration(0))
 	stringType    = reflect.TypeOf("")
+
+	usingDefaultValue any = defaultValue{}
 )
 
 // NewCollection creates a new collection. For subscriptions to work, you must call Start/Stop.
@@ -202,19 +213,18 @@ func (c *Collection) throttleLog() bool {
 	return errCount < errCountLogThreshold || errCount%errCountLogThreshold == 0
 }
 
-func findMatch[T any](cvs []ConstrainedValue, defaultCVs []TypedConstrainedValue[T], precedence []Constraints) (any, error) {
-	if len(cvs)+len(defaultCVs) == 0 {
+func findMatch(cvs []ConstrainedValue, precedence []Constraints) (*ConstrainedValue, error) {
+	if len(cvs) == 0 {
 		return nil, errKeyNotPresent
 	}
 	for _, m := range precedence {
-		for _, cv := range cvs {
+		for idx, cv := range cvs {
 			if m == cv.Constraints {
-				return cv.Value, nil
-			}
-		}
-		for _, cv := range defaultCVs {
-			if m == cv.Constraints {
-				return cv.Value, nil
+				// Note: cvs here is the slice returned by Client.GetValue. We want to return a
+				// pointer into that slice so that the converted value is cached as long as the
+				// Client keeps the []ConstrainedValue alive. See the comment on
+				// Client.GetValue.
+				return &cvs[idx], nil
 			}
 		}
 	}
@@ -228,61 +238,129 @@ func matchAndConvert[T any](
 	c *Collection,
 	key Key,
 	def T,
-	cdef *[]TypedConstrainedValue[T],
 	convert func(value any) (T, error),
 	precedence []Constraints,
 ) T {
 	cvs := c.client.GetValue(key)
-	return matchAndConvertCvs(c, key, def, cdef, convert, precedence, cvs)
+	v, _ := matchAndConvertCvs(c, key, def, convert, precedence, cvs)
+	return v
 }
 
 func matchAndConvertCvs[T any](
 	c *Collection,
 	key Key,
 	def T,
-	cdef *[]TypedConstrainedValue[T],
 	convert func(value any) (T, error),
 	precedence []Constraints,
 	cvs []ConstrainedValue,
-) T {
-	var defaultCVs []TypedConstrainedValue[T]
-	if cdef != nil {
-		defaultCVs = *cdef
-	} else {
-		defaultCVs = []TypedConstrainedValue[T]{{Value: def}}
-	}
-
-	val, matchErr := findMatch(cvs, defaultCVs, precedence)
-	if matchErr != nil {
+) (T, any) {
+	cvp, err := findMatch(cvs, precedence)
+	if err != nil {
 		if c.throttleLog() {
-			c.logger.Debug("No such key in dynamic config, using default", tag.Key(key.String()), tag.Error(matchErr))
+			c.logger.Debug("No such key in dynamic config, using default", tag.Key(key.String()), tag.Error(err))
 		}
 		// couldn't find a constrained match, use default
-		val = def
+		return def, usingDefaultValue
 	}
 
-	typedVal, convertErr := convert(val)
-	if convertErr != nil && matchErr == nil {
-		// We failed to convert the value to the desired type. Try converting the default. note
-		// that if matchErr != nil then val _is_ defaultValue and we don't have to try this again.
+	typedVal, err := convertWithCache(c, key, convert, cvp)
+	if err != nil {
+		// We failed to convert the value to the desired type. Use the default.
 		if c.throttleLog() {
-			c.logger.Warn("Failed to convert value, using default", tag.Key(key.String()), tag.IgnoredValue(val), tag.Error(convertErr))
+			c.logger.Warn("Failed to convert value, using default", tag.Key(key.String()), tag.IgnoredValue(cvp), tag.Error(err))
 		}
-		typedVal, convertErr = convert(def)
+		return def, usingDefaultValue
 	}
-	if convertErr != nil {
-		// If we can't convert the default, that's a bug in our code, use Warn level.
-		c.logger.Warn("Can't convert default value (this is a bug; fix server code)", tag.Key(key.String()), tag.IgnoredValue(def), tag.Error(convertErr))
-		// Return typedVal anyway since we have to return something.
+	return typedVal, cvp.Value
+}
+
+// Returns matched value out of cvs, matched default out of defaultCVs, and also the priorities
+// of each of the matches (lower matched first). For no match, order will be 0.
+func findMatchWithConstrainedDefaults[T any](cvs []ConstrainedValue, defaultCVs []TypedConstrainedValue[T], precedence []Constraints) (
+	matchedValue *ConstrainedValue,
+	matchedDefault T,
+	valueOrder int,
+	defaultOrder int,
+) {
+	order := 0
+	for _, m := range precedence {
+		for idx, cv := range cvs {
+			order++
+			if m == cv.Constraints {
+				if valueOrder == 0 {
+					valueOrder = order
+					// Note: cvs here is the slice returned by Client.GetValue. We want to
+					// return a pointer into that slice instead of copying the ConstrainedValue.
+					// See findMatch.
+					matchedValue = &cvs[idx]
+				}
+			}
+		}
+		for _, cv := range defaultCVs {
+			order++
+			if m == cv.Constraints {
+				if defaultOrder == 0 {
+					defaultOrder = order
+					matchedDefault = cv.Value
+				}
+			}
+		}
 	}
-	return typedVal
+	return
+}
+
+func findAndResolveWithConstrainedDefaults[T any](
+	c *Collection,
+	key Key,
+	convert func(value any) (T, error),
+	cvs []ConstrainedValue,
+	defaultCVs []TypedConstrainedValue[T],
+	precedence []Constraints,
+) (value T, raw any) {
+	cvp, defVal, valOrder, defOrder := findMatchWithConstrainedDefaults(cvs, defaultCVs, precedence)
+
+	if defOrder == 0 {
+		// This is a server bug: all precedence lists must end with no-constraints, and all
+		// constrained defaults must have a no-constraints value, so we should have gotten a match.
+		c.logger.Warn("Constrained defaults had no match (this is a bug; fix server code)", tag.Key(key.String()))
+		// leave value as the zero value, that's the best we can do
+		return value, usingDefaultValue
+	} else if valOrder == 0 {
+		if c.throttleLog() {
+			c.logger.Debug("No such key in dynamic config, using default", tag.Key(key.String()))
+		}
+		return defVal, usingDefaultValue
+	} else if defOrder < valOrder {
+		// value was present but constrained default took precedence
+		return defVal, usingDefaultValue // use sentinel since we're using default
+	}
+	typedVal, err := convertWithCache(c, key, convert, cvp)
+	if err != nil {
+		// We failed to convert the value to the desired type. Use the default.
+		if c.throttleLog() {
+			c.logger.Warn("Failed to convert value, using default", tag.Key(key.String()), tag.IgnoredValue(cvp), tag.Error(err))
+		}
+		return defVal, usingDefaultValue
+	}
+	return typedVal, cvp.Value
+}
+
+func matchAndConvertWithConstrainedDefault[T any](
+	c *Collection,
+	key Key,
+	cdef []TypedConstrainedValue[T],
+	convert func(value any) (T, error),
+	precedence []Constraints,
+) T {
+	cvs := c.client.GetValue(key)
+	value, _ := findAndResolveWithConstrainedDefaults(c, key, convert, cvs, cdef, precedence)
+	return value
 }
 
 func subscribe[T any](
 	c *Collection,
 	key Key,
 	def T,
-	cdef *[]TypedConstrainedValue[T],
 	convert func(value any) (T, error),
 	prec []Constraints,
 	callback func(T),
@@ -292,7 +370,8 @@ func subscribe[T any](
 
 	// get one value immediately (note that subscriptionLock is held here so we can't race with
 	// an update)
-	init := matchAndConvert(c, key, def, cdef, convert, prec)
+	cvs := c.client.GetValue(key)
+	init, raw := matchAndConvertCvs(c, key, def, convert, prec, cvs)
 
 	// As a convenience (and for efficiency), you can pass in a nil callback; we just return the
 	// current value and skip the subscription.  The cancellation func returned is also nil.
@@ -311,8 +390,50 @@ func subscribe[T any](
 		prec: prec,
 		f:    callback,
 		def:  def,
+		raw:  raw,
+	}
+
+	return init, func() {
+		c.subscriptionLock.Lock()
+		defer c.subscriptionLock.Unlock()
+		delete(c.subscriptions[key], id)
+	}
+}
+
+func subscribeWithConstrainedDefault[T any](
+	c *Collection,
+	key Key,
+	cdef []TypedConstrainedValue[T],
+	convert func(value any) (T, error),
+	prec []Constraints,
+	callback func(T),
+) (T, func()) {
+	c.subscriptionLock.Lock()
+	defer c.subscriptionLock.Unlock()
+
+	// get one value immediately (note that subscriptionLock is held here so we can't race with
+	// an update)
+	cvs := c.client.GetValue(key)
+	init, raw := findAndResolveWithConstrainedDefaults(c, key, convert, cvs, cdef, prec)
+
+	// As a convenience (and for efficiency), you can pass in a nil callback; we just return the
+	// current value and skip the subscription. The cancellation func returned is also nil.
+	if callback == nil {
+		return init, nil
+	}
+
+	c.subscriptionIdx++
+	id := c.subscriptionIdx
+
+	if c.subscriptions[key] == nil {
+		c.subscriptions[key] = make(map[int]any)
+	}
+
+	c.subscriptions[key][id] = &subscription[T]{
+		prec: prec,
+		f:    callback,
 		cdef: cdef,
-		prev: init,
+		raw:  raw,
 	}
 
 	return init, func() {
@@ -330,15 +451,97 @@ func dispatchUpdate[T any](
 	sub *subscription[T],
 	cvs []ConstrainedValue,
 ) {
-	newVal := matchAndConvertCvs(c, key, sub.def, sub.cdef, convert, sub.prec, cvs)
-	// Unfortunately we have to use reflect.DeepEqual instead of just == because T is not comparable.
-	// We can't make T comparable because maps and slices are not comparable, and we want to support
-	// those directly. We could have two versions of this, one for comparable types and one for
-	// non-comparable, but it's not worth it.
-	if !reflect.DeepEqual(sub.prev, newVal) {
-		sub.prev = newVal
-		c.callbackPool.Do(func() { sub.f(newVal) })
+	var raw any
+	cvp, err := findMatch(cvs, sub.prec)
+	if err != nil {
+		if c.throttleLog() {
+			c.logger.Debug("No such key in dynamic config, using default", tag.Key(key.String()), tag.Error(err))
+		}
+		raw = usingDefaultValue
+	} else {
+		raw = cvp.Value
 	}
+
+	// compare raw (pre-conversion) values, if unchanged, skip this update. note that
+	// `usingDefaultValue` is equal to itself but nothing else.
+	if reflect.DeepEqual(sub.raw, raw) {
+		// make raw field point to new one, not old one, so that old loaded files can get
+		// garbage collected.
+		sub.raw = raw
+		return
+	}
+
+	// raw value changed, need to dispatch default or converted value
+	var newVal T
+	if cvp == nil {
+		newVal = sub.def
+	} else {
+		newVal, err = convertWithCache(c, key, convert, cvp)
+		if err != nil {
+			// We failed to convert the value to the desired type. Use the default.
+			if c.throttleLog() {
+				c.logger.Warn("Failed to convert value, using default", tag.Key(key.String()), tag.IgnoredValue(cvp), tag.Error(err))
+			}
+			newVal, raw = sub.def, usingDefaultValue
+		}
+	}
+
+	sub.raw = raw
+	c.callbackPool.Do(func() { sub.f(newVal) })
+}
+
+// called with subscriptionLock
+func dispatchUpdateWithConstrainedDefault[T any](
+	c *Collection,
+	key Key,
+	convert func(value any) (T, error),
+	sub *subscription[T],
+	cvs []ConstrainedValue,
+) {
+	// Note: This performs the conversion even if the raw value is unchanged. This isn't ideal,
+	// but so far constrained default settings are only used for primitive values so it's okay.
+	// If we have a constrained default value with a complex conversion function, this could be
+	// optimized to delay conversion until after we check DeepEqual.
+	newVal, raw := findAndResolveWithConstrainedDefaults(c, key, convert, cvs, sub.cdef, sub.prec)
+
+	// compare raw (pre-conversion) values, if unchanged, skip this update. note that
+	// `usingDefaultValue` is equal to itself but nothing else.
+	if reflect.DeepEqual(sub.raw, raw) {
+		// make raw field point to new one, not old one, so that old loaded files can get
+		// garbage collected.
+		sub.raw = raw
+		return
+	}
+
+	sub.raw = raw
+	c.callbackPool.Do(func() { sub.f(newVal) })
+}
+
+func convertWithCache[T any](c *Collection, key Key, convert func(any) (T, error), cvp *ConstrainedValue) (T, error) {
+	weakcvp := weak.Make(cvp)
+
+	if converted, ok := c.convertCache.Load(weakcvp); ok {
+		if t, ok := converted.(T); ok {
+			return t, nil
+		}
+		// Each key can only be used with a single type, so this shouldn't happen
+		c.logger.Warn("Cached converted value has wrong type", tag.Key(key.String()))
+		// Fall through to regular conversion
+	}
+
+	t, err := convert(cvp.Value)
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+
+	c.convertCache.Store(weakcvp, t)
+
+	runtime.AddCleanup(cvp, func(w weak.Pointer[ConstrainedValue]) {
+		c.convertCache.Delete(w)
+	}, weakcvp)
+
+	return t, nil
 }
 
 func convertInt(val any) (int, error) {
@@ -434,9 +637,9 @@ func convertMap(val any) (map[string]any, error) {
 // Note that any failure in conversion of _any_ field will result in the overall default being used,
 // ignoring the fields that successfully converted.
 //
-// Note that the default value will be shallow-copied, so it should not have any deep structure.
-// Scalar types and values are fine, and slice and map types are fine too as long as they're set to
-// nil in the default.
+// Note that the default value will be deep-copied and then passed to mapstructure with the
+// ZeroFields setting false, so the config value will be _merged_ on top of it. Be very careful
+// when using non-empty maps or slices, the result may not be what you want.
 //
 // To avoid confusion, the default passed to ConvertStructure should be either the same as the
 // overall default for the setting (if you want any value set to be merged over the default, i.e.
@@ -449,7 +652,10 @@ func ConvertStructure[T any](def T) func(v any) (T, error) {
 			return typedV, nil
 		}
 
-		out := def
+		// Deep-copy the default and decode over it. This allows using e.g. a struct with some
+		// default fields filled in and a config that only set some fields.
+		out := deepCopyForMapstructure(def)
+
 		dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 			Result: &out,
 			DecodeHook: mapstructure.ComposeDecodeHookFunc(

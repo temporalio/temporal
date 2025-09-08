@@ -19,9 +19,16 @@ import (
 
 const (
 	codeCoverageExtension = ".cover.out"
-	retriesFlag           = "--retries="
+	maxAttemptsFlag       = "--max-attempts="
 	coverProfileFlag      = "-coverprofile="
 	junitReportFlag       = "--junitfile="
+	crashReportNameFlag   = "--crashreportname="
+	gotestsumPathFlag     = "--gotestsum-path="
+)
+
+const (
+	testCommand        = "test"
+	crashReportCommand = "report-crash"
 )
 
 type attempt struct {
@@ -41,8 +48,8 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 		}
 	}
 	log.Printf("starting test attempt #%d: %v %v",
-		a.number, a.runner.gotestsumExecutable, strings.Join(args, " "))
-	cmd := exec.CommandContext(ctx, a.runner.gotestsumExecutable, args...)
+		a.number, a.runner.gotestsumPath, strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, a.runner.gotestsumPath, args...)
 	var output strings.Builder
 	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
 	cmd.Stderr = os.Stderr
@@ -54,31 +61,49 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 }
 
 type runner struct {
-	gotestsumExecutable string
-	junitOutputPath     string
-	coverProfilePath    string
-	attempts            []*attempt
-	retries             int
+	gotestsumPath    string
+	junitOutputPath  string
+	coverProfilePath string
+	attempts         []*attempt
+	maxAttempts      int
+	crashName        string
 }
 
-func newRunner(gotestsumExecutable string) *runner {
+func newRunner() *runner {
 	return &runner{
-		gotestsumExecutable: gotestsumExecutable,
-		attempts:            make([]*attempt, 0),
+		attempts:    make([]*attempt, 0),
+		maxAttempts: 1,
 	}
 }
 
-func (r *runner) sanitizeAndParseArgs(args []string) ([]string, error) {
+// nolint:revive,cognitive-complexity
+func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, error) {
 	var sanitizedArgs []string
 	for _, arg := range args {
-		if strings.HasPrefix(arg, retriesFlag) {
+		if strings.HasPrefix(arg, maxAttemptsFlag) {
 			var err error
-			r.retries, err = strconv.Atoi(strings.Split(arg, "=")[1])
+			r.maxAttempts, err = strconv.Atoi(strings.Split(arg, "=")[1])
 			if err != nil {
-				return nil, fmt.Errorf("invalid argument %q: %w", retriesFlag, err)
+				return nil, fmt.Errorf("invalid argument %q: %w", maxAttemptsFlag, err)
 			}
-			if r.retries == 0 {
-				return nil, fmt.Errorf("invalid argument %q: must be greater than zero", retriesFlag)
+			if r.maxAttempts == 0 {
+				return nil, fmt.Errorf("invalid argument %q: must be greater than zero", maxAttemptsFlag)
+			}
+			continue // this is a `testrunner` only arg and not passed through
+		}
+
+		if strings.HasPrefix(arg, gotestsumPathFlag) {
+			r.gotestsumPath = strings.Split(arg, "=")[1]
+			continue
+		}
+
+		if strings.HasPrefix(arg, crashReportNameFlag) {
+			r.crashName = strings.Split(arg, "=")[1]
+			if r.crashName == "" {
+				return nil, fmt.Errorf("invalid argument %q: must not be empty", crashReportNameFlag)
+			}
+			if command != crashReportCommand {
+				return nil, fmt.Errorf("argument %q is only valid for command %q", crashReportNameFlag, crashReportCommand)
 			}
 			continue // this is a `testrunner` only arg and not passed through
 		}
@@ -92,15 +117,30 @@ func (r *runner) sanitizeAndParseArgs(args []string) ([]string, error) {
 
 		sanitizedArgs = append(sanitizedArgs, arg)
 	}
+
 	if r.junitOutputPath == "" {
 		return nil, fmt.Errorf("missing required argument %q", junitReportFlag)
 	}
-	if r.coverProfilePath == "" {
-		return nil, fmt.Errorf("missing required argument %q", coverProfileFlag)
+
+	switch command {
+	case testCommand:
+		if r.coverProfilePath == "" {
+			return nil, fmt.Errorf("missing required argument %q", coverProfileFlag)
+		}
+		if r.junitOutputPath == "" {
+			return nil, fmt.Errorf("missing required argument %q", junitReportFlag)
+		}
+		if r.gotestsumPath == "" {
+			return nil, fmt.Errorf("missing required argument %q", gotestsumPathFlag)
+		}
+	case crashReportCommand:
+		if r.crashName == "" {
+			return nil, fmt.Errorf("missing required argument %q", crashReportNameFlag)
+		}
+	default:
+		return nil, fmt.Errorf("unknown command %q", command)
 	}
-	if r.retries == 0 {
-		return nil, fmt.Errorf("missing required argument %q", retriesFlag)
-	}
+
 	return sanitizedArgs, nil
 }
 
@@ -129,20 +169,45 @@ func (r *runner) allReports() []*junitReport {
 	return reports
 }
 
+// Main is the entry point for the testrunner tool.
+// nolint:revive,deep-exit
 func Main() {
 	log.SetPrefix("[testrunner] ")
 	ctx := context.Background()
+
 	if len(os.Args) < 2 {
 		log.Fatalf("expected at least 2 arguments")
 	}
-	r := newRunner(os.Args[1])
-	args, err := r.sanitizeAndParseArgs(os.Args[2:])
+	r := newRunner()
+
+	command := os.Args[1]
+	args, err := r.sanitizeAndParseArgs(command, os.Args[2:])
 	if err != nil {
 		log.Fatalf("failed to parse command line options: %v", err)
 	}
 
+	switch command {
+	case testCommand:
+		r.runTests(ctx, args)
+	case crashReportCommand:
+		r.reportCrash()
+	default:
+		log.Fatalf("unknown command %q", command)
+	}
+}
+
+// nolint:revive,deep-exit
+func (r *runner) reportCrash() {
+	jr := generateStatic([]string{r.crashName}, "crash", "Crash")
+	jr.path = r.junitOutputPath
+	if err := jr.write(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (r *runner) runTests(ctx context.Context, args []string) {
 	var currentAttempt *attempt
-	for retry := 0; retry <= r.retries; retry++ {
+	for a := 1; a <= r.maxAttempts; a++ {
 		currentAttempt = r.newAttempt()
 
 		// Run tests.
@@ -155,7 +220,7 @@ func Main() {
 		if len(timedoutTests) > 0 {
 			// Run timed out and was aborted.
 			// Update JUnit XML output for timed out tests since none will have been generated.
-			currentAttempt.junitReport = generateForTimedoutTests(timedoutTests)
+			currentAttempt.junitReport = generateStatic(timedoutTests, "timed out", "Timeout")
 			log.Print(stacktrace)
 
 			// Don't retry.
@@ -179,7 +244,7 @@ func Main() {
 		}
 
 		// Rerun all tests from previous attempt if there's more than 10 failures in a single suite.
-		if len(failures) > 10 && retry < r.retries {
+		if len(failures) > 10 && a < r.maxAttempts {
 			log.Printf(
 				"number of failures exceeds configured threshold (%d/%d) for narrowing down tests to retry, retrying with previous attempt's args",
 				len(failures), 10)

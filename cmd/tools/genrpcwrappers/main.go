@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"flag"
 	"fmt"
 	"io"
@@ -71,6 +72,11 @@ var (
 	}
 	largeTimeoutContext = map[string]bool{
 		"client.admin.GetReplicationMessages": true,
+	}
+	longPollRetryPolicy = map[string]string{
+		"retryableClient.matching.PollWorkflowTaskQueue": "pollPolicy",
+		"retryableClient.matching.PollActivityTaskQueue": "pollPolicy",
+		"retryableClient.matching.PollNexusTaskQueue":    "pollPolicy",
 	}
 	ignoreMethod = map[string]bool{
 		// TODO stream APIs are not supported. do not generate.
@@ -291,7 +297,8 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	case "UpdateTaskQueueUserDataRequest",
 		"ReplicateTaskQueueUserDataRequest",
 		"RecordWorkerHeartbeatRequest",
-		"ListWorkersRequest":
+		"ListWorkersRequest",
+		"DescribeWorkerRequest":
 		// Always route these requests to the same matching node by namespace.
 		tq = fieldWithPath{path: "\"not-applicable\""}
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
@@ -386,6 +393,7 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 		"RequestType":  reqType.String(),
 		"ResponseType": respType.String(),
 		"MetricPrefix": fmt.Sprintf("%s%sClient", strings.ToUpper(service.name[:1]), service.name[1:]),
+		"RetryPolicy":  cmp.Or(longPollRetryPolicy[key], "policy"),
 	}
 	if longPollContext[key] {
 		fields["LongPoll"] = "LongPoll"
@@ -580,7 +588,7 @@ func (c *retryableClient) {{.Method}}(
 		resp, err = c.client.{{.Method}}(ctx, request, opts...)
 		return err
 	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.{{.RetryPolicy}}, c.isRetryable)
 	return resp, err
 }
 `)

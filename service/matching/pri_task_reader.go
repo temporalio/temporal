@@ -34,7 +34,7 @@ const (
 type (
 	priTaskReader struct {
 		backlogMgr *priBacklogManagerImpl
-		subqueue   int
+		subqueue   subqueueIndex
 		notifyC    chan struct{} // Used as signal to notify pump of new tasks
 		logger     log.Logger
 
@@ -65,7 +65,7 @@ var addErrorRetryPolicy = backoff.NewExponentialRetryPolicy(2 * time.Second).
 
 func newPriTaskReader(
 	backlogMgr *priBacklogManagerImpl,
-	subqueue int,
+	subqueue subqueueIndex,
 	initialAckLevel int64,
 ) *priTaskReader {
 	return &priTaskReader{
@@ -290,6 +290,7 @@ func (tr *priTaskReader) addNewTasks(tasks []*persistencespb.AllocatedTaskInfo) 
 }
 
 func (tr *priTaskReader) addTaskToMatcher(task *internalTask) {
+	task.resetMatcherState()
 	err := tr.backlogMgr.addSpooledTask(task)
 	if err == nil {
 		return

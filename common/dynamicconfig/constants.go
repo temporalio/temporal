@@ -550,11 +550,13 @@ is currently processing a task.
 	)
 
 	// keys for frontend
-	FrontendHTTPAllowedHosts = NewGlobalTypedSetting(
+	FrontendHTTPAllowedHosts = NewGlobalTypedSettingWithConverter(
 		"frontend.httpAllowedHosts",
-		[]string(nil),
+		ConvertWildcardStringListToRegexp,
+		MatchAnythingRE,
 		`HTTP API Requests with a "Host" header matching the allowed hosts will be processed, otherwise rejected.
-Wildcards (*) are expanded to allow any substring. By default any Host header is allowed.`,
+Wildcards (*) are expanded to allow any substring. By default any Host header is allowed.
+Concrete type should be list of strings.`,
 	)
 	FrontendPersistenceMaxQPS = NewGlobalIntSetting(
 		"frontend.persistenceMaxQPS",
@@ -632,12 +634,6 @@ long-running requests to fail. The name 'frontend.namespaceCount' is kept for ba
 existing deployments even though it is a bit of a misnomer. This does not limit the number of namespaces; it is a
 per-_namespace_ limit on the _count_ of long-running requests. Requests are only throttled when the limit is
 exceeded, not when it is only reached.`,
-	)
-	ReducePollWorkflowHistoryRequestPriority = NewGlobalBoolSetting(
-		"frontend.reducePollWorkflowRequestPriority",
-		true,
-		`ReducePollWorkflowRequestPriority decides whether to reduce the priority of GetWorkflowExecutionHistory
-requests if WaitNewEvent is true.`,
 	)
 	FrontendGlobalMaxConcurrentLongRunningRequests = NewNamespaceIntSetting(
 		"frontend.globalNamespaceCount",
@@ -789,6 +785,12 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		false,
 		`DisableListVisibilityByFilter is config to disable list open/close workflow using filter`,
 	)
+	ExposeAuthorizerErrors = NewGlobalBoolSetting(
+		"frontend.exposeAuthorizerErrors",
+		false,
+		`ExposeAuthorizerErrors controls whether the frontend authorization interceptor will pass through errors returned by
+the Authorizer component. If false, a generic PermissionDenied error without details will be returned. Default false.`,
+	)
 	KeepAliveMinTime = NewGlobalDurationSetting(
 		"frontend.keepAliveMinTime",
 		10*time.Second,
@@ -891,11 +893,22 @@ used when the first cache layer has a miss. Requires server restart for change t
 		`The TTL of the Nexus endpoint registry's readthrough LRU cache - the cache is a secondary cache and is only
 used when the first cache layer has a miss. Requires server restart for change to be applied.`,
 	)
-	FrontendNexusRequestHeadersBlacklist = NewGlobalTypedSetting(
+	FrontendNexusRequestHeadersBlacklist = NewGlobalTypedSettingWithConverter(
 		"frontend.nexusRequestHeadersBlacklist",
-		[]string(nil),
+		ConvertWildcardStringListToRegexp,
+		MatchNothingRE,
 		`Nexus request headers to be removed before being sent to a user handler.
-Wildcards (*) are expanded to allow any substring. By default blacklist is empty.`,
+Wildcards (*) are expanded to allow any substring. By default blacklist is empty.
+Concrete type should be list of strings.`,
+	)
+	FrontendNexusForwardRequestUseEndpointDispatch = NewGlobalBoolSetting(
+		"frontend.nexusForwardRequestUseEndpointDispatch",
+		false,
+		`!EXPERIMENTAL! NB: This config will be removed in a future release. Controls whether to use Nexus 
+task dispatch by endpoint URLs for forwarded Nexus requests. If set to true, forwarded requests will use the same 
+dispatch type (by endpoint or by namespace + task queue) as the original request. If false, dispatch by namespace + task
+queue will always be used for forwarded requests. Defaults to false because Nexus endpoints do not support replication, 
+so forwarding by endpoint ID will not work out of the box.`,
 	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",
@@ -1399,6 +1412,11 @@ will wait on workflow lock acquisition. Requires service restart to take effect.
 		256000*4*1024,
 		`HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
 HistoryCacheSizeBasedLimit is set to true.`,
+	)
+	HistoryCacheBackgroundEvict = NewGlobalTypedSetting(
+		"history.cacheBackgroundEvict",
+		DefaultHistoryCacheBackgroundEvictSettings,
+		`HistoryCacheBackgroundEvict configures background processing to purge expired entries from the history cache.`,
 	)
 	EnableWorkflowExecutionTimeoutTimer = NewGlobalBoolSetting(
 		"history.enableWorkflowExecutionTimeoutTimer",
@@ -2362,11 +2380,6 @@ that task will be sent to DLQ.`,
 		`ReplicationLowPriorityTaskParallelism is the number of executions' low priority replication tasks that can be processed in parallel`,
 	)
 
-	EnableEagerNamespaceRefresher = NewGlobalBoolSetting(
-		"history.EnableEagerNamespaceRefresher",
-		false,
-		`EnableEagerNamespaceRefresher is a feature flag for eagerly refresh namespace during processing replication task`,
-	)
 	EnableReplicationTaskBatching = NewGlobalBoolSetting(
 		"history.EnableReplicationTaskBatching",
 		false,
@@ -2604,7 +2617,8 @@ Should be at least WorkerESProcessorFlushInterval+<time to process request>.`,
 	ExecutionsScannerEnabled = NewGlobalBoolSetting(
 		"worker.executionsScannerEnabled",
 		false,
-		`ExecutionsScannerEnabled indicates if executions scanner should be started as part of worker.Scanner`,
+		`ExecutionsScannerEnabled indicates if executions scanner should be started as part of worker.Scanner. This flag has no effect when SQL persistence is used, 
+because executions scanner support for SQL is not yet implemented.`,
 	)
 	HistoryScannerDataMinAge = NewGlobalDurationSetting(
 		"worker.historyScannerDataMinAge",
@@ -2697,6 +2711,11 @@ settings for controlling remote activity concurrency for delete namespace workfl
 Valid fields: MaxConcurrentActivityExecutionSize, TaskQueueActivitiesPerSecond,
 WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 `,
+	)
+	WorkerGenerateMigrationTaskViaFrontend = NewGlobalBoolSetting(
+		"worker.generateMigrationTaskViaFrontend",
+		false,
+		`WorkerGenerateMigrationTaskViaFrontend controls whether to generate migration tasks via frontend admin service.`,
 	)
 	MaxUserMetadataSummarySize = NewNamespaceIntSetting(
 		"limit.userMetadataSummarySize",

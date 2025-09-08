@@ -791,8 +791,9 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 
 	historyAddr := historyHost.GetAddress()
 	historyResponse, err := adh.historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
-		NamespaceId: namespaceID.String(),
-		Execution:   request.Execution,
+		NamespaceId:     namespaceID.String(),
+		Execution:       request.Execution,
+		SkipForceReload: request.GetSkipForceReload(),
 	})
 
 	if err != nil {
@@ -2151,8 +2152,9 @@ func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(
 	resp, err := adh.historyClient.GenerateLastHistoryReplicationTasks(
 		ctx,
 		&historyservice.GenerateLastHistoryReplicationTasksRequest{
-			NamespaceId: namespaceEntry.ID().String(),
-			Execution:   request.Execution,
+			NamespaceId:    namespaceEntry.ID().String(),
+			Execution:      request.Execution,
+			TargetClusters: request.TargetClusters,
 		},
 	)
 	if err != nil {

@@ -60,7 +60,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
-	errSent := false
+	firstCancelSeen := false
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 			if service != "service" {
@@ -69,10 +69,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
 		OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
-			if !errSent {
+			if !firstCancelSeen {
 				// Fail cancel request once to test NexusOperationCancelRequestFailed event is recorded and request is retried.
-				errSent = true
-				return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional cancel error for test")
+				firstCancelSeen = true
+				return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "intentional non-retyrable cancel error for test")
 			}
 			return nil
 		},
@@ -167,19 +167,96 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 		},
 	})
 	s.NoError(err)
+
+	// Poll and verify first cancel request failed and allowed workflow to make progress.
+	pollResp, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test",
+	})
+	s.NoError(err)
+	cancelFailedIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
+		return e.GetNexusOperationCancelRequestFailedEventAttributes() != nil
+	})
+	s.Greater(cancelFailedIdx, 0)
+
+	// Start new operation to successfully cancel.
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  endpointName,
+						Service:   "service",
+						Operation: "operation",
+						Input:     s.mustToPayload("input"),
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+	// Poll and wait for the "started" event to be recorded.
+	pollResp, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test",
+	})
+	s.NoError(err)
+	// Get the second scheduleEventId to issue the cancel command.
+	var secondScheduledEventID int64
+	for _, event := range pollResp.History.Events[cancelFailedIdx:] {
+		if event.GetNexusOperationScheduledEventAttributes() != nil {
+			secondScheduledEventID = event.EventId
+			break
+		}
+	}
+	s.Greater(secondScheduledEventID, int64(0))
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
+					RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
+						ScheduledEventId: secondScheduledEventID,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
 	// Poll and wait for the cancelation request to go through.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(desc.PendingNexusOperations))
-		op := desc.PendingNexusOperations[0]
-		require.Equal(t, pollResp.History.Events[scheduledEventIdx].EventId, op.ScheduledEventId)
-		require.Equal(t, endpointName, op.Endpoint)
-		require.Equal(t, "service", op.Service)
-		require.Equal(t, "operation", op.Operation)
-		require.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED, op.State)
-		require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, op.CancellationInfo.State)
-	}, time.Second*10, time.Millisecond*30)
+		require.Equal(t, 2, len(desc.PendingNexusOperations))
+		op1 := desc.PendingNexusOperations[0]
+		require.Equal(t, pollResp.History.Events[scheduledEventIdx].EventId, op1.ScheduledEventId)
+		require.Equal(t, endpointName, op1.Endpoint)
+		require.Equal(t, "service", op1.Service)
+		require.Equal(t, "operation", op1.Operation)
+		require.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED, op1.State)
+		require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, op1.CancellationInfo.State)
+		op2 := desc.PendingNexusOperations[1]
+		require.Equal(t, secondScheduledEventID, op2.ScheduledEventId)
+		require.Equal(t, endpointName, op2.Endpoint)
+		require.Equal(t, "service", op2.Service)
+		require.Equal(t, "operation", op2.Operation)
+		require.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED, op2.State)
+		require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, op2.CancellationInfo.State)
+	}, time.Second*5, time.Millisecond*30)
 
 	err = s.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
 	s.NoError(err)
@@ -188,6 +265,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 		WorkflowId: run.GetID(),
 		RunId:      run.GetRunID(),
 	})
+	s.ContainsHistoryEvents(`NexusOperationCancelRequestFailed`, hist)
 	s.ContainsHistoryEvents(`NexusOperationCancelRequestCompleted`, hist)
 }
 

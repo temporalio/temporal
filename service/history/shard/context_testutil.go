@@ -149,7 +149,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		timeSource:              t.TimeSource,
 		namespaceRegistry:       registry,
 		stateMachineRegistry:    hsm.NewRegistry(),
-		chasmRegistry:           chasm.NewRegistry(),
+		chasmRegistry:           chasm.NewRegistry(t.GetLogger()),
 		persistenceShardManager: t.GetShardManager(),
 		clientBean:              t.GetClientBean(),
 		saProvider:              t.GetSearchAttributesProvider(),

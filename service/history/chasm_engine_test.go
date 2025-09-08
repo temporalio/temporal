@@ -102,7 +102,7 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.NoError(err)
 	s.mockShard.SetStateMachineRegistry(reg)
 
-	s.registry = chasm.NewRegistry()
+	s.registry = chasm.NewRegistry(s.mockShard.GetLogger())
 	err = s.registry.Register(&testChasmLibrary{})
 	s.NoError(err)
 	s.mockShard.SetChasmRegistry(s.registry)
@@ -417,7 +417,7 @@ func (s *chasmEngineSuite) validateCreateRequest(
 	s.True(ok)
 
 	activityInfo := &persistencespb.ActivityInfo{}
-	err := serialization.Proto3Decode(updatedNode.Data.Data, updatedNode.Data.EncodingType, activityInfo)
+	err := serialization.Decode(updatedNode.Data, activityInfo)
 	s.NoError(err)
 	s.Equal(expectedActivityID, activityInfo.ActivityId)
 }
@@ -483,7 +483,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 			s.True(ok)
 
 			activityInfo := &persistencespb.ActivityInfo{}
-			err := serialization.Proto3Decode(updatedNode.Data.Data, updatedNode.Data.EncodingType, activityInfo)
+			err := serialization.Decode(updatedNode.Data, activityInfo)
 			s.NoError(err)
 			s.Equal(newActivityID, activityInfo.ActivityId)
 			return tests.UpdateWorkflowExecutionResponse, nil
@@ -597,7 +597,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 func (s *chasmEngineSuite) serializeComponentState(
 	state proto.Message,
 ) *commonpb.DataBlob {
-	blob, err := serialization.ProtoEncodeBlob(state, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := serialization.ProtoEncode(state)
 	s.NoError(err)
 	return blob
 }

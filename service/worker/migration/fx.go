@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -33,6 +34,7 @@ type (
 		TaskManager               persistence.TaskManager
 		Logger                    log.Logger
 		MetricsHandler            metrics.Handler
+		DynamicCollection         *dynamicconfig.Collection
 	}
 
 	fxResult struct {
@@ -62,6 +64,7 @@ func (wc *replicationWorkerComponent) RegisterWorkflow(registry sdkworker.Regist
 	registry.RegisterWorkflowWithOptions(CatchupWorkflow, workflow.RegisterOptions{Name: catchupWorkflowName})
 	registry.RegisterWorkflowWithOptions(ForceReplicationWorkflow, workflow.RegisterOptions{Name: forceReplicationWorkflowName})
 	registry.RegisterWorkflowWithOptions(NamespaceHandoverWorkflow, workflow.RegisterOptions{Name: namespaceHandoverWorkflowName})
+	registry.RegisterWorkflowWithOptions(NamespaceHandoverWorkflowV2, workflow.RegisterOptions{Name: namespaceHandoverWorkflowV2Name})
 	registry.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
 }
 
@@ -85,17 +88,18 @@ func (wc *replicationWorkerComponent) DedicatedActivityWorkerOptions() *workerco
 
 func (wc *replicationWorkerComponent) activities() *activities {
 	return &activities{
-		historyShardCount:              wc.PersistenceConfig.NumHistoryShards,
-		executionManager:               wc.ExecutionManager,
-		namespaceRegistry:              wc.NamespaceRegistry,
-		historyClient:                  wc.HistoryClient,
-		frontendClient:                 wc.FrontendClient,
-		clientFactory:                  wc.ClientFactory,
-		clientBean:                     wc.ClientBean,
-		namespaceReplicationQueue:      wc.NamespaceReplicationQueue,
-		taskManager:                    wc.TaskManager,
-		logger:                         wc.Logger,
-		metricsHandler:                 wc.MetricsHandler,
-		forceReplicationMetricsHandler: wc.MetricsHandler.WithTags(metrics.WorkflowTypeTag(forceReplicationWorkflowName)),
+		historyShardCount:                wc.PersistenceConfig.NumHistoryShards,
+		executionManager:                 wc.ExecutionManager,
+		namespaceRegistry:                wc.NamespaceRegistry,
+		historyClient:                    wc.HistoryClient,
+		frontendClient:                   wc.FrontendClient,
+		clientFactory:                    wc.ClientFactory,
+		clientBean:                       wc.ClientBean,
+		namespaceReplicationQueue:        wc.NamespaceReplicationQueue,
+		taskManager:                      wc.TaskManager,
+		logger:                           wc.Logger,
+		metricsHandler:                   wc.MetricsHandler,
+		forceReplicationMetricsHandler:   wc.MetricsHandler.WithTags(metrics.WorkflowTypeTag(forceReplicationWorkflowName)),
+		generateMigrationTaskViaFrontend: dynamicconfig.WorkerGenerateMigrationTaskViaFrontend.Get(wc.DynamicCollection),
 	}
 }

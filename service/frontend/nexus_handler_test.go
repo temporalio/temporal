@@ -3,7 +3,6 @@ package frontend
 import (
 	"context"
 	"errors"
-	"regexp"
 	"testing"
 	"time"
 
@@ -118,7 +117,7 @@ func newOperationContext(options contextOptions) *operationContext {
 	)
 
 	checker := mockNamespaceChecker(oc.namespace.Name())
-	oc.auth = authorization.NewInterceptor(nil, mockAuthorizer{}, oc.metricsHandler, oc.logger, checker, nil, "", "")
+	oc.auth = authorization.NewInterceptor(nil, mockAuthorizer{}, oc.metricsHandler, oc.logger, checker, nil, "", "", dynamicconfig.GetBoolPropertyFn(false))
 	oc.namespaceConcurrencyLimitInterceptor = interceptor.NewConcurrentRequestLimitInterceptor(
 		nil,
 		nil,
@@ -133,7 +132,6 @@ func newOperationContext(options contextOptions) *operationContext {
 		nil,
 		mockRateLimiter{options.namespaceRateLimitAllow},
 		make(map[string]int),
-		func() bool { return true },
 	)
 	oc.rateLimitInterceptor = interceptor.NewRateLimitInterceptor(
 		mockRateLimiter{options.rateLimitAllow},
@@ -146,21 +144,11 @@ func newOperationContext(options contextOptions) *operationContext {
 	oc.forwardingEnabledForNamespace = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(
 		options.redirectAllow,
 	)
-	oc.headersBlacklist = dynamicconfig.NewGlobalCachedTypedValue(
-		dynamicconfig.NewCollection(
-			&dynamicconfig.StaticClient{
-				dynamicconfig.FrontendNexusRequestHeadersBlacklist.Key(): options.headersBlacklist,
-			},
-			nil,
-		),
-		dynamicconfig.FrontendNexusRequestHeadersBlacklist,
-		func(patterns []string) (*regexp.Regexp, error) {
-			if len(patterns) == 0 {
-				return matchNothing, nil
-			}
-			return util.WildCardStringsToRegexp(patterns)
-		},
-	)
+	re, err := dynamicconfig.ConvertWildcardStringListToRegexp(options.headersBlacklist)
+	if err != nil {
+		panic(err) // nolint:forbidigo
+	}
+	oc.headersBlacklist = dynamicconfig.GetTypedPropertyFn(re)
 	oc.redirectionInterceptor = interceptor.NewRedirection(
 		nil,
 		nil,

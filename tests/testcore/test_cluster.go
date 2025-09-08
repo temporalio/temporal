@@ -322,6 +322,11 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		}
 	}
 
+	chasmRegistry := chasm.NewRegistry(logger)
+	if err := chasmRegistry.Register(&chasm.CoreLibrary{}); err != nil {
+		return nil, err
+	}
+
 	temporalParams := &TemporalParams{
 		ClusterMetadataConfig:            clusterMetadataConfig,
 		PersistenceConfig:                pConfig,
@@ -348,7 +353,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		TLSConfigProvider:                tlsConfigProvider,
 		ServiceFxOptions:                 clusterConfig.ServiceFxOptions,
 		TaskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverBase.metadata),
-		ChasmRegistry:                    chasm.NewRegistry(),
+		ChasmRegistry:                    chasmRegistry,
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
 	}

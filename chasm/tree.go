@@ -5,7 +5,6 @@ package chasm
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"iter"
 	"reflect"
@@ -36,9 +35,9 @@ var (
 )
 
 var (
-	errAccessCheckFailed    = serviceerror.NewNotFound("access check failed, CHASM tree is closed for writes")
-	errComponentNotFound    = serviceerror.NewNotFound("component not found")
-	errTaskValidationFailed = errors.New("task validation failed")
+	errAccessCheckFailed = serviceerror.NewNotFound("access check failed, CHASM tree is closed for writes")
+	errComponentNotFound = serviceerror.NewNotFound("component not found")
+	errTaskNotValid      = serviceerror.NewNotFound("task is no longer valid")
 )
 
 type valueState uint8
@@ -150,7 +149,7 @@ type (
 		UpdateWorkflowStateStatus(
 			state enumsspb.WorkflowExecutionState,
 			status enumspb.WorkflowExecutionStatus,
-		) error
+		) (bool, error)
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
@@ -503,7 +502,8 @@ func (n *Node) initSerializedNode(ft fieldType) {
 				},
 			},
 		}
-	case fieldTypePointer:
+	case fieldTypePointer, fieldTypeDeferredPointer:
+		// A deferred pointer will be resolved to a regular pointer before persistence.
 		n.serializedNode = &persistencespb.ChasmNode{
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition: &persistencespb.VersionedTransition{
@@ -516,7 +516,7 @@ func (n *Node) initSerializedNode(ft fieldType) {
 			},
 		}
 	case fieldTypeUnspecified:
-		softassert.Fail(n.logger, "initSerializedNode can't be called with fieldTypeUnspecified")
+		softassert.Fail(n.logger, fmt.Sprintf("initSerializedNode can't be called with %v", ft))
 	}
 }
 
@@ -586,7 +586,7 @@ func (n *Node) serializeComponentNode() error {
 		var blob *commonpb.DataBlob
 		if !field.val.IsNil() {
 			var err error
-			if blob, err = serialization.ProtoEncodeBlob(field.val.Interface().(proto.Message), enumspb.ENCODING_TYPE_PROTO3); err != nil {
+			if blob, err = serialization.ProtoEncode(field.val.Interface().(proto.Message)); err != nil {
 				return err
 			}
 		}
@@ -617,24 +617,29 @@ func (n *Node) serializeComponentNode() error {
 //     -- when a child is removed, all its children are removed too.
 //
 // All removed paths are added to mutation.DeletedNodes (which is shared between all nodes in the tree).
-func (n *Node) syncSubComponents() error {
+//
+// True is returned when CHASM must perform deferred pointer resolution.
+func (n *Node) syncSubComponents() (bool, error) {
 	if n.parent != nil {
-		return serviceerror.NewInternal("syncSubComponents must be called on root node")
+		return false, serviceerror.NewInternal("syncSubComponents must be called on root node")
 	}
 	// If node value is nil, then it means there are no subcomponents to sync.
 	if n.value == nil {
-		return nil
+		return false, nil
 	}
 	return n.syncSubComponentsInternal(rootPath)
 }
 
+// syncSubComponentsInternal syncs a subcomponent's fields, managing the
+// associated node lifecycles. True is returned when CHASM must perform deferred
+// pointer resolution.
 func (n *Node) syncSubComponentsInternal(
 	nodePath []string,
-) error {
+) (needsPointerResolution bool, err error) {
 	childrenToKeep := make(map[string]struct{})
 	for field := range n.valueFields() {
 		if field.err != nil {
-			return field.err
+			return false, field.err
 		}
 
 		switch field.kind {
@@ -643,9 +648,10 @@ func (n *Node) syncSubComponentsInternal(
 		case fieldKindData:
 			// Nothing to sync.
 		case fieldKindSubField:
-			keepChild, updatedFieldV, err := n.syncSubField(field.val, field.name, nodePath)
+			keepChild, updatedFieldV, needsResolve, err := n.syncSubField(field.val, field.name, nodePath)
+			needsPointerResolution = needsPointerResolution || needsResolve
 			if err != nil {
-				return err
+				return false, err
 			}
 			if updatedFieldV.IsValid() {
 				field.val.Set(updatedFieldV)
@@ -671,7 +677,7 @@ func (n *Node) syncSubComponentsInternal(
 			if field.val.Kind() != reflect.Map {
 				errMsg := fmt.Sprintf("CHASM map must be of map type: value of %s is not of a map type", n.nodeName)
 				softassert.Fail(n.logger, errMsg)
-				return serviceerror.NewInternal(errMsg)
+				return false, serviceerror.NewInternal(errMsg)
 			}
 
 			if len(field.val.MapKeys()) == 0 {
@@ -683,7 +689,7 @@ func (n *Node) syncSubComponentsInternal(
 			if mapValT.Kind() != reflect.Struct || genericTypePrefix(mapValT) != chasmFieldTypePrefix {
 				errMsg := fmt.Sprintf("CHASM map value must be of Field[T] type: %s collection value type is not Field[T] but %s", n.nodeName, mapValT)
 				softassert.Fail(n.logger, errMsg)
-				return serviceerror.NewInternal(errMsg)
+				return false, serviceerror.NewInternal(errMsg)
 			}
 
 			collectionItemsToKeep := make(map[string]struct{})
@@ -691,11 +697,12 @@ func (n *Node) syncSubComponentsInternal(
 				mapItemV := field.val.MapIndex(mapKeyV)
 				collectionKey, err := n.mapKeyToString(mapKeyV)
 				if err != nil {
-					return err
+					return false, err
 				}
-				keepItem, updatedMapItemV, err := collectionNode.syncSubField(mapItemV, collectionKey, append(nodePath, field.name))
+				keepItem, updatedMapItemV, needsResolve, err := collectionNode.syncSubField(mapItemV, collectionKey, append(nodePath, field.name))
+				needsPointerResolution = needsPointerResolution || needsResolve
 				if err != nil {
-					return err
+					return false, err
 				}
 				if updatedMapItemV.IsValid() {
 					// The only way to update item in the map is to set it back.
@@ -706,14 +713,14 @@ func (n *Node) syncSubComponentsInternal(
 				}
 			}
 			if err := collectionNode.deleteChildren(collectionItemsToKeep, append(nodePath, field.name)); err != nil {
-				return err
+				return false, err
 			}
 			childrenToKeep[field.name] = struct{}{}
 		}
 	}
 
-	err := n.deleteChildren(childrenToKeep, nodePath)
-	return err
+	err = n.deleteChildren(childrenToKeep, nodePath)
+	return needsPointerResolution, err
 }
 
 func (n *Node) mapKeyToString(keyV reflect.Value) (string, error) {
@@ -810,8 +817,19 @@ func (n *Node) stringToMapKey(nodeName string, key string, keyT reflect.Type) (r
 //   - updatedFieldV if fieldV needs to be updated with new value.
 //     If updatedFieldV is invalid, then fieldV doesn't need to be updated.
 //     NOTE: this function doesn't update fieldV because it might come from the map which is not addressable.
+//   - needsPointerResolution indicates if a new deferred pointer has been added,
+//     in which case CHASM needs to resolve it as part of the current transaction.
 //   - error.
-func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []string) (keepNode bool, updatedFieldV reflect.Value, err error) {
+func (n *Node) syncSubField(
+	fieldV reflect.Value,
+	fieldN string,
+	nodePath []string,
+) (
+	keepNode bool,
+	updatedFieldV reflect.Value,
+	needsPointerResolution bool,
+	err error,
+) {
 	internalV := fieldV.FieldByName(internalFieldName)
 	//nolint:revive // Internal field is guaranteed to be of type fieldInternal.
 	internal := internalV.Interface().(fieldInternal)
@@ -834,6 +852,9 @@ func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []stri
 			if err = assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
 				return
 			}
+		case fieldTypeDeferredPointer:
+			// No-op, validation happens when the pointer is resolved.
+			needsPointerResolution = true
 		default:
 			err = serviceerror.NewInternalf("unexpected field type: %d", internal.fieldType())
 			return
@@ -849,11 +870,12 @@ func (n *Node) syncSubField(fieldV reflect.Value, fieldN string, nodePath []stri
 		updatedFieldV.FieldByName(internalFieldName).Set(reflect.ValueOf(internal))
 	}
 	if internal.fieldType() == fieldTypeComponent && internal.value() != nil {
-		if err = internal.node.syncSubComponentsInternal(append(nodePath, fieldN)); err != nil {
+		needsPointerResolution, err = internal.node.syncSubComponentsInternal(append(nodePath, fieldN))
+		if err != nil {
 			return
 		}
 	}
-	return true, updatedFieldV, nil
+	return true, updatedFieldV, needsPointerResolution, nil
 }
 
 func (n *Node) deleteChildren(childrenToKeep map[string]struct{}, currentPath []string) error {
@@ -884,7 +906,7 @@ func (n *Node) serializeDataNode() error {
 	var blob *commonpb.DataBlob
 	if protoValue != nil {
 		var err error
-		if blob, err = serialization.ProtoEncodeBlob(protoValue, enumspb.ENCODING_TYPE_PROTO3); err != nil {
+		if blob, err = serialization.ProtoEncode(protoValue); err != nil {
 			return err
 		}
 	}
@@ -1050,7 +1072,7 @@ func unmarshalProto(
 		}
 	}
 
-	if err := serialization.ProtoDecodeBlob(dataBlob, value.Interface().(proto.Message)); err != nil {
+	if err := serialization.Decode(dataBlob, value.Interface().(proto.Message)); err != nil {
 		return reflect.Value{}, err
 	}
 
@@ -1091,15 +1113,13 @@ func (n *Node) Ref(
 func (n *Node) componentNodePath(
 	component Component,
 ) ([]string, error) {
-	// TODO: keep track of deserilized value and
-	// only invoke syncSubComponents() when there's no match for the component.
-	if err := n.syncSubComponents(); err != nil {
-		return nil, err
-	}
-
-	// It's uncessary to deserialize entire tree as calling this method means
+	// It's unnecessary to deserialize entire tree as calling this method means
 	// caller already have the deserialized value.
 	for path, node := range n.andAllChildren() {
+		if node.fieldType() != fieldTypeComponent {
+			continue
+		}
+
 		if node.value == component {
 			return path, nil
 		}
@@ -1111,15 +1131,13 @@ func (n *Node) componentNodePath(
 func (n *Node) dataNodePath(
 	data proto.Message,
 ) ([]string, error) {
-	// TODO: keep track of deserialized node value and
-	// only invoke syncSubComponents() when there's no match for the component.
-	if err := n.syncSubComponents(); err != nil {
-		return nil, err
-	}
-
-	// It's uncessary to deserialize entire tree as calling this method means
+	// It's unnecessary to deserialize entire tree as calling this method means
 	// caller already have the deserialized value.
 	for path, node := range n.andAllChildren() {
+		if node.fieldType() != fieldTypeData {
+			continue
+		}
+
 		if node.value == data {
 			return path, nil
 		}
@@ -1140,12 +1158,11 @@ func (n *Node) AddTask(
 	component Component,
 	taskAttributes TaskAttributes,
 	task any,
-) error {
+) {
 	n.nodeBase.newTasks[component] = append(n.nodeBase.newTasks[component], taskWithAttributes{
 		task:       task,
 		attributes: taskAttributes,
 	})
-	return nil
 }
 
 // CloseTransaction is used by MutableState to close the transaction and
@@ -1158,23 +1175,15 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	maps.Copy(n.mutation.UpdatedNodes, n.systemMutation.UpdatedNodes)
 	maps.Copy(n.mutation.DeletedNodes, n.systemMutation.DeletedNodes)
 
-	if err := n.syncSubComponents(); err != nil {
+	needsPointerResolution, err := n.syncSubComponents()
+	if err != nil {
 		return NodesMutation{}, err
 	}
 
-	for nodePath, node := range n.andAllChildren() {
-		if node.valueState != valueStateNeedSerialize {
-			continue
-		}
-		if err := node.serialize(); err != nil {
+	if needsPointerResolution {
+		if err := n.resolveDeferredPointers(); err != nil {
 			return NodesMutation{}, err
 		}
-
-		encodedPath, err := n.pathEncoder.Encode(node, nodePath)
-		if err != nil {
-			return NodesMutation{}, err
-		}
-		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
 	}
 
 	nextVersionedTransition := &persistencespb.VersionedTransition{
@@ -1182,7 +1191,18 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		TransitionCount:          n.backend.NextTransitionCount(),
 	}
 
-	if err := n.closeTransactionHandleRootLifecycleChange(nextVersionedTransition); err != nil {
+	rootLifecycleChanged, err := n.closeTransactionHandleRootLifecycleChange()
+	if err != nil {
+		return NodesMutation{}, err
+	}
+
+	if rootLifecycleChanged {
+		if err := n.closeTransactionForceUpdateVisibility(nextVersionedTransition); err != nil {
+			return NodesMutation{}, err
+		}
+	}
+
+	if err := n.closeTransactionSerializeNodes(); err != nil {
 		return NodesMutation{}, err
 	}
 
@@ -1201,14 +1221,9 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	return n.mutation, nil
 }
 
-func (n *Node) closeTransactionHandleRootLifecycleChange(
-	nextVersionedTransition *persistencespb.VersionedTransition,
-) error {
-	lastUpdateVT := n.serializedNode.GetMetadata().LastUpdateVersionedTransition
-	if transitionhistory.Compare(lastUpdateVT, nextVersionedTransition) != 0 {
-		// root not updated in this transition
-		// and this covers all standby logic as well
-		return nil
+func (n *Node) closeTransactionHandleRootLifecycleChange() (bool, error) {
+	if n.valueState != valueStateNeedSerialize {
+		return false, nil
 	}
 
 	if n.terminated {
@@ -1221,7 +1236,7 @@ func (n *Node) closeTransactionHandleRootLifecycleChange(
 	chasmContext := NewContext(context.Background(), n)
 	component, err := n.Component(chasmContext, ComponentRef{})
 	if err != nil {
-		return err
+		return false, err
 	}
 	lifecycleState := component.LifecycleState(chasmContext)
 
@@ -1238,10 +1253,63 @@ func (n *Node) closeTransactionHandleRootLifecycleChange(
 		newState = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 		newStatus = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 	default:
-		return serviceerror.NewInternalf("unknown component lifecycle state: %v", lifecycleState)
+		return false, serviceerror.NewInternalf("unknown component lifecycle state: %v", lifecycleState)
 	}
 
 	return n.backend.UpdateWorkflowStateStatus(newState, newStatus)
+}
+
+func (n *Node) closeTransactionForceUpdateVisibility(
+	nextVersionedTransition *persistencespb.VersionedTransition,
+) error {
+	for _, child := range n.children {
+		componentAttr := child.serializedNode.Metadata.GetComponentAttributes()
+		if componentAttr == nil ||
+			componentAttr.Type != visibilityComponentFqType ||
+			transitionhistory.Compare(child.serializedNode.Metadata.LastUpdateVersionedTransition, nextVersionedTransition) == 0 {
+			// Skip force update is the node is not a visibility component or already updated in this transition.
+			continue
+		}
+
+		mutableContext := NewMutableContext(context.Background(), n)
+		visComponent, err := child.Component(mutableContext, ComponentRef{})
+		if err != nil {
+			return err
+		}
+
+		visibility, ok := visComponent.(*Visibility)
+		if !ok {
+			return serviceerror.NewInternalf("expected visibility component for component with type %s, but got %T", visibilityComponentFqType, visComponent)
+		}
+		visibility.GenerateTask(mutableContext)
+	}
+
+	return nil
+}
+
+func (n *Node) closeTransactionSerializeNodes() error {
+	for nodePath, node := range n.andAllChildren() {
+		if node.valueState != valueStateNeedSerialize {
+			continue
+		}
+		if err := node.serialize(); err != nil {
+			return err
+		}
+
+		if componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes(); componentAttr != nil &&
+			componentAttr.Type == visibilityComponentFqType &&
+			len(nodePath) != 1 {
+			return serviceerror.NewInternalf("CHASM visibility component must be immeidate child of the root node, but found at path %s", nodePath)
+		}
+
+		encodedPath, err := n.pathEncoder.Encode(node, nodePath)
+		if err != nil {
+			return err
+		}
+		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
+	}
+
+	return nil
 }
 
 //nolint:revive // cognitive complexity 28 (> max enabled 25)
@@ -1249,6 +1317,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	nextVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 	taskOffset := int64(1)
+	validateContext := NewContext(context.Background(), n)
 
 	for _, node := range n.andAllChildren() {
 		// no-op if node is not a component
@@ -1274,7 +1343,6 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		}
 
 		// Validate existing tasks and remove invalid ones.
-		validateContext := NewContext(context.Background(), n)
 		var validationErr error
 		deleteFunc := func(existingTask *persistencespb.ChasmComponentAttributes_Task) bool {
 			existingTaskInstance, err := node.deserializeComponentTask(existingTask)
@@ -1313,6 +1381,18 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		}
 
 		for _, newTask := range newTasks {
+			valid, err := node.validateTask(
+				validateContext,
+				newTask.attributes,
+				newTask.task,
+			)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				continue
+			}
+
 			taskValue := newTask.task
 			registrableTask, ok := n.registry.taskFor(taskValue)
 			if !ok {
@@ -1346,6 +1426,12 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		// pure tasks are sorted by scheduled time.
 		slices.SortFunc(componentAttr.PureTasks, comparePureTasks)
 	}
+
+	// TODO: We cannot simply assert that all tasks in n.nodeBase.newTasks are processed.
+	// That should be the case when only one transition for each transaction.
+	// However, when processing pure tasks, we run multiple pure tasks, thus multiple transitions
+	// in one transaction. This means it's possible that task generated for a component in the first
+	// task, and that component get deleted by the second task.
 
 	return nil
 }
@@ -1477,6 +1563,56 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask() error {
 		return err
 	}
 	n.mutation.UpdatedNodes[encodedPath] = firstTaskNode.serializedNode
+	return nil
+}
+
+// resolveDeferredPointers resolves all deferred pointers in the tree.
+// Returns error if any deferred pointer cannot be resolved, as deferred pointers
+// cannot be persisted after transaction close.
+func (n *Node) resolveDeferredPointers() error {
+	for _, node := range n.andAllChildren() {
+		if node.value == nil || node.fieldType() != fieldTypeComponent {
+			continue
+		}
+
+		for field := range node.valueFields() {
+			if field.err != nil {
+				return field.err
+			}
+
+			if field.kind != fieldKindSubField {
+				continue
+			}
+
+			internalV := field.val.FieldByName(internalFieldName)
+			internal, _ := internalV.Interface().(fieldInternal) //nolint:revive
+
+			if internal.fieldType() == fieldTypeDeferredPointer && internal.value() != nil {
+				// Must resolve the deferred pointer or fail the transaction.
+				var resolvedPath []string
+				var err error
+
+				switch value := internal.value().(type) {
+				case Component:
+					resolvedPath, err = n.componentNodePath(value)
+				case proto.Message:
+					resolvedPath, err = n.dataNodePath(value)
+				default:
+					err = serviceerror.NewInternalf("unable to create a deferred pointer for values of type: %T", value)
+				}
+				if err != nil {
+					return serviceerror.NewInternalf("failed to resolve deferred pointer during transaction close: %v", err)
+				}
+
+				// Update the field to be a regular pointer, reusing the existing serializedNode,
+				// and update the serializedNode's value.
+				newInternal := newFieldInternalWithValue(fieldTypePointer, resolvedPath)
+				newInternal.node = internal.node
+				newInternal.node.value = resolvedPath
+				internalV.Set(reflect.ValueOf(newInternal))
+			}
+		}
+	}
 	return nil
 }
 
@@ -2033,6 +2169,10 @@ func carryOverTaskStatus(
 func taskCategory(
 	task *persistencespb.ChasmComponentAttributes_Task,
 ) (tasks.Category, error) {
+	if task.Type == visibilityTaskFqType {
+		return tasks.CategoryVisibility, nil
+	}
+
 	isImmediate := task.ScheduledTime == nil || task.ScheduledTime.AsTime().Equal(TaskScheduledTimeImmediate)
 
 	if task.Destination != "" {
@@ -2113,7 +2253,7 @@ func serializeTask(
 ) (*commonpb.DataBlob, error) {
 	protoValue, ok := task.(proto.Message)
 	if ok {
-		return serialization.ProtoEncodeBlob(protoValue, enumspb.ENCODING_TYPE_PROTO3)
+		return serialization.ProtoEncode(protoValue)
 	}
 
 	taskGoType := registrableTask.goType
@@ -2149,7 +2289,7 @@ func serializeTask(
 		protoMessageFound = true
 
 		var err error
-		blob, err = serialization.ProtoEncodeBlob(fieldV.Interface().(proto.Message), enumspb.ENCODING_TYPE_PROTO3)
+		blob, err = serialization.ProtoEncode(fieldV.Interface().(proto.Message))
 		if err != nil {
 			return nil, err
 		}
@@ -2223,6 +2363,7 @@ func (n *Node) ExecutePureTask(
 // ValidatePureTask runs a pure task's associated validator, returning true
 // if the task is valid. Intended for use by standby executors as part of
 // EachPureTask's callback.
+// This method assumes the node's value has already been prepared (hydrated).
 func (n *Node) ValidatePureTask(
 	ctx context.Context,
 	taskAttributes TaskAttributes,
@@ -2242,18 +2383,41 @@ func (n *Node) ValidatePureTask(
 // If validation fails, that error is returned.
 func (n *Node) ValidateSideEffectTask(
 	ctx context.Context,
-	registry *Registry,
 	taskAttributes TaskAttributes,
 	taskInfo *persistencespb.ChasmTaskInfo,
 ) (any, error) {
 	taskType := taskInfo.Type
-	registrableTask, ok := registry.task(taskType)
+	registrableTask, ok := n.registry.task(taskType)
 	if !ok {
 		return nil, serviceerror.NewInternalf("unknown task type '%s'", taskType)
 	}
 
 	if registrableTask.isPureTask {
 		return nil, serviceerror.NewInternalf("ValidateSideEffectTask called on a Pure task '%s'", taskType)
+	}
+
+	nodePath, err := n.pathEncoder.Decode(taskInfo.Path)
+	if err != nil {
+		return nil, serviceerror.NewInternalf("failed to decode path '%s'", taskInfo.Path)
+	}
+
+	node, ok := n.findNode(nodePath)
+	if !ok {
+		return nil, nil
+	}
+
+	// node.serializedNode should always be available when running a side effect task.
+	if transitionhistory.Compare(
+		taskInfo.ComponentInitialVersionedTransition,
+		node.serializedNode.Metadata.InitialVersionedTransition,
+	) != 0 {
+		return nil, nil
+	}
+
+	// Component must be hydrated before the task's validator is called.
+	validateCtx := NewContext(ctx, n)
+	if err := node.prepareComponentValue(validateCtx); err != nil {
+		return nil, err
 	}
 
 	// TODO - cache deserialized task
@@ -2263,14 +2427,7 @@ func (n *Node) ValidateSideEffectTask(
 	}
 	taskInstance := taskValue.Interface()
 
-	validateCtx := NewContext(ctx, n)
-	// Component must be hydrated before the task's validator is called.
-	err = n.prepareComponentValue(validateCtx)
-	if err != nil {
-		return nil, err
-	}
-
-	valid, err := n.validateTask(validateCtx, taskAttributes, taskInstance)
+	valid, err := node.validateTask(validateCtx, taskAttributes, taskInstance)
 	if err != nil {
 		return nil, err
 	}
@@ -2349,6 +2506,34 @@ func (n *Node) ExecuteSideEffectTask(
 	return nil
 }
 
+func (n *Node) ComponentByPath(
+	chasmContext Context,
+	encodedPath string,
+) (Component, error) {
+	nodePath, err := n.pathEncoder.Decode(encodedPath)
+	if err != nil {
+		return nil, err
+	}
+
+	node, ok := n.findNode(nodePath)
+	if !ok {
+		return nil, errComponentNotFound
+	}
+
+	if err := node.prepareComponentValue(chasmContext); err != nil {
+		return nil, err
+	}
+
+	componentValue, ok := node.value.(Component)
+	if !ok {
+		return nil, serviceerror.NewInternalf(
+			"component value is not of type Component: %v", reflect.TypeOf(node.value),
+		)
+	}
+
+	return componentValue, nil
+}
+
 // makeValidationFn adapts the TaskValidator interface to the ComponentRef's
 // validation callback format. Returns a validation function that wraps the
 // given validation callback to be called before the RegistrableTask's registered
@@ -2382,7 +2567,7 @@ func makeValidationFn(
 
 		// Handle bool result.
 		if !result[0].Bool() {
-			return errTaskValidationFailed
+			return errTaskNotValid
 		}
 
 		return nil

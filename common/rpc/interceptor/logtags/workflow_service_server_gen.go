@@ -68,6 +68,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.DescribeTaskQueueResponse:
 		return nil
+	case *workflowservice.DescribeWorkerRequest:
+		return nil
+	case *workflowservice.DescribeWorkerResponse:
+		return nil
 	case *workflowservice.DescribeWorkerDeploymentRequest:
 		return nil
 	case *workflowservice.DescribeWorkerDeploymentResponse:
@@ -352,6 +356,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.SetWorkerDeploymentCurrentVersionRequest:
 		return nil
 	case *workflowservice.SetWorkerDeploymentCurrentVersionResponse:
+		return nil
+	case *workflowservice.SetWorkerDeploymentManagerRequest:
+		return nil
+	case *workflowservice.SetWorkerDeploymentManagerResponse:
 		return nil
 	case *workflowservice.SetWorkerDeploymentRampingVersionRequest:
 		return nil

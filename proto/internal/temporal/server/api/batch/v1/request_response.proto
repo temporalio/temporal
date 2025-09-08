@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package temporal.server.api.batch.v1;
+option go_package = "go.temporal.io/server/api/batch/v1;batch";
+
+import "temporal/api/workflowservice/v1/request_response.proto";
+import "temporal/api/enums/v1/batch_operation.proto";
+import "google/protobuf/duration.proto";
+
+message BatchOperationInput { 
+  string namespace_id = 1; 
+  
+  int64 concurrency = 2;
+
+  int64 attempts_on_retryable_error = 3;
+
+  google.protobuf.Duration activity_heartbeat_timeout = 4;
+
+  repeated string non_retryable_errors = 5;
+
+  temporal.api.enums.v1.BatchOperationType batch_type = 6;
+
+  // The request to start the batch operation.
+  temporal.api.workflowservice.v1.StartBatchOperationRequest request = 7;
+}

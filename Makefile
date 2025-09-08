@@ -59,7 +59,7 @@ TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
 TEST_TIMEOUT ?= 35m
 
 # Number of retries for *-coverage targets.
-FAILED_TEST_RETRIES ?= 2
+MAX_TEST_ATTEMPTS ?= 3
 
 # Whether or not to test with the race detector. All of (1 on y yes t true) are true values.
 TEST_RACE_FLAG ?= on
@@ -100,11 +100,13 @@ endef
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
+CHASM_PROTO_FILES = $(shell find ./chasm/lib -name "*.proto")
 PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
 API_BINPB := $(PROTO_ROOT)/api.binpb
 # Note: If you change the value of INTERNAL_BINPB, you'll have to add logic to
 # develop/buf-breaking.sh to handle the old and new values at once.
 INTERNAL_BINPB := $(PROTO_ROOT)/image.bin
+CHASM_BINPB := $(PROTO_ROOT)/chasm.bin
 PROTO_OUT := api
 
 ALL_SRC         := $(shell find . -name "*.go")
@@ -170,10 +172,10 @@ $(LOCALBIN):
 .PHONY: golangci-lint
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
-GOLANGCI_LINT_VERSION := v1.64.8
+GOLANGCI_LINT_VERSION := v2.4.0
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
-	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
 # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 GCI_VERSION := v0.13.6
@@ -181,7 +183,7 @@ GCI := $(LOCALBIN)/gci-$(GCI_VERSION)
 $(GCI): $(LOCALBIN)
 	$(call go-install-tool,$(GCI),github.com/daixiang0/gci,$(GCI_VERSION))
 
-GOTESTSUM_VER := v1.12.1
+GOTESTSUM_VER := v1.12.3
 GOTESTSUM := $(LOCALBIN)/gotestsum-$(GOTESTSUM_VER)
 $(GOTESTSUM): | $(LOCALBIN)
 	$(call go-install-tool,$(GOTESTSUM),gotest.tools/gotestsum,$(GOTESTSUM_VER))
@@ -207,21 +209,21 @@ ACTIONLINT := $(LOCALBIN)/actionlint-$(ACTIONLINT_VER)
 $(ACTIONLINT): | $(LOCALBIN)
 	$(call go-install-tool,$(ACTIONLINT),github.com/rhysd/actionlint/cmd/actionlint,$(ACTIONLINT_VER))
 
-WORKFLOWCHECK_VER := v0.3.0
+WORKFLOWCHECK_VER := master # TODO: pin this specific version once 0.3.0 follow-up is released
 WORKFLOWCHECK := $(LOCALBIN)/workflowcheck-$(WORKFLOWCHECK_VER)
 $(WORKFLOWCHECK): | $(LOCALBIN)
 	$(call go-install-tool,$(WORKFLOWCHECK),go.temporal.io/sdk/contrib/tools/workflowcheck,$(WORKFLOWCHECK_VER))
 
 # The following tools need to have a consistent name, so we use a versioned stamp file to ensure the version we want is installed
 # while installing to an unversioned binary name.
-GOIMPORTS_VER := v0.31.0
+GOIMPORTS_VER := v0.36.0
 GOIMPORTS := $(LOCALBIN)/goimports
 $(STAMPDIR)/goimports-$(GOIMPORTS_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VER))
 	@touch $@
 $(GOIMPORTS): $(STAMPDIR)/goimports-$(GOIMPORTS_VER)
 
-GOWRAP_VER := v1.4.2
+GOWRAP_VER := v1.4.3
 GOWRAP := $(LOCALBIN)/gowrap
 $(STAMPDIR)/gowrap-$(GOWRAP_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(GOWRAP),github.com/hexdigest/gowrap/cmd/gowrap,$(GOWRAP_VER))
@@ -236,14 +238,14 @@ $(STAMPDIR)/gomajor-$(GOMAJOR_VER): | $(STAMPDIR) $(LOCALBIN)
 $(GOMAJOR): $(STAMPDIR)/gomajor-$(GOMAJOR_VER)
 
 # Mockgen is called by name throughout the codebase, so we need to keep the binary name consistent
-MOCKGEN_VER := v0.5.0
+MOCKGEN_VER := v0.6.0
 MOCKGEN := $(LOCALBIN)/mockgen
 $(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(MOCKGEN),go.uber.org/mock/mockgen,$(MOCKGEN_VER))
 	@touch $@
 $(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
 
-STRINGER_VER := v0.31.0
+STRINGER_VER := v0.36.0
 STRINGER := $(LOCALBIN)/stringer
 $(STAMPDIR)/stringer-$(STRINGER_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(STRINGER),golang.org/x/tools/cmd/stringer,$(STRINGER_VER))
@@ -296,11 +298,20 @@ $(INTERNAL_BINPB): $(API_BINPB) $(PROTO_FILES)
 	@printf $(COLOR) "Generate proto image..."
 	@protoc --descriptor_set_in=$(API_BINPB) -I=$(PROTO_ROOT)/internal $(PROTO_FILES) -o $@
 
+$(CHASM_BINPB): $(API_BINPB) $(INTERNAL_BINPB) $(CHASM_PROTO_FILES)
+	@printf $(COLOR) "Generate CHASM proto image..."
+	@protoc --descriptor_set_in=$(API_BINPB):$(INTERNAL_BINPB) -I=. $(CHASM_PROTO_FILES) -o $@
+
 protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB)
-	@env \
-		PROTOGEN=$(PROTOGEN) MOCKGEN=$(MOCKGEN) GOIMPORTS=$(GOIMPORTS) \
-		API_BINPB=$(API_BINPB) PROTO_ROOT=$(PROTO_ROOT) PROTO_OUT=$(PROTO_OUT) \
-		./develop/protoc.sh
+	@go run ./cmd/tools/protogen \
+		-root=$(ROOT) \
+		-proto-out=$(PROTO_OUT) \
+		-proto-root=$(PROTO_ROOT) \
+		-protogen=$(PROTOGEN) \
+		-api-binpb=$(API_BINPB) \
+		-goimports=$(GOIMPORTS) \
+		-mockgen=$(MOCKGEN) \
+		$(PROTO_DIRS)
 
 proto-codegen:
 	@printf $(COLOR) "Generate service clients..."
@@ -368,14 +379,16 @@ lint-api: $(API_LINTER) $(API_BINPB)
 	@printf $(COLOR) "Linting proto API..."
 	$(call silent_exec, $(API_LINTER) --set-exit-status -I=$(PROTO_ROOT)/internal --descriptor-set-in $(API_BINPB) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES))
 
-lint-protos: $(BUF) $(INTERNAL_BINPB)
+lint-protos: $(BUF) $(INTERNAL_BINPB) $(CHASM_BINPB)
 	@printf $(COLOR) "Linting proto definitions..."
 	@$(BUF) lint $(INTERNAL_BINPB)
+	@$(BUF) lint --config chasm/lib/buf.yaml $(CHASM_BINPB)
 
 # Edit proto/internal/buf.yaml to exclude specific files from this check.
+# TODO: buf breaking check for CHASM protos.
 buf-breaking: $(BUF) $(API_BINPB) $(INTERNAL_BINPB)
 	@printf $(COLOR) "Run buf breaking proto changes check..."
-	@env BUF=$(BUF) API_BINPB=$(API_BINPB) INTERNAL_BINPB=$(INTERNAL_BINPB) MAIN_BRANCH=$(MAIN_BRANCH) \
+	@env BUF=$(BUF) API_BINPB=$(API_BINPB) INTERNAL_BINPB=$(INTERNAL_BINPB) CHASM_BINPB=$(CHASM_BINPB) MAIN_BRANCH=$(MAIN_BRANCH) \
 		./develop/buf-breaking.sh
 
 shell-check:
@@ -435,12 +448,12 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_DIRS)
 
 # This should use the same build flags as functional-test-coverage and functional-test-{xdc,ndc}-coverage for best build caching.
@@ -449,21 +462,27 @@ pre-build-functional-test-coverage: prepare-coverage-test
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_XDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_NDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
+
+report-test-crash: $(TEST_OUTPUT_ROOT)
+	@printf $(COLOR) "Generate test crash junit report..."
+	@go run ./cmd/tools/test-runner report-crash --gotestsum=report-crash \
+		--junitfile=$(TEST_OUTPUT_ROOT)/junit.crash.xml \
+		--crashreportname=$(CRASH_REPORT_NAME)
 
 ##### Schema #####
 install-schema-cass-es: temporal-cassandra-tool install-schema-es
@@ -637,4 +656,5 @@ go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER) $(GOWRAP)
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."
 	@printf $(COLOR) "========================================================================"
-	@git diff --name-status --exit-code || (printf $(COLOR) "========================================================================"; printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; exit 1)
+	@git status --porcelain
+	@test -z "`git status --porcelain`" || (printf $(COLOR) "========================================================================"; printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; exit 1)

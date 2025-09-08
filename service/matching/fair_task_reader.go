@@ -26,7 +26,7 @@ import (
 type (
 	fairTaskReader struct {
 		backlogMgr *fairBacklogManagerImpl
-		subqueue   int
+		subqueue   subqueueIndex
 		logger     log.Logger
 
 		lock sync.Mutex
@@ -70,7 +70,7 @@ const (
 
 func newFairTaskReader(
 	backlogMgr *fairBacklogManagerImpl,
-	subqueue int,
+	subqueue subqueueIndex,
 	initialAckLevel fairLevel,
 ) *fairTaskReader {
 	return &fairTaskReader{
@@ -277,6 +277,7 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) er
 
 // call with_out_ lock held
 func (tr *fairTaskReader) addTaskToMatcher(task *internalTask) {
+	task.resetMatcherState()
 	err := tr.backlogMgr.addSpooledTask(task)
 	if err == nil {
 		return
@@ -437,7 +438,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 			// Note that the task may have already been matched and removed from the matcher,
 			// but not completed yet. In that case this will be a noop. See comment at the top
 			// of completeTask. Lock order: task reader lock < matcher lock so this is okay.
-			task.removeFromMatcher()
+			task.setEvicted()
 		}
 	}
 

@@ -33,8 +33,8 @@ type (
 
 		subqueueLock        sync.Mutex
 		subqueues           []*fairTaskReader // subqueue index -> fairTaskReader
-		subqueuesByPriority map[int32]int     // priority key -> subqueue index
-		priorityBySubqueue  map[int]int32     // subqueue index -> priority key
+		subqueuesByPriority map[priorityKey]subqueueIndex
+		priorityBySubqueue  map[subqueueIndex]priorityKey
 
 		logger           log.Logger
 		throttledLogger  log.ThrottledLogger
@@ -69,8 +69,8 @@ func newFairBacklogManager(
 		config:              config,
 		tqCtx:               tqCtx,
 		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler),
-		subqueuesByPriority: make(map[int32]int),
-		priorityBySubqueue:  make(map[int]int32),
+		subqueuesByPriority: make(map[priorityKey]subqueueIndex),
+		priorityBySubqueue:  make(map[subqueueIndex]priorityKey),
 		matchingClient:      matchingClient,
 		metricsHandler:      metricsHandler,
 		logger:              logger,
@@ -101,7 +101,6 @@ func (c *fairBacklogManagerImpl) signalIfFatal(err error) bool {
 
 func (c *fairBacklogManagerImpl) Start() {
 	c.taskWriter.Start()
-	go c.periodicSync()
 }
 
 func (c *fairBacklogManagerImpl) Stop() {
@@ -117,7 +116,7 @@ func (c *fairBacklogManagerImpl) Stop() {
 	for i, r := range c.subqueues {
 		_, ackLevel := r.getLevels()
 		// oldestTime can be time.Time{} here since countDelta is 0
-		c.db.updateFairAckLevel(i, ackLevel, 0, -1, time.Time{})
+		c.db.updateFairAckLevel(subqueueIndex(i), ackLevel, 0, -1, time.Time{})
 	}
 	c.subqueueLock.Unlock()
 
@@ -141,6 +140,7 @@ func (c *fairBacklogManagerImpl) initState(state taskQueueState, err error) {
 	defer c.subqueueLock.Unlock()
 
 	c.loadSubqueuesLocked(state.subqueues)
+	go c.periodicSync()
 }
 
 func (c *fairBacklogManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -152,17 +152,18 @@ func (c *fairBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.
 	// TODO(pri): This assumes that subqueues never shrinks, and priority/fairness index of
 	// existing subqueues never changes. If we change that, this logic will need to change.
 	for i := range subqueues {
+		subqueueIdx := subqueueIndex(i)
 		if i >= len(c.subqueues) {
-			r := newFairTaskReader(c, i, fairLevelFromProto(subqueues[i].FairAckLevel))
+			r := newFairTaskReader(c, subqueueIdx, fairLevelFromProto(subqueues[i].FairAckLevel))
 			r.Start()
 			c.subqueues = append(c.subqueues, r)
 		}
-		c.subqueuesByPriority[subqueues[i].Key.Priority] = i
-		c.priorityBySubqueue[i] = subqueues[i].Key.Priority
+		c.subqueuesByPriority[priorityKey(subqueues[i].Key.Priority)] = subqueueIdx
+		c.priorityBySubqueue[subqueueIdx] = priorityKey(subqueues[i].Key.Priority)
 	}
 }
 
-func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority int32) int {
+func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) subqueueIndex {
 	levels := c.config.PriorityLevels()
 	if priority == 0 {
 		priority = defaultPriorityLevel(levels)
@@ -170,8 +171,8 @@ func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority int32) int {
 	if priority < 1 {
 		// this should have been rejected much earlier, but just clip it here
 		priority = 1
-	} else if priority > int32(levels) {
-		priority = int32(levels)
+	} else if priority > levels {
+		priority = levels
 	}
 
 	c.subqueueLock.Lock()
@@ -185,13 +186,13 @@ func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority int32) int {
 	// but we want to serialize these updates.
 	// TODO(pri): maybe we can improve that
 	subqueues, err := c.db.AllocateSubqueue(c.tqCtx, &persistencespb.SubqueueKey{
-		Priority: priority,
+		Priority: int32(priority),
 	})
 	if err != nil {
 		c.signalIfFatal(err)
-		// If we failed to write the metadata update, just use 0. If err was a fatal error
-		// (most likely case), the subsequent call to SpoolTask will fail.
-		return 0
+		// If we failed to write the metadata update, just use subqueueZero.
+		// If err was a fatal error (most likely case), the subsequent call to SpoolTask will fail.
+		return subqueueZero
 	}
 
 	c.loadSubqueuesLocked(subqueues)
@@ -221,7 +222,7 @@ func (c *fairBacklogManagerImpl) periodicSync() {
 }
 
 func (c *fairBacklogManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
-	subqueue := c.getSubqueueForPriority(taskInfo.Priority.GetPriorityKey())
+	subqueue := c.getSubqueueForPriority(priorityKey(taskInfo.Priority.GetPriorityKey()))
 	err := c.taskWriter.appendTask(subqueue, taskInfo)
 	c.signalIfFatal(err)
 	return err
@@ -273,10 +274,12 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 
 	result := make(map[int32]*taskqueuepb.TaskQueueStats)
 	backlogCounts := c.db.getApproximateBacklogCountsBySubqueue()
-	for subqueueKey, priorityKey := range c.priorityBySubqueue {
+	for subqueueIdx, priorityKey := range c.priorityBySubqueue {
+		pk := int32(priorityKey)
+
 		// Note that there could be more than one subqueue for the same priority.
-		if _, ok := result[priorityKey]; !ok {
-			result[priorityKey] = &taskqueuepb.TaskQueueStats{
+		if _, ok := result[pk]; !ok {
+			result[pk] = &taskqueuepb.TaskQueueStats{
 				// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
 				// be more appropriate in the future.
 				ApproximateBacklogAge: durationpb.New(0),
@@ -284,14 +287,14 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 		}
 
 		// Add backlog counts together across all subqueues for the same priority.
-		result[priorityKey].ApproximateBacklogCount += backlogCounts[subqueueKey]
+		result[pk].ApproximateBacklogCount += backlogCounts[subqueueIdx]
 
 		// Find greatest backlog age for across all subqueues for the same priority.
-		oldestBacklogTime := c.subqueues[subqueueKey].getOldestBacklogTime()
+		oldestBacklogTime := c.subqueues[subqueueIdx].getOldestBacklogTime()
 		if !oldestBacklogTime.IsZero() {
 			oldestBacklogAge := time.Since(oldestBacklogTime)
-			if oldestBacklogAge > result[priorityKey].ApproximateBacklogAge.AsDuration() {
-				result[priorityKey].ApproximateBacklogAge = durationpb.New(oldestBacklogAge)
+			if oldestBacklogAge > result[pk].ApproximateBacklogAge.AsDuration() {
+				result[pk].ApproximateBacklogAge = durationpb.New(oldestBacklogAge)
 			}
 		}
 	}
@@ -331,7 +334,7 @@ func (c *fairBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQu
 	status := make([]*taskqueuespb.InternalTaskQueueStatus, len(c.subqueues))
 	for i, r := range c.subqueues {
 		readLevel, ackLevel := r.getLevels()
-		count, maxReadLevel := c.db.getApproximateBacklogCountAndMaxReadLevel(i)
+		count, maxReadLevel := c.db.getApproximateBacklogCountAndMaxReadLevel(subqueueIndex(i))
 		status[i] = &taskqueuespb.InternalTaskQueueStatus{
 			FairReadLevel: readLevel.toProto(),
 			FairAckLevel:  ackLevel.toProto(),

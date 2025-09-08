@@ -5,6 +5,7 @@ package persistence
 import (
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -72,7 +73,7 @@ func (u *HistoryBranchUtilImpl) NewHistoryBranch(
 func (u *HistoryBranchUtilImpl) ParseHistoryBranchInfo(
 	branchToken []byte,
 ) (*persistencespb.HistoryBranch, error) {
-	return serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+	return serialization.HistoryBranchFromBlob(&commonpb.DataBlob{Data: branchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
 }
 
 func (u *HistoryBranchUtilImpl) UpdateHistoryBranchInfo(
@@ -80,7 +81,7 @@ func (u *HistoryBranchUtilImpl) UpdateHistoryBranchInfo(
 	branchInfo *persistencespb.HistoryBranch,
 	runID string,
 ) ([]byte, error) {
-	bi, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+	bi, err := serialization.HistoryBranchFromBlob(&commonpb.DataBlob{Data: branchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
 	if err != nil {
 		return nil, err
 	}

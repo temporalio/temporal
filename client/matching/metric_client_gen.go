@@ -121,6 +121,20 @@ func (c *metricClient) DescribeVersionedTaskQueues(
 	return c.client.DescribeVersionedTaskQueues(ctx, request, opts...)
 }
 
+func (c *metricClient) DescribeWorker(
+	ctx context.Context,
+	request *matchingservice.DescribeWorkerRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.DescribeWorkerResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientDescribeWorker")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeWorker(ctx, request, opts...)
+}
+
 func (c *metricClient) DispatchNexusTask(
 	ctx context.Context,
 	request *matchingservice.DispatchNexusTaskRequest,

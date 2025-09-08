@@ -18,18 +18,12 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/retrypolicy"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-)
-
-var (
-	matchAny     = regexp.MustCompile(".*")
-	matchNothing = regexp.MustCompile(".^")
 )
 
 // Config represents configuration for frontend service
@@ -63,7 +57,6 @@ type Config struct {
 	MaxNamespaceRPSPerInstance                                        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstRatioPerInstance                                 dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	MaxConcurrentLongRunningRequestsPerInstance                       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	ReducePollWorkflowHistoryRequestPriority                          dynamicconfig.BoolPropertyFn
 	MaxGlobalConcurrentLongRunningRequests                            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityRPSPerInstance                              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityBurstRatioPerInstance                       dynamicconfig.FloatPropertyFnWithNamespaceFilter
@@ -121,6 +114,9 @@ type Config struct {
 
 	// EnableTokenNamespaceEnforcement enables enforcement that namespace in completion token matches namespace of the request
 	EnableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
+
+	// ExposeAuthorizerErrors controls whether errors returned by the Authorizer will be wrapped with a PermissionDenied error.
+	ExposeAuthorizerErrors dynamicconfig.BoolPropertyFn
 
 	// gRPC keep alive options
 	// If a client pings too frequently, terminate the connection.
@@ -190,8 +186,9 @@ type Config struct {
 	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.AddressMatchRule]
 
 	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NexusRequestHeadersBlacklist   *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
-	NexusOperationsMetricTagConfig *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
+	NexusRequestHeadersBlacklist   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	NexusForwardRequestUseEndpoint dynamicconfig.BoolPropertyFn
+	NexusOperationsMetricTagConfig dynamicconfig.TypedPropertyFn[nexusoperations.NexusMetricTagConfig]
 
 	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -215,7 +212,7 @@ type Config struct {
 	ListWorkersEnabled      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkerCommandsEnabled   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	HTTPAllowedHosts *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+	HTTPAllowedHosts dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 }
 
 // NewConfig returns new service config with default values
@@ -253,7 +250,6 @@ func NewConfig(
 		MaxNamespaceRPSPerInstance:                                        dynamicconfig.FrontendMaxNamespaceRPSPerInstance.Get(dc),
 		MaxNamespaceBurstRatioPerInstance:                                 dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance.Get(dc),
 		MaxConcurrentLongRunningRequestsPerInstance:                       dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance.Get(dc),
-		ReducePollWorkflowHistoryRequestPriority:                          dynamicconfig.ReducePollWorkflowHistoryRequestPriority.Get(dc),
 		MaxGlobalConcurrentLongRunningRequests:                            dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests.Get(dc),
 		MaxNamespaceVisibilityRPSPerInstance:                              dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Get(dc),
 		MaxNamespaceVisibilityBurstRatioPerInstance:                       dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Get(dc),
@@ -292,6 +288,7 @@ func NewConfig(
 		DefaultWorkflowTaskTimeout:               dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
 		EnableServerVersionCheck:                 dynamicconfig.EnableServerVersionCheck.Get(dc),
 		EnableTokenNamespaceEnforcement:          dynamicconfig.EnableTokenNamespaceEnforcement.Get(dc),
+		ExposeAuthorizerErrors:                   dynamicconfig.ExposeAuthorizerErrors.Get(dc),
 		KeepAliveMinTime:                         dynamicconfig.KeepAliveMinTime.Get(dc),
 		KeepAlivePermitWithoutStream:             dynamicconfig.KeepAlivePermitWithoutStream.Get(dc),
 		KeepAliveMaxConnectionIdle:               dynamicconfig.KeepAliveMaxConnectionIdle.Get(dc),
@@ -325,28 +322,14 @@ func NewConfig(
 		EnableWorkerVersioningWorkflow: dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Get(dc),
 		EnableWorkerVersioningRules:    dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Get(dc),
 
-		EnableNexusAPIs:              dynamicconfig.EnableNexus.Get(dc),
-		CallbackURLMaxLength:         dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
-		CallbackHeaderMaxSize:        dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		MaxCallbacksPerWorkflow:      dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
-		MaxNexusOperationTokenLength: nexusoperations.MaxOperationTokenLength.Get(dc),
-		NexusRequestHeadersBlacklist: dynamicconfig.NewGlobalCachedTypedValue(
-			dc,
-			dynamicconfig.FrontendNexusRequestHeadersBlacklist,
-			func(patterns []string) (*regexp.Regexp, error) {
-				if len(patterns) == 0 {
-					return matchNothing, nil
-				}
-				return util.WildCardStringsToRegexp(patterns)
-			},
-		),
-		NexusOperationsMetricTagConfig: dynamicconfig.NewGlobalCachedTypedValue(
-			dc,
-			nexusoperations.MetricTagConfiguration,
-			func(config nexusoperations.NexusMetricTagConfig) (*nexusoperations.NexusMetricTagConfig, error) {
-				return &config, nil
-			},
-		),
+		EnableNexusAPIs:                dynamicconfig.EnableNexus.Get(dc),
+		CallbackURLMaxLength:           dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		CallbackHeaderMaxSize:          dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		MaxCallbacksPerWorkflow:        dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
+		MaxNexusOperationTokenLength:   nexusoperations.MaxOperationTokenLength.Get(dc),
+		NexusRequestHeadersBlacklist:   dynamicconfig.FrontendNexusRequestHeadersBlacklist.Get(dc),
+		NexusForwardRequestUseEndpoint: dynamicconfig.FrontendNexusForwardRequestUseEndpointDispatch.Get(dc),
+		NexusOperationsMetricTagConfig: nexusoperations.MetricTagConfiguration.Get(dc),
 
 		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
@@ -366,12 +349,7 @@ func NewConfig(
 		ListWorkersEnabled:             dynamicconfig.ListWorkersEnabled.Get(dc),
 		WorkerCommandsEnabled:          dynamicconfig.WorkerCommandsEnabled.Get(dc),
 
-		HTTPAllowedHosts: dynamicconfig.NewGlobalCachedTypedValue(dc, dynamicconfig.FrontendHTTPAllowedHosts, func(patterns []string) (*regexp.Regexp, error) {
-			if len(patterns) == 0 {
-				return matchAny, nil
-			}
-			return util.WildCardStringsToRegexp(patterns)
-		}),
+		HTTPAllowedHosts: dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
 	}
 }
 

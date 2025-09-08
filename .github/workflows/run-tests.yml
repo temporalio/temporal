@@ -62,6 +62,7 @@ env:
   PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
+  MAX_TEST_ATTEMPTS: 3
 
 jobs:
   set-up-single-test:
@@ -136,8 +137,6 @@ jobs:
 
   pre-build:
     name: Pre-build for cache
-    strategy:
-      fail-fast: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -150,7 +149,7 @@ jobs:
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: "go.mod"
-          cache: false  # do our own caching
+          cache: false # do our own caching
 
       - name: Restore dependencies
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -158,7 +157,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - run: make pre-build-functional-test-coverage
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -180,8 +179,6 @@ jobs:
   misc-checks:
     name: Misc checks
     needs: pre-build
-    strategy:
-      fail-fast: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -196,14 +193,14 @@ jobs:
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: "go.mod"
-          cache: false  # do our own caching
+          cache: false # do our own caching
 
       - name: Restore dependencies
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -230,8 +227,6 @@ jobs:
     if: ${{ inputs.run_single_functional_test != true }}
     name: Unit test
     needs: [pre-build, set-up-single-test]
-    strategy:
-      fail-fast: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -242,13 +237,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-          cache: false  # do our own caching
+          cache: false # do our own caching
 
       - name: Restore dependencies
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
         uses: actions/cache/restore@v4
@@ -263,6 +258,12 @@ jobs:
           UNIT_TEST_DIRS: ${{ inputs.unit_test_directory }}
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
           TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
+
+      - name: Generate crash report
+        if: failure()
+        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -315,8 +316,6 @@ jobs:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
     name: Integration test
     needs: [pre-build, set-up-single-test]
-    strategy:
-      fail-fast: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -337,13 +336,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-          cache: false  # do our own caching
+          cache: false # do our own caching
 
       - name: Restore dependencies
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
         uses: actions/cache/restore@v4
@@ -354,6 +353,12 @@ jobs:
       - name: Run integration test
         timeout-minutes: 15
         run: make integration-test-coverage
+
+      - name: Generate crash report
+        if: failure()
+        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -408,20 +413,21 @@ jobs:
 
   functional-test:
     if: ${{ inputs.run_single_unit_test != true }}
-    name: Functional test
+    name: Functional test (${{ matrix.name }}, shard ${{ matrix.shard_index }})
     needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
       matrix:
-        runs-on: ${{ fromJson(needs.set-up-single-test.outputs.runs_on) }}
-        shard_index: ${{ fromJson(needs.set-up-single-test.outputs.shard_indices) }}
         name:
           - cass_es
           - cass_es8
+          - cass_os2
           - sqlite
           - mysql8
           - postgres12
           - postgres12_pgx
+        shard_index: ${{ fromJson(needs.set-up-single-test.outputs.shard_indices) }}
+        runs-on: ${{ fromJson(needs.set-up-single-test.outputs.runs_on) }}
         include:
           - name: cass_es
             persistence_type: nosql
@@ -437,6 +443,10 @@ jobs:
             es_version: v8
             # Cassandra tests need a larger instance
             runs_on_override: ubuntu-latest-8-cores
+          - name: cass_os2
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch2]
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
@@ -484,13 +494,13 @@ jobs:
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           go-version-file: "go.mod"
-          cache: false  # do our own caching
+          cache: false # do our own caching
 
       - name: Restore dependencies
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
         uses: actions/cache/restore@v4
@@ -505,7 +515,7 @@ jobs:
           test_job_name="Functional test (${{ matrix.runs_on_override || matrix.runs-on }}, ${{matrix.shard_index}}, ${{matrix.name}})"
           job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
           # curl or jq might silently fail, but we are okay with that.
-          # We don't want to fail the job if we can't get the job id.          
+          # We don't want to fail the job if we can't get the job id.
           job_id=$(curl -L \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
@@ -523,6 +533,12 @@ jobs:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
           TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
           TEMPORAL_OTEL_DEBUG: true
+
+      - name: Generate crash report
+        if: failure()
+        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -588,7 +604,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
+        name: [cass_es, cass_es8, cass_os2, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
@@ -604,6 +620,10 @@ jobs:
             containers: [cassandra, elasticsearch8]
             # Cassandra tests need a larger instance
             runs_on_override: ubuntu-latest-8-cores
+          - name: cass_os2
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch2]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -640,13 +660,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-          cache: false  # do our own caching
+          cache: false # do our own caching
 
       - name: Restore dependencies
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
         uses: actions/cache/restore@v4
@@ -672,11 +692,17 @@ jobs:
           echo "JOB_ID=${job_id-unknown}" >> "$GITHUB_OUTPUT"
 
       - name: Run functional test xdc
-        timeout-minutes: 35   # update this to TEST_TIMEOUT+5 if you update the Makefile
+        timeout-minutes: 35 # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: make functional-test-xdc-coverage
         env:
           TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
           TEMPORAL_OTEL_DEBUG: true
+
+      - name: Generate crash report
+        if: failure()
+        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -744,6 +770,7 @@ jobs:
         name:
           - cass_es
           - cass_es8
+          - cass_os2
           - mysql8
           - postgres12
           - postgres12_pgx
@@ -762,6 +789,10 @@ jobs:
             es_version: v8
             # Cassandra tests need a larger instance
             runs_on_override: ubuntu-latest-8-cores
+          - name: cass_os2
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch2]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -795,13 +826,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-          cache: false  # do our own caching
+          cache: false # do our own caching
 
       - name: Restore dependencies
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
         uses: actions/cache/restore@v4
@@ -832,6 +863,12 @@ jobs:
         env:
           TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
           TEMPORAL_OTEL_DEBUG: true
+
+      - name: Generate crash report
+        if: failure()
+        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Upload code coverage to Codecov
         uses: codecov/codecov-action@v5

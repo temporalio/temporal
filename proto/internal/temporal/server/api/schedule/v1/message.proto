@@ -10,7 +10,6 @@ import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/schedule/v1/message.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
-import "temporal/server/api/enums/v1/common.proto";
 
 import "google/protobuf/timestamp.proto";
 
@@ -139,75 +138,3 @@ message NextTimeCache {
     bool completed = 5;
 }
 
-
-// State machine scheduler internal state.
-message SchedulerInternal {
-    // Scheduler request parameters and metadata. 
-    temporal.api.schedule.v1.Schedule schedule = 2;
-    temporal.api.schedule.v1.ScheduleInfo info = 3;
-    temporal.api.schedule.v1.SchedulePatch initial_patch = 4;
-
-    // State common to all generators is stored in the top-level machine.
-    string namespace = 5;
-    string namespace_id = 6;
-    string schedule_id = 7;
-
-    // Implemented as a sequence number. Used for optimistic locking against
-    // update requests.
-    int64 conflict_token = 8;
-}
-
-// State machine scheduler's Generator internal state.
-message GeneratorInternal {
-    // Generator waits for the next_invocation_time before buffering more actions.
-    google.protobuf.Timestamp next_invocation_time = 2;
-
-    // High water mark.
-    google.protobuf.Timestamp last_processed_time = 3;
-}
-
-// State machine scheduler's Invoker internal state.
-message InvokerInternal {
-    temporal.server.api.enums.v1.SchedulerInvokerState state = 1;
-
-    // Buffered starts that will be started by the Invoker.
-    repeated BufferedStart buffered_starts = 2;
-
-    // Workflow executions that will be cancelled due to overlap policy.
-    repeated temporal.api.common.v1.WorkflowExecution cancel_workflows = 3;
-
-    // Workflow executions that will be terminated due to overlap policy.
-    repeated temporal.api.common.v1.WorkflowExecution terminate_workflows = 4;
-
-    // High water mark, used for evaluating when to fire tasks that are backing
-    // off from a retry. LastProcessedTime is stored as state so that task
-    // generation will be consistent, regardless of when generation occurs, such
-    // as after applying a replicated state (as opposed to evaluating based on
-    // present time).
-    google.protobuf.Timestamp last_processed_time = 5;
-}
-
-// State machine scheduler's Backfiller internal state. Backfill requests are 1:1
-// with Backfiller nodes. Backfiller nodes also handle immediate trigger requests.
-message BackfillerInternal {
-    oneof request {
-        temporal.api.schedule.v1.BackfillRequest backfill_request = 1;
-
-        // When set, immediately buffer a single manual action.
-        temporal.api.schedule.v1.TriggerImmediatelyRequest trigger_request = 2;
-    }
-
-    // Every Backfiller should be assigned a unique ID upon creation, used
-    // for deduplication.
-    string backfill_id = 5;
-    
-    // Backfiller waits for the next_invocation_time before buffering more actions.
-    google.protobuf.Timestamp next_invocation_time = 6;
-     
-    // High water mark.
-    google.protobuf.Timestamp last_processed_time = 7;
-
-    // Attempt count, incremented when the buffer is full and the Backfiller
-    // needs to back off before retrying to fill.
-    int64 attempt = 8;
-}
