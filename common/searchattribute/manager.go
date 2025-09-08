@@ -23,7 +23,7 @@ const (
 	cacheRefreshTimeout               = 5 * time.Second
 	cacheRefreshInterval              = 60 * time.Second
 	cacheRefreshIfUnavailableInterval = 20 * time.Second
-	cacheRefreshColdInterval          = 5 * time.Second
+	cacheRefreshColdInterval          = 1 * time.Second
 )
 
 type (
@@ -111,7 +111,12 @@ func (m *managerImpl) refreshCache(forceRefreshCache bool, now time.Time) (cache
 func (m *managerImpl) refreshCacheLocked(saCache cache, now time.Time) (cache, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), cacheRefreshTimeout)
 	defer cancel()
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
+	if saCache.dbVersion == 0 {
+		// if cache is cold, use the highest priority caller
+		ctx = headers.SetCallerInfo(ctx, headers.SystemOperatorCallerInfo)
+	} else {
+		ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
+	}
 
 	clusterMetadata, err := m.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {
