@@ -342,6 +342,29 @@ func (c *clientImpl) IndexPutTemplate(ctx context.Context, templateName string, 
 	return resp.Acknowledged, nil
 }
 
+func (c *clientImpl) ClusterPutSettings(ctx context.Context, bodyString string) (bool, error) {
+	// Use raw HTTP request since ClusterPutSettings is not available in olivere/elastic v7
+	resp, err := c.esClient.PerformRequest(ctx, elastic.PerformRequestOptions{
+		Method:      "PUT",
+		Path:        "/_cluster/settings",
+		Body:        bodyString,
+		ContentType: "application/json",
+	})
+	if err != nil {
+		return false, err
+	}
+
+	// Parse the response to check if it was acknowledged
+	var result struct {
+		Acknowledged bool `json:"acknowledged"`
+	}
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
+		return false, err
+	}
+
+	return result.Acknowledged, nil
+}
+
 func (c *clientImpl) IndexExists(ctx context.Context, indexName string) (bool, error) {
 	return c.esClient.IndexExists(indexName).Do(ctx)
 }

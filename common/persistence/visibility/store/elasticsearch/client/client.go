@@ -45,6 +45,9 @@ type (
 	CLIClient interface {
 		Client
 		Delete(ctx context.Context, indexName string, docID string, version int64) error
+		IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error)
+		ClusterPutSettings(ctx context.Context, bodyString string) (bool, error)
+		Ping(ctx context.Context) error
 	}
 
 	IntegrationTestsClient interface {
