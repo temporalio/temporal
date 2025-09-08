@@ -38,7 +38,8 @@ func Invoke(
 		return nil, err
 	}
 
-	var activityStartedTime time.Time
+	var attemptStartedTime time.Time
+	var firstScheduledTime time.Time
 	var taskQueue string
 	var workflowTypeName string
 	var fabricateStartedEvent bool
@@ -109,7 +110,8 @@ func Invoke(
 				// Unable to add ActivityTaskCompleted event to history
 				return nil, err
 			}
-			activityStartedTime = ai.StartedTime.AsTime()
+			attemptStartedTime = ai.StartedTime.AsTime()
+			firstScheduledTime = ai.FirstScheduledTime.AsTime()
 			taskQueue = ai.TaskQueue
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
@@ -121,15 +123,21 @@ func Invoke(
 		workflowConsistencyChecker,
 	)
 
-	if err == nil && !activityStartedTime.IsZero() && !fabricateStartedEvent {
-		metrics.ActivityE2ELatency.With(
-			workflow.GetPerTaskQueueFamilyScope(
-				shard.GetMetricsHandler(), namespace, taskQueue, shard.GetConfig(),
-				metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope),
-				metrics.WorkflowTypeTag(workflowTypeName),
-				metrics.ActivityTypeTag(token.ActivityType),
-			),
-		).Record(time.Since(activityStartedTime))
+	if err == nil && !fabricateStartedEvent {
+		workflow.RecordActivityCompletionMetrics(
+			shard,
+			namespace,
+			taskQueue,
+			workflow.ActivityCompletionMetrics{
+				AttemptStartedTime: attemptStartedTime,
+				FirstScheduledTime: firstScheduledTime,
+				Status:             workflow.ActivityStatusSucceeded,
+				Closed:             true,
+			},
+			metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope),
+			metrics.WorkflowTypeTag(workflowTypeName),
+			metrics.ActivityTypeTag(token.ActivityType),
+		)
 	}
 	return &historyservice.RespondActivityTaskCompletedResponse{}, err
 }

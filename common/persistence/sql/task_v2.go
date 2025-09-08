@@ -127,7 +127,7 @@ func (m *sqlTaskManagerV2) GetTasks(
 	}
 
 	tqId, tqHash := taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, request.Subqueue)
-	rows, err := m.Db.SelectFromTasksV2(ctx, sqlplugin.TasksFilterV2{
+	rows, err := m.DB.SelectFromTasksV2(ctx, sqlplugin.TasksFilterV2{
 		RangeHash:         tqHash,
 		TaskQueueID:       tqId,
 		InclusiveMinLevel: &inclusiveMinLevel,
@@ -175,7 +175,7 @@ func (m *sqlTaskManagerV2) CompleteTasksLessThan(
 		TaskPass: request.ExclusiveMaxPass,
 		TaskID:   request.ExclusiveMaxTaskID,
 	}
-	result, err := m.Db.DeleteFromTasksV2(ctx, sqlplugin.TasksFilterV2{
+	result, err := m.DB.DeleteFromTasksV2(ctx, sqlplugin.TasksFilterV2{
 		RangeHash:         tqHash,
 		TaskQueueID:       tqId,
 		ExclusiveMaxLevel: &exclusiveMaxLevel,

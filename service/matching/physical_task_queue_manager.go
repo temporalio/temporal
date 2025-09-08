@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -582,7 +583,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 		return c.priMatcher.Offer(ctx, task)
 	}
 
-	childCtx, cancel := newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
+	childCtx, cancel := contextutil.WithDeadlineBuffer(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 	defer cancel()
 
 	return c.oldMatcher.Offer(childCtx, task)
@@ -691,31 +692,6 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 
 	c.deploymentVersionRegistered = true
 	return nil
-}
-
-// newChildContext creates a child context with desired timeout.
-// if tailroom is non-zero, then child context timeout will be
-// the minOf(parentCtx.Deadline()-tailroom, timeout). Use this
-// method to create child context when childContext cannot use
-// all of parent's deadline but instead there is a need to leave
-// some time for parent to do some post-work
-func newChildContext(
-	parent context.Context,
-	timeout time.Duration,
-	tailroom time.Duration,
-) (context.Context, context.CancelFunc) {
-	if parent.Err() != nil {
-		return parent, func() {}
-	}
-	deadline, ok := parent.Deadline()
-	if !ok {
-		return context.WithTimeout(parent, timeout)
-	}
-	remaining := time.Until(deadline) - tailroom
-	if remaining < timeout {
-		timeout = max(0, remaining)
-	}
-	return context.WithTimeout(parent, timeout)
 }
 
 func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {

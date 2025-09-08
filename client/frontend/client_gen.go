@@ -739,6 +739,16 @@ func (c *clientImpl) SetWorkerDeploymentCurrentVersion(
 	return c.client.SetWorkerDeploymentCurrentVersion(ctx, request, opts...)
 }
 
+func (c *clientImpl) SetWorkerDeploymentManager(
+	ctx context.Context,
+	request *workflowservice.SetWorkerDeploymentManagerRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.SetWorkerDeploymentManagerResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.SetWorkerDeploymentManager(ctx, request, opts...)
+}
+
 func (c *clientImpl) SetWorkerDeploymentRampingVersion(
 	ctx context.Context,
 	request *workflowservice.SetWorkerDeploymentRampingVersionRequest,

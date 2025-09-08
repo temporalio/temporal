@@ -33,12 +33,12 @@ func (j *junitReport) read() error {
 	return nil
 }
 
-func generateForTimedoutTests(timedoutTests []string) *junitReport {
+func generateStatic(names []string, suffix string, message string) *junitReport {
 	var testcases []junit.Testcase
-	for _, name := range timedoutTests {
+	for _, name := range names {
 		testcases = append(testcases, junit.Testcase{
-			Name:    name + " (timeout)",
-			Failure: &junit.Result{Message: "Timeout"},
+			Name:    fmt.Sprintf("%s (%s)", name, suffix),
+			Failure: &junit.Result{Message: message},
 		})
 	}
 	return &junitReport{

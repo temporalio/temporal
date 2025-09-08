@@ -266,7 +266,6 @@ type Config struct {
 	ReplicationProcessorSchedulerWorkerCount            dynamicconfig.TypedSubscribable[int]
 	ReplicationLowPriorityProcessorSchedulerWorkerCount dynamicconfig.TypedSubscribable[int]
 	ReplicationLowPriorityTaskParallelism               dynamicconfig.IntPropertyFn
-	EnableReplicationEagerRefreshNamespace              dynamicconfig.BoolPropertyFn
 	EnableReplicationTaskBatching                       dynamicconfig.BoolPropertyFn
 	EnableReplicationTaskTieredProcessing               dynamicconfig.BoolPropertyFn
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
@@ -528,7 +527,6 @@ func NewConfig(
 		ReplicationProcessorSchedulerWorkerCount:            dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Subscribe(dc),
 		ReplicationLowPriorityProcessorSchedulerWorkerCount: dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount.Subscribe(dc),
 		ReplicationLowPriorityTaskParallelism:               dynamicconfig.ReplicationLowPriorityTaskParallelism.Get(dc),
-		EnableReplicationEagerRefreshNamespace:              dynamicconfig.EnableEagerNamespaceRefresher.Get(dc),
 		EnableReplicationTaskBatching:                       dynamicconfig.EnableReplicationTaskBatching.Get(dc),
 		EnableReplicationTaskTieredProcessing:               dynamicconfig.EnableReplicationTaskTieredProcessing.Get(dc),
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),

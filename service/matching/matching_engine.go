@@ -34,6 +34,7 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -2416,7 +2417,7 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 		request.LastKnownTableVersion = 0
 
 		var cancel context.CancelFunc
-		ctx, cancel = newChildContext(ctx, e.config.ListNexusEndpointsLongPollTimeout(), returnEmptyTaskTimeBudget)
+		ctx, cancel = contextutil.WithDeadlineBuffer(ctx, e.config.ListNexusEndpointsLongPollTimeout(), returnEmptyTaskTimeBudget)
 		defer cancel()
 	}
 
@@ -2548,7 +2549,7 @@ func (e *matchingEngineImpl) pollTask(
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
 	// returned to the handler before a context timeout error is generated.
-	ctx, cancel := newChildContext(ctx, pm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, pm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
 	defer cancel()
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
