@@ -158,6 +158,7 @@ func SearchAttributeMapperProviderProvider(
 }
 
 func SearchAttributeProviderProvider(
+	logger log.SnTaggedLogger,
 	timeSource clock.TimeSource,
 	cmMgr persistence.ClusterMetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
@@ -165,10 +166,12 @@ func SearchAttributeProviderProvider(
 	return searchattribute.NewManager(
 		timeSource,
 		cmMgr,
+		logger,
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection))
 }
 
 func SearchAttributeManagerProvider(
+	logger log.SnTaggedLogger,
 	timeSource clock.TimeSource,
 	cmMgr persistence.ClusterMetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
@@ -176,6 +179,7 @@ func SearchAttributeManagerProvider(
 	return searchattribute.NewManager(
 		timeSource,
 		cmMgr,
+		logger,
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection))
 }
 
