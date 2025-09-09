@@ -9,10 +9,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	adminservicespb "go.temporal.io/server/api/adminservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/searchattribute"
@@ -58,8 +61,10 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) simpleWorkflow(ctx workfl
 
 // checkReportedProblemsSearchAttribute is a helper function to verify reported problems search attributes
 func (s *WorkflowTaskReportedProblemsReplicationSuite) checkReportedProblemsSearchAttribute(
+	admin adminservicespb.AdminServiceClient,
 	client sdkclient.Client,
 	workflowID, runID string,
+	namespace string,
 	expectedCategory, expectedCause string,
 	shouldExist bool,
 ) {
@@ -85,6 +90,11 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) checkReportedProblemsSear
 
 			// Validate attempt number after verifying search attribute values
 			require.GreaterOrEqual(t, description.GetPendingWorkflowTask().Attempt, int32(2))
+
+			category, cause, err := s.getWFTFailure(admin, namespace, workflowID, runID)
+			require.NoError(t, err)
+			require.Equal(t, expectedCategory, category)
+			require.Equal(t, expectedCause, cause)
 		} else {
 			// Check that the search attribute is not present or is nil
 			if description.WorkflowExecutionInfo.SearchAttributes != nil &&
@@ -93,6 +103,29 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) checkReportedProblemsSear
 			}
 		}
 	}, 20*time.Second, 500*time.Millisecond)
+}
+
+func (s *WorkflowTaskReportedProblemsReplicationSuite) getWFTFailure(admin adminservicespb.AdminServiceClient, ns, wfid, runid string) (string, string, error) {
+	resp, err := admin.DescribeMutableState(context.Background(), &adminservicespb.DescribeMutableStateRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wfid,
+			RunId:      runid,
+		},
+	})
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), resp)
+	require.NotNil(s.T(), resp.DatabaseMutableState)
+	require.NotNil(s.T(), resp.DatabaseMutableState.ExecutionInfo)
+	require.NotNil(s.T(), resp.DatabaseMutableState.ExecutionInfo.LastWorkflowTaskFailure)
+	switch i := resp.DatabaseMutableState.ExecutionInfo.GetLastWorkflowTaskFailure().(type) {
+	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause:
+		return "WorkflowTaskFailed", i.LastWorkflowTaskFailureCause.String(), nil
+	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType:
+		return "WorkflowTaskTimedOut", i.LastWorkflowTaskTimedOutType.String(), nil
+	default:
+		return "", "", nil
+	}
 }
 
 func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedProblemsReplication() {
@@ -133,9 +166,11 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 
 	// verify search attributes are set in cluster0 using the helper function
 	s.checkReportedProblemsSearchAttribute(
+		s.clusters[0].Host().AdminClient(),
 		activeSDKClient,
 		workflowRun.GetID(),
 		workflowRun.GetRunID(),
+		ns,
 		"WorkflowTaskFailed",
 		"WorkflowWorkerUnhandledFailure",
 		true,
@@ -151,9 +186,11 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 
 	// verify search attributes are replicated to cluster1 using the helper function
 	s.checkReportedProblemsSearchAttribute(
+		s.clusters[1].Host().AdminClient(),
 		standbyClient,
 		workflowRun.GetID(),
 		workflowRun.GetRunID(),
+		ns,
 		"WorkflowTaskFailed",
 		"WorkflowWorkerUnhandledFailure",
 		true,
@@ -175,9 +212,11 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 
 	// verify search attributes are cleared in cluster1 using the helper function
 	s.checkReportedProblemsSearchAttribute(
+		s.clusters[1].Host().AdminClient(),
 		standbyClient,
 		workflowRun.GetID(),
 		workflowRun.GetRunID(),
+		ns,
 		"",
 		"",
 		false,
