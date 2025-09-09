@@ -2,12 +2,13 @@ package quotas
 
 type (
 	Request struct {
-		API           string
-		Token         int
-		Caller        string
-		CallerType    string
-		CallerSegment int32
-		Initiation    string
+		API              string
+		Token            int
+		Caller           string
+		CallerType       string
+		CallerSegment    int32
+		Initiation       string
+		FairnessPriority int
 	}
 )
 

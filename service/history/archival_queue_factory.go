@@ -165,6 +165,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
+		f.SchedulerRateLimiter,
 	)
 	return queues.NewScheduledQueue(
 		shard,
