@@ -63,13 +63,14 @@ We defined three categories of tests.
 - Integration test: Those tests cover the integration between the server and the dependencies (Cassandra, SQL, ES etc.).
 - Functional test: Those tests cover the E2E functionality of Temporal server. They are all under ./tests directory.
 
-Integration and functional tests require runtime dependencies. They can be run with `start-dependencies` target (uses `docker compose` internally). Open new terminal window and run:
+Integration and functional tests require runtime dependencies. If running unit tests, no need to start the dependencies. 
+They can be run with `start-dependencies` target (uses `docker compose` internally). Open new terminal window and run:
 
 ```bash
 make start-dependencies
 ```
 
-Before testing on macOS, make sure you increase the file handle limit:
+The default file handle limit on macOS should be sufficient to run the tests. If needed, increase the file handle limit:
 
 ```bash
 ulimit -n 8192
@@ -131,11 +132,31 @@ then run the server:
 make start
 ```
 
-This will start the server using SQLite as database. If you want to run with Cassandra and Elasticsearch, then run these commands:
+This will start the server using SQLite as an in-memory database. You can choose other databases as well.
+
+If you want to run with Cassandra and Elasticsearch, then run these commands:
 
 ```bash
 make install-schema-cass-es
 make start-cass-es
+```
+
+To run with SQLite with a persisted file:
+
+```bash
+make start-sqlite-file
+```
+
+To run with Postgres:
+```bash
+make install-schema-postgresql
+make start-postgresql
+```
+
+To run with MySQL:
+```bash
+make install-schema-mysql
+make start-mysql
 ```
 
 Now you can create default namespace with Temporal CLI:
@@ -153,6 +174,29 @@ make stop-dependencies
 ```
 
 See the [developer documentation on testing](./docs/development/testing.md) to learn more about writing tests.
+
+## Debugging with the IDE
+
+### GoLand
+
+For general instructions, see [GoLand Debugging](https://www.jetbrains.com/help/go/debugging-code.html).
+
+Ensure the `start-dependencies` target is running in a separate terminal window. This will give you the necessary 
+databases, UI, metrics services etc. to run the server.
+
+To run the server, ensure the Run Type is package. In "Package path", enter `go.temporal.io/server/cmd/server`. 
+In the "Program arguments" field, add the following:
+
+```
+--env <database dev environment> --allow-no-auth start
+```
+
+For example, to run with Postgres:
+```
+--env development-postgres12 --allow-no-auth start
+```
+
+See Makefile for other environments.
 
 ## Working with merged API changes
 

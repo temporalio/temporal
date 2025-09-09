@@ -258,7 +258,8 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 
 	if callErr != nil {
-		e.Logger.Error("Nexus StartOperation request failed", tag.Error(callErr))
+		logFn := getExecuteTaskFailureLogFn(ctx, e)
+		logFn("Nexus StartOperation request failed", tag.Error(callErr))
 	}
 
 	err = e.saveResult(ctx, env, ref, result, callErr)
@@ -268,6 +269,19 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 
 	return err
+}
+
+// Returns the appropriate logging function based on the failure source context.
+// For any failures originating from the worker, we log at Debug level to avoid noise. All other failures are logged at
+// Error level.
+func getExecuteTaskFailureLogFn(ctx context.Context, e taskExecutor) func(msg string, tags ...tag.Tag) {
+	failureSource := failureSourceFromContext(ctx)
+
+	if failureSource == commonnexus.FailureSourceWorker {
+		return e.Logger.Debug
+	}
+
+	return e.Logger.Error
 }
 
 type startArgs struct {
