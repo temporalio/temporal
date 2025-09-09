@@ -93,6 +93,7 @@ func (m *managerImpl) needRefreshCache(saCache cache, forceRefreshCache bool, no
 }
 
 func (m *managerImpl) refreshCache(forceRefreshCache bool, now time.Time) (cache, error) {
+	//nolint:revive // cache value is always of type `cache`
 	saCache := m.cache.Load().(cache)
 	if !m.needRefreshCache(saCache, forceRefreshCache, now) {
 		return saCache, nil
@@ -100,6 +101,7 @@ func (m *managerImpl) refreshCache(forceRefreshCache bool, now time.Time) (cache
 
 	m.cacheUpdateMutex.Lock()
 	defer m.cacheUpdateMutex.Unlock()
+	//nolint:revive // cache value is always of type `cache`
 	saCache = m.cache.Load().(cache)
 	if !m.needRefreshCache(saCache, forceRefreshCache, now) {
 		return saCache, nil
