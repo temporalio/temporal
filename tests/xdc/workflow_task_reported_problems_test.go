@@ -14,7 +14,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	adminservicespb "go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -61,7 +61,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) simpleWorkflow(ctx workfl
 
 // checkReportedProblemsSearchAttribute is a helper function to verify reported problems search attributes
 func (s *WorkflowTaskReportedProblemsReplicationSuite) checkReportedProblemsSearchAttribute(
-	admin adminservicespb.AdminServiceClient,
+	admin adminservice.AdminServiceClient,
 	client sdkclient.Client,
 	workflowID, runID string,
 	namespace string,
@@ -105,8 +105,8 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) checkReportedProblemsSear
 	}, 20*time.Second, 500*time.Millisecond)
 }
 
-func (s *WorkflowTaskReportedProblemsReplicationSuite) getWFTFailure(admin adminservicespb.AdminServiceClient, ns, wfid, runid string) (string, string, error) {
-	resp, err := admin.DescribeMutableState(context.Background(), &adminservicespb.DescribeMutableStateRequest{
+func (s *WorkflowTaskReportedProblemsReplicationSuite) getWFTFailure(admin adminservice.AdminServiceClient, ns, wfid, runid string) (lastWFTCause string, lastWFTCategory string, err error) {
+	resp, err := admin.DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wfid,
