@@ -1391,7 +1391,6 @@ func (s *ContextImpl) handleReadErrorWithWorkflowDetails(err error, namespaceID,
 				workflowID,
 				runID,
 				source,
-				err.Error(),
 				err,
 			)
 		}

@@ -259,7 +259,6 @@ func Invoke(
 						execution.GetWorkflowId(),
 						execution.GetRunId(),
 						"GetWorkflowExecutionHistory",
-						dataLossErr.Error(),
 						dataLossErr,
 					)
 					return nil, dataLossErr

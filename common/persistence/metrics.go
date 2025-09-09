@@ -1,9 +1,6 @@
 package persistence
 
 import (
-	"errors"
-
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -13,23 +10,20 @@ const (
 	ErrorTagName      = "error"
 )
 
-// EmitDataLossMetric emits a data loss metric if the error is a DataLoss error
+// EmitDataLossMetric emits a data loss metric for DataLoss errors
 func EmitDataLossMetric(
 	handler metrics.Handler,
 	enabled bool,
-	namespaceID, workflowID, runID, source, errorMessage string,
+	namespaceID, workflowID, runID, source string,
 	err error,
 ) {
-	if enabled && err != nil {
-		var dataLossErr *serviceerror.DataLoss
-		if errors.As(err, &dataLossErr) {
-			metrics.DataLossCounter.With(handler).Record(1,
-				metrics.NamespaceIDTag(namespaceID),
-				metrics.StringTag(WorkflowIDTagName, workflowID),
-				metrics.StringTag(RunIDTagName, runID),
-				metrics.OperationTag(source),
-				metrics.StringTag(ErrorTagName, errorMessage),
-			)
-		}
+	if enabled {
+		metrics.DataLossCounter.With(handler).Record(1,
+			metrics.NamespaceIDTag(namespaceID),
+			metrics.StringTag(WorkflowIDTagName, workflowID),
+			metrics.StringTag(RunIDTagName, runID),
+			metrics.OperationTag(source),
+			metrics.StringTag(ErrorTagName, err.Error()),
+		)
 	}
 }

@@ -40,7 +40,6 @@ func GetRawHistory(
 	defer func() {
 		var dataLossErr *serviceerror.DataLoss
 		if errors.As(retError, &dataLossErr) {
-			// log event
 			shardContext.GetLogger().Error("encountered data loss event in GetRawHistory",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -54,7 +53,6 @@ func GetRawHistory(
 				execution.GetWorkflowId(),
 				execution.GetRunId(),
 				"api_get_raw_history",
-				retError.Error(),
 				retError,
 			)
 		}
@@ -157,7 +155,6 @@ func GetHistory(
 	defer func() {
 		var dataLossErr *serviceerror.DataLoss
 		if errors.As(retError, &dataLossErr) {
-			// log event
 			shardContext.GetLogger().Error("encountered data loss event in GetHistory",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -171,7 +168,6 @@ func GetHistory(
 				execution.GetWorkflowId(),
 				execution.GetRunId(),
 				"api_get_history",
-				retError.Error(),
 				retError,
 			)
 		}
@@ -283,7 +279,6 @@ func GetHistoryReverse(
 	defer func() {
 		var dataLossErr *serviceerror.DataLoss
 		if errors.As(retError, &dataLossErr) {
-			// log event
 			shardContext.GetLogger().Error("encountered data loss event in GetHistoryReverse",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -297,7 +292,6 @@ func GetHistoryReverse(
 				execution.GetWorkflowId(),
 				execution.GetRunId(),
 				"api_get_history_reverse",
-				retError.Error(),
 				retError,
 			)
 		}

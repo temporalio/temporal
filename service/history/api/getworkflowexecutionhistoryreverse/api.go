@@ -121,7 +121,6 @@ func Invoke(
 				execution.GetWorkflowId(),
 				execution.GetRunId(),
 				"GetWorkflowExecutionHistoryReverse",
-				retError.Error(),
 				retError,
 			)
 			api.TrimHistoryNode(
