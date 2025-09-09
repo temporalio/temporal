@@ -5257,23 +5257,16 @@ func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string)
 		return status.Errorf(codes.InvalidArgument, "invalid url: url length longer than max length allowed of %d", wh.config.CallbackURLMaxLength(ns.String()))
 	}
 
-	//used to indicatew the callback should be routed internally
-	// other metadata from the client request will be used to route the request to the
-	// correct namespace
-	if rawURL == "temporal://system" {
-		return nil
-	}
-
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return err
 	}
-	if !(u.Scheme == "http" || u.Scheme == "https") {
+	if !(u.Scheme == "http" || u.Scheme == "https" || u.Scheme == "temporal") {
 		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
 	}
 	for _, cfg := range wh.config.CallbackEndpointConfigs(ns.String()) {
-		if cfg.Regexp.MatchString(u.Host) {
-			if u.Scheme == "http" && !cfg.AllowInsecure {
+		if cfg.MatchHost(u.Host) {
+			if !cfg.SchemeAllowed(u.Scheme) {
 				return status.Errorf(codes.InvalidArgument, "invalid url: callback address does not allow insecure connections: %v", u)
 			}
 			return nil
