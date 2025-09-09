@@ -77,6 +77,57 @@ func (s *CallbacksSuite) runNexusCompletionHTTPServer(h *completionHandler, list
 		return nil
 	}
 }
+func (s *CallbacksSuite) TestWorkflowCallbacks_Valid() {
+	ctx := testcore.NewContext()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	workflowType := "test"
+
+	cases := []struct {
+		name   string
+		urls   []string
+		header map[string]string
+	}{
+		{
+			name: "always allow system url",
+			urls: []string{"temporal://system"},
+		},
+	}
+
+	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackURLMaxLength, 50)
+	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackHeaderMaxSize, 6)
+	s.OverrideDynamicConfig(dynamicconfig.MaxCallbacksPerWorkflow, 2)
+
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			s.OverrideDynamicConfig(dynamicconfig.EnableNexus, true)
+			cbs := make([]*commonpb.Callback, 0, len(tc.urls))
+			for _, url := range tc.urls {
+				cbs = append(cbs, &commonpb.Callback{
+					Variant: &commonpb.Callback_Nexus_{
+						Nexus: &commonpb.Callback_Nexus{
+							Url:    url,
+							Header: tc.header,
+						},
+					},
+				})
+			}
+			request := &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:           uuid.NewString(),
+				Namespace:           s.Namespace().String(),
+				WorkflowId:          testcore.RandomizeStr(s.T().Name()),
+				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				Input:               nil,
+				WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+				Identity:            s.T().Name(),
+				CompletionCallbacks: cbs,
+			}
+
+			_, err := s.FrontendClient().StartWorkflowExecution(ctx, request)
+			s.NoError(err)
+		})
+	}
+}
 
 func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 	ctx := testcore.NewContext()

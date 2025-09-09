@@ -5257,6 +5257,13 @@ func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string)
 		return status.Errorf(codes.InvalidArgument, "invalid url: url length longer than max length allowed of %d", wh.config.CallbackURLMaxLength(ns.String()))
 	}
 
+	//used to indicatew the callback should be routed internally
+	// other metadata from the client request will be used to route the request to the
+	// correct namespace
+	if rawURL == "temporal://system" {
+		return nil
+	}
+
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return err
