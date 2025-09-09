@@ -13,8 +13,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
 )
 
@@ -25,7 +25,7 @@ type (
 
 		controller *gomock.Controller
 
-		logger                     log.Logger
+		logger                     *testlogger.TestLogger
 		timeSource                 *clock.EventTimeSource
 		mockClusterMetadataManager *persistence.MockClusterMetadataManager
 		manager                    *managerImpl
@@ -47,12 +47,13 @@ func (s *searchAttributesManagerSuite) TearDownSuite() {
 func (s *searchAttributesManagerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
-	s.logger = log.NewTestLogger()
+	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 	s.timeSource = clock.NewEventTimeSource()
 	s.mockClusterMetadataManager = persistence.NewMockClusterMetadataManager(s.controller)
 	s.manager = NewManager(
 		s.timeSource,
 		s.mockClusterMetadataManager,
+		s.logger,
 		func() bool {
 			return s.forceCacheRefresh
 		},
@@ -127,6 +128,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_Error() {
 	s.timeSource.Update(time.Date(2020, 8, 22, 1, 0, 0, 0, time.UTC))
 	// Initial call
 	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(nil, errors.New("random error"))
+	s.logger.Expect(testlogger.Error, "failed to refresh search attributes")
 	searchAttributes, err := s.manager.GetSearchAttributes("index-name", false)
 	s.Error(err)
 	s.Len(searchAttributes.Custom(), 0)
@@ -149,7 +151,17 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_NotFoundErro
 func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_UnavailableError() {
 	s.timeSource.Update(time.Date(2020, 8, 22, 1, 0, 0, 0, time.UTC))
 
-	// First call populates cache.
+	// First call: DB is down, cache is cold
+	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(nil, serviceerror.NewUnavailable("db is down"))
+	s.logger.Expect(testlogger.Error, "failed to refresh search attributes")
+	searchAttributes, err := s.manager.GetSearchAttributes("index-name", false)
+	s.Error(err)
+	s.Len(searchAttributes.Custom(), 0)
+
+	// Move time forward
+	s.timeSource.Update(time.Date(2020, 8, 22, 1, 1, 0, 0, time.UTC))
+
+	// Second call populates cache.
 	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(&persistence.GetClusterMetadataResponse{
 		ClusterMetadata: &persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
@@ -160,14 +172,14 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_UnavailableE
 		},
 		Version: 1,
 	}, nil)
-	searchAttributes, err := s.manager.GetSearchAttributes("index-name", false)
+	searchAttributes, err = s.manager.GetSearchAttributes("index-name", false)
 	s.NoError(err)
 	s.Len(searchAttributes.Custom(), 1)
 
 	// Expire cache.
 	s.timeSource.Update(time.Date(2020, 8, 22, 2, 0, 0, 0, time.UTC))
 
-	// Second call, cache is expired, DB is down, but cache data is returned.
+	// Third call, cache is expired, DB is down, but cache data is returned.
 	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(nil, serviceerror.NewUnavailable("db is down"))
 	searchAttributes, err = s.manager.GetSearchAttributes("index-name", false)
 	s.NoError(err)
