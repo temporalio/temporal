@@ -1027,6 +1027,11 @@ var (
 		"dlq_message_count",
 		WithDescription("The number of messages currently in DLQ."),
 	)
+	DataLossCounter = NewCounterDef(
+		"data_loss_errors",
+		WithDescription("Total number of data loss errors encountered. This is a high cardinality metrics that is only"+
+			"emitted when system.enableDataLossMetrics is enabled. Only enable this if metrics system can handle it's cardinality"),
+	)
 	ReadNamespaceErrors                     = NewCounterDef("read_namespace_errors")
 	RateLimitedTaskRunnableWaitTime         = NewTimerDef("rate_limited_task_runnable_wait_time")
 	CircuitBreakerExecutableBlocked         = NewCounterDef("circuit_breaker_executable_blocked")

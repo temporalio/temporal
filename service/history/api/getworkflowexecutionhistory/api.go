@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -184,7 +185,8 @@ func Invoke(
 	// when data inconsistency occurs. Long term solution should check event
 	// batch pointing backwards within history store.
 	defer func() {
-		if _, ok := retError.(*serviceerror.DataLoss); ok {
+		var dataLossErr *serviceerror.DataLoss
+		if errors.As(retError, &dataLossErr) {
 			api.TrimHistoryNode(
 				ctx,
 				shardContext,
@@ -248,7 +250,19 @@ func Invoke(
 						tag.WorkflowID(execution.GetWorkflowId()),
 						tag.WorkflowRunID(execution.GetRunId()),
 					)
-					return nil, serviceerror.NewDataLoss("no events in workflow history")
+					dataLossErr := serviceerror.NewDataLoss("no events in workflow history")
+					// Emit dataloss metric
+					persistence.EmitDataLossMetric(
+						shardContext.GetMetricsHandler(),
+						shardContext.GetConfig().EnableDataLossMetrics(),
+						namespaceID.String(),
+						execution.GetWorkflowId(),
+						execution.GetRunId(),
+						"GetWorkflowExecutionHistory",
+						dataLossErr.Error(),
+						dataLossErr,
+					)
+					return nil, dataLossErr
 				}
 				history.Events = history.Events[len(history.Events)-1 : len(history.Events)]
 			}

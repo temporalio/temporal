@@ -828,7 +828,7 @@ func (s *ContextImpl) GetCurrentExecution(
 	}
 
 	resp, err := s.executionManager.GetCurrentExecution(ctx, request)
-	if err = s.handleReadError(err); err != nil {
+	if err = s.handleReadErrorWithWorkflowDetails(err, request.NamespaceID, request.WorkflowID, "", "shard_get_current_execution"); err != nil {
 		// also return resp, for RebuildMutableState API
 		return resp, err
 	}
@@ -844,7 +844,7 @@ func (s *ContextImpl) GetWorkflowExecution(
 	}
 
 	resp, err := s.executionManager.GetWorkflowExecution(ctx, request)
-	if err = s.handleReadError(err); err != nil {
+	if err = s.handleReadErrorWithWorkflowDetails(err, request.NamespaceID, request.WorkflowID, request.RunID, "shard_get_workflow_execution"); err != nil {
 		// also return resp, for RebuildMutableState API
 		return resp, err
 	}
@@ -1367,6 +1367,10 @@ func (s *ContextImpl) getLastUpdatedTime() time.Time {
 }
 
 func (s *ContextImpl) handleReadError(err error) error {
+	return s.handleReadErrorWithWorkflowDetails(err, "", "", "", "")
+}
+
+func (s *ContextImpl) handleReadErrorWithWorkflowDetails(err error, namespaceID, workflowID, runID, source string) error {
 	switch err.(type) {
 	case nil:
 		return nil
@@ -1375,6 +1379,22 @@ func (s *ContextImpl) handleReadError(err error) error {
 		// Shard is stolen, trigger shutdown of history engine.
 		// Handling of max read level doesn't matter here.
 		_ = s.transition(contextRequestStop{reason: stopReasonOwnershipLost})
+		return err
+
+	case *serviceerror.DataLoss:
+		// Emit dataloss metric if we have context
+		if namespaceID != "" && workflowID != "" && source != "" {
+			persistence.EmitDataLossMetric(
+				s.GetMetricsHandler(),
+				s.GetConfig().EnableDataLossMetrics(),
+				namespaceID,
+				workflowID,
+				runID,
+				source,
+				err.Error(),
+				err,
+			)
+		}
 		return err
 
 	default:

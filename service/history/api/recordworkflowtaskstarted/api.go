@@ -273,7 +273,8 @@ func setHistoryForRecordWfTaskStartedResp(
 	//  when data inconsistency occurs
 	//  long term solution should check event batch pointing backwards within history store
 	defer func() {
-		if _, ok := retError.(*serviceerror.DataLoss); ok {
+		var dataLossErr *serviceerror.DataLoss
+		if errors.As(retError, &dataLossErr) {
 			api.TrimHistoryNode(
 				ctx,
 				shardContext,
