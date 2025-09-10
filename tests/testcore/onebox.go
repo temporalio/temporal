@@ -695,6 +695,7 @@ func (c *TemporalImpl) newRPCFactory(
 	tracingStatsHandler telemetry.ClientStatsHandler,
 	grpcClientInterceptor *grpcinject.Interceptor,
 	httpPort httpPort,
+	metricsHandler metrics.Handler,
 ) (common.RPCFactory, error) {
 	host, portStr, err := net.SplitHostPort(string(grpcHostPort))
 	if err != nil {
@@ -732,6 +733,7 @@ func (c *TemporalImpl) newRPCFactory(
 		cfg,
 		sn,
 		logger,
+		metricsHandler,
 		tlsConfigProvider,
 		grpcResolver.MakeURL(primitives.FrontendService),
 		grpcResolver.MakeURL(primitives.FrontendService),

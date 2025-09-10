@@ -27,6 +27,7 @@ const (
 	resourceExhaustedScopeTag   = "resource_exhausted_scope"
 	PartitionTagName            = "partition"
 	PriorityTagName             = "priority"
+	PersistenceDBKindTagName    = "db_kind"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -607,6 +608,9 @@ var (
 		"service_grpc_conn_active",
 		WithDescription("Current number of gRPC's active TCP connections."),
 	)
+	ServiceDialLatency                       = NewTimerDef("service_dial_latency", WithDescription("The latency of establishing a new TCP connection."))
+	ServiceDialSuccessCount                  = NewCounterDef("service_dial_success", WithDescription("Number of TCP dial attempts that successfully established a connection."))
+	ServiceDialErrorCount                    = NewCounterDef("service_dial_error", WithDescription("Number of TCP dial attempts that failed to establish a connection."))
 	ServiceLatency                           = NewTimerDef("service_latency")
 	ServiceLatencyNoUserLatency              = NewTimerDef("service_latency_nouserlatency")
 	ServiceLatencyUserLatency                = NewTimerDef("service_latency_userlatency")
@@ -1296,6 +1300,10 @@ var (
 	CassandraSessionRefreshFailures        = NewCounterDef("cassandra_session_refresh_failures")
 	PersistenceSessionRefreshFailures      = NewCounterDef("persistence_session_refresh_failures")
 	PersistenceSessionRefreshAttempts      = NewCounterDef("persistence_session_refresh_attempts")
+	PersistenceSQLMaxOpenConn              = NewGaugeDef("persistence_sql_max_open_conn")
+	PersistenceSQLOpenConn                 = NewGaugeDef("persistence_sql_open_conn")
+	PersistenceSQLIdleConn                 = NewGaugeDef("persistence_sql_idle_conn")
+	PersistenceSQLInUse                    = NewGaugeDef("persistence_sql_in_use")
 
 	// Common service base metrics
 	RestartCount           = NewCounterDef("restarts")

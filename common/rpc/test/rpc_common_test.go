@@ -157,7 +157,7 @@ func dialTestServiceAndGetTLSInfo(
 		s.NoError(err)
 	}
 
-	clientConn, err := rpc.Dial(hostport, cfg, logger)
+	clientConn, err := rpc.Dial(hostport, cfg, logger, nil)
 	s.NoError(err)
 
 	client := testservice.NewTestServiceClient(clientConn)

@@ -35,6 +35,7 @@ const (
 	AddVersionToWorkerDeployment      = "add-version-to-worker-deployment" // for Worker Deployment wfs
 	DeleteVersion                     = "delete-version"                   // for WorkerDeployment wfs
 	DeleteDeployment                  = "delete-deployment"                // for WorkerDeployment wfs
+	SetManagerIdentity                = "set-manager-identity"             // for WorkerDeployment wfs
 
 	// Signals
 	ForceCANSignalName       = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
@@ -73,6 +74,8 @@ const (
 
 	ErrRampingVersionDoesNotHaveAllTaskQueues = "proposed ramping version is missing active task queues from the current version; these would become unversioned if it is set as the ramping version"
 	ErrCurrentVersionDoesNotHaveAllTaskQueues = "proposed current version is missing active task queues from the current version; these would become unversioned if it is set as the current version"
+	ErrManagerIdentityMismatch                = "ManagerIdentity '%s' is set and does not match user identity '%s'; to proceed, set your own identity as the ManagerIdentity, remove the ManagerIdentity, or wait for the other client to do so"
+	ErrWorkerDeploymentNotFound               = "no Worker Deployment found with name %s; does your Worker Deployment have pollers?"
 )
 
 var (

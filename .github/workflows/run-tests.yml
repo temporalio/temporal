@@ -62,6 +62,7 @@ env:
   PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
+  MAX_TEST_ATTEMPTS: 3
 
 jobs:
   set-up-single-test:
@@ -258,6 +259,12 @@ jobs:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
           TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
 
+      - name: Generate crash report
+        if: failure()
+        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
+
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
         if: failure()
@@ -346,6 +353,12 @@ jobs:
       - name: Run integration test
         timeout-minutes: 15
         run: make integration-test-coverage
+
+      - name: Generate crash report
+        if: failure()
+        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -521,6 +534,12 @@ jobs:
           TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
           TEMPORAL_OTEL_DEBUG: true
 
+      - name: Generate crash report
+        if: failure()
+        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
+
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
         if: failure()
@@ -678,6 +697,12 @@ jobs:
         env:
           TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
           TEMPORAL_OTEL_DEBUG: true
+
+      - name: Generate crash report
+        if: failure()
+        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -838,6 +863,12 @@ jobs:
         env:
           TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
           TEMPORAL_OTEL_DEBUG: true
+
+      - name: Generate crash report
+        if: failure()
+        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Upload code coverage to Codecov
         uses: codecov/codecov-action@v5
