@@ -253,7 +253,7 @@ func (ac *DLQV2Service) MergeMessages(c *cli.Context) error {
 			)
 		}
 	} else {
-		_, _ = fmt.Fprint(c.App.Writer, "Warning: No last message ID provided. Using ListQueues to find the last message ID.\n")
+		_, _ = fmt.Fprint(c.App.Writer, "Note: No last message ID provided. Using ListQueues to find the last message ID.\n")
 
 		var err error
 		var ok bool
@@ -352,7 +352,7 @@ func (ac *DLQV2Service) findLastMessageIDFromListQueues(c *cli.Context) (int64, 
 		nextPageToken = resp.NextPageToken
 	}
 
-	// Queue not found, it's empty
+	// Queue not found, it is empty in that case. We create the queue on first write.
 	return 0, false, nil
 }
 
