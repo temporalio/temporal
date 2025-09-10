@@ -1059,15 +1059,15 @@ func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Co
 }
 
 // Determines whether to bypass the normal task generation flow and return the next workflow task
-// directly in the response. By default, returns true unless the task had failed.
+// directly in the response.
 func (handler *WorkflowTaskCompletedHandler) shouldBypassTaskGeneration(
 	request *historyservice.RespondWorkflowTaskCompletedRequest,
 	wtFailedCause *workflowTaskFailedCause,
 ) bool {
 	unconditionallyEnable := handler.config.EnableReturnNewWorkflowTaskUnconditionally()
 
-	// TODO: Stop honoring the client option once we roll out the unconditionallyEnable flag.
-	// Today, the SDK can set this to false when the worker is not configured to cache history.
+	// TODO: Stop honoring the client option (return_new_workflow_task) once we roll out the unconditionallyEnable flag.
+	// Today, the SDK can set return_new_workflow_task to false when the worker is not configured to cache history.
 	// We want to standardize the behavior by always returning the next task and let the worker get the full history.
 	clientRequested := request.CompleteRequest.GetReturnNewWorkflowTask()
 
