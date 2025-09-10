@@ -1098,13 +1098,13 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 	countRequest.Query = query
 	_, err = s.FrontendClient().CountWorkflowExecutions(testcore.NewContext(), countRequest)
 	s.Error(err)
-	s.Contains(err.Error(), "'group by' clause is only supported for ExecutionStatus search attribute")
+	s.Contains(err.Error(), "'GROUP BY' clause is only supported for ExecutionStatus search attribute")
 
 	query = `GROUP BY ExecutionStatus, WorkflowType`
 	countRequest.Query = query
 	_, err = s.FrontendClient().CountWorkflowExecutions(testcore.NewContext(), countRequest)
 	s.Error(err)
-	s.Contains(err.Error(), "'group by' clause supports only a single field")
+	s.Contains(err.Error(), "'GROUP BY' clause supports only a single field")
 }
 
 func (s *AdvancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl string) *workflowservice.StartWorkflowExecutionRequest {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -34,7 +35,9 @@ type (
 
 var _ store.VisibilityStore = (*VisibilityStore)(nil)
 
-var maxTime, _ = time.Parse(time.RFC3339, "9999-12-31T23:59:59Z")
+var (
+	MaxDatetime, _ = time.Parse(time.RFC3339, "9999-12-31T23:59:59Z")
+)
 
 // NewSQLVisibilityStore creates an instance of VisibilityStore
 func NewSQLVisibilityStore(
@@ -161,32 +164,36 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	sqlQC, err := newSQLQueryConverter(s.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	converter := NewQueryConverter(
-		s.GetName(),
+	queryParams, err := s.buildQueryParams(
 		request.Namespace,
 		request.NamespaceID,
-		saTypeMap,
-		saMapper,
 		request.Query,
+		sqlQC,
 	)
-	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken)
 	if err != nil {
-		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
+		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
+		// only mapper errors).
 		var converterErr *query.ConverterError
 		if errors.As(err, &converterErr) {
 			return nil, converterErr.ToInvalidArgument()
 		}
 		return nil, err
+	}
+
+	pageToken, err := sqlplugin.DeserializeVisibilityPageToken(request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+
+	queryString, queryArgs := sqlQC.BuildSelectStmt(queryParams, request.PageSize, pageToken)
+	selectFilter := &sqlplugin.VisibilitySelectFilter{
+		Query:     queryString,
+		QueryArgs: queryArgs,
 	}
 
 	rows, err := s.sqlStore.DB.SelectFromVisibility(ctx, *selectFilter)
@@ -207,13 +214,13 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	}
 
 	var nextPageToken []byte
-	if len(rows) == request.PageSize {
+	if len(rows) > 0 && len(rows) == request.PageSize {
 		lastRow := rows[len(rows)-1]
-		closeTime := maxTime
+		closeTime := MaxDatetime
 		if lastRow.CloseTime != nil {
 			closeTime = *lastRow.CloseTime
 		}
-		nextPageToken, err = serializePageToken(&pageToken{
+		nextPageToken, err = sqlplugin.SerializeVisibilityPageToken(&sqlplugin.VisibilityPageToken{
 			CloseTime: closeTime,
 			StartTime: lastRow.StartTime,
 			RunID:     lastRow.RunID,
@@ -239,27 +246,20 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	sqlQC, err := newSQLQueryConverter(s.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	converter := NewQueryConverter(
-		s.GetName(),
+	queryParams, err := s.buildQueryParams(
 		request.Namespace,
 		request.NamespaceID,
-		saTypeMap,
-		saMapper,
 		request.Query,
+		sqlQC,
 	)
-	selectFilter, err := converter.BuildCountStmt()
 	if err != nil {
-		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
+		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
+		// only mapper errors).
 		var converterErr *query.ConverterError
 		if errors.As(err, &converterErr) {
 			return nil, converterErr.ToInvalidArgument()
@@ -267,8 +267,20 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 		return nil, err
 	}
 
+	queryString, queryArgs := sqlQC.BuildCountStmt(queryParams)
+	groupBy := make([]string, 0, len(queryParams.GroupBy)+1)
+	for _, field := range queryParams.GroupBy {
+		groupBy = append(groupBy, field.FieldName)
+	}
+
+	selectFilter := &sqlplugin.VisibilitySelectFilter{
+		Query:     queryString,
+		QueryArgs: queryArgs,
+		GroupBy:   groupBy,
+	}
+
 	if len(selectFilter.GroupBy) > 0 {
-		return s.countGroupByWorkflowExecutions(ctx, selectFilter, saTypeMap)
+		return s.countGroupByWorkflowExecutions(ctx, selectFilter)
 	}
 
 	count, err := s.sqlStore.DB.CountFromVisibility(ctx, *selectFilter)
@@ -283,9 +295,12 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 func (s *VisibilityStore) countGroupByWorkflowExecutions(
 	ctx context.Context,
 	selectFilter *sqlplugin.VisibilitySelectFilter,
-	saTypeMap searchattribute.NameTypeMap,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	var err error
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	if err != nil {
+		return nil, err
+	}
+
 	groupByTypes := make([]enumspb.IndexedValueType, len(selectFilter.GroupBy))
 	for i, fieldName := range selectFilter.GroupBy {
 		groupByTypes[i], err = saTypeMap.GetType(fieldName)
@@ -321,6 +336,36 @@ func (s *VisibilityStore) countGroupByWorkflowExecutions(
 		resp.Count += row.Count
 	}
 	return resp, nil
+}
+
+func (s *VisibilityStore) buildQueryParams(
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	queryString string,
+	sqlQC *sqlQueryConverter,
+) (*query.QueryParams[sqlparser.Expr], error) {
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	if err != nil {
+		return nil, err
+	}
+
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	c := query.NewQueryConverter(sqlQC, namespaceName, namespaceID, saTypeMap, saMapper)
+	queryParams, err := c.Convert(queryString)
+	if err != nil {
+		return nil, err
+	}
+
+	// ORDER BY is not support in SQL visibility store
+	if len(queryParams.OrderBy) > 0 {
+		return nil, query.NewConverterError("%s: 'ORDER BY' clause", query.NotSupportedErrMessage)
+	}
+
+	return queryParams, nil
 }
 
 func (s *VisibilityStore) GetWorkflowExecution(
