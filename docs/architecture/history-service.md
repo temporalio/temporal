@@ -189,7 +189,7 @@ The `QueueProcessor` starts a variety of goroutines that are responsible for:
 
 The following diagram shows the high level components of queue processing in one shard.
 
-<img src="../_assets/queue-processing.png">
+<img src="../_assets/queue-processing.svg">
 
 <details>
 <summary><i>Code entrypoints</i></summary>
