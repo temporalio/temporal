@@ -112,6 +112,62 @@ func TestEvictByCapacity(t *testing.T) {
 	assert.LessOrEqual(t, m.total.Load(), maxItems, "total counter should not exceed maxItems")
 }
 
+// Tests the critical edge case where evictByCapacity() cannot evict any entries because they're all
+// protected by minEvictAge. This verifies the "break" logic prevents infinite loops during memory
+// pressure.
+func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
+	maxItems := int64(2)
+	minEvictAge := 5 * time.Second
+	m := newRegistryImpl(1, time.Hour, minEvictAge, maxItems, time.Hour)
+	defer m.Stop()
+
+	// Add 3 entries (over capacity) - all will be "new" (< minEvictAge)
+	for i := 1; i <= 3; i++ {
+		key := fmt.Sprintf("worker%d", i)
+		hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
+		m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
+	}
+
+	// Verify we're over capacity
+	assert.Equal(t, int64(3), m.total.Load(), "should have 3 entries initially")
+	assert.Greater(t, m.total.Load(), maxItems, "should be over capacity")
+
+	// Attempt eviction - should break because all entries are too new
+	m.evictByCapacity()
+
+	// All entries should still be there (protected by minEvictAge)
+	workers := m.filterWorkers("ns", alwaysTrue)
+	assert.Len(t, workers, 3, "all entries should be protected by minEvictAge")
+	assert.Equal(t, int64(3), m.total.Load(), "should still exceed maxItems due to protection")
+}
+
+// Tests that entries can be evicted once they exceed minEvictAge.
+func TestEvictByCapacityAfterMinAge(t *testing.T) {
+	maxItems := int64(2)
+	minEvictAge := 100 * time.Millisecond // Short age for test
+	m := newRegistryImpl(1, time.Hour, minEvictAge, maxItems, time.Hour)
+	defer m.Stop()
+
+	// Add 3 entries (over capacity)
+	for i := 1; i <= 3; i++ {
+		key := fmt.Sprintf("worker%d", i)
+		hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
+		m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
+	}
+
+	// Wait for entries to exceed minEvictAge
+	// TODO: Use mock time for more reliable tests.
+	time.Sleep(300 * time.Millisecond)
+
+	// Now eviction should work
+	m.evictByCapacity()
+
+	// Should have evicted down to maxItems
+	workers := m.filterWorkers("ns", alwaysTrue)
+	assert.LessOrEqual(t, len(workers), int(maxItems), "should evict down to maxItems")
+	assert.LessOrEqual(t, m.total.Load(), maxItems, "total should be within limits")
+}
+
 func BenchmarkUpdate(b *testing.B) {
 	m := newRegistryImpl(16, time.Hour, time.Minute, int64(b.N), time.Hour)
 	defer m.Stop()
