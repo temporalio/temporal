@@ -3,6 +3,7 @@ package update
 import (
 	"fmt"
 
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -82,6 +83,11 @@ func (i *instrumentation) invalidStateTransition(updateID string, msg proto.Mess
 		tag.NewStringTag("update-id", updateID),
 		tag.NewStringTag("message", fmt.Sprintf("%T", msg)),
 		tag.NewStringerTag("state", state))
+	assert.Unreachable("[OSS/Update] invalid state transition attempted", map[string]any{
+		"update-id": updateID,
+		"message":   fmt.Sprintf("%T", msg),
+		"state":     state.String(),
+	})
 }
 
 func (i *instrumentation) updateRegistrySize(size int) {
