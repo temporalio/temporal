@@ -23,16 +23,13 @@ type DBMetricsReporter struct {
 }
 
 func newDBMetricReporter(dbKind DbKind, handle *DatabaseHandle) *DBMetricsReporter {
-	reporter := &DBMetricsReporter{
+	return &DBMetricsReporter{
 		interval: time.Minute,
 		handle:   handle,
 		metrics:  handle.metrics.WithTags(metrics.PersistenceDBKindTag(dbKind.String())),
 		quit:     make(chan struct{}),
 		logger:   handle.logger,
 	}
-	reporter.started.Store(false)
-	reporter.stopped.Store(false)
-	return reporter
 }
 
 // Start run metrics report in background
@@ -42,12 +39,10 @@ func (r *DBMetricsReporter) Start() {
 	if !r.started.CompareAndSwap(false, true) {
 		return
 	}
-	r.wg.Add(1)
-	go r.run()
+	r.wg.Go(r.run)
 }
 
 func (r *DBMetricsReporter) run() {
-	defer r.wg.Done()
 	ticker := time.NewTicker(r.interval)
 	defer ticker.Stop()
 
