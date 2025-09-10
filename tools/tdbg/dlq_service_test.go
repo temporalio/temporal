@@ -349,7 +349,7 @@ func TestDLQCommand_V2(t *testing.T) {
 			},
 			validateStdout: func(t *testing.T, b *bytes.Buffer) {
 				output := b.String()
-				assert.Contains(t, output, "Warning: No last message ID provided")
+				assert.Contains(t, output, "Note: No last message ID provided")
 				assert.Contains(t, output, "DLQ is empty, nothing to merge")
 			},
 		},
