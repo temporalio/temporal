@@ -425,6 +425,9 @@ func (h *nexusHandler) StartOperation(
 	if err != nil {
 		if common.IsContextDeadlineExceededErr(err) {
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
+
+			oc.setFailureSource(commonnexus.FailureSourceWorker)
+
 			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 		}
 		return nil, commonnexus.ConvertGRPCError(err, false)
@@ -584,6 +587,9 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	if err != nil {
 		if common.IsContextDeadlineExceededErr(err) {
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
+
+			oc.setFailureSource(commonnexus.FailureSourceWorker)
+
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 		}
 		return commonnexus.ConvertGRPCError(err, false)
