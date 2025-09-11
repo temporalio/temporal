@@ -104,4 +104,9 @@ func (i *instrumentation) stateChange(updateID string, from, to state) {
 		tag.NewStringerTag("from-state", from),
 		tag.NewStringerTag("to-state", to),
 	)
+	assert.Sometimes(true, "[OSS/Update] update state change", map[string]any{
+		"update-id":  updateID,
+		"from-state": from.String(),
+		"to-state":   to.String(),
+	})
 }
