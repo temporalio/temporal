@@ -46,4 +46,4 @@ history.ReplicationEnableUpdateWithNewTaskMerge:
 history.enableTransitionHistory:
   - value: true
 history.EnableReplicationTaskTieredProcessing:
-  - value: false
+  - value: true
