@@ -258,8 +258,12 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 
 	if callErr != nil {
-		logFn := getExecuteTaskFailureLogFn(ctx, e)
-		logFn("Nexus StartOperation request failed", tag.Error(callErr))
+		failureSource := failureSourceFromContext(ctx)
+		if failureSource == commonnexus.FailureSourceWorker {
+			e.Logger.Debug("Nexus StartOperation request failed", tag.Error(callErr))
+		} else {
+			e.Logger.Error("Nexus StartOperation request failed", tag.Error(callErr))
+		}
 	}
 
 	err = e.saveResult(ctx, env, ref, result, callErr)
@@ -269,19 +273,6 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 
 	return err
-}
-
-// Returns the appropriate logging function based on the failure source context.
-// For any failures originating from the worker, we log at Debug level to avoid noise. All other failures are logged at
-// Error level.
-func getExecuteTaskFailureLogFn(ctx context.Context, e taskExecutor) func(msg string, tags ...tag.Tag) {
-	failureSource := failureSourceFromContext(ctx)
-
-	if failureSource == commonnexus.FailureSourceWorker {
-		return e.Logger.Debug
-	}
-
-	return e.Logger.Error
 }
 
 type startArgs struct {
@@ -603,8 +594,12 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
 
 	if callErr != nil {
-		logFn := getExecuteTaskFailureLogFn(ctx, e)
-		logFn("Nexus CancelOperation request failed", tag.Error(callErr))
+		failureSource := failureSourceFromContext(ctx)
+		if failureSource == commonnexus.FailureSourceWorker {
+			e.Logger.Debug("Nexus CancelOperation request failed", tag.Error(callErr))
+		} else {
+			e.Logger.Error("Nexus CancelOperation request failed", tag.Error(callErr))
+		}
 	}
 
 	err = e.saveCancelationResult(ctx, env, ref, callErr, args.scheduledEventID)
