@@ -3952,3 +3952,69 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 		s.Error(err)
 	})
 }
+
+func (s *WorkflowHandlerSuite) TestAllowCallbackURL() {
+	type args struct {
+		rawURL string
+		rules  []callbacks.AddressMatchRule
+	}
+	ts := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "happy path, default config: just temporal",
+			args: args{
+				rawURL: "temporal://system",
+				rules:  []callbacks.AddressMatchRule{{}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "sad path incorrect scheme, default config: just temporal",
+			args: args{
+				rawURL: "https://system",
+				rules:  []callbacks.AddressMatchRule{{}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "sad path incorrect host, default config: just temporal",
+			args: args{
+				rawURL: "temporal://somehost.com",
+				rules:  []callbacks.AddressMatchRule{{}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "sad path http, default config: just temporal",
+			args: args{
+				rawURL: "http://localhost",
+				rules:  []callbacks.AddressMatchRule{{}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "sad path https, default config: just temporal",
+			args: args{
+				rawURL: "http://localhost",
+				rules:  []callbacks.AddressMatchRule{{}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "sad path invalid url, default config: just temporal",
+			args: args{
+				rawURL: "blblbblblb",
+				rules:  []callbacks.AddressMatchRule{{}},
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range ts {
+		s.Run(tt.name, func() {
+			s.Equal(tt.wantErr, allowCallbackURL(tt.args.rawURL, tt.args.rules) != nil)
+		})
+	}
+}

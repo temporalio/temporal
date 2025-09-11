@@ -1,6 +1,7 @@
 package callbacks
 
 import (
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -8,6 +9,8 @@ import (
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
@@ -53,8 +56,8 @@ var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(
 	allowedAddressConverter,
 	[]AddressMatchRule(nil),
 	`The per-namespace list of addresses that are allowed for callbacks and whether secure connections (https) are required.
-URLs are checked against each in order when starting a workflow with attached callbacks and only need to match one to pass validation. URL: "temporal://system" is always valid.
-Default is no address rules. Any invalid entries are ignored. Each entry is a map with possible values:
+URLs are checked against each in order when starting a workflow with attached callbacks and only need to match one to pass validation. 
+URL: "temporal://system" is always allowed and the default is no address rules. Any invalid entries are ignored. Each entry is a map with possible values:
 	 - "Pattern":string (required) the host:port pattern to which this config applies.
 		Wildcards, '*', are supported and can match any number of characters (e.g. '*' matches everything, 'prefix.*.domain' matches 'prefix.a.domain' as well as 'prefix.a.b.domain').
 	 - "AllowInsecure":bool (optional, default=false) indicates whether https is required`)
@@ -65,7 +68,9 @@ var allowedSchemes = []string{"http", "https", "temporal"}
 // allowedSecurSchema contains only secure schemas
 var allowedSecureSchemes = []string{"https", "temporal"}
 
-var matchTemporalSystem, _ = regexp.Compile("^temporal://system$")
+const (
+	temporalSystemURL = "temporal://system"
+)
 
 func IsSchemeAllowed(scheme string) bool {
 	return slices.Contains(allowedSchemes, scheme)
@@ -76,15 +81,30 @@ type AddressMatchRule struct {
 	AllowInsecure bool
 }
 
-func (a AddressMatchRule) MatchHost(host string) bool {
-	return a.Regexp.MatchString(host)
-}
-
-func (a AddressMatchRule) CheckSchemeSecureLevel(scheme string) bool {
-	if a.AllowInsecure {
-		return true
+// Allow assumes the scheme has already been checked with IsSchemeAllowed and will return:
+// 1. true, nil if the provided url matches the rule and passed validation
+// for the given rule.
+// 2. false, nil if the URL does not match the rule.
+// 3. It false, error if there is a match and the URL fails validation
+func (a AddressMatchRule) Allow(u *url.URL) (bool, error) {
+	if a.Regexp == nil {
+		if u.String() == temporalSystemURL {
+			return true, nil
+		}
+		return false, nil
 	}
-	return slices.Contains(allowedSecureSchemes, scheme)
+	if !a.Regexp.MatchString(u.Host) {
+		return false, nil
+	}
+	if a.AllowInsecure {
+		return true, nil
+	}
+	if !slices.Contains(allowedSecureSchemes, u.Scheme) {
+		return false,
+			status.Errorf(codes.InvalidArgument,
+				"invalid url: callback address does not allow insecure connections: %v", u)
+	}
+	return true, nil
 }
 
 func allowedAddressConverter(val any) ([]AddressMatchRule, error) {
@@ -97,7 +117,14 @@ func allowedAddressConverter(val any) ([]AddressMatchRule, error) {
 		return nil, err
 	}
 
-	var configs []AddressMatchRule
+	configs := []AddressMatchRule{
+		{
+			// used to indicate the callback should be routed internally
+			// other metadata from the client request will be used to route the request to the
+			// correct namespace
+			// the temporalSystemURL is checked explicitly in the allow method
+		},
+	}
 	for _, e := range intermediate {
 		if e.Pattern == "" {
 			// Skip configs with missing / unparsable Pattern
@@ -113,12 +140,6 @@ func allowedAddressConverter(val any) ([]AddressMatchRule, error) {
 			AllowInsecure: e.AllowInsecure,
 		})
 	}
-	// used to indicate the callback should be routed internally
-	// other metadata from the client request will be used to route the request to the
-	// correct namespace
-	configs = append(configs, AddressMatchRule{
-		Regexp: matchTemporalSystem,
-	})
 	return configs, nil
 }
 
