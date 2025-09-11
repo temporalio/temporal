@@ -9,7 +9,6 @@ package testspb
 import (
 	reflect "reflect"
 	sync "sync"
-	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -24,21 +23,24 @@ const (
 )
 
 type TestPayloadStore struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	TotalCount int64                  `protobuf:"varint,1,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
-	TotalSize  int64                  `protobuf:"varint,2,opt,name=total_size,json=totalSize,proto3" json:"total_size,omitempty"`
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	TotalCount int64 `protobuf:"varint,1,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	TotalSize  int64 `protobuf:"varint,2,opt,name=total_size,json=totalSize,proto3" json:"total_size,omitempty"`
 	// (-- api-linter: core::0142::time-field-type=disabled --)
-	ExpirationTimes map[string]*timestamppb.Timestamp `protobuf:"bytes,3,rep,name=expiration_times,json=expirationTimes,proto3" json:"expiration_times,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ExpirationTimes map[string]*timestamppb.Timestamp `protobuf:"bytes,3,rep,name=expiration_times,json=expirationTimes,proto3" json:"expiration_times,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	Closed          bool                              `protobuf:"varint,4,opt,name=closed,proto3" json:"closed,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
 }
 
 func (x *TestPayloadStore) Reset() {
 	*x = TestPayloadStore{}
-	mi := &file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[0]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *TestPayloadStore) String() string {
@@ -49,7 +51,7 @@ func (*TestPayloadStore) ProtoMessage() {}
 
 func (x *TestPayloadStore) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[0]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -93,17 +95,20 @@ func (x *TestPayloadStore) GetClosed() bool {
 }
 
 type TestPayloadTTLPureTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PayloadKey    string                 `protobuf:"bytes,1,opt,name=payload_key,json=payloadKey,proto3" json:"payload_key,omitempty"`
-	unknownFields protoimpl.UnknownFields
+	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	PayloadKey string `protobuf:"bytes,1,opt,name=payload_key,json=payloadKey,proto3" json:"payload_key,omitempty"`
 }
 
 func (x *TestPayloadTTLPureTask) Reset() {
 	*x = TestPayloadTTLPureTask{}
-	mi := &file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[1]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *TestPayloadTTLPureTask) String() string {
@@ -114,7 +119,7 @@ func (*TestPayloadTTLPureTask) ProtoMessage() {}
 
 func (x *TestPayloadTTLPureTask) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[1]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -137,17 +142,20 @@ func (x *TestPayloadTTLPureTask) GetPayloadKey() string {
 }
 
 type TestPayloadTTLSideEffectTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PayloadKey    string                 `protobuf:"bytes,1,opt,name=payload_key,json=payloadKey,proto3" json:"payload_key,omitempty"`
-	unknownFields protoimpl.UnknownFields
+	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	PayloadKey string `protobuf:"bytes,1,opt,name=payload_key,json=payloadKey,proto3" json:"payload_key,omitempty"`
 }
 
 func (x *TestPayloadTTLSideEffectTask) Reset() {
 	*x = TestPayloadTTLSideEffectTask{}
-	mi := &file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
 }
 
 func (x *TestPayloadTTLSideEffectTask) String() string {
@@ -158,7 +166,7 @@ func (*TestPayloadTTLSideEffectTask) ProtoMessage() {}
 
 func (x *TestPayloadTTLSideEffectTask) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[2]
-	if x != nil {
+	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
 			ms.StoreMessageInfo(mi)
@@ -182,40 +190,64 @@ func (x *TestPayloadTTLSideEffectTask) GetPayloadKey() string {
 
 var File_temporal_server_chasm_lib_tests_proto_v1_message_proto protoreflect.FileDescriptor
 
-const file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc = "" +
-	"\n" +
-	"6temporal/server/chasm/lib/tests/proto/v1/message.proto\x12(temporal.server.chasm.lib.tests.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc6\x02\n" +
-	"\x10TestPayloadStore\x12\x1f\n" +
-	"\vtotal_count\x18\x01 \x01(\x03R\n" +
-	"totalCount\x12\x1d\n" +
-	"\n" +
-	"total_size\x18\x02 \x01(\x03R\ttotalSize\x12z\n" +
-	"\x10expiration_times\x18\x03 \x03(\v2O.temporal.server.chasm.lib.tests.proto.v1.TestPayloadStore.ExpirationTimesEntryR\x0fexpirationTimes\x12\x16\n" +
-	"\x06closed\x18\x04 \x01(\bR\x06closed\x1a^\n" +
-	"\x14ExpirationTimesEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05value:\x028\x01\"9\n" +
-	"\x16TestPayloadTTLPureTask\x12\x1f\n" +
-	"\vpayload_key\x18\x01 \x01(\tR\n" +
-	"payloadKey\"?\n" +
-	"\x1cTestPayloadTTLSideEffectTask\x12\x1f\n" +
-	"\vpayload_key\x18\x01 \x01(\tR\n" +
-	"payloadKeyB;Z9go.temporal.io/server/chasm/lib/tests/gen/testspb;testspbb\x06proto3"
+var file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc = []byte{
+	0x0a, 0x36, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65,
+	0x72, 0x2f, 0x63, 0x68, 0x61, 0x73, 0x6d, 0x2f, 0x6c, 0x69, 0x62, 0x2f, 0x74, 0x65, 0x73, 0x74,
+	0x73, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x76, 0x31, 0x2f, 0x6d, 0x65, 0x73, 0x73, 0x61,
+	0x67, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x28, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72,
+	0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x63, 0x68, 0x61, 0x73, 0x6d, 0x2e,
+	0x6c, 0x69, 0x62, 0x2e, 0x74, 0x65, 0x73, 0x74, 0x73, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e,
+	0x76, 0x31, 0x1a, 0x1f, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x62, 0x75, 0x66, 0x2f, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x22, 0xc6, 0x02, 0x0a, 0x10, 0x54, 0x65, 0x73, 0x74, 0x50, 0x61, 0x79, 0x6c,
+	0x6f, 0x61, 0x64, 0x53, 0x74, 0x6f, 0x72, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x74, 0x6f, 0x74, 0x61,
+	0x6c, 0x5f, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x0a, 0x74,
+	0x6f, 0x74, 0x61, 0x6c, 0x43, 0x6f, 0x75, 0x6e, 0x74, 0x12, 0x1d, 0x0a, 0x0a, 0x74, 0x6f, 0x74,
+	0x61, 0x6c, 0x5f, 0x73, 0x69, 0x7a, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x09, 0x74,
+	0x6f, 0x74, 0x61, 0x6c, 0x53, 0x69, 0x7a, 0x65, 0x12, 0x7a, 0x0a, 0x10, 0x65, 0x78, 0x70, 0x69,
+	0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x18, 0x03, 0x20, 0x03,
+	0x28, 0x0b, 0x32, 0x4f, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65,
+	0x72, 0x76, 0x65, 0x72, 0x2e, 0x63, 0x68, 0x61, 0x73, 0x6d, 0x2e, 0x6c, 0x69, 0x62, 0x2e, 0x74,
+	0x65, 0x73, 0x74, 0x73, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x76, 0x31, 0x2e, 0x54, 0x65,
+	0x73, 0x74, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x53, 0x74, 0x6f, 0x72, 0x65, 0x2e, 0x45,
+	0x78, 0x70, 0x69, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x45, 0x6e,
+	0x74, 0x72, 0x79, 0x52, 0x0f, 0x65, 0x78, 0x70, 0x69, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x54,
+	0x69, 0x6d, 0x65, 0x73, 0x12, 0x16, 0x0a, 0x06, 0x63, 0x6c, 0x6f, 0x73, 0x65, 0x64, 0x18, 0x04,
+	0x20, 0x01, 0x28, 0x08, 0x52, 0x06, 0x63, 0x6c, 0x6f, 0x73, 0x65, 0x64, 0x1a, 0x5e, 0x0a, 0x14,
+	0x45, 0x78, 0x70, 0x69, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x45,
+	0x6e, 0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x30, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d,
+	0x70, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x39, 0x0a, 0x16,
+	0x54, 0x65, 0x73, 0x74, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x54, 0x54, 0x4c, 0x50, 0x75,
+	0x72, 0x65, 0x54, 0x61, 0x73, 0x6b, 0x12, 0x1f, 0x0a, 0x0b, 0x70, 0x61, 0x79, 0x6c, 0x6f, 0x61,
+	0x64, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x70, 0x61, 0x79,
+	0x6c, 0x6f, 0x61, 0x64, 0x4b, 0x65, 0x79, 0x22, 0x3f, 0x0a, 0x1c, 0x54, 0x65, 0x73, 0x74, 0x50,
+	0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x54, 0x54, 0x4c, 0x53, 0x69, 0x64, 0x65, 0x45, 0x66, 0x66,
+	0x65, 0x63, 0x74, 0x54, 0x61, 0x73, 0x6b, 0x12, 0x1f, 0x0a, 0x0b, 0x70, 0x61, 0x79, 0x6c, 0x6f,
+	0x61, 0x64, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x70, 0x61,
+	0x79, 0x6c, 0x6f, 0x61, 0x64, 0x4b, 0x65, 0x79, 0x42, 0x3b, 0x5a, 0x39, 0x67, 0x6f, 0x2e, 0x74,
+	0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65,
+	0x72, 0x2f, 0x63, 0x68, 0x61, 0x73, 0x6d, 0x2f, 0x6c, 0x69, 0x62, 0x2f, 0x74, 0x65, 0x73, 0x74,
+	0x73, 0x2f, 0x67, 0x65, 0x6e, 0x2f, 0x74, 0x65, 0x73, 0x74, 0x73, 0x70, 0x62, 0x3b, 0x74, 0x65,
+	0x73, 0x74, 0x73, 0x70, 0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+}
 
 var (
 	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescData []byte
+	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescData = file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc
 )
 
 func file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescGZIP() []byte {
 	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc)))
+		file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescData)
 	})
 	return file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescData
 }
 
 var file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_temporal_server_chasm_lib_tests_proto_v1_message_proto_goTypes = []any{
+var file_temporal_server_chasm_lib_tests_proto_v1_message_proto_goTypes = []interface{}{
 	(*TestPayloadStore)(nil),             // 0: temporal.server.chasm.lib.tests.proto.v1.TestPayloadStore
 	(*TestPayloadTTLPureTask)(nil),       // 1: temporal.server.chasm.lib.tests.proto.v1.TestPayloadTTLPureTask
 	(*TestPayloadTTLSideEffectTask)(nil), // 2: temporal.server.chasm.lib.tests.proto.v1.TestPayloadTTLSideEffectTask
@@ -237,11 +269,49 @@ func file_temporal_server_chasm_lib_tests_proto_v1_message_proto_init() {
 	if File_temporal_server_chasm_lib_tests_proto_v1_message_proto != nil {
 		return
 	}
+	if !protoimpl.UnsafeEnabled {
+		file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*TestPayloadStore); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*TestPayloadTTLPureTask); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*TestPayloadTTLSideEffectTask); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc)),
+			RawDescriptor: file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc,
 			NumEnums:      0,
 			NumMessages:   4,
 			NumExtensions: 0,
@@ -252,6 +322,7 @@ func file_temporal_server_chasm_lib_tests_proto_v1_message_proto_init() {
 		MessageInfos:      file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes,
 	}.Build()
 	File_temporal_server_chasm_lib_tests_proto_v1_message_proto = out.File
+	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc = nil
 	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_goTypes = nil
 	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_depIdxs = nil
 }

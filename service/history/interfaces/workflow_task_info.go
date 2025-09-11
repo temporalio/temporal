@@ -48,6 +48,11 @@ type WorkflowTaskInfo struct {
 	// - when persisting transient/speculative WFT, the right Build ID is used in the WFT started event
 	// Deprecated.
 	BuildId string
+
+	// Stamp represents the "version" of the workflow's internal state.
+	// It increases monotonically when the workflow's options are modified.
+	// It is used to check if a workflow task is still relevant to the corresponding workflow state machine.
+	Stamp int32
 }
 
 type WorkflowTaskCompletionLimits struct {

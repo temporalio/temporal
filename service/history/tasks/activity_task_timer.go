@@ -53,7 +53,3 @@ func (a *ActivityTimeoutTask) GetType() enumsspb.TaskType {
 func (a *ActivityTimeoutTask) GetStamp() int32 {
 	return a.Stamp
 }
-
-func (a *ActivityTimeoutTask) SetStamp(stamp int32) {
-	a.Stamp = stamp
-}
