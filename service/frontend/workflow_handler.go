@@ -69,6 +69,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/deployment"
@@ -5261,12 +5262,12 @@ func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string)
 	if err != nil {
 		return err
 	}
-	if !(u.Scheme == "http" || u.Scheme == "https" || u.Scheme == "temporal") {
+	if !callbacks.IsSchemeAllowed(u.Scheme) {
 		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
 	}
 	for _, cfg := range wh.config.CallbackEndpointConfigs(ns.String()) {
 		if cfg.MatchHost(u.Host) {
-			if !cfg.SchemeAllowed(u.Scheme) {
+			if !cfg.CheckSchemeSecureLevel(u.Scheme) {
 				return status.Errorf(codes.InvalidArgument, "invalid url: callback address does not allow insecure connections: %v", u)
 			}
 			return nil

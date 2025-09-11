@@ -53,14 +53,23 @@ var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(
 	allowedAddressConverter,
 	[]AddressMatchRule(nil),
 	`The per-namespace list of addresses that are allowed for callbacks and whether secure connections (https) are required.
-URLs are checked against each in order when starting a workflow with attached callbacks and only need to match one to pass validation.
-Default is no address rules, meaning all callbacks will be rejected, unless they are configured with the "temporal://system". Any invalid entries are ignored. Each entry is a map with possible values:
+URLs are checked against each in order when starting a workflow with attached callbacks and only need to match one to pass validation. URL: "temporal://system" is always allowed.
+Default is no address rules. Any invalid entries are ignored. Each entry is a map with possible values:
 	 - "Pattern":string (required) the host:port pattern to which this config applies.
 		Wildcards, '*', are supported and can match any number of characters (e.g. '*' matches everything, 'prefix.*.domain' matches 'prefix.a.domain' as well as 'prefix.a.b.domain').
 	 - "AllowInsecure":bool (optional, default=false) indicates whether https is required`)
 
+// allowedSchema contains all schema both insecure and secure
 var allowedSchemes = []string{"http", "https", "temporal"}
-var allowedSecureSchemes = []string{"https"}
+
+// allowedSecurSchema contains only secure schemas
+var allowedSecureSchemes = []string{"https", "temporal"}
+
+var matchTemporalSystem, _ = regexp.Compile("^temporal://system$")
+
+func IsSchemeAllowed(scheme string) bool {
+	return slices.Contains(allowedSchemes, scheme)
+}
 
 type AddressMatchRule struct {
 	Regexp        *regexp.Regexp
@@ -71,8 +80,8 @@ func (a AddressMatchRule) MatchHost(host string) bool {
 	return a.Regexp.MatchString(host)
 }
 
-func (a AddressMatchRule) SchemeAllowed(scheme string) bool {
-	if a.AllowInsecure && slices.Contains(allowedSchemes, scheme) {
+func (a AddressMatchRule) CheckSchemeSecureLevel(scheme string) bool {
+	if a.AllowInsecure {
 		return true
 	}
 	return slices.Contains(allowedSecureSchemes, scheme)
@@ -104,13 +113,11 @@ func allowedAddressConverter(val any) ([]AddressMatchRule, error) {
 			AllowInsecure: e.AllowInsecure,
 		})
 	}
-	//used to indicate the callback should be routed internally
+	// used to indicate the callback should be routed internally
 	// other metadata from the client request will be used to route the request to the
 	// correct namespace
-	re, _ := regexp.Compile("^temporal://system$")
 	configs = append(configs, AddressMatchRule{
-		Regexp:        re,
-		AllowInsecure: false,
+		Regexp: matchTemporalSystem,
 	})
 	return configs, nil
 }
