@@ -25,6 +25,19 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
 > Note: it is possible to run Temporal server without a `docker`. If for some reason (for example, performance on macOS)
 > you want to run dependencies on the host OS, please follow the [doc](./docs/development/run-dependencies-host.md).
 
+- Runtime dependencies are optional support services that can be helpful during development and testing, providing
+databases, UI, and metrics services via `docker compose`. By default, the server utilizes SQLite as an in-memory 
+database, so the runtime dependencies are optional. To start dependencies, open new terminal window and run:
+
+```bash
+make start-dependencies
+```
+
+To stop the dependencies:
+```bash
+make stop-dependencies
+```
+
 ### For Windows developers
 
 For developing on Windows, install [Windows Subsystem for Linux 2 (WSL2)](https://aka.ms/wsl) and [Ubuntu](https://docs.microsoft.com/en-us/windows/wsl/install-win10#step-6---install-your-linux-distribution-of-choice). After that, follow the guidance for installing prerequisites, building, and testing on Ubuntu.
@@ -63,18 +76,8 @@ We defined three categories of tests.
 - Integration test: Those tests cover the integration between the server and the dependencies (Cassandra, SQL, ES etc.).
 - Functional test: Those tests cover the E2E functionality of Temporal server. They are all under ./tests directory.
 
-Integration and functional tests require runtime dependencies. If running unit tests, no need to start the dependencies. 
-They can be run with `start-dependencies` target (uses `docker compose` internally). Open new terminal window and run:
-
-```bash
-make start-dependencies
-```
-
-The default file handle limit on macOS should be sufficient to run the tests. If needed, increase the file handle limit:
-
-```bash
-ulimit -n 8192
-```
+Integration and functional tests require [runtime dependencies ](#runtime-server-and-tests-prerequisites), 
+when running with a persistence option that is not SQLite. If running unit tests, no need to start the dependencies.
 
 Run unit tests:
 
@@ -120,13 +123,9 @@ make stop-dependencies
 
 ## Run Temporal Server locally
 
-First start runtime dependencies. They can be run with `start-dependencies` target (uses `docker compose` internally). Open new terminal window and run:
+First, start the optional [runtime dependencies ](#runtime-server-and-tests-prerequisites) if desired.
 
-```bash
-make start-dependencies
-```
-
-then run the server:
+Then run the server:
 
 ```bash
 make start
@@ -167,7 +166,10 @@ temporal operator namespace create default
 
 and run samples from [Go](https://github.com/temporalio/samples-go) and [Java](https://github.com/temporalio/samples-java) samples repos. Also, you can access web UI at `localhost:8080`.
 
-When you are done, press `Ctrl+C` to stop the server. Don't forget to stop dependencies (with `Ctrl+C`) and clean up resources:
+When you are done, press `Ctrl+C` to stop the server. 
+
+If you started [runtime dependencies ](#runtime-server-and-tests-prerequisites), don't forget to stop dependencies 
+(with `Ctrl+C`) and clean up resources:
 
 ```bash
 make stop-dependencies
@@ -181,8 +183,7 @@ See the [developer documentation on testing](./docs/development/testing.md) to l
 
 For general instructions, see [GoLand Debugging](https://www.jetbrains.com/help/go/debugging-code.html).
 
-Ensure the `start-dependencies` target is running in a separate terminal window. This will give you the necessary 
-databases, UI, metrics services etc. to run the server.
+First, start the optional [runtime dependencies ](#runtime-server-and-tests-prerequisites) if desired.
 
 To run the server, ensure the Run Type is package. In "Package path", enter `go.temporal.io/server/cmd/server`. 
 In the "Program arguments" field, add the following:

@@ -603,7 +603,8 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
 
 	if callErr != nil {
-		e.Logger.Error("Nexus CancelOperation request failed", tag.Error(callErr))
+		logFn := getExecuteTaskFailureLogFn(ctx, e)
+		logFn("Nexus CancelOperation request failed", tag.Error(callErr))
 	}
 
 	err = e.saveCancelationResult(ctx, env, ref, callErr, args.scheduledEventID)
