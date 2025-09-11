@@ -28,9 +28,9 @@ const SerializerDataEncodingEnvVar = "TEMPORAL_TEST_DATA_ENCODING"
 func EncodingTypeFromEnv() enumspb.EncodingType {
 	codecType := os.Getenv(SerializerDataEncodingEnvVar)
 	switch strings.ToLower(codecType) {
-	case "json":
+	case "", "json":
 		return enumspb.ENCODING_TYPE_JSON
-	case "", "proto3":
+	case "proto3":
 		return enumspb.ENCODING_TYPE_PROTO3
 	default:
 		//nolint:forbidigo // should fail fast and hard if used incorrectly
