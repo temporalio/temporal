@@ -76,7 +76,7 @@ We defined three categories of tests.
 - Integration test: Those tests cover the integration between the server and the dependencies (Cassandra, SQL, ES etc.).
 - Functional test: Those tests cover the E2E functionality of Temporal server. They are all under ./tests directory.
 
-Integration and functional tests require [runtime dependencies ](#runtime-server-and-tests-prerequisites), 
+Integration and functional tests require [runtime dependencies](#runtime-server-and-tests-prerequisites), 
 when running with a persistence option that is not SQLite. If running unit tests, no need to start the dependencies.
 
 Run unit tests:
@@ -123,7 +123,7 @@ make stop-dependencies
 
 ## Run Temporal Server locally
 
-First, start the optional [runtime dependencies ](#runtime-server-and-tests-prerequisites) if desired.
+First, start the optional [runtime dependencies](#runtime-server-and-tests-prerequisites) if needed for the desired persistence option.
 
 Then run the server:
 
@@ -168,7 +168,7 @@ and run samples from [Go](https://github.com/temporalio/samples-go) and [Java](h
 
 When you are done, press `Ctrl+C` to stop the server. 
 
-If you started [runtime dependencies ](#runtime-server-and-tests-prerequisites), don't forget to stop dependencies 
+If you started [runtime dependencies](#runtime-server-and-tests-prerequisites), don't forget to stop dependencies 
 (with `Ctrl+C`) and clean up resources:
 
 ```bash
@@ -183,7 +183,7 @@ See the [developer documentation on testing](./docs/development/testing.md) to l
 
 For general instructions, see [GoLand Debugging](https://www.jetbrains.com/help/go/debugging-code.html).
 
-First, start the optional [runtime dependencies ](#runtime-server-and-tests-prerequisites) if desired.
+First, start the optional [runtime dependencies](#runtime-server-and-tests-prerequisites) if needed for the desired persistence option.
 
 To run the server, ensure the Run Type is package. In "Package path", enter `go.temporal.io/server/cmd/server`. 
 In the "Program arguments" field, add the following:
