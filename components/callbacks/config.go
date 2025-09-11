@@ -53,7 +53,7 @@ var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(
 	allowedAddressConverter,
 	[]AddressMatchRule(nil),
 	`The per-namespace list of addresses that are allowed for callbacks and whether secure connections (https) are required.
-URLs are checked against each in order when starting a workflow with attached callbacks and only need to match one to pass validation. URL: "temporal://system" is always allowed.
+URLs are checked against each in order when starting a workflow with attached callbacks and only need to match one to pass validation. URL: "temporal://system" is always valid.
 Default is no address rules. Any invalid entries are ignored. Each entry is a map with possible values:
 	 - "Pattern":string (required) the host:port pattern to which this config applies.
 		Wildcards, '*', are supported and can match any number of characters (e.g. '*' matches everything, 'prefix.*.domain' matches 'prefix.a.domain' as well as 'prefix.a.b.domain').
