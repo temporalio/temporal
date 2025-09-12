@@ -164,7 +164,12 @@ func replicationStreamLowPrioritySchedulerProvider(
 	lc fx.Lifecycle,
 ) ctasks.Scheduler[TrackableExecutableTask] {
 	queueFactory := func(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
-		return NewSequentialTaskQueue(task)
+		item := task.QueueID()
+		workflowKey, ok := item.(definition.WorkflowKey)
+		if !ok {
+			return NewSequentialTaskQueueWithID(item)
+		}
+		return NewSequentialTaskQueueWithID(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID)
 	}
 	taskQueueHashFunc := func(item interface{}) uint32 {
 		workflowKey, ok := item.(definition.WorkflowKey)
