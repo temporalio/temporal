@@ -378,6 +378,21 @@ func (mr *MockCLIClientMockRecorder) CloseScroll(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseScroll", reflect.TypeOf((*MockCLIClient)(nil).CloseScroll), ctx, id)
 }
 
+// ClusterPutSettings mocks base method.
+func (m *MockCLIClient) ClusterPutSettings(ctx context.Context, bodyString string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClusterPutSettings", ctx, bodyString)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClusterPutSettings indicates an expected call of ClusterPutSettings.
+func (mr *MockCLIClientMockRecorder) ClusterPutSettings(ctx, bodyString any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClusterPutSettings", reflect.TypeOf((*MockCLIClient)(nil).ClusterPutSettings), ctx, bodyString)
+}
+
 // Count mocks base method.
 func (m *MockCLIClient) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
 	m.ctrl.T.Helper()
@@ -497,6 +512,21 @@ func (mr *MockCLIClientMockRecorder) IndexExists(ctx, indexName any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexExists", reflect.TypeOf((*MockCLIClient)(nil).IndexExists), ctx, indexName)
 }
 
+// IndexPutTemplate mocks base method.
+func (m *MockCLIClient) IndexPutTemplate(ctx context.Context, templateName, bodyString string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IndexPutTemplate", ctx, templateName, bodyString)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IndexPutTemplate indicates an expected call of IndexPutTemplate.
+func (mr *MockCLIClientMockRecorder) IndexPutTemplate(ctx, templateName, bodyString any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexPutTemplate", reflect.TypeOf((*MockCLIClient)(nil).IndexPutTemplate), ctx, templateName, bodyString)
+}
+
 // IsPointInTimeSupported mocks base method.
 func (m *MockCLIClient) IsPointInTimeSupported(ctx context.Context) bool {
 	m.ctrl.T.Helper()
@@ -539,6 +569,20 @@ func (m *MockCLIClient) OpenScroll(ctx context.Context, p *SearchParameters, kee
 func (mr *MockCLIClientMockRecorder) OpenScroll(ctx, p, keepAliveInterval any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenScroll", reflect.TypeOf((*MockCLIClient)(nil).OpenScroll), ctx, p, keepAliveInterval)
+}
+
+// Ping mocks base method.
+func (m *MockCLIClient) Ping(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Ping", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Ping indicates an expected call of Ping.
+func (mr *MockCLIClientMockRecorder) Ping(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ping", reflect.TypeOf((*MockCLIClient)(nil).Ping), ctx)
 }
 
 // PutMapping mocks base method.
