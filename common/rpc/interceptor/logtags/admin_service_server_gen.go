@@ -77,6 +77,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		}
 	case *adminservice.GenerateLastHistoryReplicationTasksResponse:
 		return nil
+	case *adminservice.GetConfigurationsRequest:
+		return nil
+	case *adminservice.GetConfigurationsResponse:
+		return nil
 	case *adminservice.GetDLQMessagesRequest:
 		return nil
 	case *adminservice.GetDLQMessagesResponse:

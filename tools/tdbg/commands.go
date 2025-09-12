@@ -722,3 +722,18 @@ func AdminReplicateWorkflow(
 	fmt.Fprintln(c.App.Writer, "Replication tasks generated successfully.")
 	return nil
 }
+
+
+func AdminGetClusterConfig(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	resp, err := adminClient.GetConfigurations(ctx, &adminservice.GetConfigurationsRequest{})	
+	if err != nil {
+		return fmt.Errorf("error getting cluster config: %s", err)
+	}
+
+	prettyPrintJSONObject(c, resp)
+	return nil
+}
