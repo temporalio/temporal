@@ -187,10 +187,6 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackURLMaxLength, 50)
 	s.OverrideDynamicConfig(dynamicconfig.FrontendCallbackHeaderMaxSize, 6)
 	s.OverrideDynamicConfig(dynamicconfig.MaxCallbacksPerWorkflow, 2)
-	s.OverrideDynamicConfig(
-		callbacks.AllowedAddresses,
-		[]any{map[string]any{"Pattern": "some-ignored-address", "AllowInsecure": true}, map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false}},
-	)
 
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
@@ -227,11 +223,6 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 }
 
 func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
-	s.OverrideDynamicConfig(
-		callbacks.AllowedAddresses,
-		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
-	)
-
 	cases := []struct {
 		name       string
 		wf         func(workflow.Context) (int, error)
@@ -480,11 +471,6 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 }
 
 func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
-	s.OverrideDynamicConfig(
-		callbacks.AllowedAddresses,
-		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
-	)
-
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 	sdkClient, err := client.Dial(client.Options{

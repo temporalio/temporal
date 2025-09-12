@@ -62,14 +62,14 @@ URL: "temporal://system" is always allowed and the default is no address rules. 
 		Wildcards, '*', are supported and can match any number of characters (e.g. '*' matches everything, 'prefix.*.domain' matches 'prefix.a.domain' as well as 'prefix.a.b.domain').
 	 - "AllowInsecure":bool (optional, default=false) indicates whether https is required`)
 
-// allowedSchema contains all schema both insecure and secure
+// allowedSchema contains all schemes both insecure and secure
 var allowedSchemes = []string{"http", "https", "temporal"}
 
-// allowedSecurSchema contains only secure schemas
+// allowedSecurSchema contains only secure schemes
 var allowedSecureSchemes = []string{"https", "temporal"}
 
 const (
-	temporalSystemURL = "temporal://system"
+	temporalSystemURI = "temporal://system"
 )
 
 func IsSchemeAllowed(scheme string) bool {
@@ -88,7 +88,7 @@ type AddressMatchRule struct {
 // 3. It false, error if there is a match and the URL fails validation
 func (a AddressMatchRule) Allow(u *url.URL) (bool, error) {
 	if a.Regexp == nil {
-		if u.String() == temporalSystemURL {
+		if u.String() == temporalSystemURI {
 			return true, nil
 		}
 		return false, nil
@@ -122,7 +122,7 @@ func allowedAddressConverter(val any) ([]AddressMatchRule, error) {
 			// used to indicate the callback should be routed internally
 			// other metadata from the client request will be used to route the request to the
 			// correct namespace
-			// the temporalSystemURL is checked explicitly in the allow method
+			// the temporalSystemURI is checked explicitly in the allow method
 		},
 	}
 	for _, e := range intermediate {

@@ -88,6 +88,26 @@ type taskExecutor struct {
 	TaskExecutorOptions
 }
 
+func buildCallbackURL(callbackTemplate string, ns *namespace.Namespace) (string, error) {
+	if callbackTemplate == "unset" {
+		return "", serviceerror.NewInternalf("dynamic config %q is unset", CallbackURLTemplate.Key().String())
+	}
+	// TODO(bergundy): Consider caching this template.
+	callbackURLTemplate, err := template.New("NexusCallbackURL").Parse(callbackTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse callback URL template: %w", err)
+	}
+	builder := &strings.Builder{}
+	err = callbackURLTemplate.Execute(builder, struct{ NamespaceName, NamespaceID string }{
+		NamespaceName: ns.Name().String(),
+		NamespaceID:   ns.ID().String(),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to format callback URL: %w", err)
+	}
+	return builder.String(), nil
+}
+
 func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task InvocationTask) error {
 	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
 	if err != nil {
@@ -115,24 +135,10 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		}
 		return err
 	}
-
-	if e.Config.CallbackURLTemplate() == "unset" {
-		return serviceerror.NewInternalf("dynamic config %q is unset", CallbackURLTemplate.Key().String())
-	}
-	// TODO(bergundy): Consider caching this template.
-	callbackURLTemplate, err := template.New("NexusCallbackURL").Parse(e.Config.CallbackURLTemplate())
+	callbackURL, err := buildCallbackURL(e.Config.CallbackURLTemplate(), ns)
 	if err != nil {
-		return fmt.Errorf("failed to parse callback URL template: %w", err)
+		return err
 	}
-	builder := &strings.Builder{}
-	err = callbackURLTemplate.Execute(builder, struct{ NamespaceName, NamespaceID string }{
-		NamespaceName: ns.Name().String(),
-		NamespaceID:   ns.ID().String(),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to format callback URL: %w", err)
-	}
-	callbackURL := builder.String()
 
 	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
 	ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey, &atomic.Value{})
