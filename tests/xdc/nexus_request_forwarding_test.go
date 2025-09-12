@@ -34,6 +34,7 @@ import (
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -77,6 +78,7 @@ func (s *NexusRequestForwardingSuite) SetupSuite() {
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                               1 * time.Millisecond,
 		dynamicconfig.FrontendNexusRequestHeadersBlacklist.Key():                       dynamicconfig.GetTypedPropertyFn(re),
+		callbacks.AllowedAddresses.Key():                                               []any{map[string]any{}},
 	}
 	s.setupSuite()
 }

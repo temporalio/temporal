@@ -29,6 +29,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -66,6 +67,7 @@ func (s *NexusStateReplicationSuite) SetupSuite() {
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                               1 * time.Millisecond,
+		callbacks.AllowedAddresses.Key():                                               []any{map[string]any{}},
 	}
 	s.setupSuite()
 }
