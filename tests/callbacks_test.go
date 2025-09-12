@@ -602,6 +602,13 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	)
 }
 
+func longRunningWorkflow(ctx workflow.Context) error {
+	return workflow.Await(ctx, func() bool {
+		info := workflow.GetInfo(ctx)
+		return info.OriginalRunID != info.WorkflowExecution.RunID
+	})
+}
+
 func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() {
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
@@ -628,18 +635,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 
 	w := worker.New(sdkClient, taskQueue.GetName(), worker.Options{})
 
-	// A workflow that completes once it has been reset.
-	longRunningWorkflow := func(ctx workflow.Context) error {
-		return workflow.Await(ctx, func() bool {
-			info := workflow.GetInfo(ctx)
-
-			return info.OriginalRunID != info.WorkflowExecution.RunID
-		})
-	}
-
-	w.RegisterWorkflowWithOptions(longRunningWorkflow, workflow.RegisterOptions{
-		Name: "longRunningWorkflow",
-	})
+	w.RegisterWorkflow(longRunningWorkflow)
 	s.NoError(w.Start())
 	defer w.Stop()
 
@@ -682,14 +678,15 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 	}
 	s.WaitForHistoryEvents(`
 			1 WorkflowExecutionStarted
-  			2 WorkflowTaskScheduled
-  			3 WorkflowTaskStarted
-  			4 WorkflowTaskCompleted`,
+			2 WorkflowTaskScheduled
+			3 WorkflowTaskStarted
+			4 WorkflowTaskCompleted`,
 		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
+	// Use workflow task finish event ID 3 as reset point
 
-	// Try starting another workflow, which will have the callback attached to the previous workflow.
+	// Attach second callback to existing run via conflict policy
 	request2 := proto.Clone(request1).(*workflowservice.StartWorkflowExecutionRequest)
 	request2.RequestId = uuid.NewString()
 	request2.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
@@ -717,10 +714,9 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 
 	// Reset workflow must copy all callbacks even after the reset point.
 	resetWfResponse, err := sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
-
+		Namespace:                 s.Namespace().String(),
 		WorkflowExecution:         workflowExecution,
-		Reason:                    "TestNexusResetWorkflowWithCallback",
+		Reason:                    "TestNexusResetWorkflowWithCallback_ResetToNotBaseRun",
 		WorkflowTaskFinishEventId: 3,
 		RequestId:                 "test_id",
 	})
@@ -745,6 +741,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 	err = resetWorkflowRun.Get(ctx, nil)
 	s.NoError(err)
 
+	// Expect one completion per callback after first reset
 	for range cbs {
 		completion := <-ch.requestCh
 		s.Equal(nexus.OperationStateSucceeded, completion.State)
@@ -753,8 +750,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 
 	s.EventuallyWithT(
 		func(t *assert.CollectT) {
-			// Get the description of the run post-reset and ensure its callbacks are in SUCCEEDED
-			// state.
+			// Validate first reset run has all callbacks in SUCCEEDED state
 			description, err = sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun.GetID(), "")
 			require.NoError(t, err)
 			require.Equal(
@@ -788,10 +784,12 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 	})
 	s.NoError(err)
 
+	// Wait for second (non-base) reset run to complete
 	resetWorkflowRun2 := sdkClient.GetWorkflow(ctx, workflowID, resetWfResponse2.RunId)
 	err = resetWorkflowRun2.Get(ctx, nil)
 	s.NoError(err)
 
+	// Expect another completion per callback after second (non-base) reset
 	for range cbs {
 		completion := <-ch.requestCh
 		s.Equal(nexus.OperationStateSucceeded, completion.State)
@@ -800,7 +798,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 
 	s.EventuallyWithT(
 		func(t *assert.CollectT) {
-			// Get the description of the run post-second-reset and ensure its callbacks are in SUCCEEDED state.
+			// Validate second reset run has all callbacks in SUCCEEDED state
 			description, err = sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun2.GetID(), "")
 			require.NoError(t, err)
 			require.Equal(
