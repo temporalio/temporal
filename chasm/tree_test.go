@@ -452,20 +452,21 @@ func (s *nodeSuite) TestPointerAttributes() {
 		},
 	}
 
+	sc1 := &TestSubComponent1{
+		SubComponent1Data: &protoMessageType{
+			RunId: tv.WithWorkflowIDNumber(1).WorkflowID(),
+		},
+		SubComponent11: NewComponentField[*TestSubComponent11](nil, sc11),
+	}
+
 	s.Run("Sync and serialize component with pointer", func() {
 		var nilSerializedNodes map[string]*persistencespb.ChasmNode
 		rootNode, err := s.newTestTree(nilSerializedNodes)
 		s.NoError(err)
 
-		sc1 := &TestSubComponent1{
-			SubComponent1Data: &protoMessageType{
-				RunId: tv.WithWorkflowIDNumber(1).WorkflowID(),
-			},
-			SubComponent11: NewComponentField[*TestSubComponent11](nil, sc11),
-		}
-
 		rootComponent := &TestComponent{
-			SubComponent1: NewComponentField[*TestSubComponent1](nil, sc1),
+			SubComponent1:                NewComponentField[*TestSubComponent1](nil, sc1),
+			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
 		}
 
 		rootNode.value = rootComponent
@@ -477,7 +478,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 
 		mutations, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.Len(mutations.UpdatedNodes, 4, "root, SubComponent1, SubComponent11, and SubComponent11Pointer must be updated")
+		s.Len(mutations.UpdatedNodes, 5, "root, SubComponent1, SubComponent11, SubComponent11Pointer, and SubComponentInterfacePointer must be updated")
 		s.Empty(mutations.DeletedNodes)
 
 		s.Equal([]string{"SubComponent1", "SubComponent11"}, rootNode.children["SubComponent11Pointer"].serializedNode.GetMetadata().GetPointerAttributes().GetNodePath())
@@ -502,6 +503,14 @@ func (s *nodeSuite) TestPointerAttributes() {
 		s.NoError(err)
 		s.NotNil(sc11Des)
 		s.Equal(sc11.SubComponent11Data.GetRunId(), sc11Des.SubComponent11Data.GetRunId())
+
+		ifacePtr, err := rootComponent.SubComponentInterfacePointer.Get(chasmContext)
+		s.NoError(err)
+		s.NotNil(ifacePtr)
+
+		sc1ptr, ok := ifacePtr.(*TestSubComponent1)
+		s.True(ok)
+		s.ProtoEqual(sc1ptr.SubComponent1Data, sc1.SubComponent1Data)
 	})
 
 	s.Run("Clear pointer by setting it to the empty field", func() {

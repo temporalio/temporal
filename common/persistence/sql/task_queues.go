@@ -36,8 +36,8 @@ func (m *taskQueueStore) CreateTaskQueue(
 		Data:         request.TaskQueueInfo.Data,
 		DataEncoding: request.TaskQueueInfo.EncodingType.String(),
 	}
-	if _, err := m.Db.InsertIntoTaskQueues(ctx, &row, m.version); err != nil {
-		if m.Db.IsDupEntryError(err) {
+	if _, err := m.DB.InsertIntoTaskQueues(ctx, &row, m.version); err != nil {
+		if m.DB.IsDupEntryError(err) {
 			return &persistence.ConditionFailedError{Msg: err.Error()}
 		}
 		return serviceerror.NewUnavailablef("CreateTaskQueue operation failed. Failed to make task queue %v of type %v. Error: %v", request.TaskQueue, request.TaskType, err)
@@ -55,7 +55,7 @@ func (m *taskQueueStore) GetTaskQueue(
 		return nil, serviceerror.NewInternal(err.Error())
 	}
 	tqId, tqHash := taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, persistence.SubqueueZero)
-	rows, err := m.Db.SelectFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
+	rows, err := m.DB.SelectFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
 	}, m.version)
@@ -172,7 +172,7 @@ func (m *taskQueueStore) ListTaskQueue(
 			lastPageFull = false
 		}
 
-		rows, err = m.Db.SelectFromTaskQueues(ctx, filter, m.version)
+		rows, err = m.DB.SelectFromTaskQueues(ctx, filter, m.version)
 		if err != nil {
 			return nil, serviceerror.NewUnavailable(err.Error())
 		}
@@ -238,7 +238,7 @@ func (m *taskQueueStore) DeleteTaskQueue(
 		return serviceerror.NewUnavailable(err.Error())
 	}
 	tqId, tqHash := taskQueueIdAndHash(nidBytes, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType, persistence.SubqueueZero)
-	result, err := m.Db.DeleteFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
+	result, err := m.DB.DeleteFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
 		RangeID:     &request.RangeID,

@@ -2094,8 +2094,9 @@ func (adh *AdminHandler) ListQueues(
 	queues := make([]*adminservice.ListQueuesResponse_QueueInfo, len(resp.Queues))
 	for i, queue := range resp.Queues {
 		queues[i] = &adminservice.ListQueuesResponse_QueueInfo{
-			QueueName:    queue.QueueName,
-			MessageCount: queue.MessageCount,
+			QueueName:     queue.QueueName,
+			MessageCount:  queue.MessageCount,
+			LastMessageId: queue.LastMessageId,
 		}
 	}
 	return &adminservice.ListQueuesResponse{
