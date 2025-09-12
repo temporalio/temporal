@@ -31,6 +31,7 @@ CREATE TABLE executions_visibility (
   TemporalNamespaceDivision     VARCHAR(255)  GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalNamespaceDivision")),
   BuildIds                      TEXT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.BuildIds"))              STORED,
   TemporalPauseInfo             TEXT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalPauseInfo"))     STORED,
+  TemporalReportedProblems      TEXT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalReportedProblems")) STORED,
   TemporalWorkerDeploymentVersion VARCHAR(255)        GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalWorkerDeploymentVersion")),
   TemporalWorkflowVersioningBehavior VARCHAR(255)     GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalWorkflowVersioningBehavior")),
   TemporalWorkerDeployment        VARCHAR(255)        GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalWorkerDeployment")),
@@ -137,6 +138,7 @@ CREATE VIRTUAL TABLE executions_visibility_fts_keyword_list USING fts5 (
   BinaryChecksums,
   BuildIds,
   TemporalPauseInfo,
+  TemporalReportedProblems,
   KeywordList01,
   KeywordList02,
   KeywordList03,
@@ -165,6 +167,7 @@ BEGIN
     BinaryChecksums,
     BuildIds,
     TemporalPauseInfo,
+    TemporalReportedProblems,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -174,6 +177,7 @@ BEGIN
     NEW.BinaryChecksums,
     NEW.BuildIds,
     NEW.TemporalPauseInfo,
+    NEW.TemporalReportedProblems,
     NEW.KeywordList01,
     NEW.KeywordList02,
     NEW.KeywordList03
@@ -204,6 +208,7 @@ BEGIN
     BinaryChecksums,
     BuildIds,
     TemporalPauseInfo,
+    TemporalReportedProblems,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -214,6 +219,7 @@ BEGIN
     OLD.BinaryChecksums,
     OLD.BuildIds,
     OLD.TemporalPauseInfo,
+    OLD.TemporalReportedProblems,
     OLD.KeywordList01,
     OLD.KeywordList02,
     OLD.KeywordList03
@@ -255,6 +261,7 @@ BEGIN
     BinaryChecksums,
     BuildIds,
     TemporalPauseInfo,
+    TemporalReportedProblems,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -265,6 +272,7 @@ BEGIN
     OLD.BinaryChecksums,
     OLD.BuildIds,
     OLD.TemporalPauseInfo,
+    OLD.TemporalReportedProblems,
     OLD.KeywordList01,
     OLD.KeywordList02,
     OLD.KeywordList03
@@ -275,6 +283,7 @@ BEGIN
     BinaryChecksums,
     BuildIds,
     TemporalPauseInfo,
+    TemporalReportedProblems,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -284,6 +293,7 @@ BEGIN
     NEW.BinaryChecksums,
     NEW.BuildIds,
     NEW.TemporalPauseInfo,
+    NEW.TemporalReportedProblems,
     NEW.KeywordList01,
     NEW.KeywordList02,
     NEW.KeywordList03
