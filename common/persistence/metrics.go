@@ -24,4 +24,3 @@ func EmitDataLossMetric(
 		metrics.StringTag(ErrorTagName, err.Error()),
 	)
 }
-
