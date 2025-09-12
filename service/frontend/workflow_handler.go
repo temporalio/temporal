@@ -6056,6 +6056,7 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	}
 	queueRateLimit := request.GetUpdateQueueRateLimit()
 	fairnessKeyRateLimitDefault := request.GetUpdateFairnessKeyRateLimitDefault()
+	fairnessWeightOverrides := request.GetUpdateFairnessWeightOverrides()
 	// Validate rate limits
 	if err := validateRateLimit(queueRateLimit, "UpdateQueueRateLimit"); err != nil {
 		return nil, err
@@ -6065,6 +6066,10 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	}
 	// Validate identity field
 	if err := validateStringField("Identity", request.GetIdentity(), wh.config.MaxIDLengthLimit(), false); err != nil {
+		return nil, err
+	}
+	// Validate Fairness Weight Updates
+	if err := validateFairnessWeightUpdates(fairnessWeightOverrides, wh.config.MaxFairnessWeightOverrideConfigLimit()); err != nil {
 		return nil, err
 	}
 	resp, err := wh.matchingClient.UpdateTaskQueueConfig(ctx, &matchingservice.UpdateTaskQueueConfigRequest{
