@@ -69,6 +69,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/deployment"
@@ -5256,19 +5257,24 @@ func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string)
 	if len(rawURL) > wh.config.CallbackURLMaxLength(ns.String()) {
 		return status.Errorf(codes.InvalidArgument, "invalid url: url length longer than max length allowed of %d", wh.config.CallbackURLMaxLength(ns.String()))
 	}
+	rules := wh.config.CallbackEndpointConfigs(ns.String())
+	return allowCallbackURL(rawURL, rules)
+}
 
+func allowCallbackURL(rawURL string, rules []callbacks.AddressMatchRule) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return err
 	}
-	if !(u.Scheme == "http" || u.Scheme == "https") {
+	if !callbacks.IsSchemeAllowed(u.Scheme) {
 		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
 	}
-	for _, cfg := range wh.config.CallbackEndpointConfigs(ns.String()) {
-		if cfg.Regexp.MatchString(u.Host) {
-			if u.Scheme == "http" && !cfg.AllowInsecure {
-				return status.Errorf(codes.InvalidArgument, "invalid url: callback address does not allow insecure connections: %v", u)
-			}
+	for _, rule := range rules {
+		allow, err := rule.Allow(u)
+		if err != nil {
+			return err
+		}
+		if allow {
 			return nil
 		}
 	}

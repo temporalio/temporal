@@ -78,7 +78,7 @@ func (s *NexusRequestForwardingSuite) SetupSuite() {
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                               1 * time.Millisecond,
 		dynamicconfig.FrontendNexusRequestHeadersBlacklist.Key():                       dynamicconfig.GetTypedPropertyFn(re),
-		callbacks.AllowedAddresses.Key():                                               []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+		callbacks.AllowedAddresses.Key():                                               []any{map[string]any{}},
 	}
 	s.setupSuite()
 }
