@@ -89,6 +89,9 @@ type taskExecutor struct {
 }
 
 func buildCallbackURL(callbackTemplate string, ns *namespace.Namespace) (string, error) {
+	// seems like when the system callback URL is set and no other ones are
+	// we need to check the callback link on the task. if it's the system uri then we can allow it through
+	// I could be thinking about this wrong
 	if callbackTemplate == "unset" {
 		return "", serviceerror.NewInternalf("dynamic config %q is unset", CallbackURLTemplate.Key().String())
 	}
