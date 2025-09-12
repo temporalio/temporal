@@ -10,7 +10,6 @@ import (
 	_ "time/tzdata" // embed tzdata as a fallback
 
 	"github.com/urfave/cli/v2"
-
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/build"
 	"go.temporal.io/server/common/config"
