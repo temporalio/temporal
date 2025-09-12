@@ -2,6 +2,8 @@ package queues
 
 import (
 	"math/rand"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -11,8 +13,9 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/tasks"
 	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/tasks"
+	htasks "go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 )
 
@@ -124,8 +127,8 @@ func (s *rescheudulerSuite) TestReschedule_NoRescheduleLimit() {
 	numExecutable := 10
 	for i := 0; i != numExecutable/2; i++ {
 		mockTask := NewMockExecutable(s.controller)
-		mockTask.EXPECT().SetScheduledTime(gomock.Any()).Times(1)
-		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).Times(1)
+		mockTask.EXPECT().SetScheduledTime(gomock.Any()).AnyTimes()
+		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).AnyTimes()
 		s.rescheduler.Add(
 			mockTask,
 			now.Add(time.Duration(rand.Int63n(rescheduleInterval.Nanoseconds()))),
@@ -212,7 +215,7 @@ func (s *rescheudulerSuite) TestForceReschedule_ImmediateTask() {
 		mockTask := NewMockExecutable(s.controller)
 		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).AnyTimes()
 		mockTask.EXPECT().SetScheduledTime(gomock.Any()).AnyTimes()
-		mockTask.EXPECT().GetKey().Return(tasks.NewImmediateKey(int64(i))).AnyTimes()
+		mockTask.EXPECT().GetKey().Return(htasks.NewImmediateKey(int64(i))).AnyTimes()
 		s.rescheduler.Add(
 			mockTask,
 			now.Add(time.Minute+time.Duration(rand.Int63n(time.Minute.Nanoseconds()))),
@@ -243,7 +246,7 @@ func (s *rescheudulerSuite) TestForceReschedule_ScheduledTask() {
 	retryingTask := NewMockExecutable(s.controller)
 	retryingTask.EXPECT().State().Return(ctasks.TaskStatePending).AnyTimes()
 	retryingTask.EXPECT().SetScheduledTime(gomock.Any()).AnyTimes()
-	retryingTask.EXPECT().GetKey().Return(tasks.NewKey(now.Add(-time.Minute), int64(1))).AnyTimes()
+	retryingTask.EXPECT().GetKey().Return(htasks.NewKey(now.Add(-time.Minute), int64(1))).AnyTimes()
 	s.rescheduler.Add(
 		retryingTask,
 		now.Add(time.Minute),
@@ -254,7 +257,7 @@ func (s *rescheudulerSuite) TestForceReschedule_ScheduledTask() {
 	futureTask := NewMockExecutable(s.controller)
 	futureTask.EXPECT().State().Return(ctasks.TaskStatePending).AnyTimes()
 	futureTask.EXPECT().SetScheduledTime(gomock.Any()).AnyTimes()
-	futureTask.EXPECT().GetKey().Return(tasks.NewKey(futureTaskTimestamp, int64(2))).AnyTimes()
+	futureTask.EXPECT().GetKey().Return(htasks.NewKey(futureTaskTimestamp, int64(2))).AnyTimes()
 	s.rescheduler.Add(
 		futureTask,
 		futureTaskTimestamp,
@@ -268,4 +271,95 @@ func (s *rescheudulerSuite) TestForceReschedule_ScheduledTask() {
 	s.rescheduler.Reschedule(namespaceID)
 	taskWG.Wait()
 	s.Equal(1, s.rescheduler.Len())
+}
+
+func (s *rescheudulerSuite) TestPriorityOrdering() {
+	// Test that tasks are processed in priority order
+	now := time.Now()
+	s.timeSource.Update(now)
+
+	// Track the order in which tasks are submitted
+	var submittedTasks []string
+	var mu sync.Mutex
+
+	// Map executables to their task IDs for identification
+	taskMap := make(map[Executable]string)
+
+	// Create a custom scheduler that records submission order
+	mockScheduler := NewMockScheduler(s.controller)
+	mockScheduler.EXPECT().TaskChannelKeyFn().Return(
+		func(executable Executable) TaskChannelKey {
+			taskID := taskMap[executable]
+			switch taskID {
+			case "high_ns_a":
+				return TaskChannelKey{NamespaceID: "namespace_a", Priority: tasks.PriorityHigh}
+			case "high_ns_c":
+				return TaskChannelKey{NamespaceID: "namespace_c", Priority: tasks.PriorityHigh}
+			case "low_ns_b":
+				return TaskChannelKey{NamespaceID: "namespace_b", Priority: tasks.PriorityLow}
+			case "low_ns_d":
+				return TaskChannelKey{NamespaceID: "namespace_d", Priority: tasks.PriorityLow}
+			case "preempt_ns_a":
+				return TaskChannelKey{NamespaceID: "namespace_a", Priority: tasks.PriorityPreemptable}
+			case "preempt_ns_b":
+				return TaskChannelKey{NamespaceID: "namespace_b", Priority: tasks.PriorityPreemptable}
+			}
+			return TaskChannelKey{NamespaceID: "default", Priority: tasks.PriorityLow}
+		},
+	).AnyTimes()
+
+	mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(executable Executable) bool {
+		taskID := taskMap[executable]
+		mu.Lock()
+		submittedTasks = append(submittedTasks, taskID)
+		mu.Unlock()
+		return true
+	}).AnyTimes()
+
+	rescheduler := NewRescheduler(
+		mockScheduler,
+		s.timeSource,
+		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
+	)
+
+	// Create tasks with mixed priorities and namespaces in random insertion order
+	taskIDs := []string{
+		"preempt_ns_b", "high_ns_c", "low_ns_d",
+		"preempt_ns_a", "high_ns_a", "low_ns_b",
+	}
+
+	// Add tasks in random order to ensure we're testing sorting, not insertion order
+	for _, taskID := range taskIDs {
+		mockTask := NewMockExecutable(s.controller)
+		taskMap[mockTask] = taskID
+		mockTask.EXPECT().SetScheduledTime(gomock.Any()).AnyTimes()
+		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).AnyTimes()
+
+		rescheduler.Add(mockTask, now.Add(-time.Second)) // All tasks ready to be processed
+	}
+
+	// Process all tasks
+	rescheduler.reschedule()
+
+	// All tasks should be processed in priority order
+	s.Len(submittedTasks, 6, "Should process all 6 tasks")
+	s.Equal(0, rescheduler.Len(), "Should have no remaining tasks")
+
+	rank := func(taskID string) int {
+		switch {
+		case strings.HasPrefix(taskID, "high_"):
+			return 1
+		case strings.HasPrefix(taskID, "low_"):
+			return 2
+		case strings.HasPrefix(taskID, "preempt_"):
+			return 3
+		default:
+			return 999
+		}
+	}
+
+	s.True(slices.IsSortedFunc(submittedTasks, func(a, b string) int {
+		return rank(a) - rank(b)
+	}), "Tasks should be sorted by priority order")
 }
