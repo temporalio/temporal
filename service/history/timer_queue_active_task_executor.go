@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
@@ -373,6 +372,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	workflowTask := mutableState.GetWorkflowTaskByID(task.EventID)
 	if workflowTask == nil {
 		return nil
+	}
+	if task.Stamp != workflowTask.Stamp {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrStaleReference
 	}
 
 	var operationMetricsTag string

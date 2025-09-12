@@ -13,7 +13,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -24,11 +23,9 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
@@ -762,6 +759,8 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 		workflowID,
 		runID,
 	)
+	s.EqualValues(0, s.mutableState.executionInfo.WorkflowTaskStamp)
+	s.mutableState.executionInfo.Attempt = 5 // pretend we are in the middle workflow task retries
 
 	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
@@ -770,6 +769,10 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 	err = s.mutableState.StartDeploymentTransition(deployment)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+	s.EqualValues(1, s.mutableState.executionInfo.WorkflowTaskStamp,
+		"workflow task stamp must be incremented since pending tasks are rescheduled")
+	s.EqualValues(1, s.mutableState.executionInfo.Attempt,
+		"workflow task attempt must be reset to 1 since pending tasks are rescheduled")
 
 	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		wft.ScheduledEventID,
@@ -1056,7 +1059,6 @@ func (s *mutableStateSuite) TestOverride_RedirectFails() {
 }
 
 func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
-	s.T().Skip("TODO (Shahab)")
 	tq := &taskqueuepb.TaskQueue{Name: "tq"}
 	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
@@ -1073,6 +1075,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 		},
 	)
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
+	s.Equal(int32(1), s.mutableState.executionInfo.WorkflowTaskStamp)
 
 	// assert that redirect fails - should be its own test
 	err = s.mutableState.StartDeploymentTransition(deployment2)
@@ -5123,8 +5126,6 @@ func (s *mutableStateSuite) TestHasRequestID() {
 }
 
 func (s *mutableStateSuite) TestHasRequestID_StateConsistency() {
-	s.SetupTest()
-
 	// Test that HasRequestID is consistent with AttachRequestID
 	requestID := "consistency-test-request-id"
 
@@ -5141,8 +5142,6 @@ func (s *mutableStateSuite) TestHasRequestID_StateConsistency() {
 }
 
 func (s *mutableStateSuite) TestHasRequestID_EmptyExecutionState() {
-	s.SetupTest()
-
 	// Ensure execution state has no request IDs initially
 	if s.mutableState.executionState.RequestIds == nil {
 		s.mutableState.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo)
