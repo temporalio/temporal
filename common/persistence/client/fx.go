@@ -52,6 +52,7 @@ type (
 		Logger                             log.Logger
 		HealthSignals                      persistence.HealthSignalAggregator
 		DynamicRateLimitingParams          DynamicRateLimitingParams
+		EnableDataLossMetrics              dynamicconfig.BoolPropertyFn
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -74,6 +75,7 @@ var Module = fx.Options(
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(persistence.NewDLQMetricsEmitter),
 	fx.Provide(EventBlobCacheProvider),
+	fx.Provide(EnableDataLossMetricsProvider),
 )
 
 func ClusterNameProvider(config *cluster.Config) ClusterName {
@@ -89,6 +91,12 @@ func EventBlobCacheProvider(
 		20*time.Second,
 		logger,
 	)
+}
+
+func EnableDataLossMetricsProvider(
+	dc *dynamicconfig.Collection,
+) dynamicconfig.BoolPropertyFn {
+	return dynamicconfig.EnableDataLossMetrics.Get(dc)
 }
 
 func FactoryProvider(
@@ -134,6 +142,7 @@ func FactoryProvider(
 		params.MetricsHandler,
 		params.Logger,
 		params.HealthSignals,
+		params.EnableDataLossMetrics,
 	)
 }
 

@@ -244,9 +244,15 @@ func Invoke(
 				}
 				// GetHistory func will not return empty history. Log workflow details if that is not the case
 				if len(history.Events) == 0 {
+					ns, err := shardContext.GetNamespaceRegistry().GetNamespaceName(namespaceID)
+					if err != nil {
+						shardContext.GetLogger().Error("failed to get namespace name from namespace ID for emitting data loss metric",
+							tag.WorkflowNamespaceID(namespaceID.String()))
+					}
 					shardContext.GetLogger().Error(
 						"GetHistory returned empty history",
 						tag.WorkflowNamespaceID(namespaceID.String()),
+						tag.WorkflowNamespace(ns.String()),
 						tag.WorkflowID(execution.GetWorkflowId()),
 						tag.WorkflowRunID(execution.GetRunId()),
 					)
@@ -255,7 +261,7 @@ func Invoke(
 					if shardContext.GetConfig().EnableDataLossMetrics() {
 						persistence.EmitDataLossMetric(
 							shardContext.GetMetricsHandler(),
-							namespaceID.String(),
+							ns.String(),
 							execution.GetWorkflowId(),
 							execution.GetRunId(),
 							"GetWorkflowExecutionHistory",
