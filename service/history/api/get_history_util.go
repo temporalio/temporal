@@ -45,13 +45,6 @@ func GetRawHistory(
 				shardContext.GetLogger().Error("failed to get namespace name from namespace ID for emitting data loss metric",
 					tag.WorkflowNamespaceID(namespaceID.String()))
 			}
-			shardContext.GetLogger().Error("encountered data loss event in GetRawHistory",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowNamespace(ns.String()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.Error(retError),
-			)
 			if shardContext.GetConfig().EnableDataLossMetrics() {
 				persistence.EmitDataLossMetric(
 					shardContext.GetMetricsHandler(),
@@ -165,8 +158,11 @@ func GetHistory(
 	}
 
 	defer func() {
-		var dataLossErr *serviceerror.DataLoss
-		if errors.As(retError, &dataLossErr) {
+		switch err.(type) {
+		case nil:
+			// noop
+		case *serviceerror.DataLoss, *serialization.DeserializationError, *serialization.SerializationError:
+			// log event
 			shardContext.GetLogger().Error("encountered data loss event in GetHistory",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowNamespace(ns.String()),
@@ -199,19 +195,7 @@ func GetHistory(
 		NextPageToken: nextPageToken,
 		ShardID:       shardID,
 	})
-	switch err.(type) {
-	case nil:
-		// noop
-	case *serviceerror.DataLoss, *serialization.DeserializationError, *serialization.SerializationError:
-		// log event
-		shardContext.GetLogger().Error("encountered data corruption event",
-			tag.WorkflowNamespaceID(namespaceID.String()),
-			tag.WorkflowID(execution.GetWorkflowId()),
-			tag.WorkflowRunID(execution.GetRunId()),
-			tag.Error(err),
-		)
-		return nil, nil, err
-	default:
+	if err != nil {
 		return nil, nil, err
 	}
 
@@ -326,18 +310,11 @@ func GetHistoryReverse(
 		ShardID:                shardID,
 	})
 
-	logger := shardContext.GetLogger()
-	switch err.(type) {
-	case nil:
-		// noop
-	case *serviceerror.DataLoss:
-		// log event
-		logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
-		return nil, nil, 0, err
-	default:
+	if err != nil {
 		return nil, nil, 0, err
 	}
 
+	logger := shardContext.GetLogger()
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryReverseScope))
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
