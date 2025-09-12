@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -184,7 +185,8 @@ func Invoke(
 	// when data inconsistency occurs. Long term solution should check event
 	// batch pointing backwards within history store.
 	defer func() {
-		if _, ok := retError.(*serviceerror.DataLoss); ok {
+		var dataLossErr *serviceerror.DataLoss
+		if errors.As(retError, &dataLossErr) {
 			api.TrimHistoryNode(
 				ctx,
 				shardContext,
@@ -242,13 +244,31 @@ func Invoke(
 				}
 				// GetHistory func will not return empty history. Log workflow details if that is not the case
 				if len(history.Events) == 0 {
+					ns, err := shardContext.GetNamespaceRegistry().GetNamespaceName(namespaceID)
+					if err != nil {
+						shardContext.GetLogger().Error("failed to get namespace name from namespace ID for emitting data loss metric",
+							tag.WorkflowNamespaceID(namespaceID.String()))
+					}
 					shardContext.GetLogger().Error(
 						"GetHistory returned empty history",
 						tag.WorkflowNamespaceID(namespaceID.String()),
+						tag.WorkflowNamespace(ns.String()),
 						tag.WorkflowID(execution.GetWorkflowId()),
 						tag.WorkflowRunID(execution.GetRunId()),
 					)
-					return nil, serviceerror.NewDataLoss("no events in workflow history")
+					dataLossErr := serviceerror.NewDataLoss("no events in workflow history")
+					// Emit dataloss metric
+					if shardContext.GetConfig().EnableDataLossMetrics() {
+						persistence.EmitDataLossMetric(
+							shardContext.GetMetricsHandler(),
+							ns.String(),
+							execution.GetWorkflowId(),
+							execution.GetRunId(),
+							"GetWorkflowExecutionHistory",
+							dataLossErr,
+						)
+					}
+					return nil, dataLossErr
 				}
 				history.Events = history.Events[len(history.Events)-1 : len(history.Events)]
 			}
