@@ -10,6 +10,7 @@ import (
 	_ "time/tzdata" // embed tzdata as a fallback
 
 	"github.com/urfave/cli/v2"
+
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/build"
 	"go.temporal.io/server/common/config"
@@ -22,7 +23,6 @@ import (
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"     // needed to load sqlite plugin
 	"go.temporal.io/server/temporal"
-	"go.uber.org/automaxprocs/maxprocs"
 )
 
 // main entry point for the temporal server
@@ -139,10 +139,6 @@ func buildCLI() *cli.App {
 			Before: func(c *cli.Context) error {
 				if c.Args().Len() > 0 {
 					return cli.Exit("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
-				}
-
-				if _, err := maxprocs.Set(); err != nil {
-					stdlog.Println(fmt.Sprintf("WARNING: failed to set GOMAXPROCS: %v.", err))
 				}
 				return nil
 			},
