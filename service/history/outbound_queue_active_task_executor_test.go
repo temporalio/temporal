@@ -156,7 +156,6 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_ChasmTask() {
 						gomock.Any(),
 						gomock.Any(),
 						gomock.Any(),
-						gomock.Any(),
 					)
 			},
 			expectHandlerCalled: true,
