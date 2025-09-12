@@ -13,17 +13,15 @@ const (
 // EmitDataLossMetric emits a data loss metric for DataLoss errors
 func EmitDataLossMetric(
 	handler metrics.Handler,
-	enabled bool,
-	namespaceID, workflowID, runID, source string,
+	namespaceName, workflowID, runID, source string,
 	err error,
 ) {
-	if enabled {
-		metrics.DataLossCounter.With(handler).Record(1,
-			metrics.NamespaceIDTag(namespaceID),
-			metrics.StringTag(WorkflowIDTagName, workflowID),
-			metrics.StringTag(RunIDTagName, runID),
-			metrics.OperationTag(source),
-			metrics.StringTag(ErrorTagName, err.Error()),
-		)
-	}
+	metrics.DataLossCounter.With(handler).Record(1,
+		metrics.NamespaceTag(namespaceName),
+		metrics.StringTag(WorkflowIDTagName, workflowID),
+		metrics.StringTag(RunIDTagName, runID),
+		metrics.OperationTag(source),
+		metrics.StringTag(ErrorTagName, err.Error()),
+	)
 }
+

@@ -46,15 +46,16 @@ func GetRawHistory(
 				tag.WorkflowRunID(execution.GetRunId()),
 				tag.Error(retError),
 			)
-			persistence.EmitDataLossMetric(
-				shardContext.GetMetricsHandler(),
-				shardContext.GetConfig().EnableDataLossMetrics(),
-				namespaceID.String(),
-				execution.GetWorkflowId(),
-				execution.GetRunId(),
-				"api_get_raw_history",
-				retError,
-			)
+			if shardContext.GetConfig().EnableDataLossMetrics() {
+				persistence.EmitDataLossMetric(
+					shardContext.GetMetricsHandler(),
+					namespaceID.String(),
+					execution.GetWorkflowId(),
+					execution.GetRunId(),
+					"GetRawHistory",
+					retError,
+				)
+			}
 		}
 	}()
 
@@ -161,15 +162,16 @@ func GetHistory(
 				tag.WorkflowRunID(execution.GetRunId()),
 				tag.Error(retError),
 			)
-			persistence.EmitDataLossMetric(
-				shardContext.GetMetricsHandler(),
-				shardContext.GetConfig().EnableDataLossMetrics(),
-				namespaceID.String(),
-				execution.GetWorkflowId(),
-				execution.GetRunId(),
-				"api_get_history",
-				retError,
-			)
+			if shardContext.GetConfig().EnableDataLossMetrics() {
+				persistence.EmitDataLossMetric(
+					shardContext.GetMetricsHandler(),
+					namespaceID.String(),
+					execution.GetWorkflowId(),
+					execution.GetRunId(),
+					"api_get_history",
+					retError,
+				)
+			}
 		}
 	}()
 
@@ -285,15 +287,16 @@ func GetHistoryReverse(
 				tag.WorkflowRunID(execution.GetRunId()),
 				tag.Error(retError),
 			)
-			persistence.EmitDataLossMetric(
-				shardContext.GetMetricsHandler(),
-				shardContext.GetConfig().EnableDataLossMetrics(),
-				namespaceID.String(),
-				execution.GetWorkflowId(),
-				execution.GetRunId(),
-				"api_get_history_reverse",
-				retError,
-			)
+			if shardContext.GetConfig().EnableDataLossMetrics() {
+				persistence.EmitDataLossMetric(
+					shardContext.GetMetricsHandler(),
+					namespaceID.String(),
+					execution.GetWorkflowId(),
+					execution.GetRunId(),
+					"api_get_history_reverse",
+					retError,
+				)
+			}
 		}
 	}()
 

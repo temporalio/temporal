@@ -252,15 +252,16 @@ func Invoke(
 					)
 					dataLossErr := serviceerror.NewDataLoss("no events in workflow history")
 					// Emit dataloss metric
-					persistence.EmitDataLossMetric(
-						shardContext.GetMetricsHandler(),
-						shardContext.GetConfig().EnableDataLossMetrics(),
-						namespaceID.String(),
-						execution.GetWorkflowId(),
-						execution.GetRunId(),
-						"GetWorkflowExecutionHistory",
-						dataLossErr,
-					)
+					if shardContext.GetConfig().EnableDataLossMetrics() {
+						persistence.EmitDataLossMetric(
+							shardContext.GetMetricsHandler(),
+							namespaceID.String(),
+							execution.GetWorkflowId(),
+							execution.GetRunId(),
+							"GetWorkflowExecutionHistory",
+							dataLossErr,
+						)
+					}
 					return nil, dataLossErr
 				}
 				history.Events = history.Events[len(history.Events)-1 : len(history.Events)]

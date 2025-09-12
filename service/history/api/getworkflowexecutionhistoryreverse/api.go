@@ -2,7 +2,6 @@ package getworkflowexecutionhistoryreverse
 
 import (
 	"context"
-	"errors"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -13,7 +12,6 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/api"
@@ -111,18 +109,7 @@ func Invoke(
 	//  when data inconsistency occurs
 	//  long term solution should check event batch pointing backwards within history store
 	defer func() {
-		var dataLossErr *serviceerror.DataLoss
-		if errors.As(retError, &dataLossErr) {
-			// Emit dataloss metric
-			persistence.EmitDataLossMetric(
-				shardContext.GetMetricsHandler(),
-				shardContext.GetConfig().EnableDataLossMetrics(),
-				namespaceID.String(),
-				execution.GetWorkflowId(),
-				execution.GetRunId(),
-				"GetWorkflowExecutionHistoryReverse",
-				retError,
-			)
+		if _, ok := retError.(*serviceerror.DataLoss); ok {
 			api.TrimHistoryNode(
 				ctx,
 				shardContext,
