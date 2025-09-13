@@ -539,9 +539,6 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 		return err
 	}
 
-	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
-	ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey, &atomic.Value{})
-
 	client, err := e.ClientProvider(
 		ctx,
 		ref.WorkflowKey.NamespaceID,
@@ -563,6 +560,9 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	}
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
+
+	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
+	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
 
 	if e.HTTPTraceProvider != nil {
 		traceLogger := log.With(e.Logger,
