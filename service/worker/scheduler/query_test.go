@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
@@ -14,28 +15,47 @@ const (
 	testNamespace = namespace.Name("test-namespace")
 )
 
-func TestFieldNameAggInterceptor(t *testing.T) {
+func TestFieldSaAggInterceptor(t *testing.T) {
 	s := require.New(t)
-	fnInterceptor := newFieldNameAggInterceptor(
-		testNamespace,
-		searchattribute.TestNameTypeMap,
-		searchattribute.NewTestMapperProvider(nil),
+	saInterceptor := newSaAggInterceptor()
+	intCol := query.NewSAColName("AliasForCustomIntField", "CustomIntField", enumspb.INDEXED_VALUE_TYPE_INT)
+	keywordCol := query.NewSAColName("AliasForCustomKeywordField", "CustomKeywordField", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	startTimeCol := query.NewSAColName(searchattribute.StartTime, searchattribute.StartTime, enumspb.INDEXED_VALUE_TYPE_DATETIME)
+
+	err := saInterceptor.Intercept(intCol)
+	s.NoError(err)
+	s.Equal(map[string]bool{"AliasForCustomIntField": true}, saInterceptor.names)
+
+	err = saInterceptor.Intercept(keywordCol)
+	s.NoError(err)
+	s.Equal(
+		map[string]bool{
+			"AliasForCustomIntField":     true,
+			"AliasForCustomKeywordField": true,
+		},
+		saInterceptor.names,
 	)
 
-	_, err := fnInterceptor.Name("CustomIntField", query.FieldNameFilter)
+	err = saInterceptor.Intercept(intCol)
 	s.NoError(err)
-	s.Equal(map[string]bool{"CustomIntField": true}, fnInterceptor.names)
+	s.Equal(
+		map[string]bool{
+			"AliasForCustomIntField":     true,
+			"AliasForCustomKeywordField": true,
+		},
+		saInterceptor.names,
+	)
 
-	_, err = fnInterceptor.Name("CustomKeywordField", query.FieldNameFilter)
+	err = saInterceptor.Intercept(startTimeCol)
 	s.NoError(err)
-	s.Equal(map[string]bool{"CustomIntField": true, "CustomKeywordField": true}, fnInterceptor.names)
-
-	_, err = fnInterceptor.Name("CustomIntField", query.FieldNameFilter)
-	s.NoError(err)
-	s.Equal(map[string]bool{"CustomIntField": true, "CustomKeywordField": true}, fnInterceptor.names)
-
-	_, err = fnInterceptor.Name("search-attribute-not-found", query.FieldNameFilter)
-	s.Error(err)
+	s.Equal(
+		map[string]bool{
+			"AliasForCustomIntField":     true,
+			"AliasForCustomKeywordField": true,
+			searchattribute.StartTime:    true,
+		},
+		saInterceptor.names,
+	)
 }
 
 func TestGetQueryFields(t *testing.T) {
@@ -97,7 +117,7 @@ func TestGetQueryFields(t *testing.T) {
 			name:           "invalid custom search attribute",
 			input:          "Foo = 'bar'",
 			expectedFields: nil,
-			expectedErrMsg: "invalid search attribute: Foo",
+			expectedErrMsg: "'Foo' is not a valid search attribute",
 		},
 	}
 
@@ -177,7 +197,7 @@ func TestValidateVisibilityQuery(t *testing.T) {
 		{
 			name:           "invalid custom search attribute",
 			input:          "Foo = foo",
-			expectedErrMsg: "invalid search attribute: Foo",
+			expectedErrMsg: "'Foo' is not a valid search attribute",
 		},
 	}
 

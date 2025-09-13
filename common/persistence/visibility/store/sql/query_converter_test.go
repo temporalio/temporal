@@ -3,1085 +3,683 @@ package sql
 import (
 	"fmt"
 	"testing"
-	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/mock/gomock"
 )
 
 type (
-	queryConverterSuite struct {
+	sqlQueryConverterSuite struct {
 		suite.Suite
 		*require.Assertions
+		ctrl *gomock.Controller
 
-		pqc            pluginQueryConverter
-		queryConverter *QueryConverter
-	}
-
-	testCase struct {
-		name     string
-		input    string
-		args     map[string]any
-		output   any
-		retValue any
-		err      error
-		setup    func()
+		pqcMock        *sqlplugin.MockVisibilityQueryConverter
+		queryConverter *sqlQueryConverter
 	}
 )
 
-const (
-	testNamespaceName = namespace.Name("test-namespace")
-	testNamespaceID   = namespace.ID("test-namespace-id")
-)
+func TestSqlQueryConverter(t *testing.T) {
+	s := &sqlQueryConverterSuite{}
+	suite.Run(t, s)
+}
 
-func (s *queryConverterSuite) SetupTest() {
+func (s *sqlQueryConverterSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.queryConverter = newQueryConverterInternal(
-		s.pqc,
-		testNamespaceName,
-		testNamespaceID,
-		searchattribute.TestNameTypeMap,
-		&searchattribute.TestMapper{},
-		"",
-	)
-}
-
-// TestConvertWhereString tests convertSelectStmt since convertWhereString is
-// just a wrapper for convertSelectStmt to parse users query string.
-func (s *queryConverterSuite) TestConvertWhereString() {
-	var tests = []testCase{
-		{
-			name:   "empty string",
-			input:  "",
-			output: &queryParams{queryString: "TemporalNamespaceDivision is null"},
-			err:    nil,
-		},
-		{
-			name:   "single condition int",
-			input:  "AliasForInt01 = 1",
-			output: &queryParams{queryString: "(Int01 = 1) and TemporalNamespaceDivision is null"},
-			err:    nil,
-		},
-		{
-			name:   "single condition keyword",
-			input:  "AliasForKeyword01 = 1",
-			output: &queryParams{queryString: "(Keyword01 = 1) and TemporalNamespaceDivision is null"},
-			err:    nil,
-		},
-		{
-			name:   "or condition keyword",
-			input:  "AliasForInt01 = 1 OR AliasForKeyword01 = 1",
-			output: &queryParams{queryString: "(Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision is null"},
-			err:    nil,
-		},
-		{
-			name:   "no double parenthesis",
-			input:  "(AliasForInt01 = 1 OR AliasForKeyword01 = 1)",
-			output: &queryParams{queryString: "(Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision is null"},
-			err:    nil,
-		},
-		{
-			name:   "has namespace division",
-			input:  "(AliasForInt01 = 1 OR AliasForKeyword01 = 1) AND TemporalNamespaceDivision = 'foo'",
-			output: &queryParams{queryString: "((Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision = 'foo')"},
-			err:    nil,
-		},
-		{
-			name:  "group by one field",
-			input: "GROUP BY ExecutionStatus",
-			output: &queryParams{
-				queryString: "TemporalNamespaceDivision is null",
-				groupBy:     []string{searchattribute.ExecutionStatus},
-			},
-			err: nil,
-		},
-		{
-			name:   "group by two fields not supported",
-			input:  "GROUP BY ExecutionStatus, WorkflowType",
-			output: nil,
-			err: query.NewConverterError(
-				"%s: 'group by' clause supports only a single field",
-				query.NotSupportedErrMessage,
-			),
-		},
-		{
-			name:   "group by non ExecutionStatus",
-			input:  "GROUP BY WorkflowType",
-			output: nil,
-			err: query.NewConverterError(
-				"%s: 'group by' clause is only supported for %s search attribute",
-				query.NotSupportedErrMessage,
-				searchattribute.ExecutionStatus,
-			),
-		},
-		{
-			name:   "order by not supported",
-			input:  "ORDER BY StartTime",
-			output: nil,
-			err:    query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage),
-		},
-		{
-			name:   "group by with order by not supported",
-			input:  "GROUP BY ExecutionStatus ORDER BY StartTime",
-			output: nil,
-			err:    query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage),
-		},
-	}
-
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			qc := newQueryConverterInternal(
-				s.pqc,
-				testNamespaceName,
-				testNamespaceID,
-				searchattribute.TestNameTypeMap,
-				&searchattribute.TestMapper{},
-				"",
-			)
-			qp, err := qc.convertWhereString(tc.input)
-			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, qp)
-			} else {
-				s.Error(err)
-				s.Equal(err, tc.err)
-			}
-		})
+	s.ctrl = gomock.NewController(s.T())
+	s.pqcMock = sqlplugin.NewMockVisibilityQueryConverter(s.ctrl)
+	s.queryConverter = &sqlQueryConverter{
+		pqc: s.pqcMock,
 	}
 }
 
-func (s *queryConverterSuite) TestConvertAndExpr() {
-	var tests = []testCase{
+func (s *sqlQueryConverterSuite) TestGetDatetimeFormat() {
+	s.pqcMock.EXPECT().GetDatetimeFormat().Return("")
+	s.queryConverter.GetDatetimeFormat()
+}
+
+func (s *sqlQueryConverterSuite) TestBuildParenExpr() {
+	testCases := []struct {
+		in  sqlparser.Expr
+		out string
+	}{
 		{
-			name:   "invalid",
-			input:  "AliasForInt01 = 1",
-			output: "",
-			err:    query.NewConverterError("`AliasForInt01 = 1` is not an 'AND' expression"),
+			in:  parseWhereString("a = 1"),
+			out: "(a = 1)",
 		},
 		{
-			name:   "two conditions",
-			input:  "AliasForInt01 = 1 AND AliasForKeyword01 = 'foo'",
-			output: "Int01 = 1 and Keyword01 = 'foo'",
-			err:    nil,
+			in:  parseWhereString("a = 1 and b = 'foo'"),
+			out: "(a = 1 and b = 'foo')",
 		},
 		{
-			name:   "left side invalid",
-			input:  "AliasForInt01 AND AliasForKeyword01 = 'foo'",
-			output: "",
-			err:    query.NewConverterError("%s: incomplete expression", query.InvalidExpressionErrMessage),
+			in:  parseWhereString("a = 1 and (b = 'foo' or c = 'bar')"),
+			out: "(a = 1 and (b = 'foo' or c = 'bar'))",
 		},
 		{
-			name:   "right side invalid",
-			input:  "AliasForInt01 = 1 AND AliasForKeyword01",
-			output: "",
-			err:    query.NewConverterError("%s: incomplete expression", query.InvalidExpressionErrMessage),
+			in:  parseWhereString("(a = 1)"),
+			out: "(a = 1)",
 		},
 	}
 
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
-			stmt, err := sqlparser.Parse(sql)
+	for _, tc := range testCases {
+		s.Run(tc.out, func() {
+			out, err := s.queryConverter.BuildParenExpr(tc.in)
 			s.NoError(err)
-			expr := stmt.(*sqlparser.Select).Where.Expr
-			err = s.queryConverter.convertAndExpr(&expr)
-			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, sqlparser.String(expr))
-			} else {
-				s.Error(err)
-				s.Equal(err, tc.err)
-			}
+			s.Equal(tc.out, sqlparser.String(out))
 		})
 	}
 }
 
-func (s *queryConverterSuite) TestConvertOrExpr() {
-	var tests = []testCase{
+func (s *sqlQueryConverterSuite) TestBuildNotExpr() {
+	testCases := []struct {
+		in  sqlparser.Expr
+		out string
+	}{
 		{
-			name:   "invalid",
-			input:  "AliasForInt01 = 1",
-			output: "",
-			err:    query.NewConverterError("`AliasForInt01 = 1` is not an 'OR' expression"),
+			in:  parseWhereString("a = 1"),
+			out: "not (a = 1)",
 		},
 		{
-			name:   "two conditions",
-			input:  "AliasForInt01 = 1 OR AliasForKeyword01 = 'foo'",
-			output: "Int01 = 1 or Keyword01 = 'foo'",
-			err:    nil,
+			in:  parseWhereString("a = 1 and b = 'foo'"),
+			out: "not (a = 1 and b = 'foo')",
 		},
 		{
-			name:   "left side invalid",
-			input:  "AliasForInt01 OR AliasForKeyword01 = 'foo'",
-			output: "",
-			err:    query.NewConverterError("%s: incomplete expression", query.InvalidExpressionErrMessage),
+			in:  parseWhereString("a = 1 and (b = 'foo' or c = 'bar')"),
+			out: "not (a = 1 and (b = 'foo' or c = 'bar'))",
 		},
 		{
-			name:   "right side invalid",
-			input:  "AliasForInt01 = 1 OR AliasForKeyword01",
-			output: "",
-			err:    query.NewConverterError("%s: incomplete expression", query.InvalidExpressionErrMessage),
+			in:  parseWhereString("(a = 1)"),
+			out: "not (a = 1)",
 		},
 	}
 
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
-			stmt, err := sqlparser.Parse(sql)
+	for _, tc := range testCases {
+		s.Run(tc.out, func() {
+			out, err := s.queryConverter.BuildNotExpr(tc.in)
 			s.NoError(err)
-			expr := stmt.(*sqlparser.Select).Where.Expr
-			err = s.queryConverter.convertOrExpr(&expr)
-			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, sqlparser.String(expr))
-			} else {
-				s.Error(err)
-				s.Equal(err, tc.err)
-			}
+			s.Equal(tc.out, sqlparser.String(out))
 		})
 	}
 }
 
-func (s *queryConverterSuite) TestConvertComparisonExpr() {
-	var tests = []testCase{
+func (s *sqlQueryConverterSuite) TestBuildAndExpr() {
+	testCases := []struct {
+		in  []sqlparser.Expr
+		out string
+	}{
 		{
-			name:   "invalid",
-			input:  "AliasForInt01",
-			output: "",
-			err:    query.NewConverterError("`AliasForInt01` is not a comparison expression"),
+			in:  []sqlparser.Expr{},
+			out: "<nil>", // nil value is stringified like this
 		},
 		{
-			name:   "equal expression",
-			input:  "AliasForKeyword01 = 'foo'",
-			output: "Keyword01 = 'foo'",
-			err:    nil,
+			in: []sqlparser.Expr{
+				parseWhereString("a = 1"),
+			},
+			out: "a = 1",
 		},
 		{
-			name:   "not equal expression",
-			input:  "AliasForKeyword01 != 'foo'",
-			output: "Keyword01 != 'foo'",
-			err:    nil,
+			in: []sqlparser.Expr{
+				parseWhereString("a = 1 or b = 'foo'"),
+			},
+			out: "a = 1 or b = 'foo'",
 		},
 		{
-			name:   "less than expression",
-			input:  "AliasForInt01 < 10",
-			output: "Int01 < 10",
-			err:    nil,
+			in: []sqlparser.Expr{
+				parseWhereString("a = 1"),
+				parseWhereString("b = 'foo'"),
+			},
+			out: "a = 1 and b = 'foo'",
 		},
 		{
-			name:   "greater than expression",
-			input:  "AliasForInt01 > 10",
-			output: "Int01 > 10",
-			err:    nil,
+			in: []sqlparser.Expr{
+				parseWhereString("a = 1 and b = 'foo'"),
+				parseWhereString("c = 'bar'"),
+			},
+			out: "a = 1 and b = 'foo' and c = 'bar'",
 		},
 		{
-			name:   "less than or equal expression",
-			input:  "AliasForInt01 <= 10",
-			output: "Int01 <= 10",
-			err:    nil,
-		},
-		{
-			name:   "greater than or equal expression",
-			input:  "AliasForInt01 >= 10",
-			output: "Int01 >= 10",
-			err:    nil,
-		},
-		{
-			name:   "in expression",
-			input:  "AliasForKeyword01 in ('foo', 'bar')",
-			output: "Keyword01 in ('foo', 'bar')",
-			err:    nil,
-		},
-		{
-			name:   "not in expression",
-			input:  "AliasForKeyword01 not in ('foo', 'bar')",
-			output: "Keyword01 not in ('foo', 'bar')",
-			err:    nil,
-		},
-		{
-			name:   "starts_with expression",
-			input:  "AliasForKeyword01 starts_with 'foo_bar%'",
-			output: `Keyword01 like 'foo!_bar!%%' escape '!'`,
-			err:    nil,
-		},
-		{
-			name:   "not starts_with expression",
-			input:  "AliasForKeyword01 not starts_with 'foo_bar%'",
-			output: `Keyword01 not like 'foo!_bar!%%' escape '!'`,
-			err:    nil,
-		},
-		{
-			name:   "starts_with expression error",
-			input:  "AliasForKeyword01 starts_with 123",
-			output: "",
-			err: query.NewConverterError(
-				"%s: right-hand side of '%s' must be a literal string (got: 123)",
-				query.InvalidExpressionErrMessage,
-				sqlparser.StartsWithStr,
-			),
-		},
-		{
-			name:   "not starts_with expression error",
-			input:  "AliasForKeyword01 not starts_with 123",
-			output: "",
-			err: query.NewConverterError(
-				"%s: right-hand side of '%s' must be a literal string (got: 123)",
-				query.InvalidExpressionErrMessage,
-				sqlparser.NotStartsWithStr,
-			),
-		},
-		{
-			name:   "like expression",
-			input:  "AliasForKeyword01 like 'foo%'",
-			output: "",
-			err: query.NewConverterError(
-				"%s: invalid operator 'like' in `%s`",
-				query.InvalidExpressionErrMessage,
-				"AliasForKeyword01 like 'foo%'",
-			),
-		},
-		{
-			name:   "not like expression",
-			input:  "AliasForKeyword01 NOT LIKE 'foo%'",
-			output: "",
-			err: query.NewConverterError(
-				"%s: invalid operator 'not like' in `%s`",
-				query.InvalidExpressionErrMessage,
-				"AliasForKeyword01 not like 'foo%'",
-			),
+			in: []sqlparser.Expr{
+				parseWhereString("a = 1 or b = 'foo'"),
+				parseWhereString("c = 'bar'"),
+				parseWhereString("a = 2 or b = 'zzz'"),
+			},
+			out: "(a = 1 or b = 'foo') and c = 'bar' and (a = 2 or b = 'zzz')",
 		},
 	}
 
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
-			stmt, err := sqlparser.Parse(sql)
+	for _, tc := range testCases {
+		s.Run(tc.out, func() {
+			out, err := s.queryConverter.BuildAndExpr(tc.in...)
 			s.NoError(err)
-			expr := stmt.(*sqlparser.Select).Where.Expr
-			err = s.queryConverter.convertComparisonExpr(&expr)
-			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, sqlparser.String(expr))
-			} else {
-				s.Error(err)
-				s.Equal(err, tc.err)
-			}
+			s.Equal(tc.out, sqlparser.String(out))
 		})
 	}
 }
 
-func (s *queryConverterSuite) TestConvertRangeCond() {
-	fromDatetime, _ := time.Parse(time.RFC3339Nano, "2020-02-15T20:30:40Z")
-	toDatetime, _ := time.Parse(time.RFC3339Nano, "2020-02-16T20:30:40Z")
-	var tests = []testCase{
+func (s *sqlQueryConverterSuite) TestBuildOrExpr() {
+	testCases := []struct {
+		in  []sqlparser.Expr
+		out string
+	}{
 		{
-			name:   "invalid",
-			input:  "AliasForInt01 = 1",
-			output: "",
-			err:    query.NewConverterError("`AliasForInt01 = 1` is not a range condition expression"),
+			in:  []sqlparser.Expr{},
+			out: "<nil>", // nil value is stringified like this
 		},
 		{
-			name: "between expression",
-			input: fmt.Sprintf(
-				"AliasForDatetime01 BETWEEN '%s' AND '%s'",
-				fromDatetime.Format(time.RFC3339Nano),
-				toDatetime.Format(time.RFC3339Nano),
-			),
-			output: fmt.Sprintf(
-				"Datetime01 between '%s' and '%s'",
-				fromDatetime.Format(s.queryConverter.getDatetimeFormat()),
-				toDatetime.Format(s.queryConverter.getDatetimeFormat()),
-			),
-			err: nil,
+			in: []sqlparser.Expr{
+				parseWhereString("a = 1"),
+			},
+			out: "a = 1",
 		},
 		{
-			name: "not between expression",
-			input: fmt.Sprintf(
-				"AliasForDatetime01 NOT BETWEEN '%s' AND '%s'",
-				fromDatetime.Format(time.RFC3339Nano),
-				toDatetime.Format(time.RFC3339Nano),
-			),
-			output: fmt.Sprintf(
-				"Datetime01 not between '%s' and '%s'",
-				fromDatetime.Format(s.queryConverter.getDatetimeFormat()),
-				toDatetime.Format(s.queryConverter.getDatetimeFormat()),
-			),
-			err: nil,
+			in: []sqlparser.Expr{
+				parseWhereString("a = 1 or b = 'foo'"),
+			},
+			out: "a = 1 or b = 'foo'",
 		},
 		{
-			name:   "text type not supported",
-			input:  "AliasForText01 BETWEEN 'abc' AND 'abd'",
-			output: "",
-			err: query.NewConverterError(
-				"%s: cannot do range condition on search attribute '%s' of type %s",
-				query.InvalidExpressionErrMessage,
-				"AliasForText01",
-				enumspb.INDEXED_VALUE_TYPE_TEXT.String(),
-			),
+			in: []sqlparser.Expr{
+				parseWhereString("a = 1"),
+				parseWhereString("b = 'foo'"),
+			},
+			out: "a = 1 or b = 'foo'",
+		},
+		{
+			in: []sqlparser.Expr{
+				parseWhereString("a = 1 and b = 'foo'"),
+				parseWhereString("c = 'bar'"),
+			},
+			out: "a = 1 and b = 'foo' or c = 'bar'",
+		},
+		{
+			in: []sqlparser.Expr{
+				parseWhereString("a = 1 and b = 'foo'"),
+				parseWhereString("c = 'bar'"),
+				parseWhereString("a = 2 and b = 'zzz'"),
+			},
+			out: "a = 1 and b = 'foo' or c = 'bar' or a = 2 and b = 'zzz'",
 		},
 	}
 
-	for _, tc := range tests {
-		s.Run(tc.name, func() {
-			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
-			stmt, err := sqlparser.Parse(sql)
+	for _, tc := range testCases {
+		s.Run(tc.out, func() {
+			out, err := s.queryConverter.BuildOrExpr(tc.in...)
 			s.NoError(err)
-			expr := stmt.(*sqlparser.Select).Where.Expr
-			err = s.queryConverter.convertRangeCond(&expr)
-			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, sqlparser.String(expr))
-			} else {
+			s.Equal(tc.out, sqlparser.String(out))
+		})
+	}
+}
+
+func (s *sqlQueryConverterSuite) TestConvertComparisonExpr() {
+	testCases := []struct {
+		operator  string
+		col       *query.SAColName
+		value     any
+		out       string
+		errString string
+	}{
+		{
+			operator: sqlparser.EqualStr,
+			col:      query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+			value:    "foo",
+			out:      "a = 'foo'",
+		},
+		{
+			operator: sqlparser.NotEqualStr,
+			col:      query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+			value:    "foo",
+			out:      "a != 'foo'",
+		},
+		{
+			operator: sqlparser.EqualStr,
+			col:      query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_INT),
+			value:    int64(123),
+			out:      "a = 123",
+		},
+		{
+			operator: sqlparser.EqualStr,
+			col:      query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_DOUBLE),
+			value:    123.456,
+			out:      "a = 123.456",
+		},
+		{
+			operator: sqlparser.EqualStr,
+			col:      query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_BOOL),
+			value:    true,
+			out:      "a = true",
+		},
+		{
+			operator:  sqlparser.EqualStr,
+			col:       query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+			value:     123,
+			errString: query.InvalidExpressionErrMessage,
+			out:       "unexpected type a = 123",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.out, func() {
+			out, err := s.queryConverter.ConvertComparisonExpr(tc.operator, tc.col, tc.value)
+			if tc.errString != "" {
 				s.Error(err)
-				s.Equal(err, tc.err)
+				var expectedErr *query.ConverterError
+				s.ErrorAs(err, &expectedErr)
+				s.ErrorContains(err, tc.errString)
+			} else {
+				s.NoError(err)
+				s.Equal(tc.out, sqlparser.String(out))
 			}
 		})
 	}
 }
 
-func (s *queryConverterSuite) TestConvertIsExpr() {
-	var tests = []testCase{
+func (s *sqlQueryConverterSuite) TestConvertKeywordComparisonExpr() {
+	testCases := []struct {
+		operator  string
+		col       *query.SAColName
+		value     any
+		out       string
+		errString string
+	}{
 		{
-			name:   "invalid",
-			input:  "AliasForInt01 = 1",
-			output: "",
-			err:    query.NewConverterError("`AliasForInt01 = 1` is not an 'IS' expression"),
+			operator: sqlparser.EqualStr,
+			col:      query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+			value:    "foo",
+			out:      "a = 'foo'",
 		},
 		{
-			name:   "is expression",
-			input:  "AliasForKeyword01 IS NULL",
-			output: "Keyword01 is null",
-			err:    nil,
+			operator: sqlparser.NotEqualStr,
+			col:      query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+			value:    "foo",
+			out:      "a != 'foo'",
 		},
 		{
-			name:   "is not expression",
-			input:  "AliasForKeyword01 IS NOT NULL",
-			output: "Keyword01 is not null",
-			err:    nil,
+			operator: sqlparser.StartsWithStr,
+			col:      query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+			value:    "foo",
+			out:      "a like 'foo%' escape '!'",
+		},
+		{
+			operator: sqlparser.NotStartsWithStr,
+			col:      query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+			value:    "foo",
+			out:      "a not like 'foo%' escape '!'",
+		},
+		{
+			operator:  sqlparser.EqualStr,
+			col:       query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+			value:     123,
+			errString: query.InvalidExpressionErrMessage,
+			out:       "unexpected type a = 123",
+		},
+		{
+			operator:  sqlparser.StartsWithStr,
+			col:       query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+			value:     int64(123),
+			errString: query.InvalidExpressionErrMessage,
+			out:       "unexpected type a starts_with 123",
 		},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range testCases {
+		s.Run(tc.out, func() {
+			out, err := s.queryConverter.ConvertKeywordComparisonExpr(tc.operator, tc.col, tc.value)
+			if tc.errString != "" {
+				s.Error(err)
+				var expectedErr *query.ConverterError
+				s.ErrorAs(err, &expectedErr)
+				s.ErrorContains(err, tc.errString)
+			} else {
+				s.NoError(err)
+				s.Equal(tc.out, sqlparser.String(out))
+			}
+		})
+	}
+}
+
+func (s *sqlQueryConverterSuite) TestConvertKeywordListComparisonExpr() {
+	testCases := []struct {
+		name      string
+		operator  string
+		col       *query.SAColName
+		value     any
+		valueExpr sqlparser.Expr
+		mockErr   error
+		errString string
+	}{
+		{
+			name:      "a = 'foo'",
+			operator:  sqlparser.EqualStr,
+			col:       query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST),
+			value:     "foo",
+			valueExpr: query.NewUnsafeSQLString("foo"),
+		},
+		{
+			name:      "a = 123",
+			operator:  sqlparser.EqualStr,
+			col:       query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST),
+			value:     int64(123),
+			valueExpr: sqlparser.NewIntVal([]byte("123")),
+		},
+		{
+			name:      "unexpected type a = 123",
+			operator:  sqlparser.EqualStr,
+			col:       query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST),
+			value:     123,
+			errString: query.InvalidExpressionErrMessage,
+		},
+		{
+			name:      "mock error",
+			operator:  sqlparser.EqualStr,
+			col:       query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST),
+			value:     "foo",
+			valueExpr: query.NewUnsafeSQLString("foo"),
+			mockErr:   query.NewConverterError("%s", query.InvalidExpressionErrMessage),
+			errString: query.InvalidExpressionErrMessage,
+		},
+	}
+
+	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
-			stmt, err := sqlparser.Parse(sql)
-			s.NoError(err)
-			expr := stmt.(*sqlparser.Select).Where.Expr
-			err = s.queryConverter.convertIsExpr(&expr)
-			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, sqlparser.String(expr))
-			} else {
+			if tc.valueExpr != nil {
+				s.pqcMock.EXPECT().ConvertKeywordListComparisonExpr(tc.operator, tc.col, tc.valueExpr).
+					Return(nil, tc.mockErr)
+			}
+			_, err := s.queryConverter.ConvertKeywordListComparisonExpr(tc.operator, tc.col, tc.value)
+			if tc.errString != "" {
 				s.Error(err)
-				s.Equal(err, tc.err)
+				var expectedErr *query.ConverterError
+				s.ErrorAs(err, &expectedErr)
+				s.ErrorContains(err, tc.errString)
 			}
 		})
 	}
 }
 
-func (s *queryConverterSuite) TestConvertColName() {
-	originalSaTypeMap := s.queryConverter.saTypeMap
-	originalSaMapper := s.queryConverter.saMapper
-	var tests = []testCase{
+func (s *sqlQueryConverterSuite) TestConvertTextComparisonExpr() {
+	testCases := []struct {
+		name      string
+		operator  string
+		col       *query.SAColName
+		value     any
+		valueExpr sqlparser.Expr
+		mockErr   error
+		errString string
+	}{
 		{
-			name:     "invalid: column name expression",
-			input:    "10",
-			output:   "",
-			retValue: nil,
-			err: query.NewConverterError(
-				"%s: must be a column name but was *sqlparser.SQLVal",
-				query.InvalidExpressionErrMessage,
-			),
+			name:      "a = 'foo'",
+			operator:  sqlparser.EqualStr,
+			col:       query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_TEXT),
+			value:     "foo",
+			valueExpr: query.NewUnsafeSQLString("foo"),
 		},
 		{
-			name:     "invalid search attribute",
-			input:    "InvalidName",
-			output:   "",
-			retValue: nil,
-			err: query.NewConverterError(
-				"%s: column name '%s' is not a valid search attribute",
-				query.InvalidExpressionErrMessage,
-				"InvalidName",
-			),
+			name:      "a = 123",
+			operator:  sqlparser.EqualStr,
+			col:       query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_TEXT),
+			value:     int64(123),
+			valueExpr: sqlparser.NewIntVal([]byte("123")),
 		},
 		{
-			name:   "valid system search attribute: ExecutionStatus",
-			input:  "ExecutionStatus",
-			output: "status",
-			retValue: newSAColName(
-				"status",
-				"ExecutionStatus",
-				"ExecutionStatus",
-				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			),
-			err: nil,
+			name:      "unexpected type a = 123",
+			operator:  sqlparser.EqualStr,
+			col:       query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_TEXT),
+			value:     123,
+			errString: query.InvalidExpressionErrMessage,
 		},
 		{
-			name:   "valid system search attribute: CloseTime",
-			input:  "CloseTime",
-			output: sqlparser.String(s.queryConverter.getCoalesceCloseTimeExpr()),
-			retValue: newSAColName(
-				"close_time",
-				"CloseTime",
-				"CloseTime",
-				enumspb.INDEXED_VALUE_TYPE_DATETIME,
-			),
-			err: nil,
-		},
-		{
-			name:   "valid predefined search attribute: BinaryChecksums",
-			input:  "BinaryChecksums",
-			output: "BinaryChecksums",
-			retValue: newSAColName(
-				"BinaryChecksums",
-				"BinaryChecksums",
-				"BinaryChecksums",
-				enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-			),
-			err: nil,
-		},
-		{
-			name:   "valid predefined search attribute: TemporalNamespaceDivision",
-			input:  "TemporalNamespaceDivision",
-			output: "TemporalNamespaceDivision",
-			retValue: newSAColName(
-				"TemporalNamespaceDivision",
-				"TemporalNamespaceDivision",
-				"TemporalNamespaceDivision",
-				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			),
-			err: nil,
-		},
-		{
-			name:   "valid custom search attribute: int",
-			input:  "AliasForInt01",
-			output: "Int01",
-			retValue: newSAColName(
-				"Int01",
-				"AliasForInt01",
-				"Int01",
-				enumspb.INDEXED_VALUE_TYPE_INT,
-			),
-			err: nil,
-		},
-		{
-			name:   "valid custom search attribute: datetime",
-			input:  "AliasForDatetime01",
-			output: "Datetime01",
-			retValue: newSAColName(
-				"Datetime01",
-				"AliasForDatetime01",
-				"Datetime01",
-				enumspb.INDEXED_VALUE_TYPE_DATETIME,
-			),
-			err: nil,
-		},
-		{
-			name:   "ScheduleId when there is a ScheduleId custom SA",
-			input:  searchattribute.ScheduleID,
-			output: searchattribute.ScheduleID,
-			retValue: newSAColName(
-				searchattribute.ScheduleID,
-				searchattribute.ScheduleID,
-				searchattribute.ScheduleID,
-				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			),
-			err: nil,
-			setup: func() {
-				s.queryConverter.saTypeMap = searchattribute.TestNameTypeMapWithScheduleId
-				s.queryConverter.saMapper = newMapper(
-					func(alias, namespace string) (string, error) {
-						return alias, nil
-					},
-					func(fieldName, namespace string) (string, error) {
-						return searchattribute.ScheduleID, nil
-					},
-				)
-			},
-		},
-		{
-			name:   "ScheduleId when there is no ScheduleId custom SA",
-			input:  searchattribute.ScheduleID,
-			output: "workflow_id",
-			retValue: newSAColName(
-				"workflow_id",
-				searchattribute.ScheduleID,
-				searchattribute.WorkflowID,
-				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			),
-			err: nil,
-			setup: func() {
-				s.queryConverter.saMapper = newMapper(
-					func(alias, namespace string) (string, error) {
-						return alias, nil
-					},
-					func(fieldName, namespace string) (string, error) {
-						return "", serviceerror.NewInvalidArgument(
-							fmt.Sprintf("Namespace %s has no mapping defined for field name %s", namespace, fieldName),
-						)
-					},
-				)
-			},
+			name:      "mock error",
+			operator:  sqlparser.EqualStr,
+			col:       query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_TEXT),
+			value:     "foo",
+			valueExpr: query.NewUnsafeSQLString("foo"),
+			mockErr:   query.NewConverterError("%s", query.InvalidExpressionErrMessage),
+			errString: query.InvalidExpressionErrMessage,
 		},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			// Reset to original state
-			s.queryConverter.saMapper = originalSaMapper
-			s.queryConverter.saTypeMap = originalSaTypeMap
-
-			// reset internal state of seenNamespaceDivision
-			s.queryConverter.seenNamespaceDivision = false
-
-			// Run setup function if provided
-			if tc.setup != nil {
-				tc.setup()
+			if tc.valueExpr != nil {
+				s.pqcMock.EXPECT().ConvertTextComparisonExpr(tc.operator, tc.col, tc.valueExpr).
+					Return(nil, tc.mockErr)
 			}
-
-			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
-			stmt, err := sqlparser.Parse(sql)
-			s.NoError(err)
-			expr := stmt.(*sqlparser.Select).Where.Expr
-			saColNameExpr, err := s.queryConverter.convertColName(&expr)
-			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, sqlparser.String(expr))
-				s.Equal(tc.retValue, saColNameExpr)
-				if tc.input != searchattribute.CloseTime {
-					_, ok := expr.(*saColName)
-					s.True(ok)
-				}
-				if tc.input == searchattribute.TemporalNamespaceDivision {
-					s.True(s.queryConverter.seenNamespaceDivision)
-				} else {
-					s.False(s.queryConverter.seenNamespaceDivision)
-				}
-			} else {
+			_, err := s.queryConverter.ConvertTextComparisonExpr(tc.operator, tc.col, tc.value)
+			if tc.errString != "" {
 				s.Error(err)
-				s.Equal(err, tc.err)
+				var expectedErr *query.ConverterError
+				s.ErrorAs(err, &expectedErr)
+				s.ErrorContains(err, tc.errString)
 			}
 		})
 	}
 }
 
-func (s *queryConverterSuite) TestConvertValueExpr() {
-	dt, _ := time.Parse(time.RFC3339Nano, "2020-02-15T20:30:40.123456789Z")
-	var tests = []testCase{
+func (s *sqlQueryConverterSuite) TestConvertRangeExpr() {
+	testCases := []struct {
+		operator  string
+		col       *query.SAColName
+		from      any
+		to        any
+		errString string
+		out       string
+	}{
 		{
-			name:  "invalid: column name expression",
-			input: "ExecutionStatus",
-			args: map[string]any{
-				"saName":      "ExecutionStatus",
-				"saFieldName": "ExecutionStatus",
-				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			},
-			output: "",
-			err: query.NewConverterError(
-				"%s: column name on the right side of comparison expression (did you forget to quote '%s'?)",
-				query.NotSupportedErrMessage,
-				"ExecutionStatus",
-			),
+			operator: sqlparser.BetweenStr,
+			col:      query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+			from:     "123",
+			to:       "456",
+			out:      "a between '123' and '456'",
 		},
 		{
-			name:  "valid string",
-			input: "'foo'",
-			args: map[string]any{
-				"saName":      "AliasForKeyword01",
-				"saFieldName": "Keyword01",
-				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			},
-			output: "'foo'",
-			err:    nil,
+			operator: sqlparser.NotBetweenStr,
+			col:      query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_INT),
+			from:     int64(123),
+			to:       int64(456),
+			out:      "a not between 123 and 456",
 		},
 		{
-			name:  "valid string escape char",
-			input: "'\"foo'",
-			args: map[string]any{
-				"saName":      "AliasForKeyword01",
-				"saFieldName": "Keyword01",
-				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			},
-			output: "'\\\"foo'",
-			err:    nil,
+			operator:  sqlparser.BetweenStr,
+			col:       query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_INT),
+			from:      123,
+			to:        int64(456),
+			errString: query.InvalidExpressionErrMessage,
+			out:       "unexpected type 123",
 		},
 		{
-			name:  "valid integer",
-			input: "123",
-			args: map[string]any{
-				"saName":      "AliasForInt01",
-				"saFieldName": "Int01",
-				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
-			},
-			output: "123",
-			err:    nil,
-		},
-		{
-			name:  "valid float",
-			input: "1.230",
-			args: map[string]any{
-				"saName":      "AliasForDouble01",
-				"saFieldName": "Double01",
-				"saType":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-			},
-			output: "1.23",
-			err:    nil,
-		},
-		{
-			name:  "valid bool",
-			input: "true",
-			args: map[string]any{
-				"saName":      "AliasForBool01",
-				"saFieldName": "Bool01",
-				"saType":      enumspb.INDEXED_VALUE_TYPE_BOOL,
-			},
-			output: "true",
-			err:    nil,
-		},
-		{
-			name:  "valid datetime",
-			input: fmt.Sprintf("'%s'", dt.Format(time.RFC3339Nano)),
-			args: map[string]any{
-				"saName":      "AliasForDatetime01",
-				"saFieldName": "Datetime01",
-				"saType":      enumspb.INDEXED_VALUE_TYPE_DATETIME,
-			},
-			output: fmt.Sprintf("'%s'", dt.Format(s.queryConverter.getDatetimeFormat())),
-			err:    nil,
-		},
-		{
-			name:  "valid tuple",
-			input: "('foo', 'bar')",
-			args: map[string]any{
-				"saName":      "AliasForKeywordList01",
-				"saFieldName": "KeywordList01",
-				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-			},
-			output: "('foo', 'bar')",
-			err:    nil,
-		},
-		{
-			name:  "ScheduleId transformation",
-			input: "'test-schedule'",
-			args: map[string]any{
-				"saName":      searchattribute.ScheduleID,
-				"saFieldName": searchattribute.WorkflowID,
-				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			},
-			output: fmt.Sprintf("'%stest-schedule'", primitives.ScheduleWorkflowIDPrefix),
-			err:    nil,
+			operator:  sqlparser.BetweenStr,
+			col:       query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_INT),
+			from:      int64(123),
+			to:        456,
+			errString: query.InvalidExpressionErrMessage,
+			out:       "unexpected type 456",
 		},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range testCases {
+		s.Run(tc.out, func() {
+			out, err := s.queryConverter.ConvertRangeExpr(tc.operator, tc.col, tc.from, tc.to)
+			if tc.errString != "" {
+				s.Error(err)
+				var expectedErr *query.ConverterError
+				s.ErrorAs(err, &expectedErr)
+				s.ErrorContains(err, tc.errString)
+			} else {
+				s.NoError(err)
+				s.Equal(tc.out, sqlparser.String(out))
+			}
+		})
+	}
+}
+
+func (s *sqlQueryConverterSuite) TestConvertIsExpr() {
+	testCases := []struct {
+		operator string
+		col      *query.SAColName
+		out      string
+	}{
+		{
+			operator: sqlparser.IsNullStr,
+			col:      query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+			out:      "a is null",
+		},
+		{
+			operator: sqlparser.IsNotNullStr,
+			col:      query.NewSAColName("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+			out:      "a is not null",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.out, func() {
+			out, err := s.queryConverter.ConvertIsExpr(tc.operator, tc.col)
+			s.NoError(err)
+			s.Equal(tc.out, sqlparser.String(out))
+		})
+	}
+}
+
+func (s *sqlQueryConverterSuite) TestSelectStmt() {
+	testCases := []struct {
+		name        string
+		queryParams *query.QueryParams[sqlparser.Expr]
+		pageSize    int
+		pageToken   *sqlplugin.VisibilityPageToken
+	}{
+		{
+			name:        "tc1",
+			queryParams: &query.QueryParams[sqlparser.Expr]{},
+			pageSize:    10,
+			pageToken:   &sqlplugin.VisibilityPageToken{},
+		},
+		{
+			name: "tc2",
+			queryParams: &query.QueryParams[sqlparser.Expr]{
+				QueryExpr: parseWhereString("a = 1"),
+			},
+			pageSize: 10,
+			pageToken: &sqlplugin.VisibilityPageToken{
+				RunID: "test-run-id",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			// Run setup function if provided
-			if tc.setup != nil {
-				tc.setup()
-			}
-
-			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
-			stmt, err := sqlparser.Parse(sql)
-			s.NoError(err)
-			expr := stmt.(*sqlparser.Select).Where.Expr
-			err = s.queryConverter.convertValueExpr(
-				&expr,
-				tc.args["saName"].(string),
-				tc.args["saFieldName"].(string),
-				tc.args["saType"].(enumspb.IndexedValueType),
-			)
-			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, sqlparser.String(expr))
-				if len(tc.input) > 0 && tc.input[0] == '\'' {
-					_, ok := expr.(*unsafeSQLString)
-					s.True(ok)
-				}
-			} else {
-				s.Error(err)
-				s.Equal(err, tc.err)
-			}
+			s.pqcMock.EXPECT().BuildSelectStmt(tc.queryParams, tc.pageSize, tc.pageToken).Return("", nil)
+			s.queryConverter.BuildSelectStmt(tc.queryParams, tc.pageSize, tc.pageToken)
 		})
 	}
 }
 
-func (s *queryConverterSuite) TestParseSQLVal() {
-	dt, _ := time.Parse(time.RFC3339Nano, "2020-02-15T20:30:40.123456789Z")
-	var tests = []testCase{
+func (s *sqlQueryConverterSuite) TestCountStmt() {
+	testCases := []struct {
+		name        string
+		queryParams *query.QueryParams[sqlparser.Expr]
+	}{
 		{
-			name:  "valid string",
-			input: "'foo'",
-			args: map[string]any{
-				"saName": "AliasForKeyword01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			},
-			retValue: "foo",
-			err:      nil,
+			name:        "tc1",
+			queryParams: &query.QueryParams[sqlparser.Expr]{},
 		},
 		{
-			name:  "valid integer",
-			input: "123",
-			args: map[string]any{
-				"saName": "AliasForInt01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+			name: "tc2",
+			queryParams: &query.QueryParams[sqlparser.Expr]{
+				QueryExpr: parseWhereString("a = 1"),
 			},
-			retValue: int64(123),
-			err:      nil,
-		},
-		{
-			name:  "valid float",
-			input: "1.230",
-			args: map[string]any{
-				"saName": "AliasForDouble01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-			},
-			retValue: float64(1.23),
-			err:      nil,
-		},
-		{
-			name:  "valid datetime",
-			input: fmt.Sprintf("'%s'", dt.Format(time.RFC3339Nano)),
-			args: map[string]any{
-				"saName": "AliasForDatetime01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_DATETIME,
-			},
-			retValue: fmt.Sprintf("%s", dt.Format(s.queryConverter.getDatetimeFormat())),
-			err:      nil,
-		},
-		{
-			name:  "invalid datetime",
-			input: fmt.Sprintf("'%s'", dt.String()),
-			args: map[string]any{
-				"saName": "AliasForDatetime01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_DATETIME,
-			},
-			retValue: nil,
-			err: query.NewConverterError(
-				"%s: unable to parse datetime '%s'",
-				query.InvalidExpressionErrMessage,
-				dt.String(),
-			),
-		},
-		{
-			name:  "valid ExecutionStatus keyword",
-			input: "'Running'",
-			args: map[string]any{
-				"saName": "ExecutionStatus",
-				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			},
-			retValue: int64(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-			err:      nil,
-		},
-		{
-			name:  "valid ExecutionStatus code",
-			input: "1",
-			args: map[string]any{
-				"saName": "ExecutionStatus",
-				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			},
-			retValue: int64(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-			err:      nil,
-		},
-		{
-			name:  "invalid ExecutionStatus keyword",
-			input: "'Foo'",
-			args: map[string]any{
-				"saName": "ExecutionStatus",
-				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			},
-			retValue: nil,
-			err: query.NewConverterError(
-				"%s: invalid ExecutionStatus value '%s'",
-				query.InvalidExpressionErrMessage,
-				"Foo",
-			),
-		},
-		{
-			name:  "valid ExecutionDuration day suffix",
-			input: "'10d'",
-			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
-			},
-			retValue: int64(10 * 24 * time.Hour),
-			err:      nil,
-		},
-		{
-			name:  "valid ExecutionDuration hour suffix",
-			input: "'10h'",
-			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
-			},
-			retValue: int64(10 * time.Hour),
-			err:      nil,
-		},
-		{
-			name:  "valid ExecutionDuration string nanos",
-			input: "'100'",
-			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
-			},
-			retValue: int64(100),
-			err:      nil,
-		},
-		{
-			name:  "valid ExecutionDuration int nanos",
-			input: "100",
-			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
-			},
-			retValue: int64(100),
-			err:      nil,
-		},
-		{
-			name:  "invalid ExecutionDuration",
-			input: "'100q'",
-			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
-			},
-			retValue: nil,
-			err: query.NewConverterError(
-				"invalid value for search attribute ExecutionDuration: 100q (invalid duration)"),
-		},
-		{
-			name:  "invalid ExecutionDuration out of bounds",
-			input: "'10000000h'",
-			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
-			},
-			retValue: nil,
-			err: query.NewConverterError(
-				"invalid value for search attribute ExecutionDuration: 10000000h (invalid duration)"),
 		},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
-			stmt, err := sqlparser.Parse(sql)
-			s.NoError(err)
-			expr := stmt.(*sqlparser.Select).Where.Expr
-			value, err := s.queryConverter.parseSQLVal(
-				expr.(*sqlparser.SQLVal),
-				tc.args["saName"].(string),
-				tc.args["saType"].(enumspb.IndexedValueType),
-			)
-			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.input, sqlparser.String(expr)) // parseSQLVal does not change input expr
-				s.Equal(tc.retValue, value)
-			} else {
+			s.pqcMock.EXPECT().BuildCountStmt(tc.queryParams).Return("", nil)
+			s.queryConverter.BuildCountStmt(tc.queryParams)
+		})
+	}
+}
+
+func (s *sqlQueryConverterSuite) TestBuildValueExpr() {
+	testCases := []struct {
+		name      string
+		in        any
+		out       sqlparser.Expr
+		errString string
+	}{
+		{
+			name: "string",
+			in:   "foo",
+			out:  query.NewUnsafeSQLString("foo"),
+		},
+		{
+			name: "int64",
+			in:   int64(123),
+			out:  sqlparser.NewIntVal([]byte("123")),
+		},
+		{
+			name: "float64",
+			in:   123.456,
+			out:  sqlparser.NewFloatVal([]byte("123.456")),
+		},
+		{
+			name: "bool",
+			in:   true,
+			out:  sqlparser.BoolVal(true),
+		},
+		{
+			name: "tuple",
+			in:   []any{"foo", int64(123), true},
+			out: sqlparser.ValTuple{
+				query.NewUnsafeSQLString("foo"),
+				sqlparser.NewIntVal([]byte("123")),
+				sqlparser.BoolVal(true),
+			},
+		},
+		{
+			name:      "error int",
+			in:        123,
+			errString: query.InvalidExpressionErrMessage,
+		},
+		{
+			name:      "error float32",
+			in:        float32(123.456),
+			errString: query.InvalidExpressionErrMessage,
+		},
+		{
+			name:      "error tuple",
+			in:        []string{"foo"},
+			errString: query.InvalidExpressionErrMessage,
+		},
+		{
+			name:      "error tuple item",
+			in:        []any{"foo", 123},
+			errString: query.InvalidExpressionErrMessage,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			out, err := s.queryConverter.buildValueExpr("CustomField", tc.in)
+			if tc.errString != "" {
 				s.Error(err)
-				s.Equal(err, tc.err)
+				var expectedErr *query.ConverterError
+				s.ErrorAs(err, &expectedErr)
+				s.ErrorContains(err, tc.errString)
+			} else {
+				s.NoError(err)
+				s.Equal(tc.out, out)
 			}
 		})
 	}
 }
 
-func TestSupportedComparisonOperators(t *testing.T) {
-	s := assert.New(t)
-	msg := "If you're changing the supported operators, remember to check they work with " +
-		"MySQL, PostgreSQL and SQLite, and check their respective plugin converters."
-	s.True(isSupportedComparisonOperator(sqlparser.EqualStr), msg)
-	s.True(isSupportedComparisonOperator(sqlparser.NotEqualStr), msg)
-	s.True(isSupportedComparisonOperator(sqlparser.LessThanStr), msg)
-	s.True(isSupportedComparisonOperator(sqlparser.GreaterThanStr), msg)
-	s.True(isSupportedComparisonOperator(sqlparser.LessEqualStr), msg)
-	s.True(isSupportedComparisonOperator(sqlparser.GreaterEqualStr), msg)
-	s.True(isSupportedComparisonOperator(sqlparser.InStr), msg)
-	s.True(isSupportedComparisonOperator(sqlparser.NotInStr), msg)
-	s.False(isSupportedComparisonOperator(sqlparser.LikeStr), msg)
-	s.False(isSupportedComparisonOperator(sqlparser.NotLikeStr), msg)
-}
-
-func TestSupportedKeywordListOperators(t *testing.T) {
-	s := assert.New(t)
-	msg := "If you're changing the supported operators, remember to check they work with " +
-		"MySQL, PostgreSQL and SQLite, and check their respective plugin converters."
-	s.True(isSupportedKeywordListOperator(sqlparser.EqualStr), msg)
-	s.True(isSupportedKeywordListOperator(sqlparser.NotEqualStr), msg)
-	s.True(isSupportedKeywordListOperator(sqlparser.InStr), msg)
-	s.True(isSupportedKeywordListOperator(sqlparser.NotInStr), msg)
-	s.False(isSupportedKeywordListOperator(sqlparser.LessThanStr), msg)
-	s.False(isSupportedKeywordListOperator(sqlparser.GreaterThanStr), msg)
-	s.False(isSupportedKeywordListOperator(sqlparser.LessEqualStr), msg)
-	s.False(isSupportedKeywordListOperator(sqlparser.GreaterEqualStr), msg)
-	s.False(isSupportedKeywordListOperator(sqlparser.LikeStr), msg)
-	s.False(isSupportedKeywordListOperator(sqlparser.NotLikeStr), msg)
-}
-
-func TestSupportedTextOperators(t *testing.T) {
-	s := assert.New(t)
-	msg := "If you're changing the supported operators, remember to check they work with " +
-		"MySQL, PostgreSQL and SQLite, and check their respective plugin converters."
-	s.True(isSupportedTextOperator(sqlparser.EqualStr), msg)
-	s.True(isSupportedTextOperator(sqlparser.NotEqualStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.LessThanStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.GreaterThanStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.LessEqualStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.GreaterEqualStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.InStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.NotInStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.LikeStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.NotLikeStr), msg)
-}
-
-func TestSupportedTypeRangeCond(t *testing.T) {
-	s := assert.New(t)
-	msg := "If you're changing the supported types for range condition, " +
-		"remember to check they work correctly with MySQL, PostgreSQL and SQLite."
-	supportedTypesRangeCond = []enumspb.IndexedValueType{
-		enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-		enumspb.INDEXED_VALUE_TYPE_INT,
-		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+func parseWhereString(where string) sqlparser.Expr {
+	stmt, err := sqlparser.Parse(fmt.Sprintf("select * from t where %s", where))
+	if err != nil {
+		panic(err)
 	}
-	for tpCode := range enumspb.IndexedValueType_name {
-		tp := enumspb.IndexedValueType(tpCode)
-		switch tp {
-		case enumspb.INDEXED_VALUE_TYPE_DATETIME,
-			enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-			enumspb.INDEXED_VALUE_TYPE_INT,
-			enumspb.INDEXED_VALUE_TYPE_KEYWORD:
-			s.True(isSupportedTypeRangeCond(tp), msg)
-		default:
-			s.False(isSupportedTypeRangeCond(tp), msg)
-		}
-	}
-}
-
-func newMapper(
-	getAlias func(fieldName, ns string) (string, error),
-	getFieldName func(alias, ns string) (string, error),
-) searchattribute.Mapper {
-	return &FlexibleMapper{
-		GetAliasFunc:     getAlias,
-		GetFieldNameFunc: getFieldName,
-	}
-}
-
-type FlexibleMapper struct {
-	GetAliasFunc     func(fieldName, namespace string) (string, error)
-	GetFieldNameFunc func(alias, namespace string) (string, error)
-}
-
-func (m *FlexibleMapper) GetAlias(fieldName, ns string) (string, error) {
-	return m.GetAliasFunc(fieldName, ns)
-}
-
-func (m *FlexibleMapper) GetFieldName(alias, ns string) (string, error) {
-	return m.GetFieldNameFunc(alias, ns)
+	return stmt.(*sqlparser.Select).Where.Expr
 }

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/olivere/elastic/v7"
+	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -60,6 +61,12 @@ type (
 		ScrollID string
 		// For ES>=7.10.0 and "default" flavor.
 		PointInTimeID string
+	}
+
+	esQueryParams struct {
+		Query   elastic.Query
+		Sorter  []elastic.Sorter
+		GroupBy []string
 	}
 
 	fieldSort struct {
@@ -477,7 +484,7 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 
 func (s *VisibilityStore) countGroupByWorkflowExecutions(
 	ctx context.Context,
-	queryParams *query.QueryParams,
+	queryParams *esQueryParams,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
 	groupByFields := queryParams.GroupBy
 
@@ -549,57 +556,6 @@ func (s *VisibilityStore) GetWorkflowExecution(
 	return &store.InternalGetWorkflowExecutionResponse{
 		Execution: workflowExecutionInfo,
 	}, nil
-}
-
-func (s *VisibilityStore) buildSearchParameters(
-	request *manager.ListWorkflowExecutionsRequest,
-	boolQuery *elastic.BoolQuery,
-	overStartTime bool,
-) (*client.SearchParameters, error) {
-
-	token, err := s.deserializePageToken(request.NextPageToken)
-	if err != nil {
-		return nil, err
-	}
-
-	boolQuery.Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID.String()))
-
-	if request.NamespaceDivision == "" {
-		boolQuery.MustNot(elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision))
-	} else {
-		boolQuery.Filter(elastic.NewTermQuery(searchattribute.TemporalNamespaceDivision, request.NamespaceDivision))
-	}
-
-	if !request.EarliestStartTime.IsZero() || !request.LatestStartTime.IsZero() {
-		var rangeQuery *elastic.RangeQuery
-		if overStartTime {
-			rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime)
-		} else {
-			rangeQuery = elastic.NewRangeQuery(searchattribute.CloseTime)
-		}
-
-		if !request.EarliestStartTime.IsZero() {
-			rangeQuery = rangeQuery.Gte(request.EarliestStartTime)
-		}
-
-		if !request.LatestStartTime.IsZero() {
-			rangeQuery = rangeQuery.Lte(request.LatestStartTime)
-		}
-		boolQuery.Filter(rangeQuery)
-	}
-
-	params := &client.SearchParameters{
-		Index:    s.index,
-		Query:    boolQuery,
-		PageSize: request.PageSize,
-		Sorter:   defaultSorter,
-	}
-
-	if token != nil && len(token.SearchAfter) > 0 {
-		params.SearchAfter = token.SearchAfter
-	}
-
-	return params, nil
 }
 
 func (s *VisibilityStore) BuildSearchParametersV2(
@@ -720,45 +676,63 @@ func (s *VisibilityStore) processPageToken(
 }
 
 func (s *VisibilityStore) convertQuery(
-	namespace namespace.Name,
+	namespaceName namespace.Name,
 	namespaceID namespace.ID,
-	requestQueryStr string,
-) (*query.QueryParams, error) {
+	queryString string,
+) (res *esQueryParams, err error) {
+	defer func() {
+		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
+		// only mapper errors).
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			err = converterErr.ToInvalidArgument()
+		}
+	}()
+
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef("unable to read search attribute types: %v", err)
 	}
-	nameInterceptor := NewNameInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider)
-	queryConverter := NewQueryConverter(
-		nameInterceptor,
-		NewValuesInterceptor(namespace, saTypeMap),
-		saTypeMap,
-	)
-	queryParams, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
+
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(namespaceName)
 	if err != nil {
-		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
-			return nil, converterErr.ToInvalidArgument()
-		}
 		return nil, err
 	}
 
-	// Create a new bool query because a request query might have only "should" (="or") queries.
-	namespaceFilterQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.NamespaceID, namespaceID.String()))
-
-	// If the query did not explicitly filter on TemporalNamespaceDivision somehow, then add a
-	// "must not exist" (i.e. "is null") query for it.
-	if !nameInterceptor.seenNamespaceDivision {
-		namespaceFilterQuery.MustNot(elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision))
+	c := query.NewQueryConverter(&queryConverter{}, namespaceName, namespaceID, saTypeMap, saMapper)
+	queryParams, err := c.Convert(queryString)
+	if err != nil {
+		return nil, err
 	}
 
-	if queryParams.Query != nil {
-		namespaceFilterQuery.Filter(queryParams.Query)
+	orderBy := make([]elastic.Sorter, 0, len(queryParams.OrderBy))
+	for _, orderByExpr := range queryParams.OrderBy {
+		// query converter is supposed to parse the expression and convert to SAColName
+		colName, ok := orderByExpr.Expr.(*query.SAColName)
+		if !ok {
+			return nil, query.NewConverterError(
+				"%s: unexpected field in 'ORDER BY' clause: %s",
+				query.NotSupportedErrMessage,
+				sqlparser.String(orderByExpr),
+			)
+		}
+		fieldSort := elastic.NewFieldSort(colName.FieldName)
+		if orderByExpr.Direction == sqlparser.DescScr {
+			fieldSort = fieldSort.Desc()
+		}
+		orderBy = append(orderBy, fieldSort)
 	}
 
-	queryParams.Query = namespaceFilterQuery
-	return queryParams, nil
+	groupBy := make([]string, 0, len(queryParams.GroupBy))
+	for _, field := range queryParams.GroupBy {
+		groupBy = append(groupBy, field.FieldName)
+	}
+
+	return &esQueryParams{
+		Query:   queryParams.QueryExpr,
+		Sorter:  orderBy,
+		GroupBy: groupBy,
+	}, nil
 }
 
 func (s *VisibilityStore) getScanFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
