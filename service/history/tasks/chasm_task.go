@@ -1,7 +1,7 @@
 package tasks
 
 import (
-	reflect "reflect"
+	"reflect"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
