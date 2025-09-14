@@ -640,6 +640,8 @@ func (n *Node) syncSubComponents() (bool, error) {
 // syncSubComponentsInternal syncs a subcomponent's fields, managing the
 // associated node lifecycles. True is returned when CHASM must perform deferred
 // pointer resolution.
+//
+// nolint:revive,cognitive-complexity
 func (n *Node) syncSubComponentsInternal() (needsPointerResolution bool, err error) {
 	childrenToKeep := make(map[string]struct{})
 	for field := range n.valueFields() {
@@ -1477,7 +1479,7 @@ func (n *Node) closeTransactionHandleNewTasks(
 	validateContext Context,
 	taskOffset *int64,
 ) error {
-	newTasks, ok := n.nodeBase.newTasks[n.value]
+	newTasks, ok := n.newTasks[n.value]
 	if !ok {
 		return nil
 	}
