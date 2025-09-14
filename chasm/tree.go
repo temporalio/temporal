@@ -5,6 +5,7 @@ package chasm
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"iter"
 	"reflect"
@@ -2416,7 +2417,7 @@ func (n *Node) ValidatePureTask(
 func (n *Node) ValidateSideEffectTask(
 	ctx context.Context,
 	chasmTask *tasks.ChasmTask,
-) (bool, error) {
+) (isValid bool, retErr error) {
 
 	taskInfo := chasmTask.Info
 	taskType := taskInfo.Type
@@ -2453,6 +2454,16 @@ func (n *Node) ValidateSideEffectTask(
 		return false, err
 	}
 
+	defer func() {
+		if rec := recover(); rec != nil {
+			chasmTask.DeserializedTask = reflect.Value{}
+			panic(rec) //nolint:forbidigo
+		}
+		if retErr != nil {
+			chasmTask.DeserializedTask = reflect.Value{}
+		}
+	}()
+
 	if !chasmTask.DeserializedTask.IsValid() {
 		// TODO: Change physical side effect task to reference logical task and
 		// then use deserializeTaskWithCache as well.
@@ -2484,7 +2495,8 @@ func (n *Node) ExecuteSideEffectTask(
 	entityKey EntityKey,
 	chasmTask *tasks.ChasmTask,
 	validate func(NodeBackend, Context, Component) error,
-) error {
+) (retErr error) {
+
 	if engineFromContext(ctx) == nil {
 		return serviceerror.NewInternal("no CHASM engine set on context")
 	}
@@ -2499,6 +2511,23 @@ func (n *Node) ExecuteSideEffectTask(
 		return serviceerror.NewInternalf("ExecuteSideEffectTask called on a Pure task '%s'", taskType)
 	}
 
+	// TODO - update ComponentRef to use the encoded path, and then leave decoding
+	// until access/dereference time.
+	path, err := n.pathEncoder.Decode(taskInfo.Path)
+	if err != nil {
+		return serviceerror.NewInternalf("failed to decode path '%s'", taskInfo.Path)
+	}
+
+	defer func() {
+		if rec := recover(); rec != nil {
+			chasmTask.DeserializedTask = reflect.Value{}
+			panic(rec) //nolint:forbidigo
+		}
+		if retErr != nil && !errors.As(retErr, new(*serviceerror.NotFound)) {
+			chasmTask.DeserializedTask = reflect.Value{}
+		}
+	}()
+
 	if !chasmTask.DeserializedTask.IsValid() {
 		var err error
 		// TODO: Change physical side effect task to reference logical task and
@@ -2509,13 +2538,6 @@ func (n *Node) ExecuteSideEffectTask(
 		}
 	}
 	taskValue := chasmTask.DeserializedTask
-
-	// TODO - update ComponentRef to use the encoded path, and then leave decoding
-	// until access/dereference time.
-	path, err := n.pathEncoder.Decode(taskInfo.Path)
-	if err != nil {
-		return serviceerror.NewInternalf("failed to decode path '%s'", taskInfo.Path)
-	}
 
 	taskAttributes := TaskAttributes{
 		ScheduledTime: chasmTask.GetVisibilityTime(),

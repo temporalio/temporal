@@ -993,8 +993,6 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	// Execute all fired pure tasks for a component while holding the workflow lock.
 	processedTimers := 0
 	err = t.executeChasmPureTimers(
-		ctx,
-		wfCtx,
 		ms,
 		task,
 		func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, taskInstance any) error {

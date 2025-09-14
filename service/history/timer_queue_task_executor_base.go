@@ -251,8 +251,6 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 // executeChasmPureTimers walks a CHASM tree for expired pure task timers,
 // executes them, and returns a count of timers processed.
 func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
-	ctx context.Context,
-	workflowContext historyi.WorkflowContext,
 	ms historyi.MutableState,
 	task *tasks.ChasmTaskPure,
 	callback func(node chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) error,
