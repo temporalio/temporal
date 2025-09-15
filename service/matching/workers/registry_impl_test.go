@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -17,11 +18,12 @@ func alwaysTrue(_ *workerpb.WorkerHeartbeat) bool { return true }
 
 func TestUpdateAndListNamespace(t *testing.T) {
 	m := newRegistryImpl(
-		2,         // numBuckets
-		time.Hour, // TTL
-		0,         // MinEvictAge
-		10,        // maxItems
-		time.Hour, // evictionInterval
+		2,                         // numBuckets
+		time.Hour,                 // TTL
+		0,                         // MinEvictAge
+		10,                        // maxItems
+		time.Hour,                 // evictionInterval
+		clock.NewRealTimeSource(), // timeSource
 	)
 	defer m.Stop()
 
@@ -42,7 +44,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 }
 
 func TestListNamespacePredicate(t *testing.T) {
-	m := newRegistryImpl(1, time.Hour, 0, 10, time.Hour)
+	m := newRegistryImpl(1, time.Hour, 0, 10, time.Hour, clock.NewRealTimeSource())
 	defer m.Stop()
 
 	// Set up multiple entries
@@ -72,7 +74,7 @@ func TestListNamespacePredicate(t *testing.T) {
 }
 
 func TestEvictByTTL(t *testing.T) {
-	m := newRegistryImpl(1, 1*time.Second, 0, 10, time.Hour)
+	m := newRegistryImpl(1, 1*time.Second, 0, 10, time.Hour, clock.NewRealTimeSource())
 	defer m.Stop()
 
 	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "oldWorker"}
@@ -93,7 +95,7 @@ func TestEvictByTTL(t *testing.T) {
 
 func TestEvictByCapacity(t *testing.T) {
 	maxItems := int64(3)
-	m := newRegistryImpl(1, time.Hour, 0, maxItems, time.Hour)
+	m := newRegistryImpl(1, time.Hour, 0, maxItems, time.Hour, clock.NewRealTimeSource())
 	defer m.Stop()
 
 	// Insert more entries than maxItems
@@ -118,7 +120,7 @@ func TestEvictByCapacity(t *testing.T) {
 func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 	maxItems := int64(2)
 	minEvictAge := 5 * time.Second
-	m := newRegistryImpl(1, time.Hour, minEvictAge, maxItems, time.Hour)
+	m := newRegistryImpl(1, time.Hour, minEvictAge, maxItems, time.Hour, clock.NewRealTimeSource())
 	defer m.Stop()
 
 	// Add 3 entries (over capacity) - all will be "new" (< minEvictAge)
@@ -145,7 +147,10 @@ func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 func TestEvictByCapacityAfterMinAge(t *testing.T) {
 	maxItems := int64(2)
 	minEvictAge := 100 * time.Millisecond // Short age for test
-	m := newRegistryImpl(1, time.Hour, minEvictAge, maxItems, time.Hour)
+
+	// Use mock time source for reliable testing
+	timeSource := clock.NewEventTimeSource()
+	m := newRegistryImpl(1, time.Hour, minEvictAge, maxItems, time.Hour, timeSource)
 	defer m.Stop()
 
 	// Add 3 entries (over capacity)
@@ -155,9 +160,8 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 		m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
 	}
 
-	// Wait for entries to exceed minEvictAge
-	// TODO: Use mock time for more reliable tests.
-	time.Sleep(300 * time.Millisecond)
+	// Advance time to exceed minEvictAge
+	timeSource.Advance(300 * time.Millisecond)
 
 	// Now eviction should work
 	m.evictByCapacity()
@@ -169,7 +173,7 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 }
 
 func BenchmarkUpdate(b *testing.B) {
-	m := newRegistryImpl(16, time.Hour, time.Minute, int64(b.N), time.Hour)
+	m := newRegistryImpl(16, time.Hour, time.Minute, int64(b.N), time.Hour, clock.NewRealTimeSource())
 	defer m.Stop()
 	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "benchWorker"}
 	b.ResetTimer()
@@ -179,7 +183,7 @@ func BenchmarkUpdate(b *testing.B) {
 }
 
 func BenchmarkListNamespace(b *testing.B) {
-	m := newRegistryImpl(16, time.Hour, time.Minute, 1000, time.Hour)
+	m := newRegistryImpl(16, time.Hour, time.Minute, 1000, time.Hour, clock.NewRealTimeSource())
 	defer m.Stop()
 	// Pre-populate with entries
 	for i := 0; i < 1000; i++ {
@@ -197,7 +201,7 @@ func BenchmarkListNamespace(b *testing.B) {
 func BenchmarkRandomUpdate(b *testing.B) {
 	namespaces := []namespace.ID{"ns1", "ns2", "ns3"}
 	totalHeartbeats := 30 // Total heartbeats per namespace
-	m := newRegistryImpl(len(namespaces), time.Hour, time.Minute, int64(b.N), time.Hour)
+	m := newRegistryImpl(len(namespaces), time.Hour, time.Minute, int64(b.N), time.Hour, clock.NewRealTimeSource())
 	defer m.Stop()
 
 	// Pre-populate heartbeats per namespace
