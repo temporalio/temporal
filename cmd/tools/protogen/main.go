@@ -21,14 +21,6 @@ func info(format string, args ...interface{}) {
 	log.Println(cyan.Sprintf(format, args...))
 }
 
-// runCommand executes a shell command and returns an error if it fails
-func runCommand(ctx context.Context, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
 func copyRecursive(src, dst string) error {
 	srcInfo, err := os.Stat(src)
 	if err != nil {
@@ -111,11 +103,9 @@ type generator struct {
 	tempProtoRoot string
 	protoOut      string
 	protoBackup   string
-	protogen      string
 	apiBinpb      string
 	protoRoot     string
-	goimports     string
-	mockgen       string
+	toolBinDir    string
 	chasmLibDirs  []string
 }
 
@@ -124,15 +114,12 @@ func newGenerator() (*generator, error) {
 	flag.StringVar(&gen.protoOut, "proto-out", "", "Proto output directory (required)")
 	flag.StringVar(&gen.protoRoot, "proto-root", "", "Proto root directory (required)")
 	flag.StringVar(&gen.rootDir, "root", "", "Root directory (required)")
-	flag.StringVar(&gen.protogen, "protogen", "", "Path to protogen binary (required)")
 	flag.StringVar(&gen.apiBinpb, "api-binpb", "", "Path to API binpb file (required)")
-	flag.StringVar(&gen.goimports, "goimports", "", "Path to goimports binary (required)")
-	flag.StringVar(&gen.mockgen, "mockgen", "", "Path to mockgen binary (required)")
+	flag.StringVar(&gen.toolBinDir, "tool-bin-dir", "", "Directory containing tool binaries (required)")
 	flag.Parse()
 
 	// Validate required flags
-	if gen.protoOut == "" || gen.protoRoot == "" || gen.rootDir == "" || gen.protogen == "" ||
-		gen.apiBinpb == "" || gen.goimports == "" || gen.mockgen == "" {
+	if gen.protoOut == "" || gen.protoRoot == "" || gen.rootDir == "" || gen.apiBinpb == "" || gen.toolBinDir == "" {
 		flag.Usage()
 		return nil, errors.New("all flags are required")
 	}
@@ -164,6 +151,19 @@ func (g *generator) removeExistingGenDirs() error {
 		}
 	}
 	return nil
+}
+
+// runCommand executes a shell command
+func (g *generator) runCommand(ctx context.Context, name string, args ...string) error {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	addEnv := []string{"PATH=" + g.toolBinDir + ":" + os.Getenv("PATH")}
+	env := append(os.Environ(), addEnv...) // last one wins
+	cmd.Env = env
+
+	return cmd.Run()
 }
 
 func (g *generator) backupProtos() error {
@@ -229,17 +229,16 @@ func (g *generator) runProtogen(ctx context.Context) error {
 		"-p", "go-helpers_out=paths=source_relative:" + g.tempOut,
 	}
 
-	if err := runCommand(ctx, g.protogen, protoArgs...); err != nil {
+	if err := g.runCommand(ctx, "protogen", protoArgs...); err != nil {
 		return fmt.Errorf("error running protogen: %w", err)
 	}
 	return nil
 }
 
 func (g *generator) runGoImports(ctx context.Context) error {
-	if err := runCommand(ctx, g.goimports, "-w", g.tempOut); err != nil {
+	if err := g.runCommand(ctx, "goimports", "-w", g.tempOut); err != nil {
 		return fmt.Errorf("error running goimports: %w", err)
 	}
-
 	return nil
 }
 
@@ -271,7 +270,7 @@ func (g *generator) generateProtoMocks(ctx context.Context) error {
 				"-destination", dst,
 			}
 
-			if err := runCommand(ctx, g.mockgen, mockgenArgs...); err != nil {
+			if err := g.runCommand(ctx, "mockgen", mockgenArgs...); err != nil {
 				return fmt.Errorf("error running mockgen: %v", err)
 			}
 

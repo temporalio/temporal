@@ -200,7 +200,7 @@ $(BUF): | $(LOCALBIN)
 
 GO_API_VER = $(shell go list -m -f '{{.Version}}' go.temporal.io/api \
 	|| (echo "failed to fetch version for go.temporal.io/api" >&2))
-PROTOGEN := $(LOCALBIN)/protogen-$(GO_API_VER)
+PROTOGEN := $(LOCALBIN)/protogen
 $(PROTOGEN): | $(LOCALBIN)
 	$(call go-install-tool,$(PROTOGEN),go.temporal.io/api/cmd/protogen,$(GO_API_VER))
 
@@ -307,10 +307,8 @@ protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRP
 		-root=$(ROOT) \
 		-proto-out=$(PROTO_OUT) \
 		-proto-root=$(PROTO_ROOT) \
-		-protogen=$(PROTOGEN) \
 		-api-binpb=$(API_BINPB) \
-		-goimports=$(GOIMPORTS) \
-		-mockgen=$(MOCKGEN) \
+		-tool-bin-dir=$(ROOT)/$(LOCALBIN) \
 		$(PROTO_DIRS)
 
 proto-codegen:
