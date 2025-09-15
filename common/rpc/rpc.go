@@ -69,6 +69,7 @@ func NewFactory(
 	frontendHTTPPort int,
 	frontendTLSConfig *tls.Config,
 	commonDialOptions []grpc.DialOption,
+	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption,
 	monitor membership.Monitor,
 ) *RPCFactory {
 	f := &RPCFactory{
@@ -89,12 +90,6 @@ func NewFactory(
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
 	f.interNodeGrpcConnections = cache.NewSimple(nil)
 	return f
-}
-
-// SetPerServiceDialOptions sets the per-service dial options.
-// This should be called when decorating the RPCFactory before connections are created.
-func (d *RPCFactory) SetPerServiceDialOptions(perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption) {
-	d.perServiceDialOptions = perServiceDialOptions
 }
 
 func (d *RPCFactory) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error) {
