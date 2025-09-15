@@ -115,8 +115,8 @@ func TestEvictByCapacity(t *testing.T) {
 }
 
 // Tests the critical edge case where evictByCapacity() cannot evict any entries because they're all
-// protected by minEvictAge. This verifies the "break" logic prevents infinite loops during memory
-// pressure.
+// protected by minEvictAge. This verifies that we do not keep checking the same entries repeatedly
+// when there is no space.
 func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 	maxItems := int64(2)
 	minEvictAge := 5 * time.Second
