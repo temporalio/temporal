@@ -205,7 +205,7 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 		query           string
 		expectedCount   int
 		expectedWorkers []string // WorkerInstanceKeys
-		expectError     bool
+		expectedError   string   // Expected error message (empty if no error expected)
 	}{
 		{
 			name: "valid query - basic filtering",
@@ -217,6 +217,19 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 			},
 			nsID:            "namespace1",
 			query:           "WorkerInstanceKey = 'worker1'",
+			expectedCount:   1,
+			expectedWorkers: []string{"worker1"},
+		},
+		{
+			name: "valid compound query - multiple conditions",
+			setup: func(r *registryImpl) {
+				r.upsertHeartbeats("namespace1", []*workerpb.WorkerHeartbeat{
+					{WorkerInstanceKey: "worker1", TaskQueue: "queue1"},
+					{WorkerInstanceKey: "worker2", TaskQueue: "queue2"},
+				})
+			},
+			nsID:            "namespace1",
+			query:           "WorkerInstanceKey = 'worker1' AND TaskQueue = 'queue1'",
 			expectedCount:   1,
 			expectedWorkers: []string{"worker1"},
 		},
@@ -239,9 +252,9 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 					{WorkerInstanceKey: "worker1"},
 				})
 			},
-			nsID:        "namespace1",
-			query:       "invalid SQL syntax here",
-			expectError: true,
+			nsID:          "namespace1",
+			query:         "invalid SQL syntax here",
+			expectedError: "malformed query",
 		},
 		{
 			name: "query on empty namespace",
@@ -281,8 +294,9 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 
 			result, err := r.ListWorkers(tt.nsID, tt.query, nil)
 
-			if tt.expectError {
+			if tt.expectedError != "" {
 				assert.Error(t, err, "expected an error for invalid query")
+				assert.Contains(t, err.Error(), tt.expectedError, "error message should contain expected text")
 				assert.Nil(t, result, "result should be nil when an error occurs")
 				return
 			}
