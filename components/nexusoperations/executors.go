@@ -88,27 +88,31 @@ type taskExecutor struct {
 	TaskExecutorOptions
 }
 
-func buildCallbackURL(callbackTemplate string, ns *namespace.Namespace) (string, error) {
-	// seems like when the system callback URL is set and no other ones are
-	// we need to check the callback link on the task. if it's the system uri then we can allow it through
-	// I could be thinking about this wrong
-	if callbackTemplate == "unset" {
-		return "", serviceerror.NewInternalf("dynamic config %q is unset", CallbackURLTemplate.Key().String())
+func buildCallbackURL(callbackTemplate string, ns *namespace.Namespace, endpoint *persistencespb.NexusEndpointEntry) (string, error) {
+	switch target := endpoint.GetEndpoint().GetSpec().GetTarget().GetVariant().(type) {
+	case *persistencespb.NexusEndpointTarget_Worker_:
+		return "temporal://system", nil
+	case *persistencespb.NexusEndpointTarget_External_:
+		if callbackTemplate == "unset" {
+			return "", serviceerror.NewInternalf("dynamic config %q is unset", CallbackURLTemplate.Key().String())
+		}
+		// TODO(bergundy): Consider caching this template.
+		callbackURLTemplate, err := template.New("NexusCallbackURL").Parse(callbackTemplate)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse callback URL template: %w", err)
+		}
+		builder := &strings.Builder{}
+		err = callbackURLTemplate.Execute(builder, struct{ NamespaceName, NamespaceID string }{
+			NamespaceName: ns.Name().String(),
+			NamespaceID:   ns.ID().String(),
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to format callback URL: %w", err)
+		}
+		return builder.String(), nil
+	default:
+		return "", fmt.Errorf("unknown endpoint target type: %T", target)
 	}
-	// TODO(bergundy): Consider caching this template.
-	callbackURLTemplate, err := template.New("NexusCallbackURL").Parse(callbackTemplate)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse callback URL template: %w", err)
-	}
-	builder := &strings.Builder{}
-	err = callbackURLTemplate.Execute(builder, struct{ NamespaceName, NamespaceID string }{
-		NamespaceName: ns.Name().String(),
-		NamespaceID:   ns.ID().String(),
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to format callback URL: %w", err)
-	}
-	return builder.String(), nil
 }
 
 func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task InvocationTask) error {
@@ -138,7 +142,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		}
 		return err
 	}
-	callbackURL, err := buildCallbackURL(e.Config.CallbackURLTemplate(), ns)
+	callbackURL, err := buildCallbackURL(e.Config.CallbackURLTemplate(), ns, endpoint)
 	if err != nil {
 		return err
 	}
