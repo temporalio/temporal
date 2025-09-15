@@ -409,30 +409,33 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	var handlerErr *nexus.HandlerError
 	var opFailedErr *nexus.OperationError
 
-	if errors.As(callErr, &opFailedErr) {
+	switch {
+	case errors.As(callErr, &opFailedErr):
 		return handleOperationError(node, operation, opFailedErr)
-	} else if errors.As(callErr, &handlerErr) {
+	case errors.As(callErr, &handlerErr):
+		// The StartOperation request got an unexpected response that is not retryable, fail the operation.
+		// Although Failure is nullable, Nexus SDK is expected to always populate this field
 		if !handlerErr.Retryable() {
-			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
-			// Although Failure is nullable, Nexus SDK is expected to always populate this field
 			return handleNonRetryableStartOperationError(node, operation, handlerErr)
 		}
-		// Fall through to the AttemptFailed transition.
-	} else if errors.Is(callErr, ErrResponseBodyTooLarge) {
+	case errors.Is(callErr, ErrResponseBodyTooLarge):
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response body is too large.
 		return handleNonRetryableStartOperationError(node, operation, callErr)
-	} else if errors.Is(callErr, ErrInvalidOperationToken) {
+	case errors.Is(callErr, ErrInvalidOperationToken):
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response's operation token is too large.
 		return handleNonRetryableStartOperationError(node, operation, callErr)
-	} else if errors.Is(callErr, ErrOperationTimeoutBelowMin) {
+	case errors.Is(callErr, ErrOperationTimeoutBelowMin):
 		// Operation timeout is not retryable
 		return handleNonRetryableStartOperationError(node, operation, callErr)
-	} else if errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled) {
+	case errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled):
 		// If timed out, we don't leak internal info to the user
 		callErr = errRequestTimedOut
+	default:
+		// Fall through all uncaught errors to retryable
 	}
+
 	failure, err := callErrToFailure(callErr, true)
 	if err != nil {
 		return err
