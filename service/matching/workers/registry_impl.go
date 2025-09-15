@@ -9,7 +9,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	workerpb "go.temporal.io/api/worker/v1"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/fx"
 )
@@ -42,15 +41,14 @@ type (
 	// It partitions the keyspace into buckets and enforces TTL and capacity.
 	// Eviction runs in the background.
 	registryImpl struct {
-		buckets          []*bucket        // buckets for partitioning the keyspace
-		maxItems         int64            // maximum number of entries allowed across all buckets
-		ttl              time.Duration    // time after which entries are considered expired
-		minEvictAge      time.Duration    // minimum age of entries to consider for eviction
-		evictionInterval time.Duration    // interval for periodic eviction checks
-		total            atomic.Int64     // atomic counter of total entries
-		quit             chan struct{}    // channel to signal shutdown of the eviction loop
-		timeSource       clock.TimeSource // time source for testing
-		seed             maphash.Seed     // seed for the hasher, used to ensure consistent hashing
+		buckets          []*bucket     // buckets for partitioning the keyspace
+		maxItems         int64         // maximum number of entries allowed across all buckets
+		ttl              time.Duration // time after which entries are considered expired
+		minEvictAge      time.Duration // minimum age of entries to consider for eviction
+		evictionInterval time.Duration // interval for periodic eviction checks
+		total            atomic.Int64  // atomic counter of total entries
+		quit             chan struct{} // channel to signal shutdown of the eviction loop
+		seed             maphash.Seed  // seed for the hasher, used to ensure consistent hashing
 	}
 )
 
@@ -63,7 +61,9 @@ func newBucket() *bucket {
 
 // upsertHeartbeats inserts or refreshes a WorkerHeartbeat under the given namespace.
 // Returns the number of new entries.
-func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat, now time.Time) int64 {
+func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) int64 {
+	now := time.Now()
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	var newEntries int64
@@ -182,7 +182,6 @@ func NewRegistry(lc fx.Lifecycle) Registry {
 		defaultMinEvictAge,
 		defaultMaxEntries,
 		defaultEvictionInterval,
-		clock.NewRealTimeSource(),
 	)
 
 	lc.Append(fx.StartStopHook(m.Start, m.Stop))
@@ -195,7 +194,6 @@ func newRegistryImpl(numBuckets int,
 	minEvictAge time.Duration,
 	maxItems int64,
 	evictionInterval time.Duration,
-	timeSource clock.TimeSource,
 ) *registryImpl {
 	m := &registryImpl{
 		buckets:          make([]*bucket, numBuckets),
@@ -203,7 +201,6 @@ func newRegistryImpl(numBuckets int,
 		ttl:              ttl,
 		minEvictAge:      minEvictAge,
 		evictionInterval: evictionInterval,
-		timeSource:       timeSource,
 		seed:             maphash.MakeSeed(),
 		quit:             make(chan struct{}),
 	}
@@ -229,8 +226,7 @@ func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
 // New entries increment the global counter.
 func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) {
 	b := m.getBucket(nsID)
-	now := m.timeSource.Now()
-	newEntries := b.upsertHeartbeats(nsID, heartbeats, now)
+	newEntries := b.upsertHeartbeats(nsID, heartbeats)
 	m.total.Add(newEntries)
 }
 
@@ -250,17 +246,14 @@ func (m *registryImpl) filterWorkers(
 
 // evictLoop periodically triggers TTL and capacity-based eviction.
 func (m *registryImpl) evictLoop() {
-	timerChan, timer := m.timeSource.NewTimer(m.evictionInterval)
-	defer timer.Stop()
-
+	ticker := time.NewTicker(m.evictionInterval)
 	for {
 		select {
-		case <-timerChan:
+		case <-ticker.C:
 			m.evictByTTL()
 			m.evictByCapacity()
-			// Reset for next interval
-			timer.Reset(m.evictionInterval)
 		case <-m.quit:
+			ticker.Stop()
 			return
 		}
 	}
@@ -268,7 +261,7 @@ func (m *registryImpl) evictLoop() {
 
 // evictByTTL removes expired entries across all buckets.
 func (m *registryImpl) evictByTTL() {
-	expireBefore := m.timeSource.Now().Add(-m.ttl)
+	expireBefore := time.Now().Add(-m.ttl)
 	var removed int64
 	for _, b := range m.buckets {
 		removed += int64(b.evictByTTL(expireBefore))
@@ -282,7 +275,7 @@ func (m *registryImpl) evictByTTL() {
 func (m *registryImpl) evictByCapacity() {
 	for m.total.Load() > m.maxItems {
 		removedAny := false
-		threshold := m.timeSource.Now().Add(-m.minEvictAge)
+		threshold := time.Now().Add(-m.minEvictAge)
 		for _, b := range m.buckets {
 			if m.total.Load() <= m.maxItems {
 				return
