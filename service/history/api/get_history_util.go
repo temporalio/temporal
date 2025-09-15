@@ -149,10 +149,10 @@ func GetHistory(
 	persistenceVisibilityMgr manager.VisibilityManager,
 ) (history *historypb.History, token []byte, retError error) {
 	defer func() {
-		switch retError.(type) {
-		case nil:
-			// noop
-		case *serviceerror.DataLoss, *serialization.DeserializationError, *serialization.SerializationError:
+		var dataLossErr *serviceerror.DataLoss
+		var serializationErr *serialization.DeserializationError
+		var deserializationErr *serialization.SerializationError
+		if errors.As(retError, &dataLossErr) || errors.As(retError, &serializationErr) || errors.As(retError, &deserializationErr) {
 			// log event
 			shardContext.GetLogger().Error("encountered data loss event in GetHistory",
 				tag.WorkflowNamespaceID(namespaceID.String()),
@@ -268,7 +268,9 @@ func GetHistoryReverse(
 
 	defer func() {
 		var dataLossErr *serviceerror.DataLoss
-		if errors.As(retError, &dataLossErr) {
+		var serializationErr *serialization.DeserializationError
+		var deserializationErr *serialization.SerializationError
+		if errors.As(retError, &dataLossErr) || errors.As(retError, &serializationErr) || errors.As(retError, &deserializationErr) {
 			shardContext.GetLogger().Error("encountered data loss event in GetHistoryReverse",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
