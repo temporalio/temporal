@@ -609,6 +609,12 @@ func blockingWorkflow(ctx workflow.Context) error {
 	})
 }
 
+func alwaysBlockingWorkflow(ctx workflow.Context) error {
+	return workflow.Await(ctx, func() bool {
+		return false
+	})
+}
+
 func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() {
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
@@ -646,7 +652,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 
 	w := worker.New(sdkClient, taskQueue.GetName(), worker.Options{})
 
-	w.RegisterWorkflow(blockingWorkflow)
+	w.RegisterWorkflow(alwaysBlockingWorkflow)
 	s.NoError(w.Start())
 	defer w.Stop()
 
@@ -655,7 +661,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 		RequestId:          uuid.NewString(),
 		Namespace:          s.Namespace().String(),
 		WorkflowId:         workflowID,
-		WorkflowType:       &commonpb.WorkflowType{Name: "blockingWorkflow"},
+		WorkflowType:       &commonpb.WorkflowType{Name: "alwaysBlockingWorkflow"},
 		TaskQueue:          taskQueue,
 		Input:              nil,
 		WorkflowRunTimeout: durationpb.New(20 * time.Second),
@@ -682,7 +688,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 	_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: workflowExecution,
-		Reason:            "TestNexusResetWorkflowWithCallback_ResetToNotBaseRun",
+		Reason:            "TestNexusResetWorkflowWithCallback_ResetToNotBaseRun_AlwaysBlocking",
 		Identity:          tv.WorkerIdentity(),
 	})
 	s.NoError(err)
@@ -725,14 +731,13 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 	resetWfResponse, err := sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 s.Namespace().String(),
 		WorkflowExecution:         workflowExecution, // base = first (terminated) run
-		Reason:                    "TestNexusResetWorkflowWithCallback_ResetToNotBaseRun",
+		Reason:                    "TestNexusResetWorkflowWithCallback_ResetToNotBaseRun_AlwaysBlocking",
 		WorkflowTaskFinishEventId: 3,
 		RequestId:                 "test_id",
 	})
 	s.NoError(err)
 
 	// 4. Verify states instead of waiting for callback deliveries in this sequence
-	// Second run should have been terminated by reset; its callbacks are SCHEDULED (or may progress later)
 	s.EventuallyWithT(
 		func(t *assert.CollectT) {
 			desc2, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, startResponse2.RunId)
@@ -754,7 +759,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 		func(t *assert.CollectT) {
 			descReset, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, resetWfResponse.RunId)
 			require.NoError(t, err)
-			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descReset.WorkflowExecutionInfo.Status)
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descReset.WorkflowExecutionInfo.Status)
 			require.Equal(t, 0, len(descReset.Callbacks))
 		},
 		2*time.Second,
