@@ -67,7 +67,8 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(
-				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries, defaultEvictionInterval, clock.NewRealTimeSource(),
+				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries,
+				defaultEvictionInterval, clock.NewRealTimeSource(),
 			)
 			tt.setup(r)
 
@@ -165,7 +166,8 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(
-				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries, defaultEvictionInterval, clock.NewRealTimeSource(),
+				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries,
+				defaultEvictionInterval, clock.NewRealTimeSource(),
 			)
 			tt.setup(r)
 
@@ -288,7 +290,8 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(
-				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries, defaultEvictionInterval, clock.NewRealTimeSource(),
+				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries,
+				defaultEvictionInterval, clock.NewRealTimeSource(),
 			)
 			tt.setup(r)
 
@@ -391,7 +394,8 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(
-				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries, defaultEvictionInterval, clock.NewRealTimeSource(),
+				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries,
+				defaultEvictionInterval, clock.NewRealTimeSource(),
 			)
 			tt.setup(r)
 
