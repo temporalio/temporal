@@ -41,7 +41,6 @@ func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {
 		int(port),
 		nil, // No TLS
 		nil,
-		nil,
 		monitor,
 	)
 
@@ -72,7 +71,6 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort(t *testing.T) {
 		addr.String(),
 		0,   // Port is unused
 		nil, // No TLS
-		nil,
 		nil,
 		nil, // monitor should not be used
 	)
@@ -105,7 +103,6 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort_AndTLS(t *testing.T) {
 		addr.String(),
 		0, // Port is unused
 		tlsConfig,
-		nil,
 		nil,
 		nil, // monitor should not be used
 	)
