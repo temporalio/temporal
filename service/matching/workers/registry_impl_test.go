@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -16,12 +18,18 @@ import (
 func alwaysTrue(_ *workerpb.WorkerHeartbeat) bool { return true }
 
 func TestUpdateAndListNamespace(t *testing.T) {
+	// Use capture handler to verify metrics
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
 	m := newRegistryImpl(
-		2,         // numBuckets
-		time.Hour, // TTL
-		0,         // MinEvictAge
-		10,        // maxItems
-		time.Hour, // evictionInterval
+		2,              // numBuckets
+		time.Hour,      // TTL
+		0,              // MinEvictAge
+		10,             // maxItems
+		time.Hour,      // evictionInterval
+		captureHandler, // metricsHandler
 	)
 	defer m.Stop()
 
@@ -39,10 +47,34 @@ func TestUpdateAndListNamespace(t *testing.T) {
 	keys := []string{list[0].WorkerInstanceKey, list[1].WorkerInstanceKey}
 	assert.Contains(t, keys, "workerA")
 	assert.Contains(t, keys, "workerB")
+
+	// Verify metrics: namespace entries and capacity utilization
+	snapshot := capture.Snapshot()
+
+	// Check namespace entries metric
+	entriesMetrics := snapshot[workersRegistryEntriesMetric]
+	assert.GreaterOrEqual(t, len(entriesMetrics), 1, "should have namespace entries metric")
+
+	// Find metric for ns1
+	var ns1Metric *metricstest.CapturedRecording
+	for _, metric := range entriesMetrics {
+		if metric.Tags["namespace"] == "ns1" {
+			ns1Metric = metric
+		}
+	}
+
+	assert.NotNil(t, ns1Metric, "should have metric for ns1")
+	assert.Equal(t, float64(2), ns1Metric.Value, "ns1 should have 2 entries")
+
+	// Check capacity utilization metric
+	utilizationMetrics := snapshot[workersRegistryCapacityUtilizationMetric]
+	assert.GreaterOrEqual(t, len(utilizationMetrics), 1, "should have capacity utilization metric")
+	lastUtilization := utilizationMetrics[len(utilizationMetrics)-1]
+	assert.Equal(t, float64(2)/float64(10), lastUtilization.Value, "should record correct utilization (2/10)")
 }
 
 func TestListNamespacePredicate(t *testing.T) {
-	m := newRegistryImpl(1, time.Hour, 0, 10, time.Hour)
+	m := newRegistryImpl(1, time.Hour, 0, 10, time.Hour, metrics.NoopMetricsHandler)
 	defer m.Stop()
 
 	// Set up multiple entries
@@ -72,7 +104,7 @@ func TestListNamespacePredicate(t *testing.T) {
 }
 
 func TestEvictByTTL(t *testing.T) {
-	m := newRegistryImpl(1, 1*time.Second, 0, 10, time.Hour)
+	m := newRegistryImpl(1, 1*time.Second, 0, 10, time.Hour, metrics.NoopMetricsHandler)
 	defer m.Stop()
 
 	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "oldWorker"}
@@ -93,7 +125,13 @@ func TestEvictByTTL(t *testing.T) {
 
 func TestEvictByCapacity(t *testing.T) {
 	maxItems := int64(3)
-	m := newRegistryImpl(1, time.Hour, 0, maxItems, time.Hour)
+
+	// Use capture handler to verify metrics
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	m := newRegistryImpl(1, time.Hour, 0, maxItems, time.Hour, captureHandler)
 	defer m.Stop()
 
 	// Insert more entries than maxItems
@@ -110,10 +148,64 @@ func TestEvictByCapacity(t *testing.T) {
 	remaining := m.filterWorkers("ns", alwaysTrue)
 	assert.Len(t, remaining, int(maxItems), "should evict down to maxItems")
 	assert.LessOrEqual(t, m.total.Load(), maxItems, "total counter should not exceed maxItems")
+
+	// Verify metrics: eviction should succeed (no age protection issues)
+	snapshot := capture.Snapshot()
+	evictionMetrics := snapshot[workersRegistryEvictionIssuesMetric]
+	if len(evictionMetrics) > 0 {
+		// If metric was emitted, it should be 0 (success) for successful eviction
+		lastMetric := evictionMetrics[len(evictionMetrics)-1]
+		assert.Equal(t, float64(0), lastMetric.Value, "should clear age protection issue when eviction succeeds")
+		assert.Equal(t, "age_protected", lastMetric.Tags["reason"], "should tag with age_protected reason")
+	}
+}
+
+// TestEvictByCapacityWithMinAgeProtection tests the critical edge case where evictByCapacity()
+// cannot evict any entries because they're all protected by minEvictAge.
+// This verifies the "break" logic prevents infinite loops during memory pressure.
+func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
+	maxItems := int64(2)
+	minEvictAge := 5 * time.Second
+
+	// Use capture handler to verify metrics
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	m := newRegistryImpl(1, time.Hour, minEvictAge, maxItems, time.Hour, captureHandler)
+	defer m.Stop()
+
+	// Add 3 entries (over capacity) - all will be "new" (< minEvictAge)
+	for i := 1; i <= 3; i++ {
+		key := fmt.Sprintf("worker%d", i)
+		hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
+		m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
+	}
+
+	// Verify we're over capacity
+	assert.Equal(t, int64(3), m.total.Load(), "should have 3 entries initially")
+	assert.Greater(t, m.total.Load(), maxItems, "should be over capacity")
+
+	// Attempt eviction - should break because all entries are too new
+	m.evictByCapacity()
+
+	// All entries should still be there (protected by minEvictAge)
+	workers := m.filterWorkers("ns", alwaysTrue)
+	assert.Len(t, workers, 3, "all entries should be protected by minEvictAge")
+	assert.Equal(t, int64(3), m.total.Load(), "should still exceed maxItems due to protection")
+
+	// Verify metrics: should record age protection issue
+	snapshot := capture.Snapshot()
+	evictionMetrics := snapshot[workersRegistryEvictionIssuesMetric]
+	assert.Len(t, evictionMetrics, 1, "should have eviction issues metric")
+
+	metric := evictionMetrics[0]
+	assert.Equal(t, float64(1), metric.Value, "should record age protection issue")
+	assert.Equal(t, "age_protected", metric.Tags["reason"], "should tag with age_protected reason")
 }
 
 func BenchmarkUpdate(b *testing.B) {
-	m := newRegistryImpl(16, time.Hour, time.Minute, int64(b.N), time.Hour)
+	m := newRegistryImpl(16, time.Hour, time.Minute, int64(b.N), time.Hour, metrics.NoopMetricsHandler)
 	defer m.Stop()
 	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "benchWorker"}
 	b.ResetTimer()
@@ -123,7 +215,7 @@ func BenchmarkUpdate(b *testing.B) {
 }
 
 func BenchmarkListNamespace(b *testing.B) {
-	m := newRegistryImpl(16, time.Hour, time.Minute, 1000, time.Hour)
+	m := newRegistryImpl(16, time.Hour, time.Minute, 1000, time.Hour, metrics.NoopMetricsHandler)
 	defer m.Stop()
 	// Pre-populate with entries
 	for i := 0; i < 1000; i++ {
@@ -141,7 +233,7 @@ func BenchmarkListNamespace(b *testing.B) {
 func BenchmarkRandomUpdate(b *testing.B) {
 	namespaces := []namespace.ID{"ns1", "ns2", "ns3"}
 	totalHeartbeats := 30 // Total heartbeats per namespace
-	m := newRegistryImpl(len(namespaces), time.Hour, time.Minute, int64(b.N), time.Hour)
+	m := newRegistryImpl(len(namespaces), time.Hour, time.Minute, int64(b.N), time.Hour, metrics.NoopMetricsHandler)
 	defer m.Stop()
 
 	// Pre-populate heartbeats per namespace
@@ -166,3 +258,4 @@ func BenchmarkRandomUpdate(b *testing.B) {
 		m.upsertHeartbeats(p.ns, []*workerpb.WorkerHeartbeat{p.hb})
 	}
 }
+

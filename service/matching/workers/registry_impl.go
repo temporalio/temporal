@@ -9,6 +9,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/fx"
 )
@@ -19,6 +20,13 @@ const (
 	defaultMinEvictAge      = 10 * time.Minute
 	defaultMaxEntries       = 1_000_000
 	defaultEvictionInterval = 1 * time.Hour
+)
+
+const (
+	// Metric names for workers registry
+	workersRegistryEntriesMetric             = "workers_registry_entries"
+	workersRegistryEvictionIssuesMetric      = "workers_registry_eviction_issues"
+	workersRegistryCapacityUtilizationMetric = "workers_registry_capacity_utilization"
 )
 
 type (
@@ -41,14 +49,15 @@ type (
 	// It partitions the keyspace into buckets and enforces TTL and capacity.
 	// Eviction runs in the background.
 	registryImpl struct {
-		buckets          []*bucket     // buckets for partitioning the keyspace
-		maxItems         int64         // maximum number of entries allowed across all buckets
-		ttl              time.Duration // time after which entries are considered expired
-		minEvictAge      time.Duration // minimum age of entries to consider for eviction
-		evictionInterval time.Duration // interval for periodic eviction checks
-		total            atomic.Int64  // atomic counter of total entries
-		quit             chan struct{} // channel to signal shutdown of the eviction loop
-		seed             maphash.Seed  // seed for the hasher, used to ensure consistent hashing
+		buckets          []*bucket       // buckets for partitioning the keyspace
+		maxItems         int64           // maximum number of entries allowed across all buckets
+		ttl              time.Duration   // time after which entries are considered expired
+		minEvictAge      time.Duration   // minimum age of entries to consider for eviction
+		evictionInterval time.Duration   // interval for periodic eviction checks
+		total            atomic.Int64    // atomic counter of total entries
+		quit             chan struct{}   // channel to signal shutdown of the eviction loop
+		seed             maphash.Seed    // seed for the hasher, used to ensure consistent hashing
+		metricsHandler   metrics.Handler // metrics handler for recording registry metrics
 	}
 )
 
@@ -175,13 +184,14 @@ func (b *bucket) evictByCapacity(threshold time.Time) bool {
 }
 
 // NewRegistry creates a workers heartbeat registry with the given parameters.
-func NewRegistry(lc fx.Lifecycle) Registry {
+func NewRegistry(lc fx.Lifecycle, metricsHandler metrics.Handler) Registry {
 	m := newRegistryImpl(
 		defaultBuckets,
 		defaultEntryTTL,
 		defaultMinEvictAge,
 		defaultMaxEntries,
 		defaultEvictionInterval,
+		metricsHandler,
 	)
 
 	lc.Append(fx.StartStopHook(m.Start, m.Stop))
@@ -194,6 +204,7 @@ func newRegistryImpl(numBuckets int,
 	minEvictAge time.Duration,
 	maxItems int64,
 	evictionInterval time.Duration,
+	metricsHandler metrics.Handler,
 ) *registryImpl {
 	m := &registryImpl{
 		buckets:          make([]*bucket, numBuckets),
@@ -203,6 +214,7 @@ func newRegistryImpl(numBuckets int,
 		evictionInterval: evictionInterval,
 		seed:             maphash.MakeSeed(),
 		quit:             make(chan struct{}),
+		metricsHandler:   metricsHandler,
 	}
 
 	for i := range m.buckets {
@@ -228,6 +240,27 @@ func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerp
 	b := m.getBucket(nsID)
 	newEntries := b.upsertHeartbeats(nsID, heartbeats)
 	m.total.Add(newEntries)
+
+	// Record namespace-specific entries count.
+	m.recordNamespaceEntries(nsID)
+
+	// Record overall capacity utilization.
+	m.recordCapacityUtilization()
+}
+
+// recordNamespaceEntries records the current number of entries for a given namespace.
+func (m *registryImpl) recordNamespaceEntries(nsID namespace.ID) {
+	count := len(m.filterWorkers(nsID, func(_ *workerpb.WorkerHeartbeat) bool { return true }))
+	m.metricsHandler.Gauge(workersRegistryEntriesMetric).Record(
+		float64(count),
+		metrics.NamespaceTag(nsID.String()),
+	)
+}
+
+// recordCapacityUtilization records the overall capacity utilization ratio.
+func (m *registryImpl) recordCapacityUtilization() {
+	utilization := float64(m.total.Load()) / float64(m.maxItems)
+	m.metricsHandler.Gauge(workersRegistryCapacityUtilizationMetric).Record(utilization)
 }
 
 // filterWorkers returns all WorkerHeartbeats in a namespace
@@ -269,6 +302,7 @@ func (m *registryImpl) evictByTTL() {
 	if removed > 0 {
 		m.total.Add(-removed)
 	}
+	// Note: Not recording "ttl_failure" because it's normal for entries to be newer than TTL
 }
 
 // evictByCapacity removes entries older than MinEvictAge until under capacity.
@@ -276,8 +310,14 @@ func (m *registryImpl) evictByCapacity() {
 	for m.total.Load() > m.maxItems {
 		removedAny := false
 		threshold := time.Now().Add(-m.minEvictAge)
+
 		for _, b := range m.buckets {
 			if m.total.Load() <= m.maxItems {
+				// Clear age protection issue when we're back under capacity
+				m.metricsHandler.Gauge(workersRegistryEvictionIssuesMetric).Record(
+					0,
+					metrics.StringTag("reason", "age_protected"),
+				)
 				return
 			}
 			if b.evictByCapacity(threshold) {
@@ -285,8 +325,20 @@ func (m *registryImpl) evictByCapacity() {
 				m.total.Add(-1)
 			}
 		}
+
 		if !removedAny {
+			// Record eviction failure due to age protection - operational signal to increase capacity or shard
+			m.metricsHandler.Gauge(workersRegistryEvictionIssuesMetric).Record(
+				1,
+				metrics.StringTag("reason", "age_protected"),
+			)
 			break
+		} else {
+			// Clear age protection issue when eviction succeeds
+			m.metricsHandler.Gauge(workersRegistryEvictionIssuesMetric).Record(
+				0,
+				metrics.StringTag("reason", "age_protected"),
+			)
 		}
 	}
 }
