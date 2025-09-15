@@ -108,7 +108,7 @@ var Module = fx.Options(
 )
 
 var DefaultOptions = fx.Options(
-	fx.Provide(RPCFactoryProvider),
+	fx.Provide(fx.Annotate(RPCFactoryProvider, fx.As(new(common.RPCFactory)))),
 	fx.Provide(ArchivalMetadataProvider),
 	fx.Provide(ArchiverProviderProvider),
 	fx.Provide(ThrottledLoggerProvider),
@@ -347,7 +347,7 @@ func RPCFactoryProvider(
 	tracingStatsHandler telemetry.ClientStatsHandler,
 	monitor membership.Monitor,
 	dc *dynamicconfig.Collection,
-) (common.RPCFactory, error) {
+) (*rpc.RPCFactory, error) {
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := GetFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
@@ -370,7 +370,6 @@ func RPCFactoryProvider(
 		frontendHTTPPort,
 		frontendTLSConfig,
 		options,
-		map[primitives.ServiceName][]grpc.DialOption{},
 		monitor,
 	)
 	factory.EnableInternodeServerKeepalive = enableServerKeepalive
