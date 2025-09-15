@@ -250,26 +250,19 @@ func (m *registryImpl) filterWorkers(
 
 // evictLoop periodically triggers TTL and capacity-based eviction.
 func (m *registryImpl) evictLoop() {
-	var timer clock.Timer
-	var scheduleNext func()
-	scheduleNext = func() {
-		timer = m.timeSource.AfterFunc(m.evictionInterval, func() {
+	timerChan, timer := m.timeSource.NewTimer(m.evictionInterval)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-timerChan:
 			m.evictByTTL()
 			m.evictByCapacity()
-			select {
-			case <-m.quit:
-				return
-			default:
-				scheduleNext()
-			}
-		})
-	}
-
-	scheduleNext()
-
-	<-m.quit
-	if timer != nil {
-		timer.Stop()
+			// Reset for next interval
+			timer.Reset(m.evictionInterval)
+		case <-m.quit:
+			return
+		}
 	}
 }
 
