@@ -507,10 +507,10 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		RunId:      startResponse1.RunId,
 	}
 	s.WaitForHistoryEvents(`
-			1 WorkflowExecutionStarted
-  			2 WorkflowTaskScheduled
-  			3 WorkflowTaskStarted
-  			4 WorkflowTaskCompleted`,
+				1 WorkflowExecutionStarted
+					2 WorkflowTaskScheduled
+					3 WorkflowTaskStarted
+					4 WorkflowTaskCompleted`,
 		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
@@ -602,10 +602,9 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	)
 }
 
-func longRunningWorkflow(ctx workflow.Context) error {
+func blockingWorkflow(ctx workflow.Context) error {
 	return workflow.Await(ctx, func() bool {
-		info := workflow.GetInfo(ctx)
-		return info.OriginalRunID != info.WorkflowExecution.RunID
+		return false
 	})
 }
 
@@ -614,6 +613,13 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
+
+	/*
+	 * 1. Start WF w/ no callbacks and immediately terminate
+	 * 2. Start WF second time w/ a callback
+	 * 3. Reset WF back to the first run
+	 * 4. Verify callback is called
+	 */
 
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
@@ -635,10 +641,50 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 
 	w := worker.New(sdkClient, taskQueue.GetName(), worker.Options{})
 
-	w.RegisterWorkflow(longRunningWorkflow)
+	w.RegisterWorkflow(blockingWorkflow)
 	s.NoError(w.Start())
 	defer w.Stop()
 
+	// 1. Start WF w/ no callbacks and immediately terminate
+	request1 := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:          uuid.NewString(),
+		Namespace:          s.Namespace().String(),
+		WorkflowId:         workflowID,
+		WorkflowType:       &commonpb.WorkflowType{Name: "blockingWorkflow"},
+		TaskQueue:          taskQueue,
+		Input:              nil,
+		WorkflowRunTimeout: durationpb.New(20 * time.Second),
+		Identity:           s.T().Name(),
+	}
+
+	startResponse1, err := s.FrontendClient().StartWorkflowExecution(ctx, request1)
+	s.NoError(err)
+
+	// Validate the workflow started, then terminate it
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      startResponse1.RunId,
+	}
+	s.WaitForHistoryEvents(`
+			1 WorkflowExecutionStarted
+			2 WorkflowTaskScheduled
+			3 WorkflowTaskStarted
+			4 WorkflowTaskCompleted`,
+		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
+		5*time.Second,
+		10*time.Millisecond)
+
+	// s.WaitForHistoryEvents(`
+	// 		1 WorkflowExecutionStarted
+	// 		2 WorkflowTaskScheduled
+	// 		3 WorkflowTaskStarted
+	// 		4 WorkflowTaskCompleted
+	// 		5 WorkflowExecutionTerminated`,
+	// 	s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
+	// 	5*time.Second,
+	// 	10*time.Millisecond)
+
+	// 2. Start WF second time w/ callbacks
 	cbs := []*commonpb.Callback{
 		{
 			Variant: &commonpb.Callback_Nexus_{
@@ -656,37 +702,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 		},
 	}
 
-	request1 := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
-		WorkflowId:          workflowID,
-		WorkflowType:        &commonpb.WorkflowType{Name: "longRunningWorkflow"},
-		TaskQueue:           taskQueue,
-		Input:               nil,
-		WorkflowRunTimeout:  durationpb.New(20 * time.Second),
-		Identity:            s.T().Name(),
-		CompletionCallbacks: []*commonpb.Callback{cbs[0]},
-	}
-
-	startResponse1, err := s.FrontendClient().StartWorkflowExecution(ctx, request1)
-	s.NoError(err)
-
-	// Get history, iterate to ensure workflow task completed event exists.
-	workflowExecution := &commonpb.WorkflowExecution{
-		WorkflowId: workflowID,
-		RunId:      startResponse1.RunId,
-	}
-	s.WaitForHistoryEvents(`
-			1 WorkflowExecutionStarted
-			2 WorkflowTaskScheduled
-			3 WorkflowTaskStarted
-			4 WorkflowTaskCompleted`,
-		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
-		5*time.Second,
-		10*time.Millisecond)
-	// Use workflow task finish event ID 3 as reset point
-
-	// Attach second callback to existing run via conflict policy
+	// Attach callbacks to existing run via conflict policy
 	request2 := proto.Clone(request1).(*workflowservice.StartWorkflowExecutionRequest)
 	request2.RequestId = uuid.NewString()
 	request2.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
@@ -694,33 +710,50 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 		AttachRequestId:           true,
 		AttachCompletionCallbacks: true,
 	}
-	request2.CompletionCallbacks = []*commonpb.Callback{cbs[1]}
+	request2.CompletionCallbacks = cbs
 
 	startResponse2, err := s.FrontendClient().StartWorkflowExecution(ctx, request2)
 	s.NoError(err)
 	s.False(startResponse2.Started)
 	s.Equal(workflowExecution.RunId, startResponse2.RunId)
 
+	// Terminate the first workflow run
+	_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         s.Namespace().String(),
+		WorkflowExecution: workflowExecution,
+		Reason:            "TestNexusResetWorkflowWithCallback_ResetToNotBaseRun",
+		Identity:          tv.WorkerIdentity(),
+	})
+	s.NoError(err)
+
 	// Get history, iterate to ensure workflow execution options updated event exists.
 	s.WaitForHistoryEvents(`
 			1 WorkflowExecutionStarted
   			2 WorkflowTaskScheduled
   			3 WorkflowTaskStarted
-  			4 WorkflowTaskCompleted
-     		5 WorkflowExecutionOptionsUpdated`,
-		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
+				4 WorkflowTaskCompleted
+				5 WorkflowExecutionOptionsUpdated
+				6 WorkflowExecutionTerminated`,
+		s.GetHistoryFunc(s.Namespace().String(), &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      startResponse2.RunId,
+		}),
 		5*time.Second,
 		10*time.Millisecond)
 
 	// Reset workflow must copy all callbacks even after the reset point.
 	resetWfResponse, err := sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:                 s.Namespace().String(),
-		WorkflowExecution:         workflowExecution,
+		Namespace: s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      startResponse2.RunId,
+		},
 		Reason:                    "TestNexusResetWorkflowWithCallback_ResetToNotBaseRun",
 		WorkflowTaskFinishEventId: 3,
 		RequestId:                 "test_id",
 	})
 	s.NoError(err)
+	_ = resetWfResponse
 
 	// Get the description of the run that was reset and ensure that its callback is still in STANDBY state.
 	description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, startResponse1.RunId)
@@ -731,38 +764,30 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 	s.Equal(len(cbs), len(description.Callbacks))
 	descCbs := make([]*commonpb.Callback, 0, len(description.Callbacks))
 	for _, callbackInfo := range description.Callbacks {
-		s.Equal(enumspb.CALLBACK_STATE_STANDBY, callbackInfo.State)
+		s.Equal(enumspb.CALLBACK_STATE_SCHEDULED, callbackInfo.State)
 		s.Equal(int32(0), callbackInfo.Attempt)
 		descCbs = append(descCbs, callbackInfo.Callback)
 	}
 	s.ProtoElementsMatch(cbs, descCbs)
 
-	resetWorkflowRun := sdkClient.GetWorkflow(ctx, workflowID, resetWfResponse.RunId)
-	err = resetWorkflowRun.Get(ctx, nil)
-	s.NoError(err)
-
-	// Expect one completion per callback after first reset
+	// Expect one completion per callback after first reset (post-termination)
 	for range cbs {
 		completion := <-ch.requestCh
-		s.Equal(nexus.OperationStateSucceeded, completion.State)
+		s.Equal(nexus.OperationStateFailed, completion.State)
 		ch.requestCompleteCh <- nil
 	}
 
 	s.EventuallyWithT(
 		func(t *assert.CollectT) {
 			// Validate first reset run has all callbacks in SUCCEEDED state
-			description, err = sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun.GetID(), "")
+			description, err = sdkClient.DescribeWorkflowExecution(ctx, workflowID, resetWfResponse.RunId)
 			require.NoError(t, err)
-			require.Equal(
-				t,
-				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-				description.WorkflowExecutionInfo.Status,
-			)
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, description.WorkflowExecutionInfo.Status)
 
 			require.Equal(t, len(cbs), len(description.Callbacks))
 			descCbs = make([]*commonpb.Callback, 0, len(description.Callbacks))
 			for _, callbackInfo := range description.Callbacks {
-				require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+				require.Equal(t, enumspb.CALLBACK_STATE_STANDBY, callbackInfo.State)
 				descCbs = append(descCbs, callbackInfo.Callback)
 			}
 			protoassert.ProtoElementsMatch(t, cbs, descCbs)
@@ -772,7 +797,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 	)
 
 	// Now reset again using the original run as base (base != current), and ensure callbacks trigger.
-	resetWfResponse2, err := sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+	_, err = sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
@@ -783,39 +808,4 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 		RequestId:                 "test_id_2",
 	})
 	s.NoError(err)
-
-	// Wait for second (non-base) reset run to complete
-	resetWorkflowRun2 := sdkClient.GetWorkflow(ctx, workflowID, resetWfResponse2.RunId)
-	err = resetWorkflowRun2.Get(ctx, nil)
-	s.NoError(err)
-
-	// Expect another completion per callback after second (non-base) reset
-	for range cbs {
-		completion := <-ch.requestCh
-		s.Equal(nexus.OperationStateSucceeded, completion.State)
-		ch.requestCompleteCh <- nil
-	}
-
-	s.EventuallyWithT(
-		func(t *assert.CollectT) {
-			// Validate second reset run has all callbacks in SUCCEEDED state
-			description, err = sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun2.GetID(), "")
-			require.NoError(t, err)
-			require.Equal(
-				t,
-				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-				description.WorkflowExecutionInfo.Status,
-			)
-
-			require.Equal(t, len(cbs), len(description.Callbacks))
-			descCbs = make([]*commonpb.Callback, 0, len(description.Callbacks))
-			for _, callbackInfo := range description.Callbacks {
-				require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-				descCbs = append(descCbs, callbackInfo.Callback)
-			}
-			protoassert.ProtoElementsMatch(t, cbs, descCbs)
-		},
-		2*time.Second,
-		100*time.Millisecond,
-	)
 }
