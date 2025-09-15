@@ -28,6 +28,7 @@ import (
 func GetRawHistory(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
+	namespaceName namespace.Name,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	firstEventID int64,
@@ -40,15 +41,10 @@ func GetRawHistory(
 	defer func() {
 		var dataLossErr *serviceerror.DataLoss
 		if errors.As(retError, &dataLossErr) {
-			ns, err := shardContext.GetNamespaceRegistry().GetNamespaceName(namespaceID)
-			if err != nil {
-				shardContext.GetLogger().Error("failed to get namespace name from namespace ID for emitting data loss metric",
-					tag.WorkflowNamespaceID(namespaceID.String()))
-			}
 			if shardContext.GetConfig().EnableDataLossMetrics() {
 				persistence.EmitDataLossMetric(
 					shardContext.GetMetricsHandler(),
-					ns.String(),
+					namespaceName.String(),
 					execution.GetWorkflowId(),
 					execution.GetRunId(),
 					"GetRawHistory",
@@ -58,7 +54,6 @@ func GetRawHistory(
 		}
 	}()
 
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), shardContext.GetConfig().NumberOfShards)
 	logger := shardContext.GetLogger()
 	rawHistory, size, nextToken, err := persistence.ReadFullPageRawEvents(
 		ctx, shardContext.GetExecutionManager(),
@@ -68,7 +63,7 @@ func GetRawHistory(
 			MaxEventID:    nextEventID,
 			PageSize:      int(pageSize),
 			NextPageToken: token,
-			ShardID:       shardID,
+			ShardID:       shardContext.GetShardID(),
 		},
 	)
 
@@ -142,6 +137,7 @@ func GetRawHistory(
 func GetHistory(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
+	namespaceName namespace.Name,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	firstEventID int64,
@@ -152,20 +148,15 @@ func GetHistory(
 	branchToken []byte,
 	persistenceVisibilityMgr manager.VisibilityManager,
 ) (history *historypb.History, token []byte, retError error) {
-	ns, err := shardContext.GetNamespaceRegistry().GetNamespaceName(namespaceID)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	defer func() {
-		switch err.(type) {
+		switch retError.(type) {
 		case nil:
 			// noop
 		case *serviceerror.DataLoss, *serialization.DeserializationError, *serialization.SerializationError:
 			// log event
 			shardContext.GetLogger().Error("encountered data loss event in GetHistory",
 				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowNamespace(ns.String()),
+				tag.WorkflowNamespace(namespaceName.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
 				tag.WorkflowRunID(execution.GetRunId()),
 				tag.Error(retError),
@@ -173,7 +164,7 @@ func GetHistory(
 			if shardContext.GetConfig().EnableDataLossMetrics() {
 				persistence.EmitDataLossMetric(
 					shardContext.GetMetricsHandler(),
-					ns.String(),
+					namespaceName.String(),
 					execution.GetWorkflowId(),
 					execution.GetRunId(),
 					"api_get_history",
@@ -186,6 +177,7 @@ func GetHistory(
 	var size int
 	isFirstPage := len(nextPageToken) == 0
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), shardContext.GetConfig().NumberOfShards)
+	var err error
 	var historyEvents []*historypb.HistoryEvent
 	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEvents(ctx, shardContext.GetExecutionManager(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
@@ -246,7 +238,7 @@ func GetHistory(
 		shardContext.GetSearchAttributesProvider(),
 		shardContext.GetSearchAttributesMapperProvider(),
 		historyEvents,
-		ns,
+		namespaceName,
 		persistenceVisibilityMgr); err != nil {
 		return nil, nil, err
 	}

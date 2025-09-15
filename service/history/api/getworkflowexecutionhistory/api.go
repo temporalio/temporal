@@ -38,6 +38,7 @@ func Invoke(
 	persistenceVisibilityMgr manager.VisibilityManager,
 ) (_ *historyservice.GetWorkflowExecutionHistoryResponseWithRaw, retError error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
+	namespaceName := namespace.Name(request.GetRequest().GetNamespace())
 	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
 		return nil, err
@@ -211,6 +212,7 @@ func Invoke(
 				historyBlob, _, err = api.GetRawHistory(
 					ctx,
 					shardContext,
+					namespaceName,
 					namespaceID,
 					execution,
 					lastFirstEventID,
@@ -229,6 +231,7 @@ func Invoke(
 				history, _, err = api.GetHistory(
 					ctx,
 					shardContext,
+					namespaceName,
 					namespaceID,
 					execution,
 					lastFirstEventID,
@@ -244,15 +247,10 @@ func Invoke(
 				}
 				// GetHistory func will not return empty history. Log workflow details if that is not the case
 				if len(history.Events) == 0 {
-					ns, err := shardContext.GetNamespaceRegistry().GetNamespaceName(namespaceID)
-					if err != nil {
-						shardContext.GetLogger().Error("failed to get namespace name from namespace ID for emitting data loss metric",
-							tag.WorkflowNamespaceID(namespaceID.String()))
-					}
 					shardContext.GetLogger().Error(
 						"GetHistory returned empty history",
 						tag.WorkflowNamespaceID(namespaceID.String()),
-						tag.WorkflowNamespace(ns.String()),
+						tag.WorkflowNamespace(request.GetRequest().GetNamespace()),
 						tag.WorkflowID(execution.GetWorkflowId()),
 						tag.WorkflowRunID(execution.GetRunId()),
 					)
@@ -261,7 +259,7 @@ func Invoke(
 					if shardContext.GetConfig().EnableDataLossMetrics() {
 						persistence.EmitDataLossMetric(
 							shardContext.GetMetricsHandler(),
-							ns.String(),
+							request.GetRequest().GetNamespace(),
 							execution.GetWorkflowId(),
 							execution.GetRunId(),
 							"GetWorkflowExecutionHistory",
@@ -292,6 +290,7 @@ func Invoke(
 				historyBlob, continuationToken.PersistenceToken, err = api.GetRawHistory(
 					ctx,
 					shardContext,
+					namespaceName,
 					namespaceID,
 					execution,
 					continuationToken.FirstEventId,
@@ -305,6 +304,7 @@ func Invoke(
 				history, continuationToken.PersistenceToken, err = api.GetHistory(
 					ctx,
 					shardContext,
+					namespaceName,
 					namespaceID,
 					execution,
 					continuationToken.FirstEventId,

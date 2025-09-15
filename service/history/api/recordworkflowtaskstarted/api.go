@@ -239,6 +239,7 @@ func Invoke(
 		ctx,
 		shardContext,
 		workflowKey,
+		namespaceEntry.Name(),
 		maxHistoryPageSize,
 		workflowConsistencyChecker,
 		eventNotifier,
@@ -255,6 +256,7 @@ func setHistoryForRecordWfTaskStartedResp(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	workflowKey definition.WorkflowKey,
+	namespaceName namespace.Name,
 	maximumPageSize int32,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
@@ -296,6 +298,7 @@ func setHistoryForRecordWfTaskStartedResp(
 		rawHistory, persistenceToken, err = api.GetRawHistory(
 			ctx,
 			shardContext,
+			namespaceName,
 			namespace.ID(workflowKey.GetNamespaceID()),
 			&commonpb.WorkflowExecution{WorkflowId: workflowKey.GetWorkflowID(), RunId: workflowKey.GetRunID()},
 			firstEventID,
@@ -309,6 +312,7 @@ func setHistoryForRecordWfTaskStartedResp(
 		history, persistenceToken, err = api.GetHistory(
 			ctx,
 			shardContext,
+			namespaceName,
 			namespace.ID(workflowKey.GetNamespaceID()),
 			&commonpb.WorkflowExecution{WorkflowId: workflowKey.GetWorkflowID(), RunId: workflowKey.GetRunID()},
 			firstEventID,
