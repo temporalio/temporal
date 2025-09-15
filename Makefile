@@ -311,9 +311,9 @@ protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRP
 		-protogen-bin=$(PROTOGEN) \
 		-goimports-bin=$(GOIMPORTS) \
 		-mockgen-bin=$(MOCKGEN) \
-		-protoc-gen-go-bin=$(ROOT)/$(PROTOC_GEN_GO) \
-		-protoc-gen-go-grpc-bin=$(ROOT)/$(PROTOC_GEN_GO_GRPC) \
-		-protoc-gen-go-helpers-bin=$(ROOT)/$(PROTOC_GEN_GO_HELPERS) \
+		-protoc-gen-go-bin=$(PROTOC_GEN_GO) \
+		-protoc-gen-go-grpc-bin=$(PROTOC_GEN_GO_GRPC) \
+		-protoc-gen-go-helpers-bin=$(PROTOC_GEN_GO_HELPERS) \
 		$(PROTO_DIRS)
 
 proto-codegen:
