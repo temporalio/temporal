@@ -92,7 +92,9 @@ type taskExecutor struct {
 func buildCallbackURL(callbackTemplate string, ns *namespace.Namespace, endpoint *persistencespb.NexusEndpointEntry) (string, error) {
 	switch target := endpoint.GetEndpoint().GetSpec().GetTarget().GetVariant().(type) {
 	case *persistencespb.NexusEndpointTarget_Worker_:
-		return fmt.Sprintf("temporal://system/namespaces/%s/nexus/callback", ns.Name().String()), nil
+
+		return fmt.Sprintf("temporal://system/%s",
+			commonnexus.RouteCompletionCallback.Path(ns.Name().String())), nil
 	case *persistencespb.NexusEndpointTarget_External_:
 		if callbackTemplate == "unset" {
 			return "", serviceerror.NewInternalf("dynamic config %q is unset", CallbackURLTemplate.Key().String())
