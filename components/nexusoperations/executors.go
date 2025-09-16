@@ -91,7 +91,7 @@ type taskExecutor struct {
 func buildCallbackURL(callbackTemplate string, ns *namespace.Namespace, endpoint *persistencespb.NexusEndpointEntry) (string, error) {
 	switch target := endpoint.GetEndpoint().GetSpec().GetTarget().GetVariant().(type) {
 	case *persistencespb.NexusEndpointTarget_Worker_:
-		return "temporal://system", nil
+		return fmt.Sprintf("temporal://system/namespaces/%s/nexus/callback", ns.Name().String()), nil
 	case *persistencespb.NexusEndpointTarget_External_:
 		if callbackTemplate == "unset" {
 			return "", serviceerror.NewInternalf("dynamic config %q is unset", CallbackURLTemplate.Key().String())
@@ -150,6 +150,8 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
 	ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey, &atomic.Value{})
 
+	// where the second link  in the issue is called
+
 	client, err := e.ClientProvider(
 		ctx,
 		ref.WorkflowKey.GetNamespaceID(),
@@ -197,6 +199,9 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 
+	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
+	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
+
 	if e.HTTPTraceProvider != nil {
 		traceLogger := log.With(e.Logger,
 			tag.Operation("StartOperation"),
@@ -220,6 +225,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	if callTimeout < e.Config.MinOperationTimeout(ns.Name().String()) {
 		callErr = ErrOperationTimeoutBelowMin
 	} else {
+		// this is the nexus sdk client pointing at the internal frontend
 		rawResult, callErr = client.StartOperation(callCtx, args.operation, args.payload, nexus.StartOperationOptions{
 			Header:      header,
 			CallbackURL: callbackURL,

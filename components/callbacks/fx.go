@@ -66,8 +66,6 @@ func HTTPCallerProviderProvider(
 							return client.Do(r)
 						}
 					}
-					// http://internal
-					// heders signal success
 					r.URL.Scheme = frontendClient.Scheme
 					r.URL.Host = frontendClient.Address
 					r.Host = frontendClient.Address
