@@ -5431,6 +5431,7 @@ func (s *engineSuite) TestGetHistory() {
 	history, token, err := api.GetHistory(
 		context.Background(),
 		s.mockShard,
+		tests.Namespace,
 		tests.NamespaceID,
 		&commonpb.WorkflowExecution{
 			WorkflowId: we.WorkflowId,
