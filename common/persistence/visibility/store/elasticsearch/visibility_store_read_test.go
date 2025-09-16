@@ -70,7 +70,9 @@ var (
 	filterByExecutionStatus = fmt.Sprintf("map[term:map[ExecutionStatus:%s]", testStatus.String())
 	filterByNSDivision      = fmt.Sprintf("map[term:map[TemporalNamespaceDivision:%s]", testNSDivision)
 
-	namespaceDivisionExists = elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision)
+	namespaceDivisionIsNull = elastic.NewBoolQuery().MustNot(
+		elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision),
+	)
 )
 
 func createTestRequest() *manager.ListWorkflowExecutionsRequest {
@@ -109,6 +111,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	esProcessorAckTimeout := dynamicconfig.GetDurationPropertyFn(1 * time.Minute * debug.TimeoutMultiplier)
 	visibilityDisableOrderByClause := dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 	visibilityEnableManualPagination := dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	visibilityEnableUnifiedQueryConverter := dynamicconfig.GetBoolPropertyFn(true)
 
 	s.controller = gomock.NewController(s.T())
 	s.mockMetricsHandler = metrics.NewMockHandler(s.controller)
@@ -120,13 +123,17 @@ func (s *ESVisibilitySuite) SetupTest() {
 		esClient:                       s.mockESClient,
 		index:                          testIndex,
 		searchAttributesProvider:       searchattribute.NewTestProvider(),
-		searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
+		searchAttributesMapperProvider: s.mockSearchAttributesMapperProvider,
 		processor:                      s.mockProcessor,
 		processorAckTimeout:            esProcessorAckTimeout,
 		disableOrderByClause:           visibilityDisableOrderByClause,
 		enableManualPagination:         visibilityEnableManualPagination,
+		enableUnifiedQueryConverter:    visibilityEnableUnifiedQueryConverter,
 		metricsHandler:                 s.mockMetricsHandler,
 	}
+
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(testNamespace).
+		Return(&searchattribute.TestMapper{}, nil).AnyTimes()
 }
 
 func (s *ESVisibilitySuite) TearDownTest() {
@@ -163,10 +170,12 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	matchNamespaceQuery := elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID.String())
 	matchNSDivision := elastic.NewTermQuery(searchattribute.TemporalNamespaceDivision, "hidden-stuff")
 
+	var filterQuery elastic.Query
+
 	// test for open
 	request.Query = `WorkflowId="guid-2208"`
-	filterQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.WorkflowID, "guid-2208"))
-	boolQuery := elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery).MustNot(namespaceDivisionExists)
+	filterQuery = elastic.NewTermQuery(searchattribute.WorkflowID, "guid-2208")
+	boolQuery := elastic.NewBoolQuery().Filter(matchNamespaceQuery, namespaceDivisionIsNull, filterQuery)
 	p, err := s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
 	s.Equal(&client.SearchParameters{
@@ -196,7 +205,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 
 	// test custom sort
 	request.Query = `Order bY WorkflowId`
-	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery).MustNot(namespaceDivisionExists)
+	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery, namespaceDivisionIsNull)
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler)
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).Return(metrics.NoopCounterMetricFunc)
 	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
@@ -235,8 +244,8 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
 
 	// test valid query
 	request.Query = `WorkflowId="guid-2208"`
-	filterQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.WorkflowID, "guid-2208"))
-	boolQuery := elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery).MustNot(namespaceDivisionExists)
+	filterQuery := elastic.NewTermQuery(searchattribute.WorkflowID, "guid-2208")
+	boolQuery := elastic.NewBoolQuery().Filter(matchNamespaceQuery, namespaceDivisionIsNull, filterQuery)
 	p, err := s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
 	s.Equal(&client.SearchParameters{
@@ -280,6 +289,8 @@ func (s *ESVisibilitySuite) sorterToJSON(sorters []elastic.Sorter) string {
 }
 
 func (s *ESVisibilitySuite) Test_convertQueryLegacy() {
+	s.visibilityStore.searchAttributesMapperProvider = searchattribute.NewTestMapperProvider(nil)
+
 	query := `WorkflowId = 'wid'`
 	queryParams, err := s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
 	s.NoError(err)
@@ -385,11 +396,6 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy() {
 }
 
 func (s *ESVisibilitySuite) Test_convertQueryLegacy_Mapper() {
-	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(testNamespace).
-		Return(&searchattribute.TestMapper{}, nil).AnyTimes()
-
-	s.visibilityStore.searchAttributesMapperProvider = s.mockSearchAttributesMapperProvider
-
 	query := `WorkflowId = 'wid'`
 	queryParams, err := s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
 	s.NoError(err)
@@ -448,11 +454,6 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy_Mapper() {
 }
 
 func (s *ESVisibilitySuite) Test_convertQueryLegacy_Mapper_Error() {
-	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(testNamespace).
-		Return(&searchattribute.TestMapper{}, nil).AnyTimes()
-
-	s.visibilityStore.searchAttributesMapperProvider = s.mockSearchAttributesMapperProvider
-
 	query := `WorkflowId = 'wid'`
 	queryParams, err := s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
 	s.NoError(err)
@@ -479,6 +480,115 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy_Mapper_Error() {
 	s.EqualError(err, "mapper error")
 
 	s.visibilityStore.searchAttributesMapperProvider = nil
+}
+
+func (s *ESVisibilitySuite) Test_convertQuery() {
+	namespaceIDQuery := elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String())
+
+	testCases := []struct {
+		name  string
+		query string
+		want  *esQueryParams
+		err   string
+	}{
+		{
+			name:  "empty",
+			query: "",
+			want: &esQueryParams{
+				Query: elastic.NewBoolQuery().Filter(
+					namespaceIDQuery,
+					namespaceDivisionIsNull,
+				),
+				Sorter:  []elastic.Sorter{},
+				GroupBy: []string{},
+			},
+		},
+		{
+			name:  "one comparison",
+			query: "WorkflowId = 'wid'",
+			want: &esQueryParams{
+				Query: elastic.NewBoolQuery().Filter(
+					namespaceIDQuery,
+					namespaceDivisionIsNull,
+					elastic.NewTermQuery(searchattribute.WorkflowID, "wid"),
+				),
+				Sorter:  []elastic.Sorter{},
+				GroupBy: []string{},
+			},
+		},
+		{
+			name:  "custom order by",
+			query: "WorkflowId = 'wid' ORDER BY WorkflowId",
+			want: &esQueryParams{
+				Query: elastic.NewBoolQuery().Filter(
+					namespaceIDQuery,
+					namespaceDivisionIsNull,
+					elastic.NewTermQuery(searchattribute.WorkflowID, "wid"),
+				),
+				Sorter:  []elastic.Sorter{elastic.NewFieldSort(searchattribute.WorkflowID)},
+				GroupBy: []string{},
+			},
+		},
+		{
+			name:  "group by",
+			query: "WorkflowId = 'wid' GROUP BY ExecutionStatus",
+			want: &esQueryParams{
+				Query: elastic.NewBoolQuery().Filter(
+					namespaceIDQuery,
+					namespaceDivisionIsNull,
+					elastic.NewTermQuery(searchattribute.WorkflowID, "wid"),
+				),
+				Sorter:  []elastic.Sorter{},
+				GroupBy: []string{searchattribute.ExecutionStatus},
+			},
+		},
+		{
+			name:  "custom search attributes",
+			query: "WorkflowId = 'wid' AND AliasForCustomKeywordField = 'foo' OR AliasForCustomIntField = 123 ORDER BY AliasForCustomKeywordField",
+			want: &esQueryParams{
+				Query: elastic.NewBoolQuery().Filter(
+					namespaceIDQuery,
+					namespaceDivisionIsNull,
+					elastic.NewBoolQuery().
+						Should(
+							elastic.NewBoolQuery().Filter(
+								elastic.NewTermQuery(searchattribute.WorkflowID, "wid"),
+								elastic.NewTermQuery("CustomKeywordField", "foo"),
+							),
+							elastic.NewTermQuery("CustomIntField", int64(123)),
+						).
+						MinimumNumberShouldMatch(1),
+				),
+				Sorter:  []elastic.Sorter{elastic.NewFieldSort("CustomKeywordField")},
+				GroupBy: []string{},
+			},
+		},
+		{
+			name:  "invalid query",
+			query: "WorkflowId LIKE 'wid'",
+			err:   query.NotSupportedErrMessage,
+		},
+		{
+			name:  "invalid custom search attributes",
+			query: "WorkflowId = 'wid' AND InvalidField = 'foo'",
+			err:   query.InvalidExpressionErrMessage,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			got, err := s.visibilityStore.convertQuery(testNamespace, testNamespaceID, tc.query)
+			if tc.err != "" {
+				s.Error(err)
+				s.ErrorContains(err, tc.err)
+				var invalidArgumentErr *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidArgumentErr)
+			} else {
+				s.NoError(err)
+				s.Equal(tc.want, got)
+			}
+		})
+	}
 }
 
 func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
@@ -650,6 +760,8 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 }
 
 func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
+	s.visibilityStore.searchAttributesMapperProvider = searchattribute.NewTestMapperProvider(nil)
+
 	docSource := []byte(`{"ExecutionStatus": "Completed",
           "TemporalChangeVersion": ["ver1", "ver2"],
           "CustomKeywordField": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
@@ -701,10 +813,6 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
           "CustomIntField": [111,222],
           "CustomBoolField": true,
           "UnknownField": "random"}`)
-	s.visibilityStore.searchAttributesMapperProvider = s.mockSearchAttributesMapperProvider
-
-	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(testNamespace).
-		Return(&searchattribute.TestMapper{}, nil).AnyTimes()
 
 	info, err := s.visibilityStore.ParseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
 	s.NoError(err)
@@ -720,8 +828,6 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
 	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasForCustomIntField")
 	s.NotContains(info.SearchAttributes.GetIndexedFields(), "UnknownField")
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.Status)
-
-	s.visibilityStore.searchAttributesMapperProvider = nil
 }
 
 func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
@@ -731,8 +837,9 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 			s.Equal(
 				elastic.NewBoolQuery().Filter(
 					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
-					elastic.NewBoolQuery().Filter(elastic.NewTermQuery("ExecutionStatus", "Terminated")),
-				).MustNot(namespaceDivisionExists),
+					namespaceDivisionIsNull,
+					elastic.NewTermQuery("ExecutionStatus", "Terminated"),
+				),
 				p.Query,
 			)
 			return testSearchResult, nil
@@ -818,8 +925,9 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 			s.Equal(
 				elastic.NewBoolQuery().Filter(
 					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
-					elastic.NewBoolQuery().Filter(elastic.NewTermQuery("ExecutionStatus", "Terminated")),
-				).MustNot(namespaceDivisionExists),
+					namespaceDivisionIsNull,
+					elastic.NewTermQuery("ExecutionStatus", "Terminated"),
+				),
 				query,
 			)
 			return int64(1), nil
@@ -840,8 +948,9 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 			s.Equal(
 				elastic.NewBoolQuery().Filter(
 					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
-					elastic.NewBoolQuery().Filter(elastic.NewTermQuery("ExecutionStatus", "Terminated")),
-				).MustNot(namespaceDivisionExists),
+					namespaceDivisionIsNull,
+					elastic.NewTermQuery("ExecutionStatus", "Terminated"),
+				),
 				query,
 			)
 			return int64(0), errTestESSearch
@@ -873,8 +982,10 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 			gomock.Any(),
 			testIndex,
 			elastic.NewBoolQuery().
-				Filter(elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String())).
-				MustNot(namespaceDivisionExists),
+				Filter(
+					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
+					namespaceDivisionIsNull,
+				),
 			searchattribute.ExecutionStatus,
 			elastic.NewTermsAggregation().Field(searchattribute.ExecutionStatus),
 		).
@@ -919,14 +1030,14 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 	request.Query = "GROUP BY ExecutionStatus, WorkflowType"
 	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
 	s.Error(err)
-	s.Contains(err.Error(), "'group by' clause supports only a single field")
+	s.Contains(err.Error(), "'GROUP BY' clause supports only a single field")
 	s.Nil(resp)
 
 	// test only allowed to group by ExecutionStatus
 	request.Query = "GROUP BY WorkflowType"
 	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
 	s.Error(err)
-	s.Contains(err.Error(), "'group by' clause is only supported for ExecutionStatus search attribute")
+	s.Contains(err.Error(), "'GROUP BY' clause is only supported for ExecutionStatus search attribute")
 	s.Nil(resp)
 }
 
@@ -1189,10 +1300,12 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			searchParams := &query.QueryParamsLegacy{
+			searchParams := &esQueryParams{
 				Query: elastic.NewBoolQuery().
-					Filter(elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String())).
-					MustNot(namespaceDivisionExists),
+					Filter(
+						elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
+						namespaceDivisionIsNull,
+					),
 				GroupBy: tc.groupBy,
 			}
 			s.mockESClient.EXPECT().
@@ -1200,8 +1313,10 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 					gomock.Any(),
 					testIndex,
 					elastic.NewBoolQuery().
-						Filter(elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String())).
-						MustNot(namespaceDivisionExists),
+						Filter(
+							elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
+							namespaceDivisionIsNull,
+						),
 					tc.aggName,
 					tc.agg,
 				).
