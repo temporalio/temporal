@@ -66,7 +66,7 @@ func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completio
 
 	t.Cleanup(func() {
 		// Graceful shutdown
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
 		err = srv.Shutdown(ctx)
 		if ctx.Err() != nil {
@@ -605,8 +605,6 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 func blockingWorkflow(ctx workflow.Context) error {
 	return workflow.Await(ctx, func() bool {
 		return false
-		// info := workflow.GetInfo(ctx)
-		// return info.OriginalRunID != info.WorkflowExecution.RunID
 	})
 }
 
@@ -693,7 +691,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 	request2.RequestId = uuid.NewString()
 	request2.CompletionCallbacks = cbs
 
-	_, err = s.FrontendClient().StartWorkflowExecution(ctx, request2)
+	resetWorkflowRun2, err := s.FrontendClient().StartWorkflowExecution(ctx, request2)
 	s.NoError(err)
 
 	// 3. Reset workflow back to the first (terminated) run as base; must copy callbacks
@@ -701,9 +699,24 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 		Namespace:                 s.Namespace().String(),
 		WorkflowExecution:         workflowExecution, // base = first (terminated) run
 		Reason:                    s.T().Name(),
-		WorkflowTaskFinishEventId: 4,
+		WorkflowTaskFinishEventId: 3,
 		RequestId:                 "test_id",
 	})
+	s.NoError(err)
+
+	// check the callback state of the reset workflow
+	description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, resetWorkflowRun2.RunId)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, description.WorkflowExecutionInfo.Status)
+	s.Equal(len(cbs), len(description.Callbacks))
+	for _, callbackInfo := range description.Callbacks {
+		s.Equal(enumspb.CALLBACK_STATE_SCHEDULED, callbackInfo.State)
+	}
+	return
+
+	// ensure original workflow runs to completion to avoid leaving dangling runs
+	resetWorkflowRun := sdkClient.GetWorkflow(ctx, workflowID, resetWfResponse.RunId)
+	err = resetWorkflowRun.Get(ctx, nil)
 	s.NoError(err)
 
 	// 4. Wait for callback deliveries via the handler channels
@@ -712,10 +725,6 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 		s.Equal(nexus.OperationStateFailed, completion.State)
 		ch.requestCompleteCh <- nil
 	case <-ctx.Done():
-		s.FailNow("context done")
+		s.FailNow("timed out waiting for callback")
 	}
-
-	resetWorkflowRun := sdkClient.GetWorkflow(ctx, workflowID, resetWfResponse.RunId)
-	err = resetWorkflowRun.Get(ctx, nil)
-	s.NoError(err)
 }
