@@ -32,6 +32,7 @@ func (s *invokerProcessBufferTaskSuite) SetupTest() {
 		Config:         defaultConfig(),
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     s.logger,
+		SpecProcessor:  s.specProcessor,
 	})
 }
 

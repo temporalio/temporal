@@ -42,6 +42,7 @@ func (s *invokerExecuteTaskSuite) SetupTest() {
 		Config:         defaultConfig(),
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     s.logger,
+		SpecProcessor:  s.specProcessor,
 		HistoryClient:  s.mockHistoryClient,
 		FrontendClient: s.mockFrontendClient,
 	})
