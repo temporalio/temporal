@@ -74,7 +74,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 			ctx = httptrace.WithClientTrace(ctx, trace)
 		}
 	}
-
+	// here we yes a POST request to temporal://system. this is an invalid url
 	request, err := nexus.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
 	if err != nil {
 		return invocationResultFail{queues.NewUnprocessableTaskError(

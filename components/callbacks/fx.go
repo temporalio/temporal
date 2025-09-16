@@ -52,6 +52,7 @@ func HTTPCallerProviderProvider(
 				if callbackSource == clusterInfo.ClusterID {
 					var frontendClient *common.FrontendHTTPClient
 					if clusterMetadata.GetCurrentClusterName() == clusterName {
+						// here temporal://system is overridden with the local frontend
 						frontendClient = localClient
 					} else {
 						frontendClient, err = httpClientCache.Get(clusterName)
@@ -65,6 +66,8 @@ func HTTPCallerProviderProvider(
 							return client.Do(r)
 						}
 					}
+					// http://internal
+					// heders signal success
 					r.URL.Scheme = frontendClient.Scheme
 					r.URL.Host = frontendClient.Address
 					r.Host = frontendClient.Address

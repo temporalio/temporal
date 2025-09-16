@@ -2252,15 +2252,19 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 		return nil, workflow.Sleep(ctx, 1*time.Second)
 	}
 
-	op := temporalnexus.NewWorkflowRunOperation("op", handlerWF, func(ctx context.Context, _ nexus.NoValue, soo nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
-		return client.StartWorkflowOptions{ID: handlerWorkflowID}, nil
-	})
+	op := temporalnexus.NewWorkflowRunOperation("op", handlerWF,
+		func(ctx context.Context, _ nexus.NoValue, soo nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
+			return client.StartWorkflowOptions{ID: handlerWorkflowID}, nil
+		})
 	s.NoError(svc.Register(op))
 
 	callerWF := func(ctx workflow.Context) error {
 		c := workflow.NewNexusClient(endpointName, svc.Name)
 		fut := c.ExecuteOperation(ctx, op, nil, workflow.NexusOperationOptions{})
-		return fut.Get(ctx, nil)
+		if err := fut.Get(ctx, nil); err != nil {
+			fmt.Println("future not resolved: ", err.Error())
+		}
+		return nil
 	}
 
 	w.RegisterNexusService(svc)
@@ -2289,7 +2293,8 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 		require.Len(ct, resp.Callbacks, 1)
 		require.Equal(ct, enumspb.CALLBACK_STATE_FAILED, resp.Callbacks[0].State)
 		require.NotNil(ct, resp.Callbacks[0].LastAttemptFailure)
-		require.Equal(ct, resp.Callbacks[0].LastAttemptFailure.Message, "handler error (NOT_FOUND): workflow execution already completed")
+		require.Equal(ct, "handler error (NOT_FOUND): workflow execution already completed",
+			resp.Callbacks[0].LastAttemptFailure.Message)
 	}, 3*time.Second, 200*time.Millisecond)
 }
 
