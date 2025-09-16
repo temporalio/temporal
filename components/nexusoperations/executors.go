@@ -135,16 +135,6 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 	callbackURL := builder.String()
 
-	client, err := e.ClientProvider(
-		ctx,
-		ref.WorkflowKey.GetNamespaceID(),
-		endpoint,
-		args.service,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to get a client: %w", err)
-	}
-
 	// Set MachineTransitionCount to 0 since older server versions, which had logic that considers references with
 	// non-zero MachineTransitionCount as "non-concurrent" references, and would fail validation of the reference if the
 	// Operation machine has transitioned.
@@ -184,6 +174,16 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
 	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
+
+	client, err := e.ClientProvider(
+		callCtx,
+		ref.WorkflowKey.GetNamespaceID(),
+		endpoint,
+		args.service,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to get a client: %w", err)
+	}
 
 	if e.HTTPTraceProvider != nil {
 		traceLogger := log.With(e.Logger,
@@ -412,12 +412,10 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	switch {
 	case errors.As(callErr, &opFailedErr):
 		return handleOperationError(node, operation, opFailedErr)
-	case errors.As(callErr, &handlerErr):
+	case errors.As(callErr, &handlerErr) && !handlerErr.Retryable():
 		// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 		// Although Failure is nullable, Nexus SDK is expected to always populate this field
-		if !handlerErr.Retryable() {
-			return handleNonRetryableStartOperationError(node, operation, handlerErr)
-		}
+		return handleNonRetryableStartOperationError(node, operation, handlerErr)
 	case errors.Is(callErr, ErrResponseBodyTooLarge):
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response body is too large.
@@ -542,8 +540,19 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 		return err
 	}
 
+	callTimeout := e.Config.RequestTimeout(ns.Name().String(), task.EndpointName)
+	if args.scheduleToCloseTimeout > 0 {
+		opTimeout := args.scheduleToCloseTimeout - time.Since(args.scheduledTime)
+		callTimeout = min(callTimeout, opTimeout)
+	}
+	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
+
+	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
+	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
+
 	client, err := e.ClientProvider(
-		ctx,
+		callCtx,
 		ref.WorkflowKey.NamespaceID,
 		endpoint,
 		args.service,
@@ -555,17 +564,6 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	if err != nil {
 		return fmt.Errorf("failed to get handle for operation: %w", err)
 	}
-
-	callTimeout := e.Config.RequestTimeout(ns.Name().String(), task.EndpointName)
-	if args.scheduleToCloseTimeout > 0 {
-		opTimeout := args.scheduleToCloseTimeout - time.Since(args.scheduledTime)
-		callTimeout = min(callTimeout, opTimeout)
-	}
-	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
-	defer cancel()
-
-	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
-	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
 
 	if e.HTTPTraceProvider != nil {
 		traceLogger := log.With(e.Logger,
