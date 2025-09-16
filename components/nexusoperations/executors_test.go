@@ -39,6 +39,13 @@ var endpointEntry = &persistencespb.NexusEndpointEntry{
 	Endpoint: &persistencespb.NexusEndpoint{
 		Spec: &persistencespb.NexusEndpointSpec{
 			Name: "endpoint",
+			Target: &persistencespb.NexusEndpointTarget{
+				Variant: &persistencespb.NexusEndpointTarget_External_{
+					External: &persistencespb.NexusEndpointTarget_External{
+						Url: "temporal://system",
+					},
+				},
+			},
 		},
 	},
 }
