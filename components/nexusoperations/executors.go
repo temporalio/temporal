@@ -582,7 +582,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	if callTimeout < e.Config.MinOperationTimeout(ns.Name().String()) {
 		callErr = ErrOperationTimeoutBelowMin
 	} else {
-		callErr = handle.Cancel(callCtx, nexus.CancelOperationOptions{Header: nexus.Header(args.header)})
+		callErr = handle.Cancel(callCtx, nexus.CancelOperationOptions{Header: nexus.Header(args.headers)})
 	}
 
 	methodTag := metrics.NexusMethodTag("CancelOperation")
@@ -616,7 +616,7 @@ type cancelArgs struct {
 	scheduledTime                                                  time.Time
 	scheduleToCloseTimeout                                         time.Duration
 	scheduledEventID                                               int64
-	header                                                         map[string]string
+	headers                                                        map[string]string
 }
 
 // loadArgsForCancelation loads state from the operation state machine that's the parent of the cancelation machine the
@@ -650,7 +650,7 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 			return err
 		}
 		if attrs := event.GetNexusOperationScheduledEventAttributes(); attrs != nil {
-			args.header = attrs.GetNexusHeader()
+			args.headers = attrs.GetNexusHeader()
 		}
 		return nil
 	})
