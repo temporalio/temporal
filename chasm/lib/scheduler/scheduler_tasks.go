@@ -35,15 +35,21 @@ func (r *SchedulerIdleTaskExecutor) Execute(
 func (r *SchedulerIdleTaskExecutor) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
-	task chasm.TaskAttributes,
-	_ *schedulerpb.SchedulerIdleTask,
+	taskAttrs chasm.TaskAttributes,
+	task *schedulerpb.SchedulerIdleTask,
 ) (bool, error) {
 	idleTimeTotal := r.Config.Tweakables(scheduler.Namespace).IdleTime
-	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, time.Time{})
 
+	// Validate total idle time. If the time has been increased, we'll use the longer
+	// duration. If the time has decreased, we'll consider the timer expired.
+	if idleTimeTotal < task.IdleTimeTotal.AsDuration() {
+		return !scheduler.Closed, nil
+	}
+
+	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, time.Time{})
 	// If the scheduler has since woken up, or its idle expiration time changed, this
 	// task must be obsolete.
-	if !isIdle || idleExpiration.Compare(task.ScheduledTime) != 0 {
+	if !isIdle || idleExpiration.Compare(taskAttrs.ScheduledTime) != 0 {
 		return false, nil
 	}
 

@@ -13,6 +13,7 @@ import (
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -25,7 +26,10 @@ const (
 // Fires when the scheduler's idle period has lapsed, and the scheduler should
 // be closed.
 type SchedulerIdleTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Idle time total is set at time of task creation, so that if the dynamic config key
+	// controlling idle time changes, task validation will be aware.
+	IdleTimeTotal *durationpb.Duration `protobuf:"bytes,1,opt,name=idle_time_total,json=idleTimeTotal,proto3" json:"idle_time_total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -58,6 +62,13 @@ func (x *SchedulerIdleTask) ProtoReflect() protoreflect.Message {
 // Deprecated: Use SchedulerIdleTask.ProtoReflect.Descriptor instead.
 func (*SchedulerIdleTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *SchedulerIdleTask) GetIdleTimeTotal() *durationpb.Duration {
+	if x != nil {
+		return x.IdleTimeTotal
+	}
+	return nil
 }
 
 // Buffers actions based on the schedule's specification.
@@ -213,8 +224,9 @@ var File_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto protoreflect.F
 
 const file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	"8temporal/server/chasm/lib/scheduler/proto/v1/tasks.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\"\x13\n" +
-	"\x11SchedulerIdleTask\"\x0f\n" +
+	"8temporal/server/chasm/lib/scheduler/proto/v1/tasks.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1a\x1egoogle/protobuf/duration.proto\"V\n" +
+	"\x11SchedulerIdleTask\x12A\n" +
+	"\x0fidle_time_total\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\ridleTimeTotal\"\x0f\n" +
 	"\rGeneratorTask\"\x1a\n" +
 	"\x18InvokerProcessBufferTask\"\x14\n" +
 	"\x12InvokerExecuteTask\"\x10\n" +
@@ -239,13 +251,15 @@ var file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_goTypes = []an
 	(*InvokerProcessBufferTask)(nil), // 2: temporal.server.chasm.lib.scheduler.proto.v1.InvokerProcessBufferTask
 	(*InvokerExecuteTask)(nil),       // 3: temporal.server.chasm.lib.scheduler.proto.v1.InvokerExecuteTask
 	(*BackfillerTask)(nil),           // 4: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerTask
+	(*durationpb.Duration)(nil),      // 5: google.protobuf.Duration
 }
 var file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	5, // 0: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerIdleTask.idle_time_total:type_name -> google.protobuf.Duration
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_init() }
