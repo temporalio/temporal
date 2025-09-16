@@ -82,7 +82,7 @@ func NewFactory(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	healthSignals persistence.HealthSignalAggregator,
-	enableDataLossMetrics dynamicconfig.BoolPropertyFn,
+	enableDataLossMetrics EnableDataLossMetrics,
 ) Factory {
 	factory := &factoryImpl{
 		dataStoreFactory:      dataStoreFactory,
@@ -96,7 +96,7 @@ func NewFactory(
 		namespaceRateLimiter:  namespaceRateLimiter,
 		shardRateLimiter:      shardRateLimiter,
 		healthSignals:         healthSignals,
-		enableDataLossMetrics: enableDataLossMetrics,
+		enableDataLossMetrics: dynamicconfig.BoolPropertyFn(enableDataLossMetrics),
 	}
 	factory.initDependencies()
 	return factory
