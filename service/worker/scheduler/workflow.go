@@ -852,13 +852,21 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 		s.incSeqNo()
 	}
 
-	// handle last completion/failure
+	// handle last completion/failure and record resulting payload sizes
 	if res.GetResult() != nil {
 		s.State.LastCompletionResult = res.GetResult()
 		s.State.ContinuedFailure = nil
+
+		if resultPayload, err := res.GetResult().Marshal(); err == nil {
+			s.metrics.Counter(metrics.SchedulePayloadSize.Name()).Inc(int64(len(resultPayload)))
+		}
 	} else if res.GetFailure() != nil {
 		// leave LastCompletionResult from previous run
 		s.State.ContinuedFailure = res.GetFailure()
+
+		if failurePayload, err := res.GetFailure().Marshal(); err == nil {
+			s.metrics.Counter(metrics.SchedulePayloadSize.Name()).Inc(int64(len(failurePayload)))
+		}
 	}
 
 	// Update desired time of next start if it's buffered. This is used for metrics only.
@@ -887,6 +895,14 @@ func (s *scheduler) processUpdate(req *schedulespb.FullUpdateRequest) {
 	s.compileSpec()
 
 	s.updateCustomSearchAttributes(req.SearchAttributes)
+
+	// Record customer start workflow memo payload size on each update.
+	startWf := s.Schedule.Action.GetStartWorkflow()
+	if startWf != nil {
+		if memoPayload, err := startWf.Memo.Marshal(); err == nil {
+			s.metrics.Counter(metrics.SchedulePayloadSize.Name()).Inc(int64(len(memoPayload)))
+		}
+	}
 
 	if s.hasMinVersion(UpdateFromPrevious) && !s.hasMinVersion(UseLastAction) {
 		// We need to start re-processing from the last event, so that we catch actions whose
