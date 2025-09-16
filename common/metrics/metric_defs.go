@@ -1240,10 +1240,6 @@ var (
 		"schedule_action_dropped",
 		WithDescription("The number of schedule actions that failed to start"),
 	)
-	ScheduleSize = NewBytesHistogramDef(
-		"schedule_size",
-		WithDescription("The size of a schedule's entire state blob, including arguments and payloads"),
-	)
 
 	// Worker Versioning
 	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")

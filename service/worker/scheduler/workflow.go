@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -103,17 +102,10 @@ type (
 	scheduler struct {
 		*schedulespb.StartScheduleArgs
 
-		ctx    workflow.Context
-		a      *activities
-		logger sdklog.Logger
-
-		// metrics comes from the SDK's metrics handler, which avoids double-counting
-		// during relay.
+		ctx     workflow.Context
+		a       *activities
+		logger  sdklog.Logger
 		metrics sdkclient.MetricsHandler
-
-		// serverMetrics is used for recording metric definitions unsupported through
-		// the SDK's metrics handler.
-		serverMetrics metrics.Handler
 
 		// SpecBuilder is technically a non-deterministic dependency, but it's safe as
 		// long as we only call methods on cspec inside of SideEffect (or in a query
@@ -225,22 +217,16 @@ var (
 )
 
 func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), nil)
+	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder())
 }
 
-func schedulerWorkflowWithSpecBuilder(
-	ctx workflow.Context,
-	args *schedulespb.StartScheduleArgs,
-	specBuilder *SpecBuilder,
-	serverMetrics metrics.Handler,
-) error {
+func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder) error {
 	scheduler := &scheduler{
 		StartScheduleArgs: args,
 		ctx:               ctx,
 		a:                 nil,
 		logger:            sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.State.Namespace, "schedule-id", args.State.ScheduleId),
 		metrics:           workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.State.Namespace}),
-		serverMetrics:     serverMetrics,
 		specBuilder:       specBuilder,
 	}
 	return scheduler.run()
@@ -326,7 +312,6 @@ func (s *scheduler) run() error {
 		for s.processBuffer() {
 		}
 		s.updateMemoAndSearchAttributes()
-		s.recordScheduleSize()
 
 		// if schedule is not paused and out of actions or do not have anything scheduled, exit the schedule workflow after retention period has passed
 		if exp := s.getRetentionExpiration(nextWakeup); !exp.IsZero() && !exp.After(s.now()) {
@@ -1104,21 +1089,6 @@ func (s *scheduler) updateCustomSearchAttributes(searchAttributes *commonpb.Sear
 	if err := workflow.UpsertSearchAttributes(s.ctx, upsertMap); err != nil {
 		s.logger.Error("error updating search attributes of the scheule", "error", err)
 	}
-}
-
-func (s *scheduler) recordScheduleSize() {
-	serverMetrics := s.serverMetrics
-	if serverMetrics == nil {
-		return
-	}
-
-	wfPayload, err := s.Marshal()
-	if err != nil {
-		s.logger.Error("error recording schedule state size",
-			tag.Error(err))
-		return
-	}
-	metrics.ScheduleSize.With(serverMetrics).Record(int64(len(wfPayload)))
 }
 
 func (s *scheduler) updateMemoAndSearchAttributes() {
