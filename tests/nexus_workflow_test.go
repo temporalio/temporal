@@ -2249,7 +2249,7 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 	svc := nexus.NewService("test")
 
 	handlerWF := func(ctx workflow.Context, _ nexus.NoValue) (nexus.NoValue, error) {
-		return nil, workflow.Sleep(ctx, 1*time.Second)
+		return nil, workflow.Sleep(ctx, 2*time.Second)
 	}
 
 	op := temporalnexus.NewWorkflowRunOperation("op", handlerWF, func(ctx context.Context, _ nexus.NoValue, soo nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
@@ -2271,7 +2271,7 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue:          taskQueue,
-		WorkflowRunTimeout: 200 * time.Millisecond,
+		WorkflowRunTimeout: 1200 * time.Millisecond,
 	}, callerWF)
 	s.NoError(err)
 
