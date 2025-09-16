@@ -85,3 +85,11 @@ func getPlugin(pluginName string) (sqlplugin.Plugin, error) {
 	}
 	return plugin, nil
 }
+
+func GetPluginVisibilityQueryConverter(pluginName string) (sqlplugin.VisibilityQueryConverter, error) {
+	plugin, err := getPlugin(pluginName)
+	if err != nil {
+		return nil, err
+	}
+	return plugin.GetVisibilityQueryConverter(), nil
+}
