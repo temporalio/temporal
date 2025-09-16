@@ -13,29 +13,16 @@ const (
 	visibilityTaskFqType      = "core.visTask"
 )
 
-// CoreLibrary contains built-in components maintained as part of the CHASM framework.
-type CoreLibrary struct {
-	UnimplementedLibrary
+// VisibilitySearchAttributesProvider ...
+// TODO: add comments
+type VisibilitySearchAttributesProvider interface {
+	SearchAttributes(Context) map[string]any
 }
 
-func (b *CoreLibrary) Name() string {
-	return "core"
-}
-
-func (b *CoreLibrary) Components() []*RegistrableComponent {
-	return []*RegistrableComponent{
-		NewRegistrableComponent[*Visibility]("vis"),
-	}
-}
-
-func (b *CoreLibrary) Tasks() []*RegistrableTask {
-	return []*RegistrableTask{
-		NewRegistrableSideEffectTask(
-			"visTask",
-			&visibilityTaskValidator{},
-			&visibilityTaskExecutor{},
-		),
-	}
+// VisibilityMemoProvider ...
+// TODO: add comments
+type VisibilityMemoProvider interface {
+	Memo(Context) map[string]any
 }
 
 type Visibility struct {
@@ -57,8 +44,40 @@ func NewVisibility(
 			TransitionCount: 0,
 		},
 	}
-	visibility.GenerateTask(mutableContext)
+
+	visibility.generateTask(mutableContext)
 	return visibility
+}
+
+func NewVisibilityWithData(
+	mutableContext MutableContext,
+	searchAttributes map[string]any,
+	memo map[string]any,
+) (*Visibility, error) {
+	visibility := &Visibility{
+		Data: &persistencespb.ChasmVisibilityData{
+			TransitionCount: 0,
+		},
+	}
+
+	if _, err := visibility.updatePayloadMap(
+		mutableContext,
+		&visibility.SA,
+		searchAttributes,
+	); err != nil {
+		return nil, err
+	}
+
+	if _, err := visibility.updatePayloadMap(
+		mutableContext,
+		&visibility.Memo,
+		memo,
+	); err != nil {
+		return nil, err
+	}
+
+	visibility.generateTask(mutableContext)
+	return visibility, nil
 }
 
 func (v *Visibility) LifecycleState(_ Context) LifecycleState {
@@ -71,18 +90,23 @@ func (v *Visibility) GetSearchAttributes(
 	return v.getPayloadMap(chasmContext, v.SA)
 }
 
-func (v *Visibility) UpsertSearchAttributes(
+func (v *Visibility) SetSearchAttributes(
 	mutableContext MutableContext,
 	updates map[string]any,
-) error {
-	return v.updatePayloadMap(mutableContext, &v.SA, updates)
+) (bool, error) {
+	updated, err := v.updatePayloadMap(mutableContext, &v.SA, updates)
+	if updated {
+		v.generateTask(mutableContext)
+	}
+	return updated, err
 }
 
 func (v *Visibility) RemoveSearchAttributes(
 	mutableContext MutableContext,
 	keys ...string,
 ) {
-	v.removeFromPayloadMap(mutableContext, v.SA, keys)
+	v.removeFromPayloadMap(v.SA, keys)
+	v.generateTask(mutableContext)
 }
 
 func (v *Visibility) GetMemo(
@@ -91,21 +115,26 @@ func (v *Visibility) GetMemo(
 	return v.getPayloadMap(chasmContext, v.Memo)
 }
 
-func (v *Visibility) UpsertMemo(
+func (v *Visibility) SetMemo(
 	mutableContext MutableContext,
 	updates map[string]any,
-) error {
-	return v.updatePayloadMap(mutableContext, &v.Memo, updates)
+) (bool, error) {
+	updated, err := v.updatePayloadMap(mutableContext, &v.Memo, updates)
+	if updated {
+		v.generateTask(mutableContext)
+	}
+	return updated, err
 }
 
 func (v *Visibility) RemoveMemo(
 	mutableContext MutableContext,
 	keys ...string,
 ) {
-	v.removeFromPayloadMap(mutableContext, v.Memo, keys)
+	v.removeFromPayloadMap(v.Memo, keys)
+	v.generateTask(mutableContext)
 }
 
-func (v *Visibility) GenerateTask(
+func (v *Visibility) generateTask(
 	mutableContext MutableContext,
 ) {
 	v.Data.TransitionCount++
@@ -135,30 +164,51 @@ func (v *Visibility) updatePayloadMap(
 	mutableContext MutableContext,
 	m *Map[string, *commonpb.Payload],
 	updates map[string]any,
-) error {
+) (bool, error) {
 	if len(updates) != 0 && *m == nil {
 		*m = make(Map[string, *commonpb.Payload], len(updates))
 	}
+
+	updated := false
 	for key, value := range updates {
+		currentPayloadField, exists := (*m)[key]
+
+		if value == nil {
+			updated = updated || exists
+			delete(*m, key)
+			continue
+		}
+
 		p, err := payload.Encode(value)
 		if err != nil {
-			return err
+			return false, err
 		}
-		(*m)[key] = NewDataField(mutableContext, p)
+
+		if !exists {
+			updated = true
+			(*m)[key] = NewDataField(mutableContext, p)
+			continue
+		}
+
+		currentPayload, err := currentPayloadField.Get(mutableContext.ToImmutable())
+		if err != nil {
+			return false, err
+		}
+		if !currentPayload.Equal(p) {
+			updated = true
+			(*m)[key] = NewDataField(mutableContext, p)
+		}
 	}
-	v.GenerateTask(mutableContext)
-	return nil
+	return updated, nil
 }
 
 func (v *Visibility) removeFromPayloadMap(
-	mutableContext MutableContext,
 	m Map[string, *commonpb.Payload],
 	keys []string,
 ) {
 	for _, key := range keys {
 		delete(m, key)
 	}
-	v.GenerateTask(mutableContext)
 }
 
 func GetSearchAttribute[T any](
@@ -169,13 +219,14 @@ func GetSearchAttribute[T any](
 	return getVisibilityPayloadValue[T](chasmContext, visibility.SA, key)
 }
 
-func UpsertSearchAttribute[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
-	chasmContext MutableContext,
+// TODO: only update if value is different and return bool to indicate if updated
+func SetSearchAttribute[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
+	mutableContext MutableContext,
 	visibility *Visibility,
 	name string,
 	value T,
 ) {
-	upsertVisibilityPayload(chasmContext, &visibility.SA, visibility, name, value)
+	upsertVisibilityPayload(mutableContext, &visibility.SA, visibility, name, value)
 }
 
 func GetMemo[T any](
@@ -186,17 +237,18 @@ func GetMemo[T any](
 	return getVisibilityPayloadValue[T](chasmContext, visibility.Memo, key)
 }
 
-func UpsertMemo[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
-	chasmContext MutableContext,
+// TODO: only update if value is different and return bool to indicate if updated
+func SetMemo[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
+	mutableContext MutableContext,
 	visibility *Visibility,
 	name string,
 	value T,
 ) {
-	upsertVisibilityPayload(chasmContext, &visibility.Memo, visibility, name, value)
+	upsertVisibilityPayload(mutableContext, &visibility.Memo, visibility, name, value)
 }
 
 func upsertVisibilityPayload[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
-	chasmContext MutableContext,
+	mutableContext MutableContext,
 	m *Map[string, *commonpb.Payload],
 	visibility *Visibility,
 	name string,
@@ -206,8 +258,8 @@ func upsertVisibilityPayload[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float
 	if *m == nil {
 		*m = make(Map[string, *commonpb.Payload])
 	}
-	(*m)[name] = NewDataField(chasmContext, p)
-	visibility.GenerateTask(chasmContext)
+	(*m)[name] = NewDataField(mutableContext, p)
+	visibility.generateTask(mutableContext)
 }
 
 func getVisibilityPayloadValue[T any](
