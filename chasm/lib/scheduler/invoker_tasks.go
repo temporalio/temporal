@@ -547,9 +547,14 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 		return nil, err
 	}
 
+	// realTime may be slightly past the time of the action's first scheduled WFT.
+	realTime := time.Now()
+	desiredTime := start.ActualTime
+	e.MetricsHandler.Timer(metrics.ScheduleActionDelay.Name()).Record(realTime.Sub(desiredTime.AsTime()))
+
 	return &schedulepb.ScheduleActionResult{
-		ScheduleTime: start.ActualTime,
-		ActualTime:   timestamppb.New(time.Now()),
+		ScheduleTime: desiredTime,
+		ActualTime:   timestamppb.New(realTime),
 		StartWorkflowResult: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      result.RunId,
