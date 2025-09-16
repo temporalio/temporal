@@ -1,0 +1,135 @@
+package elasticsearch
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+)
+
+const templateName = "temporal_visibility_v1_template"
+
+type SetupConfig struct {
+	TemplateFilePath string
+	SettingsFilePath string
+	VisibilityIndex  string
+	FailSilently     bool
+}
+
+type SetupTask struct {
+	esClient client.CLIClient
+	config   *SetupConfig
+	logger   log.Logger
+}
+
+// Run executes the task
+func (task *SetupTask) Run() error {
+	task.logger.Info("Starting schema setup", tag.NewAnyTag("config", task.config))
+
+	if err := task.setupClusterSettings(); err != nil {
+		return err
+	}
+
+	if err := task.setupTemplate(); err != nil {
+		return err
+	}
+
+	if err := task.setupIndex(); err != nil {
+		return err
+	}
+
+	task.logger.Info("Schema setup complete")
+	return nil
+}
+
+// setupClusterSettings handles cluster settings configuration
+func (task *SetupTask) setupClusterSettings() error {
+	config := task.config
+	if len(config.SettingsFilePath) == 0 {
+		task.logger.Info("Skipping cluster settings update, missing " + flag(CLIOptSettingsFile))
+		return nil
+	}
+
+	filePath, err := filepath.Abs(config.SettingsFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve settings file path: %w", err)
+	}
+
+	body, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read settings file: %w", err)
+	}
+
+	success, err := task.esClient.ClusterPutSettings(context.TODO(), string(body))
+	if err != nil {
+		return task.handleOperationResult("cluster settings update failed", err, false)
+	} else if !success {
+		return task.handleOperationResult("cluster settings update failed without error", errors.New("acknowledged=false"), false)
+	}
+
+	task.logger.Info("Cluster settings updated successfully")
+	return nil
+}
+
+// setupTemplate handles template configuration
+func (task *SetupTask) setupTemplate() error {
+	config := task.config
+	if len(config.TemplateFilePath) == 0 {
+		task.logger.Info("Skipping template creation, missing " + flag(CLIOptTemplateFile))
+		return nil
+	}
+
+	filePath, err := filepath.Abs(config.TemplateFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve template file path: %w", err)
+	}
+
+	body, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read template file: %w", err)
+	}
+
+	success, err := task.esClient.IndexPutTemplate(context.TODO(), templateName, string(body))
+	if err != nil {
+		return task.handleOperationResult("template creation failed", err, false)
+	} else if !success {
+		return task.handleOperationResult("template creation failed without error", errors.New("acknowledged=false"), false)
+	}
+
+	task.logger.Info("Template created successfully", tag.NewStringTag("templateName", templateName))
+	return nil
+}
+
+// setupIndex handles index creation
+func (task *SetupTask) setupIndex() error {
+	config := task.config
+	if len(config.VisibilityIndex) == 0 {
+		task.logger.Info("Skipping index creation, missing " + flag(CLIOptVisibilityIndex))
+		return nil
+	}
+
+	success, err := task.esClient.CreateIndex(context.TODO(), config.VisibilityIndex, nil)
+	if err != nil {
+		return task.handleOperationResult("index creation failed", err, false)
+	} else if !success {
+		return task.handleOperationResult("index creation failed without error", errors.New("acknowledged=false"), false)
+	}
+
+	task.logger.Info("Index created successfully", tag.NewStringTag("indexName", config.VisibilityIndex))
+	return nil
+}
+
+// handleOperationResult handles the result of an operation, optionally failing silently
+func (task *SetupTask) handleOperationResult(msg string, err error, success bool) error {
+	if !task.config.FailSilently {
+		task.logger.Error(msg, tag.Error(err))
+		return err
+	}
+	task.logger.Warn(msg, tag.Error(err))
+	return nil
+}
