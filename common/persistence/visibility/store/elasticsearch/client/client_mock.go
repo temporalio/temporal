@@ -57,35 +57,6 @@ func (mr *MockClientMockRecorder) CatIndices(ctx, target any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CatIndices", reflect.TypeOf((*MockClient)(nil).CatIndices), ctx, target)
 }
 
-// ClosePointInTime mocks base method.
-func (m *MockClient) ClosePointInTime(ctx context.Context, id string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ClosePointInTime", ctx, id)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ClosePointInTime indicates an expected call of ClosePointInTime.
-func (mr *MockClientMockRecorder) ClosePointInTime(ctx, id any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClosePointInTime", reflect.TypeOf((*MockClient)(nil).ClosePointInTime), ctx, id)
-}
-
-// CloseScroll mocks base method.
-func (m *MockClient) CloseScroll(ctx context.Context, id string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CloseScroll", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CloseScroll indicates an expected call of CloseScroll.
-func (mr *MockClientMockRecorder) CloseScroll(ctx, id any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseScroll", reflect.TypeOf((*MockClient)(nil).CloseScroll), ctx, id)
-}
-
 // Count mocks base method.
 func (m *MockClient) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
 	m.ctrl.T.Helper()
@@ -191,50 +162,6 @@ func (mr *MockClientMockRecorder) IndexExists(ctx, indexName any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexExists", reflect.TypeOf((*MockClient)(nil).IndexExists), ctx, indexName)
 }
 
-// IsPointInTimeSupported mocks base method.
-func (m *MockClient) IsPointInTimeSupported(ctx context.Context) bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsPointInTimeSupported", ctx)
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// IsPointInTimeSupported indicates an expected call of IsPointInTimeSupported.
-func (mr *MockClientMockRecorder) IsPointInTimeSupported(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsPointInTimeSupported", reflect.TypeOf((*MockClient)(nil).IsPointInTimeSupported), ctx)
-}
-
-// OpenPointInTime mocks base method.
-func (m *MockClient) OpenPointInTime(ctx context.Context, index, keepAliveInterval string) (string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OpenPointInTime", ctx, index, keepAliveInterval)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// OpenPointInTime indicates an expected call of OpenPointInTime.
-func (mr *MockClientMockRecorder) OpenPointInTime(ctx, index, keepAliveInterval any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenPointInTime", reflect.TypeOf((*MockClient)(nil).OpenPointInTime), ctx, index, keepAliveInterval)
-}
-
-// OpenScroll mocks base method.
-func (m *MockClient) OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OpenScroll", ctx, p, keepAliveInterval)
-	ret0, _ := ret[0].(*elastic.SearchResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// OpenScroll indicates an expected call of OpenScroll.
-func (mr *MockClientMockRecorder) OpenScroll(ctx, p, keepAliveInterval any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenScroll", reflect.TypeOf((*MockClient)(nil).OpenScroll), ctx, p, keepAliveInterval)
-}
-
 // PutMapping mocks base method.
 func (m *MockClient) PutMapping(ctx context.Context, index string, mapping map[string]enums.IndexedValueType) (bool, error) {
 	m.ctrl.T.Helper()
@@ -263,21 +190,6 @@ func (m *MockClient) RunBulkProcessor(ctx context.Context, p *BulkProcessorParam
 func (mr *MockClientMockRecorder) RunBulkProcessor(ctx, p any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunBulkProcessor", reflect.TypeOf((*MockClient)(nil).RunBulkProcessor), ctx, p)
-}
-
-// Scroll mocks base method.
-func (m *MockClient) Scroll(ctx context.Context, id, keepAliveInterval string) (*elastic.SearchResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Scroll", ctx, id, keepAliveInterval)
-	ret0, _ := ret[0].(*elastic.SearchResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Scroll indicates an expected call of Scroll.
-func (mr *MockClientMockRecorder) Scroll(ctx, id, keepAliveInterval any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scroll", reflect.TypeOf((*MockClient)(nil).Scroll), ctx, id, keepAliveInterval)
 }
 
 // Search mocks base method.
@@ -347,35 +259,6 @@ func (m *MockCLIClient) CatIndices(ctx context.Context, target string) (elastic.
 func (mr *MockCLIClientMockRecorder) CatIndices(ctx, target any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CatIndices", reflect.TypeOf((*MockCLIClient)(nil).CatIndices), ctx, target)
-}
-
-// ClosePointInTime mocks base method.
-func (m *MockCLIClient) ClosePointInTime(ctx context.Context, id string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ClosePointInTime", ctx, id)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ClosePointInTime indicates an expected call of ClosePointInTime.
-func (mr *MockCLIClientMockRecorder) ClosePointInTime(ctx, id any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClosePointInTime", reflect.TypeOf((*MockCLIClient)(nil).ClosePointInTime), ctx, id)
-}
-
-// CloseScroll mocks base method.
-func (m *MockCLIClient) CloseScroll(ctx context.Context, id string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CloseScroll", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CloseScroll indicates an expected call of CloseScroll.
-func (mr *MockCLIClientMockRecorder) CloseScroll(ctx, id any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseScroll", reflect.TypeOf((*MockCLIClient)(nil).CloseScroll), ctx, id)
 }
 
 // Count mocks base method.
@@ -497,50 +380,6 @@ func (mr *MockCLIClientMockRecorder) IndexExists(ctx, indexName any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexExists", reflect.TypeOf((*MockCLIClient)(nil).IndexExists), ctx, indexName)
 }
 
-// IsPointInTimeSupported mocks base method.
-func (m *MockCLIClient) IsPointInTimeSupported(ctx context.Context) bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsPointInTimeSupported", ctx)
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// IsPointInTimeSupported indicates an expected call of IsPointInTimeSupported.
-func (mr *MockCLIClientMockRecorder) IsPointInTimeSupported(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsPointInTimeSupported", reflect.TypeOf((*MockCLIClient)(nil).IsPointInTimeSupported), ctx)
-}
-
-// OpenPointInTime mocks base method.
-func (m *MockCLIClient) OpenPointInTime(ctx context.Context, index, keepAliveInterval string) (string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OpenPointInTime", ctx, index, keepAliveInterval)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// OpenPointInTime indicates an expected call of OpenPointInTime.
-func (mr *MockCLIClientMockRecorder) OpenPointInTime(ctx, index, keepAliveInterval any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenPointInTime", reflect.TypeOf((*MockCLIClient)(nil).OpenPointInTime), ctx, index, keepAliveInterval)
-}
-
-// OpenScroll mocks base method.
-func (m *MockCLIClient) OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OpenScroll", ctx, p, keepAliveInterval)
-	ret0, _ := ret[0].(*elastic.SearchResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// OpenScroll indicates an expected call of OpenScroll.
-func (mr *MockCLIClientMockRecorder) OpenScroll(ctx, p, keepAliveInterval any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenScroll", reflect.TypeOf((*MockCLIClient)(nil).OpenScroll), ctx, p, keepAliveInterval)
-}
-
 // PutMapping mocks base method.
 func (m *MockCLIClient) PutMapping(ctx context.Context, index string, mapping map[string]enums.IndexedValueType) (bool, error) {
 	m.ctrl.T.Helper()
@@ -569,21 +408,6 @@ func (m *MockCLIClient) RunBulkProcessor(ctx context.Context, p *BulkProcessorPa
 func (mr *MockCLIClientMockRecorder) RunBulkProcessor(ctx, p any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunBulkProcessor", reflect.TypeOf((*MockCLIClient)(nil).RunBulkProcessor), ctx, p)
-}
-
-// Scroll mocks base method.
-func (m *MockCLIClient) Scroll(ctx context.Context, id, keepAliveInterval string) (*elastic.SearchResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Scroll", ctx, id, keepAliveInterval)
-	ret0, _ := ret[0].(*elastic.SearchResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Scroll indicates an expected call of Scroll.
-func (mr *MockCLIClientMockRecorder) Scroll(ctx, id, keepAliveInterval any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scroll", reflect.TypeOf((*MockCLIClient)(nil).Scroll), ctx, id, keepAliveInterval)
 }
 
 // Search mocks base method.
@@ -653,35 +477,6 @@ func (m *MockIntegrationTestsClient) CatIndices(ctx context.Context, target stri
 func (mr *MockIntegrationTestsClientMockRecorder) CatIndices(ctx, target any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CatIndices", reflect.TypeOf((*MockIntegrationTestsClient)(nil).CatIndices), ctx, target)
-}
-
-// ClosePointInTime mocks base method.
-func (m *MockIntegrationTestsClient) ClosePointInTime(ctx context.Context, id string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ClosePointInTime", ctx, id)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ClosePointInTime indicates an expected call of ClosePointInTime.
-func (mr *MockIntegrationTestsClientMockRecorder) ClosePointInTime(ctx, id any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClosePointInTime", reflect.TypeOf((*MockIntegrationTestsClient)(nil).ClosePointInTime), ctx, id)
-}
-
-// CloseScroll mocks base method.
-func (m *MockIntegrationTestsClient) CloseScroll(ctx context.Context, id string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CloseScroll", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CloseScroll indicates an expected call of CloseScroll.
-func (mr *MockIntegrationTestsClientMockRecorder) CloseScroll(ctx, id any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseScroll", reflect.TypeOf((*MockIntegrationTestsClient)(nil).CloseScroll), ctx, id)
 }
 
 // Count mocks base method.
@@ -834,50 +629,6 @@ func (mr *MockIntegrationTestsClientMockRecorder) IndexPutTemplate(ctx, template
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexPutTemplate", reflect.TypeOf((*MockIntegrationTestsClient)(nil).IndexPutTemplate), ctx, templateName, bodyString)
 }
 
-// IsPointInTimeSupported mocks base method.
-func (m *MockIntegrationTestsClient) IsPointInTimeSupported(ctx context.Context) bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsPointInTimeSupported", ctx)
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// IsPointInTimeSupported indicates an expected call of IsPointInTimeSupported.
-func (mr *MockIntegrationTestsClientMockRecorder) IsPointInTimeSupported(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsPointInTimeSupported", reflect.TypeOf((*MockIntegrationTestsClient)(nil).IsPointInTimeSupported), ctx)
-}
-
-// OpenPointInTime mocks base method.
-func (m *MockIntegrationTestsClient) OpenPointInTime(ctx context.Context, index, keepAliveInterval string) (string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OpenPointInTime", ctx, index, keepAliveInterval)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// OpenPointInTime indicates an expected call of OpenPointInTime.
-func (mr *MockIntegrationTestsClientMockRecorder) OpenPointInTime(ctx, index, keepAliveInterval any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenPointInTime", reflect.TypeOf((*MockIntegrationTestsClient)(nil).OpenPointInTime), ctx, index, keepAliveInterval)
-}
-
-// OpenScroll mocks base method.
-func (m *MockIntegrationTestsClient) OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OpenScroll", ctx, p, keepAliveInterval)
-	ret0, _ := ret[0].(*elastic.SearchResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// OpenScroll indicates an expected call of OpenScroll.
-func (mr *MockIntegrationTestsClientMockRecorder) OpenScroll(ctx, p, keepAliveInterval any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenScroll", reflect.TypeOf((*MockIntegrationTestsClient)(nil).OpenScroll), ctx, p, keepAliveInterval)
-}
-
 // Ping mocks base method.
 func (m *MockIntegrationTestsClient) Ping(ctx context.Context) error {
 	m.ctrl.T.Helper()
@@ -920,21 +671,6 @@ func (m *MockIntegrationTestsClient) RunBulkProcessor(ctx context.Context, p *Bu
 func (mr *MockIntegrationTestsClientMockRecorder) RunBulkProcessor(ctx, p any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunBulkProcessor", reflect.TypeOf((*MockIntegrationTestsClient)(nil).RunBulkProcessor), ctx, p)
-}
-
-// Scroll mocks base method.
-func (m *MockIntegrationTestsClient) Scroll(ctx context.Context, id, keepAliveInterval string) (*elastic.SearchResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Scroll", ctx, id, keepAliveInterval)
-	ret0, _ := ret[0].(*elastic.SearchResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Scroll indicates an expected call of Scroll.
-func (mr *MockIntegrationTestsClientMockRecorder) Scroll(ctx, id, keepAliveInterval any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scroll", reflect.TypeOf((*MockIntegrationTestsClient)(nil).Scroll), ctx, id, keepAliveInterval)
 }
 
 // Search mocks base method.

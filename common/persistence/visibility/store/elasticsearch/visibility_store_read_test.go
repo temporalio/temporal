@@ -133,105 +133,6 @@ func (s *ESVisibilitySuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *ESVisibilitySuite) TestBuildSearchParameters() {
-	request := createTestRequest()
-
-	matchNamespaceQuery := elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID.String())
-	runningQuery := elastic.NewTermQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
-
-	token := &visibilityPageToken{SearchAfter: []interface{}{1528358645123456789, "qwe"}}
-	var err error
-	request.NextPageToken, err = s.visibilityStore.serializePageToken(token)
-	s.NoError(err)
-
-	// test for open
-	rangeQuery := elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
-	boolQuery := elastic.NewBoolQuery().Filter(runningQuery).Filter(matchNamespaceQuery).Filter(rangeQuery).MustNot(namespaceDivisionExists)
-	p, err := s.visibilityStore.buildSearchParameters(request, elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
-	s.NoError(err)
-	s.Equal(&client.SearchParameters{
-		Index:       testIndex,
-		Query:       boolQuery,
-		SearchAfter: []interface{}{json.Number("1528358645123456789"), "qwe"},
-		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
-	}, p)
-
-	// test request latestTime overflow
-	request.LatestStartTime = time.Unix(0, math.MaxInt64).UTC()
-	rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
-	boolQuery = elastic.NewBoolQuery().Filter(runningQuery).Filter(matchNamespaceQuery).Filter(rangeQuery).MustNot(namespaceDivisionExists)
-	p, err = s.visibilityStore.buildSearchParameters(request, elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
-	s.NoError(err)
-	s.Equal(&client.SearchParameters{
-		Index:       testIndex,
-		Query:       boolQuery,
-		SearchAfter: []interface{}{json.Number("1528358645123456789"), "qwe"},
-		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
-	}, p)
-	request = createTestRequest() // revert
-
-	// test for closed
-	rangeQuery = elastic.NewRangeQuery(searchattribute.CloseTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
-	boolQuery = elastic.NewBoolQuery().MustNot(runningQuery).Filter(matchNamespaceQuery).Filter(rangeQuery).MustNot(namespaceDivisionExists)
-	p, err = s.visibilityStore.buildSearchParameters(request, elastic.NewBoolQuery().MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), false)
-	s.NoError(err)
-	s.Equal(&client.SearchParameters{
-		Index:       testIndex,
-		Query:       boolQuery,
-		SearchAfter: nil,
-		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
-	}, p)
-
-	// test for additional boolQuery
-	rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
-	matchQuery := elastic.NewTermQuery(searchattribute.ExecutionStatus, int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
-	boolQuery = elastic.NewBoolQuery().Filter(matchQuery).Filter(matchNamespaceQuery).Filter(rangeQuery).MustNot(namespaceDivisionExists)
-	p, err = s.visibilityStore.buildSearchParameters(request, elastic.NewBoolQuery().Filter(matchQuery), true)
-	s.NoError(err)
-	s.Equal(&client.SearchParameters{
-		Index:       testIndex,
-		Query:       boolQuery,
-		SearchAfter: nil,
-		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
-	}, p)
-
-	// test for search after
-	token = &visibilityPageToken{SearchAfter: []interface{}{json.Number("1528358645123456789"), "qwe"}}
-	request.NextPageToken, err = s.visibilityStore.serializePageToken(token)
-	s.NoError(err)
-
-	rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
-	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery).Filter(rangeQuery).MustNot(namespaceDivisionExists)
-	p, err = s.visibilityStore.buildSearchParameters(request, elastic.NewBoolQuery(), true)
-	s.NoError(err)
-	s.Equal(&client.SearchParameters{
-		Index:       testIndex,
-		Query:       boolQuery,
-		SearchAfter: token.SearchAfter,
-		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
-	}, p)
-	request = createTestRequest() // revert
-
-	// test for nil token
-	rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
-	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery).Filter(rangeQuery).MustNot(namespaceDivisionExists)
-	request.NextPageToken = nil
-	p, err = s.visibilityStore.buildSearchParameters(request, elastic.NewBoolQuery(), true)
-	s.NoError(err)
-	s.Equal(&client.SearchParameters{
-		Index:       testIndex,
-		Query:       boolQuery,
-		PageSize:    testPageSize,
-		SearchAfter: nil,
-		Sorter:      defaultSorter,
-	}, p)
-}
-
 func (s *ESVisibilitySuite) TestGetListFieldSorter() {
 
 	// test defaultSorter is returned when fieldSorts is empty
@@ -250,20 +151,6 @@ func (s *ESVisibilitySuite) TestGetListFieldSorter() {
 	s.NoError(err)
 	s.Equal(expectedSorter, sorter)
 
-}
-
-func (s *ESVisibilitySuite) TestGetScanFieldSorter() {
-	// test docSorter is returned when fieldSorts is empty
-	fieldSorts := make([]elastic.Sorter, 0)
-	sorter, err := s.visibilityStore.getScanFieldSorter(fieldSorts)
-	s.NoError(err)
-	s.Equal(docSorter, sorter)
-
-	// test error is returned if fieldSorts is not empty
-	testFieldSorts := []elastic.Sorter{elastic.NewFieldSort("_test"), elastic.NewFieldSort("_second_tes")}
-	sorter, err = s.visibilityStore.getScanFieldSorter(testFieldSorts[:])
-	s.Error(err)
-	s.Nil(sorter)
 }
 
 func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
@@ -286,7 +173,6 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		Index:       testIndex,
 		Query:       boolQuery,
 		SearchAfter: nil,
-		PointInTime: nil,
 		PageSize:    testPageSize,
 		Sorter:      defaultSorter,
 	}, p)
@@ -303,7 +189,6 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		Index:       testIndex,
 		Query:       boolQuery,
 		SearchAfter: nil,
-		PointInTime: nil,
 		PageSize:    testPageSize,
 		Sorter:      defaultSorter,
 	}, p)
@@ -320,7 +205,6 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		Index:       testIndex,
 		Query:       boolQuery,
 		SearchAfter: nil,
-		PointInTime: nil,
 		PageSize:    testPageSize,
 		Sorter: []elastic.Sorter{
 			elastic.NewFieldSort(searchattribute.WorkflowID).Asc(),
@@ -329,34 +213,9 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	}, p)
 	request.Query = ""
 
-	// test with Scan API
-	request.Query = `WorkflowId="guid-2208"`
-	filterQuery = elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.WorkflowID, "guid-2208"))
-	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery).MustNot(namespaceDivisionExists)
-	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.getScanFieldSorter)
-	s.NoError(err)
-	s.Equal(&client.SearchParameters{
-		Index:       testIndex,
-		Query:       boolQuery,
-		SearchAfter: nil,
-		PointInTime: nil,
-		PageSize:    testPageSize,
-		Sorter:      docSorter,
-	}, p)
-	request.Query = ""
-
-	// test with Scan API with custom sort
-	request.Query = `Order bY WorkflowId`
-	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler)
-	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).Return(metrics.NoopCounterMetricFunc)
-	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.getScanFieldSorter)
-	s.Error(err)
-	s.Nil(p)
-	request.Query = ""
-
 	// test for wrong query
 	request.Query = "invalid query"
-	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.getScanFieldSorter)
+	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.Nil(p)
 	s.Error(err)
 	request.Query = ""
@@ -384,7 +243,6 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
 		Index:       testIndex,
 		Query:       boolQuery,
 		SearchAfter: nil,
-		PointInTime: nil,
 		PageSize:    testPageSize,
 		Sorter:      defaultSorter,
 	}, p)
@@ -951,220 +809,6 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsWithNamespaceDivision(
 		})
 	_, err := s.visibilityStore.ListWorkflowExecutions(context.Background(), createTestRequestWithNSDivision())
 	s.NoError(err)
-}
-
-func (s *ESVisibilitySuite) TestScanWorkflowExecutions_Scroll() {
-	scrollID := "scrollID"
-	request := &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceID,
-		Namespace:   testNamespace,
-		PageSize:    1,
-	}
-
-	data := []byte(`{"ExecutionStatus": "Running",
-          "CloseTime": "2021-06-11T16:04:07.980-07:00",
-          "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
-          "HistoryLength": 29,
-          "StateTransitionCount": 22,
-          "VisibilityTaskKey": "7-619",
-          "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
-          "StartTime": "2021-06-11T15:04:07.980-07:00",
-          "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
-          "WorkflowType": "basic.stressWorkflowExecute"}`)
-	source := json.RawMessage(data)
-	searchResult := &elastic.SearchResult{
-		Hits: &elastic.SearchHits{
-			Hits: []*elastic.SearchHit{
-				{
-					Source: source,
-				},
-			},
-		},
-		ScrollId: scrollID,
-	}
-
-	s.mockESClient.EXPECT().IsPointInTimeSupported(gomock.Any()).Return(false).AnyTimes()
-
-	// test bad request
-	request.Query = `invalid query`
-	_, err := s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
-	s.Error(err)
-	_, ok := err.(*serviceerror.InvalidArgument)
-	s.True(ok)
-	s.True(strings.HasPrefix(err.Error(), "invalid query"))
-
-	// test search
-	request.Query = `ExecutionStatus = "Running"`
-	s.mockESClient.EXPECT().OpenScroll(
-		gomock.Any(),
-		&client.SearchParameters{
-			Index: testIndex,
-			Query: elastic.NewBoolQuery().
-				Filter(
-					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
-					elastic.NewBoolQuery().Filter(
-						elastic.NewTermQuery(
-							searchattribute.ExecutionStatus,
-							enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
-						),
-					),
-				).
-				MustNot(elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision)),
-			PageSize: 1,
-			Sorter:   docSorter,
-		},
-		gomock.Any(),
-	).Return(searchResult, nil)
-
-	token := &visibilityPageToken{ScrollID: scrollID}
-	tokenBytes, err := s.visibilityStore.serializePageToken(token)
-	s.NoError(err)
-
-	result, err := s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
-	s.NoError(err)
-	s.Equal(tokenBytes, result.NextPageToken)
-
-	// test last page
-	request.NextPageToken = tokenBytes
-	searchResult = &elastic.SearchResult{
-		Hits: &elastic.SearchHits{
-			Hits: []*elastic.SearchHit{},
-		},
-		ScrollId: scrollID,
-	}
-	s.mockESClient.EXPECT().Scroll(gomock.Any(), scrollID, gomock.Any()).Return(searchResult, nil)
-	s.mockESClient.EXPECT().CloseScroll(gomock.Any(), scrollID).Return(nil)
-	result, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
-	s.NoError(err)
-	s.Nil(result.NextPageToken)
-
-	// test unavailable error
-	request.NextPageToken = nil
-	s.mockESClient.EXPECT().OpenScroll(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
-	s.Error(err)
-	_, ok = err.(*serviceerror.Unavailable)
-	s.True(ok)
-	s.Contains(err.Error(), "ScanWorkflowExecutions failed")
-}
-
-func (s *ESVisibilitySuite) TestScanWorkflowExecutions_Pit() {
-	pitID := "pitID"
-	request := &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceID,
-		Namespace:   testNamespace,
-		PageSize:    1,
-	}
-
-	data := []byte(`{"ExecutionStatus": "Running",
-          "CloseTime": "2021-06-11T16:04:07.980-07:00",
-          "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
-          "HistoryLength": 29,
-          "StateTransitionCount": 22,
-          "VisibilityTaskKey": "7-619",
-          "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
-          "StartTime": "2021-06-11T15:04:07.980-07:00",
-          "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
-          "WorkflowType": "basic.stressWorkflowExecute"}`)
-	source := json.RawMessage(data)
-	searchAfter := []any{json.Number("123")}
-	searchResult := &elastic.SearchResult{
-		Hits: &elastic.SearchHits{
-			Hits: []*elastic.SearchHit{
-				{
-					Source: source,
-					Sort:   searchAfter,
-				},
-			},
-		},
-		PitId: pitID,
-	}
-
-	s.mockESClient.EXPECT().IsPointInTimeSupported(gomock.Any()).Return(true).AnyTimes()
-
-	// test bad request
-	request.Query = `invalid query`
-	_, err := s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
-	s.Error(err)
-	_, ok := err.(*serviceerror.InvalidArgument)
-	s.True(ok)
-	s.True(strings.HasPrefix(err.Error(), "invalid query"))
-
-	request.Query = `ExecutionStatus = "Running"`
-	s.mockESClient.EXPECT().OpenPointInTime(gomock.Any(), testIndex, gomock.Any()).Return(pitID, nil)
-	s.mockESClient.EXPECT().Search(
-		gomock.Any(),
-		&client.SearchParameters{
-			Index: testIndex,
-			Query: elastic.NewBoolQuery().
-				Filter(
-					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
-					elastic.NewBoolQuery().Filter(
-						elastic.NewTermQuery(
-							searchattribute.ExecutionStatus,
-							enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
-						),
-					),
-				).
-				MustNot(elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision)),
-			PageSize:    1,
-			Sorter:      docSorter,
-			PointInTime: elastic.NewPointInTimeWithKeepAlive(pitID, pointInTimeKeepAliveInterval),
-		},
-	).Return(searchResult, nil)
-
-	token := &visibilityPageToken{
-		SearchAfter:   searchAfter,
-		PointInTimeID: pitID,
-	}
-	tokenBytes, err := s.visibilityStore.serializePageToken(token)
-	s.NoError(err)
-
-	result, err := s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
-	s.NoError(err)
-	s.Equal(tokenBytes, result.NextPageToken)
-
-	// test last page
-	request.NextPageToken = tokenBytes
-	searchResult = &elastic.SearchResult{
-		Hits: &elastic.SearchHits{
-			Hits: []*elastic.SearchHit{},
-		},
-		PitId: pitID,
-	}
-	s.mockESClient.EXPECT().ClosePointInTime(gomock.Any(), pitID).Return(true, nil)
-	s.mockESClient.EXPECT().Search(
-		gomock.Any(),
-		&client.SearchParameters{
-			Index: testIndex,
-			Query: elastic.NewBoolQuery().
-				Filter(
-					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
-					elastic.NewBoolQuery().Filter(
-						elastic.NewTermQuery(
-							searchattribute.ExecutionStatus,
-							enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
-						),
-					),
-				).
-				MustNot(elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision)),
-			PageSize:    1,
-			Sorter:      docSorter,
-			SearchAfter: token.SearchAfter,
-			PointInTime: elastic.NewPointInTimeWithKeepAlive(pitID, pointInTimeKeepAliveInterval),
-		},
-	).Return(searchResult, nil)
-	result, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
-	s.NoError(err)
-	s.Nil(result.NextPageToken)
-
-	// test unavailable error
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
-	s.Error(err)
-	_, ok = err.(*serviceerror.Unavailable)
-	s.True(ok)
-	s.Contains(err.Error(), "ScanWorkflowExecutions failed")
 }
 
 func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
