@@ -2221,12 +2221,37 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	}
 
 	taskID := uuid.New()
-	resp, err := pm.DispatchNexusTask(ctx, taskID, request)
 
-	// if we get a response or error it means that the Nexus task was handled by forwarding to another matching host
-	// this remote host's result can be returned directly
-	if resp != nil || err != nil {
-		return resp, err
+	// Buffer the deadline so we can still respond with timeout if we hit the deadline while dispatching
+	var cancel context.CancelFunc
+	if deadline, ok := ctx.Deadline(); ok {
+		timeout := time.Until(deadline)
+		ctx, cancel = contextutil.WithDeadlineBuffer(ctx, timeout, time.Second)
+		defer cancel()
+	}
+
+	dispatchCh := make(chan struct {
+		resp *matchingservice.DispatchNexusTaskResponse
+		err  error
+	})
+
+	go func() {
+		resp, err := pm.DispatchNexusTask(ctx, taskID, request)
+		dispatchCh <- struct {
+			resp *matchingservice.DispatchNexusTaskResponse
+			err  error
+		}{resp, err}
+	}()
+
+	select {
+	case r := <-dispatchCh:
+		// if we get a response or error it means that the Nexus task was handled by forwarding to another matching host
+		// this remote host's result can be returned directly
+		if r.resp != nil || r.err != nil {
+			return r.resp, err
+		}
+	case <-ctx.Done():
+		return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{}}, nil
 	}
 
 	// if we get here it means that dispatch of query task has occurred locally
@@ -2250,7 +2275,7 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 			Response: result.successfulWorkerResponse.GetRequest().GetResponse(),
 		}}, nil
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{}}, nil
 	}
 }
 
