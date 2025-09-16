@@ -151,8 +151,6 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
 	ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey, &atomic.Value{})
 
-
-
 	// Set MachineTransitionCount to 0 since older server versions, which had logic that considers references with
 	// non-zero MachineTransitionCount as "non-concurrent" references, and would fail validation of the reference if the
 	// Operation machine has transitioned.

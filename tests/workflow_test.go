@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -200,6 +201,10 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions() {
 	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
+	s.OverrideDynamicConfig(callbacks.AllowedAddresses, []any{
+		map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false},
+		map[string]any{"Pattern": "some-random-address", "AllowInsecure": false},
+	})
 	cb1 := &commonpb.Callback{
 		Variant: &commonpb.Callback_Nexus_{
 			Nexus: &commonpb.Callback_Nexus{
