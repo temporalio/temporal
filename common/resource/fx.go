@@ -321,7 +321,7 @@ func SdkClientFactoryProvider(
 	resolver *membership.GRPCResolver,
 	dc *dynamicconfig.Collection,
 ) (sdk.ClientFactory, error) {
-	frontendURL, _, _, frontendTLSConfig, err := GetFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
+	frontendURL, _, _, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +354,7 @@ func RPCFactoryProvider(
 	monitor membership.Monitor,
 	dc *dynamicconfig.Collection,
 ) (common.RPCFactory, error) {
-	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := GetFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
+	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -392,7 +392,7 @@ func FrontendHTTPClientCacheProvider(
 	return cluster.NewFrontendHTTPClientCache(metadata, tlsConfigProvider)
 }
 
-func GetFrontendConnectionDetails(
+func getFrontendConnectionDetails(
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	resolver *membership.GRPCResolver,
