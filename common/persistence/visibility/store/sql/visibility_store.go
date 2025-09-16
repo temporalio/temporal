@@ -228,13 +228,6 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	}, nil
 }
 
-func (s *VisibilityStore) ScanWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequestV2,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.ListWorkflowExecutions(ctx, request)
-}
-
 func (s *VisibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,

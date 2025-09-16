@@ -214,10 +214,8 @@ WORKFLOWCHECK := $(LOCALBIN)/workflowcheck-$(WORKFLOWCHECK_VER)
 $(WORKFLOWCHECK): | $(LOCALBIN)
 	$(call go-install-tool,$(WORKFLOWCHECK),go.temporal.io/sdk/contrib/tools/workflowcheck,$(WORKFLOWCHECK_VER))
 
-# The following tools need to have a consistent name, so we use a versioned stamp file to ensure the version we want is installed
-# while installing to an unversioned binary name.
 GOIMPORTS_VER := v0.36.0
-GOIMPORTS := $(LOCALBIN)/goimports
+GOIMPORTS := $(LOCALBIN)/goimports-$(GOIMPORTS_VER)
 $(STAMPDIR)/goimports-$(GOIMPORTS_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VER))
 	@touch $@
@@ -253,20 +251,20 @@ $(STAMPDIR)/stringer-$(STRINGER_VER): | $(STAMPDIR) $(LOCALBIN)
 $(STRINGER): $(STAMPDIR)/stringer-$(STRINGER_VER)
 
 PROTOC_GEN_GO_VER := v1.36.6
-PROTOC_GEN_GO := $(LOCALBIN)/protoc-gen-go
+PROTOC_GEN_GO := $(LOCALBIN)/protoc-gen-go-$(PROTOC_GEN_GO_VER)
 $(STAMPDIR)/protoc-gen-go-$(PROTOC_GEN_GO_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(PROTOC_GEN_GO),google.golang.org/protobuf/cmd/protoc-gen-go,$(PROTOC_GEN_GO_VER))
 	@touch $@
 $(PROTOC_GEN_GO): $(STAMPDIR)/protoc-gen-go-$(PROTOC_GEN_GO_VER)
 
 PROTOC_GEN_GO_GRPC_VER := v1.3.0
-PROTOC_GEN_GO_GRPC := $(LOCALBIN)/protoc-gen-go-grpc
+PROTOC_GEN_GO_GRPC := $(LOCALBIN)/protoc-gen-go-grpc-$(PROTOC_GEN_GO_GRPC_VER)
 $(STAMPDIR)/protoc-gen-go-grpc-$(PROTOC_GEN_GO_GRPC_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(PROTOC_GEN_GO_GRPC),google.golang.org/grpc/cmd/protoc-gen-go-grpc,$(PROTOC_GEN_GO_GRPC_VER))
 	@touch $@
 $(PROTOC_GEN_GO_GRPC): $(STAMPDIR)/protoc-gen-go-grpc-$(PROTOC_GEN_GO_GRPC_VER)
 
-PROTOC_GEN_GO_HELPERS := $(LOCALBIN)/protoc-gen-go-helpers
+PROTOC_GEN_GO_HELPERS := $(LOCALBIN)/protoc-gen-go-helpers-$(GO_API_VER)
 $(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(PROTOC_GEN_GO_HELPERS),go.temporal.io/api/cmd/protoc-gen-go-helpers,$(GO_API_VER))
 	@touch $@
@@ -307,10 +305,13 @@ protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRP
 		-root=$(ROOT) \
 		-proto-out=$(PROTO_OUT) \
 		-proto-root=$(PROTO_ROOT) \
-		-protogen=$(PROTOGEN) \
 		-api-binpb=$(API_BINPB) \
-		-goimports=$(GOIMPORTS) \
-		-mockgen=$(MOCKGEN) \
+		-protogen-bin=$(PROTOGEN) \
+		-goimports-bin=$(GOIMPORTS) \
+		-mockgen-bin=$(MOCKGEN) \
+		-protoc-gen-go-bin=$(PROTOC_GEN_GO) \
+		-protoc-gen-go-grpc-bin=$(PROTOC_GEN_GO_GRPC) \
+		-protoc-gen-go-helpers-bin=$(PROTOC_GEN_GO_HELPERS) \
 		$(PROTO_DIRS)
 
 proto-codegen:

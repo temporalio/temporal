@@ -2111,68 +2111,6 @@ func (s *WorkflowHandlerSuite) TestListWorkflowExecutions() {
 	s.Equal(query, listRequest.GetQuery())
 }
 
-func (s *WorkflowHandlerSuite) TestScanWorkflowExecutions() {
-	config := s.newConfig()
-	wh := s.getWorkflowHandler(config)
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil).AnyTimes()
-	s.mockVisibilityMgr.EXPECT().GetReadStoreName(s.testNamespace).Return(elasticsearch.PersistenceName).AnyTimes()
-
-	query := "WorkflowId = 'wid'"
-	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
-		Namespace: s.testNamespace.String(),
-		PageSize:  int32(config.VisibilityMaxPageSize(s.testNamespace.String())),
-		Query:     query,
-	}
-	ctx := context.Background()
-
-	// page size <= 0 => max page size = 1000
-	s.mockVisibilityMgr.EXPECT().ScanWorkflowExecutions(
-		gomock.Any(),
-		&manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID:   s.testNamespaceID,
-			Namespace:     s.testNamespace,
-			PageSize:      config.VisibilityMaxPageSize(s.testNamespace.String()),
-			NextPageToken: nil,
-			Query:         query,
-		},
-	).Return(&manager.ListWorkflowExecutionsResponse{}, nil)
-	_, err := wh.ScanWorkflowExecutions(ctx, scanRequest)
-	s.NoError(err)
-	s.Equal(query, scanRequest.GetQuery())
-
-	// page size > 1000 => max page size = 1000
-	s.mockVisibilityMgr.EXPECT().ScanWorkflowExecutions(
-		gomock.Any(),
-		&manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID:   s.testNamespaceID,
-			Namespace:     s.testNamespace,
-			PageSize:      config.VisibilityMaxPageSize(s.testNamespace.String()),
-			NextPageToken: nil,
-			Query:         query,
-		},
-	).Return(&manager.ListWorkflowExecutionsResponse{}, nil)
-	scanRequest.PageSize = int32(config.VisibilityMaxPageSize(s.testNamespace.String())) + 1
-	_, err = wh.ScanWorkflowExecutions(ctx, scanRequest)
-	s.NoError(err)
-	s.Equal(query, scanRequest.GetQuery())
-
-	// page size between 0 and 1000
-	s.mockVisibilityMgr.EXPECT().ScanWorkflowExecutions(
-		gomock.Any(),
-		&manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID:   s.testNamespaceID,
-			Namespace:     s.testNamespace,
-			PageSize:      10,
-			NextPageToken: nil,
-			Query:         query,
-		},
-	).Return(&manager.ListWorkflowExecutionsResponse{}, nil)
-	scanRequest.PageSize = 10
-	_, err = wh.ScanWorkflowExecutions(ctx, scanRequest)
-	s.NoError(err)
-	s.Equal(query, scanRequest.GetQuery())
-}
-
 func (s *WorkflowHandlerSuite) TestCountWorkflowExecutions() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
