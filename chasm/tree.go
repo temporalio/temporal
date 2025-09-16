@@ -75,8 +75,11 @@ type (
 		// If new value might be changed since it was deserialized and serialize method wasn't called yet, then valueState is valueStateNeedSerialize.
 		// If a node is constructed from the database, then valueState is valueStateNeedDeserialize.
 		// If serialize or deserialize method were called, then valueState is valueStateSynced, and next calls to them would be no-op.
+		//
 		// NOTE: This is a different concept from the IsDirty() method needed by MutableState which means
 		// if the state in memory matches the state in DB.
+		//
+		// To update this field, ALWAYS use setValueState() method.
 		valueState valueState
 
 		// Cached encoded path for this node.
@@ -115,6 +118,12 @@ type (
 		newTasks       map[any][]taskWithAttributes // component value -> task & attributes
 
 		taskValueCache map[*commonpb.DataBlob]reflect.Value
+
+		// isActiveStateDirty is true if any user data is mutated.
+		// NOTE: this only captures active cluster's user data mutation.
+		// Replication logic (ApplySnapshot/Mutation) will not set this field.
+		// The flag is equivalent to checking if any node's valueState is valueStateNeedSerialize
+		isActiveStateDirty bool
 	}
 
 	taskWithAttributes struct {
@@ -218,7 +227,7 @@ func NewEmptyTree(
 	// Although both value and serializedNode.Data are nil, they are considered NOT synced
 	// because value has no type and serializedNode does.
 	// deserialize method should set value when called.
-	root.valueState = valueStateNeedDeserialize
+	root.setValueState(valueStateNeedDeserialize)
 	return root
 }
 
@@ -256,7 +265,14 @@ func (n *Node) SetRootComponent(
 ) {
 	root := n.root()
 	root.value = rootComponent
-	root.valueState = valueStateNeedSerialize
+	root.setValueState(valueStateNeedSerialize)
+}
+
+func (n *Node) setValueState(state valueState) {
+	n.valueState = state
+	if state == valueStateNeedSerialize {
+		n.isActiveStateDirty = true
+	}
 }
 
 // Component retrieves a component from the tree rooted at node n
@@ -285,10 +301,9 @@ func (n *Node) Component(
 		return nil, errComponentNotFound
 	}
 
-	metadata := node.serializedNode.Metadata
 	if ref.componentInitialVT != nil && transitionhistory.Compare(
 		ref.componentInitialVT,
-		metadata.InitialVersionedTransition,
+		node.serializedNode.Metadata.InitialVersionedTransition,
 	) != 0 {
 		return nil, errComponentNotFound
 	}
@@ -371,15 +386,15 @@ func (n *Node) validateAccess(ctx Context) error {
 func (n *Node) prepareComponentValue(
 	chasmContext Context,
 ) error {
-	metadata := n.serializedNode.Metadata
-	componentAttr := metadata.GetComponentAttributes()
-	if componentAttr == nil {
-		return serviceerror.NewInternalf(
-			"expect chasm node to have ComponentAttributes, actual attributes: %v", metadata.Attributes,
-		)
-	}
-
 	if n.valueState == valueStateNeedDeserialize {
+		metadata := n.serializedNode.Metadata
+		componentAttr := metadata.GetComponentAttributes()
+		if componentAttr == nil {
+			return serviceerror.NewInternalf(
+				"expect chasm node to have ComponentAttributes, actual attributes: %v", metadata.Attributes,
+			)
+		}
+
 		registrableComponent, ok := n.registry.component(componentAttr.GetType())
 		if !ok {
 			return serviceerror.NewInternalf("component type name not registered: %v", componentAttr.GetType())
@@ -394,7 +409,7 @@ func (n *Node) prepareComponentValue(
 	// its value will be mutated and no longer in sync with the serializedNode.
 	_, componentCanBeMutated := chasmContext.(MutableContext)
 	if componentCanBeMutated {
-		n.valueState = valueStateNeedSerialize
+		n.setValueState(valueStateNeedSerialize)
 	}
 
 	return nil
@@ -422,15 +437,13 @@ func (n *Node) prepareDataValue(
 	// its value will be mutated and no longer in sync with the serializedNode.
 	_, componentCanBeMutated := chasmContext.(MutableContext)
 	if componentCanBeMutated {
-		n.valueState = valueStateNeedSerialize
+		n.setValueState(valueStateNeedSerialize)
 	}
 
 	return nil
 }
 
-func (n *Node) preparePointerValue(
-	chasmContext Context,
-) error {
+func (n *Node) preparePointerValue() error {
 	metadata := n.serializedNode.Metadata
 	pointerAttr := metadata.GetPointerAttributes()
 	if pointerAttr == nil {
@@ -548,7 +561,7 @@ func (n *Node) setSerializedNode(
 ) *Node {
 	if len(nodePath) == 0 {
 		n.serializedNode = serializedNode
-		n.valueState = valueStateNeedDeserialize
+		n.setValueState(valueStateNeedDeserialize)
 		n.encodedPath = &encodedPath
 		return n
 	}
@@ -609,7 +622,7 @@ func (n *Node) serializeComponentNode() error {
 		n.serializedNode.Data = blob
 		n.serializedNode.GetMetadata().GetComponentAttributes().Type = rc.fqType()
 		n.updateLastUpdateVersionedTransition()
-		n.valueState = valueStateSynced
+		n.setValueState(valueStateSynced)
 
 		// continue to iterate over fields to validate that there is only one proto field in the component.
 	}
@@ -679,7 +692,7 @@ func (n *Node) syncSubComponentsInternal() (needsPointerResolution bool, err err
 			if collectionNode == nil {
 				collectionNode = newNode(n.nodeBase, n, field.name)
 				collectionNode.initSerializedCollectionNode()
-				collectionNode.valueState = valueStateNeedSerialize
+				collectionNode.setValueState(valueStateNeedSerialize)
 				n.children[field.name] = collectionNode
 			}
 
@@ -870,7 +883,7 @@ func (n *Node) syncSubField(
 		}
 		childNode.value = internal.value()
 		childNode.initSerializedNode(internal.fieldType())
-		childNode.valueState = valueStateNeedSerialize
+		childNode.setValueState(valueStateNeedSerialize)
 
 		n.children[fieldN] = childNode
 		internal.node = childNode
@@ -923,7 +936,7 @@ func (n *Node) serializeDataNode() error {
 	}
 	n.serializedNode.Data = blob
 	n.updateLastUpdateVersionedTransition()
-	n.valueState = valueStateSynced
+	n.setValueState(valueStateSynced)
 
 	return nil
 }
@@ -931,7 +944,7 @@ func (n *Node) serializeDataNode() error {
 func (n *Node) serializeCollectionNode() error {
 	// The collection node has no data; therefore, only metadata needs to be updated.
 	n.updateLastUpdateVersionedTransition()
-	n.valueState = valueStateSynced
+	n.setValueState(valueStateSynced)
 	return nil
 }
 
@@ -946,7 +959,7 @@ func (n *Node) serializePointerNode() error {
 
 	n.serializedNode.GetMetadata().GetPointerAttributes().NodePath = path
 	n.updateLastUpdateVersionedTransition()
-	n.valueState = valueStateSynced
+	n.setValueState(valueStateSynced)
 
 	return nil
 }
@@ -1039,7 +1052,7 @@ func (n *Node) deserializeComponentNode(
 	}
 
 	n.value = valueV.Interface()
-	n.valueState = valueStateSynced
+	n.setValueState(valueStateSynced)
 	return nil
 }
 
@@ -1052,14 +1065,14 @@ func (n *Node) deserializeDataNode(
 	}
 
 	n.value = value.Interface()
-	n.valueState = valueStateSynced
+	n.setValueState(valueStateSynced)
 	return nil
 }
 
 // deserializePointerNode doesn't deserialize anything but named this way for consistency.
 func (n *Node) deserializePointerNode() error {
 	n.value = n.serializedNode.GetMetadata().GetPointerAttributes().GetNodePath()
-	n.valueState = valueStateSynced
+	n.setValueState(valueStateSynced)
 	return nil
 }
 
@@ -1202,8 +1215,8 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		return NodesMutation{}, err
 	}
 
-	if rootLifecycleChanged {
-		if err := n.closeTransactionForceUpdateVisibility(nextVersionedTransition); err != nil {
+	if n.isActiveStateDirty {
+		if err := n.closeTransactionForceUpdateVisibility(rootLifecycleChanged); err != nil {
 			return NodesMutation{}, err
 		}
 	}
@@ -1236,11 +1249,11 @@ func (n *Node) closeTransactionHandleRootLifecycleChange() (bool, error) {
 	}
 
 	chasmContext := NewContext(context.Background(), n)
-	component, err := n.Component(chasmContext, ComponentRef{})
+	rootComponent, err := n.Component(chasmContext, ComponentRef{})
 	if err != nil {
 		return false, err
 	}
-	lifecycleState := component.LifecycleState(chasmContext)
+	lifecycleState := rootComponent.LifecycleState(chasmContext)
 
 	var newState enumsspb.WorkflowExecutionState
 	var newStatus enumspb.WorkflowExecutionStatus
@@ -1262,31 +1275,93 @@ func (n *Node) closeTransactionHandleRootLifecycleChange() (bool, error) {
 }
 
 func (n *Node) closeTransactionForceUpdateVisibility(
-	nextVersionedTransition *persistencespb.VersionedTransition,
+	rootLifecycleChanged bool,
 ) error {
+	var visibilityNode *Node
 	for _, child := range n.children {
 		componentAttr := child.serializedNode.Metadata.GetComponentAttributes()
-		if componentAttr == nil ||
-			componentAttr.Type != visibilityComponentFqType ||
-			transitionhistory.Compare(child.serializedNode.Metadata.LastUpdateVersionedTransition, nextVersionedTransition) == 0 {
-			// Skip force update is the node is not a visibility component or already updated in this transition.
+		if componentAttr == nil {
 			continue
 		}
 
-		mutableContext := NewMutableContext(context.Background(), n)
-		visComponent, err := child.Component(mutableContext, ComponentRef{})
+		if child.valueState == valueStateNeedSerialize {
+			if rc, ok := n.registry.componentFor(child.value); ok && rc.fqType() == visibilityComponentFqType {
+				visibilityNode = child
+				break
+			}
+		} else if componentAttr.Type == visibilityComponentFqType {
+			visibilityNode = child
+			break
+		}
+
+	}
+	if visibilityNode == nil {
+		return nil
+	}
+
+	needUpdate := rootLifecycleChanged
+
+	mutableContext := NewMutableContext(context.Background(), n)
+	immutableContext := mutableContext.ToImmutable()
+
+	// NOTE: It is a HACK to access visibility component with immutable Context,
+	// but later invoke a method that requires MutableContext.
+	//
+	// But here we only know if visibility component needs to be updated or not AFTER
+	// invoking a mutable method on it.
+	// To prevent unnecessary update and replication of its state, we first access it with a immutable Context,
+	// then, at the end of this method, when we are sure it needs to be updated,
+	// access the visibility component again with a MutableContext so that the changes can be
+	// serialized and persisted.
+	//
+	// TODO: have a better story around checking for updates and skip unnecessary updates even if a
+	// component is accessed with a MutableContext, but no changes are actually made.
+	// (Not just state, need to check for if there is any new tasks too.)
+	visComponent, err := visibilityNode.Component(immutableContext, ComponentRef{})
+	if err != nil {
+		return err
+	}
+
+	visibility, ok := visComponent.(*Visibility)
+	if !ok {
+		return serviceerror.NewInternalf("expected visibility component for component with type %s, but got %T", visibilityComponentFqType, visComponent)
+	}
+
+	rootComponent, err := n.Component(immutableContext, ComponentRef{})
+	if err != nil {
+		return err
+	}
+
+	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
+	if ok {
+		updated, err := visibility.SetSearchAttributes(mutableContext, saProvider.SearchAttributes(immutableContext))
 		if err != nil {
 			return err
 		}
-
-		visibility, ok := visComponent.(*Visibility)
-		if !ok {
-			return serviceerror.NewInternalf("expected visibility component for component with type %s, but got %T", visibilityComponentFqType, visComponent)
-		}
-		visibility.GenerateTask(mutableContext)
+		needUpdate = needUpdate || updated
 	}
 
-	return nil
+	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
+	if ok {
+		updated, err := visibility.SetMemo(mutableContext, memoProvider.Memo(immutableContext))
+		if err != nil {
+			return err
+		}
+		needUpdate = needUpdate || updated
+	}
+
+	if !needUpdate {
+		return nil
+	}
+
+	// Need visibility update, generate a task and mark the node as dirty (using a MutableContext).
+	visibility.generateTask(mutableContext)
+	if _, err := visibilityNode.Component(mutableContext, ComponentRef{}); err != nil {
+		return err
+	}
+
+	_, err = visibilityNode.syncSubComponentsInternal()
+	return err
 }
 
 func (n *Node) closeTransactionSerializeNodes() error {
@@ -1681,6 +1756,8 @@ func (n *Node) cleanupTransaction() {
 	}
 
 	n.newTasks = make(map[any][]taskWithAttributes)
+
+	n.isActiveStateDirty = false
 }
 
 // Snapshot returns all nodes in the tree that have been modified after the given min versioned transition.
@@ -1855,7 +1932,7 @@ func (n *Node) applyUpdates(
 			n.mutation.UpdatedNodes[encodedPath] = updatedNode
 			node.serializedNode = updatedNode
 			node.value = nil
-			node.valueState = valueStateNeedDeserialize
+			node.setValueState(valueStateNeedDeserialize)
 
 			// Clearing decoded value for ancestor nodes is not necessary because the value field is not referenced directly.
 			// Parent node is pointing to the Node struct.
@@ -1984,11 +2061,7 @@ func (n *Node) IsDirty() bool {
 // which need to be persisted to DB AND replicated to other clusters.
 // The result will be reset to false after a call to CloseTransaction().
 func (n *Node) IsStateDirty() bool {
-	if len(n.mutation.UpdatedNodes) > 0 || len(n.mutation.DeletedNodes) > 0 {
-		return true
-	}
-
-	return n.isValueNeedSerialize()
+	return n.isActiveStateDirty || len(n.mutation.UpdatedNodes) > 0 || len(n.mutation.DeletedNodes) > 0
 }
 
 func (n *Node) IsStale(
@@ -2004,20 +2077,6 @@ func (n *Node) IsStale(
 		n.backend.GetExecutionInfo().TransitionHistory,
 		ref.entityLastUpdateVT,
 	)
-}
-
-func (n *Node) isValueNeedSerialize() bool {
-	if n.valueState == valueStateNeedSerialize {
-		return true
-	}
-
-	for _, childNode := range n.children {
-		if childNode.isValueNeedSerialize() {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (n *Node) Terminate(

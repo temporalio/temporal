@@ -27,6 +27,8 @@ type Context interface {
 type MutableContext interface {
 	Context
 
+	ToImmutable() Context
+
 	AddTask(Component, TaskAttributes, any)
 
 	// Add more methods here for other storage commands/primitives.
@@ -99,4 +101,8 @@ func (c *MutableContextImpl) AddTask(
 	payload any,
 ) {
 	c.root.AddTask(component, attributes, payload)
+}
+
+func (c *MutableContextImpl) ToImmutable() Context {
+	return c.ContextImpl
 }

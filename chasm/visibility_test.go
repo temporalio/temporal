@@ -76,16 +76,17 @@ func (s *visibilitySuite) TestSearchAttributes() {
 
 	// Add SA via Visibility struct method.
 	s.mockChasmContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}).Times(1)
-	err = s.visibility.UpsertSearchAttributes(s.mockChasmContext, map[string]any{
+	updated, err := s.visibility.SetSearchAttributes(s.mockChasmContext, map[string]any{
 		stringKey: stringVal,
 		intKey:    intVal,
 	})
 	s.NoError(err)
+	s.True(updated)
 	s.Equal(int64(2), s.visibility.Data.TransitionCount)
 
 	// Add SA via generic UpdateSearchAttribute helper function.
 	s.mockChasmContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}).Times(1)
-	UpsertSearchAttribute(s.mockChasmContext, s.visibility, floatKey, floatVal)
+	SetSearchAttribute(s.mockChasmContext, s.visibility, floatKey, floatVal)
 	s.Equal(int64(3), s.visibility.Data.TransitionCount)
 
 	sa, err = s.visibility.GetSearchAttributes(s.mockChasmContext)
@@ -120,16 +121,17 @@ func (s *visibilitySuite) TestMemo() {
 
 	// Add memo via Visibility struct method.
 	s.mockChasmContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}).Times(1)
-	err = s.visibility.UpsertMemo(s.mockChasmContext, map[string]any{
+	updated, err := s.visibility.SetMemo(s.mockChasmContext, map[string]any{
 		stringKey: stringVal,
 		intKey:    intVal,
 	})
 	s.NoError(err)
+	s.True(updated)
 	s.Equal(int64(2), s.visibility.Data.TransitionCount)
 
 	// Add memo via generic UpdateSearchAttribute helper function.
 	s.mockChasmContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}).Times(1)
-	UpsertMemo(s.mockChasmContext, s.visibility, floatKey, floatVal)
+	SetMemo(s.mockChasmContext, s.visibility, floatKey, floatVal)
 	s.Equal(int64(3), s.visibility.Data.TransitionCount)
 
 	sa, err = s.visibility.GetMemo(s.mockChasmContext)
