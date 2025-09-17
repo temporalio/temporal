@@ -83,7 +83,7 @@ func NewFactory(
 		frontendTLSConfig:     frontendTLSConfig,
 		tlsFactory:            tlsProvider,
 		commonDialOptions:     commonDialOptions,
-		perServiceDialOptions: map[primitives.ServiceName][]grpc.DialOption{},
+		perServiceDialOptions: perServiceDialOptions,
 		monitor:               monitor,
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
