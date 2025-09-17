@@ -500,11 +500,10 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 		if errors.As(err, &permissionDeniedError) {
 			c.outcomeTag = metrics.OutcomeTag("unauthorized")
 			return commonnexus.AdaptAuthorizeError(permissionDeniedError)
-		} else {
-			c.outcomeTag = metrics.OutcomeTag("internal_auth_error")
-			c.logger.Error("Authorization internal error with processing nexus callback", tag.Error(err))
-			return commonnexus.ConvertGRPCError(err, false)
 		}
+		c.outcomeTag = metrics.OutcomeTag("internal_auth_error")
+		c.logger.Error("Authorization internal error with processing nexus callback", tag.Error(err))
+		return commonnexus.ConvertGRPCError(err, false)
 	}
 
 	if err := c.NamespaceValidationInterceptor.ValidateState(c.namespace, apiName); err != nil {

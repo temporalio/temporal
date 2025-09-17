@@ -164,11 +164,10 @@ func (c *operationContext) interceptRequest(
 		if errors.As(err, &permissionDeniedError) {
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("unauthorized"))
 			return commonnexus.AdaptAuthorizeError(permissionDeniedError)
-		} else {
-			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("internal_auth_error"))
-			c.logger.Error("Authorization internal error with processing nexus request", tag.Error(err))
-			return commonnexus.ConvertGRPCError(err, false)
 		}
+		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("internal_auth_error"))
+		c.logger.Error("Authorization internal error with processing nexus request", tag.Error(err))
+		return commonnexus.ConvertGRPCError(err, false)
 	}
 
 	if err := c.namespaceValidationInterceptor.ValidateState(c.namespace, c.apiName); err != nil {
