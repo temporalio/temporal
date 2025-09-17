@@ -244,8 +244,7 @@ func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName 
 		}
 	}
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[serviceName]...)
-	d.logger.Info("CreateInternodeGRPCConnection Alan Wu", tag.Address(hostName), tag.Service(serviceName),
-		tag.DetailInfo(fmt.Sprintf("additional dial options: %v", additionalDialOptions)))
+	fmt.Println("CreateInternodeGRPCConnection Alan Wu", hostName, serviceName, additionalDialOptions)
 	c := d.dial(hostName, tlsClientConfig, append(additionalDialOptions, d.getClientKeepAliveConfig(serviceName))...)
 	d.interNodeGrpcConnections.Put(hostName, c)
 	return c
