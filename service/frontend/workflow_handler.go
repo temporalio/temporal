@@ -2538,40 +2538,24 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 	}, nil
 }
 
-// ScanWorkflowExecutions is a visibility API to list large amount of workflow executions in a specific namespace without order.
+// ScanWorkflowExecutions _was_ a Visibility API to list large amount of workflow executions in a specific namespace without order.
+// It has since been deprecated in favor of `ListWorkflowExecutions` and rewritten to use `ListWorkflowExecutions` internally.
+// Deprecated: Use `ListWorkflowExecutions`
 func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *workflowservice.ScanWorkflowExecutionsRequest) (_ *workflowservice.ScanWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
-	if request.GetPageSize() <= 0 || request.GetPageSize() > maxPageSize {
-		request.PageSize = maxPageSize
-	}
-
-	namespaceName := namespace.Name(request.GetNamespace())
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
-	if err != nil {
-		return nil, err
-	}
-
-	req := &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID:   namespaceID,
-		Namespace:     namespaceName,
-		PageSize:      int(request.GetPageSize()),
+	listResp, err := wh.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace:     request.Namespace,
+		PageSize:      request.PageSize,
 		NextPageToken: request.NextPageToken,
-		Query:         request.GetQuery(),
-	}
-	persistenceResp, err := wh.visibilityMgr.ScanWorkflowExecutions(ctx, req)
+		Query:         request.Query,
+	})
 	if err != nil {
 		return nil, err
 	}
-
 	resp := &workflowservice.ScanWorkflowExecutionsResponse{
-		Executions:    persistenceResp.Executions,
-		NextPageToken: persistenceResp.NextPageToken,
+		Executions:    listResp.Executions,
+		NextPageToken: listResp.NextPageToken,
 	}
 	return resp, nil
 }

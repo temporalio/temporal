@@ -182,21 +182,6 @@ func (mr *MockVisibilityStoreMockRecorder) RecordWorkflowExecutionStarted(ctx, r
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordWorkflowExecutionStarted", reflect.TypeOf((*MockVisibilityStore)(nil).RecordWorkflowExecutionStarted), ctx, request)
 }
 
-// ScanWorkflowExecutions mocks base method.
-func (m *MockVisibilityStore) ScanWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ScanWorkflowExecutions", ctx, request)
-	ret0, _ := ret[0].(*InternalListWorkflowExecutionsResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ScanWorkflowExecutions indicates an expected call of ScanWorkflowExecutions.
-func (mr *MockVisibilityStoreMockRecorder) ScanWorkflowExecutions(ctx, request any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScanWorkflowExecutions", reflect.TypeOf((*MockVisibilityStore)(nil).ScanWorkflowExecutions), ctx, request)
-}
-
 // UpsertWorkflowExecution mocks base method.
 func (m *MockVisibilityStore) UpsertWorkflowExecution(ctx context.Context, request *InternalUpsertWorkflowExecutionRequest) error {
 	m.ctrl.T.Helper()
