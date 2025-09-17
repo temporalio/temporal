@@ -24,7 +24,6 @@ import (
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
-	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/config"
@@ -44,7 +43,7 @@ type (
 		xdcBaseSuite
 	}
 	FunctionalClustersWithRedirectionTestSuite struct {
-		FunctionalClustersTestSuite
+		xdcBaseSuite
 	}
 )
 
@@ -2659,20 +2658,6 @@ func (s *FunctionalClustersTestSuite) getHistory(client workflowservice.Workflow
 	}
 
 	return events
-}
-
-func (s *FunctionalClustersTestSuite) newClientAndWorker(hostport, namespace, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  hostport,
-		Namespace: namespace,
-	})
-	s.NoError(err)
-
-	worker := sdkworker.New(sdkClient, taskqueue, sdkworker.Options{
-		Identity: identity,
-	})
-
-	return sdkClient, worker
 }
 
 func TestFuncClustersWithRedirectionTestSuite(t *testing.T) {
