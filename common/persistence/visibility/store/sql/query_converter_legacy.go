@@ -18,7 +18,7 @@ import (
 )
 
 type (
-	pluginQueryConverter interface {
+	pluginQueryConverterLegacy interface {
 		convertKeywordListComparisonExpr(expr *sqlparser.ComparisonExpr) (sqlparser.Expr, error)
 
 		convertTextComparisonExpr(expr *sqlparser.ComparisonExpr) (sqlparser.Expr, error)
@@ -27,7 +27,7 @@ type (
 			namespaceID namespace.ID,
 			queryString string,
 			pageSize int,
-			token *pageToken,
+			token *pageTokenLegacy,
 		) (string, []any)
 
 		buildCountStmt(namespaceID namespace.ID, queryString string, groupBy []string) (string, []any)
@@ -37,8 +37,8 @@ type (
 		getCoalesceCloseTimeExpr() sqlparser.Expr
 	}
 
-	QueryConverter struct {
-		pluginQueryConverter
+	QueryConverterLegacy struct {
+		pluginQueryConverterLegacy
 		namespaceName namespace.Name
 		namespaceID   namespace.ID
 		saTypeMap     searchattribute.NameTypeMap
@@ -48,7 +48,7 @@ type (
 		seenNamespaceDivision bool
 	}
 
-	queryParams struct {
+	queryParamsLegacy struct {
 		queryString string
 		// List of search attributes to group by (field name, not db name).
 		groupBy []string
@@ -112,30 +112,30 @@ var (
 )
 
 func newQueryConverterInternal(
-	pqc pluginQueryConverter,
+	pqc pluginQueryConverterLegacy,
 	namespaceName namespace.Name,
 	namespaceID namespace.ID,
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
 	queryString string,
-) *QueryConverter {
-	return &QueryConverter{
-		pluginQueryConverter: pqc,
-		namespaceName:        namespaceName,
-		namespaceID:          namespaceID,
-		saTypeMap:            saTypeMap,
-		saMapper:             saMapper,
-		queryString:          queryString,
+) *QueryConverterLegacy {
+	return &QueryConverterLegacy{
+		pluginQueryConverterLegacy: pqc,
+		namespaceName:              namespaceName,
+		namespaceID:                namespaceID,
+		saTypeMap:                  saTypeMap,
+		saMapper:                   saMapper,
+		queryString:                queryString,
 
 		seenNamespaceDivision: false,
 	}
 }
 
-func (c *QueryConverter) BuildSelectStmt(
+func (c *QueryConverterLegacy) BuildSelectStmt(
 	pageSize int,
 	nextPageToken []byte,
 ) (*sqlplugin.VisibilitySelectFilter, error) {
-	token, err := deserializePageToken(nextPageToken)
+	token, err := deserializePageTokenLegacy(nextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -155,11 +155,12 @@ func (c *QueryConverter) BuildSelectStmt(
 	return &sqlplugin.VisibilitySelectFilter{Query: queryString, QueryArgs: queryArgs}, nil
 }
 
-func (c *QueryConverter) BuildCountStmt() (*sqlplugin.VisibilitySelectFilter, error) {
+func (c *QueryConverterLegacy) BuildCountStmt() (*sqlplugin.VisibilitySelectFilter, error) {
 	qp, err := c.convertWhereString(c.queryString)
 	if err != nil {
 		return nil, err
 	}
+	//nolint:staticcheck
 	groupByDbNames := make([]string, len(qp.groupBy))
 	for i, fieldName := range qp.groupBy {
 		groupByDbNames[i] = searchattribute.GetSqlDbColName(fieldName)
@@ -172,7 +173,7 @@ func (c *QueryConverter) BuildCountStmt() (*sqlplugin.VisibilitySelectFilter, er
 	}, nil
 }
 
-func (c *QueryConverter) convertWhereString(queryString string) (*queryParams, error) {
+func (c *QueryConverterLegacy) convertWhereString(queryString string) (*queryParamsLegacy, error) {
 	where := strings.TrimSpace(queryString)
 	if where != "" &&
 		!strings.HasPrefix(strings.ToLower(where), "order by") &&
@@ -186,25 +187,27 @@ func (c *QueryConverter) convertWhereString(queryString string) (*queryParams, e
 		return nil, query.NewConverterError("%s: %v", query.MalformedSqlQueryErrMessage, err)
 	}
 
+	//nolint:revive
 	selectStmt, _ := stmt.(*sqlparser.Select)
 	err = c.convertSelectStmt(selectStmt)
 	if err != nil {
 		return nil, err
 	}
 
-	res := &queryParams{}
+	res := &queryParamsLegacy{}
 	if selectStmt.Where != nil {
 		res.queryString = sqlparser.String(selectStmt.Where.Expr)
 	}
 	for _, groupByExpr := range selectStmt.GroupBy {
 		// The parser already ensures the type is saColName.
+		//nolint:revive
 		colName := groupByExpr.(*saColName)
 		res.groupBy = append(res.groupBy, colName.fieldName)
 	}
 	return res, nil
 }
 
-func (c *QueryConverter) convertSelectStmt(sel *sqlparser.Select) error {
+func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 	if sel.OrderBy != nil {
 		return query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage)
 	}
@@ -281,7 +284,7 @@ func (c *QueryConverter) convertSelectStmt(sel *sqlparser.Select) error {
 	return nil
 }
 
-func (c *QueryConverter) convertWhereExpr(expr *sqlparser.Expr) error {
+func (c *QueryConverterLegacy) convertWhereExpr(expr *sqlparser.Expr) error {
 	if expr == nil || *expr == nil {
 		return errors.New("cannot be nil")
 	}
@@ -310,7 +313,7 @@ func (c *QueryConverter) convertWhereExpr(expr *sqlparser.Expr) error {
 	}
 }
 
-func (c *QueryConverter) convertAndExpr(exprRef *sqlparser.Expr) error {
+func (c *QueryConverterLegacy) convertAndExpr(exprRef *sqlparser.Expr) error {
 	expr, ok := (*exprRef).(*sqlparser.AndExpr)
 	if !ok {
 		return query.NewConverterError("`%s` is not an 'AND' expression", sqlparser.String(*exprRef))
@@ -322,7 +325,7 @@ func (c *QueryConverter) convertAndExpr(exprRef *sqlparser.Expr) error {
 	return c.convertWhereExpr(&expr.Right)
 }
 
-func (c *QueryConverter) convertOrExpr(exprRef *sqlparser.Expr) error {
+func (c *QueryConverterLegacy) convertOrExpr(exprRef *sqlparser.Expr) error {
 	expr, ok := (*exprRef).(*sqlparser.OrExpr)
 	if !ok {
 		return query.NewConverterError("`%s` is not an 'OR' expression", sqlparser.String(*exprRef))
@@ -334,7 +337,7 @@ func (c *QueryConverter) convertOrExpr(exprRef *sqlparser.Expr) error {
 	return c.convertWhereExpr(&expr.Right)
 }
 
-func (c *QueryConverter) convertComparisonExpr(exprRef *sqlparser.Expr) error {
+func (c *QueryConverterLegacy) convertComparisonExpr(exprRef *sqlparser.Expr) error {
 	expr, ok := (*exprRef).(*sqlparser.ComparisonExpr)
 	if !ok {
 		return query.NewConverterError(
@@ -362,6 +365,7 @@ func (c *QueryConverter) convertComparisonExpr(exprRef *sqlparser.Expr) error {
 		return err
 	}
 
+	//nolint:revive,exhaustive // missing default case
 	switch saColNameExpr.valueType {
 	case enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
 		newExpr, err := c.convertKeywordListComparisonExpr(expr)
@@ -377,6 +381,7 @@ func (c *QueryConverter) convertComparisonExpr(exprRef *sqlparser.Expr) error {
 		*exprRef = newExpr
 	}
 
+	//nolint:revive // missing default case
 	switch expr.Operator {
 	case sqlparser.StartsWithStr, sqlparser.NotStartsWithStr:
 		valueExpr, ok := expr.Right.(*unsafeSQLString)
@@ -400,7 +405,7 @@ func (c *QueryConverter) convertComparisonExpr(exprRef *sqlparser.Expr) error {
 	return nil
 }
 
-func (c *QueryConverter) convertRangeCond(exprRef *sqlparser.Expr) error {
+func (c *QueryConverterLegacy) convertRangeCond(exprRef *sqlparser.Expr) error {
 	expr, ok := (*exprRef).(*sqlparser.RangeCond)
 	if !ok {
 		return query.NewConverterError(
@@ -431,7 +436,7 @@ func (c *QueryConverter) convertRangeCond(exprRef *sqlparser.Expr) error {
 	return nil
 }
 
-func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, error) {
+func (c *QueryConverterLegacy) convertColName(exprRef *sqlparser.Expr) (*saColName, error) {
 	expr, ok := (*exprRef).(*sqlparser.ColName)
 	if !ok {
 		return nil, query.NewConverterError(
@@ -484,7 +489,7 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 	return newExpr, nil
 }
 
-func (c *QueryConverter) convertValueExpr(
+func (c *QueryConverterLegacy) convertValueExpr(
 	exprRef *sqlparser.Expr,
 	name string,
 	saFieldName string,
@@ -557,7 +562,7 @@ func (c *QueryConverter) convertValueExpr(
 // For datetime, converts to UTC.
 // For execution status, converts string to enum value.
 // For execution duration, converts to nanoseconds.
-func (c *QueryConverter) parseSQLVal(
+func (c *QueryConverterLegacy) parseSQLVal(
 	expr *sqlparser.SQLVal,
 	saName string,
 	saType enumspb.IndexedValueType,
@@ -642,7 +647,7 @@ func (c *QueryConverter) parseSQLVal(
 	return value, nil
 }
 
-func (c *QueryConverter) convertIsExpr(exprRef *sqlparser.Expr) error {
+func (c *QueryConverterLegacy) convertIsExpr(exprRef *sqlparser.Expr) error {
 	expr, ok := (*exprRef).(*sqlparser.IsExpr)
 	if !ok {
 		return query.NewConverterError("`%s` is not an 'IS' expression", sqlparser.String(*exprRef))
