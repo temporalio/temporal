@@ -81,7 +81,9 @@ func Invoke(
 			if !activityRunning ||
 				ai.StartedEventId == common.EmptyEventID ||
 				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) ||
-				(token.GetVersion() != common.EmptyVersion && token.Version != ai.Version) {
+				(token.GetVersion() != common.EmptyVersion &&
+					(ai.StartedEventVersion != common.EmptyVersion && token.Version != ai.StartedEventVersion) ||
+					(ai.StartedEventVersion == common.EmptyVersion && token.Version != ai.Version)) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 

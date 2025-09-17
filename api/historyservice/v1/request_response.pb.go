@@ -4358,6 +4358,7 @@ type SyncActivityRequest struct {
 	RetryMaximumInterval    *durationpb.Duration `protobuf:"bytes,23,opt,name=retry_maximum_interval,json=retryMaximumInterval,proto3" json:"retry_maximum_interval,omitempty"`
 	RetryMaximumAttempts    int32                `protobuf:"varint,24,opt,name=retry_maximum_attempts,json=retryMaximumAttempts,proto3" json:"retry_maximum_attempts,omitempty"`
 	RetryBackoffCoefficient float64              `protobuf:"fixed64,25,opt,name=retry_backoff_coefficient,json=retryBackoffCoefficient,proto3" json:"retry_backoff_coefficient,omitempty"`
+	StartedEventVersion     int64                `protobuf:"varint,26,opt,name=started_event_version,json=startedEventVersion,proto3" json:"started_event_version,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -4567,6 +4568,13 @@ func (x *SyncActivityRequest) GetRetryBackoffCoefficient() float64 {
 	return 0
 }
 
+func (x *SyncActivityRequest) GetStartedEventVersion() int64 {
+	if x != nil {
+		return x.StartedEventVersion
+	}
+	return 0
+}
+
 type SyncActivitiesRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId    string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
@@ -4665,6 +4673,7 @@ type ActivitySyncInfo struct {
 	RetryMaximumInterval    *durationpb.Duration `protobuf:"bytes,23,opt,name=retry_maximum_interval,json=retryMaximumInterval,proto3" json:"retry_maximum_interval,omitempty"`
 	RetryMaximumAttempts    int32                `protobuf:"varint,24,opt,name=retry_maximum_attempts,json=retryMaximumAttempts,proto3" json:"retry_maximum_attempts,omitempty"`
 	RetryBackoffCoefficient float64              `protobuf:"fixed64,25,opt,name=retry_backoff_coefficient,json=retryBackoffCoefficient,proto3" json:"retry_backoff_coefficient,omitempty"`
+	StartedEventVersion     int64                `protobuf:"varint,26,opt,name=started_event_version,json=startedEventVersion,proto3" json:"started_event_version,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -4842,6 +4851,13 @@ func (x *ActivitySyncInfo) GetRetryMaximumAttempts() int32 {
 func (x *ActivitySyncInfo) GetRetryBackoffCoefficient() float64 {
 	if x != nil {
 		return x.RetryBackoffCoefficient
+	}
+	return 0
+}
+
+func (x *ActivitySyncInfo) GetStartedEventVersion() int64 {
+	if x != nil {
+		return x.StartedEventVersion
 	}
 	return 0
 }
@@ -9971,7 +9987,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\vstatus_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"statusTime:\x0e\x92\xc4\x03\n" +
 	"\x1a\bshard_id\"\x19\n" +
-	"\x17SyncShardStatusResponse\"\xac\v\n" +
+	"\x17SyncShardStatusResponse\"\xe0\v\n" +
 	"\x13SyncActivityRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -9999,13 +10015,15 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x16retry_initial_interval\x18\x16 \x01(\v2\x19.google.protobuf.DurationR\x14retryInitialInterval\x12O\n" +
 	"\x16retry_maximum_interval\x18\x17 \x01(\v2\x19.google.protobuf.DurationR\x14retryMaximumInterval\x124\n" +
 	"\x16retry_maximum_attempts\x18\x18 \x01(\x05R\x14retryMaximumAttempts\x12:\n" +
-	"\x19retry_backoff_coefficient\x18\x19 \x01(\x01R\x17retryBackoffCoefficient:\x11\x92\xc4\x03\r*\vworkflow_id\"\xe7\x01\n" +
+	"\x19retry_backoff_coefficient\x18\x19 \x01(\x01R\x17retryBackoffCoefficient\x122\n" +
+	"\x15started_event_version\x18\x1a \x01(\x03R\x13startedEventVersion:\x11\x92\xc4\x03\r*\vworkflow_id\"\xe7\x01\n" +
 	"\x15SyncActivitiesRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
 	"\x06run_id\x18\x03 \x01(\tR\x05runId\x12`\n" +
-	"\x0factivities_info\x18\x04 \x03(\v27.temporal.server.api.historyservice.v1.ActivitySyncInfoR\x0eactivitiesInfo:\x11\x92\xc4\x03\r*\vworkflow_id\"\xd7\t\n" +
+	"\x0factivities_info\x18\x04 \x03(\v27.temporal.server.api.historyservice.v1.ActivitySyncInfoR\x0eactivitiesInfo:\x11\x92\xc4\x03\r*\vworkflow_id\"\x8b\n" +
+	"\n" +
 	"\x10ActivitySyncInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x12,\n" +
 	"\x12scheduled_event_id\x18\x02 \x01(\x03R\x10scheduledEventId\x12A\n" +
@@ -10028,7 +10046,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x16retry_initial_interval\x18\x16 \x01(\v2\x19.google.protobuf.DurationR\x14retryInitialInterval\x12O\n" +
 	"\x16retry_maximum_interval\x18\x17 \x01(\v2\x19.google.protobuf.DurationR\x14retryMaximumInterval\x124\n" +
 	"\x16retry_maximum_attempts\x18\x18 \x01(\x05R\x14retryMaximumAttempts\x12:\n" +
-	"\x19retry_backoff_coefficient\x18\x19 \x01(\x01R\x17retryBackoffCoefficient\"\x16\n" +
+	"\x19retry_backoff_coefficient\x18\x19 \x01(\x01R\x17retryBackoffCoefficient\x122\n" +
+	"\x15started_event_version\x18\x1a \x01(\x03R\x13startedEventVersion\"\x16\n" +
 	"\x14SyncActivityResponse\"\xd2\x01\n" +
 	"\x1bDescribeMutableStateRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
