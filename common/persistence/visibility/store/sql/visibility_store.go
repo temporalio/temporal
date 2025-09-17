@@ -213,7 +213,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		if lastRow.CloseTime != nil {
 			closeTime = *lastRow.CloseTime
 		}
-		nextPageToken, err = serializePageToken(&pageToken{
+		nextPageToken, err = serializePageTokenLegacy(&pageTokenLegacy{
 			CloseTime: closeTime,
 			StartTime: lastRow.StartTime,
 			RunID:     lastRow.RunID,

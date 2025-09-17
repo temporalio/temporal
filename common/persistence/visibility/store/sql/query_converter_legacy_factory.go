@@ -15,7 +15,7 @@ func NewQueryConverter(
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
 	queryString string,
-) *QueryConverter {
+) *QueryConverterLegacy {
 	switch pluginName {
 	case mysql.PluginName:
 		return newMySQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
