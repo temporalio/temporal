@@ -493,7 +493,17 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 		Request:   request,
 	})
 	if err != nil {
-		return commonnexus.AdaptAuthorizeError(err)
+		// If frontend.exposeAuthorizerErrors is false, Authorize err is either an explicitly set reason, or a generic
+		// "Request unauthorized." message.
+		// Otherwise, expose the underlying error.
+		var permissionDeniedError *serviceerror.PermissionDenied
+		if errors.As(err, &permissionDeniedError) {
+			c.outcomeTag = metrics.OutcomeTag("unauthorized")
+			return commonnexus.AdaptAuthorizeError(permissionDeniedError)
+		}
+		c.outcomeTag = metrics.OutcomeTag("internal_auth_error")
+		c.logger.Error("Authorization internal error with processing nexus callback", tag.Error(err))
+		return commonnexus.ConvertGRPCError(err, false)
 	}
 
 	if err := c.NamespaceValidationInterceptor.ValidateState(c.namespace, apiName); err != nil {
