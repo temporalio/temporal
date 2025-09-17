@@ -163,7 +163,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow() {
 	s.NoError(err)
 
 	query := fmt.Sprintf(`WorkflowId = "%s"`, id)
-	s.testHelperForReadOnce(we.GetRunId(), query, false)
+	s.testHelperForReadOnce(we.GetRunId(), query)
 }
 
 func (s *AdvancedVisibilitySuite) TestListWorkflow_ExecutionTime() {
@@ -196,16 +196,16 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_ExecutionTime() {
 
 	// WorkflowId filter is to filter workflows from other tests.
 	nonCronQueryNanos := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < %d`, id, cronID, expectedNonCronMaxExecutionTime.UnixNano())
-	s.testHelperForReadOnce(weNonCron.GetRunId(), nonCronQueryNanos, false)
+	s.testHelperForReadOnce(weNonCron.GetRunId(), nonCronQueryNanos)
 
 	cronQueryNanos := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < %d AND ExecutionTime > %d`, id, cronID, expectedCronMaxExecutionTime.UnixNano(), expectedNonCronMaxExecutionTime.UnixNano())
-	s.testHelperForReadOnce(weCron.GetRunId(), cronQueryNanos, false)
+	s.testHelperForReadOnce(weCron.GetRunId(), cronQueryNanos)
 
 	nonCronQuery := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < "%s"`, id, cronID, expectedNonCronMaxExecutionTime.Format(time.RFC3339Nano))
-	s.testHelperForReadOnce(weNonCron.GetRunId(), nonCronQuery, false)
+	s.testHelperForReadOnce(weNonCron.GetRunId(), nonCronQuery)
 
 	cronQuery := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < "%s" AND ExecutionTime > "%s"`, id, cronID, expectedCronMaxExecutionTime.Format(time.RFC3339Nano), expectedNonCronMaxExecutionTime.Format(time.RFC3339Nano))
-	s.testHelperForReadOnce(weCron.GetRunId(), cronQuery, false)
+	s.testHelperForReadOnce(weCron.GetRunId(), cronQuery)
 }
 
 func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
@@ -225,7 +225,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
 	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, testSearchAttributeKey, testSearchAttributeVal)
-	s.testHelperForReadOnce(we.GetRunId(), query, false)
+	s.testHelperForReadOnce(we.GetRunId(), query)
 
 	searchAttributes := s.createSearchAttributes()
 	// test upsert
@@ -300,7 +300,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_PageToken() {
 	numOfWorkflows := testcore.DefaultPageSize - 1 // == 4
 	pageSize := 3
 
-	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt, false)
+	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt)
 }
 
 func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAfter() {
@@ -312,7 +312,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAfter() {
 	numOfWorkflows := testcore.DefaultPageSize + 1 // == 6
 	pageSize := 4
 
-	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt, false)
+	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt)
 }
 
 func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
@@ -625,6 +625,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
 
+	ctx := testcore.NewContext()
 	id := "es-functional-list-workflow-order-by-test"
 	wt := "es-functional-list-workflow-order-by-test-type"
 	tl := "es-functional-list-workflow-order-by-test-taskqueue"
@@ -663,7 +664,21 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 		s.NoError(err)
 	}
 
-	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
+	s.EventuallyWithT(
+		func(c *assert.CollectT) {
+			resp, err := s.FrontendClient().CountWorkflowExecutions(
+				ctx,
+				&workflowservice.CountWorkflowExecutionsRequest{
+					Namespace: s.Namespace().String(),
+					Query:     fmt.Sprintf(`WorkflowType = "%s"`, wt),
+				},
+			)
+			require.NoError(c, err)
+			require.EqualValues(c, 6, resp.GetCount())
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
 
 	desc := "desc"
 	asc := "asc"
@@ -678,20 +693,14 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 		PageSize:  pageSize,
 		Query:     query1,
 	}
-	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
-		s.NoError(err)
-		if int32(len(resp.GetExecutions())) == listRequest.GetPageSize() {
-			openExecutions = resp.GetExecutions()
-			break
-		}
-		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
-	}
-	s.NotNil(openExecutions)
+	resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), int(pageSize))
+	openExecutions = resp.GetExecutions()
 	for i := int32(1); i < pageSize; i++ {
 		e1 := openExecutions[i-1]
 		e2 := openExecutions[i]
-		if e2.GetCloseTime() != nil {
+		if e1.GetCloseTime() != nil && e2.GetCloseTime() != nil {
 			s.NotEqual(time.Time{}, *e1.GetCloseTime())
 			s.GreaterOrEqual(e2.GetCloseTime(), e1.GetCloseTime())
 		}
@@ -701,7 +710,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 	testHelper := func(query, searchAttrKey string, prevVal, currVal interface{}) {
 		listRequest.Query = query
 		listRequest.NextPageToken = []byte{}
-		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
+		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, listRequest)
 		s.NoError(err)
 		openExecutions = resp.GetExecutions()
 		dec := json.NewDecoder(bytes.NewReader(openExecutions[0].GetSearchAttributes().GetIndexedFields()[searchAttrKey].GetData()))
@@ -738,7 +747,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 			prevVal = currVal
 		}
 		listRequest.NextPageToken = resp.GetNextPageToken()
-		resp, err = s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest) // last page
+		resp, err = s.FrontendClient().ListWorkflowExecutions(ctx, listRequest) // last page
 		s.NoError(err)
 		s.Equal(1, len(resp.GetExecutions()))
 	}
@@ -768,10 +777,11 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 	testHelper(query, field, t1, t2)
 }
 
-//nolint:revive // isScan is a control flag
-func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSize int,
-	startRequest *workflowservice.StartWorkflowExecutionRequest, wid, wType string, isScan bool) {
-
+func (s *AdvancedVisibilitySuite) testListWorkflowHelper(
+	numOfWorkflows, pageSize int,
+	startRequest *workflowservice.StartWorkflowExecutionRequest,
+	wid, wType string,
+) {
 	// start enough number of workflows
 	for i := 0; i < numOfWorkflows; i++ {
 		startRequest.RequestId = uuid.New()
@@ -792,31 +802,14 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 		Query:         fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wType),
 	}
 
-	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
-		Namespace:     s.Namespace().String(),
-		PageSize:      int32(pageSize),
-		NextPageToken: nextPageToken,
-		Query:         fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wType),
-	}
-
 	// test first page
 	for i := 0; i < numOfRetry; i++ {
-		if isScan {
-			scanResponse, err := s.FrontendClient().ScanWorkflowExecutions(testcore.NewContext(), scanRequest)
-			s.NoError(err)
-			if len(scanResponse.GetExecutions()) == pageSize {
-				openExecutions = scanResponse.GetExecutions()
-				nextPageToken = scanResponse.GetNextPageToken()
-				break
-			}
-		} else {
-			listResponse, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
-			s.NoError(err)
-			if len(listResponse.GetExecutions()) == pageSize {
-				openExecutions = listResponse.GetExecutions()
-				nextPageToken = listResponse.GetNextPageToken()
-				break
-			}
+		listResponse, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
+		s.NoError(err)
+		if len(listResponse.GetExecutions()) == pageSize {
+			openExecutions = listResponse.GetExecutions()
+			nextPageToken = listResponse.GetNextPageToken()
+			break
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
@@ -826,27 +819,15 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 
 	// test last page
 	listRequest.NextPageToken = nextPageToken
-	scanRequest.NextPageToken = nextPageToken
 	inIf := false
 	for i := 0; i < numOfRetry; i++ {
-		if isScan {
-			scanResponse, err := s.FrontendClient().ScanWorkflowExecutions(testcore.NewContext(), scanRequest)
-			s.NoError(err)
-			if len(scanResponse.GetExecutions()) == numOfWorkflows-pageSize {
-				inIf = true
-				openExecutions = scanResponse.GetExecutions()
-				nextPageToken = scanResponse.GetNextPageToken()
-				break
-			}
-		} else {
-			listResponse, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
-			s.NoError(err)
-			if len(listResponse.GetExecutions()) == numOfWorkflows-pageSize {
-				inIf = true
-				openExecutions = listResponse.GetExecutions()
-				nextPageToken = listResponse.GetNextPageToken()
-				break
-			}
+		listResponse, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
+		s.NoError(err)
+		if len(listResponse.GetExecutions()) == numOfWorkflows-pageSize {
+			inIf = true
+			openExecutions = listResponse.GetExecutions()
+			nextPageToken = listResponse.GetNextPageToken()
+			break
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
@@ -855,37 +836,21 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 	s.Nil(nextPageToken)
 }
 
-//nolint:revive // isScan is a control flag
-func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, query string, isScan bool) {
+func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, query string) {
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.Namespace().String(),
 		PageSize:  testcore.DefaultPageSize,
 		Query:     query,
 	}
-	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
-		Namespace: s.Namespace().String(),
-		PageSize:  testcore.DefaultPageSize,
-		Query:     query,
-	}
 
 	for i := 0; i < numOfRetry; i++ {
-		if isScan {
-			scanResponse, err := s.FrontendClient().ScanWorkflowExecutions(testcore.NewContext(), scanRequest)
-			s.NoError(err)
-			if len(scanResponse.GetExecutions()) == 1 {
-				openExecution = scanResponse.GetExecutions()[0]
-				s.Nil(scanResponse.NextPageToken)
-				break
-			}
-		} else {
-			listResponse, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
-			s.NoError(err)
-			if len(listResponse.GetExecutions()) == 1 {
-				openExecution = listResponse.GetExecutions()[0]
-				s.Nil(listResponse.NextPageToken)
-				break
-			}
+		listResponse, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
+		s.NoError(err)
+		if len(listResponse.GetExecutions()) == 1 {
+			openExecution = listResponse.GetExecutions()[0]
+			s.Nil(listResponse.NextPageToken)
+			break
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
@@ -898,92 +863,6 @@ func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, qu
 		_ = payload.Decode(searchValBytes, &searchVal)
 		s.Equal(testSearchAttributeVal, searchVal)
 	}
-}
-
-func (s *AdvancedVisibilitySuite) TestScanWorkflow() {
-	if testcore.UseSQLVisibility() {
-		s.T().Skip("This test is only for Elasticsearch")
-	}
-
-	id := "es-functional-scan-workflow-test"
-	wt := "es-functional-scan-workflow-test-type"
-	tl := "es-functional-scan-workflow-test-taskqueue"
-	identity := "worker1"
-
-	workflowType := &commonpb.WorkflowType{Name: wt}
-
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-
-	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
-		Namespace:           s.Namespace().String(),
-		WorkflowId:          id,
-		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
-		Input:               nil,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            identity,
-	}
-
-	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-	s.NoError(err)
-	query := fmt.Sprintf(`WorkflowId = "%s"`, id)
-	s.testHelperForReadOnce(we.GetRunId(), query, true)
-}
-
-func (s *AdvancedVisibilitySuite) TestScanWorkflow_SearchAttribute() {
-	if testcore.UseSQLVisibility() {
-		s.T().Skip("This test is only for Elasticsearch")
-	}
-
-	id := "es-functional-scan-workflow-search-attr-test"
-	wt := "es-functional-scan-workflow-search-attr-test-type"
-	tl := "es-functional-scan-workflow-search-attr-test-taskqueue"
-	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
-
-	attrValBytes, _ := payload.Encode(testSearchAttributeVal)
-	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
-			testSearchAttributeKey: attrValBytes,
-		},
-	}
-	request.SearchAttributes = searchAttr
-
-	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-	s.NoError(err)
-	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, testSearchAttributeKey, testSearchAttributeVal)
-	s.testHelperForReadOnce(we.GetRunId(), query, true)
-}
-
-func (s *AdvancedVisibilitySuite) TestScanWorkflow_PageToken() {
-	if testcore.UseSQLVisibility() {
-		s.T().Skip("This test is only for Elasticsearch")
-	}
-
-	id := "es-functional-scan-workflow-token-test"
-	wt := "es-functional-scan-workflow-token-test-type"
-	tl := "es-functional-scan-workflow-token-test-taskqueue"
-	identity := "worker1"
-
-	workflowType := &commonpb.WorkflowType{Name: wt}
-
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-
-	request := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:           s.Namespace().String(),
-		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
-		Input:               nil,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            identity,
-	}
-
-	numOfWorkflows := 4
-	pageSize := 3
-
-	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt, true)
 }
 
 func (s *AdvancedVisibilitySuite) TestCountWorkflow() {
@@ -1859,7 +1738,7 @@ func (s *AdvancedVisibilitySuite) Test_LongWorkflowID() {
 	s.NoError(err)
 
 	query := fmt.Sprintf(`WorkflowId = "%s"`, id)
-	s.testHelperForReadOnce(we.GetRunId(), query, false)
+	s.testHelperForReadOnce(we.GetRunId(), query)
 }
 
 func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWorker() {
