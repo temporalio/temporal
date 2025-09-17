@@ -43,6 +43,9 @@ type (
 	FunctionalClustersTestSuite struct {
 		xdcBaseSuite
 	}
+	FunctionalClustersWithRedirectionTestSuite struct {
+		FunctionalClustersTestSuite
+	}
 )
 
 func TestFuncClustersTestSuite(t *testing.T) {
@@ -69,13 +72,7 @@ func TestFuncClustersTestSuite(t *testing.T) {
 }
 
 func (s *FunctionalClustersTestSuite) SetupSuite() {
-	s.setupSuite(
-		testcore.WithFxOptionsForService(primitives.FrontendService,
-			fx.Decorate(func(_ config.DCRedirectionPolicy) config.DCRedirectionPolicy {
-				return config.DCRedirectionPolicy{Policy: "all-apis-forwarding"}
-			}),
-		),
-	)
+	s.setupSuite()
 }
 
 func (s *FunctionalClustersTestSuite) SetupTest() {
@@ -2103,122 +2100,6 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.Equal(2, lastAttemptCount)
 }
 
-func (s *FunctionalClustersTestSuite) TestActivityMultipleHeartbeatsAcrossFailover() {
-	namespace := s.createGlobalNamespace()
-
-	taskqueue := "functional-activity-multi-heartbeat-failover-test-taskqueue"
-	client0, worker0 := s.newClientAndWorker(s.clusters[0].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker0")
-
-	// Orchestration channels
-	hb1Ch := make(chan struct{}, 1)
-	hb2Ch := make(chan struct{}, 1)
-	hb3Ch := make(chan struct{}, 1)
-	allowFailover := make(chan struct{})
-	allowComplete := make(chan struct{})
-
-	// Values to heartbeat in sequence
-	hb1Val := 1
-	hb2Val := 2
-	hb3Val := 3
-
-	activityWithMultipleHB := func(ctx context.Context) error {
-		// Heartbeat before failover
-		activity.RecordHeartbeat(ctx, hb1Val)
-		select {
-		case hb1Ch <- struct{}{}:
-		default:
-		}
-		// wait for failover
-		<-allowFailover
-
-		// After failover, verify we can still heartbeat and complete
-		if activity.HasHeartbeatDetails(ctx) {
-			var v int
-			_ = activity.GetHeartbeatDetails(ctx, &v)
-		}
-		activity.RecordHeartbeat(ctx, hb2Val)
-		select {
-		case hb2Ch <- struct{}{}:
-		default:
-		}
-		activity.RecordHeartbeat(ctx, hb3Val)
-		select {
-		case hb3Ch <- struct{}{}:
-		default:
-		}
-		<-allowComplete
-		return nil
-	}
-
-	testWorkflowFn := func(ctx workflow.Context) error {
-		ao := workflow.ActivityOptions{
-			StartToCloseTimeout: time.Second * 120,
-			HeartbeatTimeout:    time.Second * 10,
-		}
-		ctx = workflow.WithActivityOptions(ctx, ao)
-		return workflow.ExecuteActivity(ctx, activityWithMultipleHB).Get(ctx, nil)
-	}
-
-	worker0.RegisterWorkflow(testWorkflowFn)
-	worker0.RegisterActivity(activityWithMultipleHB)
-	s.NoError(worker0.Start())
-	defer worker0.Stop()
-
-	// Start a workflow
-	workflowID := "functional-activity-multi-heartbeat-failover-test"
-	run, err := client0.ExecuteWorkflow(testcore.NewContext(), sdkclient.StartWorkflowOptions{
-		ID:                 workflowID,
-		TaskQueue:          taskqueue,
-		WorkflowRunTimeout: time.Second * 300,
-	}, testWorkflowFn)
-	s.NoError(err)
-	s.NotEmpty(run.GetRunID())
-
-	// Wait for first heartbeat to be sent
-	<-hb1Ch
-
-	// Validate heartbeat1 is visible before failover (eventually)
-	var hbVal int
-	s.Eventually(func() bool {
-		desc0, err := client0.DescribeWorkflowExecution(testcore.NewContext(), workflowID, "")
-		if err != nil || len(desc0.GetPendingActivities()) != 1 {
-			return false
-		}
-		hbVal = 0
-		if err := payloads.Decode(desc0.PendingActivities[0].GetHeartbeatDetails(), &hbVal); err != nil {
-			return false
-		}
-		return hbVal == hb1Val
-	}, 10*time.Second, 200*time.Millisecond)
-
-	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
-	// nolint:forbidigo
-	time.Sleep(time.Second * 4)
-
-	close(allowFailover)
-	// Wait for heartbeats from second attempt
-	<-hb2Ch
-	<-hb3Ch
-
-	// Validate latest heartbeat is visible in new active cluster (eventually)
-	s.Eventually(func() bool {
-		desc1, err := client0.DescribeWorkflowExecution(testcore.NewContext(), workflowID, "")
-		if err != nil || len(desc1.GetPendingActivities()) != 1 {
-			return false
-		}
-		hbVal = 0
-		if err := payloads.Decode(desc1.PendingActivities[0].GetHeartbeatDetails(), &hbVal); err != nil {
-			return false
-		}
-		return hbVal == hb3Val
-	}, 10*time.Second, 200*time.Millisecond)
-
-	// Complete the activity and workflow
-	close(allowComplete)
-
-	s.NoError(run.Get(testcore.NewContext(), nil))
-}
-
 func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -2792,4 +2673,161 @@ func (s *FunctionalClustersTestSuite) newClientAndWorker(hostport, namespace, ta
 	})
 
 	return sdkClient, worker
+}
+
+func TestFuncClustersWithRedirectionTestSuite(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                    string
+		enableTransitionHistory bool
+	}{
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
+		},
+		{
+			name:                    "DisableTransitionHistory",
+			enableTransitionHistory: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &FunctionalClustersWithRedirectionTestSuite{}
+			s.enableTransitionHistory = tc.enableTransitionHistory
+			suite.Run(t, s)
+		})
+	}
+}
+
+func (s *FunctionalClustersWithRedirectionTestSuite) SetupSuite() {
+	s.setupSuite(
+		testcore.WithFxOptionsForService(primitives.FrontendService,
+			fx.Decorate(func(_ config.DCRedirectionPolicy) config.DCRedirectionPolicy {
+				return config.DCRedirectionPolicy{Policy: "all-apis-forwarding"}
+			}),
+		),
+	)
+}
+
+func (s *FunctionalClustersWithRedirectionTestSuite) SetupTest() {
+	s.setupTest()
+}
+
+func (s *FunctionalClustersWithRedirectionTestSuite) TearDownSuite() {
+	s.tearDownSuite()
+}
+
+func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbeatsAcrossFailover() {
+	namespace := s.createGlobalNamespace()
+
+	taskqueue := "functional-activity-multi-heartbeat-failover-test-taskqueue"
+	client0, worker0 := s.newClientAndWorker(s.clusters[0].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker0")
+
+	// Orchestration channels
+	hb1Ch := make(chan struct{}, 1)
+	hb2Ch := make(chan struct{}, 1)
+	hb3Ch := make(chan struct{}, 1)
+	allowFailover := make(chan struct{})
+	allowComplete := make(chan struct{})
+
+	// Values to heartbeat in sequence
+	hb1Val := 1
+	hb2Val := 2
+	hb3Val := 3
+
+	activityWithMultipleHB := func(ctx context.Context) error {
+		// Heartbeat before failover
+		activity.RecordHeartbeat(ctx, hb1Val)
+		select {
+		case hb1Ch <- struct{}{}:
+		default:
+		}
+		// wait for failover
+		<-allowFailover
+
+		// After failover, verify we can still heartbeat and complete
+		if activity.HasHeartbeatDetails(ctx) {
+			var v int
+			_ = activity.GetHeartbeatDetails(ctx, &v)
+		}
+		activity.RecordHeartbeat(ctx, hb2Val)
+		select {
+		case hb2Ch <- struct{}{}:
+		default:
+		}
+		activity.RecordHeartbeat(ctx, hb3Val)
+		select {
+		case hb3Ch <- struct{}{}:
+		default:
+		}
+		<-allowComplete
+		return nil
+	}
+
+	testWorkflowFn := func(ctx workflow.Context) error {
+		ao := workflow.ActivityOptions{
+			StartToCloseTimeout: time.Second * 120,
+			HeartbeatTimeout:    time.Second * 10,
+		}
+		ctx = workflow.WithActivityOptions(ctx, ao)
+		return workflow.ExecuteActivity(ctx, activityWithMultipleHB).Get(ctx, nil)
+	}
+
+	worker0.RegisterWorkflow(testWorkflowFn)
+	worker0.RegisterActivity(activityWithMultipleHB)
+	s.NoError(worker0.Start())
+	defer worker0.Stop()
+
+	// Start a workflow
+	workflowID := "functional-activity-multi-heartbeat-failover-test"
+	run, err := client0.ExecuteWorkflow(testcore.NewContext(), sdkclient.StartWorkflowOptions{
+		ID:                 workflowID,
+		TaskQueue:          taskqueue,
+		WorkflowRunTimeout: time.Second * 300,
+	}, testWorkflowFn)
+	s.NoError(err)
+	s.NotEmpty(run.GetRunID())
+
+	// Wait for first heartbeat to be sent
+	<-hb1Ch
+
+	// Validate heartbeat1 is visible before failover (eventually)
+	var hbVal int
+	s.Eventually(func() bool {
+		desc0, err := client0.DescribeWorkflowExecution(testcore.NewContext(), workflowID, "")
+		if err != nil || len(desc0.GetPendingActivities()) != 1 {
+			return false
+		}
+		hbVal = 0
+		if err := payloads.Decode(desc0.PendingActivities[0].GetHeartbeatDetails(), &hbVal); err != nil {
+			return false
+		}
+		return hbVal == hb1Val
+	}, 10*time.Second, 200*time.Millisecond)
+
+	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+	// nolint:forbidigo
+	time.Sleep(time.Second * 4)
+
+	close(allowFailover)
+	// Wait for heartbeats from second attempt
+	<-hb2Ch
+	<-hb3Ch
+
+	// Validate latest heartbeat is visible in new active cluster (eventually)
+	s.Eventually(func() bool {
+		desc1, err := client0.DescribeWorkflowExecution(testcore.NewContext(), workflowID, "")
+		if err != nil || len(desc1.GetPendingActivities()) != 1 {
+			return false
+		}
+		hbVal = 0
+		if err := payloads.Decode(desc1.PendingActivities[0].GetHeartbeatDetails(), &hbVal); err != nil {
+			return false
+		}
+		return hbVal == hb3Val
+	}, 10*time.Second, 200*time.Millisecond)
+
+	// Complete the activity and workflow
+	close(allowComplete)
+
+	s.NoError(run.Get(testcore.NewContext(), nil))
 }
