@@ -252,6 +252,7 @@ func recordActivityTaskStarted(
 	response.Attempt = ai.Attempt
 	response.HeartbeatDetails = ai.LastHeartbeatDetails
 	response.Version = ai.Version
+	response.StartVersion = ai.StartVersion
 
 	response.WorkflowType = mutableState.GetWorkflowType()
 	response.WorkflowNamespace = namespaceName

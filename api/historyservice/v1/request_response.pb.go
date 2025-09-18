@@ -1735,6 +1735,7 @@ type RecordActivityTaskStartedResponse struct {
 	Version                     int64                  `protobuf:"varint,9,opt,name=version,proto3" json:"version,omitempty"`
 	Priority                    *v14.Priority          `protobuf:"bytes,10,opt,name=priority,proto3" json:"priority,omitempty"`
 	RetryPolicy                 *v14.RetryPolicy       `protobuf:"bytes,11,opt,name=retry_policy,json=retryPolicy,proto3" json:"retry_policy,omitempty"`
+	StartVersion                int64                  `protobuf:"varint,12,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
 	unknownFields               protoimpl.UnknownFields
 	sizeCache                   protoimpl.SizeCache
 }
@@ -1844,6 +1845,13 @@ func (x *RecordActivityTaskStartedResponse) GetRetryPolicy() *v14.RetryPolicy {
 		return x.RetryPolicy
 	}
 	return nil
+}
+
+func (x *RecordActivityTaskStartedResponse) GetStartVersion() int64 {
+	if x != nil {
+		return x.StartVersion
+	}
+	return 0
 }
 
 type RespondWorkflowTaskCompletedRequest struct {
@@ -9822,7 +9830,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x05stamp\x18\t \x01(\x05R\x05stamp\x12Y\n" +
 	"\x14scheduled_deployment\x18\n" +
 	" \x01(\v2&.temporal.api.deployment.v1.DeploymentR\x13scheduledDeployment\x12c\n" +
-	"\x11version_directive\x18\f \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05J\x04\b\v\x10\f\"\xd7\x05\n" +
+	"\x11version_directive\x18\f \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05J\x04\b\v\x10\f\"\xfc\x05\n" +
 	"!RecordActivityTaskStartedResponse\x12N\n" +
 	"\x0fscheduled_event\x18\x01 \x01(\v2%.temporal.api.history.v1.HistoryEventR\x0escheduledEvent\x12=\n" +
 	"\fstarted_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vstartedTime\x12\x18\n" +
@@ -9835,7 +9843,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\aversion\x18\t \x01(\x03R\aversion\x12<\n" +
 	"\bpriority\x18\n" +
 	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12F\n" +
-	"\fretry_policy\x18\v \x01(\v2#.temporal.api.common.v1.RetryPolicyR\vretryPolicy\"\xdc\x01\n" +
+	"\fretry_policy\x18\v \x01(\v2#.temporal.api.common.v1.RetryPolicyR\vretryPolicy\x12#\n" +
+	"\rstart_version\x18\f \x01(\x03R\fstartVersion\"\xdc\x01\n" +
 	"#RespondWorkflowTaskCompletedRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12o\n" +
 	"\x10complete_request\x18\x02 \x01(\v2D.temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequestR\x0fcompleteRequest:!\x92\xc4\x03\x1d2\x1bcomplete_request.task_token\"\xa7\x03\n" +
