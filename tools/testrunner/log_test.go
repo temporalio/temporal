@@ -21,3 +21,30 @@ func TestParseTestTimeouts(t *testing.T) {
 	}, tests)
 	require.Equal(t, string(logOutput), stacktrace)
 }
+
+func TestParseAlerts_DataRaceAndPanic(t *testing.T) {
+	input, err := os.ReadFile("testdata/alerts-input.log")
+	require.NoError(t, err)
+
+	alerts := parseAlerts(string(input))
+	require.NotEmpty(t, alerts)
+
+	// Expect at least one data race and one panic alert.
+	var hasRace, hasPanic bool
+	for _, a := range alerts {
+		switch a.Kind {
+		case alertKindDataRace:
+			hasRace = true
+			require.Contains(t, a.Details, "WARNING: DATA RACE")
+		case alertKindPanic:
+			hasPanic = true
+			require.Contains(t, a.Details, "panic: ")
+		}
+	}
+	require.True(t, hasRace, "expected at least one data race alert")
+	require.True(t, hasPanic, "expected at least one panic alert")
+
+	// Ensure dedupe works: applying twice should not increase count.
+	deduped := dedupeAlerts(append(alerts, alerts...))
+	require.LessOrEqual(t, len(deduped), len(alerts))
+}

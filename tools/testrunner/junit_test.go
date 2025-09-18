@@ -115,6 +115,40 @@ func TestMergeReports_MissingRerun(t *testing.T) {
 	require.Equal(t, errors.New("expected rerun of all failures from previous attempt, missing: [TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument]"), report.reportingErrs[1])
 }
 
+func TestAppendAlertsSuite(t *testing.T) {
+	j := &junitReport{}
+	alerts := []alert{
+		{Kind: alertKindDataRace, Summary: "Data race detected", Details: "WARNING: DATA RACE\n..."},
+		{Kind: alertKindPanic, Summary: "This is a panic", Details: "panic: This is a panic\n..."},
+	}
+	j.appendAlertsSuite(alerts)
+
+	require.Len(t, j.Testsuites.Suites, 1)
+	suite := j.Testsuites.Suites[0]
+	require.Equal(t, "ALERTS", suite.Name)
+	require.Equal(t, 2, suite.Failures)
+	require.Equal(t, 2, suite.Tests)
+	require.Len(t, suite.Testcases, 2)
+
+	// Validate the first testcase looks like a DATA RACE alert.
+	tc0 := suite.Testcases[0]
+	require.Contains(t, tc0.Name, "DATA RACE")
+	require.NotNil(t, tc0.Failure)
+	require.Equal(t, "DATA RACE", tc0.Failure.Message)
+	require.Contains(t, tc0.Failure.Data, "WARNING: DATA RACE")
+
+	// Validate the second testcase looks like a PANIC alert.
+	tc1 := suite.Testcases[1]
+	require.Contains(t, tc1.Name, "PANIC")
+	require.NotNil(t, tc1.Failure)
+	require.Equal(t, "PANIC", tc1.Failure.Message)
+	require.Contains(t, tc1.Failure.Data, "panic: This is a panic")
+
+	// Ensure totals updated at the top level.
+	require.Equal(t, 2, j.Testsuites.Failures)
+	require.Equal(t, 2, j.Testsuites.Tests)
+}
+
 func collectTestNames(suites []junit.Testsuite) []string {
 	var testNames []string
 	for _, suite := range suites {

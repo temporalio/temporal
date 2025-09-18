@@ -14,8 +14,8 @@ import (
 )
 
 type junitReport struct {
-	path string
 	junit.Testsuites
+	path          string
 	reportingErrs []error
 }
 
