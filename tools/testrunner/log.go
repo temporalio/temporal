@@ -81,6 +81,7 @@ type alert struct {
 	Kind    alertKind
 	Summary string
 	Details string
+	Tests   []string
 }
 
 // parseAlerts scans a gotestsum/go test stdout stream and extracts high-priority
@@ -115,10 +116,12 @@ func parseAlerts(stdout string) []alert {
 					break
 				}
 			}
+			block := b.String()
 			alerts = append(alerts, alert{
 				Kind:    alertKindDataRace,
 				Summary: "Data race detected",
-				Details: b.String(),
+				Details: block,
+				Tests:   extractTestNames(block),
 			})
 			continue
 		}
@@ -136,10 +139,12 @@ func parseAlerts(stdout string) []alert {
 					break
 				}
 			}
+			block := b.String()
 			alerts = append(alerts, alert{
 				Kind:    alertKindPanic,
 				Summary: strings.TrimSpace(strings.TrimPrefix(line, "panic: ")),
-				Details: b.String(),
+				Details: block,
+				Tests:   extractTestNames(block),
 			})
 			i = j
 			continue
@@ -158,10 +163,12 @@ func parseAlerts(stdout string) []alert {
 					break
 				}
 			}
+			block := b.String()
 			alerts = append(alerts, alert{
 				Kind:    alertKindFatal,
 				Summary: strings.TrimSpace(strings.TrimPrefix(line, "fatal error: ")),
-				Details: b.String(),
+				Details: block,
+				Tests:   extractTestNames(block),
 			})
 			i = j
 			continue
@@ -169,6 +176,63 @@ func parseAlerts(stdout string) []alert {
 	}
 
 	return alerts
+}
+
+// extractTestNames tries to identify Go test function names from a log block.
+// It looks for fully-qualified names like pkg.TestXxx(...) and '--- FAIL: TestXxx' lines.
+func extractTestNames(block string) []string {
+	var tests []string
+	seen := make(map[string]struct{})
+	for _, line := range strings.Split(block, "\n") {
+		l := strings.TrimSpace(line)
+		if l == "" {
+			continue
+		}
+		// Match '--- FAIL: TestName' or '--- PASS: TestName' etc.
+		if strings.HasPrefix(l, "--- ") {
+			// format: --- FAIL: TestName (0.00s)
+			parts := strings.Split(l, ":")
+			if len(parts) >= 2 {
+				name := strings.TrimSpace(parts[1])
+				// name may contain duration suffix; split on space
+				name = strings.Split(name, " ")[0]
+				if strings.HasPrefix(name, "Test") {
+					if _, ok := seen[name]; !ok {
+						seen[name] = struct{}{}
+						tests = append(tests, name)
+					}
+					continue
+				}
+			}
+		}
+		// Match fully-qualified 'pkg/path.TestName(' occurrences.
+		// Find ' TestName(' token preceded by a dot.
+		// Example: go.temporal.io/server/tools/testrunner.TestShowPanic(...)
+		if idx := strings.Index(l, ".Test"); idx >= 0 {
+			// Extract token until '('
+			rest := l[idx+1:]
+			if p := strings.Index(rest, "("); p > 0 {
+				fq := rest[:p]
+				// Keep the full qualifier to aid identification in CI
+				if _, ok := seen[fq]; !ok {
+					seen[fq] = struct{}{}
+					tests = append(tests, fq)
+				}
+			}
+		}
+		// Fallback: plain 'TestName(' at line start
+		if strings.HasPrefix(l, "Test") && strings.Contains(l, "(") {
+			name := l
+			if p := strings.Index(name, "("); p > 0 {
+				name = name[:p]
+			}
+			if _, ok := seen[name]; !ok {
+				seen[name] = struct{}{}
+				tests = append(tests, name)
+			}
+		}
+	}
+	return tests
 }
 
 // dedupeAlerts removes duplicate alerts (e.g., repeated across retries) based
@@ -200,7 +264,11 @@ func printAlertsSummary(alerts []alert) {
 	}
 	log.Printf("%s\nFULL ALERT DETAILS:\n%s", banner, banner)
 	for idx, a := range alerts {
-		log.Printf("-- Alert %d: [%s] %s --\n%s", idx+1, a.Kind, a.Summary, a.Details)
+		if len(a.Tests) > 0 {
+			log.Printf("-- Alert %d: [%s] %s --\nDetected in tests:\n\t%s\n\n%s", idx+1, a.Kind, a.Summary, strings.Join(a.Tests, "\n\t"), a.Details)
+		} else {
+			log.Printf("-- Alert %d: [%s] %s --\n%s", idx+1, a.Kind, a.Summary, a.Details)
+		}
 	}
 	log.Printf("%s\n", banner)
 }

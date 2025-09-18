@@ -36,9 +36,13 @@ func TestParseAlerts_DataRaceAndPanic(t *testing.T) {
 		case alertKindDataRace:
 			hasRace = true
 			require.Contains(t, a.Details, "WARNING: DATA RACE")
+			// Ensure we extracted at least one test name.
+			require.NotEmpty(t, a.Tests)
 		case alertKindPanic:
 			hasPanic = true
 			require.Contains(t, a.Details, "panic: ")
+			// Ensure we extracted at least one test name.
+			require.NotEmpty(t, a.Tests)
 		}
 	}
 	require.True(t, hasRace, "expected at least one data race alert")

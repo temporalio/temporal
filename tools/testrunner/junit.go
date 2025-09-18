@@ -78,8 +78,12 @@ func (j *junitReport) appendAlertsSuite(alerts []alert) {
 	var cases []junit.Testcase
 	for _, a := range alerts {
 		name := fmt.Sprintf("%s: %s", a.Kind, a.Summary)
-		// Use Failure with CDATA data so it renders prominently.
-		r := &junit.Result{Message: string(a.Kind), Data: a.Details}
+		// Prepend detected test names to the details for quick context in CI UIs.
+		details := a.Details
+		if len(a.Tests) > 0 {
+			details = fmt.Sprintf("Detected in tests:\n\t%s\n\n%s", strings.Join(a.Tests, "\n\t"), a.Details)
+		}
+		r := &junit.Result{Message: string(a.Kind), Data: details}
 		cases = append(cases, junit.Testcase{
 			Name:    name,
 			Failure: r,

@@ -118,8 +118,8 @@ func TestMergeReports_MissingRerun(t *testing.T) {
 func TestAppendAlertsSuite(t *testing.T) {
 	j := &junitReport{}
 	alerts := []alert{
-		{Kind: alertKindDataRace, Summary: "Data race detected", Details: "WARNING: DATA RACE\n..."},
-		{Kind: alertKindPanic, Summary: "This is a panic", Details: "panic: This is a panic\n..."},
+		{Kind: alertKindDataRace, Summary: "Data race detected", Details: "WARNING: DATA RACE\n...", Tests: []string{"go.temporal.io/server/tools/testrunner.TestShowPanic"}},
+		{Kind: alertKindPanic, Summary: "This is a panic", Details: "panic: This is a panic\n...", Tests: []string{"TestPanicExample"}},
 	}
 	j.appendAlertsSuite(alerts)
 
@@ -136,6 +136,8 @@ func TestAppendAlertsSuite(t *testing.T) {
 	require.NotNil(t, tc0.Failure)
 	require.Equal(t, "DATA RACE", tc0.Failure.Message)
 	require.Contains(t, tc0.Failure.Data, "WARNING: DATA RACE")
+	require.Contains(t, tc0.Failure.Data, "Detected in tests:")
+	require.Contains(t, tc0.Failure.Data, "go.temporal.io/server/tools/testrunner.TestShowPanic")
 
 	// Validate the second testcase looks like a PANIC alert.
 	tc1 := suite.Testcases[1]
@@ -143,6 +145,8 @@ func TestAppendAlertsSuite(t *testing.T) {
 	require.NotNil(t, tc1.Failure)
 	require.Equal(t, "PANIC", tc1.Failure.Message)
 	require.Contains(t, tc1.Failure.Data, "panic: This is a panic")
+	require.Contains(t, tc1.Failure.Data, "Detected in tests:")
+	require.Contains(t, tc1.Failure.Data, "TestPanicExample")
 
 	// Ensure totals updated at the top level.
 	require.Equal(t, 2, j.Testsuites.Failures)
