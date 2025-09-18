@@ -2224,7 +2224,7 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	taskID := uuid.New()
 
 	// Buffer the deadline so we can still respond with timeout if we hit the deadline while dispatching
-	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, time.Second)
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, commonnexus.NexusTimeoutBuffer)
 	defer cancel()
 
 	resp, err := pm.DispatchNexusTask(ctx, taskID, request)
