@@ -101,14 +101,15 @@ func NewInterceptor(
 	exposeAuthorizerErrors dynamicconfig.BoolPropertyFn,
 ) *Interceptor {
 	return &Interceptor{
-		claimMapper:         claimMapper,
-		authorizer:          authorizer,
-		logger:              logger,
-		namespaceChecker:    namespaceChecker,
-		metricsHandler:      metricsHandler,
-		authHeaderName:      cmp.Or(authHeaderName, defaultAuthHeaderName),
-		authExtraHeaderName: cmp.Or(authExtraHeaderName, defaultAuthExtraHeaderName),
-		audienceGetter:      audienceGetter,
+		claimMapper:            claimMapper,
+		authorizer:             authorizer,
+		logger:                 logger,
+		namespaceChecker:       namespaceChecker,
+		metricsHandler:         metricsHandler,
+		authHeaderName:         cmp.Or(authHeaderName, defaultAuthHeaderName),
+		authExtraHeaderName:    cmp.Or(authExtraHeaderName, defaultAuthExtraHeaderName),
+		audienceGetter:         audienceGetter,
+		exposeAuthorizerErrors: exposeAuthorizerErrors,
 	}
 }
 
@@ -225,7 +226,7 @@ func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTar
 	if err != nil {
 		metrics.ServiceErrAuthorizeFailedCounter.With(mh).Record(1)
 		a.logger.Error("Authorization error", tag.Error(err))
-		if a.exposeAuthorizerErrors != nil && a.exposeAuthorizerErrors() {
+		if a.exposeAuthorizerErrors() {
 			return err
 		}
 		return errUnauthorized // return a generic error to the caller without disclosing details

@@ -53,7 +53,7 @@ func TestCallbacksSuite(t *testing.T) {
 	suite.Run(t, new(CallbacksSuite))
 }
 
-func (s *CallbacksSuite) runNexusCompletionHTTPServer(h *completionHandler, listenAddr string) func() error {
+func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler, listenAddr string) {
 	hh := nexus.NewCompletionHTTPHandler(nexus.CompletionHandlerOptions{Handler: h})
 	srv := &http.Server{Addr: listenAddr, Handler: hh}
 	listener, err := net.Listen("tcp", listenAddr)
@@ -64,18 +64,16 @@ func (s *CallbacksSuite) runNexusCompletionHTTPServer(h *completionHandler, list
 		errCh <- srv.Serve(listener)
 	}()
 
-	return func() error {
+	t.Cleanup(func() {
 		// Graceful shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
-			return err
+		err = srv.Shutdown(ctx)
+		if ctx.Err() != nil {
+			require.NoError(t, err)
+			require.ErrorIs(t, <-errCh, http.ErrServerClosed)
 		}
-		if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return err
-		}
-		return nil
-	}
+	})
 }
 
 func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
@@ -246,10 +244,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				requestCompleteCh: make(chan error, 2),
 			}
 			callbackAddress := fmt.Sprintf("localhost:%d", freeport.MustGetFreePort())
-			shutdownServer := s.runNexusCompletionHTTPServer(ch, callbackAddress)
-			defer func() {
-				s.NoError(shutdownServer())
-			}()
+			s.runNexusCompletionHTTPServer(s.T(), ch, callbackAddress)
 
 			w := worker.New(sdkClient, taskQueue, worker.Options{})
 			w.RegisterWorkflowWithOptions(tc.wf, workflow.RegisterOptions{Name: workflowType})
@@ -455,10 +450,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		requestCompleteCh: make(chan error, 2),
 	}
 	callbackAddress := fmt.Sprintf("localhost:%d", freeport.MustGetFreePort())
-	shutdownServer := s.runNexusCompletionHTTPServer(ch, callbackAddress)
-	defer func() {
-		s.NoError(shutdownServer())
-	}()
+	s.runNexusCompletionHTTPServer(s.T(), ch, callbackAddress)
 
 	w := worker.New(sdkClient, taskQueue.GetName(), worker.Options{})
 

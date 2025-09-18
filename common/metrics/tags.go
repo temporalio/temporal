@@ -482,3 +482,7 @@ func ToUnversionedTag(version string) Tag {
 var TaskExpireStageReadTag Tag = &tagImpl{key: taskExpireStage, value: "read"}
 var TaskExpireStageMemoryTag Tag = &tagImpl{key: taskExpireStage, value: "memory"}
 var TaskInvalidTag Tag = &tagImpl{key: taskExpireStage, value: "invalid"}
+
+func PersistenceDBKindTag(kind string) Tag {
+	return &tagImpl{key: PersistenceDBKindTagName, value: kind}
+}

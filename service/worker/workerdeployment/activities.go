@@ -237,3 +237,13 @@ func (a *Activities) SyncDeploymentVersionUserDataFromWorkerDeployment(
 	}
 	return &deploymentspb.SyncDeploymentVersionUserDataResponse{TaskQueueMaxVersions: maxVersionByName}, nil
 }
+
+func (a *Activities) StartWorkerDeploymentVersionWorkflow(
+	ctx context.Context,
+	input *deploymentspb.StartWorkerDeploymentVersionRequest,
+) error {
+	logger := activity.GetLogger(ctx)
+	logger.Info("starting worker deployment version workflow", "deploymentName", input.DeploymentName, "buildID", input.BuildId)
+	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	return a.deploymentClient.StartWorkerDeploymentVersion(ctx, a.namespace, input.DeploymentName, input.BuildId, identity, input.RequestId)
+}

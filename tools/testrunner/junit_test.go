@@ -23,18 +23,14 @@ func TestGenerateJUnitReportForTimedoutTests(t *testing.T) {
 	require.NoError(t, err)
 	defer os.Remove(out.Name())
 
-	j := generateForTimedoutTests([]string{
+	testNames := []string{
 		"TestCallbacksSuite/TestWorkflowCallbacks_1",
 		"TestCallbacksSuite/TestWorkflowCallbacks_2",
-	})
+	}
+	j := generateStatic(testNames, "timeout", "Timeout")
 	j.path = out.Name()
 	require.NoError(t, j.write())
-
-	expectedReport, err := os.ReadFile("testdata/junit-timeout-output.xml")
-	require.NoError(t, err)
-	actualReport, err := os.ReadFile(out.Name())
-	require.NoError(t, err)
-	require.Equal(t, string(expectedReport), string(actualReport))
+	requireReportEquals(t, "testdata/junit-timeout-output.xml", out.Name())
 }
 
 func TestNode(t *testing.T) {
@@ -127,4 +123,13 @@ func collectTestNames(suites []junit.Testsuite) []string {
 		}
 	}
 	return testNames
+}
+
+func requireReportEquals(t *testing.T, expectedFile, actualFile string) {
+	expectedReport, err := os.ReadFile(expectedFile)
+	require.NoError(t, err)
+
+	actualReport, err := os.ReadFile(actualFile)
+	require.NoError(t, err)
+	require.Equal(t, string(expectedReport), string(actualReport))
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
@@ -275,6 +276,14 @@ func (mdb *db) prepareRowForDB(row *sqlplugin.VisibilityRow) *sqlplugin.Visibili
 	finalRow.ExecutionTime = mdb.converter.ToMySQLDateTime(finalRow.ExecutionTime)
 	if finalRow.CloseTime != nil {
 		*finalRow.CloseTime = mdb.converter.ToMySQLDateTime(*finalRow.CloseTime)
+	}
+	if finalRow.SearchAttributes != nil {
+		saMap := *finalRow.SearchAttributes
+		for name, value := range saMap {
+			if dt, ok := value.(time.Time); ok {
+				saMap[name] = dt.Format(time.RFC3339Nano)
+			}
+		}
 	}
 	return &finalRow
 }
