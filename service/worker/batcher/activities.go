@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -33,9 +34,18 @@ import (
 )
 
 const (
-	pageSize                 = 1000
 	statusRunningQueryFilter = "ExecutionStatus='Running'"
 )
+
+var (
+	defaultPageSize int32 = 1000
+)
+
+func SetPageSizeForTesting(size int32) {
+	defaultPageSize = size
+}
+
+var pageFetches = atomic.Int32{}
 
 var (
 	errNamespaceMismatch = errors.New("namespace mismatch")
@@ -124,7 +134,7 @@ func fetchPage(
 	}
 
 	resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-		PageSize:      int32(pageSize),
+		PageSize:      defaultPageSize,
 		NextPageToken: pageToken,
 		Query:         config.adjustedQuery,
 	})
@@ -134,7 +144,9 @@ func fetchPage(
 
 	executions := make([]*commonpb.WorkflowExecution, 0, len(resp.Executions))
 	for _, wf := range resp.Executions {
-		executions = append(executions, wf.Execution)
+		if wf.Execution != nil {
+			executions = append(executions, wf.Execution)
+		}
 	}
 
 	return &page{
