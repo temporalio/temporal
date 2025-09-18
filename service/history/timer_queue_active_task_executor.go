@@ -925,7 +925,7 @@ func (t *timerQueueActiveTaskExecutor) processActivityWorkflowRules(
 		// need to update activity
 		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
 			activityInfo.StartedEventId = common.EmptyEventID
-			activityInfo.StartedEventVersion = common.EmptyVersion
+			activityInfo.StartVersion = common.EmptyVersion
 			activityInfo.StartedTime = nil
 			activityInfo.RequestId = ""
 			return nil

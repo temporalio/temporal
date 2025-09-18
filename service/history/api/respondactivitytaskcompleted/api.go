@@ -78,12 +78,7 @@ func Invoke(
 				return nil, consts.ErrStaleState
 			}
 
-			if !isRunning ||
-				(!isCompletedByID && ai.StartedEventId == common.EmptyEventID) ||
-				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) ||
-				(token.GetVersion() != common.EmptyVersion &&
-					(ai.StartedEventVersion != common.EmptyVersion && token.Version != ai.StartedEventVersion) ||
-					(ai.StartedEventVersion == common.EmptyVersion && token.Version != ai.Version)) {
+			if !isRunning || api.IsActivityTaskNotFoundForToken(token, ai, &isCompletedByID) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 

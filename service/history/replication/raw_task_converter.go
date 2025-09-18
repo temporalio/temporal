@@ -173,7 +173,7 @@ func convertActivityStateReplicationTask(
 						ScheduledEventId:           activityInfo.ScheduledEventId,
 						ScheduledTime:              activityInfo.ScheduledTime,
 						StartedEventId:             activityInfo.StartedEventId,
-						StartedEventVersion:        activityInfo.StartedEventVersion,
+						StartVersion:               activityInfo.StartVersion,
 						StartedTime:                startedTime,
 						LastHeartbeatTime:          activityInfo.LastHeartbeatUpdateTime,
 						Details:                    activityInfo.LastHeartbeatDetails,

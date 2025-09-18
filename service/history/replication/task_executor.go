@@ -129,7 +129,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 		ScheduledEventId:           attr.ScheduledEventId,
 		ScheduledTime:              attr.ScheduledTime,
 		StartedEventId:             attr.StartedEventId,
-		StartedEventVersion:        attr.StartedEventVersion,
+		StartVersion:               attr.StartVersion,
 		StartedTime:                attr.StartedTime,
 		LastHeartbeatTime:          attr.LastHeartbeatTime,
 		Details:                    attr.Details,

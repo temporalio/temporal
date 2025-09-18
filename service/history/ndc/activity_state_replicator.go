@@ -119,7 +119,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 			ScheduledEventId:           request.ScheduledEventId,
 			ScheduledTime:              request.ScheduledTime,
 			StartedEventId:             request.StartedEventId,
-			StartedEventVersion:        request.StartedEventVersion,
+			StartVersion:               request.StartVersion,
 			StartedTime:                request.StartedTime,
 			LastHeartbeatTime:          request.LastHeartbeatTime,
 			Details:                    request.Details,
