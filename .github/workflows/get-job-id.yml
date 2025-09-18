@@ -1,0 +1,36 @@
+name: Get Job ID
+
+on:
+  workflow_call:
+    inputs:
+      job_name:
+        required: true
+        type: string
+      run_id:
+        required: true
+        type: string
+    outputs:
+      job_id:
+        description: "The numeric job ID from the GitHub API"
+        value: ${{ jobs.get_job_id.outputs.job_id }}
+
+jobs:
+  get_job_id:
+    runs-on: ubuntu-latest
+    outputs:
+      job_id: ${{ steps.set_job_id.outputs.job_id }}
+    steps:
+      - name: Get job ID from workflow run
+        id: set_job_id
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JOB_NAME: ${{ inputs.job_name }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100"
+          job_id=$(curl -L \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "$job_url" \
+            | jq "first(.jobs[] | select(.name == \"$JOB_NAME\") | .id)")
+          echo "job_id=$job_id" >> $GITHUB_OUTPUT

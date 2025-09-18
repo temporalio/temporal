@@ -234,23 +234,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - name: Get job ID from workflow run
-        id: get_job_id
-        run: |
-          set -eu
-          job_name="Unit test"
-          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
-          job_id=$(curl -L \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-             "$job_url" \
-            | jq "first(.jobs[] | select(.name == \"$job_name\") | .id)")
-          echo "Job name: $job_name"
-          echo "Job id from API: $job_id"
-          echo "github.job context: ${{ github.job }}"
-          echo "JOB_ID=${job_id:-unknown}" >> "$GITHUB_OUTPUT"
-
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
@@ -430,10 +413,17 @@ jobs:
         run: |
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
+  get-functional-test-job-id:
+    uses: ./.github/workflows/get-job-id.yml
+    with:
+      job_name: Functional test (${{ matrix.name }}, shard ${{ matrix.shard_index }})
+      run_id: ${{ github.run_id }}
+    secrets: inherit
+
   functional-test:
     if: ${{ inputs.run_single_unit_test != true }}
     name: Functional test (${{ matrix.name }}, shard ${{ matrix.shard_index }})
-    needs: [pre-build, set-up-single-test]
+    needs: [pre-build, set-up-single-test, get-functional-test-job-id]
     strategy:
       fail-fast: false
       matrix:
@@ -489,6 +479,7 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
+      JOB_ID: ${{ needs.get-functional-test-job-id.outputs.job_id }}
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -526,23 +517,6 @@ jobs:
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
-
-      - name: Get job ID from workflow run
-        id: get_job_id
-        run: |
-          set -eu
-          test_job_name="Functional test (${{ matrix.runs_on_override || matrix.runs-on }}, ${{matrix.shard_index}}, ${{matrix.name}})"
-          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
-          # curl or jq might silently fail, but we are okay with that.
-          # We don't want to fail the job if we can't get the job id.
-          job_id=$(curl -L \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-             "$job_url" \
-            | jq "first(.jobs[] | select(.name == \"$test_job_name\") | .id)")
-          echo "Job id is $job_id"
-          echo "JOB_ID=${job_id:-unknown}" >> "$GITHUB_OUTPUT"
 
       - name: Run functional test
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -590,7 +564,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
         with:
-          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{ matrix.runs_on_override || matrix.runs-on }}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
+          name: junit-xml--${{github.run_id}}--${{env.JOB_ID}}--${{github.run_attempt}}--${{ matrix.runs_on_override || matrix.runs-on }}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
@@ -611,7 +585,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: traces-json--${{github.run_id}}-${{steps.get_job_id.outputs.JOB_ID}}--${{matrix.shard_index}}--${{github.run_attempt}}--${{matrix.name}}--functional-test
+          name: traces-json--${{github.run_id}}--${{env.JOB_ID}}--${{matrix.shard_index}}--${{github.run_attempt}}--${{matrix.name}}--functional-test
           path: ./.testoutput/traces.*.json
           if-no-files-found: ignore
           include-hidden-files: true
@@ -694,23 +668,6 @@ jobs:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
-      - name: Get job ID from workflow run
-        id: get_job_id
-        run: |
-          set -eu
-          test_job_name="Functional test xdc (${{matrix.name}})"
-          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
-          # curl or jq might silently fail, but we are okay with that.
-          # We don't want to fail the job if we can't get the job id.
-          job_id=$(curl -L \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-             "$job_url" \
-            | jq "first(.jobs[] | select(.name == \"$test_job_name\") | .id)")
-          echo "Job id is $job_id"
-          echo "JOB_ID=${job_id-unknown}" >> "$GITHUB_OUTPUT"
-
       - name: Run functional test xdc
         timeout-minutes: 35 # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: make functional-test-xdc-coverage
@@ -755,7 +712,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
+          name: junit-xml--${{github.run_id}}--${{github.job}}--${{github.run_attempt}}--}}--.run_attemptgithub----${{.job}}githubgithub.job}}--${{github.run_attempt}}${{matrix.name}}--functional-test-xdc
           path: ./.testoutput
           include-hidden-files: true
           retention-days: 28
@@ -776,7 +733,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: traces-json--${{github.run_id}}-${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
+          name: traces-json--${{github.run_id}}-${{github.job}}--${{github.run_attempt}}----${{github.run_attempt}}--github.run_attempt}}--${{.job}}--github.job}}github${{matrix.name}}--functional-test-xdc
           path: ./.testoutput/traces.*.json
           if-no-files-found: ignore
           retention-days: 28
@@ -861,23 +818,6 @@ jobs:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
-      - name: Get job ID from workflow run
-        id: get_job_id
-        run: |
-          set -eu
-          test_job_name="Functional test ndc (${{matrix.name}})"
-          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
-          # curl or jq might silently fail, but we are okay with that.
-          # We don't want to fail the job if we can't get the job id.
-          job_id=$(curl -L \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-             "$job_url" \
-            | jq "first(.jobs[] | select(.name == \"$test_job_name\") | .id)")
-          echo "Job id is $job_id"
-          echo "JOB_ID=${job_id:-unknown}" >> "$GITHUB_OUTPUT"
-
       - name: Run functional test ndc
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
@@ -912,7 +852,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
+          name: junit-xml--${{github.run_id}}--${{github.job}}--${{github.run_attempt}}--github.job}}--${{github.run_attempt}}----.run_attempt}}}}--${{githubgithub.job${{matrix.name}}--functional-test-ndc
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
@@ -933,7 +873,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: traces-json--${{github.run_id}}-${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
+          name: traces-json--${{github.run_id}}-${{github.job}}--${{github.run_attempt}}--_attempt}}--github.job}}--${{github.run_attempt}}--.job}}--${{github.rungithub${{matrix.name}}--functional-test-ndc
           path: ./.testoutput/traces.*.json
           if-no-files-found: ignore
           retention-days: 28
