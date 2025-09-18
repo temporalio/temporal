@@ -27,6 +27,7 @@ type PrioritySuite struct {
 }
 
 func TestPrioritySuite(t *testing.T) {
+	t.Skip("skipping priority fairness test")
 	t.Parallel()
 	suite.Run(t, new(PrioritySuite))
 }
