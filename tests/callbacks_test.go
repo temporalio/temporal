@@ -493,7 +493,6 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		WorkflowType:        &commonpb.WorkflowType{Name: "longRunningWorkflow"},
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  durationpb.New(20 * time.Second),
 		Identity:            s.T().Name(),
 		CompletionCallbacks: []*commonpb.Callback{cbs[0]},
 	}
