@@ -55,11 +55,7 @@ func TestCallbacksSuite(t *testing.T) {
 
 func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler, listenAddr string) {
 	hh := nexus.NewCompletionHTTPHandler(nexus.CompletionHandlerOptions{Handler: h})
-	// Wrap handler to print inbound HTTP requests for easy tracing
-	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hh.ServeHTTP(w, r)
-	})
-	srv := &http.Server{Addr: listenAddr, Handler: wrapped}
+	srv := &http.Server{Addr: listenAddr, Handler: hh}
 	listener, err := net.Listen("tcp", listenAddr)
 	s.NoError(err)
 
@@ -70,7 +66,7 @@ func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completio
 
 	t.Cleanup(func() {
 		// Graceful shutdown
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		err = srv.Shutdown(ctx)
 		if ctx.Err() != nil {
@@ -717,7 +713,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 		s.FailNow("timed out waiting for callback")
 	}
 
-	// Terminate the original workflow
+	// Ensure the original workflow runs to completion to avoid leaving dangling runs
 	_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{

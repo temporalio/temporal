@@ -5906,8 +5906,7 @@ func (ms *MutableStateImpl) AddHistorySize(size int64) {
 // processCloseCallbacks triggers "WorkflowClosed" callbacks, applying the state machine transition that schedules
 // callback tasks.
 func (ms *MutableStateImpl) processCloseCallbacks() error {
-	resetRunID := ms.GetExecutionInfo().GetResetRunId()
-	if ms.GetExecutionInfo().GetWorkflowWasReset() && resetRunID != "" && resetRunID != ms.executionState.RunId {
+	if ms.GetExecutionInfo().GetWorkflowWasReset() && ms.GetExecutionInfo().GetResetRunId() != ms.executionState.RunId {
 		return nil
 	}
 
