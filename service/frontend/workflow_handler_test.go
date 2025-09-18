@@ -3893,8 +3893,9 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 
 func (s *WorkflowHandlerSuite) TestAllowCallbackURL() {
 	type args struct {
-		rawURL string
-		rules  []callbacks.AddressMatchRule
+		rawURL      string
+		allowSystem bool
+		rules       []callbacks.AddressMatchRule
 	}
 	ts := []struct {
 		name    string
@@ -3904,10 +3905,20 @@ func (s *WorkflowHandlerSuite) TestAllowCallbackURL() {
 		{
 			name: "happy path, default config: just temporal",
 			args: args{
-				rawURL: "temporal://system",
-				rules:  []callbacks.AddressMatchRule{{}},
+				rawURL:      "temporal://system",
+				allowSystem: true,
+				rules:       []callbacks.AddressMatchRule{{}},
 			},
 			wantErr: false,
+		},
+		{
+			name: "sad path, default config: just temporal",
+			args: args{
+				rawURL:      "temporal://system",
+				allowSystem: false,
+				rules:       []callbacks.AddressMatchRule{{}},
+			},
+			wantErr: true,
 		},
 		{
 			name: "sad path incorrect scheme, default config: just temporal",
@@ -3952,7 +3963,7 @@ func (s *WorkflowHandlerSuite) TestAllowCallbackURL() {
 	}
 	for _, tt := range ts {
 		s.Run(tt.name, func() {
-			s.Equal(tt.wantErr, allowCallbackURL(tt.args.rawURL, tt.args.rules) != nil)
+			s.Equal(tt.wantErr, allowCallbackURL(tt.args.rawURL, tt.args.rules, tt.args.allowSystem) != nil)
 		})
 	}
 }

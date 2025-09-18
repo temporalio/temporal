@@ -51,6 +51,13 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	}
 }
 
+var AllowSystemCallbackURL = dynamicconfig.NewNamespaceBoolSetting(
+	"component.callbacks.allowSystemCallbackURL",
+	false,
+	`The per-namespace feature toggle that controls support for the "temporal://system URL". The default will switch to true in future releases.
+	- false (default): do not allow callback URLS to use the "temporal://system" URL
+	- true: allow callback URLS to use the "temporal://system" URL`)
+
 var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(
 	"component.callbacks.allowedAddresses",
 	allowedAddressConverter,
@@ -65,14 +72,18 @@ URL: "temporal://system" is always allowed and the default is no address rules. 
 // allowedSchema contains all schemes both insecure and secure
 var allowedSchemes = []string{"http", "https", "temporal"}
 
+const (
+	temporalScheme = "temporal"
+	systemHost     = "system"
+)
+
 // allowedSecurSchema contains only secure schemes
 var allowedSecureSchemes = []string{"https", "temporal"}
 
-const (
-	temporalSystemURI = "temporal://system"
-)
-
-func IsSchemeAllowed(scheme string) bool {
+func IsSchemeAllowed(scheme string, enableSystem bool) bool {
+	if scheme == temporalScheme && !enableSystem {
+		return false
+	}
 	return slices.Contains(allowedSchemes, scheme)
 }
 
@@ -89,7 +100,7 @@ type AddressMatchRule struct {
 func (a AddressMatchRule) Allow(u *url.URL) (bool, error) {
 	if a.Regexp == nil {
 
-		if u.Host == "system" && u.Scheme == "temporal" {
+		if u.Host == systemHost && u.Scheme == temporalScheme {
 			return true, nil
 		}
 		return false, nil

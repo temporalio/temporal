@@ -184,6 +184,7 @@ type Config struct {
 	CallbackHeaderMaxSize   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.AddressMatchRule]
+	AllowSystemCallbackURL  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NexusRequestHeadersBlacklist   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
@@ -335,6 +336,7 @@ func NewConfig(
 		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
 
 		CallbackEndpointConfigs:     callbacks.AllowedAddresses.Get(dc),
+		AllowSystemCallbackURL:      callbacks.AllowSystemCallbackURL.Get(dc),
 		AdminEnableListHistoryTasks: dynamicconfig.AdminEnableListHistoryTasks.Get(dc),
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),

@@ -2260,11 +2260,7 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 	callerWF := func(ctx workflow.Context) error {
 		c := workflow.NewNexusClient(endpointName, svc.Name)
 		fut := c.ExecuteOperation(ctx, op, nil, workflow.NexusOperationOptions{})
-		if err := fut.Get(ctx, nil); err != nil {
-			fmt.Println("future not resolved: ", err.Error())
-			return err
-		}
-		return nil
+		return fut.Get(ctx, nil)
 	}
 
 	w.RegisterNexusService(svc)

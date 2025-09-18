@@ -5242,15 +5242,15 @@ func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string)
 		return status.Errorf(codes.InvalidArgument, "invalid url: url length longer than max length allowed of %d", wh.config.CallbackURLMaxLength(ns.String()))
 	}
 	rules := wh.config.CallbackEndpointConfigs(ns.String())
-	return allowCallbackURL(rawURL, rules)
+	return allowCallbackURL(rawURL, rules, wh.config.AllowSystemCallbackURL(ns.String()))
 }
 
-func allowCallbackURL(rawURL string, rules []callbacks.AddressMatchRule) error {
+func allowCallbackURL(rawURL string, rules []callbacks.AddressMatchRule, allowSystem bool) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return err
 	}
-	if !callbacks.IsSchemeAllowed(u.Scheme) {
+	if !callbacks.IsSchemeAllowed(u.Scheme, allowSystem) {
 		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
 	}
 	for _, rule := range rules {

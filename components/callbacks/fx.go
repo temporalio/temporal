@@ -52,7 +52,6 @@ func HTTPCallerProviderProvider(
 				if callbackSource == clusterInfo.ClusterID {
 					var frontendClient *common.FrontendHTTPClient
 					if clusterMetadata.GetCurrentClusterName() == clusterName {
-						// here temporal://system is overridden with the local frontend
 						frontendClient = localClient
 					} else {
 						frontendClient, err = httpClientCache.Get(clusterName)
