@@ -1244,6 +1244,10 @@ var (
 		"schedule_action_dropped",
 		WithDescription("The number of schedule actions that failed to start"),
 	)
+	SchedulePayloadSize = NewCounterDef(
+		"schedule_payload_size",
+		WithDescription("The size in bytes of a customer payload (including action results and update signals)"),
+	)
 
 	// Worker Versioning
 	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")
@@ -1306,20 +1310,21 @@ var (
 	PersistenceSQLInUse                    = NewGaugeDef("persistence_sql_in_use")
 
 	// Common service base metrics
-	RestartCount           = NewCounterDef("restarts")
-	NumGoRoutinesGauge     = NewGaugeDef("num_goroutines")
-	GoMaxProcsGauge        = NewGaugeDef("gomaxprocs")
-	MemoryAllocatedGauge   = NewGaugeDef("memory_allocated")
-	MemoryHeapGauge        = NewGaugeDef("memory_heap")
-	MemoryHeapObjectsGauge = NewGaugeDef("memory_heap_objects")
-	MemoryHeapIdleGauge    = NewGaugeDef("memory_heapidle")
-	MemoryHeapInuseGauge   = NewGaugeDef("memory_heapinuse")
-	MemoryStackGauge       = NewGaugeDef("memory_stack")
-	MemoryMallocsGauge     = NewGaugeDef("memory_mallocs")
-	MemoryFreesGauge       = NewGaugeDef("memory_frees")
-	NumGCCounter           = NewBytesHistogramDef("memory_num_gc")
-	GcPauseMsTimer         = NewTimerDef("memory_gc_pause_ms")
-	NumGCGauge             = NewGaugeDef("memory_num_gc_last",
+	RestartCount            = NewCounterDef("restarts")
+	NumGoRoutinesGauge      = NewGaugeDef("num_goroutines")
+	GoMaxProcsGauge         = NewGaugeDef("gomaxprocs")
+	MemoryAllocatedGauge    = NewGaugeDef("memory_allocated")
+	MemoryHeapGauge         = NewGaugeDef("memory_heap")
+	MemoryHeapObjectsGauge  = NewGaugeDef("memory_heap_objects")
+	MemoryHeapIdleGauge     = NewGaugeDef("memory_heapidle")
+	MemoryHeapInuseGauge    = NewGaugeDef("memory_heapinuse")
+	MemoryHeapReleasedGauge = NewGaugeDef("memory_heapreleased")
+	MemoryStackGauge        = NewGaugeDef("memory_stack")
+	MemoryMallocsGauge      = NewGaugeDef("memory_mallocs")
+	MemoryFreesGauge        = NewGaugeDef("memory_frees")
+	NumGCCounter            = NewBytesHistogramDef("memory_num_gc")
+	GcPauseMsTimer          = NewTimerDef("memory_gc_pause_ms")
+	NumGCGauge              = NewGaugeDef("memory_num_gc_last",
 		WithDescription("Last runtime.MemStats.NumGC"),
 	)
 	GcPauseNsTotal = NewGaugeDef("memory_pause_total_ns_last",
