@@ -5242,7 +5242,7 @@ func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string)
 		return status.Errorf(codes.InvalidArgument, "invalid url: url length longer than max length allowed of %d", wh.config.CallbackURLMaxLength(ns.String()))
 	}
 	rules := wh.config.CallbackEndpointConfigs(ns.String())
-	return allowCallbackURL(rawURL, rules, wh.config.AllowSystemCallbackURL(ns.String()))
+	return allowCallbackURL(rawURL, rules, wh.config.AllowSystemCallbackURL())
 }
 
 func allowCallbackURL(rawURL string, rules []callbacks.AddressMatchRule, allowSystem bool) error {

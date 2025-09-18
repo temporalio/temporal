@@ -51,12 +51,13 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	}
 }
 
-var AllowSystemCallbackURL = dynamicconfig.NewNamespaceBoolSetting(
+var AllowSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
 	"component.callbacks.allowSystemCallbackURL",
 	false,
-	`The per-namespace feature toggle that controls support for the "temporal://system URL". The default will switch to true in future releases.
+	`The global feature toggle that controls whether or not client workers can use "temporal://system" URL. 
 	- false (default): do not allow callback URLS to use the "temporal://system" URL
-	- true: allow callback URLS to use the "temporal://system" URL`)
+	- true: allow callback URLS to use the "temporal://system" URL
+	- The default will switch to true in future releases.`)
 
 var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(
 	"component.callbacks.allowedAddresses",
