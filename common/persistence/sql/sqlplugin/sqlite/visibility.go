@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
@@ -167,6 +168,8 @@ func (mdb *db) prepareRowForDB(row *sqlplugin.VisibilityRow) *sqlplugin.Visibili
 			switch v := value.(type) {
 			case []string:
 				finalSearchAttributes[name] = strings.Join(v, keywordListSeparator)
+			case time.Time:
+				finalSearchAttributes[name] = v.Format(time.RFC3339Nano)
 			default:
 				finalSearchAttributes[name] = v
 			}

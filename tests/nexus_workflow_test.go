@@ -1295,7 +1295,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrors() {
 	res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, "")
 	s.Equal(http.StatusForbidden, res.StatusCode)
 	s.Equal(1, len(snap["nexus_completion_requests"]))
-	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "error_unauthorized"})
+	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "unauthorized"})
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth() {

@@ -2,6 +2,7 @@ package signalwithstartworkflow
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -140,7 +141,10 @@ func createWorkflowMutationFunction(
 	}
 	currentMutableState := currentWorkflowLease.GetMutableState()
 	currentExecutionState := currentMutableState.GetExecutionState()
-	currentWorkflowStartTime := currentMutableState.GetExecutionState().StartTime.AsTime()
+	currentWorkflowStartTime := time.Time{}
+	if shardContext.GetConfig().EnableWorkflowIdReuseStartTimeValidation(namespaceEntry.Name().String()) {
+		currentWorkflowStartTime = currentExecutionState.StartTime.AsTime()
+	}
 
 	// It is unclear if currentExecutionState.RunId is the same as
 	// currentWorkflowLease.GetContext().GetWorkflowKey().RunID
