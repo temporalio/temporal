@@ -771,6 +771,58 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Duplicati
 	s.Nil(resp.ExecutionErr)
 }
 
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_StampMismatch() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.Nil(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	taskID := s.mustGenerateTaskID()
+
+	transferTask := &tasks.WorkflowTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		TaskID:              taskID,
+		TaskQueue:           taskQueueName,
+		ScheduledEventID:    wt.ScheduledEventID,
+		VisibilityTimestamp: time.Now().UTC(),
+		Stamp:               wt.Stamp,
+	}
+
+	// Modify the workflow task stamp in mutable state to create mismatch
+	mutableState.GetExecutionInfo().WorkflowTaskStamp = wt.Stamp + 1
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, wt.ScheduledEventID, s.version)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+
+	// Execute the task - should return stale reference error
+	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.ErrorIs(resp.ExecutionErr, consts.ErrStaleReference)
+}
+
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasParent() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
