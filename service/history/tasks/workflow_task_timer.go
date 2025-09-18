@@ -29,6 +29,7 @@ type (
 		ScheduleAttempt     int32
 		TimeoutType         enumspb.TimeoutType
 		Version             int64
+		Stamp               int32
 
 		// InMemory field is not persisted in the database.
 		InMemory bool

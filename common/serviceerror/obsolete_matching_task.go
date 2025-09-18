@@ -13,6 +13,7 @@ type (
 	// is no longer valid. Some examples:
 	// - WFT belongs to a sticky queue but the workflow is not on that sticky queue anymore.
 	// - WFT belongs to the normal queue but no the workflow is on a sticky queue.
+	// - WFT options were updated and the task was rescheduled
 	// - WF or activity task wants to start but their schedule time directive deployment no longer
 	//   matched the workflows effective deployment.
 	// When Matching receives this error it can safely drop the task because History has already

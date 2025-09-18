@@ -473,6 +473,7 @@ func (s *TaskSerializer) transferWorkflowTaskToProto(
 		Version:                 workflowTask.Version,
 		TaskId:                  workflowTask.TaskID,
 		VisibilityTime:          timestamppb.New(workflowTask.VisibilityTimestamp),
+		Stamp:                   workflowTask.Stamp,
 	}
 }
 
@@ -490,6 +491,7 @@ func (s *TaskSerializer) transferWorkflowTaskFromProto(
 		TaskQueue:           workflowTask.TaskQueue,
 		ScheduledEventID:    workflowTask.ScheduledEventId,
 		Version:             workflowTask.Version,
+		Stamp:               workflowTask.Stamp,
 	}
 }
 
@@ -736,6 +738,7 @@ func (s *TaskSerializer) timerWorkflowTaskToProto(
 		EventId:             workflowTimer.EventID,
 		TaskId:              workflowTimer.TaskID,
 		VisibilityTime:      timestamppb.New(workflowTimer.VisibilityTimestamp),
+		Stamp:               workflowTimer.Stamp,
 	}
 }
 
@@ -754,6 +757,7 @@ func (s *TaskSerializer) timerWorkflowTaskFromProto(
 		ScheduleAttempt:     workflowTimer.ScheduleAttempt,
 		TimeoutType:         workflowTimer.TimeoutType,
 		Version:             workflowTimer.Version,
+		Stamp:               workflowTimer.Stamp,
 	}
 }
 
