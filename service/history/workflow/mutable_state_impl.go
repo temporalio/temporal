@@ -5921,14 +5921,12 @@ func (ms *MutableStateImpl) processCloseCallbacks() error {
 		if _, ok := cb.Trigger.Variant.(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); !ok {
 			continue
 		}
-		fmt.Println("DEBUGGING: processCloseCallbacks: scheduling callback:", "id=", node.Key.ID)
 		err = coll.Transition(node.Key.ID, func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
 			return callbacks.TransitionScheduled.Apply(cb, callbacks.EventScheduled{})
 		})
 		if err != nil {
 			return err
 		}
-		fmt.Println("DEBUGGING: processCloseCallbacks: scheduled callback:", "id=", node.Key.ID)
 	}
 	return nil
 }

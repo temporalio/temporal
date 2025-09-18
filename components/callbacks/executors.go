@@ -115,16 +115,6 @@ func (e taskExecutor) executeInvocationTask(
 	if err != nil {
 		return err
 	}
-	// Debug: only print for nexus scheduled callbacks.
-	if _, ok := invokable.(nexusInvocation); ok {
-		fmt.Println("DEBUGGING: executeInvocationTask: nexus scheduled callback executing:",
-			"ns=", ns.Name().String(),
-			"nsID=", ref.WorkflowKey.NamespaceID,
-			"wf=", ref.WorkflowKey.WorkflowID,
-			"run=", ref.WorkflowKey.RunID,
-			"dest=", task.Destination(),
-		)
-	}
 
 	callCtx, cancel := context.WithTimeout(
 		ctx,
@@ -133,27 +123,6 @@ func (e taskExecutor) executeInvocationTask(
 	defer cancel()
 
 	result := invokable.Invoke(callCtx, ns, e, task)
-	if _, ok := invokable.(nexusInvocation); ok {
-		switch result.(type) {
-		case invocationResultOK:
-			fmt.Println("DEBUGGING: executeInvocationTask: invoke returned:", "ok",
-				"wf=", ref.WorkflowKey.WorkflowID,
-				"run=", ref.WorkflowKey.RunID,
-			)
-		case invocationResultRetry:
-			fmt.Println("DEBUGGING: executeInvocationTask: invoke returned:", "retry",
-				"wf=", ref.WorkflowKey.WorkflowID,
-				"run=", ref.WorkflowKey.RunID,
-				"err=", result.error(),
-			)
-		case invocationResultFail:
-			fmt.Println("DEBUGGING: executeInvocationTask: invoke returned:", "fail",
-				"wf=", ref.WorkflowKey.WorkflowID,
-				"run=", ref.WorkflowKey.RunID,
-				"err=", result.error(),
-			)
-		}
-	}
 	saveErr := e.saveResult(ctx, env, ref, result)
 	return invokable.WrapError(result, saveErr)
 }
@@ -219,39 +188,16 @@ func (e taskExecutor) saveResult(
 		return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
 			switch result.(type) {
 			case invocationResultOK:
-				if _, ok := callback.GetCallback().GetVariant().(*persistencespb.Callback_Nexus_); ok {
-					fmt.Println("DEBUGGING: saveResult: succeeded:",
-						"wf=", ref.WorkflowKey.WorkflowID,
-						"run=", ref.WorkflowKey.RunID,
-						"attempt=", callback.Attempt,
-					)
-				}
 				return TransitionSucceeded.Apply(callback, EventSucceeded{
 					Time: env.Now(),
 				})
 			case invocationResultRetry:
-				if _, ok := callback.GetCallback().GetVariant().(*persistencespb.Callback_Nexus_); ok {
-					fmt.Println("DEBUGGING: saveResult: retrying:",
-						"wf=", ref.WorkflowKey.WorkflowID,
-						"run=", ref.WorkflowKey.RunID,
-						"attempt=", callback.Attempt,
-						"err=", result.error(),
-					)
-				}
 				return TransitionAttemptFailed.Apply(callback, EventAttemptFailed{
 					Time:        env.Now(),
 					Err:         result.error(),
 					RetryPolicy: e.Config.RetryPolicy(),
 				})
 			case invocationResultFail:
-				if _, ok := callback.GetCallback().GetVariant().(*persistencespb.Callback_Nexus_); ok {
-					fmt.Println("DEBUGGING: saveResult: failed:",
-						"wf=", ref.WorkflowKey.WorkflowID,
-						"run=", ref.WorkflowKey.RunID,
-						"attempt=", callback.Attempt,
-						"err=", result.error(),
-					)
-				}
 				return TransitionFailed.Apply(callback, EventFailed{
 					Time: env.Now(),
 					Err:  result.error(),
@@ -269,9 +215,6 @@ func (e taskExecutor) executeBackoffTask(
 	task BackoffTask,
 ) error {
 	return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
-		if _, ok := callback.GetCallback().GetVariant().(*persistencespb.Callback_Nexus_); ok {
-			fmt.Println("DEBUGGING: executeBackoffTask: rescheduling nexus callback")
-		}
 		return TransitionRescheduled.Apply(callback, EventRescheduled{})
 	})
 }

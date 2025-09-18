@@ -57,12 +57,6 @@ func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completio
 	hh := nexus.NewCompletionHTTPHandler(nexus.CompletionHandlerOptions{Handler: h})
 	// Wrap handler to print inbound HTTP requests for easy tracing
 	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("DEBUGGING: HTTPServer: incoming request:", "method=", r.Method, "url=", r.URL.String())
-		for k, v := range r.Header {
-			if len(v) > 0 {
-				fmt.Println("DEBUGGING: HTTPServer: header:", k, v[0])
-			}
-		}
 		hh.ServeHTTP(w, r)
 	})
 	srv := &http.Server{Addr: listenAddr, Handler: wrapped}

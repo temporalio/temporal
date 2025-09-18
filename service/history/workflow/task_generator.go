@@ -288,9 +288,7 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 			if err != nil {
 				return err
 			}
-			fmt.Println("DEBUGGING: GenerateDirtySubStateMachineTasks: processing TransitionOperation:", "path=", transitionOp.Path())
 			for _, task := range transitionOp.Output.Tasks {
-				fmt.Println("DEBUGGING: GenerateDirtySubStateMachineTasks: found task from transition:", "type=", task.Type(), "dest=", task.Destination(), "deadline=", task.Deadline())
 				// since this method is called after transition history is updated for the current transition,
 				// we can safely call generateSubStateMachineTask which sets MutableStateVersionedTransition
 				// to the last versioned transition in StateMachineRef
