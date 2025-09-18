@@ -665,7 +665,9 @@ func TestProcessCancelationTask(t *testing.T) {
 			destinationDown: false,
 			header:          map[string]string{"key": "value"},
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
-				require.Equal(t, "value", options.Header["key"])
+				if options.Header["key"] != "value" {
+					return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, `"key" header is not equal to "value"`)
+				}
 				return nil
 			},
 			expectedMetricOutcome: "successful",
