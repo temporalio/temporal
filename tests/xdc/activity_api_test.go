@@ -3,6 +3,7 @@ package xdc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -10,15 +11,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/temporalio/sqlparser"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -39,9 +42,7 @@ func TestActivityApiStateReplicationSuite(t *testing.T) {
 }
 
 func (s *ActivityApiStateReplicationSuite) SetupSuite() {
-	if s.dynamicConfigOverrides == nil {
-		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
-	}
+	s.enableTransitionHistory = true // enable state based replication.
 	s.setupSuite()
 }
 
@@ -61,6 +62,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	var activityWasPaused atomic.Bool
 	var startedActivityCount atomic.Int32
 
+	activityTypeName := "test-activity-type"
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
 		if activityWasPaused.Load() == false {
@@ -71,7 +73,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		return "done!", nil
 	}
 
-	workflowFn := s.makeWorkflowFunc(activityFunction)
+	workflowFn := s.makeTestWorkflowFuncMultiActivities(activityFunction, activityFunction)
 
 	ns := s.createGlobalNamespace()
 	activeSDKClient, err := sdkclient.Dial(sdkclient.Options{
@@ -82,13 +84,13 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	s.NoError(err)
 
 	taskQueue := testcore.RandomizeStr("tq")
-	worker1 := sdkworker.New(activeSDKClient, taskQueue, sdkworker.Options{})
+	worker0 := sdkworker.New(activeSDKClient, taskQueue, sdkworker.Options{})
 
-	worker1.RegisterWorkflow(workflowFn)
-	worker1.RegisterActivity(activityFunction)
+	worker0.RegisterWorkflow(workflowFn)
+	worker0.RegisterActivityWithOptions(activityFunction, activity.RegisterOptions{Name: activityTypeName})
 
-	s.NoError(worker1.Start())
-	defer worker1.Stop()
+	s.NoError(worker0.Start())
+	defer worker0.Stop()
 
 	// start a workflow
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -107,13 +109,13 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		require.Greater(t, startedActivityCount.Load(), int32(2))
 	}, 5*time.Second, 200*time.Millisecond)
 
-	// pause the activity in cluster0
+	// pause the first activity in cluster0
 	pauseRequest := &workflowservice.PauseActivityRequest{
 		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowRun.GetID(),
 		},
-		Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
+		Activity: &workflowservice.PauseActivityRequest_Type{Type: activityTypeName},
 	}
 	pauseResp, err := s.clusters[0].Host().FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
@@ -133,7 +135,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowRun.GetID(),
 		},
-		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity-id"},
+		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity-id-0"},
 		ActivityOptions: &activitypb.ActivityOptions{
 			RetryPolicy: &commonpb.RetryPolicy{
 				InitialInterval: durationpb.New(2 * time.Second),
@@ -164,7 +166,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowRun.GetID(),
 		},
-		Activity:   &workflowservice.ResetActivityRequest_Id{Id: "activity-id"},
+		Activity:   &workflowservice.ResetActivityRequest_Id{Id: "activity-id-0"},
 		KeepPaused: true,
 	}
 	resetResp, err := s.clusters[0].Host().FrontendClient().ResetActivity(ctx, resetRequest)
@@ -185,7 +187,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// stop worker1 so cluster0 won't make any progress on the activity (just in case)
-	worker1.Stop()
+	worker0.Stop()
 
 	// failover to standby cluster
 	s.failover(ns, 0, s.clusters[1].ClusterName(), 2)
@@ -211,29 +213,54 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
-	// start worker2
-	worker2 := sdkworker.New(standbyClient, taskQueue, sdkworker.Options{})
-	worker2.RegisterWorkflow(workflowFn)
-	worker2.RegisterActivity(activityFunction)
-	s.NoError(worker2.Start())
-	defer worker2.Stop()
+	// start worker1
+	worker1 := sdkworker.New(standbyClient, taskQueue, sdkworker.Options{})
+	worker1.RegisterWorkflow(workflowFn)
+	worker1.RegisterActivityWithOptions(activityFunction, activity.RegisterOptions{Name: activityTypeName})
+	s.NoError(worker1.Start())
+	defer worker1.Stop()
 
-	// let the activity make progress once unpaused
+	// unblock the workflow in cluster1 (previously standby) so that it can start the second activity
+	err = standbyClient.SignalWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID(), "UNBLOCK-WORKFLOW", nil)
+	s.NoError(err)
+
+	// make sure both activities are paused in cluster1 and the search attribute is updated
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := standbyClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		require.NoError(t, err)
+		require.Equal(t, 2, len(description.PendingActivities))
+		require.True(t, description.PendingActivities[0].Paused)
+		require.True(t, description.PendingActivities[1].Paused)
+
+		searchValue := fmt.Sprintf("property:activityType=%s", activityTypeName)
+		escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
+		pauseAttribute := fmt.Sprintf("%s = %s", searchattribute.TemporalPauseInfo, escapedSearchValue)
+		query := fmt.Sprintf("(WorkflowId='%s' AND %s)", workflowRun.GetID(), pauseAttribute)
+		visibilityResponse, err := s.clusters[1].Host().FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: ns,
+			Query:     query,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(visibilityResponse.Executions))
+	}, 5*time.Second, 500*time.Millisecond)
+
+	// let the activities make progress once unpaused
 	activityWasPaused.Store(true)
 
-	// unpause the activity in cluster1
+	// unpause the activities in cluster1
 	unpauseRequest := &workflowservice.UnpauseActivityRequest{
 		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowRun.GetID(),
 		},
-		Activity: &workflowservice.UnpauseActivityRequest_Id{Id: "activity-id"},
+		Activity: &workflowservice.UnpauseActivityRequest_Type{Type: activityTypeName},
 	}
 	unpauseResp, err := s.clusters[1].Host().FrontendClient().UnpauseActivity(ctx, unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)
 
-	// unblock the activity
+	// unblock the activities in cluster1
+	activityPausedCn <- struct{}{}
 	activityPausedCn <- struct{}{}
 
 	// wait for activity to finish
@@ -243,27 +270,41 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	s.NoError(err)
 }
 
-func (s *ActivityApiStateReplicationSuite) makeWorkflowFunc(activityFunction ActivityFunctions) WorkflowFunction {
+// makeTestWorkflowFuncMultiActivities is a helper function to create a workflow function that starts multiple activities.
+// After the first activity is started, it will wait for a signal to unblock the starting of next activity.
+func (s *ActivityApiStateReplicationSuite) makeTestWorkflowFuncMultiActivities(activityFunctions ...ActivityFunctions) WorkflowFunction {
 	initialRetryInterval := 1 * time.Second
 	scheduleToCloseTimeout := 30 * time.Minute
 	startToCloseTimeout := 15 * time.Minute
-
 	activityRetryPolicy := &temporal.RetryPolicy{
 		InitialInterval:    initialRetryInterval,
 		BackoffCoefficient: 1,
 	}
 
 	return func(ctx workflow.Context) error {
+		var activityExecutions []workflow.Future
+		for i, activityFunction := range activityFunctions {
+			activityExecutions = append(activityExecutions, workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				ActivityID:             fmt.Sprintf("activity-id-%d", i),
+				DisableEagerExecution:  true,
+				StartToCloseTimeout:    startToCloseTimeout,
+				ScheduleToCloseTimeout: scheduleToCloseTimeout,
+				RetryPolicy:            activityRetryPolicy,
+			}), activityFunction))
 
-		var ret string
-		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-			ActivityID:             "activity-id",
-			DisableEagerExecution:  true,
-			StartToCloseTimeout:    startToCloseTimeout,
-			ScheduleToCloseTimeout: scheduleToCloseTimeout,
-			RetryPolicy:            activityRetryPolicy,
-		}), activityFunction).Get(ctx, &ret)
-		return err
+			if i < len(activityFunctions)-1 {
+				// wait for the signal from the test before proceeding to start another activity
+				workflow.GetSignalChannel(ctx, "UNBLOCK-WORKFLOW").Receive(ctx, nil)
+			}
+		}
+
+		for _, activityExecution := range activityExecutions {
+			err := activityExecution.Get(ctx, nil)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 }
 
