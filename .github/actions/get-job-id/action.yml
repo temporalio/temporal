@@ -1,0 +1,35 @@
+name: Get Job ID
+description: Resolve the numeric job ID for a job name within a workflow run
+inputs:
+  job_name:
+    description: Exact job name to search for
+    required: true
+  run_id:
+    description: The workflow run ID to search within
+    required: true
+outputs:
+  job_id:
+    description: The numeric job ID
+    value: ${{ steps.get_id.outputs.job_id }}
+runs:
+  using: composite
+  steps:
+    - id: get_id
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        JOB_NAME: ${{ inputs.job_name }}
+        RUN_ID: ${{ inputs.run_id }}
+      run: |
+        set -euo pipefail
+        job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100"
+        job_id=$(curl -sSL \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
+          "$job_url" \
+          | jq -r --arg name "$JOB_NAME" 'first(.jobs[] | select(.name == $name) | .id)')
+        if [ -z "$job_id" ] || [ "$job_id" = "null" ]; then
+          echo "::error::Failed to resolve job ID for name '$JOB_NAME' in run '$RUN_ID'" >&2
+          exit 1
+        fi
+        echo "job_id=$job_id" >> "$GITHUB_OUTPUT"
