@@ -12,25 +12,41 @@ import (
 )
 
 type (
-	sqliteQueryConverter struct{}
-)
+	pgCastExpr struct {
+		sqlparser.Expr
+		Value sqlparser.Expr
+		Type  *sqlparser.ConvertType
+	}
 
-var _ pluginQueryConverter = (*sqliteQueryConverter)(nil)
+	pgQueryConverter struct{}
+)
 
 const (
-	keywordListTypeFtsTableName = "executions_visibility_fts_keyword_list"
-	textTypeFtsTableName        = "executions_visibility_fts_text"
+	jsonBuildArrayFuncName = "jsonb_build_array"
+	jsonContainsOp         = "@>"
+	ftsMatchOp             = "@@"
 )
 
-func newSqliteQueryConverter(
+var (
+	convertTypeTSQuery = &sqlparser.ConvertType{Type: "tsquery"}
+)
+
+var _ sqlparser.Expr = (*pgCastExpr)(nil)
+var _ pluginQueryConverterLegacy = (*pgQueryConverter)(nil)
+
+func (node *pgCastExpr) Format(buf *sqlparser.TrackedBuffer) {
+	buf.Myprintf("%v::%v", node.Value, node.Type)
+}
+
+func newPostgreSQLQueryConverter(
 	namespaceName namespace.Name,
 	namespaceID namespace.ID,
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
 	queryString string,
-) *QueryConverter {
+) *QueryConverterLegacy {
 	return newQueryConverterInternal(
-		&sqliteQueryConverter{},
+		&pgQueryConverter{},
 		namespaceName,
 		namespaceID,
 		saTypeMap,
@@ -39,11 +55,11 @@ func newSqliteQueryConverter(
 	)
 }
 
-func (c *sqliteQueryConverter) getDatetimeFormat() string {
-	return "2006-01-02 15:04:05.999999-07:00"
+func (c *pgQueryConverter) getDatetimeFormat() string {
+	return "2006-01-02 15:04:05.999999"
 }
 
-func (c *sqliteQueryConverter) getCoalesceCloseTimeExpr() sqlparser.Expr {
+func (c *pgQueryConverter) getCoalesceCloseTimeExpr() sqlparser.Expr {
 	return newFuncExpr(
 		coalesceFuncName,
 		closeTimeSaColName,
@@ -51,7 +67,7 @@ func (c *sqliteQueryConverter) getCoalesceCloseTimeExpr() sqlparser.Expr {
 	)
 }
 
-func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
+func (c *pgQueryConverter) convertKeywordListComparisonExpr(
 	expr *sqlparser.ComparisonExpr,
 ) (sqlparser.Expr, error) {
 	if !isSupportedKeywordListOperator(expr.Operator) {
@@ -63,28 +79,13 @@ func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
 		)
 	}
 
-	saColNameExpr, isSAColNameExpr := expr.Left.(*saColName)
-	if !isSAColNameExpr {
-		return nil, query.NewConverterError(
-			"%s: must be a search attribute column name but was %T",
-			query.InvalidExpressionErrMessage,
-			expr.Left,
-		)
-	}
-
-	var ftsQuery string
 	switch expr.Operator {
 	case sqlparser.EqualStr, sqlparser.NotEqualStr:
-		valueExpr, ok := expr.Right.(*unsafeSQLString)
-		if !ok {
-			return nil, query.NewConverterError(
-				"%s: unexpected value type (expected string, got %s)",
-				query.InvalidExpressionErrMessage,
-				sqlparser.String(expr.Right),
-			)
+		newExpr := c.newJsonContainsExpr(expr.Left, expr.Right)
+		if expr.Operator == sqlparser.NotEqualStr {
+			newExpr = &sqlparser.NotExpr{Expr: newExpr}
 		}
-		ftsQuery = buildFtsQueryString(saColNameExpr.dbColName.Name, valueExpr.Val)
-
+		return newExpr, nil
 	case sqlparser.InStr, sqlparser.NotInStr:
 		valTupleExpr, isValTuple := expr.Right.(sqlparser.ValTuple)
 		if !isValTuple {
@@ -94,12 +95,13 @@ func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
 				sqlparser.String(expr.Right),
 			)
 		}
-		values, err := getUnsafeStringTupleValues(valTupleExpr)
-		if err != nil {
-			return nil, err
+		var newExpr sqlparser.Expr = &sqlparser.ParenExpr{
+			Expr: c.convertInExpr(expr.Left, valTupleExpr),
 		}
-		ftsQuery = buildFtsQueryString(saColNameExpr.dbColName.Name, values...)
-
+		if expr.Operator == sqlparser.NotInStr {
+			newExpr = &sqlparser.NotExpr{Expr: newExpr}
+		}
+		return newExpr, nil
 	default:
 		// this should never happen since isSupportedKeywordListOperator should already fail
 		return nil, query.NewConverterError(
@@ -109,34 +111,35 @@ func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
 			formatComparisonExprStringForError(*expr),
 		)
 	}
-
-	var oper string
-	switch expr.Operator {
-	case sqlparser.EqualStr, sqlparser.InStr:
-		oper = sqlparser.InStr
-	case sqlparser.NotEqualStr, sqlparser.NotInStr:
-		oper = sqlparser.NotInStr
-	default:
-		// this should never happen since isSupportedKeywordListOperator should already fail
-		return nil, query.NewConverterError(
-			"%s: operator '%s' not supported for KeywordList type search attribute in `%s`",
-			query.InvalidExpressionErrMessage,
-			expr.Operator,
-			formatComparisonExprStringForError(*expr),
-		)
-	}
-
-	newExpr := sqlparser.ComparisonExpr{
-		Operator: oper,
-		Left:     newColName("rowid"),
-		Right: &sqlparser.Subquery{
-			Select: c.buildFtsSelectStmt(keywordListTypeFtsTableName, ftsQuery),
-		},
-	}
-	return &newExpr, nil
 }
 
-func (c *sqliteQueryConverter) convertTextComparisonExpr(
+func (c *pgQueryConverter) convertInExpr(
+	leftExpr sqlparser.Expr,
+	values sqlparser.ValTuple,
+) sqlparser.Expr {
+	exprs := make([]sqlparser.Expr, len(values))
+	for i, value := range values {
+		exprs[i] = c.newJsonContainsExpr(leftExpr, value)
+	}
+	for len(exprs) > 1 {
+		k := 0
+		for i := 0; i < len(exprs); i += 2 {
+			if i+1 < len(exprs) {
+				exprs[k] = &sqlparser.OrExpr{
+					Left:  exprs[i],
+					Right: exprs[i+1],
+				}
+			} else {
+				exprs[k] = exprs[i]
+			}
+			k++
+		}
+		exprs = exprs[:k]
+	}
+	return exprs[0]
+}
+
+func (c *pgQueryConverter) convertTextComparisonExpr(
 	expr *sqlparser.ComparisonExpr,
 ) (sqlparser.Expr, error) {
 	if !isSupportedTextOperator(expr.Operator) {
@@ -147,16 +150,6 @@ func (c *sqliteQueryConverter) convertTextComparisonExpr(
 			formatComparisonExprStringForError(*expr),
 		)
 	}
-
-	saColNameExpr, isSAColNameExpr := expr.Left.(*saColName)
-	if !isSAColNameExpr {
-		return nil, query.NewConverterError(
-			"%s: must be a search attribute column name but was %T",
-			query.InvalidExpressionErrMessage,
-			expr.Left,
-		)
-	}
-
 	valueExpr, ok := expr.Right.(*unsafeSQLString)
 	if !ok {
 		return nil, query.NewConverterError(
@@ -173,39 +166,37 @@ func (c *sqliteQueryConverter) convertTextComparisonExpr(
 			sqlparser.String(expr.Right),
 		)
 	}
-
-	var oper string
-	switch expr.Operator {
-	case sqlparser.EqualStr:
-		oper = sqlparser.InStr
-	case sqlparser.NotEqualStr:
-		oper = sqlparser.NotInStr
-	default:
-		// this should never happen since isSupportedTextOperator should already fail
-		return nil, query.NewConverterError(
-			"%s: operator '%s' not supported for Text type search attribute in `%s`",
-			query.InvalidExpressionErrMessage,
-			expr.Operator,
-			formatComparisonExprStringForError(*expr),
-		)
-	}
-
-	ftsQuery := buildFtsQueryString(saColNameExpr.dbColName.Name, tokens...)
-	newExpr := sqlparser.ComparisonExpr{
-		Operator: oper,
-		Left:     newColName("rowid"),
-		Right: &sqlparser.Subquery{
-			Select: c.buildFtsSelectStmt(textTypeFtsTableName, ftsQuery),
+	valueExpr.Val = strings.Join(tokens, " | ")
+	var newExpr sqlparser.Expr = &sqlparser.ComparisonExpr{
+		Operator: ftsMatchOp,
+		Left:     expr.Left,
+		Right: &pgCastExpr{
+			Value: expr.Right,
+			Type:  convertTypeTSQuery,
 		},
 	}
-	return &newExpr, nil
+	if expr.Operator == sqlparser.NotEqualStr {
+		newExpr = &sqlparser.NotExpr{Expr: newExpr}
+	}
+	return newExpr, nil
 }
 
-func (c *sqliteQueryConverter) buildSelectStmt(
+func (c *pgQueryConverter) newJsonContainsExpr(
+	jsonExpr sqlparser.Expr,
+	valueExpr sqlparser.Expr,
+) sqlparser.Expr {
+	return &sqlparser.ComparisonExpr{
+		Operator: jsonContainsOp,
+		Left:     jsonExpr,
+		Right:    newFuncExpr(jsonBuildArrayFuncName, valueExpr),
+	}
+}
+
+func (c *pgQueryConverter) buildSelectStmt(
 	namespaceID namespace.ID,
 	queryString string,
 	pageSize int,
-	token *pageToken,
+	token *pageTokenLegacy,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
@@ -260,38 +251,7 @@ func (c *sqliteQueryConverter) buildSelectStmt(
 	), queryArgs
 }
 
-// buildFtsSelectStmt builds the following statement for querying FTS:
-//
-//	SELECT rowid FROM tableName WHERE tableName = '%s'
-func (c *sqliteQueryConverter) buildFtsSelectStmt(
-	tableName string,
-	queryString string,
-) sqlparser.SelectStatement {
-	return &sqlparser.Select{
-		SelectExprs: sqlparser.SelectExprs{
-			&sqlparser.AliasedExpr{
-				Expr: newColName("rowid"),
-			},
-		},
-		From: sqlparser.TableExprs{
-			&sqlparser.AliasedTableExpr{
-				Expr: &sqlparser.TableName{
-					Name: sqlparser.NewTableIdent(tableName),
-				},
-			},
-		},
-		Where: sqlparser.NewWhere(
-			sqlparser.WhereStr,
-			&sqlparser.ComparisonExpr{
-				Operator: sqlparser.EqualStr,
-				Left:     newColName(tableName),
-				Right:    newUnsafeSQLString(queryString),
-			},
-		),
-	}
-}
-
-func (c *sqliteQueryConverter) buildCountStmt(
+func (c *pgQueryConverter) buildCountStmt(
 	namespaceID namespace.ID,
 	queryString string,
 	groupBy []string,
@@ -320,9 +280,4 @@ func (c *sqliteQueryConverter) buildCountStmt(
 		strings.Join(whereClauses, " AND "),
 		groupByClause,
 	), queryArgs
-}
-
-func buildFtsQueryString(colname string, values ...string) string {
-	// FTS query format: 'colname : ("token1" OR "token2" OR ...)'
-	return fmt.Sprintf(`%s : ("%s")`, colname, strings.Join(values, `" OR "`))
 }
