@@ -3,6 +3,7 @@ package testrunner
 import (
 	"fmt"
 	"io"
+	"log"
 	"slices"
 	"strings"
 
@@ -64,4 +65,142 @@ func testOnlyStacktrace(stacktrace string) string {
 		}
 	}
 	return res
+}
+
+// alertKind represents a category of high-priority alert detected in test output.
+type alertKind string
+
+const (
+	alertKindDataRace alertKind = "DATA RACE"
+	alertKindPanic    alertKind = "PANIC"
+	alertKindFatal    alertKind = "FATAL"
+)
+
+// alert captures a prominent issue detected from stdout/stderr of test runs.
+type alert struct {
+	Kind    alertKind
+	Summary string
+	Details string
+}
+
+// parseAlerts scans a gotestsum/go test stdout stream and extracts high-priority
+// alerts such as data races and panics. It returns a slice of alerts in the
+// order they were encountered.
+func parseAlerts(stdout string) []alert {
+	lines := strings.Split(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n")
+	var alerts []alert
+
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+
+		// Detect Go race detector reports.
+		if strings.HasPrefix(line, "WARNING: DATA RACE") {
+			start := i
+			for j := i - 1; j >= 0; j-- {
+				if strings.HasPrefix(strings.TrimSpace(lines[j]), "==================") {
+					start = j
+					break
+				}
+			}
+			var b strings.Builder
+			for j := start; j < len(lines); j++ {
+				b.WriteString(lines[j])
+				b.WriteByte('\n')
+				if j > start && strings.HasPrefix(strings.TrimSpace(lines[j]), "==================") {
+					i = j
+					break
+				}
+				if strings.HasPrefix(lines[j], "FAIL") || strings.HasPrefix(lines[j], "PASS") {
+					i = j
+					break
+				}
+			}
+			alerts = append(alerts, alert{
+				Kind:    alertKindDataRace,
+				Summary: "Data race detected",
+				Details: b.String(),
+			})
+			continue
+		}
+
+		// Detect panics that are not timeouts.
+		if strings.HasPrefix(line, "panic: ") && !strings.HasPrefix(line, "panic: test timed out after") {
+			var b strings.Builder
+			b.WriteString(line)
+			b.WriteByte('\n')
+			j := i + 1
+			for ; j < len(lines); j++ {
+				b.WriteString(lines[j])
+				b.WriteByte('\n')
+				if strings.HasPrefix(lines[j], "FAIL") || strings.HasPrefix(lines[j], "PASS") {
+					break
+				}
+			}
+			alerts = append(alerts, alert{
+				Kind:    alertKindPanic,
+				Summary: strings.TrimSpace(strings.TrimPrefix(line, "panic: ")),
+				Details: b.String(),
+			})
+			i = j
+			continue
+		}
+
+		// Detect runtime fatal errors.
+		if strings.HasPrefix(line, "fatal error: ") {
+			var b strings.Builder
+			b.WriteString(line)
+			b.WriteByte('\n')
+			j := i + 1
+			for ; j < len(lines); j++ {
+				b.WriteString(lines[j])
+				b.WriteByte('\n')
+				if strings.HasPrefix(lines[j], "FAIL") || strings.HasPrefix(lines[j], "PASS") {
+					break
+				}
+			}
+			alerts = append(alerts, alert{
+				Kind:    alertKindFatal,
+				Summary: strings.TrimSpace(strings.TrimPrefix(line, "fatal error: ")),
+				Details: b.String(),
+			})
+			i = j
+			continue
+		}
+	}
+
+	return alerts
+}
+
+// dedupeAlerts removes duplicate alerts (e.g., repeated across retries) based
+// on kind and details while preserving the first-seen order.
+func dedupeAlerts(alerts []alert) []alert {
+	seen := make(map[string]struct{}, len(alerts))
+	var out []alert
+	for _, a := range alerts {
+		key := string(a.Kind) + "\n" + a.Details
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, a)
+	}
+	return out
+}
+
+// printAlertsSummary emits a prominent banner with a concise list of alerts,
+// followed by their details for quick triage in CI logs.
+func printAlertsSummary(alerts []alert) {
+	if len(alerts) == 0 {
+		return
+	}
+	banner := strings.Repeat("=", 80)
+	log.Printf("\n%s\nALERTS DETECTED: %d\n%s\n", banner, len(alerts), banner)
+	for _, a := range alerts {
+		log.Printf("[%s] %s", a.Kind, a.Summary)
+	}
+	log.Printf("%s\nFULL ALERT DETAILS:\n%s", banner, banner)
+	for idx, a := range alerts {
+		log.Printf("-- Alert %d: [%s] %s --\n%s", idx+1, a.Kind, a.Summary, a.Details)
+	}
+	log.Printf("%s\n", banner)
 }

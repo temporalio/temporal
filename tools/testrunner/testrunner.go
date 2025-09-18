@@ -57,7 +57,7 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 	if err := cmd.Run(); err != nil {
 		return output.String(), err
 	}
-	return "", nil
+	return output.String(), nil
 }
 
 type runner struct {
@@ -67,6 +67,7 @@ type runner struct {
 	attempts         []*attempt
 	maxAttempts      int
 	crashName        string
+	alerts           []alert
 }
 
 func newRunner() *runner {
@@ -212,6 +213,8 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 
 		// Run tests.
 		stdout, err := currentAttempt.run(ctx, args)
+		// Extract prominent alerts from this attempt's output.
+		r.alerts = append(r.alerts, parseAlerts(stdout)...)
 		if err != nil && !errors.As(err, &currentAttempt.exitErr) {
 			log.Fatalf("test run failed with an unexpected error: %v", err)
 		}
@@ -269,12 +272,22 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// Append ALERTS suite to the merged JUnit if any were found.
+	if len(r.alerts) > 0 {
+		// Deduplicate by kind+details to avoid noisy repeats across retries.
+		mergedReport.appendAlertsSuite(dedupeAlerts(r.alerts))
+	}
 	mergedReport.path = r.junitOutputPath
 	if err = mergedReport.write(); err != nil {
 		log.Fatal(err)
 	}
 	if len(mergedReport.reportingErrs) > 0 {
 		log.Fatal(mergedReport.reportingErrs)
+	}
+
+	// Print a prominent console summary for alerts.
+	if len(r.alerts) > 0 {
+		printAlertsSummary(dedupeAlerts(r.alerts))
 	}
 
 	// Exit with the exit code of the last attempt.

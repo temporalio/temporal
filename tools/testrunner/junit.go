@@ -69,6 +69,33 @@ func (j *junitReport) write() error {
 	return nil
 }
 
+// appendAlertsSuite adds a synthetic JUnit suite summarizing high-priority alerts
+// (data races, panics, fatals) so that CI surfaces them prominently.
+func (j *junitReport) appendAlertsSuite(alerts []alert) {
+	if len(alerts) == 0 {
+		return
+	}
+	var cases []junit.Testcase
+	for _, a := range alerts {
+		name := fmt.Sprintf("%s: %s", a.Kind, a.Summary)
+		// Use Failure with CDATA data so it renders prominently.
+		r := &junit.Result{Message: string(a.Kind), Data: a.Details}
+		cases = append(cases, junit.Testcase{
+			Name:    name,
+			Failure: r,
+		})
+	}
+	suite := junit.Testsuite{
+		Name:      "ALERTS",
+		Failures:  len(cases),
+		Tests:     len(cases),
+		Testcases: cases,
+	}
+	j.Testsuites.Suites = append(j.Testsuites.Suites, suite)
+	j.Testsuites.Failures += suite.Failures
+	j.Testsuites.Tests += suite.Tests
+}
+
 func (j *junitReport) collectTestCases() map[string]struct{} {
 	cases := make(map[string]struct{})
 	for _, suite := range j.Testsuites.Suites {

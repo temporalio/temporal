@@ -7,6 +7,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestShowPanic(t *testing.T) {
+	showPanic()
+}
+
+func showPanic() {
+	panic("test panic")
+}
+
 func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("Passthrough", func(t *testing.T) {
 		r := newRunner()
