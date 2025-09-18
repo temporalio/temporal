@@ -37,6 +37,9 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 }
 
 func (s *ActivityApiPauseClientTestSuite) SetupTest() {
+	s.T().Log("SetupTest: inducing failure")
+	s.T().FailNow()
+
 	s.FunctionalTestBase.SetupTest()
 
 	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
