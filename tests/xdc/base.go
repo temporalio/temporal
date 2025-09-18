@@ -452,10 +452,10 @@ func (s *xdcBaseSuite) mustToPayload(v any) *commonpb.Payload {
 	return payload
 }
 
-func (s *xdcBaseSuite) newClientAndWorker(hostport, namespace, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
+func (s *xdcBaseSuite) newClientAndWorker(hostport, ns, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  hostport,
-		Namespace: namespace,
+		Namespace: ns,
 	})
 	s.NoError(err)
 
