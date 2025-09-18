@@ -990,7 +990,6 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskAttempt = workflowTask.Attempt
 	if !workflowTask.StartedTime.IsZero() {
 		m.ms.executionInfo.WorkflowTaskStartedTime = timestamppb.New(workflowTask.StartedTime)
-
 	}
 	if !workflowTask.ScheduledTime.IsZero() {
 		m.ms.executionInfo.WorkflowTaskScheduledTime = timestamppb.New(workflowTask.ScheduledTime)
@@ -999,13 +998,14 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskType = workflowTask.Type
 	m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew = workflowTask.SuggestContinueAsNew
 	m.ms.executionInfo.WorkflowTaskHistorySizeBytes = workflowTask.HistorySizeBytes
-
 	m.ms.executionInfo.WorkflowTaskBuildId = workflowTask.BuildId
 	m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter = workflowTask.BuildIdRedirectCounter
 
 	m.ms.workflowTaskUpdated = true
 
-	// NOTE: do not update task queue in execution info
+	// NOTE:
+	// - do not update executionInfo.TaskQueue!
+	// - do not update executionInfo.WorkflowTaskStamp (only changed when rescheduling workflow task)
 
 	m.ms.logger.Debug("Workflow task updated",
 		tag.WorkflowScheduledEventID(workflowTask.ScheduledEventID),
@@ -1125,6 +1125,7 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		BuildIdRedirectCounter:     m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter,
 		ScheduleToStartTimeoutTask: m.ms.GetWorkflowTaskScheduleToStartTimeoutTask(),
 		StartToCloseTimeoutTask:    m.ms.GetWorkflowTaskStartToCloseTimeoutTask(),
+		Stamp:                  m.ms.executionInfo.WorkflowTaskStamp,
 	}
 
 	return wft

@@ -660,6 +660,58 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	s.Nil(resp.ExecutionErr)
 }
 
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_StampMismatch() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+	now := time.Now().UTC().Add(-10 * time.Second)
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.Nil(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+
+	transferTask := &tasks.WorkflowTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		TaskID:              s.mustGenerateTaskID(),
+		TaskQueue:           taskQueueName,
+		ScheduledEventID:    wt.ScheduledEventID,
+		VisibilityTimestamp: now,
+		Stamp:               wt.Stamp,
+	}
+
+	// Modify the workflow task stamp in mutable state to create mismatch
+	mutableState.GetExecutionInfo().WorkflowTaskStamp = wt.Stamp + 1
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, wt.ScheduledEventID, s.version)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockShard.SetCurrentTime(s.clusterName, now)
+
+	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.ErrorIs(resp.ExecutionErr, consts.ErrStaleReference)
+}
+
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
