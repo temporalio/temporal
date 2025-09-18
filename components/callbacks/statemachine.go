@@ -85,9 +85,11 @@ func (c Callback) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse URL: %v: %w", &c, err)
 			}
+			fmt.Println("DEBUGGING: RegenerateTasks: creating InvocationTask:", "variant=", "nexus", "dest=", u.Scheme+"://"+u.Host)
 			return []hsm.Task{InvocationTask{destination: u.Scheme + "://" + u.Host}}, nil
 		case *persistencespb.Callback_Hsm:
 			// Destination is empty on the internal queue.
+			fmt.Println("DEBUGGING: RegenerateTasks: creating InvocationTask:", "variant=", "hsm")
 			return []hsm.Task{InvocationTask{"TODO(bergundy): make this empty"}}, nil
 
 		default:

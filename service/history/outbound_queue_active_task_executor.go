@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	callbacks "go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -139,6 +140,15 @@ func (e *outboundQueueActiveTaskExecutor) executeStateMachineTask(
 	ref, smt, err := StateMachineTask(e.shardContext.StateMachineRegistry(), task)
 	if err != nil {
 		return err
+	}
+	// Print only for callbacks Invocation tasks
+	if t, ok := smt.(interface {
+		Type() string
+		Destination() string
+	}); ok {
+		if t.Type() == callbacks.TaskTypeInvocation {
+			fmt.Println("DEBUGGING: executeStateMachineTask: dispatching Invocation task:", "nsID=", ref.WorkflowKey.NamespaceID, "wf=", ref.WorkflowKey.WorkflowID, "run=", ref.WorkflowKey.RunID, "dest=", t.Destination())
+		}
 	}
 
 	smRegistry := e.shardContext.StateMachineRegistry()

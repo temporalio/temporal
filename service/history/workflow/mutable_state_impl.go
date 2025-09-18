@@ -5906,7 +5906,8 @@ func (ms *MutableStateImpl) AddHistorySize(size int64) {
 // processCloseCallbacks triggers "WorkflowClosed" callbacks, applying the state machine transition that schedules
 // callback tasks.
 func (ms *MutableStateImpl) processCloseCallbacks() error {
-	if ms.GetExecutionInfo().GetWorkflowWasReset() && ms.GetExecutionInfo().GetResetRunId() != ms.executionState.RunId {
+	resetRunID := ms.GetExecutionInfo().GetResetRunId()
+	if ms.GetExecutionInfo().GetWorkflowWasReset() && resetRunID != "" && resetRunID != ms.executionState.RunId {
 		return nil
 	}
 
@@ -5920,12 +5921,14 @@ func (ms *MutableStateImpl) processCloseCallbacks() error {
 		if _, ok := cb.Trigger.Variant.(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); !ok {
 			continue
 		}
+		fmt.Println("DEBUGGING: processCloseCallbacks: scheduling callback:", "id=", node.Key.ID)
 		err = coll.Transition(node.Key.ID, func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
 			return callbacks.TransitionScheduled.Apply(cb, callbacks.EventScheduled{})
 		})
 		if err != nil {
 			return err
 		}
+		fmt.Println("DEBUGGING: processCloseCallbacks: scheduled callback:", "id=", node.Key.ID)
 	}
 	return nil
 }
