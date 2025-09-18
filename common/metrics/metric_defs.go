@@ -1244,6 +1244,10 @@ var (
 		"schedule_action_dropped",
 		WithDescription("The number of schedule actions that failed to start"),
 	)
+	SchedulePayloadSize = NewCounterDef(
+		"schedule_payload_size",
+		WithDescription("The size in bytes of a customer payload (including action results and update signals)"),
+	)
 
 	// Worker Versioning
 	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")
