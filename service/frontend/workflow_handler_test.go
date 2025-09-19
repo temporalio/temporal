@@ -844,10 +844,12 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregat
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
 	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
-	config.CallbackEndpointConfigs = dc.GetTypedPropertyFnFilteredByNamespace([]callbacks.AddressMatchRule{
-		{
-			Regexp:        regexp.MustCompile(`.*`),
-			AllowInsecure: true,
+	config.CallbackEndpointConfigs = dc.GetTypedPropertyFnFilteredByNamespace(callbacks.AddressMatchRules{
+		Rules: []callbacks.AddressMatchRule{
+			{
+				Regexp:        regexp.MustCompile(`.*`),
+				AllowInsecure: true,
+			},
 		},
 	})
 	wh := s.getWorkflowHandler(config)
@@ -3889,81 +3891,4 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 		s.Nil(resp)
 		s.Error(err)
 	})
-}
-
-func (s *WorkflowHandlerSuite) TestAllowCallbackURL() {
-	type args struct {
-		rawURL      string
-		allowSystem bool
-		rules       []callbacks.AddressMatchRule
-	}
-	ts := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		{
-			name: "happy path, default config: just temporal",
-			args: args{
-				rawURL:      "temporal://system",
-				allowSystem: true,
-				rules:       []callbacks.AddressMatchRule{{}},
-			},
-			wantErr: false,
-		},
-		{
-			name: "sad path, default config: just temporal",
-			args: args{
-				rawURL:      "temporal://system",
-				allowSystem: false,
-				rules:       []callbacks.AddressMatchRule{{}},
-			},
-			wantErr: true,
-		},
-		{
-			name: "sad path incorrect scheme, default config: just temporal",
-			args: args{
-				rawURL: "https://system",
-				rules:  []callbacks.AddressMatchRule{{}},
-			},
-			wantErr: true,
-		},
-		{
-			name: "sad path incorrect host, default config: just temporal",
-			args: args{
-				rawURL: "temporal://somehost.com",
-				rules:  []callbacks.AddressMatchRule{{}},
-			},
-			wantErr: true,
-		},
-		{
-			name: "sad path http, default config: just temporal",
-			args: args{
-				rawURL: "http://localhost",
-				rules:  []callbacks.AddressMatchRule{{}},
-			},
-			wantErr: true,
-		},
-		{
-			name: "sad path https, default config: just temporal",
-			args: args{
-				rawURL: "http://localhost",
-				rules:  []callbacks.AddressMatchRule{{}},
-			},
-			wantErr: true,
-		},
-		{
-			name: "sad path invalid url, default config: just temporal",
-			args: args{
-				rawURL: "blblbblblb",
-				rules:  []callbacks.AddressMatchRule{{}},
-			},
-			wantErr: true,
-		},
-	}
-	for _, tt := range ts {
-		s.Run(tt.name, func() {
-			s.Equal(tt.wantErr, allowCallbackURL(tt.args.rawURL, tt.args.rules, tt.args.allowSystem) != nil)
-		})
-	}
 }

@@ -51,41 +51,49 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	}
 }
 
-var AllowSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
-	"component.callbacks.allowSystemCallbackURL",
-	false,
-	`The global feature toggle that controls whether or not client workers can use "temporal://system" URL. 
-	- false (default): do not allow callback URLS to use the "temporal://system" URL
-	- true: allow callback URLS to use the "temporal://system" URL
-	- The default will switch to true in future releases.`)
-
 var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(
 	"component.callbacks.allowedAddresses",
 	allowedAddressConverter,
-	[]AddressMatchRule(nil),
+	AddressMatchRules{},
 	`The per-namespace list of addresses that are allowed for callbacks and whether secure connections (https) are required.
-URLs are checked against each in order when starting a workflow with attached callbacks and only need to match one to pass validation. 
+URLs are checked against each in order when starting a workflow with attached callbacks and only need to match one to pass validation.
 URL: "temporal://system" is always allowed and the default is no address rules. Any invalid entries are ignored. Each entry is a map with possible values:
 	 - "Pattern":string (required) the host:port pattern to which this config applies.
 		Wildcards, '*', are supported and can match any number of characters (e.g. '*' matches everything, 'prefix.*.domain' matches 'prefix.a.domain' as well as 'prefix.a.b.domain').
 	 - "AllowInsecure":bool (optional, default=false) indicates whether https is required`)
 
 // allowedSchema contains all schemes both insecure and secure
-var allowedSchemes = []string{"http", "https", "temporal"}
+var allowedSchemes = []string{"http", "https"}
+
+// allowedSecurSchema contains only secure schemes
+var allowedSecureSchemes = []string{"https"}
 
 const (
 	temporalScheme = "temporal"
 	systemHost     = "system"
 )
 
-// allowedSecurSchema contains only secure schemes
-var allowedSecureSchemes = []string{"https", "temporal"}
+type AddressMatchRules struct {
+	Rules []AddressMatchRule
+}
 
-func IsSchemeAllowed(scheme string, enableSystem bool) bool {
-	if scheme == temporalScheme && !enableSystem {
-		return false
+func (a AddressMatchRules) Validate(u *url.URL) error {
+	if u.Host == systemHost && u.Scheme == temporalScheme {
+		return nil
 	}
-	return slices.Contains(allowedSchemes, scheme)
+	if !slices.Contains(allowedSchemes, u.Scheme) {
+		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
+	}
+	for _, rule := range a.Rules {
+		allow, err := rule.Allow(u)
+		if err != nil {
+			return err
+		}
+		if allow {
+			return nil
+		}
+	}
+	return status.Errorf(codes.InvalidArgument, "invalid url: url does not match any configured callback address: %v", u)
 }
 
 type AddressMatchRule struct {
@@ -120,24 +128,17 @@ func (a AddressMatchRule) Allow(u *url.URL) (bool, error) {
 	return true, nil
 }
 
-func allowedAddressConverter(val any) ([]AddressMatchRule, error) {
+func allowedAddressConverter(val any) (AddressMatchRules, error) {
 	type entry struct {
 		Pattern       string
 		AllowInsecure bool
 	}
 	intermediate, err := dynamicconfig.ConvertStructure[[]entry](nil)(val)
 	if err != nil {
-		return nil, err
+		return AddressMatchRules{}, err
 	}
 
-	configs := []AddressMatchRule{
-		{
-			// used to indicate the callback should be routed internally
-			// other metadata from the client request will be used to route the request to the
-			// correct namespace
-			// the temporalSystemURI is checked explicitly in the allow method
-		},
-	}
+	configs := []AddressMatchRule{}
 	for _, e := range intermediate {
 		if e.Pattern == "" {
 			// Skip configs with missing / unparsable Pattern
@@ -153,7 +154,7 @@ func allowedAddressConverter(val any) ([]AddressMatchRule, error) {
 			AllowInsecure: e.AllowInsecure,
 		})
 	}
-	return configs, nil
+	return AddressMatchRules{Rules: configs}, nil
 }
 
 func addressPatternToRegexp(pattern string) string {

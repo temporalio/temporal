@@ -89,33 +89,44 @@ type taskExecutor struct {
 	TaskExecutorOptions
 }
 
-func buildCallbackURL(callbackTemplate string, ns *namespace.Namespace, endpoint *persistencespb.NexusEndpointEntry) (string, error) {
-	switch target := endpoint.GetEndpoint().GetSpec().GetTarget().GetVariant().(type) {
+func buildCallbackURL(
+	useSystemCallback bool,
+	callbackTemplate string,
+	ns *namespace.Namespace,
+	endpoint *persistencespb.NexusEndpointEntry,
+) (string, error) {
+	target := endpoint.GetEndpoint().GetSpec().GetTarget().GetVariant()
+	if !useSystemCallback {
+		return buildCallbackFromTemplate(callbackTemplate, ns)
+	}
+	switch target.(type) {
 	case *persistencespb.NexusEndpointTarget_Worker_:
-
 		return fmt.Sprintf("temporal://system/%s",
 			commonnexus.RouteCompletionCallback.Path(ns.Name().String())), nil
 	case *persistencespb.NexusEndpointTarget_External_:
-		if callbackTemplate == "unset" {
-			return "", serviceerror.NewInternalf("dynamic config %q is unset", CallbackURLTemplate.Key().String())
-		}
-		// TODO(bergundy): Consider caching this template.
-		callbackURLTemplate, err := template.New("NexusCallbackURL").Parse(callbackTemplate)
-		if err != nil {
-			return "", fmt.Errorf("failed to parse callback URL template: %w", err)
-		}
-		builder := &strings.Builder{}
-		err = callbackURLTemplate.Execute(builder, struct{ NamespaceName, NamespaceID string }{
-			NamespaceName: ns.Name().String(),
-			NamespaceID:   ns.ID().String(),
-		})
-		if err != nil {
-			return "", fmt.Errorf("failed to format callback URL: %w", err)
-		}
-		return builder.String(), nil
+		return buildCallbackFromTemplate(callbackTemplate, ns)
 	default:
 		return "", fmt.Errorf("unknown endpoint target type: %T", target)
 	}
+}
+
+func buildCallbackFromTemplate(callbackTemplate string, ns *namespace.Namespace) (string, error) {
+	if callbackTemplate == "unset" {
+		return "", serviceerror.NewInternalf("dynamic config %q is unset", CallbackURLTemplate.Key().String())
+	}
+	callbackURLTemplate, err := template.New("NexusCallbackURL").Parse(callbackTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse callback URL template: %w", err)
+	}
+	builder := &strings.Builder{}
+	err = callbackURLTemplate.Execute(builder, struct{ NamespaceName, NamespaceID string }{
+		NamespaceName: ns.Name().String(),
+		NamespaceID:   ns.ID().String(),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to format callback URL: %w", err)
+	}
+	return builder.String(), nil
 }
 
 func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task InvocationTask) error {
@@ -145,13 +156,11 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		}
 		return err
 	}
-	callbackURL, err := buildCallbackURL(e.Config.CallbackURLTemplate(), ns, endpoint)
+
+	callbackURL, err := buildCallbackURL(e.Config.UseSystemCallbackURL(), e.Config.CallbackURLTemplate(), ns, endpoint)
 	if err != nil {
 		return err
 	}
-
-	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
-	ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey, &atomic.Value{})
 
 	// Set MachineTransitionCount to 0 since older server versions, which had logic that considers references with
 	// non-zero MachineTransitionCount as "non-concurrent" references, and would fail validation of the reference if the
