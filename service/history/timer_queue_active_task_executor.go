@@ -374,6 +374,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	if workflowTask == nil {
 		return nil
 	}
+	if task.Stamp != workflowTask.Stamp {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrStaleReference
+	}
 
 	var operationMetricsTag string
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {

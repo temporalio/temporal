@@ -99,6 +99,10 @@ message WorkflowExecutionInfo {
     // for a transient/speculative WFT.
     // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     int64 workflow_task_build_id_redirect_counter = 89;
+    // Stamp represents the "version" of the workflow's internal state.
+    // It increases monotonically when the workflow's options are modified.
+    // It is used to check if a workflow task is still relevant to the corresponding workflow state machine.
+    int32 workflow_task_stamp = 107;
 
     bool cancel_requested = 29;
     string cancel_request_id = 32;
@@ -331,9 +335,9 @@ message TransferTaskInfo {
         // If the task addresses a CHASM component, this field will be set.
         ChasmTaskInfo chasm_task_info = 18;
     }
-    // Stamp represents the version of the activity internal state, for which the timer task was created.
-    // It monotonically increments when the activity options are changed.
-    // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
+    // Stamp represents the "version" of the entity's internal state for which the transfer task was created.
+    // It increases monotonically when the entity's options are modified.
+    // It is used to check if a task is still relevant to the entity's corresponding state machine.
     int32 stamp = 17;
 }
 
@@ -414,9 +418,9 @@ message TimerTaskInfo {
     // A workflow chain is identified by the run_id of the first workflow in the chain.
     string first_run_id = 15;
 
-    // Stamp represents the version of the activity internal state, for which the timer task was created.
-    // It monotonically increments when the activity options are changed.
-    // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
+    // Stamp represents the "version" of the entity's internal state for which the timer task was created.
+    // It increases monotonically when the entity's options are modified.
+    // It is used to check if a task is still relevant to the entity's corresponding state machine.
     int32 stamp = 16;
 
     oneof task_details {
@@ -545,10 +549,9 @@ message ActivityInfo {
     // The last time an activity attempt completion was recorded by the server.
     google.protobuf.Timestamp last_attempt_complete_time = 40;
 
-
-    // Stamp represents the “version” of the activity internal state (options) and can/will be changed with Activity API.
-    // It monotonically increments when the activity options are changed.
-    // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
+    // Stamp represents the “version” of the activity's internal state and can/will be changed with Activity API.
+    // It increases monotonically when the activity's options are modified.
+    // It is used to check if an activity task is still relevant to the corresponding activity state machine.
     int32 stamp = 41;
 
     // Paused state. When activity is paused it will not advance until unpaused.
