@@ -330,13 +330,6 @@ func isTestResultBoundary(line string) bool {
 	return strings.HasPrefix(line, "FAIL") || strings.HasPrefix(line, "PASS")
 }
 
-func shouldStopDataRace(line string, idx, start int) bool {
-	if idx > start && isRaceBoundary(line) {
-		return true
-	}
-	return isTestResultBoundary(line)
-}
-
 func shouldStopOnTestBoundary(line string, _ int, _ int) bool {
 	return isTestResultBoundary(line)
 }
