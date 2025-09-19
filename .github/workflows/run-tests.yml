@@ -261,8 +261,9 @@ jobs:
 
       - name: Generate crash report
         if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+        run:
+          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
@@ -356,8 +357,9 @@ jobs:
 
       - name: Generate crash report
         if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+        run:
+          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
@@ -474,26 +476,15 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
     steps:
-      - name: Checkout Code (for local actions)
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ env.COMMIT }}
-      # Resolve the numeric job ID for this job instance.
-      # IMPORTANT: `job_name` must exactly match the job's display name above.
-      - name: Get job ID
-        id: get_job_id
-        uses: ./.github/actions/get-job-id
-        with:
-          job_name: Functional test (${{ matrix.name }}, shard ${{ matrix.shard_index }})
-          run_id: ${{ github.run_id }}
       - uses: ScribeMD/docker-cache@0.3.7
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
 
       - uses: actions/checkout@v4
-      if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
@@ -539,8 +530,9 @@ jobs:
 
       - name: Generate crash report
         if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+        run:
+          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
@@ -651,7 +643,7 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
     steps:
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -663,7 +655,6 @@ jobs:
         with:
           job_name: Functional test xdc (${{ matrix.name }})
           run_id: ${{ github.run_id }}
-      
 
       - name: Start containerized dependencies
         uses: hoverkraft-tech/compose-action@v2.0.1
@@ -698,8 +689,9 @@ jobs:
 
       - name: Generate crash report
         if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+        run:
+          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
@@ -812,7 +804,7 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       ES_VERSION: ${{ matrix.es_version }}
     steps:
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -824,7 +816,6 @@ jobs:
         with:
           job_name: Functional test ndc (${{ matrix.name }})
           run_id: ${{ github.run_id }}
-      
 
       - name: Start containerized dependencies
         uses: hoverkraft-tech/compose-action@v2.0.1
@@ -859,8 +850,9 @@ jobs:
 
       - name: Generate crash report
         if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+        run:
+          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Upload code coverage to Codecov
