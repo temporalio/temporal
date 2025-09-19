@@ -108,14 +108,15 @@ type (
 		captureMetricsHandler            *metricstest.CaptureHandler
 		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
 
-		onGetClaims           func(*authorization.AuthInfo) (*authorization.Claims, error)
-		onAuthorize           func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
-		callbackLock          sync.RWMutex // Must be used for above callbacks
-		serviceFxOptions      map[primitives.ServiceName][]fx.Option
-		taskCategoryRegistry  tasks.TaskCategoryRegistry
-		chasmRegistry         *chasm.Registry
-		grpcClientInterceptor *grpcinject.Interceptor
-		spanExporters         map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		onGetClaims               func(*authorization.AuthInfo) (*authorization.Claims, error)
+		onAuthorize               func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
+		callbackLock              sync.RWMutex // Must be used for above callbacks
+		serviceFxOptions          map[primitives.ServiceName][]fx.Option
+		dynamicConfigLogOverrides map[primitives.ServiceName]bool
+		taskCategoryRegistry      tasks.TaskCategoryRegistry
+		chasmRegistry             *chasm.Registry
+		grpcClientInterceptor     *grpcinject.Interceptor
+		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -612,6 +613,14 @@ func (c *TemporalImpl) WithDynamicConfigLogLevel(serviceName primitives.ServiceN
 	if c.serviceFxOptions == nil {
 		c.serviceFxOptions = make(map[primitives.ServiceName][]fx.Option)
 	}
+	if c.dynamicConfigLogOverrides == nil {
+		c.dynamicConfigLogOverrides = make(map[primitives.ServiceName]bool)
+	}
+
+	// Check if we've already set up dynamic config logging for this service
+	if c.dynamicConfigLogOverrides[serviceName] {
+		return // Already configured, avoid duplicate decoration
+	}
 
 	// Create a logger with the specific log level for dynamic config
 	dynamicConfigLogger := log.NewZapLogger(log.BuildZapLogger(log.Config{
@@ -624,6 +633,9 @@ func (c *TemporalImpl) WithDynamicConfigLogLevel(serviceName primitives.ServiceN
 			return dynamicconfig.NewCollection(client, dynamicConfigLogger)
 		}),
 	)
+
+	// Mark this service as having dynamic config logging configured
+	c.dynamicConfigLogOverrides[serviceName] = true
 }
 
 // WithDynamicConfigLogLevelForAllServices overrides the log level for the dynamic config client for all services
