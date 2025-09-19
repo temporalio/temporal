@@ -78,6 +78,9 @@ func (j *junitReport) appendAlertsSuite(alerts []alert) {
 	var cases []junit.Testcase
 	for _, a := range alerts {
 		name := fmt.Sprintf("%s: %s", a.Kind, a.Summary)
+		if p := primaryTestName(a.Tests); p != "" {
+			name = fmt.Sprintf("%s — in %s", name, p)
+		}
 		// Prepend detected test names to the details for quick context in CI UIs.
 		details := a.Details
 		if len(a.Tests) > 0 {

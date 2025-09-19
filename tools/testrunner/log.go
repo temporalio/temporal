@@ -84,6 +84,22 @@ type alert struct {
 	Tests   []string
 }
 
+// primaryTestName returns a single representative test name for an alert.
+// Preference order:
+// 1) Fully-qualified test name containing ".Test"
+// 2) First detected test name
+func primaryTestName(tests []string) string {
+	if len(tests) == 0 {
+		return ""
+	}
+	for _, t := range tests {
+		if strings.Contains(t, ".Test") {
+			return t
+		}
+	}
+	return tests[0]
+}
+
 // parseAlerts scans a gotestsum/go test stdout stream and extracts high-priority
 // alerts such as data races and panics. It returns a slice of alerts in the
 // order they were encountered.
@@ -260,7 +276,17 @@ func printAlertsSummary(alerts []alert) {
 	banner := strings.Repeat("=", 80)
 	log.Printf("\n%s\nALERTS DETECTED: %d\n%s\n", banner, len(alerts), banner)
 	for _, a := range alerts {
-		log.Printf("[%s] %s", a.Kind, a.Summary)
+		// Include originating test when available to aid quick triage in CI logs.
+		if len(a.Tests) > 0 {
+			primary := primaryTestName(a.Tests)
+			if len(a.Tests) == 1 {
+				log.Printf("[%s] %s — in %s", a.Kind, a.Summary, primary)
+			} else {
+				log.Printf("[%s] %s — in %s (+%d more)", a.Kind, a.Summary, primary, len(a.Tests)-1)
+			}
+		} else {
+			log.Printf("[%s] %s", a.Kind, a.Summary)
+		}
 	}
 	log.Printf("%s\nFULL ALERT DETAILS:\n%s", banner, banner)
 	for idx, a := range alerts {
