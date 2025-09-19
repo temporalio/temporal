@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -39,6 +40,13 @@ var endpointEntry = &persistencespb.NexusEndpointEntry{
 	Endpoint: &persistencespb.NexusEndpoint{
 		Spec: &persistencespb.NexusEndpointSpec{
 			Name: "endpoint",
+			Target: &persistencespb.NexusEndpointTarget{
+				Variant: &persistencespb.NexusEndpointTarget_External_{
+					External: &persistencespb.NexusEndpointTarget_External{
+						Url: "http://" + uuid.NewString(),
+					},
+				},
+			},
 		},
 	},
 }

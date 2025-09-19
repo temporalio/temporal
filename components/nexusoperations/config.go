@@ -73,6 +73,17 @@ ScheduleNexusOperation commands with a "nexus_header" field that exceeds this li
 Uses Go's len() function on header keys and values to determine the total size.`,
 )
 
+var UseSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
+	"component.nexusoperations.useSystemCallbackURL",
+	false,
+	`UseSystemCallbackURL is a global feature toggle that controls how the executor generates callback URLs for worker targets in Nexus Operations.
+When set to true, the executor will use the fixed system callback URL ("temporal://system") for all worker targets, instead of generating URLs from the callback URL template.
+This simplifies configuration and improves reliability for worker callbacks.
+- false (default): The executor uses the callback URL template to generate callback URLs for worker targets.
+- true: The executor uses the fixed system callback URL ("temporal://system") for worker targets.
+Note: The default will switch to true in future releases.`,
+)
+
 var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSettingWithConverter(
 	"component.nexusoperations.disallowedHeaders",
 	func(in any) ([]string, error) {
@@ -142,7 +153,7 @@ requirements and query complexity. Consider the cardinality impact when enabling
 var RecordCancelRequestCompletionEvents = dynamicconfig.NewGlobalBoolSetting(
 	"component.nexusoperations.recordCancelRequestCompletionEvents",
 	true,
-	`Boolean flag to control whether to record NexusOperationCancelRequestCompleted and 
+	`Boolean flag to control whether to record NexusOperationCancelRequestCompleted and
 NexusOperationCancelRequestFailed events. Default true.`,
 )
 
@@ -159,6 +170,7 @@ type Config struct {
 	MaxOperationScheduleToCloseTimeout  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
+	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
 	EndpointNotFoundAlwaysNonRetryable  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
 	RetryPolicy                         func() backoff.RetryPolicy
@@ -178,6 +190,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		MaxOperationScheduleToCloseTimeout:  MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                    dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:                 CallbackURLTemplate.Get(dc),
+		UseSystemCallbackURL:                UseSystemCallbackURL.Get(dc),
 		EndpointNotFoundAlwaysNonRetryable:  EndpointNotFoundAlwaysNonRetryable.Get(dc),
 		RecordCancelRequestCompletionEvents: RecordCancelRequestCompletionEvents.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
