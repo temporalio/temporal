@@ -52,6 +52,7 @@ type (
 		Logger                             log.Logger
 		HealthSignals                      persistence.HealthSignalAggregator
 		DynamicRateLimitingParams          DynamicRateLimitingParams
+		Serializer                         serialization.Serializer
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -83,6 +84,7 @@ func ClusterNameProvider(config *cluster.Config) ClusterName {
 func EventBlobCacheProvider(
 	dc *dynamicconfig.Collection,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) persistence.XDCCache {
 	return persistence.NewEventsBlobCache(
 		dynamicconfig.XDCCacheMaxSizeBytes.Get(dc)(),
@@ -128,7 +130,7 @@ func FactoryProvider(
 		systemRequestRateLimiter,
 		namespaceRequestRateLimiter,
 		shardRequestRateLimiter,
-		serialization.NewSerializer(),
+		params.Serializer,
 		params.EventBlobCache,
 		string(params.ClusterName),
 		params.MetricsHandler,
@@ -163,14 +165,15 @@ func DataStoreFactoryProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	tracerProvider trace.TracerProvider,
+	serializer serialization.Serializer,
 ) persistence.DataStoreFactory {
 	var dataStoreFactory persistence.DataStoreFactory
 	defaultStoreCfg := cfg.DataStores[cfg.DefaultStore]
 	switch {
 	case defaultStoreCfg.Cassandra != nil:
-		dataStoreFactory = cassandra.NewFactory(*defaultStoreCfg.Cassandra, r, string(clusterName), logger, metricsHandler)
+		dataStoreFactory = cassandra.NewFactory(*defaultStoreCfg.Cassandra, r, string(clusterName), logger, metricsHandler, serializer)
 	case defaultStoreCfg.SQL != nil:
-		dataStoreFactory = sql.NewFactory(*defaultStoreCfg.SQL, r, string(clusterName), logger, metricsHandler)
+		dataStoreFactory = sql.NewFactory(*defaultStoreCfg.SQL, r, string(clusterName), serializer, logger, metricsHandler)
 	case defaultStoreCfg.CustomDataStoreConfig != nil:
 		dataStoreFactory = abstractDataStoreFactory.NewFactory(*defaultStoreCfg.CustomDataStoreConfig, r, string(clusterName), logger, metricsHandler)
 	default:

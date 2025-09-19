@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -44,13 +45,17 @@ const (
 type (
 	HistoryStore struct {
 		Session gocql.Session
-		p.HistoryBranchUtilImpl
+		p.HistoryBranchUtil
 	}
 )
 
-func NewHistoryStore(session gocql.Session) *HistoryStore {
+func NewHistoryStore(
+	session gocql.Session,
+	serializer serialization.Serializer,
+) *HistoryStore {
 	return &HistoryStore{
-		Session: session,
+		Session:           session,
+		HistoryBranchUtil: p.NewHistoryBranchUtil(serializer),
 	}
 }
 
@@ -137,7 +142,7 @@ func (h *HistoryStore) ReadHistoryBranch(
 	ctx context.Context,
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
-	branch, err := h.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	branch, err := h.ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +351,7 @@ func (h *HistoryStore) GetHistoryTreeContainingBranch(
 	request *p.InternalGetHistoryTreeContainingBranchRequest,
 ) (*p.InternalGetHistoryTreeContainingBranchResponse, error) {
 
-	branch, err := h.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	branch, err := h.ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
 		return nil, err
 	}
@@ -389,6 +394,10 @@ func (h *HistoryStore) GetHistoryTreeContainingBranch(
 	return &p.InternalGetHistoryTreeContainingBranchResponse{
 		TreeInfos: treeInfos,
 	}, nil
+}
+
+func (h *HistoryStore) GetHistoryBranchUtil() p.HistoryBranchUtil {
+	return h.HistoryBranchUtil
 }
 
 func convertHistoryNode(
