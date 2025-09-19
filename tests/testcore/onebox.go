@@ -229,6 +229,9 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 }
 
 func (c *TemporalImpl) Start() error {
+	// Override dynamic config log level to INFO for all services
+	c.WithDynamicConfigLogLevelForAllServices("info")
+
 	// create temporal-system namespace, this must be created before starting
 	// the services - so directly use the metadataManager to create this
 	if err := c.createSystemNamespace(); err != nil {
@@ -602,6 +605,33 @@ func (c *TemporalImpl) startWorker() {
 
 func (c *TemporalImpl) getFxOptionsForService(serviceName primitives.ServiceName) fx.Option {
 	return fx.Options(c.serviceFxOptions[serviceName]...)
+}
+
+// WithDynamicConfigLogLevel overrides the log level for the dynamic config client for a specific service
+func (c *TemporalImpl) WithDynamicConfigLogLevel(serviceName primitives.ServiceName, logLevel string) {
+	if c.serviceFxOptions == nil {
+		c.serviceFxOptions = make(map[primitives.ServiceName][]fx.Option)
+	}
+
+	// Create a logger with the specific log level for dynamic config
+	dynamicConfigLogger := log.NewZapLogger(log.BuildZapLogger(log.Config{
+		Level: logLevel,
+	}))
+
+	// Override the dynamic config collection provider
+	c.serviceFxOptions[serviceName] = append(c.serviceFxOptions[serviceName],
+		fx.Decorate(func(client dynamicconfig.Client) *dynamicconfig.Collection {
+			return dynamicconfig.NewCollection(client, dynamicConfigLogger)
+		}),
+	)
+}
+
+// WithDynamicConfigLogLevelForAllServices overrides the log level for the dynamic config client for all services
+func (c *TemporalImpl) WithDynamicConfigLogLevelForAllServices(logLevel string) {
+	c.WithDynamicConfigLogLevel(primitives.FrontendService, logLevel)
+	c.WithDynamicConfigLogLevel(primitives.HistoryService, logLevel)
+	c.WithDynamicConfigLogLevel(primitives.MatchingService, logLevel)
+	c.WithDynamicConfigLogLevel(primitives.WorkerService, logLevel)
 }
 
 func (c *TemporalImpl) createSystemNamespace() error {
