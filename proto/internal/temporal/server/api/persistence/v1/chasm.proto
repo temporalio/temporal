@@ -77,8 +77,8 @@ message ChasmTaskInfo {
     // reference was created. Can be used to invalidate this reference.
     VersionedTransition component_last_update_versioned_transition = 2;
 
-    // Encoded full path to the component.
-    string path = 3;
+    // Path to the component.
+    repeated string path = 3;
 
     // Task type (registered by components).
     string type = 4;

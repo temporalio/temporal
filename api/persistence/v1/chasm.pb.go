@@ -399,8 +399,8 @@ type ChasmTaskInfo struct {
 	// Last updated transition of the entity being referenced at the time the
 	// reference was created. Can be used to invalidate this reference.
 	ComponentLastUpdateVersionedTransition *VersionedTransition `protobuf:"bytes,2,opt,name=component_last_update_versioned_transition,json=componentLastUpdateVersionedTransition,proto3" json:"component_last_update_versioned_transition,omitempty"`
-	// Encoded full path to the component.
-	Path string `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
+	// Path to the component.
+	Path []string `protobuf:"bytes,3,rep,name=path,proto3" json:"path,omitempty"`
 	// Task type (registered by components).
 	Type string `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
 	// Opaque attached task data. May be nil. Usable by components, not the CHASM
@@ -454,11 +454,11 @@ func (x *ChasmTaskInfo) GetComponentLastUpdateVersionedTransition() *VersionedTr
 	return nil
 }
 
-func (x *ChasmTaskInfo) GetPath() string {
+func (x *ChasmTaskInfo) GetPath() []string {
 	if x != nil {
 		return x.Path
 	}
-	return ""
+	return nil
 }
 
 func (x *ChasmTaskInfo) GetType() string {
@@ -705,7 +705,7 @@ const file_temporal_server_api_persistence_v1_chasm_proto_rawDesc = "" +
 	"\rChasmTaskInfo\x12\x8c\x01\n" +
 	"&component_initial_versioned_transition\x18\x01 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR#componentInitialVersionedTransition\x12\x93\x01\n" +
 	"*component_last_update_versioned_transition\x18\x02 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR&componentLastUpdateVersionedTransition\x12\x12\n" +
-	"\x04path\x18\x03 \x01(\tR\x04path\x12\x12\n" +
+	"\x04path\x18\x03 \x03(\tR\x04path\x12\x12\n" +
 	"\x04type\x18\x04 \x01(\tR\x04type\x124\n" +
 	"\x04data\x18\x05 \x01(\v2 .temporal.api.common.v1.DataBlobR\x04data\"\xc1\x03\n" +
 	"\x11ChasmComponentRef\x12!\n" +

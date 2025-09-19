@@ -1950,7 +1950,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_
 		Info: &persistencespb.ChasmTaskInfo{
 			ComponentInitialVersionedTransition:    &persistencespb.VersionedTransition{},
 			ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{},
-			Path:                                   "",
+			Path:                                   []string{},
 			Type:                                   "Testlib.TestSideEffectTask",
 			Data: &commonpb.DataBlob{
 				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
