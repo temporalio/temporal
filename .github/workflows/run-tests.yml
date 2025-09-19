@@ -651,7 +651,6 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
     steps:
-      - name: Checkout Code
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
