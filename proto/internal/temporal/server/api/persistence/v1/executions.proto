@@ -9,6 +9,7 @@ import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/common.proto";
 import "temporal/api/enums/v1/event_type.proto";
+import "temporal/api/enums/v1/failed_cause.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
@@ -276,6 +277,12 @@ message WorkflowExecutionInfo {
 
     // Pause info contains the details of the request to pause the workflow.
     WorkflowPauseInfo pause_info = 106;
+
+    // Last workflow task failure category and cause are used to track the last workflow task failure category and cause.
+    oneof last_workflow_task_failure {
+        temporal.api.enums.v1.WorkflowTaskFailedCause last_workflow_task_failure_cause = 107;
+        temporal.api.enums.v1.TimeoutType last_workflow_task_timed_out_type = 108;
+    }
 }
 
 message ExecutionStats {
