@@ -40,6 +40,7 @@ func NewActivityTaskToken(
 	attempt int32,
 	clock *clockspb.VectorClock,
 	version int64,
+	startVersion int64,
 ) *tokenspb.Task {
 	return &tokenspb.Task{
 		NamespaceId:      namespaceID,
@@ -51,5 +52,6 @@ func NewActivityTaskToken(
 		ActivityId:       activityId,
 		Clock:            clock,
 		Version:          version,
+		StartVersion:     startVersion,
 	}
 }

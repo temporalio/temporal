@@ -997,6 +997,7 @@ type SyncActivityTaskAttributes struct {
 	RetryMaximumInterval    *durationpb.Duration `protobuf:"bytes,23,opt,name=retry_maximum_interval,json=retryMaximumInterval,proto3" json:"retry_maximum_interval,omitempty"`
 	RetryMaximumAttempts    int32                `protobuf:"varint,24,opt,name=retry_maximum_attempts,json=retryMaximumAttempts,proto3" json:"retry_maximum_attempts,omitempty"`
 	RetryBackoffCoefficient float64              `protobuf:"fixed64,25,opt,name=retry_backoff_coefficient,json=retryBackoffCoefficient,proto3" json:"retry_backoff_coefficient,omitempty"`
+	StartVersion            int64                `protobuf:"varint,26,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -1202,6 +1203,13 @@ func (x *SyncActivityTaskAttributes) GetRetryMaximumAttempts() int32 {
 func (x *SyncActivityTaskAttributes) GetRetryBackoffCoefficient() float64 {
 	if x != nil {
 		return x.RetryBackoffCoefficient
+	}
+	return 0
+}
+
+func (x *SyncActivityTaskAttributes) GetStartVersion() int64 {
+	if x != nil {
+		return x.StartVersion
 	}
 	return 0
 }
@@ -2067,7 +2075,7 @@ const file_temporal_server_api_replication_v1_message_proto_rawDesc = "" +
 	"\x0esource_cluster\x18\x01 \x01(\tR\rsourceCluster\x12\x19\n" +
 	"\bshard_id\x18\x02 \x01(\x05R\ashardId\x12;\n" +
 	"\vstatus_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"statusTime\"\xa0\v\n" +
+	"statusTime\"\xc5\v\n" +
 	"\x1aSyncActivityTaskAttributes\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -2095,7 +2103,8 @@ const file_temporal_server_api_replication_v1_message_proto_rawDesc = "" +
 	"\x16retry_initial_interval\x18\x16 \x01(\v2\x19.google.protobuf.DurationR\x14retryInitialInterval\x12O\n" +
 	"\x16retry_maximum_interval\x18\x17 \x01(\v2\x19.google.protobuf.DurationR\x14retryMaximumInterval\x124\n" +
 	"\x16retry_maximum_attempts\x18\x18 \x01(\x05R\x14retryMaximumAttempts\x12:\n" +
-	"\x19retry_backoff_coefficient\x18\x19 \x01(\x01R\x17retryBackoffCoefficient\"\xad\x04\n" +
+	"\x19retry_backoff_coefficient\x18\x19 \x01(\x01R\x17retryBackoffCoefficient\x12#\n" +
+	"\rstart_version\x18\x1a \x01(\x03R\fstartVersion\"\xad\x04\n" +
 	"\x15HistoryTaskAttributes\x12!\n" +
 	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x03 \x01(\tR\n" +
