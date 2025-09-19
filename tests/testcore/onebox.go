@@ -767,6 +767,7 @@ func (c *TemporalImpl) newRPCFactory(
 		int(httpPort),
 		frontendTLSConfig,
 		options,
+		map[primitives.ServiceName][]grpc.DialOption{},
 		monitor,
 	), nil
 }
