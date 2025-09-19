@@ -47,6 +47,8 @@ func TestParseAlerts_DataRaceAndPanic(t *testing.T) {
 			require.NotEmpty(t, a.Tests)
 			// Primary test should be the first entry.
 			require.Equal(t, a.Tests[0], primaryTestName(a.Tests))
+		default:
+			t.Fatalf("unexpected alert kind: %s", a.Kind)
 		}
 	}
 	require.True(t, hasRace, "expected at least one data race alert")

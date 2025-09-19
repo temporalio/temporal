@@ -98,14 +98,14 @@ func (j *junitReport) appendAlertsSuite(alerts []alert) {
 		Tests:     len(cases),
 		Testcases: cases,
 	}
-	j.Testsuites.Suites = append(j.Testsuites.Suites, suite)
-	j.Testsuites.Failures += suite.Failures
-	j.Testsuites.Tests += suite.Tests
+	j.Suites = append(j.Suites, suite)
+	j.Failures += suite.Failures
+	j.Tests += suite.Tests
 }
 
 func (j *junitReport) collectTestCases() map[string]struct{} {
 	cases := make(map[string]struct{})
-	for _, suite := range j.Testsuites.Suites {
+	for _, suite := range j.Suites {
 		for _, tc := range suite.Testcases {
 			cases[tc.Name] = struct{}{}
 		}
@@ -115,7 +115,7 @@ func (j *junitReport) collectTestCases() map[string]struct{} {
 
 func (j *junitReport) collectTestCaseFailures() []string {
 	var failures []string
-	for _, suite := range j.Testsuites.Suites {
+	for _, suite := range j.Suites {
 		if suite.Failures == 0 {
 			continue
 		}

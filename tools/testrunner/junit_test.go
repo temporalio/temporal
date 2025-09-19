@@ -13,8 +13,8 @@ import (
 func TestReadJUnitReport(t *testing.T) {
 	j := &junitReport{path: "testdata/junit-attempt-1.xml"}
 	require.NoError(t, j.read())
-	require.Len(t, j.Testsuites.Suites, 1)
-	require.Equal(t, 2, j.Testsuites.Failures)
+	require.Len(t, j.Suites, 1)
+	require.Equal(t, 2, j.Failures)
 	require.Equal(t, []string{"TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument"}, j.collectTestCaseFailures())
 }
 
@@ -123,8 +123,8 @@ func TestAppendAlertsSuite(t *testing.T) {
 	}
 	j.appendAlertsSuite(alerts)
 
-	require.Len(t, j.Testsuites.Suites, 1)
-	suite := j.Testsuites.Suites[0]
+	require.Len(t, j.Suites, 1)
+	suite := j.Suites[0]
 	require.Equal(t, "ALERTS", suite.Name)
 	require.Equal(t, 2, suite.Failures)
 	require.Equal(t, 2, suite.Tests)
@@ -151,8 +151,8 @@ func TestAppendAlertsSuite(t *testing.T) {
 	require.Contains(t, tc1.Failure.Data, "TestPanicExample")
 
 	// Ensure totals updated at the top level.
-	require.Equal(t, 2, j.Testsuites.Failures)
-	require.Equal(t, 2, j.Testsuites.Tests)
+	require.Equal(t, 2, j.Failures)
+	require.Equal(t, 2, j.Tests)
 }
 
 func collectTestNames(suites []junit.Testsuite) []string {

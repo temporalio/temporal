@@ -110,83 +110,19 @@ func parseAlerts(stdout string) []alert {
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
 
-		// Detect Go race detector reports.
-		if strings.HasPrefix(line, "WARNING: DATA RACE") {
-			start := i
-			for j := i - 1; j >= 0; j-- {
-				if strings.HasPrefix(strings.TrimSpace(lines[j]), "==================") {
-					start = j
-					break
-				}
-			}
-			var b strings.Builder
-			for j := start; j < len(lines); j++ {
-				b.WriteString(lines[j])
-				b.WriteByte('\n')
-				if j > start && strings.HasPrefix(strings.TrimSpace(lines[j]), "==================") {
-					i = j
-					break
-				}
-				if strings.HasPrefix(lines[j], "FAIL") || strings.HasPrefix(lines[j], "PASS") {
-					i = j
-					break
-				}
-			}
-			block := b.String()
-			alerts = append(alerts, alert{
-				Kind:    alertKindDataRace,
-				Summary: "Data race detected",
-				Details: block,
-				Tests:   extractTestNames(block),
-			})
+		if a, next, ok := tryParseDataRace(lines, i, line); ok {
+			alerts = append(alerts, a)
+			i = next
 			continue
 		}
-
-		// Detect panics that are not timeouts.
-		if strings.HasPrefix(line, "panic: ") && !strings.HasPrefix(line, "panic: test timed out after") {
-			var b strings.Builder
-			b.WriteString(line)
-			b.WriteByte('\n')
-			j := i + 1
-			for ; j < len(lines); j++ {
-				b.WriteString(lines[j])
-				b.WriteByte('\n')
-				if strings.HasPrefix(lines[j], "FAIL") || strings.HasPrefix(lines[j], "PASS") {
-					break
-				}
-			}
-			block := b.String()
-			alerts = append(alerts, alert{
-				Kind:    alertKindPanic,
-				Summary: strings.TrimSpace(strings.TrimPrefix(line, "panic: ")),
-				Details: block,
-				Tests:   extractTestNames(block),
-			})
-			i = j
+		if a, next, ok := tryParsePanic(lines, i, line); ok {
+			alerts = append(alerts, a)
+			i = next
 			continue
 		}
-
-		// Detect runtime fatal errors.
-		if strings.HasPrefix(line, "fatal error: ") {
-			var b strings.Builder
-			b.WriteString(line)
-			b.WriteByte('\n')
-			j := i + 1
-			for ; j < len(lines); j++ {
-				b.WriteString(lines[j])
-				b.WriteByte('\n')
-				if strings.HasPrefix(lines[j], "FAIL") || strings.HasPrefix(lines[j], "PASS") {
-					break
-				}
-			}
-			block := b.String()
-			alerts = append(alerts, alert{
-				Kind:    alertKindFatal,
-				Summary: strings.TrimSpace(strings.TrimPrefix(line, "fatal error: ")),
-				Details: block,
-				Tests:   extractTestNames(block),
-			})
-			i = j
+		if a, next, ok := tryParseFatal(lines, i, line); ok {
+			alerts = append(alerts, a)
+			i = next
 			continue
 		}
 	}
@@ -204,51 +140,162 @@ func extractTestNames(block string) []string {
 		if l == "" {
 			continue
 		}
-		// Match '--- FAIL: TestName' or '--- PASS: TestName' etc.
-		if strings.HasPrefix(l, "--- ") {
-			// format: --- FAIL: TestName (0.00s)
-			parts := strings.Split(l, ":")
-			if len(parts) >= 2 {
-				name := strings.TrimSpace(parts[1])
-				// name may contain duration suffix; split on space
-				name = strings.Split(name, " ")[0]
-				if strings.HasPrefix(name, "Test") {
-					if _, ok := seen[name]; !ok {
-						seen[name] = struct{}{}
-						tests = append(tests, name)
-					}
-					continue
-				}
-			}
+		if name, ok := parseTripleDashTestName(l); ok {
+			addUniqueTest(&tests, seen, name)
+			continue
 		}
-		// Match fully-qualified 'pkg/path.TestName(' occurrences.
-		// Find ' TestName(' token preceded by a dot.
-		// Example: go.temporal.io/server/tools/testrunner.TestShowPanic(...)
-		if idx := strings.Index(l, ".Test"); idx >= 0 {
-			// Extract token until '('
-			rest := l[idx+1:]
-			if p := strings.Index(rest, "("); p > 0 {
-				fq := rest[:p]
-				// Keep the full qualifier to aid identification in CI
-				if _, ok := seen[fq]; !ok {
-					seen[fq] = struct{}{}
-					tests = append(tests, fq)
-				}
-			}
+		if name, ok := parseFullyQualifiedTestName(l); ok {
+			addUniqueTest(&tests, seen, name)
+			continue
 		}
-		// Fallback: plain 'TestName(' at line start
-		if strings.HasPrefix(l, "Test") && strings.Contains(l, "(") {
-			name := l
-			if p := strings.Index(name, "("); p > 0 {
-				name = name[:p]
-			}
-			if _, ok := seen[name]; !ok {
-				seen[name] = struct{}{}
-				tests = append(tests, name)
-			}
+		if name, ok := parsePlainTestName(l); ok {
+			addUniqueTest(&tests, seen, name)
 		}
 	}
 	return tests
+}
+
+// addUniqueTest appends name to tests if not already seen.
+func addUniqueTest(tests *[]string, seen map[string]struct{}, name string) {
+	if _, ok := seen[name]; ok {
+		return
+	}
+	seen[name] = struct{}{}
+	*tests = append(*tests, name)
+}
+
+// parseTripleDashTestName parses lines like:
+// "--- FAIL: TestName (0.00s)" and returns the test name if present.
+func parseTripleDashTestName(line string) (string, bool) {
+	if !strings.HasPrefix(line, "--- ") {
+		return "", false
+	}
+	parts := strings.Split(line, ":")
+	if len(parts) < 2 {
+		return "", false
+	}
+	name := strings.TrimSpace(parts[1])
+	name = strings.Split(name, " ")[0]
+	if !strings.HasPrefix(name, "Test") {
+		return "", false
+	}
+	return name, true
+}
+
+// parseFullyQualifiedTestName extracts names like "pkg/path.TestName" from a line.
+func parseFullyQualifiedTestName(line string) (string, bool) {
+	idx := strings.Index(line, ".Test")
+	if idx < 0 {
+		return "", false
+	}
+	rest := line[idx+1:]
+	if p := strings.Index(rest, "("); p > 0 {
+		fq := rest[:p]
+		return fq, true
+	}
+	return "", false
+}
+
+// parsePlainTestName extracts a leading "TestName(" form.
+func parsePlainTestName(line string) (string, bool) {
+	if !strings.HasPrefix(line, "Test") || !strings.Contains(line, "(") {
+		return "", false
+	}
+	name := line
+	if p := strings.Index(name, "("); p > 0 {
+		name = name[:p]
+	}
+	return name, true
+}
+
+// tryParseDataRace parses a data race alert at position i if present.
+func tryParseDataRace(lines []string, i int, line string) (alert, int, bool) {
+	if !strings.HasPrefix(line, "WARNING: DATA RACE") {
+		return alert{}, i, false
+	}
+	start := findRaceBlockStart(lines, i)
+	block, end := collectBlock(lines, start, shouldStopDataRace)
+	return alert{
+		Kind:    alertKindDataRace,
+		Summary: "Data race detected",
+		Details: block,
+		Tests:   extractTestNames(block),
+	}, end, true
+}
+
+// tryParsePanic parses a non-timeout panic alert at position i if present.
+func tryParsePanic(lines []string, i int, line string) (alert, int, bool) {
+	if !(strings.HasPrefix(line, "panic: ") && !strings.HasPrefix(line, "panic: test timed out after")) {
+		return alert{}, i, false
+	}
+	block, end := collectBlock(lines, i, shouldStopOnTestBoundary)
+	return alert{
+		Kind:    alertKindPanic,
+		Summary: strings.TrimSpace(strings.TrimPrefix(line, "panic: ")),
+		Details: block,
+		Tests:   extractTestNames(block),
+	}, end, true
+}
+
+// tryParseFatal parses a runtime fatal error alert at position i if present.
+func tryParseFatal(lines []string, i int, line string) (alert, int, bool) {
+	if !strings.HasPrefix(line, "fatal error: ") {
+		return alert{}, i, false
+	}
+	block, end := collectBlock(lines, i, shouldStopOnTestBoundary)
+	return alert{
+		Kind:    alertKindFatal,
+		Summary: strings.TrimSpace(strings.TrimPrefix(line, "fatal error: ")),
+		Details: block,
+		Tests:   extractTestNames(block),
+	}, end, true
+}
+
+// findRaceBlockStart searches upward for the race report delimiter.
+func findRaceBlockStart(lines []string, i int) int {
+	start := i
+	for j := i - 1; j >= 0; j-- {
+		if isRaceBoundary(lines[j]) {
+			start = j
+			break
+		}
+	}
+	return start
+}
+
+// collectBlock builds a block from start until the stop condition is met.
+func collectBlock(lines []string, start int, stop func(line string, idx, start int) bool) (string, int) {
+	var b strings.Builder
+	end := len(lines) - 1
+	for j := start; j < len(lines); j++ {
+		b.WriteString(lines[j])
+		b.WriteByte('\n')
+		if stop(lines[j], j, start) {
+			end = j
+			break
+		}
+		end = j
+	}
+	return b.String(), end
+}
+
+func isRaceBoundary(line string) bool {
+	return strings.HasPrefix(strings.TrimSpace(line), "==================")
+}
+
+func isTestResultBoundary(line string) bool {
+	return strings.HasPrefix(line, "FAIL") || strings.HasPrefix(line, "PASS")
+}
+
+func shouldStopDataRace(line string, idx, start int) bool {
+	if idx > start && isRaceBoundary(line) {
+		return true
+	}
+	return isTestResultBoundary(line)
+}
+
+func shouldStopOnTestBoundary(line string, _ int, _ int) bool {
+	return isTestResultBoundary(line)
 }
 
 // dedupeAlerts removes duplicate alerts (e.g., repeated across retries) based
