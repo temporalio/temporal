@@ -432,13 +432,6 @@ func (h *nexusHandler) StartOperation(
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
-		if common.IsContextDeadlineExceededErr(err) {
-			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
-
-			oc.setFailureSource(commonnexus.FailureSourceWorker)
-
-			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
-		}
 		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
@@ -450,6 +443,13 @@ func (h *nexusHandler) StartOperation(
 
 		err := h.convertOutcomeToNexusHandlerError(t)
 		return nil, err
+
+	case *matchingservice.DispatchNexusTaskResponse_RequestTimeout:
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
+
+		oc.setFailureSource(commonnexus.FailureSourceWorker)
+
+		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 
 	case *matchingservice.DispatchNexusTaskResponse_Response:
 		switch t := t.Response.GetStartOperation().GetVariant().(type) {
@@ -594,13 +594,6 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
-		if common.IsContextDeadlineExceededErr(err) {
-			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
-
-			oc.setFailureSource(commonnexus.FailureSourceWorker)
-
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
-		}
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
@@ -612,6 +605,14 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 
 		err := h.convertOutcomeToNexusHandlerError(t)
 		return err
+
+	case *matchingservice.DispatchNexusTaskResponse_RequestTimeout:
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
+
+		oc.setFailureSource(commonnexus.FailureSourceWorker)
+
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
+
 	case *matchingservice.DispatchNexusTaskResponse_Response:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("success"))
 		return nil

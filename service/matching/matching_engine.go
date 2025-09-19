@@ -28,6 +28,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -2221,7 +2222,17 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	}
 
 	taskID := uuid.New()
+
+	// Buffer the deadline so we can still respond with timeout if we hit the deadline while dispatching
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, commonnexus.NexusTimeoutBuffer)
+	defer cancel()
+
 	resp, err := pm.DispatchNexusTask(ctx, taskID, request)
+
+	if ctx.Err() != nil {
+		// The context deadline has expired with the given buffer, return an explicit timeout to the caller to indicate this is an issue with the worker and not the server.
+		return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{}}, nil
+	}
 
 	// if we get a response or error it means that the Nexus task was handled by forwarding to another matching host
 	// this remote host's result can be returned directly
@@ -2250,7 +2261,8 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 			Response: result.successfulWorkerResponse.GetRequest().GetResponse(),
 		}}, nil
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		// The context deadline has expired if it reaches here; return an explicit timeout response to the caller.
+		return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{}}, nil
 	}
 }
 

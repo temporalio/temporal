@@ -225,11 +225,15 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			name:     "handler_timeout",
 			outcome:  "handler_timeout",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-service"), testcore.RandomizeStr("task-queue")),
-			timeout:  1 * time.Second,
+			timeout:  2 * time.Second,
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				timeoutStr, set := res.Request.Header[nexus.HeaderRequestTimeout]
 				s.True(set)
 				timeout, err := time.ParseDuration(timeoutStr)
+
+				expectedMaxTimeout := 2*time.Second - cnexus.NexusTimeoutBuffer
+				s.LessOrEqual(timeout, expectedMaxTimeout, "timeout should be buffered")
+
 				s.NoError(err)
 				time.Sleep(timeout) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return nil, nil
