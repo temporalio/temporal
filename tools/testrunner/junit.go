@@ -72,6 +72,8 @@ func (j *junitReport) write() error {
 // appendAlertsSuite adds a synthetic JUnit suite summarizing high-priority alerts
 // (data races, panics, fatals) so that CI surfaces them prominently.
 func (j *junitReport) appendAlertsSuite(alerts []alert) {
+	// Deduplicate by kind+details to avoid noisy repeats across retries.
+	alerts = dedupeAlerts(alerts)
 	if len(alerts) == 0 {
 		return
 	}
@@ -101,6 +103,22 @@ func (j *junitReport) appendAlertsSuite(alerts []alert) {
 	j.Suites = append(j.Suites, suite)
 	j.Failures += suite.Failures
 	j.Tests += suite.Tests
+}
+
+// dedupeAlerts removes duplicate alerts (e.g., repeated across retries) based
+// on kind and details while preserving the first-seen order.
+func dedupeAlerts(alerts []alert) []alert {
+	seen := make(map[string]struct{}, len(alerts))
+	var out []alert
+	for _, a := range alerts {
+		key := string(a.Kind) + "\n" + a.Details
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, a)
+	}
+	return out
 }
 
 func (j *junitReport) collectTestCases() map[string]struct{} {

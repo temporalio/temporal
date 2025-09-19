@@ -54,10 +54,8 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-	if err := cmd.Run(); err != nil {
-		return output.String(), err
-	}
-	return output.String(), nil
+	err := cmd.Run()
+	return output.String(), err
 }
 
 type runner struct {
@@ -274,8 +272,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 	}
 	// Append ALERTS suite to the merged JUnit if any were found.
 	if len(r.alerts) > 0 {
-		// Deduplicate by kind+details to avoid noisy repeats across retries.
-		mergedReport.appendAlertsSuite(dedupeAlerts(r.alerts))
+		mergedReport.appendAlertsSuite(r.alerts)
 	}
 	mergedReport.path = r.junitOutputPath
 	if err = mergedReport.write(); err != nil {
@@ -283,11 +280,6 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 	}
 	if len(mergedReport.reportingErrs) > 0 {
 		log.Fatal(mergedReport.reportingErrs)
-	}
-
-	// Print a prominent console summary for alerts.
-	if len(r.alerts) > 0 {
-		printAlertsSummary(dedupeAlerts(r.alerts))
 	}
 
 	// Exit with the exit code of the last attempt.

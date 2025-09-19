@@ -28,33 +28,16 @@ func TestParseAlerts_DataRaceAndPanic(t *testing.T) {
 
 	alerts := parseAlerts(string(input))
 	require.NotEmpty(t, alerts)
+	require.Equal(t, 2, len(alerts))
 
-	// Expect at least one data race and one panic alert.
-	var hasRace, hasPanic bool
-	for _, a := range alerts {
-		switch a.Kind {
-		case alertKindDataRace:
-			hasRace = true
-			require.Contains(t, a.Details, "WARNING: DATA RACE")
-			// Ensure we extracted at least one test name.
-			require.NotEmpty(t, a.Tests)
-			// Primary test should be the fully qualified name when present.
-			require.Contains(t, primaryTestName(a.Tests), ".Test")
-		case alertKindPanic:
-			hasPanic = true
-			require.Contains(t, a.Details, "panic: ")
-			// Ensure we extracted at least one test name.
-			require.NotEmpty(t, a.Tests)
-			// Primary test should be the first entry.
-			require.Equal(t, a.Tests[0], primaryTestName(a.Tests))
-		default:
-			t.Fatalf("unexpected alert kind: %s", a.Kind)
-		}
-	}
-	require.True(t, hasRace, "expected at least one data race alert")
-	require.True(t, hasPanic, "expected at least one panic alert")
+	require.Contains(t, alerts[0].Details, "WARNING: DATA RACE")
+	require.Contains(t, alerts[0].Tests[0], "test.TestDataRaceExample")
+	require.Contains(t, primaryTestName(alerts[0].Tests), "test.TestDataRaceExample")
+	require.Contains(t, alerts[1].Details, "panic: ")
+	require.Contains(t, alerts[1].Tests[0], "test.TestPanicExample")
+	require.Contains(t, primaryTestName(alerts[1].Tests), "TestPanicExample")
 
-	// Ensure dedupe works: applying twice should not increase count.
+	// Ensure dedupe works
 	deduped := dedupeAlerts(append(alerts, alerts...))
-	require.LessOrEqual(t, len(deduped), len(alerts))
+	require.Equal(t, len(deduped), len(alerts))
 }

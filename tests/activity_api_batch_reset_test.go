@@ -42,6 +42,24 @@ func (s *ActivityApiBatchResetClientTestSuite) createWorkflow(ctx context.Contex
 	return workflowRun
 }
 
+func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Panic() {
+	panic("test panic")
+}
+
+func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_DataRace() {
+	c := make(chan bool)
+	m := make(map[string]string)
+	go func() {
+		m["1"] = "1"
+		c <- true
+	}()
+	m["2"] = "b"
+	<-c
+	for k, v := range m {
+		fmt.Println(k, v)
+	}
+}
+
 func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

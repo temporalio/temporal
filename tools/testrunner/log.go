@@ -3,7 +3,6 @@ package testrunner
 import (
 	"fmt"
 	"io"
-	"log"
 	"slices"
 	"strings"
 
@@ -98,6 +97,25 @@ func primaryTestName(tests []string) string {
 		}
 	}
 	return tests[0]
+}
+
+// preferFullyQualifiedTestName returns the best display name for a test.
+// If the primary name is not fully-qualified (e.g., "TestXxx"), but a
+// fully-qualified variant exists in the list (e.g., "pkg/path.TestXxx"),
+// this returns the fully-qualified variant.
+func preferFullyQualifiedTestName(tests []string) string {
+	primary := primaryTestName(tests)
+	if primary == "" || strings.Contains(primary, ".Test") {
+		return primary
+	}
+	// Try to find an FQN that ends with "."+primary
+	suffix := "." + primary
+	for _, t := range tests {
+		if strings.HasSuffix(t, suffix) {
+			return t
+		}
+	}
+	return primary
 }
 
 // parseAlerts scans a gotestsum/go test stdout stream and extracts high-priority
@@ -217,7 +235,29 @@ func tryParseDataRace(lines []string, i int, line string) (alert, int, bool) {
 		return alert{}, i, false
 	}
 	start := findRaceBlockStart(lines, i)
-	block, end := collectBlock(lines, start, shouldStopDataRace)
+	// Merge contiguous race-report sections into a single alert. The Go race
+	// detector may emit multiple "WARNING: DATA RACE" blocks back-to-back,
+	// each wrapped by a line of ==================. Treat adjacent sections as
+	// a single logical alert until we either hit a test boundary or a race
+	// boundary that is not followed by another race section.
+	block, end := collectBlock(lines, start, func(curLine string, idx, start int) bool {
+		// Stop at PASS/FAIL boundaries always.
+		if isTestResultBoundary(curLine) {
+			return true
+		}
+		// If we hit a race boundary after we've started, only stop if the next
+		// non-current line does not continue the race report.
+		if idx > start && isRaceBoundary(curLine) {
+			if idx+1 < len(lines) {
+				next := strings.TrimSpace(lines[idx+1])
+				if isRaceBoundary(next) || strings.HasPrefix(next, "WARNING: DATA RACE") {
+					return false
+				}
+			}
+			return true
+		}
+		return false
+	})
 	return alert{
 		Kind:    alertKindDataRace,
 		Summary: "Data race detected",
@@ -299,52 +339,4 @@ func shouldStopDataRace(line string, idx, start int) bool {
 
 func shouldStopOnTestBoundary(line string, _ int, _ int) bool {
 	return isTestResultBoundary(line)
-}
-
-// dedupeAlerts removes duplicate alerts (e.g., repeated across retries) based
-// on kind and details while preserving the first-seen order.
-func dedupeAlerts(alerts []alert) []alert {
-	seen := make(map[string]struct{}, len(alerts))
-	var out []alert
-	for _, a := range alerts {
-		key := string(a.Kind) + "\n" + a.Details
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, a)
-	}
-	return out
-}
-
-// printAlertsSummary emits a prominent banner with a concise list of alerts,
-// followed by their details for quick triage in CI logs.
-func printAlertsSummary(alerts []alert) {
-	if len(alerts) == 0 {
-		return
-	}
-	banner := strings.Repeat("=", 80)
-	log.Printf("\n%s\nALERTS DETECTED: %d\n%s\n", banner, len(alerts), banner)
-	for _, a := range alerts {
-		// Include originating test when available to aid quick triage in CI logs.
-		if len(a.Tests) > 0 {
-			primary := primaryTestName(a.Tests)
-			if len(a.Tests) == 1 {
-				log.Printf("[%s] %s — in %s", a.Kind, a.Summary, primary)
-			} else {
-				log.Printf("[%s] %s — in %s (+%d more)", a.Kind, a.Summary, primary, len(a.Tests)-1)
-			}
-		} else {
-			log.Printf("[%s] %s", a.Kind, a.Summary)
-		}
-	}
-	log.Printf("%s\nFULL ALERT DETAILS:\n%s", banner, banner)
-	for idx, a := range alerts {
-		if len(a.Tests) > 0 {
-			log.Printf("-- Alert %d: [%s] %s --\nDetected in tests:\n\t%s\n\n%s", idx+1, a.Kind, a.Summary, strings.Join(a.Tests, "\n\t"), a.Details)
-		} else {
-			log.Printf("-- Alert %d: [%s] %s --\n%s", idx+1, a.Kind, a.Summary, a.Details)
-		}
-	}
-	log.Printf("%s\n", banner)
 }
