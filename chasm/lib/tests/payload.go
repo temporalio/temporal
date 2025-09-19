@@ -48,9 +48,6 @@ func NewPayloadStore(
 			chasm.NewVisibility(mutableContext),
 		),
 	}
-	if err := store.updateVisibility(mutableContext); err != nil {
-		return nil, err
-	}
 	return store, nil
 }
 
@@ -100,10 +97,6 @@ func (s *PayloadStore) AddPayload(
 		)
 	}
 
-	if err := s.updateVisibility(mutableContext); err != nil {
-		return nil, err
-	}
-
 	return s.Describe(mutableContext, DescribePayloadStoreRequest{})
 }
 
@@ -135,10 +128,6 @@ func (s *PayloadStore) RemovePayload(
 	delete(s.Payloads, key)
 	delete(s.State.ExpirationTimes, key)
 
-	if err := s.updateVisibility(mutableContext); err != nil {
-		return nil, err
-	}
-
 	return s.Describe(mutableContext, DescribePayloadStoreRequest{})
 }
 
@@ -151,18 +140,23 @@ func (s *PayloadStore) LifecycleState(
 	return chasm.LifecycleStateRunning
 }
 
-func (s *PayloadStore) updateVisibility(
-	mutableContext chasm.MutableContext,
-) error {
-	visibility, err := s.Visibility.Get(mutableContext)
-	if err != nil {
-		return err
-	}
-	chasm.UpsertMemo(mutableContext, visibility, TotalCountMemoFieldName, s.State.TotalCount)
-	chasm.UpsertMemo(mutableContext, visibility, TotalSizeMemoFieldName, s.State.TotalSize)
-
+// Implements chasm.VisibilitySearchAttributesProvider interface
+func (s *PayloadStore) SearchAttributes(
+	_ chasm.Context,
+) map[string]any {
 	// TODO: UpsertSearchAttribute as well when CHASM framework supports Per-Component SearchAttributes
 	// For now, we just update a random existing pre-defined SA to make sure the logic works.
-	chasm.UpsertSearchAttribute(mutableContext, visibility, TestKeywordSAFieldName, TestKeywordSAFieldValue)
-	return nil
+	return map[string]any{
+		TestKeywordSAFieldName: TestKeywordSAFieldValue,
+	}
+}
+
+// Implements chasm.VisibilityMemoProvider interface
+func (s *PayloadStore) Memo(
+	_ chasm.Context,
+) map[string]any {
+	return map[string]any{
+		TotalCountMemoFieldName: s.State.TotalCount,
+		TotalSizeMemoFieldName:  s.State.TotalSize,
+	}
 }
