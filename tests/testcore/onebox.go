@@ -108,15 +108,15 @@ type (
 		captureMetricsHandler            *metricstest.CaptureHandler
 		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
 
-		onGetClaims               func(*authorization.AuthInfo) (*authorization.Claims, error)
-		onAuthorize               func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
-		callbackLock              sync.RWMutex // Must be used for above callbacks
-		serviceFxOptions          map[primitives.ServiceName][]fx.Option
-		dynamicConfigLogOverrides map[primitives.ServiceName]bool
-		taskCategoryRegistry      tasks.TaskCategoryRegistry
-		chasmRegistry             *chasm.Registry
-		grpcClientInterceptor     *grpcinject.Interceptor
-		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		onGetClaims           func(*authorization.AuthInfo) (*authorization.Claims, error)
+		onAuthorize           func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
+		callbackLock          sync.RWMutex // Must be used for above callbacks
+		serviceFxOptions      map[primitives.ServiceName][]fx.Option
+		taskCategoryRegistry  tasks.TaskCategoryRegistry
+		chasmRegistry         *chasm.Registry
+		grpcClientInterceptor *grpcinject.Interceptor
+		spanExporters         map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		dynamicConfigLogger   log.Logger
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -211,6 +211,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		dcClient:                         dynamicconfig.NewMemoryClient(),
 		// If this doesn't build, make sure you're building with tags 'test_dep':
 		testHooks:                testhooks.NewTestHooksImpl(),
+		dynamicConfigLogger:      log.NewZapLogger(log.BuildZapLogger(log.Config{Level: "info"})),
 		serviceFxOptions:         params.ServiceFxOptions,
 		taskCategoryRegistry:     params.TaskCategoryRegistry,
 		chasmRegistry:            params.ChasmRegistry,
@@ -230,8 +231,6 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 }
 
 func (c *TemporalImpl) Start() error {
-	// Override dynamic config log level to INFO for all services
-	c.WithDynamicConfigLogLevelForAllServices("info")
 
 	// create temporal-system namespace, this must be created before starting
 	// the services - so directly use the metadataManager to create this
@@ -375,6 +374,11 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
+			fx.Decorate(func(client dynamicconfig.Client, lc fx.Lifecycle) *dynamicconfig.Collection {
+				col := dynamicconfig.NewCollection(client, c.dynamicConfigLogger)
+				lc.Append(fx.StartStopHook(col.Start, col.Stop))
+				return col
+			}),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -450,6 +454,11 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
+			fx.Decorate(func(client dynamicconfig.Client, lc fx.Lifecycle) *dynamicconfig.Collection {
+				col := dynamicconfig.NewCollection(client, c.dynamicConfigLogger)
+				lc.Append(fx.StartStopHook(col.Start, col.Stop))
+				return col
+			}),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -511,6 +520,11 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
+			fx.Decorate(func(client dynamicconfig.Client, lc fx.Lifecycle) *dynamicconfig.Collection {
+				col := dynamicconfig.NewCollection(client, c.dynamicConfigLogger)
+				lc.Append(fx.StartStopHook(col.Start, col.Stop))
+				return col
+			}),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
@@ -578,6 +592,11 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
+			fx.Decorate(func(client dynamicconfig.Client, lc fx.Lifecycle) *dynamicconfig.Collection {
+				col := dynamicconfig.NewCollection(client, c.dynamicConfigLogger)
+				lc.Append(fx.StartStopHook(col.Start, col.Stop))
+				return col
+			}),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -606,44 +625,6 @@ func (c *TemporalImpl) startWorker() {
 
 func (c *TemporalImpl) getFxOptionsForService(serviceName primitives.ServiceName) fx.Option {
 	return fx.Options(c.serviceFxOptions[serviceName]...)
-}
-
-// WithDynamicConfigLogLevel overrides the log level for the dynamic config client for a specific service
-func (c *TemporalImpl) WithDynamicConfigLogLevel(serviceName primitives.ServiceName, logLevel string) {
-	if c.serviceFxOptions == nil {
-		c.serviceFxOptions = make(map[primitives.ServiceName][]fx.Option)
-	}
-	if c.dynamicConfigLogOverrides == nil {
-		c.dynamicConfigLogOverrides = make(map[primitives.ServiceName]bool)
-	}
-
-	// Check if we've already set up dynamic config logging for this service
-	if c.dynamicConfigLogOverrides[serviceName] {
-		return // Already configured, avoid duplicate decoration
-	}
-
-	// Create a logger with the specific log level for dynamic config
-	dynamicConfigLogger := log.NewZapLogger(log.BuildZapLogger(log.Config{
-		Level: logLevel,
-	}))
-
-	// Override the dynamic config collection provider
-	c.serviceFxOptions[serviceName] = append(c.serviceFxOptions[serviceName],
-		fx.Decorate(func(client dynamicconfig.Client) *dynamicconfig.Collection {
-			return dynamicconfig.NewCollection(client, dynamicConfigLogger)
-		}),
-	)
-
-	// Mark this service as having dynamic config logging configured
-	c.dynamicConfigLogOverrides[serviceName] = true
-}
-
-// WithDynamicConfigLogLevelForAllServices overrides the log level for the dynamic config client for all services
-func (c *TemporalImpl) WithDynamicConfigLogLevelForAllServices(logLevel string) {
-	c.WithDynamicConfigLogLevel(primitives.FrontendService, logLevel)
-	c.WithDynamicConfigLogLevel(primitives.HistoryService, logLevel)
-	c.WithDynamicConfigLogLevel(primitives.MatchingService, logLevel)
-	c.WithDynamicConfigLogLevel(primitives.WorkerService, logLevel)
 }
 
 func (c *TemporalImpl) createSystemNamespace() error {
