@@ -1,0 +1,96 @@
+❯ go test -race 
+==================
+WARNING: DATA RACE
+Read at 0x00c0001121e8 by goroutine 8:
+  test.dataRaceExample.func2()
+      /Users/seankane/github.com/test/main.go:27 +0x2c
+
+Previous write at 0x00c0001121e8 by goroutine 7:
+  test.dataRaceExample.func1()
+      /Users/seankane/github.com/test/main.go:23 +0x3c
+
+Goroutine 8 (running) created at:
+  test.dataRaceExample()
+      /Users/seankane/github.com/test/main.go:26 +0x100
+  test.TestDataRaceExample()
+      /Users/seankane/github.com/test/main_test.go:13 +0x20
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:1792 +0x180
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:1851 +0x40
+
+Goroutine 7 (finished) created at:
+  test.dataRaceExample()
+      /Users/seankane/github.com/test/main.go:22 +0x9c
+  test.TestDataRaceExample()
+      /Users/seankane/github.com/test/main_test.go:13 +0x20
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:1792 +0x180
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:1851 +0x40
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c0001121e8 by goroutine 6:
+  test.dataRaceExample()
+      /Users/seankane/github.com/test/main.go:33 +0x118
+  test.TestDataRaceExample()
+      /Users/seankane/github.com/test/main_test.go:13 +0x20
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:1792 +0x180
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:1851 +0x40
+
+Previous write at 0x00c0001121e8 by goroutine 8:
+  test.dataRaceExample.func2()
+      /Users/seankane/github.com/test/main.go:27 +0x3c
+
+Goroutine 6 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:1851 +0x684
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:2279 +0x7c
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:1792 +0x180
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:2277 +0x77c
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:2142 +0xb68
+  main.main()
+      _testmain.go:47 +0x110
+
+Goroutine 8 (finished) created at:
+  test.dataRaceExample()
+      /Users/seankane/github.com/test/main.go:26 +0x100
+  test.TestDataRaceExample()
+      /Users/seankane/github.com/test/main_test.go:13 +0x20
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:1792 +0x180
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:1851 +0x40
+==================
+Counter value: 2
+--- FAIL: TestDataRaceExample (0.01s)
+    testing.go:1490: race detected during execution of test
+--- FAIL: TestPanicExample (0.00s)
+panic: This is a panic [recovered]
+        panic: This is a panic
+
+goroutine 37 [running]:
+testing.tRunner.func1.2({0x100668b00, 0x100699d40})
+        /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:1734 +0x2bc
+testing.tRunner.func1()
+        /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:1737 +0x47c
+panic({0x100668b00?, 0x100699d40?})
+        /opt/homebrew/Cellar/go/1.24.4/libexec/src/runtime/panic.go:792 +0x124
+test.panicExample(...)
+        /Users/seankane/github.com/test/main.go:13
+test.TestPanicExample(0xc000102e00?)
+        /Users/seankane/github.com/test/main_test.go:17 +0x38
+testing.tRunner(0xc000102e00, 0x1006992b0)
+        /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:1792 +0x184
+created by testing.(*T).Run in goroutine 1
+        /opt/homebrew/Cellar/go/1.24.4/libexec/src/testing/testing.go:1851 +0x688
+exit status 2
+FAIL    test    0.311s
+
