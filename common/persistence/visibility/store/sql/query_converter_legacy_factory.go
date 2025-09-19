@@ -8,14 +8,14 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 )
 
-func NewQueryConverter(
+func NewQueryConverterLegacy(
 	pluginName string,
 	namespaceName namespace.Name,
 	namespaceID namespace.ID,
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
 	queryString string,
-) *QueryConverter {
+) *QueryConverterLegacy {
 	switch pluginName {
 	case mysql.PluginName:
 		return newMySQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
