@@ -108,7 +108,6 @@ type AddressMatchRule struct {
 // 3. It false, error if there is a match and the URL fails validation
 func (a AddressMatchRule) Allow(u *url.URL) (bool, error) {
 	if a.Regexp == nil {
-
 		if u.Host == systemHost && u.Scheme == temporalScheme {
 			return true, nil
 		}
