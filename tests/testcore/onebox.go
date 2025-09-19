@@ -210,7 +210,11 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
 		// If this doesn't build, make sure you're building with tags 'test_dep':
-		testHooks:                testhooks.NewTestHooksImpl(),
+		testHooks: testhooks.NewTestHooksImpl(),
+		// We are overriding the dynamic config logger with a new one that uses the INFO level
+		// because there are some debug logs that are too verbose for testing.
+		// ex: "No such key in dynamic config, using default"
+		// this can be removed if logging from this package becomes less verbose
 		dynamicConfigLogger:      log.NewZapLogger(log.BuildZapLogger(log.Config{Level: "info"})),
 		serviceFxOptions:         params.ServiceFxOptions,
 		taskCategoryRegistry:     params.TaskCategoryRegistry,
