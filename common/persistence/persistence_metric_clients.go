@@ -234,11 +234,13 @@ func (p *executionPersistenceClient) CreateWorkflowExecution(
 	defer func() {
 		p.healthSignals.Record(request.ShardID, time.Since(startTime), retErr)
 		var workflowID, runID string
-		if request != nil && request.NewWorkflowSnapshot.ExecutionInfo != nil {
-			workflowID = request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
-		}
-		if request != nil && request.NewWorkflowSnapshot.ExecutionState != nil {
-			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
+		if request != nil {
+			if request.NewWorkflowSnapshot.ExecutionInfo != nil {
+				workflowID = request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
+			}
+			if request.NewWorkflowSnapshot.ExecutionState != nil {
+				runID = request.NewWorkflowSnapshot.ExecutionState.RunId
+			}
 		}
 		p.recordRequestMetrics(metrics.PersistenceCreateWorkflowExecutionScope, caller, time.Since(startTime), retErr)
 		p.recordDataLossMetrics(metrics.PersistenceCreateWorkflowExecutionScope, caller, retErr, workflowID, runID)
@@ -274,11 +276,13 @@ func (p *executionPersistenceClient) SetWorkflowExecution(
 	defer func() {
 		p.healthSignals.Record(request.ShardID, time.Since(startTime), retErr)
 		var workflowID, runID string
-		if request != nil && request.SetWorkflowSnapshot.ExecutionInfo != nil {
-			workflowID = request.SetWorkflowSnapshot.ExecutionInfo.WorkflowId
-		}
-		if request != nil && request.SetWorkflowSnapshot.ExecutionState != nil {
-			runID = request.SetWorkflowSnapshot.ExecutionState.RunId
+		if request != nil {
+			if request.SetWorkflowSnapshot.ExecutionInfo != nil {
+				workflowID = request.SetWorkflowSnapshot.ExecutionInfo.WorkflowId
+			}
+			if request.SetWorkflowSnapshot.ExecutionState != nil {
+				runID = request.SetWorkflowSnapshot.ExecutionState.RunId
+			}
 		}
 		p.recordRequestMetrics(metrics.PersistenceSetWorkflowExecutionScope, caller, time.Since(startTime), retErr)
 		p.recordDataLossMetrics(metrics.PersistenceSetWorkflowExecutionScope, caller, retErr, workflowID, runID)
@@ -295,11 +299,13 @@ func (p *executionPersistenceClient) UpdateWorkflowExecution(
 	defer func() {
 		p.healthSignals.Record(request.ShardID, time.Since(startTime), retErr)
 		var workflowID, runID string
-		if request != nil && request.UpdateWorkflowMutation.ExecutionInfo != nil {
-			workflowID = request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId
-		}
-		if request != nil && request.UpdateWorkflowMutation.ExecutionState != nil {
-			runID = request.UpdateWorkflowMutation.ExecutionState.RunId
+		if request != nil {
+			if request.UpdateWorkflowMutation.ExecutionInfo != nil {
+				workflowID = request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId
+			}
+			if request.UpdateWorkflowMutation.ExecutionState != nil {
+				runID = request.UpdateWorkflowMutation.ExecutionState.RunId
+			}
 		}
 		p.recordRequestMetrics(metrics.PersistenceUpdateWorkflowExecutionScope, caller, time.Since(startTime), retErr)
 		p.recordDataLossMetrics(metrics.PersistenceUpdateWorkflowExecutionScope, caller, retErr, workflowID, runID)
@@ -315,15 +321,8 @@ func (p *executionPersistenceClient) ConflictResolveWorkflowExecution(
 	startTime := time.Now().UTC()
 	defer func() {
 		p.healthSignals.Record(request.ShardID, time.Since(startTime), retErr)
-		var workflowID, runID string
-		if request != nil && request.ResetWorkflowSnapshot.ExecutionInfo != nil {
-			workflowID = request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId
-		}
-		if request != nil && request.ResetWorkflowSnapshot.ExecutionState != nil {
-			runID = request.ResetWorkflowSnapshot.ExecutionState.RunId
-		}
 		p.recordRequestMetrics(metrics.PersistenceConflictResolveWorkflowExecutionScope, caller, time.Since(startTime), retErr)
-		p.recordDataLossMetrics(metrics.PersistenceConflictResolveWorkflowExecutionScope, caller, retErr, workflowID, runID)
+		p.recordDataLossMetrics(metrics.PersistenceConflictResolveWorkflowExecutionScope, caller, retErr, "", "")
 	}()
 	return p.persistence.ConflictResolveWorkflowExecution(ctx, request)
 }
