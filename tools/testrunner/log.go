@@ -188,10 +188,13 @@ func parseFullyQualifiedTestName(line string) (string, bool) {
 	if idx < 0 {
 		return "", false
 	}
-	rest := line[idx+1:]
-	if p := strings.Index(rest, "("); p > 0 {
-		fq := rest[:p]
-		return fq, true
+	// Include the package/path qualifier preceding ".Test"
+	start := 0
+	if sp := strings.LastIndex(line[:idx], " "); sp >= 0 {
+		start = sp + 1
+	}
+	if p := strings.Index(line[idx:], "("); p > 0 {
+		return line[start : idx+p], true
 	}
 	return "", false
 }
@@ -225,7 +228,7 @@ func tryParseDataRace(lines []string, i int, line string) (alert, int, bool) {
 
 // tryParsePanic parses a non-timeout panic alert at position i if present.
 func tryParsePanic(lines []string, i int, line string) (alert, int, bool) {
-	if !(strings.HasPrefix(line, "panic: ") && !strings.HasPrefix(line, "panic: test timed out after")) {
+	if !strings.HasPrefix(line, "panic: ") || strings.HasPrefix(line, "panic: test timed out after") {
 		return alert{}, i, false
 	}
 	block, end := collectBlock(lines, i, shouldStopOnTestBoundary)
