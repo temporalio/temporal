@@ -212,6 +212,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		metrics.NoopMetricsHandler,
 		s.Logger,
 		s.PersistenceHealthSignals,
+		func() bool { return false },
 	)
 
 	s.TaskMgr, err = factory.NewTaskManager()
