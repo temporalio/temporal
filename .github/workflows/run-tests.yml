@@ -492,7 +492,9 @@ jobs:
         with:
           key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
 
-      
+      - uses: actions/checkout@v4
+      if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+          ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
