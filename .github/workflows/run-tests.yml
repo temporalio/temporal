@@ -812,7 +812,6 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       ES_VERSION: ${{ matrix.es_version }}
     steps:
-      - name: Checkout Code
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
