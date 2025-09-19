@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.uber.org/fx"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -102,7 +103,9 @@ func (g *GeneratorTaskExecutor) Execute(
 		// Once the idle timer expires, we close the component.
 		ctx.AddTask(scheduler, chasm.TaskAttributes{
 			ScheduledTime: idleExpiration,
-		}, &schedulerpb.SchedulerIdleTask{})
+		}, &schedulerpb.SchedulerIdleTask{
+			IdleTimeTotal: durationpb.New(idleTimeTotal),
+		})
 		return nil
 	}
 
