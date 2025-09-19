@@ -226,7 +226,6 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	if callTimeout < e.Config.MinOperationTimeout(ns.Name().String()) {
 		callErr = ErrOperationTimeoutBelowMin
 	} else {
-		// this is the nexus sdk client pointing at the internal frontend
 		rawResult, callErr = client.StartOperation(callCtx, args.operation, args.payload, nexus.StartOperationOptions{
 			Header:      header,
 			CallbackURL: callbackURL,
