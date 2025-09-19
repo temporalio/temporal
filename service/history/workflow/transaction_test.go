@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -198,7 +198,7 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_CompletionMetrics() {
 					},
 					ExecutionState: &persistencespb.WorkflowExecutionState{
 						RunId:  tests.RunID,
-						Status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+						Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 						State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 					},
 				},
