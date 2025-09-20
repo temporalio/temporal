@@ -2,12 +2,15 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"maps"
 	"math"
 	"net"
+	"reflect"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -61,6 +64,7 @@ import (
 	"go.temporal.io/server/service/worker/dlq"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -2178,6 +2182,111 @@ func (adh *AdminHandler) getDLQWorkflowID(
 			key.TargetCluster,
 		),
 	)
+}
+
+func (adh *AdminHandler) GetConfigurations(
+	ctx context.Context,
+	req *adminservice.GetConfigurationsRequest,
+) (*adminservice.GetConfigurationsResponse, error) {
+	cfgVal := reflect.ValueOf(adh.config)
+	if cfgVal.Kind() == reflect.Ptr {
+		cfgVal = cfgVal.Elem()
+	}
+	cfgType := cfgVal.Type()
+	entries := &adminservice.GetConfigurationsResponse{
+		ClusterName:  adh.clusterMetadata.GetCurrentClusterName(),
+		ConfigValues: make(map[string]*structpb.Value, cfgVal.NumField()),
+	}
+
+	for i := 0; i < cfgVal.NumField(); i++ {
+		field := cfgType.Field(i)
+		v := cfgVal.Field(i)
+
+		var raw interface{}
+		if v.Kind() == reflect.Func {
+			ft := v.Type()
+			if ft.NumOut() == 1 {
+				if ft.NumIn() == 0 {
+					defer func() { _ = recover() }()
+					out := v.Call(nil)
+					if len(out) == 1 {
+						raw = out[0].Interface()
+					}
+				} else if ft.NumIn() == 1 && ft.In(0).Kind() == reflect.String {
+					defer func() { _ = recover() }()
+					out := v.Call([]reflect.Value{reflect.ValueOf("")})
+					if len(out) == 1 {
+						raw = out[0].Interface()
+					}
+				} else {
+					continue
+				}
+			} else {
+				continue
+			}
+		} else {
+			raw = v.Interface()
+		}
+		pbVal := toPBValue(raw)
+		entries.ConfigValues[field.Name] = pbVal
+	}
+	return entries, nil
+}
+
+func toPBValue(val interface{}) *structpb.Value {
+	if val == nil {
+		return structpb.NewNullValue()
+	}
+	switch t := val.(type) {
+	case string:
+		return structpb.NewStringValue(t)
+	case bool:
+		return structpb.NewBoolValue(t)
+	case int:
+		return structpb.NewNumberValue(float64(t))
+	case int32:
+		return structpb.NewNumberValue(float64(t))
+	case int64:
+		return structpb.NewNumberValue(float64(t))
+	case float32:
+		return structpb.NewNumberValue(float64(t))
+	case float64:
+		return structpb.NewNumberValue(t)
+	case time.Duration:
+		return structpb.NewStringValue(t.String())
+	case fmt.Stringer:
+		return structpb.NewStringValue(t.String())
+	}
+	if re, ok := val.(*regexp.Regexp); ok && re != nil {
+		return structpb.NewStringValue(re.String())
+	}
+	if re2, ok := val.(regexp.Regexp); ok {
+		return structpb.NewStringValue(re2.String())
+	}
+	rv := reflect.ValueOf(val)
+	if rv.IsValid() && rv.Kind() == reflect.Ptr {
+		if m := rv.MethodByName("Get"); m.IsValid() {
+			if m.Type().NumIn() == 0 && m.Type().NumOut() == 1 {
+				defer func() {
+					_ = recover() // be defensive
+				}()
+				out := m.Call(nil)[0].Interface()
+				return toPBValue(out)
+			}
+		}
+	}
+	{
+		bs, err := json.Marshal(val)
+		if err == nil {
+			var out interface{}
+			if err2 := json.Unmarshal(bs, &out); err2 == nil {
+				if pb, err3 := structpb.NewValue(out); err3 == nil {
+					return pb
+				}
+			}
+		}
+	}
+	return structpb.NewStringValue(fmt.Sprint(val))
 }
 
 func validateHistoryDLQKey(
