@@ -72,6 +72,8 @@ const (
 	versioningPollerSeenWindow        = 70 * time.Second
 	recordTaskStartedDefaultTimeout   = 10 * time.Second
 	recordTaskStartedSyncMatchTimeout = 1 * time.Second
+	// NexusTimeoutBuffer is the amount of time to leave as a buffer when dispatching a Nexus task
+	NexusTimeoutBuffer = time.Second
 )
 
 type (
@@ -2224,14 +2226,16 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	taskID := uuid.New()
 
 	// Buffer the deadline so we can still respond with timeout if we hit the deadline while dispatching
-	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, commonnexus.NexusTimeoutBuffer)
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, NexusTimeoutBuffer)
 	defer cancel()
 
 	resp, err := pm.DispatchNexusTask(ctx, taskID, request)
 
 	if ctx.Err() != nil {
 		// The context deadline has expired with the given buffer, return an explicit timeout to the caller to indicate this is an issue with the worker and not the server.
-		return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{}}, nil
+		return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{
+			RequestTimeout: &matchingservice.DispatchNexusTaskResponse_Timeout{},
+		}}, nil
 	}
 
 	// if we get a response or error it means that the Nexus task was handled by forwarding to another matching host
@@ -2262,7 +2266,9 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 		}}, nil
 	case <-ctx.Done():
 		// The context deadline has expired if it reaches here; return an explicit timeout response to the caller.
-		return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{}}, nil
+		return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{
+			RequestTimeout: &matchingservice.DispatchNexusTaskResponse_Timeout{},
+		}}, nil
 	}
 }
 

@@ -2271,7 +2271,7 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue:          taskQueue,
-		WorkflowRunTimeout: 1200 * time.Millisecond,
+		WorkflowRunTimeout: 1700 * time.Millisecond,
 	}, callerWF)
 	s.NoError(err)
 

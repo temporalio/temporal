@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"sync/atomic"
-	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -23,8 +22,6 @@ const (
 	FailureSourceHeaderName = "Temporal-Nexus-Failure-Source"
 	// FailureSourceWorker indicates the failure originated from outside the server (e.g. bad request or on the Nexus worker).
 	FailureSourceWorker = "worker"
-	// NexusTimeoutBuffer is the amount of time to leave as a buffer when dispatching a Nexus task
-	NexusTimeoutBuffer = time.Second
 )
 
 type failureSourceContextKeyType struct{}

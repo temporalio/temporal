@@ -32,13 +32,18 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/service/matching"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// user-agent header contains Nexus SDK client info in the form <sdk-name>/v<sdk-version>
-const headerUserAgent = "user-agent"
-const clientNameVersionDelim = "/v"
+const (
+	// user-agent header contains Nexus SDK client info in the form <sdk-name>/v<sdk-version>
+	headerUserAgent        = "user-agent"
+	clientNameVersionDelim = "/v"
+	// Timeout to check if sufficient time for dispatching a Nexus task to matching.
+	nexusDispatchPreflightTimeout = matching.NexusTimeoutBuffer + 500*time.Millisecond
+)
 
 // Generic Nexus context that is not bound to a specific operation.
 // Includes fields extracted from an incoming Nexus request before being handled by the Nexus HTTP handler.
@@ -425,6 +430,14 @@ func (h *nexusHandler) StartOperation(
 	if startOperationRequest.Payload.Size() > h.payloadSizeLimit(oc.namespaceName) {
 		oc.logger.Error("payload size exceeds error limit for Nexus StartOperation request", tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "input exceeds size limit")
+	}
+
+	if deadline, hasDeadline := ctx.Deadline(); hasDeadline && time.Until(deadline) < nexusDispatchPreflightTimeout {
+		return nil, &nexus.HandlerError{
+			Type:          nexus.HandlerErrorTypeBadRequest,
+			RetryBehavior: nexus.HandlerErrorRetryBehaviorRetryable,
+			Cause:         errors.New("insufficient time to dispatch task"),
+		}
 	}
 
 	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.

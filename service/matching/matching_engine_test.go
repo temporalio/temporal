@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
-	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -3555,38 +3554,34 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 	type testCase struct {
 		name      string
 		sleepTime time.Duration
-		assertion func(s *matchingEngineSuite, response *matchingservice.DispatchNexusTaskResponse, err error)
+		assertion func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error)
 	}
 
 	testCases := []testCase{
 		{
 			name:      "deadline_exceeded",
-			sleepTime: ctxTimeout - cnexus.NexusTimeoutBuffer,
-			assertion: func(s *matchingEngineSuite, response *matchingservice.DispatchNexusTaskResponse, err error) {
-				s.NoError(err)
-				s.NotNil(response)
-				s.NotNil(response.Outcome)
-
-				_, ok := response.Outcome.(*matchingservice.DispatchNexusTaskResponse_RequestTimeout)
-				s.True(ok)
+			sleepTime: ctxTimeout - NexusTimeoutBuffer,
+			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, response)
+				require.NotNil(t, response.Outcome)
+				require.NotNil(t, response.GetRequestTimeout())
 			},
 		},
 		{
 			name:      "deadline_not_exceeded",
-			sleepTime: ctxTimeout - cnexus.NexusTimeoutBuffer - time.Nanosecond,
-			assertion: func(s *matchingEngineSuite, response *matchingservice.DispatchNexusTaskResponse, err error) {
-				s.NoError(err)
-				s.NotNil(response)
-				s.NotNil(response.Outcome)
-
-				_, ok := response.Outcome.(*matchingservice.DispatchNexusTaskResponse_Response)
-				s.True(ok)
+			sleepTime: ctxTimeout - NexusTimeoutBuffer - time.Nanosecond,
+			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, response)
+				require.NotNil(t, response.Outcome)
+				require.NotNil(t, response.GetResponse())
 			},
 		},
 	}
 
-	testFn := func(s *matchingEngineSuite, tc testCase) {
-		synctest.Test(s.T(), func(t *testing.T) {
+	testFn := func(t *testing.T, tc testCase) {
+		synctest.Test(t, func(t *testing.T) {
 			nexusRequest := &matchingservice.DispatchNexusTaskRequest{
 				NamespaceId: "my-nsid",
 				TaskQueue: &taskqueuepb.TaskQueue{
@@ -3614,7 +3609,9 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 						return nil, err
 					}
 
-					return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_Response{}}, nil
+					return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
+						Response: &nexuspb.Response{},
+					}}, nil
 				},
 			).Times(1)
 
@@ -3626,13 +3623,13 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 
 			resp, err := s.matchingEngine.DispatchNexusTask(ctx, nexusRequest)
 
-			tc.assertion(s, resp, err)
+			tc.assertion(t, resp, err)
 		})
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(_ *testing.T) {
-			testFn(s, tc)
+		s.T().Run(tc.name, func(t *testing.T) {
+			testFn(t, tc)
 		})
 	}
 }
