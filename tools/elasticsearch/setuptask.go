@@ -72,9 +72,9 @@ func (task *SetupTask) setupClusterSettings() error {
 
 	success, err := task.esClient.ClusterPutSettings(context.TODO(), string(body))
 	if err != nil {
-		return task.handleOperationResult("cluster settings update failed", err, false)
+		return task.handleOperationFailure("cluster settings update failed", err)
 	} else if !success {
-		return task.handleOperationResult("cluster settings update failed without error", errors.New("acknowledged=false"), false)
+		return task.handleOperationFailure("cluster settings update failed without error", errors.New("acknowledged=false"))
 	}
 
 	task.logger.Info("Cluster settings updated successfully")
@@ -103,9 +103,9 @@ func (task *SetupTask) setupTemplate() error {
 
 	success, err := task.esClient.IndexPutTemplate(context.TODO(), templateName, string(body))
 	if err != nil {
-		return task.handleOperationResult("template creation failed", err, false)
+		return task.handleOperationFailure("template creation failed", err)
 	} else if !success {
-		return task.handleOperationResult("template creation failed without error", errors.New("acknowledged=false"), false)
+		return task.handleOperationFailure("template creation failed without error", errors.New("acknowledged=false"))
 	}
 
 	task.logger.Info("Template created successfully", tag.NewStringTag("templateName", templateName))
@@ -122,17 +122,17 @@ func (task *SetupTask) setupIndex() error {
 
 	success, err := task.esClient.CreateIndex(context.TODO(), config.VisibilityIndex, nil)
 	if err != nil {
-		return task.handleOperationResult("index creation failed", err, false)
+		return task.handleOperationFailure("index creation failed", err)
 	} else if !success {
-		return task.handleOperationResult("index creation failed without error", errors.New("acknowledged=false"), false)
+		return task.handleOperationFailure("index creation failed without error", errors.New("acknowledged=false"))
 	}
 
 	task.logger.Info("Index created successfully", tag.NewStringTag("indexName", config.VisibilityIndex))
 	return nil
 }
 
-// handleOperationResult handles the result of an operation, optionally failing silently
-func (task *SetupTask) handleOperationResult(msg string, err error, success bool) error {
+// handleOperationFailure handles operation failures, optionally failing silently
+func (task *SetupTask) handleOperationFailure(msg string, err error) error {
 	if !task.config.FailSilently {
 		task.logger.Error(msg, tag.Error(err))
 		return err
