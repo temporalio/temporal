@@ -32,14 +32,17 @@ func (task *SetupTask) Run() error {
 	task.logger.Info("Starting schema setup", tag.NewAnyTag("config", task.config))
 
 	if err := task.setupClusterSettings(); err != nil {
+		task.logger.Error("Failed to setup cluster settings.", tag.Error(err))
 		return err
 	}
 
 	if err := task.setupTemplate(); err != nil {
+		task.logger.Error("Failed to setup template.", tag.Error(err))
 		return err
 	}
 
 	if err := task.setupIndex(); err != nil {
+		task.logger.Error("Failed to setup index.", tag.Error(err))
 		return err
 	}
 
@@ -57,11 +60,13 @@ func (task *SetupTask) setupClusterSettings() error {
 
 	filePath, err := filepath.Abs(config.SettingsFilePath)
 	if err != nil {
+		task.logger.Error("Failed to resolve settings file path.", tag.Error(err), tag.NewStringTag("settingsFile", config.SettingsFilePath))
 		return fmt.Errorf("failed to resolve settings file path: %w", err)
 	}
 
 	body, err := os.ReadFile(filePath)
 	if err != nil {
+		task.logger.Error("Failed to read settings file.", tag.Error(err), tag.NewStringTag("filePath", filePath))
 		return fmt.Errorf("failed to read settings file: %w", err)
 	}
 
@@ -86,11 +91,13 @@ func (task *SetupTask) setupTemplate() error {
 
 	filePath, err := filepath.Abs(config.TemplateFilePath)
 	if err != nil {
+		task.logger.Error("Failed to resolve template file path.", tag.Error(err), tag.NewStringTag("templateFile", config.TemplateFilePath))
 		return fmt.Errorf("failed to resolve template file path: %w", err)
 	}
 
 	body, err := os.ReadFile(filePath)
 	if err != nil {
+		task.logger.Error("Failed to read template file.", tag.Error(err), tag.NewStringTag("filePath", filePath))
 		return fmt.Errorf("failed to read template file: %w", err)
 	}
 

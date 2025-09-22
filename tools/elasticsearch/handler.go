@@ -15,18 +15,21 @@ import (
 func createClient(cli *cli.Context, logger log.Logger) (esclient.CLIClient, error) {
 	cfg, err := parseElasticConfig(cli)
 	if err != nil {
+		logger.Error("Unable to parse elasticsearch config.", tag.Error(err))
 		return nil, err
 	}
 
 	if cfg.AWSRequestSigning.Enabled {
 		_, err = esclient.NewAwsHttpClient(cfg.AWSRequestSigning)
 		if err != nil {
+			logger.Error("Unable to create AWS HTTP client.", tag.Error(err))
 			return nil, err
 		}
 	}
 
 	esClient, err := esclient.NewCLIClient(cfg, logger)
 	if err != nil {
+		logger.Error("Unable to create elasticsearch client.", tag.Error(err))
 		return nil, err
 	}
 
@@ -78,7 +81,7 @@ func parseElasticConfig(cli *cli.Context) (*esclient.Config, error) {
 
 	u, err := url.Parse(cli.String(CLIOptESURL))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid elasticsearch URL %q: %w", cli.String(CLIOptESURL), err)
 	}
 
 	cfg.URL = *u
