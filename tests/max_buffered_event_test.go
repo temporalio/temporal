@@ -176,7 +176,7 @@ func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
 
 	// now send 3 signals with 500KB payload each, all of them will be buffered
 	buf := make([]byte, 500*1024)
-	// fill the slice with random dat to make sure the
+	// fill the slice with random data to make sure the
 	// encoder does not zero out the data
 	_, err := rand.Read(buf)
 	s.NoError(err)
