@@ -13,8 +13,8 @@ import (
 func TestReadJUnitReport(t *testing.T) {
 	j := &junitReport{path: "testdata/junit-attempt-1.xml"}
 	require.NoError(t, j.read())
-	require.Len(t, j.Testsuites.Suites, 1)
-	require.Equal(t, 2, j.Testsuites.Failures)
+	require.Len(t, j.Suites, 1)
+	require.Equal(t, 2, j.Failures)
 	require.Equal(t, []string{"TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument"}, j.collectTestCaseFailures())
 }
 
@@ -113,6 +113,28 @@ func TestMergeReports_MissingRerun(t *testing.T) {
 	require.Len(t, report.reportingErrs, 2)
 	require.Equal(t, errors.New("expected rerun of all failures from previous attempt, missing: [TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument]"), report.reportingErrs[0])
 	require.Equal(t, errors.New("expected rerun of all failures from previous attempt, missing: [TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument]"), report.reportingErrs[1])
+}
+
+func TestAppendAlertsSuite(t *testing.T) {
+	j := &junitReport{}
+	alerts := []alert{
+		{Kind: alertKindDataRace, Summary: "Data race detected", Details: "WARNING: DATA RACE\n...", Tests: []string{"go.temporal.io/server/tools/testrunner.TestShowPanic"}},
+		{Kind: alertKindPanic, Summary: "This is a panic", Details: "panic: This is a panic\n...", Tests: []string{"TestPanicExample"}},
+	}
+	j.appendAlertsSuite(alerts)
+
+	// Write the report to a temporary file for comparison
+	out, err := os.CreateTemp("", "junit-alerts-*.xml")
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, os.Remove(out.Name()))
+	}()
+
+	j.path = out.Name()
+	require.NoError(t, j.write())
+
+	// Compare against the expected output file
+	requireReportEquals(t, "testdata/junit-alerts-output.xml", out.Name())
 }
 
 func collectTestNames(suites []junit.Testsuite) []string {
