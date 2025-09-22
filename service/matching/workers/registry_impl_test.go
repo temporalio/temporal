@@ -295,6 +295,8 @@ func TestMultiNamespaceMetrics(t *testing.T) {
 			ns1Metric = metric
 		case "namespace2":
 			ns2Metric = metric
+		default:
+			t.Fatalf("unexpected namespace: %s", metric.Tags["namespace"])
 		}
 	}
 
