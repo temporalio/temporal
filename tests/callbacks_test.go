@@ -3,9 +3,6 @@ package tests
 import (
 	"context"
 	"errors"
-	"fmt"
-	"net"
-	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -25,7 +22,6 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
@@ -54,35 +50,7 @@ func TestCallbacksSuite(t *testing.T) {
 	suite.Run(t, new(CallbacksSuite))
 }
 
-func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler, listenAddr string) {
-	hh := nexus.NewCompletionHTTPHandler(nexus.CompletionHandlerOptions{Handler: h})
-	srv := &http.Server{Addr: listenAddr, Handler: hh}
-	listener, err := net.Listen("tcp", listenAddr)
-	s.NoError(err)
-
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- srv.Serve(listener)
-	}()
-
-	t.Cleanup(func() {
-		// Graceful shutdown
-		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-		defer cancel()
-		defer close(errCh)
-		err = srv.Shutdown(ctx)
-		if ctx.Err() != nil {
-			require.NoError(t, err)
-			select {
-			case err := <-errCh:
-				require.ErrorIs(t, err, http.ErrServerClosed)
-			case <-ctx.Done():
-				require.Fail(t, "timeount before reading from http error channel")
-			}
-		}
-	})
-}
-func (s *CallbacksSuite) runNexusCompletionHTTPServerV2(t *testing.T, h *completionHandler) string {
+func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler) string {
 	hh := nexus.NewCompletionHTTPHandler(nexus.CompletionHandlerOptions{Handler: h})
 	srv := httptest.NewServer(hh)
 	t.Cleanup(func() {
@@ -258,8 +226,11 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				requestCh:         make(chan *nexus.CompletionRequest, 2),
 				requestCompleteCh: make(chan error, 2),
 			}
-			callbackAddress := fmt.Sprintf("localhost:%d", freeport.MustGetFreePort())
-			s.runNexusCompletionHTTPServer(s.T(), ch, callbackAddress)
+			defer func() {
+				close(ch.requestCh)
+				close(ch.requestCompleteCh)
+			}()
+			callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
 
 			w := worker.New(sdkClient, taskQueue, worker.Options{})
 			w.RegisterWorkflowWithOptions(tc.wf, workflow.RegisterOptions{Name: workflowType})
@@ -291,7 +262,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				{
 					Variant: &commonpb.Callback_Nexus_{
 						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://" + callbackAddress + "/cb1",
+							Url: callbackAddress + "/cb1",
 						},
 					},
 					Links: []*commonpb.Link{links[0]},
@@ -299,7 +270,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				{
 					Variant: &commonpb.Callback_Nexus_{
 						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://" + callbackAddress + "/cb2",
+							Url: callbackAddress + "/cb2",
 						},
 					},
 					Links: []*commonpb.Link{links[1]},
@@ -468,7 +439,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		close(ch.requestCh)
 		close(ch.requestCompleteCh)
 	}()
-	callbackAddress := s.runNexusCompletionHTTPServerV2(s.T(), ch)
+	callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
 
 	w := worker.New(sdkClient, taskQueue.GetName(), worker.Options{})
 
@@ -661,8 +632,11 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 		requestCh:         make(chan *nexus.CompletionRequest, 1),
 		requestCompleteCh: make(chan error, 1),
 	}
-	callbackAddress := fmt.Sprintf("localhost:%d", freeport.MustGetFreePort())
-	s.runNexusCompletionHTTPServer(s.T(), ch, callbackAddress)
+	defer func() {
+		close(ch.requestCh)
+		close(ch.requestCompleteCh)
+	}()
+	callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
 
 	w := worker.New(sdkClient, taskQueue.GetName(), worker.Options{})
 
@@ -709,7 +683,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 
 	// 2. Start WF second time w/ callbacks (new run)
 	cbs := []*commonpb.Callback{
-		{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://" + callbackAddress + "/cb1"}}},
+		{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress + "/cb1"}}},
 	}
 
 	request2 := proto.Clone(request1).(*workflowservice.StartWorkflowExecutionRequest)
