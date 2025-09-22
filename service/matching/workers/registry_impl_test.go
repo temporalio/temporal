@@ -160,6 +160,7 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 		}
 
 		// Virtual time advance - instant with synctest!
+		// nolint:forbidigo
 		time.Sleep(300 * time.Millisecond)
 
 		// Now eviction should work
