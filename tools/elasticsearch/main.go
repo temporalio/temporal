@@ -15,7 +15,7 @@ const (
 	CLIOptESPassword      = "password"
 	CLIOptVisibilityIndex = "index"
 	CLIOptAWSCredentials  = "aws-credentials"
-	CLIOptAWSToken        = "aws-token"
+	CLIOptAWSToken        = "aws-session-token"
 	CLIOptSettingsFile    = "settings-file"
 	CLIOptTemplateFile    = "template-file"
 	CLIOptFailSilently    = "fail"
@@ -24,7 +24,7 @@ const (
 	CLIFlagESURL           = CLIOptESURL + ", e"
 	CLIFlagESUsername      = CLIOptESUsername + ", u"
 	CLIFlagESPassword      = CLIOptESPassword + ", p"
-	CLIFlagAWSToken        = CLIOptAWSToken + ", t"
+	CLIFlagAWSToken        = CLIOptAWSToken
 	CLIFlagVisibilityIndex = CLIOptVisibilityIndex + ", i"
 	CLIFlagAWSCredentials  = CLIOptAWSCredentials + ", aws"
 	CLIFlagFailSilently    = CLIOptFailSilently
@@ -88,13 +88,13 @@ func BuildCLIOptions() *cli.App {
 			Name:    CLIFlagAWSCredentials,
 			Value:   "",
 			Usage:   "AWS credentials provider (supported ['static', 'environment', 'aws-sdk-default'])",
-			EnvVars: []string{"ES_AWS_CREDENTIALS"},
+			EnvVars: []string{"AWS_CREDENTIALS"},
 		},
 		&cli.StringFlag{
 			Name:    CLIFlagAWSToken,
 			Value:   "",
-			Usage:   "AWS token for use with 'static' AWS credentials provider",
-			EnvVars: []string{"ES_AWS_TOKEN"},
+			Usage:   "AWS sessiontoken for use with 'static' AWS credentials provider",
+			EnvVars: []string{"AWS_SESSION_TOKEN"},
 		},
 		&cli.BoolFlag{
 			Name:  schema.CLIOptQuiet,

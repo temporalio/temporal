@@ -23,8 +23,8 @@ GLOBAL OPTIONS:
    --user value, -u value                username for elasticsearch or aws_access_key_id if using static aws credentials [$ES_USER]
    --password value, -p value            password for elasticsearch or aws_secret_access_key if using static aws credentials [$ES_PWD]
    --es-version value                    elasticsearch version (default: "v7") [$ES_VERSION]
-   --aws-credentials value, --aws value  AWS credentials provider (supported ['static', 'environment', 'aws-sdk-default']) [$ES_AWS_CREDENTIALS]
-   --aws-token value, -t value           AWS token for use with 'static' AWS credentials provider [$ES_AWS_TOKEN]
+   --aws-credentials value, --aws value  AWS credentials provider (supported ['static', 'environment', 'aws-sdk-default']) [$AWS_CREDENTIALS]
+   --aws-session-token value             AWS session token for use with 'static' AWS credentials provider [$AWS_SESSION_TOKEN]
    --quiet                               don't log errors to stderr
    --help, -h                            show help
    --version, -v                         print the version
@@ -131,7 +131,7 @@ export AWS_REGION=us-east-1
 export ES_SERVER=http://127.0.0.1:9200
 export ES_USER=$AWS_ACCESS_KEY_ID
 export ES_PWD=$AWS_SECRET_ACCESS_KEY
-export ES_AWS_TOKEN=$AWS_SESSION_TOKEN
+export AWS_SESSION_TOKEN
 
 temporal-elasticsearch-tool --aws static setup \
     --settings-file ./schema/elasticsearch/visibility/cluster_settings_v6.json \
