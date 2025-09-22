@@ -65,7 +65,10 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 	options = append(options, getLoggerOptions(cfg.LogLevel, logger)...)
 
 	if httpClient == nil {
-		if cfg.TLS != nil && cfg.TLS.Enabled {
+		// Check if httpClient is set in config (e.g., AWS HTTP client)
+		if configHttpClient := cfg.GetHttpClient(); configHttpClient != nil {
+			httpClient = configHttpClient
+		} else if cfg.TLS != nil && cfg.TLS.Enabled {
 			tlsHttpClient, err := buildTLSHTTPClient(cfg.TLS)
 			if err != nil {
 				return nil, fmt.Errorf("unable to create TLS HTTP client: %w", err)

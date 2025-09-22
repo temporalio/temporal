@@ -20,11 +20,12 @@ func createClient(cli *cli.Context, logger log.Logger) (esclient.CLIClient, erro
 	}
 
 	if cfg.AWSRequestSigning.Enabled {
-		_, err = esclient.NewAwsHttpClient(cfg.AWSRequestSigning)
+		awsHttpClient, err := esclient.NewAwsHttpClient(cfg.AWSRequestSigning)
 		if err != nil {
 			logger.Error("Unable to create AWS HTTP client.", tag.Error(err))
 			return nil, err
 		}
+		cfg.SetHttpClient(awsHttpClient)
 	}
 
 	esClient, err := esclient.NewCLIClient(cfg, logger)
