@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -66,14 +67,28 @@ func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completio
 
 	t.Cleanup(func() {
 		// Graceful shutdown
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer cancel()
+		defer close(errCh)
 		err = srv.Shutdown(ctx)
 		if ctx.Err() != nil {
 			require.NoError(t, err)
-			require.ErrorIs(t, <-errCh, http.ErrServerClosed)
+			select {
+			case err := <-errCh:
+				require.ErrorIs(t, err, http.ErrServerClosed)
+			case <-ctx.Done():
+				require.Fail(t, "timeount before reading from http error channel")
+			}
 		}
 	})
+}
+func (s *CallbacksSuite) runNexusCompletionHTTPServerV2(t *testing.T, h *completionHandler) string {
+	hh := nexus.NewCompletionHTTPHandler(nexus.CompletionHandlerOptions{Handler: h})
+	srv := httptest.NewServer(hh)
+	t.Cleanup(func() {
+		defer srv.Close()
+	})
+	return srv.URL
 }
 
 func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
@@ -449,8 +464,11 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		requestCh:         make(chan *nexus.CompletionRequest, 2),
 		requestCompleteCh: make(chan error, 2),
 	}
-	callbackAddress := fmt.Sprintf("localhost:%d", freeport.MustGetFreePort())
-	s.runNexusCompletionHTTPServer(s.T(), ch, callbackAddress)
+	defer func() {
+		close(ch.requestCh)
+		close(ch.requestCompleteCh)
+	}()
+	callbackAddress := s.runNexusCompletionHTTPServerV2(s.T(), ch)
 
 	w := worker.New(sdkClient, taskQueue.GetName(), worker.Options{})
 
@@ -473,14 +491,14 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		{
 			Variant: &commonpb.Callback_Nexus_{
 				Nexus: &commonpb.Callback_Nexus{
-					Url: "http://" + callbackAddress + "/cb1",
+					Url: callbackAddress + "/cb1",
 				},
 			},
 		},
 		{
 			Variant: &commonpb.Callback_Nexus_{
 				Nexus: &commonpb.Callback_Nexus{
-					Url: "http://" + callbackAddress + "/cb2",
+					Url: callbackAddress + "/cb2",
 				},
 			},
 		},
@@ -571,9 +589,17 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	s.NoError(err)
 
 	for range cbs {
-		completion := <-ch.requestCh
-		s.Equal(nexus.OperationStateSucceeded, completion.State)
-		ch.requestCompleteCh <- nil
+		select {
+		case completion := <-ch.requestCh:
+			s.Equal(nexus.OperationStateSucceeded, completion.State)
+		case <-time.After(time.Second):
+			s.Fail("timeout waiting for callback")
+		}
+		select {
+		case ch.requestCompleteCh <- nil:
+		case <-time.After(time.Second):
+			s.Fail("timeout writing to completion channel")
+		}
 	}
 
 	s.EventuallyWithT(
