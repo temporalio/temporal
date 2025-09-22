@@ -117,7 +117,7 @@ func (mr *MockChasmTreeMockRecorder) Component(arg0, arg1 any) *gomock.Call {
 }
 
 // ComponentByPath mocks base method.
-func (m *MockChasmTree) ComponentByPath(arg0 chasm.Context, arg1 string) (chasm.Component, error) {
+func (m *MockChasmTree) ComponentByPath(arg0 chasm.Context, arg1 []string) (chasm.Component, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ComponentByPath", arg0, arg1)
 	ret0, _ := ret[0].(chasm.Component)

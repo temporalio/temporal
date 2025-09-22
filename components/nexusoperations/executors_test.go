@@ -295,7 +295,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Regexp(t, "Post \"http://localhost:\\d+/service/operation\\?callback=http%3A%2F%2Flocalhost%2Fcallback\": context deadline exceeded", op.LastAttemptFailure.Message)
+				require.Regexp(t, "request timed out", op.LastAttemptFailure.Message)
 				require.Equal(t, 0, len(events))
 			},
 		},
@@ -312,7 +312,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Regexp(t, "Post \"http://localhost:\\d+/service/operation\\?callback=http%3A%2F%2Flocalhost%2Fcallback\": context deadline exceeded", op.LastAttemptFailure.Message)
+				require.Regexp(t, "request timed out", op.LastAttemptFailure.Message)
 				require.Equal(t, 0, len(events))
 			},
 		},
@@ -625,6 +625,7 @@ func TestProcessCancelationTask(t *testing.T) {
 		requestTimeout        time.Duration
 		schedToCloseTimeout   time.Duration
 		destinationDown       bool
+		header                map[string]string
 	}{
 		{
 			name:            "failure",
@@ -650,6 +651,23 @@ func TestProcessCancelationTask(t *testing.T) {
 			requestTimeout:  time.Hour,
 			destinationDown: false,
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+				return nil
+			},
+			expectedMetricOutcome: "successful",
+			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
+				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, c.State())
+				require.Nil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
+			},
+		},
+		{
+			name:            "success with headers",
+			requestTimeout:  time.Hour,
+			destinationDown: false,
+			header:          map[string]string{"key": "value"},
+			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+				if options.Header["key"] != "value" {
+					return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, `"key" header is not equal to "value"`)
+				}
 				return nil
 			},
 			expectedMetricOutcome: "successful",
@@ -724,8 +742,12 @@ func TestProcessCancelationTask(t *testing.T) {
 			nexustest.NewNexusServer(t, listenAddr, h)
 
 			reg := newRegistry(t)
-			backend := &hsmtest.NodeBackend{}
-			node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), tc.schedToCloseTimeout))
+			event := mustNewScheduledEvent(time.Now(), tc.schedToCloseTimeout)
+			if tc.header != nil {
+				event.GetNexusOperationScheduledEventAttributes().NexusHeader = tc.header
+			}
+			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
+			node := newOperationNode(t, backend, backend.Events[0])
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
 			_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{

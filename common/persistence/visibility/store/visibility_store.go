@@ -33,7 +33,6 @@ type (
 
 		// Read APIs.
 		ListWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
-		ScanWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
 		CountWorkflowExecutions(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error)
 		GetWorkflowExecution(ctx context.Context, request *manager.GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
 

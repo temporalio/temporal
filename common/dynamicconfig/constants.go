@@ -248,6 +248,12 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 		`PersistenceQPSBurstRatio is the burst ratio for persistence QPS. This flag controls the burst ratio for all services.`,
 	)
 
+	EnableDataLossMetrics = NewGlobalBoolSetting(
+		"system.enableDataLossMetrics",
+		false,
+		`EnableDataLossMetrics determines whether dataloss metrics are emitted when dataloss errors are encountered`,
+	)
+
 	// deadlock detector
 
 	DeadlockDumpGoroutines = NewGlobalBoolSetting(
@@ -635,12 +641,6 @@ existing deployments even though it is a bit of a misnomer. This does not limit 
 per-_namespace_ limit on the _count_ of long-running requests. Requests are only throttled when the limit is
 exceeded, not when it is only reached.`,
 	)
-	ReducePollWorkflowHistoryRequestPriority = NewGlobalBoolSetting(
-		"frontend.reducePollWorkflowRequestPriority",
-		true,
-		`ReducePollWorkflowRequestPriority decides whether to reduce the priority of GetWorkflowExecutionHistory
-requests if WaitNewEvent is true.`,
-	)
 	FrontendGlobalMaxConcurrentLongRunningRequests = NewNamespaceIntSetting(
 		"frontend.globalNamespaceCount",
 		0,
@@ -790,6 +790,12 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		"frontend.disableListVisibilityByFilter",
 		false,
 		`DisableListVisibilityByFilter is config to disable list open/close workflow using filter`,
+	)
+	ExposeAuthorizerErrors = NewGlobalBoolSetting(
+		"frontend.exposeAuthorizerErrors",
+		false,
+		`ExposeAuthorizerErrors controls whether the frontend authorization interceptor will pass through errors returned by
+the Authorizer component. If false, a generic PermissionDenied error without details will be returned. Default false.`,
 	)
 	KeepAliveMinTime = NewGlobalDurationSetting(
 		"frontend.keepAliveMinTime",
@@ -2380,11 +2386,6 @@ that task will be sent to DLQ.`,
 		`ReplicationLowPriorityTaskParallelism is the number of executions' low priority replication tasks that can be processed in parallel`,
 	)
 
-	EnableEagerNamespaceRefresher = NewGlobalBoolSetting(
-		"history.EnableEagerNamespaceRefresher",
-		false,
-		`EnableEagerNamespaceRefresher is a feature flag for eagerly refresh namespace during processing replication task`,
-	)
 	EnableReplicationTaskBatching = NewGlobalBoolSetting(
 		"history.EnableReplicationTaskBatching",
 		false,

@@ -630,7 +630,7 @@ func ApplyClusterMetadataConfigProvider(
 			tag.ClusterName(clusterMetadata.CurrentClusterName))
 		return svc.ClusterMetadata, svc.Persistence, missingCurrentClusterMetadataErr
 	}
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemOperatorCallerInfo)
 	resp, err := clusterMetadataManager.GetClusterMetadata(
 		ctx,
 		&persistence.GetClusterMetadataRequest{ClusterName: clusterMetadata.CurrentClusterName},
@@ -987,6 +987,7 @@ var ServiceTracingModule = fx.Options(
 	fx.Provide(func() propagation.TextMapPropagator { return propagation.TraceContext{} }),
 	fx.Provide(telemetry.NewServerStatsHandler),
 	fx.Provide(telemetry.NewClientStatsHandler),
+	fx.Provide(metrics.NewServerStatsHandler),
 )
 
 func startAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {

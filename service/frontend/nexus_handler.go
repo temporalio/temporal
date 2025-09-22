@@ -126,15 +126,20 @@ func (c *operationContext) augmentContext(ctx context.Context, header nexus.Head
 		func() string { return c.method },
 	)
 	if userAgent, ok := header[headerUserAgent]; ok {
-		parts := strings.Split(userAgent, clientNameVersionDelim)
-		if len(parts) == 2 {
-			mdIncoming, ok := metadata.FromIncomingContext(ctx)
-			if !ok {
-				mdIncoming = metadata.MD{}
+		// Use SplitN for efficiency but enforce exactly one delimiter to preserve the
+		// original (pre-SplitN) strictness where additional delimiters cause us to ignore
+		// the header instead of coalescing trailing data into the version string.
+		if strings.Count(userAgent, clientNameVersionDelim) == 1 { // exact single occurrence
+			parts := strings.SplitN(userAgent, clientNameVersionDelim, 2)
+			if len(parts) == 2 { // always true given Count==1, kept for defensive clarity
+				mdIncoming, ok := metadata.FromIncomingContext(ctx)
+				if !ok {
+					mdIncoming = metadata.MD{}
+				}
+				mdIncoming.Set(headers.ClientNameHeaderName, parts[0])
+				mdIncoming.Set(headers.ClientVersionHeaderName, parts[1])
+				ctx = metadata.NewIncomingContext(ctx, mdIncoming)
 			}
-			mdIncoming.Set(headers.ClientNameHeaderName, parts[0])
-			mdIncoming.Set(headers.ClientVersionHeaderName, parts[1])
-			ctx = metadata.NewIncomingContext(ctx, mdIncoming)
 		}
 	}
 	return headers.Propagate(ctx)
@@ -152,8 +157,17 @@ func (c *operationContext) interceptRequest(
 		Request:           request,
 	})
 	if err != nil {
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("unauthorized"))
-		return commonnexus.AdaptAuthorizeError(err)
+		// If frontend.exposeAuthorizerErrors is false, Authorize err is either an explicitly set reason, or a generic
+		// "Request unauthorized." message.
+		// Otherwise, expose the underlying error.
+		var permissionDeniedError *serviceerror.PermissionDenied
+		if errors.As(err, &permissionDeniedError) {
+			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("unauthorized"))
+			return commonnexus.AdaptAuthorizeError(permissionDeniedError)
+		}
+		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("internal_auth_error"))
+		c.logger.Error("Authorization internal error with processing nexus request", tag.Error(err))
+		return commonnexus.ConvertGRPCError(err, false)
 	}
 
 	if err := c.namespaceValidationInterceptor.ValidateState(c.namespace, c.apiName); err != nil {
@@ -420,6 +434,9 @@ func (h *nexusHandler) StartOperation(
 	if err != nil {
 		if common.IsContextDeadlineExceededErr(err) {
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
+
+			oc.setFailureSource(commonnexus.FailureSourceWorker)
+
 			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 		}
 		return nil, commonnexus.ConvertGRPCError(err, false)
@@ -579,6 +596,9 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	if err != nil {
 		if common.IsContextDeadlineExceededErr(err) {
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
+
+			oc.setFailureSource(commonnexus.FailureSourceWorker)
+
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 		}
 		return commonnexus.ConvertGRPCError(err, false)

@@ -173,6 +173,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"DescribeWorkerDeploymentVersion":       {},
 		"SetWorkerDeploymentCurrentVersion":     {},
 		"SetWorkerDeploymentRampingVersion":     {},
+		"SetWorkerDeploymentManager":            {},
 		"DescribeWorkerDeployment":              {},
 		"ListWorkerDeployments":                 {},
 		"DeleteWorkerDeployment":                {},

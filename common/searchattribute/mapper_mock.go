@@ -41,33 +41,33 @@ func (m *MockMapper) EXPECT() *MockMapperMockRecorder {
 }
 
 // GetAlias mocks base method.
-func (m *MockMapper) GetAlias(fieldName, namespace string) (string, error) {
+func (m *MockMapper) GetAlias(fieldName, arg1 string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAlias", fieldName, namespace)
+	ret := m.ctrl.Call(m, "GetAlias", fieldName, arg1)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetAlias indicates an expected call of GetAlias.
-func (mr *MockMapperMockRecorder) GetAlias(fieldName, namespace any) *gomock.Call {
+func (mr *MockMapperMockRecorder) GetAlias(fieldName, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAlias", reflect.TypeOf((*MockMapper)(nil).GetAlias), fieldName, namespace)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAlias", reflect.TypeOf((*MockMapper)(nil).GetAlias), fieldName, arg1)
 }
 
 // GetFieldName mocks base method.
-func (m *MockMapper) GetFieldName(alias, namespace string) (string, error) {
+func (m *MockMapper) GetFieldName(alias, arg1 string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetFieldName", alias, namespace)
+	ret := m.ctrl.Call(m, "GetFieldName", alias, arg1)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetFieldName indicates an expected call of GetFieldName.
-func (mr *MockMapperMockRecorder) GetFieldName(alias, namespace any) *gomock.Call {
+func (mr *MockMapperMockRecorder) GetFieldName(alias, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFieldName", reflect.TypeOf((*MockMapper)(nil).GetFieldName), alias, namespace)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFieldName", reflect.TypeOf((*MockMapper)(nil).GetFieldName), alias, arg1)
 }
 
 // MockMapperProvider is a mock of MapperProvider interface.

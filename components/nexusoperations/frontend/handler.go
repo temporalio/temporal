@@ -402,15 +402,18 @@ func (c *requestContext) augmentContext(ctx context.Context, header http.Header)
 		func() string { return methodNameForMetrics },
 	)
 	if userAgent := header.Get(http.CanonicalHeaderKey(headerUserAgent)); userAgent != "" {
-		parts := strings.Split(userAgent, clientNameVersionDelim)
-		if len(parts) == 2 {
-			mdIncoming, ok := metadata.FromIncomingContext(ctx)
-			if !ok {
-				mdIncoming = metadata.MD{}
+		// Preserve original strict behavior: only process if exactly one delimiter present.
+		if strings.Count(userAgent, clientNameVersionDelim) == 1 {
+			parts := strings.SplitN(userAgent, clientNameVersionDelim, 2)
+			if len(parts) == 2 { // defensive
+				mdIncoming, ok := metadata.FromIncomingContext(ctx)
+				if !ok {
+					mdIncoming = metadata.MD{}
+				}
+				mdIncoming.Set(headers.ClientNameHeaderName, parts[0])
+				mdIncoming.Set(headers.ClientVersionHeaderName, parts[1])
+				ctx = metadata.NewIncomingContext(ctx, mdIncoming)
 			}
-			mdIncoming.Set(headers.ClientNameHeaderName, parts[0])
-			mdIncoming.Set(headers.ClientVersionHeaderName, parts[1])
-			ctx = metadata.NewIncomingContext(ctx, mdIncoming)
 		}
 	}
 	return headers.Propagate(ctx)
@@ -490,7 +493,17 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 		Request:   request,
 	})
 	if err != nil {
-		return commonnexus.AdaptAuthorizeError(err)
+		// If frontend.exposeAuthorizerErrors is false, Authorize err is either an explicitly set reason, or a generic
+		// "Request unauthorized." message.
+		// Otherwise, expose the underlying error.
+		var permissionDeniedError *serviceerror.PermissionDenied
+		if errors.As(err, &permissionDeniedError) {
+			c.outcomeTag = metrics.OutcomeTag("unauthorized")
+			return commonnexus.AdaptAuthorizeError(permissionDeniedError)
+		}
+		c.outcomeTag = metrics.OutcomeTag("internal_auth_error")
+		c.logger.Error("Authorization internal error with processing nexus callback", tag.Error(err))
+		return commonnexus.ConvertGRPCError(err, false)
 	}
 
 	if err := c.NamespaceValidationInterceptor.ValidateState(c.namespace, apiName); err != nil {

@@ -16,10 +16,12 @@ linters:
     - forbidigo
     - exhaustive
     - godox
+    - iotamixing
   settings:
     staticcheck:
       checks:
         - "all"
+        - "-ST1000" # disable: package comment is missing
     godox:
       keywords:
         - FIXME

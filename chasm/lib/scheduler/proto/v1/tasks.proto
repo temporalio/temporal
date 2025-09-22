@@ -4,6 +4,10 @@ package temporal.server.chasm.lib.scheduler.proto.v1;
 
 option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpb";
 
+// Fires when the scheduler's idle period has lapsed, and the scheduler should
+// be closed.
+message SchedulerIdleTask {}
+
 // Buffers actions based on the schedule's specification.
 message GeneratorTask {}
 

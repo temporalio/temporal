@@ -588,6 +588,8 @@ type (
 		AuthHeaderName string `yaml:"authHeaderName"`
 		// Name of extra auth header to pass to ClaimMapper (as `ExtraData`). Defaults to `authorization-extras`.
 		AuthExtraHeaderName string `yaml:"authExtraHeaderName"`
+		// JWT audience for validating tokens
+		Audience string `yaml:"audience"`
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider
