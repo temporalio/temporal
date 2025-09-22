@@ -123,36 +123,16 @@ func TestAppendAlertsSuite(t *testing.T) {
 	}
 	j.appendAlertsSuite(alerts)
 
-	require.Len(t, j.Suites, 1)
-	suite := j.Suites[0]
-	require.Equal(t, "ALERTS", suite.Name)
-	require.Equal(t, 2, suite.Failures)
-	require.Equal(t, 2, suite.Tests)
-	require.Len(t, suite.Testcases, 2)
+	// Write the report to a temporary file for comparison
+	out, err := os.CreateTemp("", "junit-alerts-*.xml")
+	require.NoError(t, err)
+	defer os.Remove(out.Name())
 
-	// Validate the first testcase looks like a DATA RACE alert and includes test in name.
-	tc0 := suite.Testcases[0]
-	require.Contains(t, tc0.Name, "DATA RACE")
-	require.Contains(t, tc0.Name, "TestShowPanic")
-	require.NotNil(t, tc0.Failure)
-	require.Equal(t, "DATA RACE", tc0.Failure.Message)
-	require.Contains(t, tc0.Failure.Data, "WARNING: DATA RACE")
-	require.Contains(t, tc0.Failure.Data, "Detected in tests:")
-	require.Contains(t, tc0.Failure.Data, "go.temporal.io/server/tools/testrunner.TestShowPanic")
+	j.path = out.Name()
+	require.NoError(t, j.write())
 
-	// Validate the second testcase looks like a PANIC alert and includes test in name.
-	tc1 := suite.Testcases[1]
-	require.Contains(t, tc1.Name, "PANIC")
-	require.Contains(t, tc1.Name, "TestPanicExample")
-	require.NotNil(t, tc1.Failure)
-	require.Equal(t, "PANIC", tc1.Failure.Message)
-	require.Contains(t, tc1.Failure.Data, "panic: This is a panic")
-	require.Contains(t, tc1.Failure.Data, "Detected in tests:")
-	require.Contains(t, tc1.Failure.Data, "TestPanicExample")
-
-	// Ensure totals updated at the top level.
-	require.Equal(t, 2, j.Failures)
-	require.Equal(t, 2, j.Tests)
+	// Compare against the expected output file
+	requireReportEquals(t, "testdata/junit-alerts-output.xml", out.Name())
 }
 
 func collectTestNames(suites []junit.Testsuite) []string {
