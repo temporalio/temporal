@@ -126,7 +126,9 @@ func TestAppendAlertsSuite(t *testing.T) {
 	// Write the report to a temporary file for comparison
 	out, err := os.CreateTemp("", "junit-alerts-*.xml")
 	require.NoError(t, err)
-	defer os.Remove(out.Name())
+	defer func() {
+		require.NoError(t, os.Remove(out.Name()))
+	}()
 
 	j.path = out.Name()
 	require.NoError(t, j.write())
