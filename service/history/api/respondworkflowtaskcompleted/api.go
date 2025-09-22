@@ -2,6 +2,7 @@ package respondworkflowtaskcompleted
 
 import (
 	"context"
+	"errors"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -757,6 +758,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse(
 	ctx context.Context,
+	namespaceName namespace.Name,
 	namespaceID namespace.ID,
 	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
 	branchToken []byte,
@@ -798,7 +800,8 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 		//  when data inconsistency occurs
 		//  long term solution should check event batch pointing backwards within history store
 		defer func() {
-			if _, ok := retError.(*serviceerror.DataLoss); ok {
+			var dataLossErr *serviceerror.DataLoss
+			if errors.As(retError, &dataLossErr) {
 				api.TrimHistoryNode(
 					ctx,
 					handler.shardContext,
@@ -813,6 +816,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 		history, persistenceToken, err = api.GetHistory(
 			ctx,
 			handler.shardContext,
+			namespaceName,
 			namespaceID,
 			matchingResp.GetWorkflowExecution(),
 			firstEventID,
@@ -894,9 +898,9 @@ func (handler *WorkflowTaskCompletedHandler) withNewWorkflowTask(
 		RunId:      taskToken.GetRunId(),
 	}
 	matchingResp := common.CreateMatchingPollWorkflowTaskQueueResponse(response, workflowExecution, token)
-
 	return handler.createPollWorkflowTaskQueueResponse(
 		ctx,
+		namespaceName,
 		namespace.ID(taskToken.NamespaceId),
 		matchingResp,
 		matchingResp.GetBranchToken(),
