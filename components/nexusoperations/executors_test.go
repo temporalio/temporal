@@ -504,6 +504,7 @@ func TestProcessInvocationTask(t *testing.T) {
 					MinOperationTimeout:     dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
 					CallbackURLTemplate:     dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
+					UseSystemCallbackURL:    dynamicconfig.GetBoolPropertyFn(true),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
