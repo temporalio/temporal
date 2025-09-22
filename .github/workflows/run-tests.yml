@@ -514,10 +514,60 @@ jobs:
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
       - name: Get job ID
         id: get_job_id
-        uses: ./.github/actions/get-job-id
-        with:
-          job_name: Functional test (${{ matrix.name }}, shard ${{ matrix.shard_index }})
-          run_id: ${{ github.run_id }}
+        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        run: |
+          set -euo pipefail
+          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${{ github.run_id }}/jobs?per_page=100"
+          job_name="Functional test (${{ matrix.name }}, shard ${{ matrix.shard_index }})"
+
+          # Retry logic for API calls (timing issues with job registration)
+          max_attempts=5
+          attempt=1
+          job_id=""
+
+          while [ $attempt -le $max_attempts ] && [ -z "${job_id:-}" ]; do
+            echo "Attempt $attempt of $max_attempts to fetch job ID for '$job_name'..."
+
+            json=$(curl -sSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{ github.token }}" \
+              "$job_url")
+
+
+
+            # Prefer matching both job name and the current runner name to disambiguate matrix jobs
+            job_id=$(jq -r --arg name "$job_name" --arg runner "$RUNNER_NAME" '
+              (.jobs // [])
+              | map(select(.name == $name and (.runner_name // "") == $runner))
+              | (.[0].id // empty)
+            ' <<< "$json" )
+
+            # Fallback: match by name only
+            if [ -z "${job_id:-}" ]; then
+              job_id=$(jq -r --arg name "$job_name" '
+                (.jobs // []) | map(select(.name == $name)) | (.[0].id // empty)
+              ' <<< "$json" )
+            fi
+
+            if [ -z "${job_id:-}" ] || [ "$job_id" = "null" ]; then
+              if [ $attempt -lt $max_attempts ]; then
+                echo "Job not found yet, waiting 3 seconds before retry..."
+                sleep 3
+                job_id=""  # Reset for next iteration
+              fi
+            else
+              echo "Successfully found job ID: $job_id"
+              break
+            fi
+
+            attempt=$((attempt + 1))
+          done
+
+          if [ -z "${job_id:-}" ] || [ "$job_id" = "null" ]; then
+            echo "::warning::Failed to resolve job ID for name '$job_name' on runner '$RUNNER_NAME' in run '${{ github.run_id }}' after $max_attempts attempts. Using 'unknown' as fallback."
+            job_id="unknown"
+          fi
+          echo "job_id=$job_id" >> "$GITHUB_OUTPUT"
 
       - name: Run functional test
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -651,10 +701,59 @@ jobs:
       # IMPORTANT: `job_name` must exactly match the job's display name above.
       - name: Get job ID
         id: get_job_id
-        uses: ./.github/actions/get-job-id
-        with:
-          job_name: Functional test xdc (${{ matrix.name }})
-          run_id: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${{ github.run_id }}/jobs?per_page=100"
+          job_name="Functional test xdc (${{ matrix.name }})"
+
+          # Retry logic for API calls (timing issues with job registration)
+          max_attempts=5
+          attempt=1
+          job_id=""
+
+          while [ $attempt -le $max_attempts ] && [ -z "${job_id:-}" ]; do
+            echo "Attempt $attempt of $max_attempts to fetch job ID for '$job_name'..."
+
+            json=$(curl -sSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{ github.token }}" \
+              "$job_url")
+
+
+
+            # Prefer matching both job name and the current runner name to disambiguate matrix jobs
+            job_id=$(jq -r --arg name "$job_name" --arg runner "$RUNNER_NAME" '
+              (.jobs // [])
+              | map(select(.name == $name and (.runner_name // "") == $runner))
+              | (.[0].id // empty)
+            ' <<< "$json" )
+
+            # Fallback: match by name only
+            if [ -z "${job_id:-}" ]; then
+              job_id=$(jq -r --arg name "$job_name" '
+                (.jobs // []) | map(select(.name == $name)) | (.[0].id // empty)
+              ' <<< "$json" )
+            fi
+
+            if [ -z "${job_id:-}" ] || [ "$job_id" = "null" ]; then
+              if [ $attempt -lt $max_attempts ]; then
+                echo "Job not found yet, waiting 3 seconds before retry..."
+                sleep 3
+                job_id=""  # Reset for next iteration
+              fi
+            else
+              echo "Successfully found job ID: $job_id"
+              break
+            fi
+
+            attempt=$((attempt + 1))
+          done
+
+          if [ -z "${job_id:-}" ] || [ "$job_id" = "null" ]; then
+            echo "::warning::Failed to resolve job ID for name '$job_name' on runner '$RUNNER_NAME' in run '${{ github.run_id }}' after $max_attempts attempts. Using 'unknown' as fallback."
+            job_id="unknown"
+          fi
+          echo "job_id=$job_id" >> "$GITHUB_OUTPUT"
 
       - name: Start containerized dependencies
         uses: hoverkraft-tech/compose-action@v2.0.1
@@ -812,10 +911,59 @@ jobs:
       # IMPORTANT: `job_name` must exactly match the job's display name above.
       - name: Get job ID
         id: get_job_id
-        uses: ./.github/actions/get-job-id
-        with:
-          job_name: Functional test ndc (${{ matrix.name }})
-          run_id: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${{ github.run_id }}/jobs?per_page=100"
+          job_name="Functional test ndc (${{ matrix.name }})"
+
+          # Retry logic for API calls (timing issues with job registration)
+          max_attempts=5
+          attempt=1
+          job_id=""
+
+          while [ $attempt -le $max_attempts ] && [ -z "${job_id:-}" ]; do
+            echo "Attempt $attempt of $max_attempts to fetch job ID for '$job_name'..."
+
+            json=$(curl -sSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{ github.token }}" \
+              "$job_url")
+
+
+
+            # Prefer matching both job name and the current runner name to disambiguate matrix jobs
+            job_id=$(jq -r --arg name "$job_name" --arg runner "$RUNNER_NAME" '
+              (.jobs // [])
+              | map(select(.name == $name and (.runner_name // "") == $runner))
+              | (.[0].id // empty)
+            ' <<< "$json" )
+
+            # Fallback: match by name only
+            if [ -z "${job_id:-}" ]; then
+              job_id=$(jq -r --arg name "$job_name" '
+                (.jobs // []) | map(select(.name == $name)) | (.[0].id // empty)
+              ' <<< "$json" )
+            fi
+
+            if [ -z "${job_id:-}" ] || [ "$job_id" = "null" ]; then
+              if [ $attempt -lt $max_attempts ]; then
+                echo "Job not found yet, waiting 3 seconds before retry..."
+                sleep 3
+                job_id=""  # Reset for next iteration
+              fi
+            else
+              echo "Successfully found job ID: $job_id"
+              break
+            fi
+
+            attempt=$((attempt + 1))
+          done
+
+          if [ -z "${job_id:-}" ] || [ "$job_id" = "null" ]; then
+            echo "::warning::Failed to resolve job ID for name '$job_name' on runner '$RUNNER_NAME' in run '${{ github.run_id }}' after $max_attempts attempts. Using 'unknown' as fallback."
+            job_id="unknown"
+          fi
+          echo "job_id=$job_id" >> "$GITHUB_OUTPUT"
 
       - name: Start containerized dependencies
         uses: hoverkraft-tech/compose-action@v2.0.1
