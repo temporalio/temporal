@@ -1,0 +1,57 @@
+name: Get Job ID
+description: Resolve the numeric job ID for a job name within a workflow run
+# NOTE:
+# - The GitHub API returns jobs keyed by their display name (the job's `name:` field),
+#   not the YAML job key. The `inputs.job_name` you pass here MUST exactly match
+#   the job's display name as it appears in the workflow run UI.
+# - For matrix jobs with identical names, include matrix parameters in the name
+#   (e.g., "Functional test xdc (${matrix.name})") to make each instance unique.
+inputs:
+  job_name:
+    description: Exact job name to search for
+    required: true
+  run_id:
+    description: The workflow run ID to search within
+    required: true
+outputs:
+  job_id:
+    description: The numeric job ID
+    value: ${{ steps.get_id.outputs.job_id }}
+runs:
+  using: composite
+  steps:
+    - id: get_id
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        JOB_NAME: ${{ inputs.job_name }}
+        RUN_ID: ${{ inputs.run_id }}
+        # RUNNER_NAME helps disambiguate if multiple jobs share the same name.
+        # The script will first try to match by (name, runner_name), then fall back to name-only.
+      run: |
+        set -euo pipefail
+        job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100"
+        json=$(curl -sSL \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
+          "$job_url")
+
+        # Prefer matching both job name and the current runner name to disambiguate matrix jobs
+        job_id=$(jq -r --arg name "$JOB_NAME" --arg runner "$RUNNER_NAME" '
+          (.jobs // [])
+          | map(select(.name == $name and (.runner_name // "") == $runner))
+          | (.[0].id // empty)
+        ' <<< "$json" )
+
+        # Fallback: match by name only
+        if [ -z "${job_id:-}" ]; then
+          job_id=$(jq -r --arg name "$JOB_NAME" '
+            (.jobs // []) | map(select(.name == $name)) | (.[0].id // empty)
+          ' <<< "$json" )
+        fi
+
+        if [ -z "${job_id:-}" ] || [ "$job_id" = "null" ]; then
+          echo "::error::Failed to resolve job ID for name '$JOB_NAME' on runner '$RUNNER_NAME' in run '$RUN_ID'" >&2
+          exit 1
+        fi
+        echo "job_id=$job_id" >> "$GITHUB_OUTPUT"

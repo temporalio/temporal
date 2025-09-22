@@ -522,20 +522,30 @@ func updateWorkflowExecution(
 			&resp.UpdateMutableStateStats,
 			resp.NewMutableStateStats,
 		)
-		emitCompletionMetrics(
-			shardContext,
-			namespaceEntry,
-			mutationToCompletionMetric(
-				namespaceState(shardContext.GetClusterMetadata(), &updateWorkflowFailoverVersion),
-				&request.UpdateWorkflowMutation,
-				isWorkflow,
-			),
-			snapshotToCompletionMetric(
-				namespaceState(shardContext.GetClusterMetadata(), newWorkflowFailoverVersion),
-				request.NewWorkflowSnapshot,
-				isWorkflow,
-			),
-		)
+
+		// To avoid double emission, we only want to emit completion metrics if workflow is not closed.
+		// This is done by checking the UpdateMode, which has three modes:
+		// 1. UpdateCurrent: Workflow must be the current run and thus must be running before this update.
+		// 2. IgnoreCurrent: We don't know if workflow is current or not, this only happens when it's already closed.
+		// 3. BypassCurrent: Workflow must NOT be the current run, this only happens for zombie workflows,
+		// 		which by definition is not closed yet.
+		// See updateWorkflowMode() method in context.go for more details.
+		if request.Mode != persistence.UpdateWorkflowModeIgnoreCurrent {
+			emitCompletionMetrics(
+				shardContext,
+				namespaceEntry,
+				mutationToCompletionMetric(
+					namespaceState(shardContext.GetClusterMetadata(), &updateWorkflowFailoverVersion),
+					&request.UpdateWorkflowMutation,
+					isWorkflow,
+				),
+				snapshotToCompletionMetric(
+					namespaceState(shardContext.GetClusterMetadata(), newWorkflowFailoverVersion),
+					request.NewWorkflowSnapshot,
+					isWorkflow,
+				),
+			)
+		}
 	}
 
 	return resp, nil
