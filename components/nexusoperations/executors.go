@@ -102,8 +102,6 @@ func buildCallbackURL(
 	switch target.(type) {
 	case *persistencespb.NexusEndpointTarget_Worker_:
 		return commonnexus.SystemCallbackURL, nil
-		// return fmt.Sprintf("temporal://system/%s",
-		// 	commonnexus.RouteCompletionCallback.Path(ns.Name().String())), nil
 	case *persistencespb.NexusEndpointTarget_External_:
 		return buildCallbackFromTemplate(callbackTemplate, ns)
 	default:

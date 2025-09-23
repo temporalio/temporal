@@ -54,7 +54,6 @@ func routeInternally(r *http.Request,
 	if err != nil {
 		return nil, fmt.Errorf("could not find namespace name by namespace id: %w", err)
 	}
-	// how can we lookup the namespace name now?
 	path := nexus.RouteCompletionCallback.Path(namespaceName.String())
 	callbackSource := r.Header.Get(callbackSourceHeader)
 	for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
@@ -69,7 +68,7 @@ func routeInternally(r *http.Request,
 					// the request does not have a scheme and host for us to default to
 					// there for, if we can't resolve the proper frontend the request is not rouatable
 					logger.Error(
-						"HTTPCallerProviderProvider unable to get FrontendHTTPClient for callback target cluster. Request not Routable",
+						"HTTPCallerProvider unable to get FrontendHTTPClient for callback target cluster. Request not routable",
 						tag.SourceCluster(clusterMetadata.GetCurrentClusterName()),
 						tag.TargetCluster(clusterName),
 						tag.Error(err),
@@ -131,7 +130,7 @@ func HTTPCallerProviderProvider(
 						frontendClient, err = httpClientCache.Get(clusterName)
 						if err != nil {
 							logger.Warn(
-								"HTTPCallerProviderProvider unable to get FrontendHTTPClient for callback target cluster. Using default HTTP client.",
+								"HTTPCallerProvider unable to get FrontendHTTPClient for callback target cluster. Using default HTTP client.",
 								tag.SourceCluster(clusterMetadata.GetCurrentClusterName()),
 								tag.TargetCluster(clusterName),
 								tag.Error(err),

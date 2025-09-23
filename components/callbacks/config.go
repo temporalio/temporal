@@ -57,16 +57,17 @@ var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(
 	allowedAddressConverter,
 	AddressMatchRules{},
 	`The per-namespace list of addresses that are allowed for callbacks and whether secure connections (https) are required.
+URL: "temporal://system" is always allowed for worker callbacks. The default is no address rules.
 URLs are checked against each in order when starting a workflow with attached callbacks and only need to match one to pass validation.
-URL: "temporal://system" is always allowed and the default is no address rules. Any invalid entries are ignored. Each entry is a map with possible values:
-	 - "Pattern":string (required) the host:port pattern to which this config applies.
-		Wildcards, '*', are supported and can match any number of characters (e.g. '*' matches everything, 'prefix.*.domain' matches 'prefix.a.domain' as well as 'prefix.a.b.domain').
-	 - "AllowInsecure":bool (optional, default=false) indicates whether https is required`)
+This configuration is required for external endpoint targets; any invalid entries are ignored. Each entry is a map with possible values:
+     - "Pattern":string (required) the host:port pattern to which this config applies.
+        Wildcards, '*', are supported and can match any number of characters (e.g. '*' matches everything, 'prefix.*.domain' matches 'prefix.a.domain' as well as 'prefix.a.b.domain').
+     - "AllowInsecure":bool (optional, default=false) indicates whether https is required`)
 
-// allowedSchema contains all schemes both insecure and secure
+// allowedSchemes contains all schemes, both insecure and secure
 var allowedSchemes = []string{"http", "https"}
 
-// allowedSecurSchema contains only secure schemes
+// allowedSecureSchemes contains only secure schemes
 var allowedSecureSchemes = []string{"https"}
 
 type AddressMatchRules struct {
@@ -74,6 +75,7 @@ type AddressMatchRules struct {
 }
 
 func (a AddressMatchRules) Validate(u *url.URL) error {
+	// Exact match only; no path, query, or fragment allowed for system URL
 	if u.String() == nexus.SystemCallbackURL {
 		return nil
 	}
