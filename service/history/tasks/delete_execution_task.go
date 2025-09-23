@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"fmt"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -45,4 +46,13 @@ func (a *DeleteExecutionTask) GetCategory() Category {
 
 func (a *DeleteExecutionTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION
+}
+
+func (a *DeleteExecutionTask) String() string {
+	return fmt.Sprintf("DeleteExecutionTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, ProcessStage: %v}",
+		a.WorkflowKey.String(),
+		a.VisibilityTimestamp,
+		a.TaskID,
+		a.ProcessStage,
+	)
 }
