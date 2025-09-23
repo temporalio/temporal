@@ -46,3 +46,21 @@ func PathsByDB(dbName string) []string {
 	}
 	return PathsByDir(dbName)
 }
+
+// ElasticsearchClusterSettings returns the embedded cluster settings for Elasticsearch v7
+func ElasticsearchClusterSettings() (string, error) {
+	data, err := assets.ReadFile("elasticsearch/visibility/cluster_settings_v7.json")
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// ElasticsearchIndexTemplate returns the embedded index template for Elasticsearch v7 (latest version)
+func ElasticsearchIndexTemplate() (string, error) {
+	data, err := assets.ReadFile("elasticsearch/visibility/versioned/v9/index_template_v7.json")
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}

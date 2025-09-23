@@ -9,18 +9,14 @@ import (
 )
 
 const (
-	CLIOptESVersion       = "es-version"
 	CLIOptESURL           = "endpoint"
 	CLIOptESUsername      = "user"
 	CLIOptESPassword      = "password"
 	CLIOptVisibilityIndex = "index"
 	CLIOptAWSCredentials  = "aws-credentials"
 	CLIOptAWSToken        = "aws-session-token"
-	CLIOptSettingsFile    = "settings-file"
-	CLIOptTemplateFile    = "template-file"
 	CLIOptFailSilently    = "fail"
 
-	CLIFlagESVersion       = CLIOptESVersion
 	CLIFlagESURL           = CLIOptESURL + ", e"
 	CLIFlagESUsername      = CLIOptESUsername + ", u"
 	CLIFlagESPassword      = CLIOptESPassword + ", p"
@@ -28,8 +24,6 @@ const (
 	CLIFlagVisibilityIndex = CLIOptVisibilityIndex + ", i"
 	CLIFlagAWSCredentials  = CLIOptAWSCredentials + ", aws"
 	CLIFlagFailSilently    = CLIOptFailSilently
-	CLIFlagSettingsFile    = CLIOptSettingsFile
-	CLIFlagTemplateFile    = CLIOptTemplateFile
 )
 
 // RunTool runs the temporal-elasticsearch-tool command line tool
@@ -79,12 +73,6 @@ func BuildCLIOptions() *cli.App {
 			EnvVars: []string{"ES_PWD"},
 		},
 		&cli.StringFlag{
-			Name:    CLIFlagESVersion,
-			Value:   "v7",
-			Usage:   "elasticsearch version",
-			EnvVars: []string{"ES_VERSION"},
-		},
-		&cli.StringFlag{
 			Name:    CLIFlagAWSCredentials,
 			Value:   "",
 			Usage:   "AWS credentials provider (supported ['static', 'environment', 'aws-sdk-default'])",
@@ -104,21 +92,41 @@ func BuildCLIOptions() *cli.App {
 
 	app.Commands = []*cli.Command{
 		{
-			Name:    "setup-schema",
-			Aliases: []string{"setup"},
-			Usage:   "setup initial version of elasticsearch schema and index",
+			Name:  "setup-schema",
+			Usage: "setup elasticsearch cluster settings and index template",
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:  CLIFlagFailSilently,
+					Usage: "fail silently on HTTP errors",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				cliHandler(c, setupSchema, logger)
+				return nil
+			},
+		},
+		{
+			Name:  "upgrade-schema",
+			Usage: "upgrade elasticsearch index template to latest version",
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:  CLIFlagFailSilently,
+					Usage: "fail silently on HTTP errors",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				cliHandler(c, upgradeSchema, logger)
+				return nil
+			},
+		},
+		{
+			Name:  "create-index",
+			Usage: "create elasticsearch visibility index",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:  CLIFlagSettingsFile,
-					Usage: "path to the .json cluster settings file",
-				},
-				&cli.StringFlag{
-					Name:  CLIFlagTemplateFile,
-					Usage: "path to the .json index template file",
-				},
-				&cli.StringFlag{
-					Name:  CLIFlagVisibilityIndex,
-					Usage: "name of the visibility index to create",
+					Name:     CLIFlagVisibilityIndex,
+					Usage:    "name of the visibility index to create",
+					Required: true,
 				},
 				&cli.BoolFlag{
 					Name:  CLIFlagFailSilently,
@@ -126,7 +134,26 @@ func BuildCLIOptions() *cli.App {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				cliHandler(c, setup, logger)
+				cliHandler(c, createIndex, logger)
+				return nil
+			},
+		},
+		{
+			Name:  "drop-index",
+			Usage: "delete elasticsearch visibility index",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     CLIFlagVisibilityIndex,
+					Usage:    "name of the visibility index to delete",
+					Required: true,
+				},
+				&cli.BoolFlag{
+					Name:  CLIFlagFailSilently,
+					Usage: "fail silently on HTTP errors",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				cliHandler(c, dropIndex, logger)
 				return nil
 			},
 		},

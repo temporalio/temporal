@@ -44,36 +44,45 @@ make install-schema-es
 ### Schema setup
 ```
 NAME:
-   temporal-elasticsearch-tool setup-schema - setup initial version of elasticsearch schema and index
+   temporal-elasticsearch-tool setup-schema - setup elasticsearch cluster settings and index template
 
 USAGE:
-   temporal-elasticsearch-tool setup-schema [command options] [arguments...]
+   temporal-elasticsearch-tool setup-schema [command options]
 
 OPTIONS:
-   --settings-file value    path to the .json cluster settings file
-   --template-file value    path to the .json index template file
-   --index value, -i value  name of the visibility index to create
-   --fail                   fail silently on HTTP errors
+   --fail      fail silently on HTTP errors (default: false)
+   --help, -h  show help
 ```
 
-The options are optional. For example, if you only want to create the index you can provide just the `--index` argument. This allows you to choose which setup operations can fail by combining them with `--fail` to ignore errors.
+```
+NAME:
+   temporal-elasticsearch-tool create-index - create elasticsearch visibility index
+
+USAGE:
+   temporal-elasticsearch-tool create-index [command options]
+
+OPTIONS:
+   --index value  name of the visibility index to create
+   --fail         fail silently on HTTP errors (default: false)
+   --help, -h     show help
+```
+
+The tool now uses embedded schema files (cluster settings and index template) and provides separate commands for different operations. You can set up the schema and create indexes separately:
 
 ```
 export ES_SERVER=http://127.0.0.1:9200
 export ES_USER=$USER
 export ES_PWD=$PWD
 
-# ESv6
-ES_VERSION=v6 temporal-elasticsearch-tool setup \
-    --settings-file ./schema/elasticsearch/visibility/cluster_settings_v6.json \
-    --template-file ./schema/elasticsearch/visibility/index_template_v6.json \
-    --index temporal_visibility_v1 
+# Setup cluster settings and index template
+temporal-elasticsearch-tool setup-schema
 
-# ESv7
-ES_VERSION=v7 temporal-elasticsearch-tool setup \
-    --settings-file ./schema/elasticsearch/visibility/cluster_settings_v7.json \
-    --template-file ./schema/elasticsearch/visibility/index_template_v7.json \
-    --index temporal_visibility_v1 
+# Create the visibility index
+temporal-elasticsearch-tool create-index --index temporal_visibility_v1
+
+# Or combine both operations
+temporal-elasticsearch-tool setup-schema && \
+temporal-elasticsearch-tool create-index --index temporal_visibility_v1
 ```
 
 ### Ping
@@ -95,10 +104,8 @@ The CLI supports 3 AWS authentication mechanisms: `aws-sdk-default`, `environmen
 export AWS_REGION=us-east-1
 export ES_SERVER=http://127.0.0.1:9200
 
-temporal-elasticsearch-tool --aws aws-sdk-default setup \
-    --settings-file ./schema/elasticsearch/visibility/cluster_settings_v6.json \
-    --template-file ./schema/elasticsearch/visibility/index_template_v6.json \
-    --index temporal_visibility_v1 
+temporal-elasticsearch-tool --aws aws-sdk-default setup-schema
+temporal-elasticsearch-tool --aws aws-sdk-default create-index --index temporal_visibility_v1
 ```
 
 ```
@@ -106,10 +113,8 @@ temporal-elasticsearch-tool --aws aws-sdk-default setup \
 export AWS_REGION=us-east-1
 export ES_SERVER=http://127.0.0.1:9200
 
-temporal-elasticsearch-tool --aws environment setup \
-    --settings-file ./schema/elasticsearch/visibility/cluster_settings_v6.json \
-    --template-file ./schema/elasticsearch/visibility/index_template_v6.json \
-    --index temporal_visibility_v1 
+temporal-elasticsearch-tool --aws environment setup-schema
+temporal-elasticsearch-tool --aws environment create-index --index temporal_visibility_v1
 ```
 
 ```
@@ -119,10 +124,8 @@ export ES_SERVER=http://127.0.0.1:9200
 export ES_USER=$AWS_ACCESS_KEY_ID
 export ES_PWD=$AWS_SECRET_ACCESS_KEY
 
-temporal-elasticsearch-tool --aws static setup \
-    --settings-file ./schema/elasticsearch/visibility/cluster_settings_v6.json \
-    --template-file ./schema/elasticsearch/visibility/index_template_v6.json \
-    --index temporal_visibility_v1 
+temporal-elasticsearch-tool --aws static setup-schema
+temporal-elasticsearch-tool --aws static create-index --index temporal_visibility_v1
 ```
 
 ```
@@ -133,8 +136,27 @@ export ES_USER=$AWS_ACCESS_KEY_ID
 export ES_PWD=$AWS_SECRET_ACCESS_KEY
 export AWS_SESSION_TOKEN
 
-temporal-elasticsearch-tool --aws static setup \
-    --settings-file ./schema/elasticsearch/visibility/cluster_settings_v6.json \
-    --template-file ./schema/elasticsearch/visibility/index_template_v6.json \
-    --index temporal_visibility_v1 
+temporal-elasticsearch-tool --aws static setup-schema
+temporal-elasticsearch-tool --aws static create-index --index temporal_visibility_v1
 ```
+
+### Additional Commands
+
+#### Upgrade Schema
+Updates the index template to the latest version without affecting cluster settings or indexes:
+```bash
+temporal-elasticsearch-tool upgrade-schema
+```
+
+#### Drop Index
+Deletes a visibility index:
+```bash
+temporal-elasticsearch-tool drop-index --index temporal_visibility_v1
+```
+
+#### Command Summary
+- `setup-schema`: Sets up cluster settings and index template (no index creation)
+- `upgrade-schema`: Updates index template only  
+- `create-index`: Creates a new visibility index (requires --index flag)
+- `drop-index`: Deletes a visibility index (requires --index flag)
+- `ping`: Tests connectivity to Elasticsearch server

@@ -525,17 +525,13 @@ install-schema-postgresql12: temporal-sql-tool
 
 install-schema-es: temporal-elasticsearch-tool
 	@printf $(COLOR) "Install Elasticsearch schema..."
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 setup \
-		--settings-file ./schema/elasticsearch/visibility/cluster_settings_v7.json \
-		--template-file ./schema/elasticsearch/visibility/index_template_v7.json \
-		--index temporal_visibility_v1_dev
+	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 setup-schema
+	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev
 
 install-schema-es-secondary: temporal-elasticsearch-tool
 	@printf $(COLOR) "Install Elasticsearch schema..."
-	./temporal-elasticsearch-tool -e http://127.0.0.1:8200 setup \
-		--settings-file ./schema/elasticsearch/visibility/cluster_settings_v7.json \
-		--template-file ./schema/elasticsearch/visibility/index_template_v7.json \
-		--index temporal_visibility_v1_secondary
+	./temporal-elasticsearch-tool -e http://127.0.0.1:8200 setup-schema
+	./temporal-elasticsearch-tool -e http://127.0.0.1:8200 create-index --index temporal_visibility_v1_secondary
 
 install-schema-xdc: temporal-cassandra-tool
 	@printf $(COLOR)  "Install Cassandra schema (active)..."
@@ -557,15 +553,15 @@ install-schema-xdc: temporal-cassandra-tool
 	./temporal-cassandra-tool -k temporal_cluster_c update-schema -d ./schema/cassandra/temporal/versioned
 
 	@printf $(COLOR) "Install Elasticsearch schemas..."
-	curl --fail -X PUT "http://127.0.0.1:9200/_cluster/settings" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/cluster_settings_v7.json --write-out "\n"
-	curl --fail -X PUT "http://127.0.0.1:9200/_template/temporal_visibility_v1_template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/index_template_v7.json --write-out "\n"
-# No --fail here because create index is not idempotent operation.
-	curl -X DELETE http://localhost:9200/temporal_visibility_v1_dev_cluster_a
-	curl -X DELETE http://localhost:9200/temporal_visibility_v1_dev_cluster_b
-	curl -X DELETE http://localhost:9200/temporal_visibility_v1_dev_cluster_c
-	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_cluster_a" --write-out "\n"
-	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_cluster_b" --write-out "\n"
-	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_cluster_c" --write-out "\n"
+	./temporal-elasticsearch-tool setup-schema
+# Delete indices if they exist (drop-index fails silently if index doesn't exist)
+	./temporal-elasticsearch-tool drop-index --index temporal_visibility_v1_dev_cluster_a --fail
+	./temporal-elasticsearch-tool drop-index --index temporal_visibility_v1_dev_cluster_b --fail
+	./temporal-elasticsearch-tool drop-index --index temporal_visibility_v1_dev_cluster_c --fail
+# Create indices
+	./temporal-elasticsearch-tool create-index --index temporal_visibility_v1_dev_cluster_a
+	./temporal-elasticsearch-tool create-index --index temporal_visibility_v1_dev_cluster_b
+	./temporal-elasticsearch-tool create-index --index temporal_visibility_v1_dev_cluster_c
 
 ##### Run server #####
 DOCKER_COMPOSE_FILES     := -f ./develop/docker-compose/docker-compose.yml -f ./develop/docker-compose/docker-compose.$(GOOS).yml

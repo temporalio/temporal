@@ -9,7 +9,8 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
-	"go.temporal.io/server/tools/common/schema"
+	"go.temporal.io/server/schema"
+	commonschema "go.temporal.io/server/tools/common/schema"
 )
 
 func createClient(cli *cli.Context, logger log.Logger) (esclient.CLIClient, error) {
@@ -37,11 +38,23 @@ func createClient(cli *cli.Context, logger log.Logger) (esclient.CLIClient, erro
 	return esClient, nil
 }
 
-// setup creates a ESClient and runs SetupTask
-func setup(cli *cli.Context, logger log.Logger) error {
+// setupSchema creates cluster settings and index template, but not the index
+func setupSchema(cli *cli.Context, logger log.Logger) error {
 	client, err := createClient(cli, logger)
 	if err != nil {
-		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
+		logger.Error("Unable to read config.", tag.Error(commonschema.NewConfigError(err.Error())))
+		return err
+	}
+
+	settingsContent, err := schema.ElasticsearchClusterSettings()
+	if err != nil {
+		logger.Error("Unable to load embedded cluster settings.", tag.Error(err))
+		return err
+	}
+
+	templateContent, err := schema.ElasticsearchIndexTemplate()
+	if err != nil {
+		logger.Error("Unable to load embedded index template.", tag.Error(err))
 		return err
 	}
 
@@ -49,21 +62,21 @@ func setup(cli *cli.Context, logger log.Logger) error {
 		esClient: client,
 		logger:   logger,
 		config: &SetupConfig{
-			SettingsFilePath: cli.String(CLIOptSettingsFile),
-			TemplateFilePath: cli.String(CLIOptTemplateFile),
-			VisibilityIndex:  cli.String(CLIOptVisibilityIndex),
-			FailSilently:     cli.Bool(CLIOptFailSilently),
+			SettingsContent: settingsContent,
+			TemplateContent: templateContent,
+			VisibilityIndex: "", // Don't create index in setup-schema
+			FailSilently:    cli.Bool(CLIOptFailSilently),
 		},
 	}
 
-	return task.Run()
+	return task.RunSchemaSetup()
 }
 
 // ping the elasticsearch host and return the json response
 func ping(cli *cli.Context, logger log.Logger) error {
 	client, err := createClient(cli, logger)
 	if err != nil {
-		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
+		logger.Error("Unable to read config.", tag.Error(commonschema.NewConfigError(err.Error())))
 		return err
 	}
 
@@ -88,7 +101,7 @@ func parseElasticConfig(cli *cli.Context) (*esclient.Config, error) {
 	cfg.URL = *u
 	cfg.Username = cli.String(CLIOptESUsername)
 	cfg.Password = cli.String(CLIOptESPassword)
-	cfg.Version = cli.String(CLIOptESVersion)
+	cfg.Version = "v7" // Fixed schema version 7
 	cfg.Indices = map[string]string{}
 
 	if cli.String(CLIOptVisibilityIndex) != "" {
@@ -107,6 +120,95 @@ func parseElasticConfig(cli *cli.Context) (*esclient.Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// upgradeSchema updates the index template to the latest version
+func upgradeSchema(cli *cli.Context, logger log.Logger) error {
+	client, err := createClient(cli, logger)
+	if err != nil {
+		logger.Error("Unable to read config.", tag.Error(commonschema.NewConfigError(err.Error())))
+		return err
+	}
+
+	templateContent, err := schema.ElasticsearchIndexTemplate()
+	if err != nil {
+		logger.Error("Unable to load embedded index template.", tag.Error(err))
+		return err
+	}
+
+	task := SetupTask{
+		esClient: client,
+		logger:   logger,
+		config: &SetupConfig{
+			SettingsContent: "", // Don't update cluster settings in upgrade
+			TemplateContent: templateContent,
+			VisibilityIndex: "", // Don't create index in upgrade-schema
+			FailSilently:    cli.Bool(CLIOptFailSilently),
+		},
+	}
+
+	return task.RunTemplateUpgrade()
+}
+
+// createIndex creates a new visibility index
+func createIndex(cli *cli.Context, logger log.Logger) error {
+	client, err := createClient(cli, logger)
+	if err != nil {
+		logger.Error("Unable to read config.", tag.Error(commonschema.NewConfigError(err.Error())))
+		return err
+	}
+
+	task := SetupTask{
+		esClient: client,
+		logger:   logger,
+		config: &SetupConfig{
+			SettingsContent: "", // Don't update cluster settings
+			TemplateContent: "", // Don't update template
+			VisibilityIndex: cli.String(CLIOptVisibilityIndex),
+			FailSilently:    cli.Bool(CLIOptFailSilently),
+		},
+	}
+
+	return task.RunIndexCreation()
+}
+
+// dropIndex deletes a visibility index
+func dropIndex(cli *cli.Context, logger log.Logger) error {
+	client, err := createClient(cli, logger)
+	if err != nil {
+		logger.Error("Unable to read config.", tag.Error(commonschema.NewConfigError(err.Error())))
+		return err
+	}
+
+	indexName := cli.String(CLIOptVisibilityIndex)
+	if indexName == "" {
+		err := fmt.Errorf("index name is required")
+		logger.Error("Missing index name.", tag.Error(err))
+		return err
+	}
+
+	failSilently := cli.Bool(CLIOptFailSilently)
+
+	success, err := client.DeleteIndex(context.TODO(), indexName)
+	if err != nil {
+		if !failSilently {
+			logger.Error("Index deletion failed", tag.Error(err), tag.NewStringTag("indexName", indexName))
+			return err
+		}
+		logger.Warn("Index deletion failed", tag.Error(err), tag.NewStringTag("indexName", indexName))
+		return nil
+	} else if !success {
+		err := fmt.Errorf("acknowledged=false")
+		if !failSilently {
+			logger.Error("Index deletion failed without error", tag.Error(err), tag.NewStringTag("indexName", indexName))
+			return err
+		}
+		logger.Warn("Index deletion failed without error", tag.Error(err), tag.NewStringTag("indexName", indexName))
+		return nil
+	}
+
+	logger.Info("Index deleted successfully", tag.NewStringTag("indexName", indexName))
+	return nil
 }
 
 func flag(opt string) string {
