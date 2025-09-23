@@ -447,7 +447,6 @@ func newRoot(t *testing.T) *hsm.Node {
 }
 
 func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
-	// Create a dummy ComponentRef for testing
 	dummyRef := persistencespb.ChasmComponentRef{
 		NamespaceId: "namespace-id",
 		BusinessId:  "business-id",
