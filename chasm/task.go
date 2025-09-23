@@ -27,3 +27,12 @@ type (
 )
 
 var TaskScheduledTimeImmediate = time.Time{}
+
+func (a *TaskAttributes) IsImmediate() bool {
+	return a.ScheduledTime.IsZero() ||
+		a.ScheduledTime.Equal(TaskScheduledTimeImmediate)
+}
+
+func (a *TaskAttributes) IsValid() bool {
+	return a.Destination == "" || a.IsImmediate()
+}
