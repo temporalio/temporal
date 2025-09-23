@@ -66,7 +66,7 @@ func (*noopChasmTree) Component(chasm.Context, chasm.ComponentRef) (chasm.Compon
 	return nil, serviceerror.NewInternal("Component() method invoked on noop CHASM tree")
 }
 
-func (*noopChasmTree) ComponentByPath(chasm.Context, string) (chasm.Component, error) {
+func (*noopChasmTree) ComponentByPath(chasm.Context, []string) (chasm.Component, error) {
 	return nil, serviceerror.NewInternal("ComponentByPath() method invoked on noop CHASM tree")
 }
 
