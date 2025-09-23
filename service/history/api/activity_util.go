@@ -72,6 +72,8 @@ func IsActivityTaskNotFoundForToken(
 		return token.GetStartVersion() != ai.GetStartVersion()
 	}
 	if token.GetVersion() != common.EmptyVersion && token.GetVersion() != ai.GetVersion() {
+		// For backward compatibility. We should not check version here because ai.Version is last write version,
+		// but token.Version is generated when task is created. We should use start version instead.
 		return true
 	}
 	return false
