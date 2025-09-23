@@ -2,6 +2,7 @@ package chasm
 
 import (
 	"encoding/base64"
+	"errors"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -25,6 +26,10 @@ type NexusCompletionHandler interface {
 // to receive Nexus operation completion callbacks. Particularly useful for
 // components that want to track a workflow start with StartWorkflowExecution.
 func GetNexusCallback(ctx Context, component Component) (*commonpb.Callback, error) {
+	if _, ok := component.(NexusCompletionHandler); !ok {
+		return nil, errors.New("component must implement NexusCompletionHandler")
+	}
+
 	ref, err := ctx.Ref(component)
 	if err != nil {
 		return nil, err
