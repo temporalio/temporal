@@ -261,8 +261,9 @@ jobs:
 
       - name: Generate crash report
         if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+        run:
+          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
@@ -356,8 +357,9 @@ jobs:
 
       - name: Generate crash report
         if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+        run:
+          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
@@ -411,8 +413,11 @@ jobs:
         run: |
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
+  # Root job name includes matrix details so it is unique per shard.
+  # This MUST stay in sync with the `job_name` passed to the job-id action below.
   functional-test:
     if: ${{ inputs.run_single_unit_test != true }}
+    # Display name shown in the UI. The job-id lookup uses this exact value.
     name: Functional test (${{ matrix.name }}, shard ${{ matrix.shard_index }})
     needs: [pre-build, set-up-single-test]
     strategy:
@@ -508,22 +513,13 @@ jobs:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
-      - name: Get job ID from workflow run
+      - name: Get job ID
+        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         id: get_job_id
-        run: |
-          set -eu
-          test_job_name="Functional test (${{ matrix.runs_on_override || matrix.runs-on }}, ${{matrix.shard_index}}, ${{matrix.name}})"
-          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
-          # curl or jq might silently fail, but we are okay with that.
-          # We don't want to fail the job if we can't get the job id.
-          job_id=$(curl -L \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-             "$job_url" \
-            | jq "first(.jobs[] | select(.name == \"$test_job_name\") | .id)")
-          echo "Job id is $job_id"
-          echo "JOB_ID=${job_id:-unknown}" >> "$GITHUB_OUTPUT"
+        uses: ./.github/actions/get-job-id
+        with:
+          job_name: Functional test (${{ matrix.name }}, shard ${{ matrix.shard_index }})
+          run_id: ${{ github.run_id }}
 
       - name: Run functional test
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -536,8 +532,9 @@ jobs:
 
       - name: Generate crash report
         if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+        run:
+          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
@@ -570,7 +567,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
         with:
-          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{ matrix.runs_on_override || matrix.runs-on }}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
+          name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
@@ -591,15 +588,18 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: traces-json--${{github.run_id}}-${{steps.get_job_id.outputs.JOB_ID}}--${{matrix.shard_index}}--${{github.run_attempt}}--${{matrix.name}}--functional-test
+          name: traces-json--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{matrix.shard_index}}--${{github.run_attempt}}--${{matrix.name}}--functional-test
           path: ./.testoutput/traces.*.json
           if-no-files-found: ignore
           include-hidden-files: true
           retention-days: 28
 
+  # XDC matrix job. Include `${{ matrix.name }}` in the display name so each
+  # matrix variant has a unique name for the job-id lookup.
   functional-test-xdc:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
-    name: Functional test xdc
+    # Display name shown in the UI. The job-id lookup uses this exact value.
+    name: Functional test xdc (${{ matrix.name }})
     needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
@@ -649,6 +649,14 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
+      # Resolve the numeric job ID for this job instance.
+      # IMPORTANT: `job_name` must exactly match the job's display name above.
+      - name: Get job ID
+        id: get_job_id
+        uses: ./.github/actions/get-job-id
+        with:
+          job_name: Functional test xdc (${{ matrix.name }})
+          run_id: ${{ github.run_id }}
 
       - name: Start containerized dependencies
         uses: hoverkraft-tech/compose-action@v2.0.1
@@ -674,23 +682,6 @@ jobs:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
-      - name: Get job ID from workflow run
-        id: get_job_id
-        run: |
-          set -eu
-          test_job_name="Functional test xdc (${{matrix.name}})"
-          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
-          # curl or jq might silently fail, but we are okay with that.
-          # We don't want to fail the job if we can't get the job id.
-          job_id=$(curl -L \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-             "$job_url" \
-            | jq "first(.jobs[] | select(.name == \"$test_job_name\") | .id)")
-          echo "Job id is $job_id"
-          echo "JOB_ID=${job_id-unknown}" >> "$GITHUB_OUTPUT"
-
       - name: Run functional test xdc
         timeout-minutes: 35 # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: make functional-test-xdc-coverage
@@ -700,8 +691,9 @@ jobs:
 
       - name: Generate crash report
         if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+        run:
+          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
@@ -734,7 +726,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
+          name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
           path: ./.testoutput
           include-hidden-files: true
           retention-days: 28
@@ -755,14 +747,17 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: traces-json--${{github.run_id}}-${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
+          name: traces-json--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
           path: ./.testoutput/traces.*.json
           if-no-files-found: ignore
           retention-days: 28
 
+  # NDC matrix job. Include `${{ matrix.name }}` in the display name so each
+  # matrix variant has a unique name for the job-id lookup.
   functional-test-ndc:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
-    name: Functional test ndc
+    # Display name shown in the UI. The job-id lookup uses this exact value.
+    name: Functional test ndc (${{ matrix.name }})
     needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
@@ -815,6 +810,14 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
+      # Resolve the numeric job ID for this job instance.
+      # IMPORTANT: `job_name` must exactly match the job's display name above.
+      - name: Get job ID
+        id: get_job_id
+        uses: ./.github/actions/get-job-id
+        with:
+          job_name: Functional test ndc (${{ matrix.name }})
+          run_id: ${{ github.run_id }}
 
       - name: Start containerized dependencies
         uses: hoverkraft-tech/compose-action@v2.0.1
@@ -840,23 +843,6 @@ jobs:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
-      - name: Get job ID from workflow run
-        id: get_job_id
-        run: |
-          set -eu
-          test_job_name="Functional test ndc (${{matrix.name}})"
-          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
-          # curl or jq might silently fail, but we are okay with that.
-          # We don't want to fail the job if we can't get the job id.
-          job_id=$(curl -L \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-             "$job_url" \
-            | jq "first(.jobs[] | select(.name == \"$test_job_name\") | .id)")
-          echo "Job id is $job_id"
-          echo "JOB_ID=${job_id:-unknown}" >> "$GITHUB_OUTPUT"
-
       - name: Run functional test ndc
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
@@ -866,8 +852,9 @@ jobs:
 
       - name: Generate crash report
         if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] && 
+        run:
+          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Upload code coverage to Codecov
@@ -890,7 +877,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
+          name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
@@ -911,7 +898,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: traces-json--${{github.run_id}}-${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
+          name: traces-json--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
           path: ./.testoutput/traces.*.json
           if-no-files-found: ignore
           retention-days: 28
