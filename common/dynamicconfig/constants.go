@@ -693,7 +693,7 @@ all internal-frontends.`,
 	)
 	FrontendGlobalNamespaceVisibilityRPS = NewNamespaceIntSetting(
 		"frontend.globalNamespaceRPS.visibility",
-		0,
+		60,
 		`FrontendGlobalNamespaceVisibilityRPS is workflow namespace rate limit per second for the whole cluster for visibility API.
 The limit is evenly distributed among available frontend service instances.
 If this is set, it overwrites per instance limit "frontend.namespaceRPS.visibility".
