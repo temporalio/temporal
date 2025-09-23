@@ -54,7 +54,7 @@ func routeInternally(r *http.Request,
 	if err != nil {
 		return nil, fmt.Errorf("could not find namespace name by namespace id: %w", err)
 	}
-	path := nexus.RouteCompletionCallback.Path(namespaceName.String())
+	path := fmt.Sprintf("/%s", nexus.RouteCompletionCallback.Path(namespaceName.String()))
 	callbackSource := r.Header.Get(callbackSourceHeader)
 	for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
 		if callbackSource == clusterInfo.ClusterID {
