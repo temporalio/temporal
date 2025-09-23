@@ -5245,6 +5245,11 @@ func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string)
 	if err != nil {
 		return err
 	}
+	// Internally routed.
+	// TODO - validate requests involving this URL come from a history pod.
+	if u.Scheme == "temporal" {
+		return nil
+	}
 	if !(u.Scheme == "http" || u.Scheme == "https") {
 		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
 	}
