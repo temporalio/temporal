@@ -552,7 +552,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 					Callback: &persistencespb.Callback{
 						Variant: &persistencespb.Callback_Nexus_{
 							Nexus: &persistencespb.Callback_Nexus{
-								Url:    chasm.NexusCompletionHandlerBaseURL,
+								Url:    chasm.NexusCompletionHandlerURL,
 								Header: headers,
 							},
 						},
