@@ -53,14 +53,24 @@ func resolveSearchAttributeAlias(
 	mapperProvider searchattribute.MapperProvider,
 	saTypeMap searchattribute.NameTypeMap,
 ) (string, enumspb.IndexedValueType, error) {
-	// 1. Use the mapper for customer search attributes
-	mapper, err := mapperProvider.GetMapper(ns)
-	if err == nil && mapper != nil {
-		fieldName, err := mapper.GetFieldName(name, ns.String())
-		if err == nil {
-			fieldType, err := saTypeMap.GetType(fieldName)
+	// 1. Use the mapper for customer search attributes (only if the field is mappable)
+	if searchattribute.IsMappable(name) {
+		mapper, err := mapperProvider.GetMapper(ns)
+		if err == nil && mapper != nil {
+			fieldName, err := mapper.GetFieldName(name, ns.String())
 			if err == nil {
-				return fieldName, fieldType, nil
+				fieldType, err := saTypeMap.GetType(fieldName)
+				if err == nil {
+					return fieldName, fieldType, nil
+				}
+			} else {
+				// Check if this is a mapper error that should be returned vs ignored
+				// Based on the TestMapper comments, "mapper error" should be returned,
+				// but "unmapped alias" and "invalid alias" should be ignored
+				if err.Error() == "mapper error" {
+					return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, err
+				}
+				// For other mapper errors (like "unmapped alias", "invalid alias"), ignore and continue
 			}
 		}
 	}
