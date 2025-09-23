@@ -270,14 +270,14 @@ type customMapper struct {
 	aliasToField map[string]string
 }
 
-func (m *customMapper) GetAlias(fieldName string, namespace string) (string, error) {
+func (m *customMapper) GetAlias(fieldName string, ns string) (string, error) {
 	if fn, ok := m.fieldToAlias[fieldName]; ok {
 		return fn, nil
 	}
 	return "", serviceerror.NewInvalidArgument("invalid field name")
 }
 
-func (m *customMapper) GetFieldName(alias string, namespace string) (string, error) {
+func (m *customMapper) GetFieldName(alias string, ns string) (string, error) {
 	if fn, ok := m.aliasToField[alias]; ok {
 		return fn, nil
 	}

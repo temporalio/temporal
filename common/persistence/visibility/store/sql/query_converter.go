@@ -469,7 +469,7 @@ func resolveSearchAttributeAlias(
 	}
 
 	// 5. Not found, return error
-	return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, query.NewConverterError("invalid search attribute: %s", name)
+	return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, query.NewConverterError("%s: column name '%s' is not a valid search attribute", query.InvalidExpressionErrMessage, name)
 }
 
 // TODO chasm-visibility: entry point for field name resolution in SQL queries
