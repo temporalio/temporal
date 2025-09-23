@@ -3559,22 +3559,26 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 
 	testCases := []testCase{
 		{
-			name:      "deadline_exceeded",
+			name:      "deadline_exceeded_immediately",
 			sleepTime: ctxTimeout - NexusTimeoutBuffer,
 			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
 				require.NoError(t, err)
-				require.NotNil(t, response)
-				require.NotNil(t, response.Outcome)
 				require.NotNil(t, response.GetRequestTimeout())
 			},
 		},
 		{
-			name:      "deadline_not_exceeded",
+			name:      "deadline_exceeded_awaiting_local_dispatch",
 			sleepTime: ctxTimeout - NexusTimeoutBuffer - time.Nanosecond,
 			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
 				require.NoError(t, err)
-				require.NotNil(t, response)
-				require.NotNil(t, response.Outcome)
+				require.NotNil(t, response.GetRequestTimeout())
+			},
+		},
+		{
+			name:      "deadline_not_exceeded_on_forwarding",
+			sleepTime: ctxTimeout - NexusTimeoutBuffer - time.Nanosecond,
+			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
+				require.NoError(t, err)
 				require.NotNil(t, response.GetResponse())
 			},
 		},
@@ -3609,6 +3613,10 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 						return nil, err
 					}
 
+					if tc.name == "deadline_exceeded_awaiting_local_dispatch" {
+						return nil, nil
+					}
+
 					return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
 						Response: &nexuspb.Response{},
 					}}, nil
@@ -3617,6 +3625,7 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 
 			partition := newRootPartition("my-nsid", "my-tq", enumspb.TASK_QUEUE_TYPE_NEXUS)
 			s.matchingEngine.partitions[partition.Key()] = mockPartitionManager
+			s.matchingEngine.nexusResults = collection.NewSyncMap[string, chan *nexusResult]()
 
 			ctx, cancel := context.WithTimeout(context.Background(), ctxTimeout)
 			defer cancel()

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -2248,8 +2249,14 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 
 	svc := nexus.NewService("test")
 
+	completeHandlerCh := make(chan struct{})
+	wgHandlerStarted := sync.WaitGroup{}
+	wgHandlerStarted.Add(1)
+
 	handlerWF := func(ctx workflow.Context, _ nexus.NoValue) (nexus.NoValue, error) {
-		return nil, workflow.Sleep(ctx, 2*time.Second)
+		wgHandlerStarted.Done()
+		<-completeHandlerCh
+		return nil, nil
 	}
 
 	op := temporalnexus.NewWorkflowRunOperation("op", handlerWF, func(ctx context.Context, _ nexus.NoValue, soo nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
@@ -2270,13 +2277,16 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 	s.T().Cleanup(w.Stop)
 
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		TaskQueue:          taskQueue,
-		WorkflowRunTimeout: 1700 * time.Millisecond,
+		TaskQueue: taskQueue,
 	}, callerWF)
 	s.NoError(err)
 
-	wfErr := run.Get(ctx, nil)
-	s.Error(wfErr)
+	wgHandlerStarted.Wait()
+
+	err = s.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
+	s.NoError(err)
+
+	completeHandlerCh <- struct{}{}
 
 	s.EventuallyWithT(func(ct *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{

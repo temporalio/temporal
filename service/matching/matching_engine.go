@@ -2231,8 +2231,9 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 
 	resp, err := pm.DispatchNexusTask(ctx, taskID, request)
 
+	// We should already have at least an additional 500ms from the upstream request (see frontend.nexusDispatchPreflightTimeout),
+	// so this should be a sufficient amount of time for the request to be dispatched internally to the partition manager.
 	if ctx.Err() != nil {
-		// The context deadline has expired with the given buffer, return an explicit timeout to the caller to indicate this is an issue with the worker and not the server.
 		return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{
 			RequestTimeout: &matchingservice.DispatchNexusTaskResponse_Timeout{},
 		}}, nil
