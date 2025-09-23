@@ -529,7 +529,7 @@ Loop:
 			continue Loop
 		}
 		if !s.shouldProcessTask(item) {
-			continue
+			continue Loop
 		}
 		metrics.ReplicationTaskLoadLatency.With(s.metrics).Record(
 			time.Since(item.GetVisibilityTime()),
