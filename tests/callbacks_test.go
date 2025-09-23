@@ -54,7 +54,7 @@ func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completio
 	hh := nexus.NewCompletionHTTPHandler(nexus.CompletionHandlerOptions{Handler: h})
 	srv := httptest.NewServer(hh)
 	t.Cleanup(func() {
-		defer srv.Close()
+		srv.Close()
 	})
 	return srv.URL
 }
