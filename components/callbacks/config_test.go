@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/nexus"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func Test_addressPatternToRegexp(t *testing.T) {
@@ -45,49 +48,67 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 		rules  []AddressMatchRule
 	}
 	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
+		name        string
+		args        args
+		validateErr func(t *testing.T, err error)
 	}{
 		{
 			name: "happy path, default config: just temporal",
 			args: args{
-				rawURL: "temporal://system",
-				rules:  []AddressMatchRule{{}},
+				rawURL: nexus.SystemCallbackURL,
+				rules:  []AddressMatchRule{},
 			},
-			wantErr: false,
+			validateErr: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
 		},
 		{
 			name: "sad path incorrect scheme, default config: just temporal",
 			args: args{
 				rawURL: "https://system",
-				rules:  []AddressMatchRule{{}},
+				rules:  []AddressMatchRule{},
 			},
-			wantErr: true,
+			validateErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+				require.ErrorContains(t, err, "invalid url: url does not match any configured callback address")
+			},
 		},
 		{
 			name: "sad path incorrect host, default config: just temporal",
 			args: args{
 				rawURL: "temporal://somehost.com",
-				rules:  []AddressMatchRule{{}},
+				rules:  []AddressMatchRule{},
 			},
-			wantErr: true,
+			validateErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+				require.ErrorContains(t, err, "invalid url: unknown scheme")
+			},
 		},
 		{
 			name: "sad path http, default config: just temporal",
 			args: args{
 				rawURL: "http://localhost",
-				rules:  []AddressMatchRule{{}},
+				rules:  []AddressMatchRule{},
 			},
-			wantErr: true,
+			validateErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+				require.ErrorContains(t, err, "invalid url: url does not match any configured callback address")
+			},
 		},
 		{
 			name: "sad path invalid url, default config: just temporal",
 			args: args{
 				rawURL: "blblbblblb",
-				rules:  []AddressMatchRule{{}},
+				rules:  []AddressMatchRule{},
 			},
-			wantErr: true,
+			validateErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+				require.ErrorContains(t, err, "invalid url: unknown scheme")
+			},
 		},
 		{
 			name: "secure only passes with https",
@@ -100,7 +121,9 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 					}(),
 				},
 			},
-			wantErr: false,
+			validateErr: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
 		},
 		{
 			name: "secure only fails with http",
@@ -113,7 +136,11 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 					}(),
 				},
 			},
-			wantErr: true,
+			validateErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+				require.ErrorContains(t, err, "invalid url: callback address does not allow insecure connections")
+			},
 		},
 		{
 			name: "allow insecure passes with http",
@@ -126,7 +153,9 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 					}(),
 				},
 			},
-			wantErr: false,
+			validateErr: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
 		},
 		{
 			name: "allow insecure passes with https",
@@ -139,7 +168,9 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 					}(),
 				},
 			},
-			wantErr: false,
+			validateErr: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
 		},
 		{
 			name: "port must match",
@@ -152,7 +183,9 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 					}(),
 				},
 			},
-			wantErr: false,
+			validateErr: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
 		},
 		{
 			name: "port mismatch fails",
@@ -165,7 +198,11 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 					}(),
 				},
 			},
-			wantErr: true,
+			validateErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+				require.ErrorContains(t, err, "invalid url: url does not match any configured callback address")
+			},
 		},
 		{
 			name: "middle wildcard matches",
@@ -178,7 +215,9 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 					}(),
 				},
 			},
-			wantErr: false,
+			validateErr: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
 		},
 		{
 			name: "prefix subdomain matches single level",
@@ -191,7 +230,9 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 					}(),
 				},
 			},
-			wantErr: false,
+			validateErr: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
 		},
 		{
 			name: "prefix subdomain matches multiple levels",
@@ -204,7 +245,9 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 					}(),
 				},
 			},
-			wantErr: false,
+			validateErr: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
 		},
 		{
 			name: "multiple rules, second matches",
@@ -221,7 +264,9 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 					}(),
 				},
 			},
-			wantErr: false,
+			validateErr: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
 		},
 		{
 			name: "unknown scheme fails",
@@ -234,11 +279,16 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 					}(),
 				},
 			},
-			wantErr: true,
+			validateErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+				require.ErrorContains(t, err, "invalid url: unknown scheme")
+			},
 		},
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			u, err := url.Parse(tt.args.rawURL)
 			if err != nil {
@@ -246,9 +296,7 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 			}
 			rules := AddressMatchRules{Rules: tt.args.rules}
 			err = rules.Validate(u)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Validate(%q) error = %v, wantErr %v", tt.args.rawURL, err, tt.wantErr)
-			}
+			tt.validateErr(t, err)
 		})
 	}
 }

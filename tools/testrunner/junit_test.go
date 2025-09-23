@@ -13,8 +13,8 @@ import (
 func TestReadJUnitReport(t *testing.T) {
 	j := &junitReport{path: "testdata/junit-attempt-1.xml"}
 	require.NoError(t, j.read())
-	require.Len(t, j.Testsuites.Suites, 1)
-	require.Equal(t, 2, j.Testsuites.Failures)
+	require.Len(t, j.Suites, 1)
+	require.Equal(t, 2, j.Failures)
 	require.Equal(t, []string{"TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument"}, j.collectTestCaseFailures())
 }
 

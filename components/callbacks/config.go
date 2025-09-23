@@ -9,6 +9,7 @@ import (
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/nexus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -68,17 +69,12 @@ var allowedSchemes = []string{"http", "https"}
 // allowedSecurSchema contains only secure schemes
 var allowedSecureSchemes = []string{"https"}
 
-const (
-	temporalScheme = "temporal"
-	systemHost     = "system"
-)
-
 type AddressMatchRules struct {
 	Rules []AddressMatchRule
 }
 
 func (a AddressMatchRules) Validate(u *url.URL) error {
-	if u.Host == systemHost && u.Scheme == temporalScheme {
+	if u.String() == nexus.SystemCallbackURL {
 		return nil
 	}
 	if !slices.Contains(allowedSchemes, u.Scheme) {
@@ -101,18 +97,12 @@ type AddressMatchRule struct {
 	AllowInsecure bool
 }
 
-// Allow assumes the scheme has already been checked with IsSchemeAllowed and will return:
+// Allow validates the URL by:
 // 1. true, nil if the provided url matches the rule and passed validation
 // for the given rule.
 // 2. false, nil if the URL does not match the rule.
 // 3. It false, error if there is a match and the URL fails validation
 func (a AddressMatchRule) Allow(u *url.URL) (bool, error) {
-	if a.Regexp == nil {
-		if u.Host == systemHost && u.Scheme == temporalScheme {
-			return true, nil
-		}
-		return false, nil
-	}
 	if !a.Regexp.MatchString(u.Host) {
 		return false, nil
 	}
