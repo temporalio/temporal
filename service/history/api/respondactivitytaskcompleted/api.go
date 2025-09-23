@@ -112,7 +112,10 @@ func Invoke(
 				// Unable to add ActivityTaskCompleted event to history
 				return nil, err
 			}
-			attemptStartedTime = ai.StartedTime.AsTime()
+			if !fabricateStartedEvent {
+				// leave it zero if the event is fabricated so the latency metrics are not emitted
+				attemptStartedTime = ai.StartedTime.AsTime()
+			}
 			firstScheduledTime = ai.FirstScheduledTime.AsTime()
 			taskQueue = ai.TaskQueue
 			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
@@ -126,7 +129,7 @@ func Invoke(
 		workflowConsistencyChecker,
 	)
 
-	if err == nil && !fabricateStartedEvent {
+	if err == nil {
 		workflow.RecordActivityCompletionMetrics(
 			shard,
 			namespace,
