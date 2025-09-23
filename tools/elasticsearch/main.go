@@ -48,7 +48,7 @@ func BuildCLIOptions() *cli.App {
 
 	app := cli.NewApp()
 	app.Name = "temporal-elasticsearch-tool"
-	app.Usage = "Command line tool for temporal elasticsearch operations"
+	app.Usage = "Command line tool for temporal elasticsearch operations (EXPERIMENTAL)"
 	app.Version = "0.0.1"
 
 	logger := log.NewCLILogger()

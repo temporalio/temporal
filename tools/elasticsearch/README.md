@@ -1,11 +1,13 @@
 ## Using the Elasticsearch schema tool
- 
+
+⚠️ **EXPERIMENTAL**: This tool is experimental and may change in future versions.
+
 This package contains the tooling for temporal elasticsearch operations. 
 
 ### Usage
 ```
 NAME:
-   temporal-elasticsearch-tool - Command line tool for temporal elasticsearch operations
+   temporal-elasticsearch-tool - Command line tool for temporal elasticsearch operations (EXPERIMENTAL)
 
 USAGE:
    temporal-elasticsearch-tool [global options] command [command options] [arguments...]
@@ -14,20 +16,22 @@ VERSION:
    0.0.1
 
 COMMANDS:
-   setup-schema, setup  setup initial version of elasticsearch schema and index
-   ping                 pings the elasticsearch host
-   help, h              Shows a list of commands or help for one command
+   setup-schema    setup elasticsearch cluster settings and index template
+   upgrade-schema  upgrade elasticsearch index template to latest version
+   create-index    create elasticsearch visibility index
+   drop-index      delete elasticsearch visibility index
+   ping            pings the elasticsearch host
+   help, h         Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
-   --endpoint value, -e value            hostname or ip address of elasticsearch server (default: "http://127.0.0.1:9200") [$ES_SERVER]
-   --user value, -u value                username for elasticsearch or aws_access_key_id if using static aws credentials [$ES_USER]
-   --password value, -p value            password for elasticsearch or aws_secret_access_key if using static aws credentials [$ES_PWD]
-   --es-version value                    elasticsearch version (default: "v7") [$ES_VERSION]
-   --aws-credentials value, --aws value  AWS credentials provider (supported ['static', 'environment', 'aws-sdk-default']) [$AWS_CREDENTIALS]
-   --aws-session-token value             AWS session token for use with 'static' AWS credentials provider [$AWS_SESSION_TOKEN]
-   --quiet                               don't log errors to stderr
-   --help, -h                            show help
-   --version, -v                         print the version
+   --endpoint value           hostname or ip address of elasticsearch server (default: "http://127.0.0.1:9200") [$ES_SERVER]
+   --user value               username for elasticsearch or aws_access_key_id if using static aws credentials [$ES_USER]
+   --password value           password for elasticsearch or aws_secret_access_key if using static aws credentials [$ES_PWD]
+   --aws-credentials value    AWS credentials provider (supported ['static', 'environment', 'aws-sdk-default']) [$AWS_CREDENTIALS]
+   --aws-session-token value  AWS sessiontoken for use with 'static' AWS credentials provider [$AWS_SESSION_TOKEN]
+   --quiet                    don't log errors to stderr (default: false)
+   --help, -h                 show help
+   --version, -v              print the version
 ```
 
 ## For localhost development
@@ -143,7 +147,7 @@ temporal-elasticsearch-tool --aws static create-index --index temporal_visibilit
 ### Additional Commands
 
 #### Upgrade Schema
-Updates the index template to the latest version without affecting cluster settings or indexes:
+Updates the index template (settings and mappings) to the latest version without affecting cluster settings or existing indexes:
 ```bash
 temporal-elasticsearch-tool upgrade-schema
 ```
@@ -156,7 +160,7 @@ temporal-elasticsearch-tool drop-index --index temporal_visibility_v1
 
 #### Command Summary
 - `setup-schema`: Sets up cluster settings and index template (no index creation)
-- `upgrade-schema`: Updates index template only  
+- `upgrade-schema`: Updates index template (settings and mappings) to latest version
 - `create-index`: Creates a new visibility index (requires --index flag)
 - `drop-index`: Deletes a visibility index (requires --index flag)
 - `ping`: Tests connectivity to Elasticsearch server
