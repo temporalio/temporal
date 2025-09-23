@@ -155,7 +155,7 @@ func (e taskExecutor) loadInvocationArgs(
 
 			// CHASM internal callbacks make use of Nexus as their callback delivery
 			// mechanism, but with a special prefix.
-			if strings.HasPrefix(variant.Nexus.Url, chasm.NexusCompletionHandlerBaseURL) {
+			if strings.HasPrefix(variant.Nexus.Url, chasm.NexusCompletionHandlerURL) {
 				chasmInvokable := chasmInvocation{}
 				chasmInvokable.nexus = variant.Nexus
 				chasmInvokable.attempt = callback.Attempt

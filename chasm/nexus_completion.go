@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	commonpb "go.temporal.io/api/common/v1"
 )
 
 const (
@@ -11,7 +12,7 @@ const (
 	NexusComponentRefHeader = "X-CHASM-Component-Ref"
 
 	// Base URL for Nexus->CHASM callbacks.
-	NexusCompletionHandlerBaseURL = "temporal://internal/chasm"
+	NexusCompletionHandlerURL = "temporal://internal/chasm"
 )
 
 // NexusCompletionHandler is implemented by CHASM components that want to handle
@@ -20,12 +21,13 @@ type NexusCompletionHandler interface {
 	HandleNexusCompletion(MutableContext, nexus.OperationCompletion) error
 }
 
-// RegisterNexusCallback generates a callback URL and headers for a CHASM component
-// to receive Nexus operation completion callbacks.
-func RegisterNexusCallback(ctx Context, component Component) (string, map[string]string, error) {
+// GetNexusCallback generates a Callback message indicating a CHASM component
+// to receive Nexus operation completion callbacks. Particularly useful for
+// components that want to track a workflow start with StartWorkflowExecution.
+func GetNexusCallback(ctx Context, component Component) (*commonpb.Callback, error) {
 	ref, err := ctx.Ref(component)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
 	encodedRef := base64.RawURLEncoding.EncodeToString(ref)
@@ -33,5 +35,12 @@ func RegisterNexusCallback(ctx Context, component Component) (string, map[string
 		NexusComponentRefHeader: encodedRef,
 	}
 
-	return NexusCompletionHandlerBaseURL, headers, nil
+	return &commonpb.Callback{
+		Variant: &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{
+				Url:    NexusCompletionHandlerURL,
+				Header: headers,
+			},
+		},
+	}, nil
 }
