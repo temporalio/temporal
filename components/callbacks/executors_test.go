@@ -2,6 +2,7 @@ package callbacks_test
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -442,4 +444,168 @@ func newRoot(t *testing.T) *hsm.Node {
 	root, err := hsm.NewRoot(reg, workflow.StateMachineType, mutableState, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
 	require.NoError(t, err)
 	return root
+}
+
+func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
+	// Create a dummy ComponentRef for testing
+	dummyRef := persistencespb.ChasmComponentRef{
+		NamespaceId: "namespace-id",
+		BusinessId:  "business-id",
+		EntityId:    "entity-id",
+	}
+	serializedRef, err := dummyRef.Marshal()
+	require.NoError(t, err)
+	encodedRef := base64.RawURLEncoding.EncodeToString(serializedRef)
+
+	cases := []struct {
+		name             string
+		setupChasmEngine func(*gomock.Controller) *chasm.MockEngine
+		headerValue      string
+		expectedError    error
+		assertOutcome    func(*testing.T, callbacks.Callback)
+	}{
+		{
+			name: "success",
+			setupChasmEngine: func(ctrl *gomock.Controller) *chasm.MockEngine {
+				engine := chasm.NewMockEngine(ctrl)
+				engine.EXPECT().UpdateComponent(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+				return engine
+			},
+			headerValue: encodedRef,
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_SUCCEEDED, cb.State())
+			},
+		},
+		{
+			name: "unimplemented-handler",
+			setupChasmEngine: func(ctrl *gomock.Controller) *chasm.MockEngine {
+				engine := chasm.NewMockEngine(ctrl)
+				engine.EXPECT().UpdateComponent(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, callbacks.ErrUnimplementedHandler)
+				return engine
+			},
+			headerValue:   encodedRef,
+			expectedError: errors.New("unprocessable task: component does not implement NexusCompletionHandler"),
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
+			},
+		},
+		{
+			name: "retryable-error",
+			setupChasmEngine: func(ctrl *gomock.Controller) *chasm.MockEngine {
+				engine := chasm.NewMockEngine(ctrl)
+				engine.EXPECT().UpdateComponent(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("some retryable error"))
+				return engine
+			},
+			headerValue:   encodedRef,
+			expectedError: errors.New("destination down: some retryable error"),
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
+			},
+		},
+		{
+			name: "missing-header",
+			setupChasmEngine: func(ctrl *gomock.Controller) *chasm.MockEngine {
+				return chasm.NewMockEngine(ctrl)
+			},
+			expectedError: errors.New("unprocessable task: callback missing CHASM header"),
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
+			},
+		},
+		{
+			name: "invalid-base64-header",
+			setupChasmEngine: func(ctrl *gomock.Controller) *chasm.MockEngine {
+				return chasm.NewMockEngine(ctrl)
+			},
+			headerValue:   "invalid-base64!!!",
+			expectedError: errors.New("unprocessable task: failed to decode CHASM ComponentRef: illegal base64 data at input byte 14"),
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
+			namespaceRegistryMock.EXPECT().GetNamespaceByID(gomock.Any()).Return(
+				namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+					Info: &persistencespb.NamespaceInfo{
+						Id:   "namespace-id",
+						Name: "namespace-name",
+					},
+					Config: &persistencespb.NamespaceConfig{},
+				}),
+				nil,
+			)
+			chasmEngine := tc.setupChasmEngine(ctrl)
+
+			headers := make(map[string]string)
+			if tc.headerValue != "" {
+				headers[chasm.NexusComponentRefHeader] = tc.headerValue
+			}
+
+			root := newRoot(t)
+			cb := callbacks.Callback{
+				CallbackInfo: &persistencespb.CallbackInfo{
+					Callback: &persistencespb.Callback{
+						Variant: &persistencespb.Callback_Nexus_{
+							Nexus: &persistencespb.Callback_Nexus{
+								Url:    chasm.NexusCompletionHandlerBaseURL,
+								Header: headers,
+							},
+						},
+					},
+					State:     enumsspb.CALLBACK_STATE_SCHEDULED,
+					RequestId: "request-id",
+					Attempt:   1,
+				},
+			}
+
+			reg := hsm.NewRegistry()
+			require.NoError(t, callbacks.RegisterExecutor(reg, callbacks.TaskExecutorOptions{
+				NamespaceRegistry: namespaceRegistryMock,
+				MetricsHandler:    metrics.NoopMetricsHandler,
+				ChasmEngine:       chasmEngine,
+				Logger:            log.NewNoopLogger(),
+				Config: &callbacks.Config{
+					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+					RetryPolicy: func() backoff.RetryPolicy {
+						return backoff.NewExponentialRetryPolicy(time.Second)
+					},
+				},
+			}))
+
+			coll := callbacks.MachineCollection(root)
+			node, err := coll.Add("ID", cb)
+			require.NoError(t, err)
+			env := fakeEnv{node}
+
+			err = reg.ExecuteImmediateTask(
+				context.Background(),
+				env,
+				hsm.Ref{
+					WorkflowKey: definition.NewWorkflowKey("namespace-id", "workflow-id", "run-id"),
+					StateMachineRef: &persistencespb.StateMachineRef{
+						Path: []*persistencespb.StateMachineKey{
+							{
+								Type: callbacks.StateMachineType,
+								Id:   "ID",
+							},
+						},
+					},
+				},
+				callbacks.InvocationTask{},
+			)
+
+			if tc.expectedError != nil {
+				require.EqualError(t, err, tc.expectedError.Error())
+			} else {
+				require.NoError(t, err)
+			}
+
+			tc.assertOutcome(t, cb)
+		})
+	}
 }
