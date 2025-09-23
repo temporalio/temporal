@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"fmt"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -44,4 +45,13 @@ func (u *UserTimerTask) GetCategory() Category {
 
 func (u *UserTimerTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_USER_TIMER
+}
+
+func (u *UserTimerTask) String() string {
+	return fmt.Sprintf("UserTimerTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, EventID: %v}",
+		u.WorkflowKey.String(),
+		u.VisibilityTimestamp,
+		u.TaskID,
+		u.EventID,
+	)
 }
