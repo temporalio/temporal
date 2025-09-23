@@ -2,15 +2,16 @@ package frontend
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/mock/gomock"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
-	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -50,7 +51,7 @@ func (s *healthCheckerSuite) SetupTest() {
 			case "1", "3":
 				return enumsspb.HEALTH_STATE_SERVING, nil
 			case "2":
-				return enumsspb.HEALTH_STATE_UNSPECIFIED, fmt.Errorf("test")
+				return enumsspb.HEALTH_STATE_UNSPECIFIED, errors.New("test")
 			case "4":
 				return enumsspb.HEALTH_STATE_DECLINED_SERVING, nil
 			default:
@@ -124,7 +125,7 @@ func (s *healthCheckerSuite) Test_Check_No_Available_Hosts() {
 func (s *healthCheckerSuite) Test_Check_GetResolver_Error() {
 	// Create a new checker for this test to avoid conflicting expectations
 	membershipMonitor := membership.NewMockMonitor(s.controller)
-	membershipMonitor.EXPECT().GetResolver(primitives.HistoryService).Return(nil, fmt.Errorf("resolver error"))
+	membershipMonitor.EXPECT().GetResolver(primitives.HistoryService).Return(nil, errors.New("resolver error"))
 
 	checker := NewHealthChecker(
 		primitives.HistoryService,
@@ -160,28 +161,28 @@ func (s *healthCheckerSuite) Test_Check_Boundary_Failure_Percentage_Equals_Thres
 
 func (s *healthCheckerSuite) Test_Check_Single_Host_Scenarios() {
 	testCases := []struct {
-		name         string
-		hostAddress  string
+		name          string
+		hostAddress   string
 		expectedState enumsspb.HealthState
 	}{
 		{
-			name:         "single host serving",
-			hostAddress:  "1", // SERVING
+			name:          "single host serving",
+			hostAddress:   "1", // SERVING
 			expectedState: enumsspb.HEALTH_STATE_SERVING,
 		},
 		{
-			name:         "single host failed",
-			hostAddress:  "2", // UNSPECIFIED (failed)
+			name:          "single host failed",
+			hostAddress:   "2", // UNSPECIFIED (failed)
 			expectedState: enumsspb.HEALTH_STATE_NOT_SERVING,
 		},
 		{
-			name:         "single host declined serving",
-			hostAddress:  "4", // DECLINED_SERVING
+			name:          "single host declined serving",
+			hostAddress:   "4",                               // DECLINED_SERVING
 			expectedState: enumsspb.HEALTH_STATE_NOT_SERVING, // Combined logic: 0% failed + 100% declined = 100% > 25% threshold
 		},
 		{
-			name:         "single host not serving",
-			hostAddress:  "5", // NOT_SERVING
+			name:          "single host not serving",
+			hostAddress:   "5", // NOT_SERVING
 			expectedState: enumsspb.HEALTH_STATE_NOT_SERVING,
 		},
 	}
@@ -227,46 +228,46 @@ func (s *healthCheckerSuite) Test_Check_Context_Cancellation() {
 	)
 
 	state, err := checker.Check(ctx)
-	s.NoError(err) // Context cancellation in individual health checks should not fail the overall check
+	s.NoError(err)                                    // Context cancellation in individual health checks should not fail the overall check
 	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, state) // All hosts will return UNSPECIFIED due to cancellation
 }
 
 func (s *healthCheckerSuite) Test_Check_Mixed_Host_States_Edge_Cases() {
 	testCases := []struct {
-		name         string
-		hosts        []string
+		name          string
+		hosts         []string
 		expectedState enumsspb.HealthState
-		description  string
+		description   string
 	}{
 		{
-			name:         "edge case: 50% declined serving equals minimum threshold",
-			hosts:        []string{"4", "4", "1", "1"}, // 2 declined, 2 serving out of 4
+			name:          "edge case: 50% declined serving equals minimum threshold",
+			hosts:         []string{"4", "4", "1", "1"},      // 2 declined, 2 serving out of 4
 			expectedState: enumsspb.HEALTH_STATE_NOT_SERVING, // Combined: 0% failed + 50% declined = 50% > 25% threshold
-			description:  "50% declined serving triggers combined failure threshold, returns NOT_SERVING",
+			description:   "50% declined serving triggers combined failure threshold, returns NOT_SERVING",
 		},
 		{
-			name:         "edge case: 60% declined serving exceeds minimum threshold",
-			hosts:        []string{"4", "4", "4", "1", "1"}, // 3 declined, 2 serving out of 5
+			name:          "edge case: 60% declined serving exceeds minimum threshold",
+			hosts:         []string{"4", "4", "4", "1", "1"},      // 3 declined, 2 serving out of 5
 			expectedState: enumsspb.HEALTH_STATE_DECLINED_SERVING, // 60% > 40% minimum threshold
-			description:  "60% declined serving should trigger DECLINED_SERVING response",
+			description:   "60% declined serving should trigger DECLINED_SERVING response",
 		},
 		{
-			name:         "edge case: mixed failures just under threshold",
-			hosts:        []string{"2", "1", "1", "1", "1"}, // 1 failed (20%), 4 serving (80%) out of 5
-			expectedState: enumsspb.HEALTH_STATE_SERVING, // 20% < 25% threshold
-			description:  "20% failures should still return SERVING",
+			name:          "edge case: mixed failures just under threshold",
+			hosts:         []string{"2", "1", "1", "1", "1"}, // 1 failed (20%), 4 serving (80%) out of 5
+			expectedState: enumsspb.HEALTH_STATE_SERVING,     // 20% < 25% threshold
+			description:   "20% failures should still return SERVING",
 		},
 		{
-			name:         "edge case: combined failures and declined just over threshold",
-			hosts:        []string{"2", "4", "1", "1"}, // 1 failed (25%) + 1 declined (25%) = 50% > 25% threshold
+			name:          "edge case: combined failures and declined just over threshold",
+			hosts:         []string{"2", "4", "1", "1"}, // 1 failed (25%) + 1 declined (25%) = 50% > 25% threshold
 			expectedState: enumsspb.HEALTH_STATE_NOT_SERVING,
-			description:  "Combined 50% failures and declined serving should trigger NOT_SERVING",
+			description:   "Combined 50% failures and declined serving should trigger NOT_SERVING",
 		},
 		{
-			name:         "edge case: all declined serving with many hosts",
-			hosts:        []string{"4", "4", "4", "4", "4"}, // All declined serving
+			name:          "edge case: all declined serving with many hosts",
+			hosts:         []string{"4", "4", "4", "4", "4"}, // All declined serving
 			expectedState: enumsspb.HEALTH_STATE_DECLINED_SERVING,
-			description:  "100% declined serving should return DECLINED_SERVING",
+			description:   "100% declined serving should return DECLINED_SERVING",
 		},
 	}
 
