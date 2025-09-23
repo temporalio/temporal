@@ -431,6 +431,48 @@ func (c *QueryConverter) convertRangeCond(exprRef *sqlparser.Expr) error {
 	return nil
 }
 
+func resolveSearchAttributeAlias(
+	name string, ns namespace.Name,
+	mapper searchattribute.Mapper,
+	saTypeMap searchattribute.NameTypeMap,
+) (string, enumspb.IndexedValueType, error) {
+	// 1. Use the mapper for customer search attributes
+	// mapper, err := mapperProvider.GetMapper(ns)
+	// if err == nil && mapper != nil {
+	if mapper != nil {
+		fieldName, err := mapper.GetFieldName(name, ns.String())
+		if err == nil {
+			fieldType, err := saTypeMap.GetType(fieldName)
+			if err == nil {
+				return fieldName, fieldType, nil
+			}
+		}
+	}
+
+	// 2. Check if the name is a system/predefined search attribute
+	if saType, err := saTypeMap.GetType(name); err == nil {
+		return name, saType, nil
+	}
+
+	// 3. Check if the name is a system/predefined search attribute with Temporal prefix
+	temporalName := fmt.Sprintf("Temporal%s", name)
+	if saType, err := saTypeMap.GetType(temporalName); err == nil {
+		return temporalName, saType, nil
+	}
+
+	// 4. Handle special cases
+	if name == searchattribute.ScheduleID {
+		saType, err := saTypeMap.GetType(searchattribute.WorkflowID)
+		if err == nil {
+			return searchattribute.WorkflowID, saType, nil
+		}
+	}
+
+	// 5. Not found, return error
+	return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, query.NewConverterError("invalid search attribute: %s", name)
+}
+
+// TODO chasm-visibility: entry point for field name resolution in SQL queries
 func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, error) {
 	expr, ok := (*exprRef).(*sqlparser.ColName)
 	if !ok {
@@ -441,31 +483,9 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 		)
 	}
 	saAlias := strings.ReplaceAll(sqlparser.String(expr), "`", "")
-	saFieldName := saAlias
-	if searchattribute.IsMappable(saAlias) {
-		var err error
-		saFieldName, err = c.saMapper.GetFieldName(saAlias, c.namespaceName.String())
-		if err != nil {
-			if saAlias != searchattribute.ScheduleID {
-				return nil, query.NewConverterError(
-					"%s: column name '%s' is not a valid search attribute",
-					query.InvalidExpressionErrMessage,
-					saAlias,
-				)
-			}
-			// ScheduleId is a fake SA -- convert to WorkflowId
-			saFieldName = searchattribute.WorkflowID
-		}
-	}
-
-	saType, err := c.saTypeMap.GetType(saFieldName)
+	saFieldName, saType, err := resolveSearchAttributeAlias(saAlias, c.namespaceName, c.saMapper, c.saTypeMap)
 	if err != nil {
-		// This should never happen since it came from mapping.
-		return nil, query.NewConverterError(
-			"%s: column name '%s' is not a valid search attribute",
-			query.InvalidExpressionErrMessage,
-			saAlias,
-		)
+		return nil, err
 	}
 	if saFieldName == searchattribute.TemporalNamespaceDivision {
 		c.seenNamespaceDivision = true

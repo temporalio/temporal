@@ -48,37 +48,51 @@ func NewValuesInterceptor(
 	}
 }
 
-// TODO: this is invoked for non-ES validation code flow. Needs refactoring
-func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
-	fieldName := name
-	if searchattribute.IsMappable(name) {
-		mapper, err := ni.searchAttributesMapperProvider.GetMapper(ni.namespace)
-		if err != nil {
-			return "", err
-		}
-
-		if mapper != nil {
-			fieldName, err = mapper.GetFieldName(name, ni.namespace.String())
-			if err != nil {
-				if name != searchattribute.ScheduleID {
-					return "", err
-				}
-
-				// ScheduleId is a fake SA -- convert to WorkflowId
-				fieldName = searchattribute.WorkflowID
-			} else if name == searchattribute.ScheduleID && name == fieldName {
-				_, isCustom := ni.searchAttributesTypeMap.Custom()[fieldName]
-				if !isCustom {
-					// ScheduleId is a fake SA -- convert to WorkflowId
-					fieldName = searchattribute.WorkflowID
-				}
+func resolveSearchAttributeAlias(
+	name string, ns namespace.Name,
+	mapperProvider searchattribute.MapperProvider,
+	saTypeMap searchattribute.NameTypeMap,
+) (string, enumspb.IndexedValueType, error) {
+	// 1. Use the mapper for customer search attributes
+	mapper, err := mapperProvider.GetMapper(ns)
+	if err == nil && mapper != nil {
+		fieldName, err := mapper.GetFieldName(name, ns.String())
+		if err == nil {
+			fieldType, err := saTypeMap.GetType(fieldName)
+			if err == nil {
+				return fieldName, fieldType, nil
 			}
 		}
 	}
 
-	fieldType, err := ni.searchAttributesTypeMap.GetType(fieldName)
+	// 2. Check if the name is a system/predefined search attribute
+	if saType, err := saTypeMap.GetType(name); err == nil {
+		return name, saType, nil
+	}
+
+	// 3. Check if the name is a system/predefined search attribute with Temporal prefix
+	temporalName := fmt.Sprintf("Temporal%s", name)
+	if saType, err := saTypeMap.GetType(temporalName); err == nil {
+		return temporalName, saType, nil
+	}
+
+	// 4. Handle special cases
+	if name == searchattribute.ScheduleID {
+		saType, err := saTypeMap.GetType(searchattribute.WorkflowID)
+		if err == nil {
+			return searchattribute.WorkflowID, saType, nil
+		}
+	}
+
+	// 5. Not found, return error
+	return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, query.NewConverterError("invalid search attribute: %s", name)
+}
+
+// TODO: this is invoked for non-ES validation code flow. Needs refactoring
+func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
+	fieldName, fieldType, err := resolveSearchAttributeAlias(name, ni.namespace, ni.searchAttributesMapperProvider, ni.searchAttributesTypeMap)
 	if err != nil {
-		return "", query.NewConverterError("invalid search attribute: %s", name)
+		return "", err
 	}
 
 	switch usage {
