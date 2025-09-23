@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -47,6 +49,7 @@ type TaskExecutorOptions struct {
 	HTTPCallerProvider HTTPCallerProvider
 	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
 	HistoryClient      resource.HistoryClient
+	ChasmEngine        chasm.Engine
 }
 
 type taskExecutor struct {
@@ -144,17 +147,30 @@ func (e taskExecutor) loadInvocationArgs(
 			if err != nil {
 				return err
 			}
+
+			completion, err := target.GetNexusCompletion(ctx, callback.GetRequestId())
+			if err != nil {
+				return err
+			}
+
+			// CHASM internal callbacks make use of Nexus as their callback delivery
+			// mechanism, but with a special prefix.
+			if strings.HasPrefix(variant.Nexus.Url, chasm.NexusCompletionHandlerBaseURL) {
+				chasmInvokable := chasmInvocation{}
+				chasmInvokable.nexus = variant.Nexus
+				chasmInvokable.attempt = callback.Attempt
+				invokable = chasmInvokable
+				break
+			}
+
 			// variant struct is immutable and ok to reference without copying
 			nexusInvokable := nexusInvocation{}
 			nexusInvokable.nexus = variant.Nexus
-			nexusInvokable.completion, err = target.GetNexusCompletion(ctx, callback.GetRequestId())
+			nexusInvokable.completion = completion
 			nexusInvokable.workflowID = ref.WorkflowKey.WorkflowID
 			nexusInvokable.runID = ref.WorkflowKey.RunID
 			nexusInvokable.attempt = callback.Attempt
 			invokable = nexusInvokable
-			if err != nil {
-				return err
-			}
 		case *persistencespb.Callback_Hsm:
 			target, err := hsm.MachineData[CanGetHSMCompletionCallbackArg](node.Parent)
 			if err != nil {
