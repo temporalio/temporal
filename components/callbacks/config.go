@@ -67,9 +67,6 @@ This configuration is required for external endpoint targets; any invalid entrie
 // allowedSchemes contains all schemes, both insecure and secure
 var allowedSchemes = []string{"http", "https"}
 
-// allowedSecureSchemes contains only secure schemes
-var allowedSecureSchemes = []string{"https"}
-
 type AddressMatchRules struct {
 	Rules []AddressMatchRule
 }
@@ -111,7 +108,7 @@ func (a AddressMatchRule) Allow(u *url.URL) (bool, error) {
 	if a.AllowInsecure {
 		return true, nil
 	}
-	if !slices.Contains(allowedSecureSchemes, u.Scheme) {
+	if u.Scheme != "https" {
 		return false,
 			status.Errorf(codes.InvalidArgument,
 				"invalid url: callback address does not allow insecure connections: %v", u)
