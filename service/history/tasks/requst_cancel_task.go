@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"fmt"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -61,4 +62,18 @@ func (u *CancelExecutionTask) GetCategory() Category {
 
 func (u *CancelExecutionTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION
+}
+
+func (u *CancelExecutionTask) String() string {
+	return fmt.Sprintf("CancelExecutionTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, TargetNamespaceID: %v, TargetWorkflowID: %v, TargetRunID: %v, TargetChildWorkflowOnly: %v, InitiatedEventID: %v, Version: %v}",
+		u.WorkflowKey.String(),
+		u.VisibilityTimestamp,
+		u.TaskID,
+		u.TargetNamespaceID,
+		u.TargetWorkflowID,
+		u.TargetRunID,
+		u.TargetChildWorkflowOnly,
+		u.InitiatedEventID,
+		u.Version,
+	)
 }
