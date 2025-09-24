@@ -766,3 +766,14 @@ func (db *taskQueueDB) cloneSubqueues() []persistencespb.SubqueueInfo {
 	}
 	return infos
 }
+
+func (db *taskQueueDB) emitZeroBacklogGauges() {
+	if !db.config.BreakdownMetricsByTaskQueue() ||
+		!db.config.BreakdownMetricsByPartition() ||
+		(db.queue.IsVersioned() && !db.config.BreakdownMetricsByBuildID()) {
+		return
+	}
+
+	metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(0)
+	metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
+}
