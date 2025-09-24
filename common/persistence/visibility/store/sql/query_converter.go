@@ -438,16 +438,15 @@ func resolveSearchAttributeAlias(
 ) (string, enumspb.IndexedValueType, error) {
 	// 1. Use the mapper for customer search attributes
 	if searchattribute.IsMappable(name) {
-		if mapper != nil {
-			fieldName, err := mapper.GetFieldName(name, ns.String())
-			if err == nil {
-				fieldType, err := saTypeMap.GetType(fieldName)
-				if err == nil {
-					return fieldName, fieldType, nil
-				}
-			}
-		} else {
+		if mapper == nil {
 			return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, query.NewConverterError("%s: column name '%s' is not a valid search attribute", query.InvalidExpressionErrMessage, name)
+		}
+		fieldName, err := mapper.GetFieldName(name, ns.String())
+		if err == nil {
+			fieldType, err := saTypeMap.GetType(fieldName)
+			if err == nil {
+				return fieldName, fieldType, nil
+			}
 		}
 	}
 
