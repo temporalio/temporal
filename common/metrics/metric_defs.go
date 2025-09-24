@@ -1112,10 +1112,6 @@ var (
 
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching Workers Registry
-	MatchingRegistryEntriesMetric = NewGaugeDef(
-		"matching_registry_entries",
-		WithDescription("Number of entries in the registry, broken down by namespace."),
-	)
 	MatchingRegistryEvictionBlockedByAgeMetric = NewGaugeDef(
 		"matching_registry_eviction_blocked_by_age",
 		WithDescription(
