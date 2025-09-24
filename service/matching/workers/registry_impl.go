@@ -76,7 +76,7 @@ func newBucket() *bucket {
 
 // upsertHeartbeats inserts or refreshes a WorkerHeartbeat under the given namespace.
 // Records metrics and returns the number of new entries.
-func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat, metricsHandler metrics.Handler) int64 {
+func (b *bucket) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat, metricsHandler metrics.Handler) int64 {
 	now := time.Now()
 
 	b.mu.Lock()
@@ -107,7 +107,7 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.Work
 		}
 	}
 
-	recordEntriesMetric(metricsHandler, nsID, len(mp))
+	recordEntriesMetric(metricsHandler, nsName, len(mp))
 	return newEntries
 }
 
@@ -243,19 +243,19 @@ func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
 
 // upsertHeartbeat records or refreshes a WorkerHeartbeat under the given namespace.
 // New entries increment the global counter.
-func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) {
+func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat) {
 	b := m.getBucket(nsID)
-	newEntries := b.upsertHeartbeats(nsID, heartbeats, m.metricsHandler)
+	newEntries := b.upsertHeartbeats(nsID, nsName, heartbeats, m.metricsHandler)
 	m.total.Add(newEntries)
 
 	m.recordUtilizationMetric()
 }
 
 // recordEntriesMetric records the number of entries for a given namespace.
-func recordEntriesMetric(metricsHandler metrics.Handler, nsID namespace.ID, count int) {
+func recordEntriesMetric(metricsHandler metrics.Handler, nsName namespace.Name, count int) {
 	metricsHandler.Gauge(entriesMetric).Record(
 		float64(count),
-		metrics.NamespaceTag(nsID.String()),
+		metrics.NamespaceTag(nsName.String()),
 	)
 }
 
@@ -355,8 +355,8 @@ func (m *registryImpl) Stop() {
 	close(m.quit)
 }
 
-func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, workerHeartbeat []*workerpb.WorkerHeartbeat) {
-	m.upsertHeartbeats(nsID, workerHeartbeat)
+func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespace.Name, workerHeartbeat []*workerpb.WorkerHeartbeat) {
+	m.upsertHeartbeats(nsID, nsName, workerHeartbeat)
 }
 
 func (m *registryImpl) ListWorkers(nsID namespace.ID, query string, _ []byte) ([]*workerpb.WorkerHeartbeat, error) {
