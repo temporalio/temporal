@@ -291,6 +291,7 @@ func (m *registryImpl) evictLoop() {
 		case <-ticker.C:
 			m.evictByTTL()
 			m.evictByCapacity()
+			m.recordUtilizationMetric()
 		case <-m.quit:
 			ticker.Stop()
 			return
