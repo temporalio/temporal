@@ -1,5 +1,3 @@
-//go:build !with_antithesis_sdk
-
 package softassert
 
 import (
