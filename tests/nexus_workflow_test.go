@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -2249,13 +2248,12 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 
 	svc := nexus.NewService("test")
 
-	completeHandlerCh := make(chan struct{})
-	wgHandlerStarted := sync.WaitGroup{}
-	wgHandlerStarted.Add(1)
-
 	handlerWF := func(ctx workflow.Context, _ nexus.NoValue) (nexus.NoValue, error) {
-		wgHandlerStarted.Done()
-		<-completeHandlerCh
+		signalChan := workflow.GetSignalChannel(ctx, "test-signal")
+		if ok, _ := signalChan.ReceiveWithTimeout(ctx, 10*time.Second, nil); !ok {
+			return nil, errors.New("receive signal timed out")
+		}
+
 		return nil, nil
 	}
 
@@ -2267,7 +2265,7 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 	callerWF := func(ctx workflow.Context) error {
 		c := workflow.NewNexusClient(endpointName, svc.Name)
 		fut := c.ExecuteOperation(ctx, op, nil, workflow.NexusOperationOptions{})
-		return fut.Get(ctx, nil)
+		return fut.GetNexusOperationExecution().Get(ctx, nil)
 	}
 
 	w.RegisterNexusService(svc)
@@ -2280,13 +2278,10 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 		TaskQueue: taskQueue,
 	}, callerWF)
 	s.NoError(err)
+	s.NoError(run.Get(ctx, nil))
 
-	wgHandlerStarted.Wait()
-
-	err = s.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
+	err = s.SdkClient().SignalWorkflow(ctx, handlerWorkflowID, "", "test-signal", nil)
 	s.NoError(err)
-
-	completeHandlerCh <- struct{}{}
 
 	s.EventuallyWithT(func(ct *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
