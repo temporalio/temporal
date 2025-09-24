@@ -716,7 +716,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 		{
 			outcome:  "handler_timeout",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-service"), testcore.RandomizeStr("task-queue")),
-			timeout:  1 * time.Second,
+			timeout:  2 * time.Second,
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				timeoutStr, set := res.Request.Header[nexus.HeaderRequestTimeout]
 				s.True(set)
