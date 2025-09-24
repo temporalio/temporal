@@ -17,7 +17,16 @@ linters:
     - exhaustive
     - godox
     - iotamixing
+    - depguard
   settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: "github.com/antithesishq/antithesis-sdk-go/assert"
+              desc: "use internal antithesis package instead"
+          files:
+            - $all
     staticcheck:
       checks:
         - "all"
