@@ -110,23 +110,3 @@ func TestNewRoute(t *testing.T) {
 		assert.Equal(t, QualifiedWorkflow{Namespace: "TEST-NAMESPACE", WorkflowID: "TEST-WORKFLOW-ID"}, params)
 	})
 }
-func TestNewRouteNoVariable(t *testing.T) {
-	t.Parallel()
-
-	route := routing.NewBuilder[string]().
-		Constant("nexus", "callback").
-		Build()
-
-	t.Run("Path", func(t *testing.T) {
-		assert.Equal(t, "nexus/callback", route.Representation())
-	})
-
-	t.Run("Get", func(t *testing.T) {
-		assert.Equal(t, "nexus/callback", route.Path(""))
-	})
-
-	t.Run("Set", func(t *testing.T) {
-		params := route.Deserialize(map[string]string{})
-		assert.Equal(t, "", params)
-	})
-}

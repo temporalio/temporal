@@ -32,6 +32,4 @@ var RouteCompletionCallback = routing.NewBuilder[string]().
 // Unlike  RouteCompletionCallback it does not require any identifying information to be provided in the
 // URL path. Instead the handler for this path is expected to look up identifying information through
 // via the callback token in the headers.
-var RouteCompletionCallbackNoIdentifier = routing.NewBuilder[string]().
-	Constant("nexus", "callback").
-	Build()
+var RouteCompletionCallbackNoIdentifier = "/nexus/callback"

@@ -3,7 +3,6 @@ package callbacks
 import (
 	"net/url"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -64,9 +63,6 @@ This configuration is required for external endpoint targets; any invalid entrie
         Wildcards, '*', are supported and can match any number of characters (e.g. '*' matches everything, 'prefix.*.domain' matches 'prefix.a.domain' as well as 'prefix.a.b.domain').
      - "AllowInsecure":bool (optional, default=false) indicates whether https is required`)
 
-// allowedSchemes contains all schemes, both insecure and secure
-var allowedSchemes = []string{"http", "https"}
-
 type AddressMatchRules struct {
 	Rules []AddressMatchRule
 }
@@ -76,7 +72,7 @@ func (a AddressMatchRules) Validate(u *url.URL) error {
 	if u.String() == nexus.SystemCallbackURL {
 		return nil
 	}
-	if !slices.Contains(allowedSchemes, u.Scheme) {
+	if u.Scheme != "http" && u.Scheme != "https" {
 		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
 	}
 	for _, rule := range a.Rules {
