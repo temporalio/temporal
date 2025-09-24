@@ -1110,6 +1110,25 @@ var (
 		WithDescription("Count of tasks that hit a transient error during match or forward and are retried immediately"),
 	)
 
+	// ----------------------------------------------------------------------------------------------------------------
+	// Matching Workers Registry
+	MatchingRegistryEntriesMetric = NewGaugeDef(
+		"matching_registry_entries",
+		WithDescription("Number of entries in the registry, broken down by namespace."),
+	)
+	MatchingRegistryEvictionBlockedByAgeMetric = NewGaugeDef(
+		"matching_registry_eviction_blocked_by_age",
+		WithDescription(
+			"Set if entries could not be evicted due to minEvictAge policy in a given eviction iteration. "+
+				"Reset once a subsequent eviction succeeds.",
+		),
+	)
+	MatchingRegistryCapacityUtilizationMetric = NewGaugeDef(
+		"matching_registry_capacity_utilization",
+		WithDescription("Tracks the ratio of total entries to maxItems."),
+	)
+	// ----------------------------------------------------------------------------------------------------------------
+
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
 

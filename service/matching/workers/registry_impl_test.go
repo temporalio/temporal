@@ -53,7 +53,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 	snapshot := capture.Snapshot()
 
 	// Check namespace entries metric
-	entriesMetrics := snapshot["entries"]
+	entriesMetrics := snapshot["matching_registry_entries"]
 	assert.GreaterOrEqual(t, len(entriesMetrics), 1, "should have namespace entries metric")
 
 	// Find metric for ns1
@@ -68,7 +68,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 	assert.Equal(t, float64(2), ns1Metric.Value, "ns1 should have 2 entries")
 
 	// Check capacity utilization metric
-	utilizationMetrics := snapshot["capacity_utilization"]
+	utilizationMetrics := snapshot["matching_registry_capacity_utilization"]
 	assert.Equal(t, len(utilizationMetrics), 1, "should have capacity utilization metric")
 	lastUtilization := utilizationMetrics[0]
 	assert.Equal(t, float64(2)/float64(10), lastUtilization.Value, "should record correct capacity utilization")
@@ -152,7 +152,7 @@ func TestEvictByCapacity(t *testing.T) {
 
 	// Verify metrics: eviction should succeed (no age protection issues)
 	snapshot := capture.Snapshot()
-	evictionMetrics := snapshot["eviction_blocked_by_age"]
+	evictionMetrics := snapshot["matching_registry_eviction_blocked_by_age"]
 	assert.Len(t, evictionMetrics, 1, "should have eviction metric")
 
 	metric := evictionMetrics[0]
@@ -195,7 +195,7 @@ func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 
 	// Verify metrics: should record eviction blocked by age
 	snapshot := capture.Snapshot()
-	evictionMetrics := snapshot["eviction_blocked_by_age"]
+	evictionMetrics := snapshot["matching_registry_eviction_blocked_by_age"]
 	assert.Len(t, evictionMetrics, 1, "should have eviction blocked by age metric")
 
 	metric := evictionMetrics[0]
@@ -236,7 +236,7 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 
 		// Verify metrics: eviction should succeed (entries were old enough)
 		snapshot := capture.Snapshot()
-		evictionMetrics := snapshot["eviction_blocked_by_age"]
+		evictionMetrics := snapshot["matching_registry_eviction_blocked_by_age"]
 		assert.Len(t, evictionMetrics, 1, "should have eviction metric")
 
 		metric := evictionMetrics[0]
@@ -285,7 +285,7 @@ func TestMultiNamespaceMetrics(t *testing.T) {
 	snapshot := capture.Snapshot()
 
 	// Check namespace-specific entries metrics
-	entriesMetrics := snapshot["entries"]
+	entriesMetrics := snapshot["matching_registry_entries"]
 	assert.Equal(t, len(entriesMetrics), 2, "should have entries metrics for both namespaces")
 
 	var ns1Metric, ns2Metric *metricstest.CapturedRecording
@@ -307,7 +307,7 @@ func TestMultiNamespaceMetrics(t *testing.T) {
 	assert.Equal(t, float64(2), ns2Metric.Value, "namespace2 should have 2 entries")
 
 	// Check capacity utilization reflects total across all namespaces
-	utilizationMetrics := snapshot["capacity_utilization"]
+	utilizationMetrics := snapshot["matching_registry_capacity_utilization"]
 	assert.GreaterOrEqual(t, len(utilizationMetrics), 1, "should have capacity utilization metric")
 
 	lastUtilization := utilizationMetrics[len(utilizationMetrics)-1]

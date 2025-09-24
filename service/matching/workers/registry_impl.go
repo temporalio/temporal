@@ -22,19 +22,6 @@ const (
 	defaultEvictionInterval = 1 * time.Hour
 )
 
-// Metric names to track the health of the workers registry.
-const (
-	// Number of entries in the registry, broken down by namespace.
-	entriesMetric = "entries"
-
-	// Set if entries could not be evicted due to minEvictAge policy in a given eviction iteration.
-	// Note: The metric is reset once a subsequent eviction succeeds.
-	evictionBlockedByAgeMetric = "eviction_blocked_by_age"
-
-	// Tracks the ratio of total entries to maxItems.
-	capacityUtilizationMetric = "capacity_utilization"
-)
-
 type (
 	// entry wraps a WorkerHeartbeat along with its namespace and eviction metadata.
 	entry struct {
@@ -76,7 +63,12 @@ func newBucket() *bucket {
 
 // upsertHeartbeats inserts or refreshes a WorkerHeartbeat under the given namespace.
 // Records metrics and returns the number of new entries.
-func (b *bucket) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat, metricsHandler metrics.Handler) int64 {
+func (b *bucket) upsertHeartbeats(
+	nsID namespace.ID,
+	nsName namespace.Name,
+	heartbeats []*workerpb.WorkerHeartbeat,
+	metricsHandler metrics.Handler,
+) int64 {
 	now := time.Now()
 
 	b.mu.Lock()
@@ -253,7 +245,7 @@ func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name
 
 // recordEntriesMetric records the number of entries for a given namespace.
 func recordEntriesMetric(metricsHandler metrics.Handler, nsName namespace.Name, count int) {
-	metricsHandler.Gauge(entriesMetric).Record(
+	metrics.MatchingRegistryEntriesMetric.With(metricsHandler).Record(
 		float64(count),
 		metrics.NamespaceTag(nsName.String()),
 	)
@@ -262,7 +254,7 @@ func recordEntriesMetric(metricsHandler metrics.Handler, nsName namespace.Name, 
 // recordUtilizationMetric records the overall capacity utilization ratio.
 func (m *registryImpl) recordUtilizationMetric() {
 	utilization := float64(m.total.Load()) / float64(m.maxItems)
-	m.metricsHandler.Gauge(capacityUtilizationMetric).Record(utilization)
+	metrics.MatchingRegistryCapacityUtilizationMetric.With(m.metricsHandler).Record(utilization)
 }
 
 // recordEvictionMetric sets the eviction metric based on current capacity state.
@@ -270,10 +262,10 @@ func (m *registryImpl) recordUtilizationMetric() {
 func (m *registryImpl) recordEvictionMetric() {
 	if m.total.Load() > m.maxItems {
 		// Still over capacity - eviction failed
-		m.metricsHandler.Gauge(evictionBlockedByAgeMetric).Record(1)
+		metrics.MatchingRegistryEvictionBlockedByAgeMetric.With(m.metricsHandler).Record(1)
 	} else {
 		// Back under capacity - clear the issue
-		m.metricsHandler.Gauge(evictionBlockedByAgeMetric).Record(0)
+		metrics.MatchingRegistryEvictionBlockedByAgeMetric.With(m.metricsHandler).Record(0)
 	}
 }
 
