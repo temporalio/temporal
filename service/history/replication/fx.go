@@ -229,7 +229,6 @@ func replicationStreamLowPrioritySchedulerProvider(
 		namespaceTag := metrics.NamespaceUnknownTag()
 		if replicationTask != nil {
 			taskType = replicationTask.TaskType.String()
-
 			rawTaskInfo := replicationTask.GetRawTaskInfo()
 			if rawTaskInfo != nil {
 				nsName, err := nsRegistry.GetNamespaceName(namespace.ID(replicationTask.GetRawTaskInfo().NamespaceId))
