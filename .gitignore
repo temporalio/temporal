@@ -13,6 +13,7 @@
 *.out
 *.test
 *.xml
+!tools/testrunner/testdata/*.xml
 *.swp
 /*.iml
 *.cov

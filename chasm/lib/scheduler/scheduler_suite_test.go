@@ -2,6 +2,7 @@ package scheduler_test
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -84,6 +85,20 @@ func (s *schedulerSuite) SetupSuite() {
 	ctx := s.newMutableContext()
 	s.scheduler = scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
 	s.node.SetRootComponent(s.scheduler)
+}
+
+// hasTask returns true if the given task type was added at the end of the
+// transaction with the given visibilityTime.
+func (s *schedulerSuite) hasTask(task any, visibilityTime time.Time) bool {
+	taskType := reflect.TypeOf(task)
+	for _, task := range s.addedTasks {
+		if reflect.TypeOf(task) == taskType &&
+			task.GetVisibilityTime().Equal(visibilityTime) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (s *schedulerSuite) newMutableContext() chasm.MutableContext {

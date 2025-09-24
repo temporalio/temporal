@@ -2790,6 +2790,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		historyResponse.GetAttempt(),
 		historyResponse.GetClock(),
 		historyResponse.GetVersion(),
+		historyResponse.GetStartVersion(),
 	)
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 

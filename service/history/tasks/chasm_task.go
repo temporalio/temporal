@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"reflect"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -60,6 +61,9 @@ type ChasmTask struct {
 	Category               Category // Set based on the task's queue.
 	Destination            string   // Set for outbound tasks.
 	Info                   *persistencespb.ChasmTaskInfo
+
+	// In-memory only
+	DeserializedTask reflect.Value
 }
 
 var _ Task = &ChasmTask{}

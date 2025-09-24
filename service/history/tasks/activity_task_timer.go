@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -56,4 +57,16 @@ func (a *ActivityTimeoutTask) GetStamp() int32 {
 
 func (a *ActivityTimeoutTask) SetStamp(stamp int32) {
 	a.Stamp = stamp
+}
+
+func (a *ActivityTimeoutTask) String() string {
+	return fmt.Sprintf("ActivityTimeoutTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, TimeoutType: %v, EventID: %v, Attempt: %v, Stamp: %v}",
+		a.WorkflowKey.String(),
+		a.VisibilityTimestamp,
+		a.TaskID,
+		a.TimeoutType,
+		a.EventID,
+		a.Attempt,
+		a.Stamp,
+	)
 }
