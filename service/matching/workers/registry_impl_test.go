@@ -275,6 +275,50 @@ func TestMultipleNamespaces(t *testing.T) {
 	assert.Equal(t, expectedUtilization, lastUtilization.Value, "capacity utilization should reflect total across all namespaces")
 }
 
+func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
+	// Using synctest as it provides virtual time control.
+	synctest.Test(t, func(t *testing.T) {
+		maxItems := int64(5)
+		evictionInterval := 100 * time.Millisecond
+
+		captureHandler := metricstest.NewCaptureHandler()
+		capture := captureHandler.StartCapture()
+		defer captureHandler.StopCapture(capture)
+
+		m := newRegistryImpl(1, time.Hour, 0, maxItems, evictionInterval, captureHandler)
+
+		// Add some entries to create utilization
+		for i := 1; i <= 3; i++ {
+			key := fmt.Sprintf("worker%d", i)
+			hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
+			m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
+		}
+
+		// Verify initial state
+		assert.Equal(t, int64(3), m.total.Load(), "should have 3 workers")
+
+		// Start the evictLoop
+		m.Start()
+		defer m.Stop()
+
+		// Advance virtual time to trigger one eviction cycle
+		time.Sleep(evictionInterval)
+
+		// Wait until all goroutines are blocked (evictLoop processes timer and blocks on next timer)
+		synctest.Wait()
+
+		// Verify evictLoop recorded utilization metric
+		snapshot := capture.Snapshot()
+		utilizationMetrics := snapshot["matching_registry_capacity_utilization"]
+		assert.NotEmpty(t, utilizationMetrics, "evictLoop should record utilization metrics")
+
+		// Verify the utilization value is correct
+		lastUtilization := utilizationMetrics[len(utilizationMetrics)-1]
+		expectedUtilization := float64(3) / float64(5) // 3 entries / 5 max capacity = 0.6
+		assert.Equal(t, expectedUtilization, lastUtilization.Value, "evictLoop should record correct utilization")
+	})
+}
+
 func BenchmarkUpdate(b *testing.B) {
 	m := newRegistryImpl(16, time.Hour, time.Minute, int64(b.N), time.Hour, metrics.NoopMetricsHandler)
 	defer m.Stop()

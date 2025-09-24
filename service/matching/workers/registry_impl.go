@@ -62,7 +62,7 @@ func newBucket() *bucket {
 }
 
 // upsertHeartbeats inserts or refreshes a WorkerHeartbeat under the given namespace.
-// Records metrics and returns the number of new entries.
+// Returns the number of new entries.
 func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) int64 {
 	now := time.Now()
 
