@@ -298,7 +298,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 
 	workflow.RecordActivityCompletionMetrics(
 		t.shardContext,
-		namespace.Name(mutableState.GetNamespaceEntry().Name()),
+		mutableState.GetNamespaceEntry().Name(),
 		ai.TaskQueue,
 		workflow.ActivityCompletionMetrics{
 			Status:             workflow.ActivityStatusTimeout,
@@ -310,7 +310,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		metrics.OperationTag(metrics.TimerActiveTaskActivityTimeoutScope),
 		metrics.WorkflowTypeTag(mutableState.GetWorkflowType().GetName()),
 		metrics.ActivityTypeTag(ai.ActivityType.GetName()),
-	)
+		metrics.VersioningBehaviorTag(mutableState.GetEffectiveVersioningBehavior()))
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		// TODO uncommment once RETRY_STATE_PAUSED is supported

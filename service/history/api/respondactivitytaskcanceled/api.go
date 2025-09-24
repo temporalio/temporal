@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -42,6 +43,7 @@ func Invoke(
 	var firstScheduledTime time.Time
 	var taskQueue string
 	var workflowTypeName string
+	var versioningBehavior enumspb.VersioningBehavior
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
@@ -97,6 +99,7 @@ func Invoke(
 			attemptStartedTime = ai.StartedTime.AsTime()
 			firstScheduledTime = ai.FirstScheduledTime.AsTime()
 			taskQueue = ai.TaskQueue
+			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
 				CreateWorkflowTask: true,
@@ -121,7 +124,7 @@ func Invoke(
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskCanceledScope),
 			metrics.WorkflowTypeTag(workflowTypeName),
 			metrics.ActivityTypeTag(token.ActivityType),
-		)
+			metrics.VersioningBehaviorTag(versioningBehavior))
 	}
 	return &historyservice.RespondActivityTaskCanceledResponse{}, err
 }
