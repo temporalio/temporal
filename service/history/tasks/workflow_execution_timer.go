@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"fmt"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -66,4 +67,14 @@ func (t *WorkflowExecutionTimeoutTask) GetCategory() Category {
 
 func (t *WorkflowExecutionTimeoutTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_WORKFLOW_EXECUTION_TIMEOUT
+}
+
+func (t *WorkflowExecutionTimeoutTask) String() string {
+	return fmt.Sprintf("WorkflowExecutionTimeoutTask{NamespaceID: %v, WorkflowID: %v, FirstRunID: %v, VisibilityTimestamp: %v, TaskID: %v}",
+		t.NamespaceID,
+		t.WorkflowID,
+		t.FirstRunID,
+		t.VisibilityTimestamp,
+		t.TaskID,
+	)
 }

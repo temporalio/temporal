@@ -128,8 +128,6 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
 		mutableState historyi.MutableState,
 	) (any, error) {
 		err := t.executeChasmPureTimers(
-			ctx,
-			wfContext,
 			mutableState,
 			task,
 			func(node chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) error {
