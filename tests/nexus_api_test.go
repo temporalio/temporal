@@ -30,7 +30,6 @@ import (
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
-	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -232,7 +231,8 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				s.True(set)
 				timeout, err := time.ParseDuration(timeoutStr)
 
-				expectedMaxTimeout := 2*time.Second - matching.NexusTimeoutBuffer
+				var dispatchTimeoutBuffer = nexusoperations.MinDispatchTaskTimeout.Get(dynamicconfig.NewNoopCollection())("test")
+				expectedMaxTimeout := 2*time.Second - dispatchTimeoutBuffer
 				s.LessOrEqual(timeout, expectedMaxTimeout, "timeout should be buffered")
 
 				s.NoError(err)

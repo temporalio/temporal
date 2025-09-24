@@ -205,7 +205,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	startTime := time.Now()
 	var rawResult *nexus.ClientStartOperationResult[*nexus.LazyValue]
 	var callErr error
-	if callTimeout < e.Config.MinOperationTimeout(ns.Name().String()) {
+	if callTimeout < e.Config.MinRequestTimeout(ns.Name().String()) {
 		callErr = ErrOperationTimeoutBelowMin
 	} else {
 		rawResult, callErr = client.StartOperation(callCtx, args.operation, args.payload, nexus.StartOperationOptions{
@@ -584,7 +584,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 
 	var callErr error
 	startTime := time.Now()
-	if callTimeout < e.Config.MinOperationTimeout(ns.Name().String()) {
+	if callTimeout < e.Config.MinRequestTimeout(ns.Name().String()) {
 		callErr = ErrOperationTimeoutBelowMin
 	} else {
 		callErr = handle.Cancel(callCtx, nexus.CancelOperationOptions{Header: nexus.Header(args.headers)})

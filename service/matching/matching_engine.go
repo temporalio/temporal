@@ -72,8 +72,6 @@ const (
 	versioningPollerSeenWindow        = 70 * time.Second
 	recordTaskStartedDefaultTimeout   = 10 * time.Second
 	recordTaskStartedSyncMatchTimeout = 1 * time.Second
-	// NexusTimeoutBuffer is the amount of time to leave as a buffer when dispatching a Nexus task
-	NexusTimeoutBuffer = time.Second
 )
 
 type (
@@ -2225,8 +2223,14 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 
 	taskID := uuid.New()
 
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	ns, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, err
+	}
+
 	// Buffer the deadline so we can still respond with timeout if we hit the deadline while dispatching
-	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, NexusTimeoutBuffer)
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, e.config.MinDispatchTaskTimeout(ns.Name().String()))
 	defer cancel()
 
 	resp, err := pm.DispatchNexusTask(ctx, taskID, request)

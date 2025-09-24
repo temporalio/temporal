@@ -64,6 +64,7 @@ import (
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/consts"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -3551,6 +3552,8 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueueWithRateLimiterError() {
 
 func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 	const ctxTimeout = 2 * time.Second
+	var defaultTimeoutBuffer = nexusoperations.MinDispatchTaskTimeout.Get(dynamicconfig.NewNoopCollection())("my-nsid")
+
 	type testCase struct {
 		name      string
 		sleepTime time.Duration
@@ -3560,7 +3563,7 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 	testCases := []testCase{
 		{
 			name:      "deadline_exceeded_immediately",
-			sleepTime: ctxTimeout - NexusTimeoutBuffer,
+			sleepTime: ctxTimeout - defaultTimeoutBuffer,
 			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
 				require.NoError(t, err)
 				require.NotNil(t, response.GetRequestTimeout())
@@ -3568,7 +3571,7 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 		},
 		{
 			name:      "deadline_exceeded_awaiting_local_dispatch",
-			sleepTime: ctxTimeout - NexusTimeoutBuffer - time.Nanosecond,
+			sleepTime: ctxTimeout - defaultTimeoutBuffer - time.Nanosecond,
 			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
 				require.NoError(t, err)
 				require.NotNil(t, response.GetRequestTimeout())
@@ -3576,7 +3579,7 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 		},
 		{
 			name:      "deadline_not_exceeded_on_forwarding",
-			sleepTime: ctxTimeout - NexusTimeoutBuffer - time.Nanosecond,
+			sleepTime: ctxTimeout - defaultTimeoutBuffer - time.Nanosecond,
 			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
 				require.NoError(t, err)
 				require.NotNil(t, response.GetResponse())
