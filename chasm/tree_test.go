@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1643,7 +1644,7 @@ func (s *nodeSuite) TestSerializeDeserializeTask() {
 			rt, ok := s.registry.taskFor(tc.task)
 			s.True(ok)
 
-			blob, err := serializeTask(rt, tc.task)
+			blob, err := serializeTask(rt, reflect.ValueOf(tc.task))
 			s.NoError(err)
 
 			s.NotNil(blob)
@@ -2356,6 +2357,17 @@ func (s *nodeSuite) nodeBase() *nodeBase {
 		timeSource:  s.timeSource,
 		backend:     s.nodeBackend,
 		pathEncoder: s.nodePathEncoder,
+
+		mutation: NodesMutation{
+			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
+			DeletedNodes: make(map[string]struct{}),
+		},
+		systemMutation: NodesMutation{
+			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
+			DeletedNodes: make(map[string]struct{}),
+		},
+		newTasks:       make(map[any][]taskWithAttributes),
+		taskValueCache: make(map[*commonpb.DataBlob]reflect.Value),
 	}
 }
 
@@ -2397,11 +2409,11 @@ func (s *nodeSuite) testComponentTree() *Node {
 func (s *nodeSuite) TestEachPureTask() {
 	now := s.timeSource.Now()
 
-	payload := &commonpb.Payload{
-		Data: []byte("some-random-data"),
+	mustEncode := func(m proto.Message) *commonpb.DataBlob {
+		taskBlob, err := serialization.ProtoEncode(m)
+		s.NoError(err)
+		return taskBlob
 	}
-	taskBlob, err := serialization.ProtoEncode(payload)
-	s.NoError(err)
 
 	// Set up a tree with expired and unexpired pure tasks.
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
@@ -2419,7 +2431,9 @@ func (s *nodeSuite) TestEachPureTask() {
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
 								VersionedTransitionOffset: 1,
 								PhysicalTaskStatus:        physicalTaskStatusCreated,
-								Data:                      taskBlob,
+								Data: mustEncode(&commonpb.Payload{
+									Data: []byte("some-random-data-root"),
+								}),
 							},
 						},
 					},
@@ -2435,12 +2449,14 @@ func (s *nodeSuite) TestEachPureTask() {
 						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
 							{
 								Type: "TestLibrary.test_pure_task",
-								// Unexpired
+								// Not expired yet.
 								ScheduledTime:             timestamppb.New(now.Add(time.Hour)),
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
 								VersionedTransitionOffset: 1,
 								PhysicalTaskStatus:        physicalTaskStatusCreated,
-								Data:                      taskBlob,
+								Data: mustEncode(&commonpb.Payload{
+									Data: []byte("some-random-data-child"),
+								}),
 							},
 						},
 					},
@@ -2461,7 +2477,9 @@ func (s *nodeSuite) TestEachPureTask() {
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
 								VersionedTransitionOffset: 2,
 								PhysicalTaskStatus:        physicalTaskStatusNone,
-								Data:                      taskBlob,
+								Data: mustEncode(&commonpb.Payload{
+									Data: []byte("some-random-data-grandchild-1"),
+								}),
 							},
 							{
 								Type: "TestLibrary.test_pure_task",
@@ -2470,7 +2488,9 @@ func (s *nodeSuite) TestEachPureTask() {
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
 								VersionedTransitionOffset: 1,
 								PhysicalTaskStatus:        physicalTaskStatusCreated,
-								Data:                      taskBlob,
+								Data: mustEncode(&commonpb.Payload{
+									Data: []byte("some-random-data-grandchild-2"),
+								}),
 							},
 						},
 					},
@@ -2496,6 +2516,7 @@ func (s *nodeSuite) TestEachPureTask() {
 	})
 	s.NoError(err)
 	s.Equal(3, actualTaskCount)
+	s.Len(root.taskValueCache, actualTaskCount)
 }
 
 func (s *nodeSuite) TestExecutePureTask() {
@@ -2565,6 +2586,8 @@ func (s *nodeSuite) TestExecutePureTask() {
 }
 
 func (s *nodeSuite) TestExecuteSideEffectTask() {
+	tv := testvars.New(s.T())
+
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
@@ -2577,8 +2600,6 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 			},
 		},
 	}
-
-	taskAttributes := TaskAttributes{}
 
 	taskInfo := &persistencespb.ChasmTaskInfo{
 		ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
@@ -2594,7 +2615,19 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		},
 	}
-	entityKey := EntityKey{}
+	chasmTask := &tasks.ChasmTask{
+		WorkflowKey:         tv.Any().WorkflowKey(),
+		VisibilityTimestamp: s.timeSource.Now(),
+		TaskID:              123,
+		Category:            tasks.CategoryOutbound,
+		Destination:         "destination",
+		Info:                taskInfo,
+	}
+	entityKey := EntityKey{
+		NamespaceID: chasmTask.NamespaceID,
+		BusinessID:  chasmTask.WorkflowID,
+		EntityID:    chasmTask.RunID,
+	}
 
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
@@ -2624,7 +2657,10 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 			Execute(
 				gomock.Any(),
 				gomock.Any(),
-				gomock.Eq(taskAttributes),
+				gomock.Eq(TaskAttributes{
+					chasmTask.GetVisibilityTime(),
+					chasmTask.Destination,
+				}),
 				gomock.Any(),
 			).DoAndReturn(
 			func(_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestSideEffectTask) error {
@@ -2642,34 +2678,40 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	// Succeed task execution.
 	expectValidate(true, nil)
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskAttributes, taskInfo, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, chasmTask, dummyValidationFn)
 	s.NoError(err)
 	s.True(backendValidtionFnCalled)
+	s.True(chasmTask.DeserializedTask.IsValid())
 
 	// Invalid task.
 	expectValidate(false, nil)
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskAttributes, taskInfo, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, chasmTask, dummyValidationFn)
 	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
+	s.True(chasmTask.DeserializedTask.IsValid())
 
 	// Failed to validate task.
 	validationErr := errors.New("validation error")
 	expectValidate(false, validationErr)
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskAttributes, taskInfo, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, chasmTask, dummyValidationFn)
 	s.ErrorIs(validationErr, err)
+	s.False(chasmTask.DeserializedTask.IsValid())
 
 	// Fail task execution.
 	expectValidate(true, nil)
 	executionErr := errors.New("execution error")
 	expectExecute(executionErr)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, taskAttributes, taskInfo, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, chasmTask, dummyValidationFn)
 	s.ErrorIs(executionErr, err)
 	s.True(backendValidtionFnCalled)
+	s.False(chasmTask.DeserializedTask.IsValid())
 }
 
 func (s *nodeSuite) TestValidateSideEffectTask() {
+	tv := testvars.New(s.T())
+
 	taskInfo := &persistencespb.ChasmTaskInfo{
 		ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
 			TransitionCount:          1,
@@ -2686,51 +2728,69 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		},
 	}
+	chasmTask := &tasks.ChasmTask{
+		WorkflowKey:         tv.Any().WorkflowKey(),
+		VisibilityTimestamp: s.timeSource.Now(),
+		TaskID:              123,
+		Category:            tasks.CategoryTransfer,
+		Info:                taskInfo,
+	}
 
 	root := s.testComponentTree()
 
 	mockEngine := NewMockEngine(s.controller)
 	ctx := NewEngineContext(context.Background(), mockEngine)
-	taskAttributes := TaskAttributes{}
 
 	expectValidate := func(componentType any, retValue bool, errValue error) {
 		s.testLibrary.mockSideEffectTaskValidator.EXPECT().
 			Validate(
 				gomock.AssignableToTypeOf((*ContextImpl)(nil)),
 				gomock.AssignableToTypeOf(componentType),
-				gomock.Eq(taskAttributes),
+				gomock.Eq(TaskAttributes{
+					ScheduledTime: chasmTask.GetVisibilityTime(),
+					Destination:   chasmTask.Destination,
+				}),
 				gomock.AssignableToTypeOf(&TestSideEffectTask{}),
 			).Return(retValue, errValue).Times(1)
 	}
 
 	// Succeed validation as valid.
 	expectValidate((*TestComponent)(nil), true, nil)
-	task, err := root.ValidateSideEffectTask(ctx, taskAttributes, taskInfo)
-	s.NotNil(task)
-	s.IsType(&TestSideEffectTask{}, task)
+	isValid, err := root.ValidateSideEffectTask(ctx, chasmTask)
+	s.True(isValid)
 	s.NoError(err)
+	s.True(chasmTask.DeserializedTask.IsValid())
 
 	// Succeed validation as invalid.
 	expectValidate((*TestComponent)(nil), false, nil)
-	task, err = root.ValidateSideEffectTask(ctx, taskAttributes, taskInfo)
-	s.Nil(task)
+	isValid, err = root.ValidateSideEffectTask(ctx, chasmTask)
+	s.False(isValid)
 	s.NoError(err)
+	s.True(chasmTask.DeserializedTask.IsValid())
 
 	// Fail validation.
 	expectedErr := errors.New("validation failed")
 	expectValidate((*TestComponent)(nil), false, expectedErr)
-	task, err = root.ValidateSideEffectTask(ctx, taskAttributes, taskInfo)
-	s.Nil(task)
+	isValid, err = root.ValidateSideEffectTask(ctx, chasmTask)
+	s.False(isValid)
 	s.ErrorIs(expectedErr, err)
+	s.False(chasmTask.DeserializedTask.IsValid())
 
 	// Succeed validation as valid for a sub component.
 	childTaskInfo := taskInfo
 	childTaskInfo.Path = []string{"SubComponent1"}
+	childChasmTask := &tasks.ChasmTask{
+		WorkflowKey:         tv.Any().WorkflowKey(),
+		VisibilityTimestamp: s.timeSource.Now(),
+		TaskID:              124,
+		Category:            tasks.CategoryTransfer,
+		Info:                childTaskInfo,
+	}
 	expectValidate((*TestSubComponent1)(nil), true, nil)
-	task, err = root.ValidateSideEffectTask(ctx, taskAttributes, childTaskInfo)
-	s.NotNil(task)
-	s.IsType(&TestSideEffectTask{}, task)
+	isValid, err = root.ValidateSideEffectTask(ctx, childChasmTask)
+	s.True(isValid)
 	s.NoError(err)
+	s.True(childChasmTask.DeserializedTask.IsValid())
 }
 
 func (s *nodeSuite) newTestTree(
