@@ -2235,12 +2235,9 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 
 	resp, err := pm.DispatchNexusTask(ctx, taskID, request)
 
-	// We should already have a caller side timeout buffer (see MinRequestTimeout dynamic config) by default, so this
-	// should be a sufficient amount of time for the request to be dispatched internally to the partition manager.
+	// If we get a context error, that means we didn't manage to dispatch the task to a remote host
 	if ctx.Err() != nil {
-		return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{
-			RequestTimeout: &matchingservice.DispatchNexusTaskResponse_Timeout{},
-		}}, nil
+		return nil, ctx.Err()
 	}
 
 	// if we get a response or error it means that the Nexus task was handled by forwarding to another matching host
