@@ -23,12 +23,10 @@ const (
 	PluginNamePGX = "postgres12_pgx"
 )
 
-var (
-	defaultDatabaseNames = []string{
-		"postgres",  // normal PostgreSQL default DB name
-		"defaultdb", // special behavior for Aiven: #1389
-	}
-)
+var defaultDatabaseNames = []string{
+	"postgres",  // normal PostgreSQL default DB name
+	"defaultdb", // special behavior for Aiven: #1389
+}
 
 type plugin struct {
 	d driver.Driver
@@ -56,7 +54,7 @@ func (d *plugin) CreateDB(
 		return d.createDBConnection(cfg, r)
 	}
 	needsRefresh := d.d.IsConnNeedsRefreshError
-	handle := sqlplugin.NewDatabaseHandle(connect, needsRefresh, logger, metricsHandler, clock.NewRealTimeSource())
+	handle := sqlplugin.NewDatabaseHandle(dbKind, connect, needsRefresh, logger, metricsHandler, clock.NewRealTimeSource())
 	db := newDB(dbKind, cfg.DatabaseName, d.d, handle, nil)
 	return db, nil
 }

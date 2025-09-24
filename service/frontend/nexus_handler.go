@@ -157,8 +157,17 @@ func (c *operationContext) interceptRequest(
 		Request:           request,
 	})
 	if err != nil {
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("unauthorized"))
-		return commonnexus.AdaptAuthorizeError(err)
+		// If frontend.exposeAuthorizerErrors is false, Authorize err is either an explicitly set reason, or a generic
+		// "Request unauthorized." message.
+		// Otherwise, expose the underlying error.
+		var permissionDeniedError *serviceerror.PermissionDenied
+		if errors.As(err, &permissionDeniedError) {
+			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("unauthorized"))
+			return commonnexus.AdaptAuthorizeError(permissionDeniedError)
+		}
+		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("internal_auth_error"))
+		c.logger.Error("Authorization internal error with processing nexus request", tag.Error(err))
+		return commonnexus.ConvertGRPCError(err, false)
 	}
 
 	if err := c.namespaceValidationInterceptor.ValidateState(c.namespace, c.apiName); err != nil {
@@ -425,6 +434,9 @@ func (h *nexusHandler) StartOperation(
 	if err != nil {
 		if common.IsContextDeadlineExceededErr(err) {
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
+
+			oc.setFailureSource(commonnexus.FailureSourceWorker)
+
 			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 		}
 		return nil, commonnexus.ConvertGRPCError(err, false)
@@ -584,6 +596,9 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	if err != nil {
 		if common.IsContextDeadlineExceededErr(err) {
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
+
+			oc.setFailureSource(commonnexus.FailureSourceWorker)
+
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 		}
 		return commonnexus.ConvertGRPCError(err, false)

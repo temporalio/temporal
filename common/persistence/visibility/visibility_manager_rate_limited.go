@@ -116,16 +116,6 @@ func (m *visibilityManagerRateLimited) ListWorkflowExecutions(
 	return m.delegate.ListWorkflowExecutions(ctx, request)
 }
 
-func (m *visibilityManagerRateLimited) ScanWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequestV2,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	if ok := allow(ctx, "ScanWorkflowExecutions", m.readRateLimiter); !ok {
-		return nil, persistence.ErrPersistenceSystemLimitExceeded
-	}
-	return m.delegate.ScanWorkflowExecutions(ctx, request)
-}
-
 func (m *visibilityManagerRateLimited) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,

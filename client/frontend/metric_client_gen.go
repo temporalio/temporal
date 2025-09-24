@@ -1031,6 +1031,20 @@ func (c *metricClient) SetWorkerDeploymentCurrentVersion(
 	return c.client.SetWorkerDeploymentCurrentVersion(ctx, request, opts...)
 }
 
+func (c *metricClient) SetWorkerDeploymentManager(
+	ctx context.Context,
+	request *workflowservice.SetWorkerDeploymentManagerRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.SetWorkerDeploymentManagerResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientSetWorkerDeploymentManager")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.SetWorkerDeploymentManager(ctx, request, opts...)
+}
+
 func (c *metricClient) SetWorkerDeploymentRampingVersion(
 	ctx context.Context,
 	request *workflowservice.SetWorkerDeploymentRampingVersionRequest,

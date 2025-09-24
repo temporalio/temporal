@@ -77,12 +77,15 @@ The History Service has many other responsibilities which are not covered here, 
 ### History shards
 
 A single Temporal Cluster manages many (e.g. millions of) Workflow Executions.
-These are logically partitioned into subsets that we call History Shards.
-The Temporal Cluster typically has multiple instances of the History service application process (each typically running on a separate machine/VM), and each History service instance owns some set of History Shards.
-"Owning" a History Shard means being responsible for the lifecycle of every workflow execution in the shard by [handling incoming requests](#rpc-handling) relating to that workflow execution, managing timers, and causing Workflow and Activity Tasks to be enqueued in Matching Service. To achieve this, each shard manages its own [task queues](#queue-processing).
+These are logically partitioned into subsets called History Shards. The total number of History Shards is fixed at cluster creation and cannot be changed later.
 
-Therefore, objects corresponding to History Shards exist in the memory of a History service instance.
-Persistence details are abstracted away via a Go interface but in practice, when the persistence layer is backed by Cassandra, History Shards map 1-1 with partitions of the [`executions` table](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/schema/cassandra/temporal/schema.cql#L52). Persistence layer implementations also exist for MySQL, Postgres, and SQLite.
+The cluster typically runs multiple instances of the History Service process (often on separate machines / VMs). Each instance owns a subset of History Shards. Ownership is coordinated by a `ShardController` component that uses a membership protocol (implemented via the Ringpop library).
+
+"Owning" a History Shard means being responsible for the lifecycle of every workflow execution in that shard by (synchronously) [handling incoming requests](#rpc-handling) for those executions and (asynchronously) [processing background tasks](#queue-processing) that trigger timers, dispatch Workflow and Activity Tasks to the Matching Service, etc. To do this, each shard manages several internal task queues.
+
+An in-memory object tracks various metadata for each shard; the two most important are: (1) the `RangeID` (a monotonically increasing generation number used for fencing) and (2) queue states (the acknowledged / processed positions of each internal queue).
+
+Persistence details of a shard are abstracted behind an interface. In practice, with a Cassandra persistence layer, History Shards map 1:1 to partitions of the [`executions` table](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/schema/cassandra/temporal/schema.cql#L52). Implementations also exist for MySQL, Postgres, and SQLite.
 
 <details>
 <summary><i>Code entrypoints</i></summary>
@@ -184,6 +187,10 @@ The `QueueProcessor` starts a variety of goroutines that are responsible for:
 - Submitting tasks for execution to the task execution framework.
 - Periodically persisting queue "ack levels" (this periodic checkpointing represents a compromise between the desire to minimize the number of already-processed tasks processed on shard reload, and the desire to minimize write load).
 
+The following diagram shows the high level components of queue processing in one shard.
+
+<img src="../_assets/queue-processing.svg">
+
 <details>
 <summary><i>Code entrypoints</i></summary>
 
@@ -201,7 +208,7 @@ The `QueueProcessor` starts a variety of goroutines that are responsible for:
    </details>
    <br>
 
-#### Transfer Task queue
+#### Transfer Task Queue
 
 A Transfer Task is available to be executed immediately.
 When a Transfer Task is executed, an RPC is made to the Matching Service, for example to enqueue a Workflow Task or Activity Task specified by the Transfer Task.
@@ -217,7 +224,7 @@ When a Transfer Task is executed, an RPC is made to the Matching Service, for ex
 - Similarly, for a workflow task: [`processWorkflowTask`](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/transfer_queue_active_task_executor.go#L217) results in an [RPC to Matching Service](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/transfer_queue_task_executor_base.go#L152) to create the Workflow Task.
 </details><br>
 
-#### Timer Task queue
+#### Timer Task Queue
 
 There are several scenarios in which it's necessary to set a timer associated with a workflow execution and do something when the timer expires. For example:
 
@@ -226,6 +233,10 @@ There are several scenarios in which it's necessary to set a timer associated wi
 
 These are implemented as tasks in the Timer Task queue.
 A Timer Task becomes available to be executed at the trigger time that is stored with the task.
+
+#### Visibility Task Queue
+
+Visibility tasks are also available to be executed immedidately, but they are for updating workflow metadata records in the visibility storage which could be a different database than the one hosting the primary workflow states and histoires.
 
 <details>
 <summary><i>Code entrypoints</i></summary>
@@ -239,6 +250,30 @@ A Timer Task becomes available to be executed at the trigger time that is stored
 </details><br>
 
 ### State transitions
+
+A "state transition" generally takes the form
+
+```mermaid
+flowchart LR
+  sA["State A"]
+
+  subgraph outputs["&nbsp"]
+    
+
+    subgraph tx[Atomic Transaction]
+      sB["State B"]
+      Tasks
+    end
+  
+    Events
+
+    tx ~~~ Events
+  end
+
+  sA == "Input" ==> tx
+
+  style outputs fill:transparent,stroke:transparent
+```
 
 Notice that a workflow execution "state transition" can occur in response to four different types of inputs:
 

@@ -158,6 +158,7 @@ func SearchAttributeMapperProviderProvider(
 }
 
 func SearchAttributeProviderProvider(
+	logger log.SnTaggedLogger,
 	timeSource clock.TimeSource,
 	cmMgr persistence.ClusterMetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
@@ -165,10 +166,12 @@ func SearchAttributeProviderProvider(
 	return searchattribute.NewManager(
 		timeSource,
 		cmMgr,
+		logger,
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection))
 }
 
 func SearchAttributeManagerProvider(
+	logger log.SnTaggedLogger,
 	timeSource clock.TimeSource,
 	cmMgr persistence.ClusterMetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
@@ -176,6 +179,7 @@ func SearchAttributeManagerProvider(
 	return searchattribute.NewManager(
 		timeSource,
 		cmMgr,
+		logger,
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection))
 }
 
@@ -337,6 +341,7 @@ func RPCFactoryProvider(
 	cfg *config.Config,
 	svcName primitives.ServiceName,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	resolver *membership.GRPCResolver,
 	tracingStatsHandler telemetry.ClientStatsHandler,
@@ -358,6 +363,7 @@ func RPCFactoryProvider(
 		cfg,
 		svcName,
 		logger,
+		metricsHandler,
 		tlsConfigProvider,
 		frontendURL,
 		frontendHTTPURL,

@@ -240,9 +240,34 @@ func (ac *DLQV2Service) PurgeMessages(c *cli.Context) error {
 
 func (ac *DLQV2Service) MergeMessages(c *cli.Context) error {
 	adminClient := ac.clientFactory.AdminClient(c)
-	lastMessageID, err := ac.getLastMessageID(c, "merge")
-	if err != nil {
-		return err
+
+	var lastMessageID int64
+	if c.IsSet(FlagLastMessageID) {
+		lastMessageID = c.Int64(FlagLastMessageID)
+		if lastMessageID < persistence.FirstQueueMessageID {
+			return fmt.Errorf(
+				"--%s must be at least %d but was %d",
+				FlagLastMessageID,
+				persistence.FirstQueueMessageID,
+				lastMessageID,
+			)
+		}
+	} else {
+		_, _ = fmt.Fprint(c.App.Writer, "Note: No last message ID provided. Using ListQueues to find the last message ID.\n")
+
+		var err error
+		var ok bool
+		lastMessageID, ok, err = ac.findLastMessageIDFromListQueues(c)
+		if err != nil {
+			return fmt.Errorf("failed to find last message ID: %w", err)
+		}
+
+		if !ok {
+			_, _ = fmt.Fprint(c.App.Writer, "DLQ is empty, nothing to merge.\n")
+			return nil
+		}
+
+		_, _ = fmt.Fprintf(c.App.Writer, "Found last message ID: %d. Using this as the upper bound for merge operation.\n", lastMessageID)
 	}
 	ctx, cancel := newContext(c)
 	defer cancel()
@@ -292,6 +317,43 @@ func (ac *DLQV2Service) getLastMessageID(c *cli.Context, action string) (int64, 
 		)
 	}
 	return lastMessageID, nil
+}
+
+func (ac *DLQV2Service) findLastMessageIDFromListQueues(c *cli.Context) (int64, bool, error) {
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	adminClient := ac.clientFactory.AdminClient(c)
+
+	// Use ListQueues to find our specific DLQ and get its LastMessageID
+	dlqKey := ac.getDLQKey()
+	queueName := persistence.GetHistoryTaskQueueName(int(dlqKey.TaskCategory), dlqKey.SourceCluster, dlqKey.TargetCluster)
+
+	var nextPageToken []byte
+	for {
+		resp, err := adminClient.ListQueues(ctx, &adminservice.ListQueuesRequest{
+			QueueType:     int32(persistence.QueueTypeHistoryDLQ),
+			PageSize:      int32(defaultPageSize),
+			NextPageToken: nextPageToken,
+		})
+		if err != nil {
+			return 0, false, fmt.Errorf("call to ListQueues from findLastMessageIDFromListQueues failed: %w", err)
+		}
+
+		for _, queueInfo := range resp.Queues {
+			if queueInfo.QueueName == queueName {
+				return queueInfo.LastMessageId, queueInfo.MessageCount > 0, nil
+			}
+		}
+
+		if len(resp.NextPageToken) == 0 {
+			break
+		}
+		nextPageToken = resp.NextPageToken
+	}
+
+	// Queue not found, it is empty in that case. We create the queue on first write.
+	return 0, false, nil
 }
 
 func getSupportedDLQTaskCategories(taskCategoryRegistry tasks.TaskCategoryRegistry) []tasks.Category {

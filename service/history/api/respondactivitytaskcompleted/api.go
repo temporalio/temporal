@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -43,6 +44,7 @@ func Invoke(
 	var taskQueue string
 	var workflowTypeName string
 	var fabricateStartedEvent bool
+	var versioningBehavior enumspb.VersioningBehavior
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
@@ -78,10 +80,7 @@ func Invoke(
 				return nil, consts.ErrStaleState
 			}
 
-			if !isRunning ||
-				(!isCompletedByID && ai.StartedEventId == common.EmptyEventID) ||
-				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) ||
-				(token.GetVersion() != common.EmptyVersion && token.Version != ai.Version) {
+			if !isRunning || api.IsActivityTaskNotFoundForToken(token, ai, &isCompletedByID) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
@@ -110,9 +109,13 @@ func Invoke(
 				// Unable to add ActivityTaskCompleted event to history
 				return nil, err
 			}
-			attemptStartedTime = ai.StartedTime.AsTime()
+			if !fabricateStartedEvent {
+				// leave it zero if the event is fabricated so the latency metrics are not emitted
+				attemptStartedTime = ai.StartedTime.AsTime()
+			}
 			firstScheduledTime = ai.FirstScheduledTime.AsTime()
 			taskQueue = ai.TaskQueue
+			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
 				CreateWorkflowTask: true,
@@ -123,7 +126,7 @@ func Invoke(
 		workflowConsistencyChecker,
 	)
 
-	if err == nil && !fabricateStartedEvent {
+	if err == nil {
 		workflow.RecordActivityCompletionMetrics(
 			shard,
 			namespace,
@@ -137,6 +140,7 @@ func Invoke(
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope),
 			metrics.WorkflowTypeTag(workflowTypeName),
 			metrics.ActivityTypeTag(token.ActivityType),
+			metrics.VersioningBehaviorTag(versioningBehavior),
 		)
 	}
 	return &historyservice.RespondActivityTaskCompletedResponse{}, err

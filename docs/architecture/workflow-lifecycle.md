@@ -37,6 +37,47 @@ loop QueueProcessor
 end
 ```
 
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart LR
+   subgraph left["&nbsp"]
+      direction TB
+
+      subgraph ms[Mutable State]
+         direction TB
+
+         ms1["Workflow Task: Scheduled"]
+      end
+
+      subgraph transferQ[Transfer Queue]
+         direction LR
+
+         transfer1("WorkflowTask")
+      end
+
+      subgraph timerQ[Timer Queue]
+         direction LR
+
+         timer1("Workflow Timeout")
+      end
+
+      ms ~~~ transferQ ~~~ timerQ
+   end
+
+   subgraph history[Workflow History]
+      direction TB
+      e1[WorkflowExecutionStarted] ~~~
+      e2[WorkflowTaskScheduled]
+   end
+
+   left ~~~ history
+
+   style left fill:transparent,stroke:transparent
+```
+
 <details>
 <summary><i>Code entrypoints</i></summary>
 
@@ -70,6 +111,50 @@ Frontend->>Worker: WorkflowTask
 Worker->>Worker: Advance workflow
 ```
 
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart LR
+   subgraph left["&nbsp"]
+      direction TB
+
+      subgraph ms[Mutable State]
+         direction TB
+
+         ms1["Workflow Task: Started"]
+      end
+
+      subgraph transferQ[Transfer Queue]
+         direction LR
+
+         transfer1("&nbsp")
+      end
+
+      subgraph timerQ[Timer Queue]
+         direction LR
+
+         timer1("Workflow Task Timeout") ~~~
+         timer2("Workflow Timeout")
+      end
+
+      ms ~~~ transferQ ~~~ timerQ
+   end
+
+   subgraph history[Workflow History]
+      direction TB
+
+      e1[WorkflowExecutionStarted] ~~~
+      e2[WorkflowTaskScheduled] ~~~
+      e3[WorkflowTaskStarted]
+   end
+
+   left ~~~ history
+
+   style left fill:transparent,stroke:transparent
+```
+
 <details>
 <summary><i>Code entrypoints</i></summary>
 
@@ -101,6 +186,54 @@ loop QueueProcessor
 end
 ```
 
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart LR
+   subgraph left["&nbsp"]
+      direction TB
+
+      subgraph ms[Mutable State]
+         direction TB
+
+         ms1["Workflow Task: Empty"] ~~~
+         ms2["Activity Task: Scheduled"]
+      end
+
+      subgraph transferQ[Transfer Queue]
+         direction LR
+
+         transfer1("Activity Task")
+      end
+
+      subgraph timerQ[Timer Queue]
+         direction LR
+
+         timer1("Workflow Task Timeout") ~~~
+         timer2("Activity Task Timeout") ~~~
+         timer3("Workflow Timeout")
+      end
+
+      ms ~~~ transferQ  ~~~ timerQ
+   end
+
+   subgraph history[Workflow History]
+      direction TB
+
+      e1[WorkflowExecutionStarted] ~~~
+      e2[WorkflowTaskScheduled] ~~~
+      e3[WorkflowTaskStarted] ~~~
+      e4[WorkflowTaskCompleted] ~~~
+      e5[ActivityTaskScheduled]
+   end
+
+   left ~~~ history
+
+   style left fill:transparent,stroke:transparent
+```
+
 <details>
 <summary><i>Code entrypoints</i></summary>
 
@@ -128,6 +261,55 @@ History->>Matching: Record Succeed
 Matching->>Frontend: ActivityTask
 Frontend->>Worker: ActivityTask
 Worker->>Worker: Execute activity
+```
+
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart LR
+   subgraph left["&nbsp"]
+      direction TB
+
+      subgraph ms[Mutable State]
+         direction TB
+
+         ms1["Workflow Task: Empty"] ~~~
+         ms2["Activity Task: Started"]
+      end
+
+      subgraph transferQ[Transfer Queue]
+         direction LR
+
+         transfer1("&nbsp")
+      end
+
+      subgraph timerQ[Timer Queue]
+         direction LR
+
+         timer1("Activity Task Timeout") ~~~
+         timer2("Workflow Timeout")
+      end
+
+      ms ~~~ transferQ ~~~ timerQ
+   end
+
+   subgraph history[Workflow History]
+      classDef dottedBoxStyle stroke-dasharray: 5 5;
+      direction TB
+
+      e1[WorkflowExecutionStarted] ~~~
+      e2[WorkflowTaskScheduled] ~~~
+      e3[WorkflowTaskStarted] ~~~
+      e4[WorkflowTaskCompleted] ~~~
+      e5[ActivityTaskScheduled] ~~~
+      e6[ActivityTaskStarted]:::dottedBoxStyle
+   end
+
+   left ~~~ history
+
+   style left fill:transparent,stroke:transparent
 ```
 
 <details>
@@ -159,6 +341,56 @@ loop QueueProcessor
 		History->>History: ProcessTask
 		History->>Matching: AddWorkflowTask
 end
+```
+
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart LR
+   subgraph left["&nbsp"]
+      direction TB
+
+      subgraph ms[Mutable State]
+         direction TB
+
+         ms1["Workflow Task: Empty"]
+      end
+
+      subgraph transferQ[Transfer Queue]
+         direction LR
+
+         transfer1("Workflow Task")
+      end
+
+      subgraph timerQ[Timer Queue]
+         direction LR
+
+         timer1("Workflow Task Timeout") ~~~
+         timer2("Activity Task Timeout") ~~~
+         timer3("Workflow Timeout")
+      end
+
+      ms ~~~ transferQ ~~~ timerQ
+   end
+
+   subgraph history[Workflow History]
+      direction TB
+
+      e1[WorkflowExecutionStarted] ~~~
+      e2[WorkflowTaskScheduled] ~~~
+      e3[WorkflowTaskStarted] ~~~
+      e4[WorkflowTaskCompleted] ~~~
+      e5[ActivityTaskScheduled] ~~~
+      e6[ActivityTaskStarted] ~~~
+      e7[ActivityTaskCompleted] ~~~
+      e8[WorkflowTaskScheduled]
+   end
+
+   left ~~~ history
+
+   style left fill:transparent,stroke:transparent
 ```
 
 <details>
@@ -201,6 +433,59 @@ loop QueueProcessor
 end
 ```
 
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart LR
+   subgraph left["&nbsp"]
+      direction TB
+
+      subgraph ms[Mutable State]
+         direction TB
+
+         ms1["Workflow Task: Empty"]
+      end
+
+      subgraph transferQ[Transfer Queue]
+         direction LR
+
+         transfer1("&nbsp")
+      end
+
+      subgraph timerQ[Timer Queue]
+         direction LR
+
+         timer1("Workflow Task Timeout") ~~~
+         timer2("Activity Task Timeout") ~~~
+         timer3("Workflow Timeout")
+      end
+
+      ms ~~~ transferQ ~~~ timerQ
+   end
+
+   subgraph history[Workflow History]
+      direction TB
+
+      e1[WorkflowExecutionStarted] ~~~
+      e2[WorkflowTaskScheduled] ~~~
+      e3[WorkflowTaskStarted] ~~~
+      e4[WorkflowTaskCompleted] ~~~
+      e5[ActivityTaskScheduled] ~~~
+      e6[ActivityTaskStarted] ~~~
+      e7[ActivityTaskCompleted] ~~~
+      e8[WorkflowTaskScheduled] ~~~
+      e9[WorkflowTaskStarted] ~~~
+      e10[WorkflowTaskCompleted] ~~~
+      e11[WorkflowExecutionCompleted]
+   end
+
+   left ~~~ history
+
+   style left fill:transparent,stroke:transparent
+```
+
 <details>
 <summary><i>Code entrypoints</i></summary>
 
@@ -229,6 +514,53 @@ loop QueueProcessor
 		History->>History: ProcessTask
 		History->>Matching: AddActivityTask
 end
+```
+
+```mermaid
+---
+config:
+   layout: elk
+---
+flowchart LR
+   subgraph left["&nbsp"]
+      direction TB
+
+      subgraph ms[Mutable State]
+         direction TB
+
+         ms1["Workflow Task: Empty"] ~~~
+         ms2["Activity Task: Scheduled, Attempt 2"]
+      end
+
+      subgraph transferQ[Transfer Queue]
+         direction LR
+
+         transfer1("&nbsp")
+      end
+
+      subgraph timerQ[Timer Queue]
+         direction LR
+
+         timer1("Activity Retry") ~~~
+         timer2("Workflow Timeout")
+      end
+
+      ms ~~~ transferQ ~~~ timerQ
+   end
+
+   subgraph history[Workflow History]
+      direction TB
+
+      e1[WorkflowExecutionStarted] ~~~
+      e2[WorkflowTaskScheduled] ~~~
+      e3[WorkflowTaskStarted] ~~~
+      e4[WorkflowTaskCompleted] ~~~
+      e5[ActivityTaskScheduled]
+   end
+
+   left ~~~ history
+
+   style left fill:transparent,stroke:transparent
 ```
 
 <details>
