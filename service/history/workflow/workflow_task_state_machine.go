@@ -4,7 +4,6 @@ package workflow
 
 import (
 	"cmp"
-	"fmt"
 	"math"
 	"time"
 
@@ -925,8 +924,6 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
 
 	consecutiveFailuresRequired := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())
-	fmt.Println("consecutiveFailuresRequired", consecutiveFailuresRequired)
-	fmt.Println("failWorkflowTaskInfo.Attempt", failWorkflowTaskInfo.Attempt)
 	if consecutiveFailuresRequired > 0 && failWorkflowTaskInfo.Attempt == int32(consecutiveFailuresRequired) {
 		if err := m.ms.UpdateReportedProblemsSearchAttribute(); err != nil {
 			return err
