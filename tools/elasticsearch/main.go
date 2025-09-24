@@ -106,16 +106,20 @@ func BuildCLIOptions() *cli.App {
 			},
 		},
 		{
-			Name:  "upgrade-schema",
-			Usage: "upgrade elasticsearch index template to latest version",
+			Name:  "update-schema",
+			Usage: "update elasticsearch index template, or index mappings if --index is specified",
 			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  CLIFlagVisibilityIndex,
+					Usage: "name of the visibility index to update mappings for (optional)",
+				},
 				&cli.BoolFlag{
 					Name:  CLIFlagFailSilently,
 					Usage: "fail silently on HTTP errors",
 				},
 			},
 			Action: func(c *cli.Context) error {
-				cliHandler(c, upgradeSchema, logger)
+				cliHandler(c, updateSchema, logger)
 				return nil
 			},
 		},

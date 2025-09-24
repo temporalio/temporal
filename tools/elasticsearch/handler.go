@@ -122,8 +122,8 @@ func parseElasticConfig(cli *cli.Context) (*esclient.Config, error) {
 	return cfg, nil
 }
 
-// upgradeSchema updates the index template to the latest version
-func upgradeSchema(cli *cli.Context, logger log.Logger) error {
+// updateSchema updates the index template to the latest version, or index mappings if --index is specified
+func updateSchema(cli *cli.Context, logger log.Logger) error {
 	client, err := createClient(cli, logger)
 	if err != nil {
 		logger.Error("Unable to read config.", tag.Error(commonschema.NewConfigError(err.Error())))
@@ -136,18 +136,25 @@ func upgradeSchema(cli *cli.Context, logger log.Logger) error {
 		return err
 	}
 
+	indexName := cli.String(CLIOptVisibilityIndex)
+
 	task := SetupTask{
 		esClient: client,
 		logger:   logger,
 		config: &SetupConfig{
-			SettingsContent: "", // Don't update cluster settings in upgrade
+			SettingsContent: "", // Don't update cluster settings
 			TemplateContent: templateContent,
-			VisibilityIndex: "", // Don't create index in upgrade-schema
+			VisibilityIndex: indexName,
 			FailSilently:    cli.Bool(CLIOptFailSilently),
 		},
 	}
 
-	return task.RunTemplateUpgrade()
+	// If index is specified, update index mappings; otherwise update template
+	if indexName != "" {
+		return task.RunIndexUpdate()
+	} else {
+		return task.RunTemplateUpgrade()
+	}
 }
 
 // createIndex creates a new visibility index

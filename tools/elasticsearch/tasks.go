@@ -2,7 +2,9 @@ package elasticsearch
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -145,6 +147,69 @@ func (task *SetupTask) RunIndexCreation() error {
 	}
 
 	task.logger.Info("Index creation complete")
+	return nil
+}
+
+// RunIndexUpdate updates the mappings of an existing index
+func (task *SetupTask) RunIndexUpdate() error {
+	task.logger.Info("Starting index mapping update", tag.NewAnyTag("config", task.config))
+
+	if err := task.updateIndexMappings(); err != nil {
+		task.logger.Error("Failed to update index mappings.", tag.Error(err))
+		return err
+	}
+
+	task.logger.Info("Index mapping update complete")
+	return nil
+}
+
+// updateIndexMappings updates the mappings of an existing index using raw HTTP request
+func (task *SetupTask) updateIndexMappings() error {
+	config := task.config
+	if len(config.VisibilityIndex) == 0 {
+		task.logger.Info("Skipping index mapping update, missing index name")
+		return nil
+	}
+
+	if len(config.TemplateContent) == 0 {
+		task.logger.Info("Skipping index mapping update, no embedded template content")
+		return nil
+	}
+
+	// Parse the template to extract mappings
+	var template map[string]interface{}
+	if err := json.Unmarshal([]byte(config.TemplateContent), &template); err != nil {
+		return fmt.Errorf("failed to parse template content: %w", err)
+	}
+
+	mappings, ok := template["mappings"]
+	if !ok {
+		return fmt.Errorf("no mappings found in template")
+	}
+
+	mappingsBytes, err := json.Marshal(mappings)
+	if err != nil {
+		return fmt.Errorf("failed to marshal mappings: %w", err)
+	}
+
+	// Check if the index exists first
+	indexName := config.VisibilityIndex
+	exists, err := task.esClient.IndexExists(context.TODO(), indexName)
+	if err != nil {
+		return task.handleOperationFailure("failed to check if index exists", err)
+	}
+	if !exists {
+		return task.handleOperationFailure("index does not exist", fmt.Errorf("index %s does not exist", indexName))
+	}
+
+	success, err := task.esClient.IndexPutMapping(context.TODO(), indexName, string(mappingsBytes))
+	if err != nil {
+		return task.handleOperationFailure("index mapping update failed", err)
+	} else if !success {
+		return task.handleOperationFailure("index mapping update failed without error", fmt.Errorf("acknowledged=false"))
+	}
+
+	task.logger.Info("Index mappings updated successfully", tag.NewStringTag("indexName", indexName))
 	return nil
 }
 

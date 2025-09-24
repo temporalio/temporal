@@ -17,7 +17,7 @@ VERSION:
 
 COMMANDS:
    setup-schema    setup elasticsearch cluster settings and index template
-   upgrade-schema  upgrade elasticsearch index template to latest version
+   update-schema   update elasticsearch index template, or index mappings if --index is specified
    create-index    create elasticsearch visibility index
    drop-index      delete elasticsearch visibility index
    ping            pings the elasticsearch host
@@ -146,10 +146,17 @@ temporal-elasticsearch-tool --aws static create-index --index temporal_visibilit
 
 ### Additional Commands
 
-#### Upgrade Schema
-Updates the index template (settings and mappings) to the latest version without affecting cluster settings or existing indexes:
+#### Update Schema
+Updates the index template to the latest version, or updates index mappings if `--index` is specified:
+
+Update template only:
 ```bash
-temporal-elasticsearch-tool upgrade-schema
+temporal-elasticsearch-tool update-schema
+```
+
+Update index mappings based on current template:
+```bash
+temporal-elasticsearch-tool update-schema --index temporal_visibility_v1
 ```
 
 #### Drop Index
@@ -160,7 +167,7 @@ temporal-elasticsearch-tool drop-index --index temporal_visibility_v1
 
 #### Command Summary
 - `setup-schema`: Sets up cluster settings and index template (no index creation)
-- `upgrade-schema`: Updates index template (settings and mappings) to latest version
+- `update-schema`: Updates index template, or index mappings if --index is specified
 - `create-index`: Creates a new visibility index (requires --index flag)
 - `drop-index`: Deletes a visibility index (requires --index flag)
 - `ping`: Tests connectivity to Elasticsearch server
