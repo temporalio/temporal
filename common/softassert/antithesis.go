@@ -2,7 +2,6 @@
 
 package softassert
 
-//nolint:depguard | Use of Antithesis SDK is allowed (only) here
 import (
 	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"go.temporal.io/server/common/log"
