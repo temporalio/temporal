@@ -2235,11 +2235,6 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 
 	resp, err := pm.DispatchNexusTask(ctx, taskID, request)
 
-	// If we get a context error, that means we didn't manage to dispatch the task to a remote host
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-
 	// if we get a response or error it means that the Nexus task was handled by forwarding to another matching host
 	// this remote host's result can be returned directly
 	if resp != nil || err != nil {
