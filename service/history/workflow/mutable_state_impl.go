@@ -1818,9 +1818,9 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 
-	if resultPayload, err := request.Details.Marshal(); err == nil && resultPayload != nil {
-		ms.metricsHandler.Counter(metrics.ActivityHeartbeatPayloadSize.Name()).Record(
-			int64(len(resultPayload)), metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope))
+	if payloadSize := request.Details.Size(); payloadSize > 0 {
+		ms.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
+			int64(payloadSize), metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope))
 	}
 }
 

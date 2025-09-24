@@ -283,9 +283,9 @@ func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 	event := b.EventFactory.CreateActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
 	event, _ = b.EventStore.add(event)
 
-	if resultPayload, err := command.Input.Marshal(); err == nil && resultPayload != nil {
+	if payloadSize := command.Input.Size(); payloadSize > 0 {
 		b.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
-			int64(len(resultPayload)), metrics.OperationTag(metrics.HistoryRecordActivityTaskStartedScope))
+			int64(payloadSize), metrics.OperationTag(metrics.HistoryRecordActivityTaskStartedScope))
 	}
 
 	return event
@@ -314,9 +314,9 @@ func (b *HistoryBuilder) AddActivityTaskCompletedEvent(
 	event := b.EventFactory.CreateActivityTaskCompletedEvent(scheduledEventID, startedEventID, identity, result)
 	event, _ = b.EventStore.add(event)
 
-	if resultPayload, err := result.Marshal(); err == nil && resultPayload != nil {
+	if payloadSize := result.Size(); payloadSize > 0 {
 		b.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
-			int64(len(resultPayload)), metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope))
+			int64(payloadSize), metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope))
 	}
 
 	return event
@@ -339,9 +339,9 @@ func (b *HistoryBuilder) AddActivityTaskFailedEvent(
 
 	event, _ = b.EventStore.add(event)
 
-	if resultPayload, err := failure.Marshal(); err == nil && resultPayload != nil {
-		b.metricsHandler.Counter(metrics.ActivityFailurePayloadSize.Name()).Record(
-			int64(len(resultPayload)), metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope))
+	if payloadSize := failure.Size(); payloadSize > 0 {
+		b.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
+			int64(payloadSize), metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope))
 	}
 
 	return event
