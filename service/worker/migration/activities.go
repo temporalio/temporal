@@ -721,7 +721,7 @@ func (a *activities) verifySingleReplicationTask(
 	switch err.(type) {
 	case nil:
 		result, err := a.workflowVerifier(ctx, request, remotAdminClient, a.adminClient, ns, we, mu)
-		if result.status == verified {
+		if err != nil && result.status == verified {
 			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
 		}
 		return result, err
