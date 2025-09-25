@@ -104,28 +104,28 @@ jobs:
           # Set environment variables for Slack
           {
             echo "SLACK_TITLE=${title}"
-            echo "SLACK_MESSAGE<<EOF" >> $GITHUB_ENV
-            echo "${message}" >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
+            echo "SLACK_MESSAGE<<EOF" >> "$GITHUB_ENV"
+            echo "${message}" >> "$GITHUB_ENV"
+            echo "EOF" >> "$GITHUB_ENV"
           }
 
       - name: Create GitHub Actions summary
         if: steps.process-flaky-tests.outcome == 'success'
         run: |
-          echo "## 📊 Flaky Tests Report - $(date)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📊 Flaky Tests Report - $(date)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           
           if [ -f "out.json" ]; then
-            echo "### 🔴 Failed Tests Summary" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "| Test Name | Failure Count | Artifact |" >> $GITHUB_STEP_SUMMARY
-            echo "|-----------|---------------|----------|" >> $GITHUB_STEP_SUMMARY
+            echo "### 🔴 Failed Tests Summary" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Test Name | Failure Count | Artifact |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|-----------|---------------|----------|" >> "$GITHUB_STEP_SUMMARY"
             
             # Convert JSON to markdown table
-            jq -r '.[] | "| \(.name) | \(.failure_count) | \(.artifact) |"' out.json >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
+            jq -r '.[] | "| \(.name) | \(.failure_count) | \(.artifact) |"' out.json >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "❌ No report data available" >> $GITHUB_STEP_SUMMARY
+            echo "❌ No report data available" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Send Slack notification
