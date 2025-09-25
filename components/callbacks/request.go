@@ -8,8 +8,11 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/components/nexusoperations"
 )
+
+// Header key used to identify callbacks that originate from and target the same cluster.
+// Note: this is the nexusoperations.NexusCallbackSourceHeader stripped of Nexus-Callback-
+const callbackSourceHeader = "source"
 
 func routeRequest(
 	r *http.Request,
@@ -20,12 +23,12 @@ func routeRequest(
 	logger log.Logger,
 
 ) (*http.Response, error) {
-	// this source header is populated in nexusoperations/executors for worker targets
+	// this source header is populated in nexusoperations/executors (via the ClientProvider) for worker targets
 	// if this header is not populated then we assume it's and external target
-	if r.Header == nil || r.Header.Get(nexusoperations.NexusCallbackSourceHeader) == "" {
+	if r.Header == nil || r.Header.Get(callbackSourceHeader) == "" {
 		return defaultCilent.Do(r)
 	}
-	callbackSource := r.Header.Get(nexusoperations.NexusCallbackSourceHeader)
+	callbackSource := r.Header.Get(callbackSourceHeader)
 	for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
 		if callbackSource == clusterInfo.ClusterID {
 			return execRequest(
