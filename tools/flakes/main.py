@@ -98,9 +98,9 @@ def process_json_file(input_filename):
         # Load the file content as JSON
         data = json.load(file)
 
-    process_flaky(data, "flaky_7.txt")
-    process_tests(data, "(timeout)", "timeout_7.txt")
-    process_tests(data, "(retry 2)", "retry_7.txt")
+    process_flaky(data, "flaky.txt")
+    process_tests(data, "(timeout)", "timeout.txt")
+    process_tests(data, "(retry 2)", "retry.txt")
     process_crash(data, "(crash)", "crash.txt")
 
 

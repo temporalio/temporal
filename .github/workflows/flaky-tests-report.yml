@@ -59,7 +59,7 @@ jobs:
         id: process-flaky-tests
         run: |
           cd tools/flakes
-          uv run main.py --file ../out.json
+          uv run main.py --file ../../out.json
 
       - name: Upload generated reports
         uses: actions/upload-artifact@v4
@@ -68,6 +68,10 @@ jobs:
           name: flaky-tests-reports-${{ github.run_number }}
           path: |
             out.json
+            crash.txt
+            flaky.txt
+            retry.txt
+            timeout.txt
           retention-days: 30
 
       - name: Generate flaky tests summary
@@ -75,31 +79,73 @@ jobs:
         shell: bash
         id: flaky-summary
         run: |
-          # Create a summary of the flaky tests report from JSON
-          if [ -f "out.json" ]; then
-            # Count total failed tests
-            total_failures=$(jq '. | length' out.json)
-            
-            # Create Slack message
-            title="📊 Flaky Tests Report - Last 7 Days"
-            message="*Summary:*\n"
-            message+="• 🔴 Total Failed Tests: ${total_failures}\n\n"
-            message+="*Top Flaky Tests:*\n"
-            
-            # Add top 10 flaky tests to the message
-            if [ "$total_failures" -gt 0 ]; then
-              # Extract top 10 tests and format for Slack
-              top_tests=$(jq -r '.[0:10] | .[] | "• \(.name) - \(.failure_count) failures"' out.json)
-              message+="${top_tests}\n"
-            else
-              message+="No flaky tests found in the last 7 days! 🎉\n"
-            fi
-            
-            message+="\n📋 <https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }}|View Full Report>"
-          else
-            title="📊 Flaky Tests Report - Last 7 Days"
-            message="❌ Failed to generate report - no data file found"
+          # Create a comprehensive summary from the generated text files
+          title="📊 Flaky Tests Report - Last 7 Days"
+          message="*Test Failure Analysis:*\n\n"
+          
+          # Count failures by category
+          crash_count=0
+          flaky_count=0
+          retry_count=0
+          timeout_count=0
+          
+          if [ -f "crash.txt" ]; then
+            crash_count=$(grep -c "|\[" crash.txt || echo "0")
           fi
+          
+          if [ -f "flaky.txt" ]; then
+            flaky_count=$(grep -c "|\[" flaky.txt || echo "0")
+          fi
+          
+          if [ -f "retry.txt" ]; then
+            retry_count=$(grep -c "|\[" retry.txt || echo "0")
+          fi
+          
+          if [ -f "timeout.txt" ]; then
+            timeout_count=$(grep -c "|\[" timeout.txt || echo "0")
+          fi
+          
+          # Create summary section
+          message+="*📈 Failure Categories:*\n"
+          message+="• 💥 Crashes: ${crash_count}\n"
+          message+="• 🔄 Flaky Tests: ${flaky_count}\n"
+          message+="• 🔁 Retry Failures: ${retry_count}\n"
+          message+="• ⏰ Timeouts: ${timeout_count}\n\n"
+          
+          # Add detailed tables for each category with failures
+          if [ "$crash_count" -gt 0 ] && [ -f "crash.txt" ]; then
+            message+="*💥 Crashes:*\n"
+            message+="\`\`\`\n"
+            message+="$(cat crash.txt)\n"
+            message+="\`\`\`\n\n"
+          fi
+          
+          if [ "$timeout_count" -gt 0 ] && [ -f "timeout.txt" ]; then
+            message+="*⏰ Timeouts:*\n"
+            message+="\`\`\`\n"
+            message+="$(cat timeout.txt)\n"
+            message+="\`\`\`\n\n"
+          fi
+          
+          if [ "$flaky_count" -gt 0 ] && [ -f "flaky.txt" ]; then
+            message+="*🔄 Flaky Tests:*\n"
+            message+="\`\`\`\n"
+            message+="$(cat flaky.txt)\n"
+            message+="\`\`\`\n\n"
+          fi
+          
+          if [ "$retry_count" -gt 0 ] && [ -f "retry.txt" ]; then
+            message+="*🔁 Retry Failures:*\n"
+            message+="\`\`\`\n"
+            message+="$(cat retry.txt)\n"
+            message+="\`\`\`\n\n"
+          fi
+          
+          if [ "$crash_count" -eq 0 ] && [ "$flaky_count" -eq 0 ] && [ "$retry_count" -eq 0 ] && [ "$timeout_count" -eq 0 ]; then
+            message+="🎉 No test failures found in the last 7 days!\n"
+          fi
+          
+          message+="\n📋 <https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }}|View Detailed Report>"
           
           # Set environment variables for Slack
           {
@@ -115,17 +161,69 @@ jobs:
           echo "## 📊 Flaky Tests Report - $(date)" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           
-          if [ -f "out.json" ]; then
-            echo "### 🔴 Failed Tests Summary" >> "$GITHUB_STEP_SUMMARY"
+          # Count failures by category
+          crash_count=0
+          flaky_count=0
+          retry_count=0
+          timeout_count=0
+          
+          if [ -f "crash.txt" ]; then
+            crash_count=$(grep -c "|\[" crash.txt || echo "0")
+          fi
+          
+          if [ -f "flaky.txt" ]; then
+            flaky_count=$(grep -c "|\[" flaky.txt || echo "0")
+          fi
+          
+          if [ -f "retry.txt" ]; then
+            retry_count=$(grep -c "|\[" retry.txt || echo "0")
+          fi
+          
+          if [ -f "timeout.txt" ]; then
+            timeout_count=$(grep -c "|\[" timeout.txt || echo "0")
+          fi
+          
+          echo "### 📈 Failure Categories Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Category | Count |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 💥 Crashes | ${crash_count} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ⏰ Timeouts | ${timeout_count} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 🔄 Flaky Tests | ${flaky_count} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 🔁 Retry Failures | ${retry_count} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          
+          # Add detailed tables for each category
+          if [ "$crash_count" -gt 0 ] && [ -f "crash.txt" ]; then
+            echo "### 💥 Crashes" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Test Name | Failure Count | Artifact |" >> "$GITHUB_STEP_SUMMARY"
-            echo "|-----------|---------------|----------|" >> "$GITHUB_STEP_SUMMARY"
-            
-            # Convert JSON to markdown table
-            jq -r '.[] | "| \(.name) | \(.failure_count) | \(.artifact) |"' out.json >> "$GITHUB_STEP_SUMMARY"
+            cat crash.txt >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "❌ No report data available" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          
+          if [ "$timeout_count" -gt 0 ] && [ -f "timeout.txt" ]; then
+            echo "### ⏰ Timeouts" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            cat timeout.txt >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          
+          if [ "$flaky_count" -gt 0 ] && [ -f "flaky.txt" ]; then
+            echo "### 🔄 Flaky Tests" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            cat flaky.txt >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          
+          if [ "$retry_count" -gt 0 ] && [ -f "retry.txt" ]; then
+            echo "### 🔁 Retry Failures" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            cat retry.txt >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          
+          if [ "$crash_count" -eq 0 ] && [ "$flaky_count" -eq 0 ] && [ "$retry_count" -eq 0 ] && [ "$timeout_count" -eq 0 ]; then
+            echo "🎉 **No test failures found in the last 7 days!**" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Send Slack notification
