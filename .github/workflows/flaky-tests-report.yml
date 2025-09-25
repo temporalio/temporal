@@ -45,6 +45,7 @@ jobs:
           uv tool install git+https://github.com/dandavison/tringa --force
 
       - name: Run bash script to generate output file
+        id: generate-output-file
         run: |
           set -euo pipefail
           
@@ -55,69 +56,50 @@ jobs:
             --branch main --workflow-id 80591745 https://github.com/temporalio/temporal > out.json
 
       - name: Run Python script to process flaky tests
+        id: process-flaky-tests
         run: |
           cd tools/flakes
           uv run main.py --file ../out.json
 
       - name: Upload generated reports
         uses: actions/upload-artifact@v4
-        if: always()
+        if: steps.process-flaky-tests.outcome == 'success'
         with:
           name: flaky-tests-reports-${{ github.run_number }}
           path: |
-            tools/flakes/flaky.txt
-            tools/flakes/timeout.txt
-            tools/flakes/retry.txt
-            tools/flakes/crash.txt
+            out.json
           retention-days: 30
 
       - name: Generate flaky tests summary
-        if: always()
+        if: steps.process-flaky-tests.outcome == 'success'
         shell: bash
         id: flaky-summary
         run: |
-          # Create a summary of the flaky tests report
-          summary=""
-          flaky_count=0
-          timeout_count=0
-          retry_count=0
-          crash_count=0
-          
-          # Count entries in each report file
-          if [ -f "tools/flakes/flaky.txt" ]; then
-            flaky_count=$(tail -n +3 tools/flakes/flaky.txt | grep -c "|" || echo "0")
-          fi
-          
-          if [ -f "tools/flakes/timeout.txt" ]; then
-            timeout_count=$(tail -n +3 tools/flakes/timeout.txt | grep -c "|" || echo "0")
-          fi
-          
-          if [ -f "tools/flakes/retry.txt" ]; then
-            retry_count=$(tail -n +3 tools/flakes/retry.txt | grep -c "|" || echo "0")
-          fi
-          
-          if [ -f "tools/flakes/crash.txt" ]; then
-            crash_count=$(tail -n +3 tools/flakes/crash.txt | grep -c "|" || echo "0")
-          fi
-          
-          # Create Slack message
-          title="📊 Flaky Tests Report - Last 7 Days"
-          message="*Summary:*\n"
-          message+="• 🔴 Flaky Tests: ${flaky_count}\n"
-          message+="• ⏱️ Timeout Tests: ${timeout_count}\n"
-          message+="• 🔄 Retry Tests: ${retry_count}\n"
-          message+="• 💥 Crash Tests: ${crash_count}\n\n"
-          message+="*Top Flaky Tests:*\n"
-          
-          # Add top 10 flaky tests to the message
-          if [ -f "tools/flakes/flaky.txt" ] && [ "$flaky_count" -gt 0 ]; then
-            top_tests=$(tail -n +3 tools/flakes/flaky.txt | head -10 | sed 's/|/•/g' | sed 's/^•//' | sed 's/•$//')
-            message+="${top_tests}\n"
+          # Create a summary of the flaky tests report from JSON
+          if [ -f "out.json" ]; then
+            # Count total failed tests
+            total_failures=$(jq '. | length' out.json)
+            
+            # Create Slack message
+            title="📊 Flaky Tests Report - Last 7 Days"
+            message="*Summary:*\n"
+            message+="• 🔴 Total Failed Tests: ${total_failures}\n\n"
+            message+="*Top Flaky Tests:*\n"
+            
+            # Add top 10 flaky tests to the message
+            if [ "$total_failures" -gt 0 ]; then
+              # Extract top 10 tests and format for Slack
+              top_tests=$(jq -r '.[0:10] | .[] | "• \(.name) - \(.failure_count) failures"' out.json)
+              message+="${top_tests}\n"
+            else
+              message+="No flaky tests found in the last 7 days! 🎉\n"
+            fi
+            
+            message+="\n📋 <https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }}|View Full Report>"
           else
-            message+="No flaky tests found in the last 7 days! 🎉\n"
+            title="📊 Flaky Tests Report - Last 7 Days"
+            message="❌ Failed to generate report - no data file found"
           fi
-          
-          message+="\n📋 <https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }}|View Full Report>"
           
           # Set environment variables for Slack
           {
@@ -128,37 +110,26 @@ jobs:
           }
 
       - name: Create GitHub Actions summary
-        if: always()
+        if: steps.process-flaky-tests.outcome == 'success'
         run: |
           echo "## 📊 Flaky Tests Report - $(date)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [ -f "tools/flakes/flaky.txt" ]; then
-            echo "### 🔴 Top Flaky Tests" >> $GITHUB_STEP_SUMMARY
-            cat tools/flakes/flaky.txt >> $GITHUB_STEP_SUMMARY
+          if [ -f "out.json" ]; then
+            echo "### 🔴 Failed Tests Summary" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ -f "tools/flakes/timeout.txt" ]; then
-            echo "### ⏱️ Timeout Tests" >> $GITHUB_STEP_SUMMARY
-            cat tools/flakes/timeout.txt >> $GITHUB_STEP_SUMMARY
+            echo "| Test Name | Failure Count | Artifact |" >> $GITHUB_STEP_SUMMARY
+            echo "|-----------|---------------|----------|" >> $GITHUB_STEP_SUMMARY
+            
+            # Convert JSON to markdown table
+            jq -r '.[] | "| \(.name) | \(.failure_count) | \(.artifact) |"' out.json >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ -f "tools/flakes/retry.txt" ]; then
-            echo "### 🔄 Retry Tests" >> $GITHUB_STEP_SUMMARY
-            cat tools/flakes/retry.txt >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ -f "tools/flakes/crash.txt" ]; then
-            echo "### 💥 Crash Tests" >> $GITHUB_STEP_SUMMARY
-            cat tools/flakes/crash.txt >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ No report data available" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Send Slack notification
-        if: always() && steps.flaky-summary.outcome == 'success'
+        if: steps.process-flaky-tests.outcome == 'success' && steps.flaky-summary.outcome == 'success'
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_USERNAME: "Flaky Tests Bot"
