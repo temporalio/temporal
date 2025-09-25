@@ -9,7 +9,7 @@ on:
       output_file:
         description: 'Output file from bash script'
         required: false
-        default: 'out7.json'
+        default: 'out.json'
 
 permissions:
   contents: read
@@ -48,16 +48,16 @@ jobs:
         run: |
           set -euo pipefail
           
-          rm -rf out7.json timeout_7.txt retry_7.txt flaky_7.txt
+          rm -rf out.json timeout.txt retry.txt flaky.txt
           
           tringa --json --since-days 7 repo sql \
             'select classname, name, count(*) as failure_count, max(artifact) as artifact from test where passed = false and skipped = false group by classname, name order by failure_count desc' \
-            --branch main --workflow-id 80591745 https://github.com/temporalio/temporal > out7.json
+            --branch main --workflow-id 80591745 https://github.com/temporalio/temporal > out.json
 
       - name: Run Python script to process flaky tests
         run: |
           cd tools/flakes
-          uv run main.py --file ../out7.json
+          uv run main.py --file ../out.json
 
       - name: Upload generated reports
         uses: actions/upload-artifact@v4
@@ -65,9 +65,9 @@ jobs:
         with:
           name: flaky-tests-reports-${{ github.run_number }}
           path: |
-            tools/flakes/flaky_7.txt
-            tools/flakes/timeout_7.txt
-            tools/flakes/retry_7.txt
+            tools/flakes/flaky.txt
+            tools/flakes/timeout.txt
+            tools/flakes/retry.txt
             tools/flakes/crash.txt
           retention-days: 30
 
@@ -84,16 +84,16 @@ jobs:
           crash_count=0
           
           # Count entries in each report file
-          if [ -f "tools/flakes/flaky_7.txt" ]; then
-            flaky_count=$(tail -n +3 tools/flakes/flaky_7.txt | grep -c "|" || echo "0")
+          if [ -f "tools/flakes/flaky.txt" ]; then
+            flaky_count=$(tail -n +3 tools/flakes/flaky.txt | grep -c "|" || echo "0")
           fi
           
-          if [ -f "tools/flakes/timeout_7.txt" ]; then
-            timeout_count=$(tail -n +3 tools/flakes/timeout_7.txt | grep -c "|" || echo "0")
+          if [ -f "tools/flakes/timeout.txt" ]; then
+            timeout_count=$(tail -n +3 tools/flakes/timeout.txt | grep -c "|" || echo "0")
           fi
           
-          if [ -f "tools/flakes/retry_7.txt" ]; then
-            retry_count=$(tail -n +3 tools/flakes/retry_7.txt | grep -c "|" || echo "0")
+          if [ -f "tools/flakes/retry.txt" ]; then
+            retry_count=$(tail -n +3 tools/flakes/retry.txt | grep -c "|" || echo "0")
           fi
           
           if [ -f "tools/flakes/crash.txt" ]; then
@@ -110,8 +110,8 @@ jobs:
           message+="*Top Flaky Tests:*\n"
           
           # Add top 10 flaky tests to the message
-          if [ -f "tools/flakes/flaky_7.txt" ] && [ "$flaky_count" -gt 0 ]; then
-            top_tests=$(tail -n +3 tools/flakes/flaky_7.txt | head -10 | sed 's/|/•/g' | sed 's/^•//' | sed 's/•$//')
+          if [ -f "tools/flakes/flaky.txt" ] && [ "$flaky_count" -gt 0 ]; then
+            top_tests=$(tail -n +3 tools/flakes/flaky.txt | head -10 | sed 's/|/•/g' | sed 's/^•//' | sed 's/•$//')
             message+="${top_tests}\n"
           else
             message+="No flaky tests found in the last 7 days! 🎉\n"
@@ -133,21 +133,21 @@ jobs:
           echo "## 📊 Flaky Tests Report - $(date)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [ -f "tools/flakes/flaky_7.txt" ]; then
+          if [ -f "tools/flakes/flaky.txt" ]; then
             echo "### 🔴 Top Flaky Tests" >> $GITHUB_STEP_SUMMARY
-            cat tools/flakes/flaky_7.txt >> $GITHUB_STEP_SUMMARY
+            cat tools/flakes/flaky.txt >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
           
-          if [ -f "tools/flakes/timeout_7.txt" ]; then
+          if [ -f "tools/flakes/timeout.txt" ]; then
             echo "### ⏱️ Timeout Tests" >> $GITHUB_STEP_SUMMARY
-            cat tools/flakes/timeout_7.txt >> $GITHUB_STEP_SUMMARY
+            cat tools/flakes/timeout.txt >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
           
-          if [ -f "tools/flakes/retry_7.txt" ]; then
+          if [ -f "tools/flakes/retry.txt" ]; then
             echo "### 🔄 Retry Tests" >> $GITHUB_STEP_SUMMARY
-            cat tools/flakes/retry_7.txt >> $GITHUB_STEP_SUMMARY
+            cat tools/flakes/retry.txt >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
           
