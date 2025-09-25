@@ -67,10 +67,14 @@ type AddressMatchRules struct {
 	Rules []AddressMatchRule
 }
 
-func (a AddressMatchRules) Validate(u *url.URL) error {
+func (a AddressMatchRules) Validate(rawURL string) error {
 	// Exact match only; no path, query, or fragment allowed for system URL
-	if u.String() == nexus.SystemCallbackURL {
+	if rawURL == nexus.SystemCallbackURL {
 		return nil
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return err
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)

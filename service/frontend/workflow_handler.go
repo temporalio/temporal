@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -5241,11 +5240,7 @@ func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string)
 		return status.Errorf(codes.InvalidArgument, "invalid url: url length longer than max length allowed of %d", wh.config.CallbackURLMaxLength(ns.String()))
 	}
 	rules := wh.config.CallbackEndpointConfigs(ns.String())
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return err
-	}
-	return rules.Validate(u)
+	return rules.Validate(rawURL)
 }
 
 type buildIdAndFlag interface {

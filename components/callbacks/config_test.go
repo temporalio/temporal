@@ -1,7 +1,6 @@
 package callbacks
 
 import (
-	"net/url"
 	"regexp"
 	"testing"
 
@@ -290,13 +289,8 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			u, err := url.Parse(tt.args.rawURL)
-			if err != nil {
-				t.Fatalf("failed to parse url: %v", err)
-			}
 			rules := AddressMatchRules{Rules: tt.args.rules}
-			err = rules.Validate(u)
-			tt.validateErr(t, err)
+			tt.validateErr(t, rules.Validate(tt.args.rawURL))
 		})
 	}
 }
