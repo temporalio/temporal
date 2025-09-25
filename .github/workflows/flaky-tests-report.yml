@@ -248,7 +248,7 @@ jobs:
           # Read the step summary content and convert to Slack format
           if [ -f "$GITHUB_STEP_SUMMARY" ]; then
             # Convert markdown to Slack format
-            message=$(sed 's/^## /*/g; s/^### /*/g; s/^\- /• /g; s/\*\*\([^*]*\)\*\*/\*\1\*/g; s/`\([^`]*\)`/`\1`/g; s/\[\([^]]*\)\](\([^)]*\))/<\2|\1>/g; s/^| /• /g; /^|--/d; s/|/ • /g' "$GITHUB_STEP_SUMMARY")
+            message=$(sed "s/^## /*/g; s/^### /*/g; s/^\- /• /g; s/\*\*\([^*]*\)\*\*/\*\1\*/g; s/\`\([^\`]*\)\`/\`\1\`/g; s/\[\([^]]*\)\](\([^)]*\))/<\2|\1>/g; s/^| /• /g; /^|--/d; s/|/ • /g" "$GITHUB_STEP_SUMMARY")
           else
             message="Flaky tests report generated successfully."
           fi
@@ -317,7 +317,7 @@ jobs:
           # Read the step summary content and convert to Slack format
           if [ -f "$GITHUB_STEP_SUMMARY" ]; then
             # Convert markdown to Slack format
-            message=$(sed 's/^## /*/g; s/^### /*/g; s/^\- /• /g; s/\*\*\([^*]*\)\*\*/\*\1\*/g; s/`\([^`]*\)`/`\1`/g; s/\[\([^]]*\)\](\([^)]*\))/<\2|\1>/g' "$GITHUB_STEP_SUMMARY")
+            message=$(sed "s/^## /*/g; s/^### /*/g; s/^\- /• /g; s/\*\*\([^*]*\)\*\*/\*\1\*/g; s/\`\([^\`]*\)\`/\`\1\`/g; s/\[\([^]]*\)\](\([^)]*\))/<\2|\1>/g" "$GITHUB_STEP_SUMMARY")
           else
             message="The flaky tests report workflow failed to generate the report."
           fi
