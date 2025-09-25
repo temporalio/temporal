@@ -454,7 +454,6 @@ func resolveSearchAttributeAlias(
 				return searchattribute.WorkflowID, saType, nil
 			}
 		}
-	
 
 		return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, query.NewConverterError("%s: column name '%s' is not a valid search attribute", query.InvalidExpressionErrMessage, name)
 	}
