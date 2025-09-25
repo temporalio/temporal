@@ -259,13 +259,6 @@ jobs:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
           TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
 
-      - name: Generate crash report
-        if: failure()
-        run:
-          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
-            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
-
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
         if: failure()
