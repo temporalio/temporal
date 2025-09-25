@@ -4,6 +4,10 @@ on:
   schedule:
     # Run nightly at 2 AM UTC
     - cron: '0 2 * * *'
+  pull_request:
+    # TODO: Remove this pull_request trigger before merging to main
+    # This is only for testing the workflow during development
+    branches: [ main ]
   workflow_dispatch:
     inputs:
       output_file:
@@ -53,7 +57,7 @@ jobs:
           
           tringa --json --since-days 7 repo sql \
             'select classname, name, count(*) as failure_count, max(artifact) as artifact from test where passed = false and skipped = false group by classname, name order by failure_count desc' \
-            --branch main --workflow-id 80591745 https://github.com/temporalio/temporal > out.json
+            --branch spk/flaky-tests-report --workflow-id 80591745 https://github.com/temporalio/temporal > out.json
 
       - name: Run Python script to process flaky tests
         id: process-flaky-tests
