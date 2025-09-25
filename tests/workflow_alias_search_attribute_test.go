@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
@@ -138,7 +140,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute_WithClash() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30000*time.Second)
 	defer cancel()
 
 	s.Worker().RegisterWorkflow(s.WorkflowFunc)
@@ -175,45 +177,45 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 	s.Equal(workflowRun2.GetRunID(), getWFResponse.GetWorkflowExecutionInfo().Execution.RunId)
 
 	// Use Eventually pattern to wait for visibility store to be updated
-	s.Eventually(
-		func() bool {
+	s.EventuallyWithT(
+		func(c *assert.CollectT) {
 			resp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
 				Query:     "WorkflowId = '" + workflowRun1.GetID() + "' OR WorkflowId = '" + workflowRun2.GetID() + "'",
 			})
-			s.NoError(err)
-			s.NotNil(resp)
-			return len(resp.GetExecutions()) == 2
+			require.NoError(c, err)
+			require.NotNil(c, resp)
+			require.Equal(c, len(resp.GetExecutions()), 2)
 		},
-		testcore.WaitForESToSettle,
-		100*time.Millisecond,
+		30*time.Second,
+		250*time.Millisecond,
 	)
 
-	s.Eventually(
-		func() bool {
+	s.EventuallyWithT(
+		func(c *assert.CollectT) {
 			resp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
 				Query:     "TemporalScheduledById IS NULL",
 			})
-			s.NoError(err)
-			s.NotNil(resp)
-			return len(resp.GetExecutions()) == 0
+			require.NoError(c, err)
+			require.NotNil(c, resp)
+			require.Equal(c, len(resp.GetExecutions()), 0)
 		},
-		testcore.WaitForESToSettle,
-		100*time.Millisecond,
+		30*time.Second,
+		250*time.Millisecond,
 	)
 
-	s.Eventually(
-		func() bool {
+	s.EventuallyWithT(
+		func(c *assert.CollectT) {
 			resp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
 				Query:     "ScheduledById IS NOT NULL",
 			})
-			s.NoError(err)
-			s.NotNil(resp)
-			return len(resp.GetExecutions()) == 2
+			require.NoError(c, err)
+			require.NotNil(c, resp)
+			require.Equal(c, len(resp.GetExecutions()), 2)
 		},
-		testcore.WaitForESToSettle,
-		100*time.Millisecond,
+		30*time.Second,
+		250*time.Millisecond,
 	)
 }

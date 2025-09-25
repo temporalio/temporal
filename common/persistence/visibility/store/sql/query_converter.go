@@ -436,32 +436,51 @@ func resolveSearchAttributeAlias(
 	mapper searchattribute.Mapper,
 	saTypeMap searchattribute.NameTypeMap,
 ) (string, enumspb.IndexedValueType, error) {
-	// 1. Use the mapper for customer search attributes
-	if searchattribute.IsMappable(name) {
-		if mapper == nil {
-			return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, query.NewConverterError("%s: column name '%s' is not a valid search attribute", query.InvalidExpressionErrMessage, name)
+	// 1. Skip mapping to custom search attribute if the name has "Temporal" prefix
+	if strings.HasPrefix(name, "Temporal") {
+		// Check if it's a system/predefined search attribute with Temporal prefix
+		if saType, err := saTypeMap.GetType(name); err == nil {
+			return name, saType, nil
 		}
-		fieldName, err := mapper.GetFieldName(name, ns.String())
-		if err == nil {
-			fieldType, err := saTypeMap.GetType(fieldName)
+
+		removedTemporalPrefix := strings.TrimPrefix(name, "Temporal")
+		if saType, err := saTypeMap.GetType(removedTemporalPrefix); err == nil {
+			return removedTemporalPrefix, saType, nil
+		}
+
+		if removedTemporalPrefix == searchattribute.ScheduleID {
+			saType, err := saTypeMap.GetType(searchattribute.WorkflowID)
 			if err == nil {
-				return fieldName, fieldType, nil
+				return searchattribute.WorkflowID, saType, nil
+			}
+		}
+	
+
+		return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, query.NewConverterError("%s: column name '%s' is not a valid search attribute", query.InvalidExpressionErrMessage, name)
+	}
+
+	// 2. If the search attribute exists in the visibility mapper, pass it through
+	if searchattribute.IsMappable(name) {
+		if mapper != nil {
+			fieldName, err := mapper.GetFieldName(name, ns.String())
+			if err == nil {
+				fieldType, err := saTypeMap.GetType(fieldName)
+				if err == nil {
+					return fieldName, fieldType, nil
+				}
 			}
 		}
 	}
 
-	// 2. Check if the name is a system/predefined search attribute
+	// 3. If it exists as a system or pre-defined attribute, map it
 	if saType, err := saTypeMap.GetType(name); err == nil {
 		return name, saType, nil
 	}
-
-	// 3. Check if the name is a system/predefined search attribute with Temporal prefix
-	temporalName := fmt.Sprintf("Temporal%s", name)
-	if saType, err := saTypeMap.GetType(temporalName); err == nil {
-		return temporalName, saType, nil
+	if saType, err := saTypeMap.GetType(fmt.Sprintf("Temporal%s", name)); err == nil {
+		return fmt.Sprintf("Temporal%s", name), saType, nil
 	}
 
-	// 4. Handle special cases
+	// 4. Handle special cases (maintain ScheduleID -> WorkflowID mapping)
 	if name == searchattribute.ScheduleID {
 		saType, err := saTypeMap.GetType(searchattribute.WorkflowID)
 		if err == nil {
@@ -469,7 +488,8 @@ func resolveSearchAttributeAlias(
 		}
 	}
 
-	// 5. Not found, return error
+	// 5. In the future we will need to lookup in the CHASM archetype search attribute mapping.
+	// For now, return error if not found
 	return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, query.NewConverterError("%s: column name '%s' is not a valid search attribute", query.InvalidExpressionErrMessage, name)
 }
 
