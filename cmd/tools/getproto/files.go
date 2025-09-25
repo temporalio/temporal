@@ -51,12 +51,14 @@ func init() {
 	importMap["temporal/api/command/v1/message.proto"] = command.File_temporal_api_command_v1_message_proto
 	importMap["temporal/api/common/v1/message.proto"] = common.File_temporal_api_common_v1_message_proto
 	importMap["temporal/api/deployment/v1/message.proto"] = deployment.File_temporal_api_deployment_v1_message_proto
+	importMap["temporal/api/enums/v1/activity.proto"] = enums.File_temporal_api_enums_v1_activity_proto
 	importMap["temporal/api/enums/v1/batch_operation.proto"] = enums.File_temporal_api_enums_v1_batch_operation_proto
 	importMap["temporal/api/enums/v1/command_type.proto"] = enums.File_temporal_api_enums_v1_command_type_proto
 	importMap["temporal/api/enums/v1/common.proto"] = enums.File_temporal_api_enums_v1_common_proto
 	importMap["temporal/api/enums/v1/deployment.proto"] = enums.File_temporal_api_enums_v1_deployment_proto
 	importMap["temporal/api/enums/v1/event_type.proto"] = enums.File_temporal_api_enums_v1_event_type_proto
 	importMap["temporal/api/enums/v1/failed_cause.proto"] = enums.File_temporal_api_enums_v1_failed_cause_proto
+	importMap["temporal/api/enums/v1/id.proto"] = enums.File_temporal_api_enums_v1_id_proto
 	importMap["temporal/api/enums/v1/namespace.proto"] = enums.File_temporal_api_enums_v1_namespace_proto
 	importMap["temporal/api/enums/v1/nexus.proto"] = enums.File_temporal_api_enums_v1_nexus_proto
 	importMap["temporal/api/enums/v1/query.proto"] = enums.File_temporal_api_enums_v1_query_proto
