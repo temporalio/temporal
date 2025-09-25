@@ -54,7 +54,7 @@ jobs:
 
       - name: Install tringa
         run: |
-          uv tool install git+https://github.com/dandavison/tringa --force
+          uv tool install git+https://github.com/spkane31/tringa@spk/skip-xml-parsing-errors --force
 
       - name: Run bash script to generate output file
         id: generate-output-file
@@ -65,9 +65,9 @@ jobs:
           
           rm -rf out.json timeout.txt retry.txt flaky.txt
           
-          tringa --json --since-days 7 repo sql \
+          tringa --json --since-days 1 repo sql \
             'select classname, name, count(*) as failure_count, max(artifact) as artifact from test where passed = false and skipped = false group by classname, name order by failure_count desc' \
-            --branch spk/flaky-tests-report --workflow-id 80591745 https://github.com/temporalio/temporal > out.json
+            --branch main --workflow-id 80591745 https://github.com/temporalio/temporal > out.json
 
       - name: Run Python script to process flaky tests
         id: process-flaky-tests
