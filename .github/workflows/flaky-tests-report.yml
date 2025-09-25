@@ -150,16 +150,18 @@ jobs:
           # Set environment variables for Slack
           {
             echo "SLACK_TITLE=${title}"
-            echo "SLACK_MESSAGE<<EOF" >> "$GITHUB_ENV"
-            echo "${message}" >> "$GITHUB_ENV"
-            echo "EOF" >> "$GITHUB_ENV"
-          }
+            echo "SLACK_MESSAGE<<EOF"
+            echo "${message}"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
 
       - name: Create GitHub Actions summary
         if: steps.process-flaky-tests.outcome == 'success'
         run: |
-          echo "## 📊 Flaky Tests Report - $(date)" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## 📊 Flaky Tests Report - $(date)"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
           
           # Count failures by category
           crash_count=0
@@ -183,43 +185,53 @@ jobs:
             timeout_count=$(grep -c "|\[" timeout.txt || echo "0")
           fi
           
-          echo "### 📈 Failure Categories Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Category | Count |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 💥 Crashes | ${crash_count} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| ⏰ Timeouts | ${timeout_count} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 🔄 Flaky Tests | ${flaky_count} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 🔁 Retry Failures | ${retry_count} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### 📈 Failure Categories Summary"
+            echo ""
+            echo "| Category | Count |"
+            echo "|----------|-------|"
+            echo "| 💥 Crashes | ${crash_count} |"
+            echo "| ⏰ Timeouts | ${timeout_count} |"
+            echo "| 🔄 Flaky Tests | ${flaky_count} |"
+            echo "| 🔁 Retry Failures | ${retry_count} |"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
           
           # Add detailed tables for each category
           if [ "$crash_count" -gt 0 ] && [ -f "crash.txt" ]; then
-            echo "### 💥 Crashes" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            cat crash.txt >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "### 💥 Crashes"
+              echo ""
+              cat crash.txt
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
           
           if [ "$timeout_count" -gt 0 ] && [ -f "timeout.txt" ]; then
-            echo "### ⏰ Timeouts" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            cat timeout.txt >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "### ⏰ Timeouts"
+              echo ""
+              cat timeout.txt
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
           
           if [ "$flaky_count" -gt 0 ] && [ -f "flaky.txt" ]; then
-            echo "### 🔄 Flaky Tests" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            cat flaky.txt >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "### 🔄 Flaky Tests"
+              echo ""
+              cat flaky.txt
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
           
           if [ "$retry_count" -gt 0 ] && [ -f "retry.txt" ]; then
-            echo "### 🔁 Retry Failures" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            cat retry.txt >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "### 🔁 Retry Failures"
+              echo ""
+              cat retry.txt
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
           
           if [ "$crash_count" -eq 0 ] && [ "$flaky_count" -eq 0 ] && [ "$retry_count" -eq 0 ] && [ "$timeout_count" -eq 0 ]; then
@@ -236,26 +248,17 @@ jobs:
           # Read the step summary content and convert to Slack format
           if [ -f "$GITHUB_STEP_SUMMARY" ]; then
             # Convert markdown to Slack format
-            message=$(cat "$GITHUB_STEP_SUMMARY" | \
-              sed 's/^## /*/g' | \
-              sed 's/^### /*/g' | \
-              sed 's/^\- /• /g' | \
-              sed 's/\*\*\([^*]*\)\*\*/\*\1\*/g' | \
-              sed 's/`\([^`]*\)`/`\1`/g' | \
-              sed 's/\[\([^]]*\)\](\([^)]*\))/<\2|\1>/g' | \
-              sed 's/^| /• /g' | \
-              sed '/^|--/d' | \
-              sed 's/|/ • /g')
+            message=$(sed 's/^## /*/g; s/^### /*/g; s/^\- /• /g; s/\*\*\([^*]*\)\*\*/\*\1\*/g; s/`\([^`]*\)`/`\1`/g; s/\[\([^]]*\)\](\([^)]*\))/<\2|\1>/g; s/^| /• /g; /^|--/d; s/|/ • /g' "$GITHUB_STEP_SUMMARY")
           else
             message="Flaky tests report generated successfully."
           fi
 
           {
             echo "SLACK_TITLE=${title}"
-            echo "SLACK_MESSAGE<<EOF" >> "$GITHUB_ENV"
-            echo "${message}" >> "$GITHUB_ENV"
-            echo "EOF" >> "$GITHUB_ENV"
-          }
+            echo "SLACK_MESSAGE<<EOF"
+            echo "${message}"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
 
       - name: Send Slack notification
         if: steps.process-flaky-tests.outcome == 'success' && steps.flaky-summary.outcome == 'success'
@@ -272,28 +275,34 @@ jobs:
       - name: Create GitHub Actions failure summary
         if: steps.process-flaky-tests.outcome == 'failure' || steps.flaky-summary.outcome == 'failure'
         run: |
-          echo "## ❌ Flaky Tests Report Generation Failed" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "The flaky tests report workflow failed to generate the report." >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Workflow Details" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Run ID**: [${{ github.run_id }}](https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }})" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Branch**: \`${{ github.ref_name }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Commit**: [${{ github.sha }}](https://github.com/temporalio/temporal/commit/${{ github.sha }})" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## ❌ Flaky Tests Report Generation Failed"
+            echo ""
+            echo "The flaky tests report workflow failed to generate the report."
+            echo ""
+            echo "### Workflow Details"
+            echo ""
+            echo "- **Run ID**: [${{ github.run_id }}](https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }})"
+            echo "- **Branch**: \`${{ github.ref_name }}\`"
+            echo "- **Commit**: [${{ github.sha }}](https://github.com/temporalio/temporal/commit/${{ github.sha }})"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
           
           # Add specific failure information
           if [[ "${{ steps.process-flaky-tests.outcome }}" == "failure" ]]; then
-            echo "### Failure Point" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "Python script processing failed" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "### Failure Point"
+              echo ""
+              echo "Python script processing failed"
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
           elif [[ "${{ steps.flaky-summary.outcome }}" == "failure" ]]; then
-            echo "### Failure Point" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "Summary generation failed" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "### Failure Point"
+              echo ""
+              echo "Summary generation failed"
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
           
           echo "Please check the workflow logs for more details." >> "$GITHUB_STEP_SUMMARY"
@@ -308,23 +317,17 @@ jobs:
           # Read the step summary content and convert to Slack format
           if [ -f "$GITHUB_STEP_SUMMARY" ]; then
             # Convert markdown to Slack format
-            message=$(cat "$GITHUB_STEP_SUMMARY" | \
-              sed 's/^## /*/g' | \
-              sed 's/^### /*/g' | \
-              sed 's/^\- /• /g' | \
-              sed 's/\*\*\([^*]*\)\*\*/\*\1\*/g' | \
-              sed 's/`\([^`]*\)`/`\1`/g' | \
-              sed 's/\[\([^]]*\)\](\([^)]*\))/<\2|\1>/g')
+            message=$(sed 's/^## /*/g; s/^### /*/g; s/^\- /• /g; s/\*\*\([^*]*\)\*\*/\*\1\*/g; s/`\([^`]*\)`/`\1`/g; s/\[\([^]]*\)\](\([^)]*\))/<\2|\1>/g' "$GITHUB_STEP_SUMMARY")
           else
             message="The flaky tests report workflow failed to generate the report."
           fi
 
           {
             echo "SLACK_TITLE=${title}"
-            echo "SLACK_MESSAGE<<EOF" >> "$GITHUB_ENV"
-            echo "${message}" >> "$GITHUB_ENV"
-            echo "EOF" >> "$GITHUB_ENV"
-          }
+            echo "SLACK_MESSAGE<<EOF"
+            echo "${message}"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
 
       - name: Send Slack workflow failure notification
         if: steps.process-flaky-tests.outcome == 'failure' || steps.flaky-summary.outcome == 'failure'
