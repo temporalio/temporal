@@ -633,8 +633,6 @@ func enqueueReplicationTasksLocal(ctx workflow.Context, workflowExecutionsCh wor
 
 		pendingGenerateTasks++
 		selector.AddFuture(generateTaskFuture, func(f workflow.Future) {
-			pendingGenerateTasks--
-
 			if err := f.Get(ctx, nil); err != nil {
 				lastActivityErr = err
 			}
@@ -642,6 +640,7 @@ func enqueueReplicationTasksLocal(ctx workflow.Context, workflowExecutionsCh wor
 			if params.EnableVerification {
 				verifyTask()
 			}
+			pendingGenerateTasks--
 		})
 
 		for pendingGenerateTasks >= params.ConcurrentActivityCount || pendingVerifyTasks >= params.ConcurrentActivityCount {
