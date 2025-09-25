@@ -130,7 +130,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 	s.Equal([]byte(nil), status.PageTokenForRestart)
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow_ContinueAsNew() {
+func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
 	totalPageCount := 4
 	currentPageCount := 0
 	testMaxPageCountPerExecution := 2
@@ -286,7 +286,7 @@ func (s *ForceReplicationWorkflowTestSuite) testRunForceReplicationForContinueAs
 	return continueAsNewParams, status
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow_InvalidInput() {
+func (s *ForceReplicationWorkflowTestSuite) TestInvalidInput() {
 	testSuite := &testsuite.WorkflowTestSuite{}
 
 	for _, invalidInput := range []ForceReplicationParams{
@@ -311,7 +311,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow_Invalid
 	}
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow_ListWorkflowsError() {
+func (s *ForceReplicationWorkflowTestSuite) TestListWorkflowsError() {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
@@ -342,7 +342,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow_ListWor
 	env.AssertExpectations(s.T())
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow_GenerateReplicationTaskRetryableError() {
+func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskRetryableError() {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
@@ -390,7 +390,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow_Generat
 	env.AssertExpectations(s.T())
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow_GenerateReplicationTaskNonRetryableError() {
+func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskNonRetryableError() {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
@@ -445,7 +445,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow_Generat
 	env.AssertExpectations(s.T())
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow_VerifyReplicationTaskNonRetryableError() {
+func (s *ForceReplicationWorkflowTestSuite) TestVerifyReplicationTaskNonRetryableError() {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
@@ -501,7 +501,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow_VerifyR
 	env.AssertExpectations(s.T())
 }
 
-func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow_TaskQueueReplicationFailure() {
+func (s *ForceReplicationWorkflowTestSuite) TestTaskQueueReplicationFailure() {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
@@ -542,6 +542,82 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow_TaskQue
 	s.True(status.TaskQueueUserDataReplicationStatus.Done)
 	s.Contains(status.TaskQueueUserDataReplicationStatus.FailureMessage, "namespace is required")
 	s.Equal([]byte(nil), status.PageTokenForRestart)
+}
+
+func (s *ForceReplicationWorkflowTestSuite) TestVerifyPerIterationExecutions() {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
+
+	var a *activities
+	namespaceID := uuid.New()
+	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 3}, nil)
+	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 1, NamespaceID: namespaceID}, nil)
+
+	pages := [][]*commonpb.WorkflowExecution{
+		{{WorkflowId: "wf-1a"}},
+		{{WorkflowId: "wf-2a"}, {WorkflowId: "wf-2b"}},
+		{{WorkflowId: "wf-3a"}},
+	}
+
+	totalPageCount := len(pages)
+	currentPage := 0
+	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+		resp := &listWorkflowsResponse{Executions: pages[currentPage]}
+		if currentPage < totalPageCount-1 {
+			resp.NextPageToken = []byte("more")
+		}
+		currentPage++
+		return resp, nil
+	}).Times(totalPageCount)
+
+	capturedGenerate := make([][]string, 0, totalPageCount)
+	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(func(ctx context.Context, req *generateReplicationTasksRequest) error {
+		ids := make([]string, len(req.Executions))
+		for i, we := range req.Executions {
+			ids[i] = we.GetWorkflowId()
+		}
+		capturedGenerate = append(capturedGenerate, ids)
+		// Add a small delay so Verify is scheduled in later iterations when concurrency > 1
+		time.Sleep(1 * time.Second)
+		return nil
+	}).Times(totalPageCount)
+
+	capturedVerify := make([][]string, 0, totalPageCount)
+	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(func(ctx context.Context, req *verifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
+		ids := make([]string, len(req.Executions))
+		for i, we := range req.Executions {
+			ids[i] = we.GetWorkflowId()
+		}
+		capturedVerify = append(capturedVerify, ids)
+		return verifyReplicationTasksResponse{VerifiedWorkflowCount: int64(len(req.Executions))}, nil
+	}).Times(totalPageCount)
+
+	// Seed task queue replication activity may or may not run in this execution; allow either.
+	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	env.ExecuteWorkflow(s.forceReplicationWorkflowFn, ForceReplicationParams{
+		Namespace:               "test-ns",
+		Query:                   "",
+		ConcurrentActivityCount: 2,
+		OverallRps:              10,
+		ListWorkflowsPageSize:   1,
+		PageCountPerExecution:   totalPageCount,
+		EnableVerification:      true,
+		TargetClusterName:       "target",
+	})
+
+	s.True(env.IsWorkflowCompleted())
+	s.NoError(env.GetWorkflowError())
+	env.AssertExpectations(s.T())
+
+	expected := [][]string{
+		{"wf-1a"},
+		{"wf-2a", "wf-2b"},
+		{"wf-3a"},
+	}
+	s.Equal(expected, capturedGenerate)
+	s.ElementsMatch(expected, capturedVerify)
 }
 
 func TestSeedReplicationQueueWithUserDataEntries_Heartbeats(t *testing.T) {

@@ -583,6 +583,7 @@ func enqueueReplicationTasksLocal(ctx workflow.Context, workflowExecutionsCh wor
 	}
 
 	for workflowExecutionsCh.Receive(ctx, &workflowExecutions) {
+		executions := workflowExecutions
 
 		verifyTask := func() {
 			verifyTaskFuture := workflow.ExecuteLocalActivity(
@@ -593,7 +594,7 @@ func enqueueReplicationTasksLocal(ctx workflow.Context, workflowExecutionsCh wor
 					TargetClusterName:     params.TargetClusterName,
 					Namespace:             params.Namespace,
 					NamespaceID:           namespaceID,
-					Executions:            workflowExecutions,
+					Executions:            executions,
 					VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
 				})
 
@@ -625,7 +626,7 @@ func enqueueReplicationTasksLocal(ctx workflow.Context, workflowExecutionsCh wor
 			a.GenerateReplicationTasks,
 			&generateReplicationTasksRequest{
 				NamespaceID:      namespaceID,
-				Executions:       workflowExecutions,
+				Executions:       executions,
 				RPS:              params.OverallRps / float64(params.ConcurrentActivityCount),
 				GetParentInfoRPS: params.GetParentInfoRPS / float64(params.ConcurrentActivityCount),
 				TargetClusters:   targetClusters,
