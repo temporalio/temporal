@@ -83,10 +83,10 @@ func (j *junitReport) appendAlertsSuite(alerts []alert) {
 		if p := primaryTestName(a.Tests); p != "" {
 			name = fmt.Sprintf("%s — in %s", name, p)
 		}
-		// Prepend detected test names to the details for quick context in CI UIs.
-		details := a.Details
+		// Include only test names for context, not the full log details to avoid XML malformation
+		var details string
 		if len(a.Tests) > 0 {
-			details = fmt.Sprintf("Detected in tests:\n\t%s\n\n%s", strings.Join(a.Tests, "\n\t"), a.Details)
+			details = fmt.Sprintf("Detected in tests:\n\t%s", strings.Join(a.Tests, "\n\t"))
 		}
 		r := &junit.Result{Message: string(a.Kind), Data: details}
 		cases = append(cases, junit.Testcase{
