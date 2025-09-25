@@ -1,0 +1,170 @@
+name: Flaky Tests Report
+
+on:
+  schedule:
+    # Run nightly at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      output_file:
+        description: 'Output file from bash script'
+        required: false
+        default: 'out7.json'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  flaky-tests-report:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Install Python dependencies
+        run: |
+          cd tools/flakes
+          uv sync
+
+      - name: Install tringa
+        run: |
+          uv tool install git+https://github.com/dandavison/tringa --force
+
+      - name: Run bash script to generate output file
+        run: |
+          set -euo pipefail
+          
+          rm -rf out7.json timeout_7.txt retry_7.txt flaky_7.txt
+          
+          tringa --json --since-days 7 repo sql \
+            'select classname, name, count(*) as failure_count, max(artifact) as artifact from test where passed = false and skipped = false group by classname, name order by failure_count desc' \
+            --branch main --workflow-id 80591745 https://github.com/temporalio/temporal > out7.json
+
+      - name: Run Python script to process flaky tests
+        run: |
+          cd tools/flakes
+          uv run main.py --file ../out7.json
+
+      - name: Upload generated reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flaky-tests-reports-${{ github.run_number }}
+          path: |
+            tools/flakes/flaky_7.txt
+            tools/flakes/timeout_7.txt
+            tools/flakes/retry_7.txt
+            tools/flakes/crash.txt
+          retention-days: 30
+
+      - name: Generate flaky tests summary
+        if: always()
+        shell: bash
+        id: flaky-summary
+        run: |
+          # Create a summary of the flaky tests report
+          summary=""
+          flaky_count=0
+          timeout_count=0
+          retry_count=0
+          crash_count=0
+          
+          # Count entries in each report file
+          if [ -f "tools/flakes/flaky_7.txt" ]; then
+            flaky_count=$(tail -n +3 tools/flakes/flaky_7.txt | grep -c "|" || echo "0")
+          fi
+          
+          if [ -f "tools/flakes/timeout_7.txt" ]; then
+            timeout_count=$(tail -n +3 tools/flakes/timeout_7.txt | grep -c "|" || echo "0")
+          fi
+          
+          if [ -f "tools/flakes/retry_7.txt" ]; then
+            retry_count=$(tail -n +3 tools/flakes/retry_7.txt | grep -c "|" || echo "0")
+          fi
+          
+          if [ -f "tools/flakes/crash.txt" ]; then
+            crash_count=$(tail -n +3 tools/flakes/crash.txt | grep -c "|" || echo "0")
+          fi
+          
+          # Create Slack message
+          title="📊 Flaky Tests Report - Last 7 Days"
+          message="*Summary:*\n"
+          message+="• 🔴 Flaky Tests: ${flaky_count}\n"
+          message+="• ⏱️ Timeout Tests: ${timeout_count}\n"
+          message+="• 🔄 Retry Tests: ${retry_count}\n"
+          message+="• 💥 Crash Tests: ${crash_count}\n\n"
+          message+="*Top Flaky Tests:*\n"
+          
+          # Add top 10 flaky tests to the message
+          if [ -f "tools/flakes/flaky_7.txt" ] && [ "$flaky_count" -gt 0 ]; then
+            top_tests=$(tail -n +3 tools/flakes/flaky_7.txt | head -10 | sed 's/|/•/g' | sed 's/^•//' | sed 's/•$//')
+            message+="${top_tests}\n"
+          else
+            message+="No flaky tests found in the last 7 days! 🎉\n"
+          fi
+          
+          message+="\n📋 <https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }}|View Full Report>"
+          
+          # Set environment variables for Slack
+          {
+            echo "SLACK_TITLE=${title}"
+            echo "SLACK_MESSAGE<<EOF" >> $GITHUB_ENV
+            echo "${message}" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          }
+
+      - name: Create GitHub Actions summary
+        if: always()
+        run: |
+          echo "## 📊 Flaky Tests Report - $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "tools/flakes/flaky_7.txt" ]; then
+            echo "### 🔴 Top Flaky Tests" >> $GITHUB_STEP_SUMMARY
+            cat tools/flakes/flaky_7.txt >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f "tools/flakes/timeout_7.txt" ]; then
+            echo "### ⏱️ Timeout Tests" >> $GITHUB_STEP_SUMMARY
+            cat tools/flakes/timeout_7.txt >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f "tools/flakes/retry_7.txt" ]; then
+            echo "### 🔄 Retry Tests" >> $GITHUB_STEP_SUMMARY
+            cat tools/flakes/retry_7.txt >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f "tools/flakes/crash.txt" ]; then
+            echo "### 💥 Crash Tests" >> $GITHUB_STEP_SUMMARY
+            cat tools/flakes/crash.txt >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Send Slack notification
+        if: always() && steps.flaky-summary.outcome == 'success'
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_USERNAME: "Flaky Tests Bot"
+          SLACK_CHANNEL: "crew-server-testing"
+          SLACK_MSG_AUTHOR: "temporal-flaky-tests"
+          SLACK_FOOTER: "Generated by GitHub Actions"
+          SLACK_COLOR: "warning"
+          SLACK_ICON_EMOJI: ":chart_with_upwards_trend:"
+        uses: rtCamp/action-slack-notify@v2
