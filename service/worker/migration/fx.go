@@ -100,7 +100,6 @@ func workflowVerifierProvider() WorkflowVerifier {
 		we *commonpb.WorkflowExecution,
 		mu *adminservice.DescribeMutableStateResponse,
 	) (verifyResult, error) {
-		println("calling verifier")
 		return verifyResult{
 			status: verified,
 		}, nil
