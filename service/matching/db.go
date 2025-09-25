@@ -776,4 +776,5 @@ func (db *taskQueueDB) emitZeroBacklogGauges() {
 
 	metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(0)
 	metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
+	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(0)
 }
