@@ -461,11 +461,14 @@ message DispatchNexusTaskRequest {
 }
 
 message DispatchNexusTaskResponse {
+    message Timeout {}
+
     oneof outcome {
         // Set if the worker's handler failed the nexus task.
         temporal.api.nexus.v1.HandlerError handler_error = 1;
         // Set if the worker's handler responded successfully to the nexus task.
         temporal.api.nexus.v1.Response response = 2;
+        Timeout request_timeout = 3;
     }
 }
 
