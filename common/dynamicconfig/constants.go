@@ -2490,8 +2490,8 @@ that task will be sent to DLQ.`,
 		"Use real chasm tree implementation instead of the noop one",
 	)
 
-	EnableCHASMScheduler = NewNamespaceBoolSetting(
-		"history.enableCHASMScheduler",
+	EnableCHASMSchedulerCreation = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerCreation",
 		false,
 		`EnableCHASMScheduler controls whether new schedules are created using the CHASM (V2) implementation
 instead of the existing (V1) implementation.`,
