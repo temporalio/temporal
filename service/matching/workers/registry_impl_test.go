@@ -53,7 +53,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 	snapshot := capture.Snapshot()
 
 	// Check capacity utilization metric
-	utilizationMetrics := snapshot["matching_registry_capacity_utilization"]
+	utilizationMetrics := snapshot["worker_registry_capacity_utilization"]
 	assert.Equal(t, len(utilizationMetrics), 1, "should have capacity utilization metric")
 	lastUtilization := utilizationMetrics[0]
 	assert.Equal(t, float64(2)/float64(10), lastUtilization.Value, "should record correct capacity utilization")
@@ -137,7 +137,7 @@ func TestEvictByCapacity(t *testing.T) {
 
 	// Verify metrics: eviction should succeed (no age protection issues)
 	snapshot := capture.Snapshot()
-	evictionMetrics := snapshot["matching_registry_eviction_blocked_by_age"]
+	evictionMetrics := snapshot["worker_registry_eviction_blocked_by_age"]
 	assert.Len(t, evictionMetrics, 1, "should have eviction metric")
 
 	metric := evictionMetrics[0]
@@ -180,7 +180,7 @@ func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 
 	// Verify metrics: should record eviction blocked by age
 	snapshot := capture.Snapshot()
-	evictionMetrics := snapshot["matching_registry_eviction_blocked_by_age"]
+	evictionMetrics := snapshot["worker_registry_eviction_blocked_by_age"]
 	assert.Len(t, evictionMetrics, 1, "should have eviction blocked by age metric")
 
 	metric := evictionMetrics[0]
@@ -221,7 +221,7 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 
 		// Verify metrics: eviction should succeed (entries were old enough)
 		snapshot := capture.Snapshot()
-		evictionMetrics := snapshot["matching_registry_eviction_blocked_by_age"]
+		evictionMetrics := snapshot["worker_registry_eviction_blocked_by_age"]
 		assert.Len(t, evictionMetrics, 1, "should have eviction metric")
 
 		metric := evictionMetrics[0]
@@ -267,7 +267,7 @@ func TestMultipleNamespaces(t *testing.T) {
 	snapshot := capture.Snapshot()
 
 	// Check capacity utilization reflects total across all namespaces
-	utilizationMetrics := snapshot["matching_registry_capacity_utilization"]
+	utilizationMetrics := snapshot["worker_registry_capacity_utilization"]
 	assert.GreaterOrEqual(t, len(utilizationMetrics), 1, "should have capacity utilization metric")
 
 	lastUtilization := utilizationMetrics[len(utilizationMetrics)-1]
@@ -309,7 +309,7 @@ func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
 
 		// Verify evictLoop recorded utilization metric
 		snapshot := capture.Snapshot()
-		utilizationMetrics := snapshot["matching_registry_capacity_utilization"]
+		utilizationMetrics := snapshot["worker_registry_capacity_utilization"]
 		assert.NotEmpty(t, utilizationMetrics, "evictLoop should record utilization metrics")
 
 		// Verify the utilization value is correct

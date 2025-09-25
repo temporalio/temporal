@@ -1111,16 +1111,16 @@ var (
 	)
 
 	// ----------------------------------------------------------------------------------------------------------------
-	// Matching Workers Registry
-	MatchingRegistryEvictionBlockedByAgeMetric = NewGaugeDef(
-		"matching_registry_eviction_blocked_by_age",
+	// Matching service: Metrics to track the health of worker registry.
+	WorkerRegistryEvictionBlockedByAgeMetric = NewGaugeDef(
+		"worker_registry_eviction_blocked_by_age",
 		WithDescription(
 			"Set if entries could not be evicted due to minEvictAge policy in a given eviction iteration. "+
 				"Reset once a subsequent eviction succeeds.",
 		),
 	)
-	MatchingRegistryCapacityUtilizationMetric = NewGaugeDef(
-		"matching_registry_capacity_utilization",
+	WorkerRegistryCapacityUtilizationMetric = NewGaugeDef(
+		"worker_registry_capacity_utilization",
 		WithDescription("Tracks the ratio of total entries to maxItems."),
 	)
 	// ----------------------------------------------------------------------------------------------------------------

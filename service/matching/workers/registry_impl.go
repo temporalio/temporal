@@ -239,7 +239,7 @@ func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerp
 // recordUtilizationMetric records the overall capacity utilization ratio.
 func (m *registryImpl) recordUtilizationMetric() {
 	utilization := float64(m.total.Load()) / float64(m.maxItems)
-	metrics.MatchingRegistryCapacityUtilizationMetric.With(m.metricsHandler).Record(utilization)
+	metrics.WorkerRegistryCapacityUtilizationMetric.With(m.metricsHandler).Record(utilization)
 }
 
 // recordEvictionMetric sets the eviction metric based on current capacity state.
@@ -247,10 +247,10 @@ func (m *registryImpl) recordUtilizationMetric() {
 func (m *registryImpl) recordEvictionMetric() {
 	if m.total.Load() > m.maxItems {
 		// Still over capacity - eviction failed
-		metrics.MatchingRegistryEvictionBlockedByAgeMetric.With(m.metricsHandler).Record(1)
+		metrics.WorkerRegistryEvictionBlockedByAgeMetric.With(m.metricsHandler).Record(1)
 	} else {
 		// Back under capacity - clear the issue
-		metrics.MatchingRegistryEvictionBlockedByAgeMetric.With(m.metricsHandler).Record(0)
+		metrics.WorkerRegistryEvictionBlockedByAgeMetric.With(m.metricsHandler).Record(0)
 	}
 }
 
