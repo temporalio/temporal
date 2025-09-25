@@ -15,6 +15,8 @@ const (
 
 	sqlLeftParenthesis  = '('
 	sqlRightParenthesis = ')'
+	sqlIfKeyword        = "if"
+	sqlEndIfKeyword     = "end if"
 	sqlBeginKeyword     = "begin"
 	sqlEndKeyword       = "end"
 	sqlLineComment      = "--"
@@ -76,6 +78,12 @@ func LoadAndSplitQueryFromReaders(
 					}
 					st = st[:len(st)-1]
 
+				case sqlIfKeyword[0]:
+					if hasWordAt(contentStr, sqlIfKeyword, j) {
+						st = append(st, sqlIfKeyword[0])
+						j += len(sqlIfKeyword) - 1
+					}
+
 				case sqlBeginKeyword[0]:
 					if hasWordAt(contentStr, sqlBeginKeyword, j) {
 						st = append(st, sqlBeginKeyword[0])
@@ -83,6 +91,13 @@ func LoadAndSplitQueryFromReaders(
 					}
 
 				case sqlEndKeyword[0]:
+					if hasWordAt(contentStr, sqlEndIfKeyword, j) {
+						if len(st) == 0 || st[len(st)-1] != sqlIfKeyword[0] {
+							return nil, fmt.Errorf("error reading contents: unmatched `END IF` keyword")
+						}
+						st = st[:len(st)-1]
+						j += len(sqlEndIfKeyword) - 1
+					}
 					if hasWordAt(contentStr, sqlEndKeyword, j) {
 						if len(st) == 0 || st[len(st)-1] != sqlBeginKeyword[0] {
 							return nil, fmt.Errorf("error reading contents: unmatched `END` keyword")
@@ -139,7 +154,7 @@ func LoadAndSplitQueryFromReaders(
 }
 
 // hasWordAt is a simple test to check if it matches the whole word:
-// it checks if the adjacent charactes are not alphanumeric if they exist.
+// it checks if the adjacent characters are not alphanumeric if they exist.
 func hasWordAt(s, word string, pos int) bool {
 	if pos+len(word) > len(s) || s[pos:pos+len(word)] != word {
 		return false
