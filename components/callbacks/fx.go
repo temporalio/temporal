@@ -12,9 +12,6 @@ import (
 	"go.uber.org/fx"
 )
 
-// Header key used to identify callbacks that originate from and target the same cluster.
-const callbackSourceHeader = "source"
-
 var Module = fx.Module(
 	"component.callbacks",
 	fx.Provide(ConfigProvider),
@@ -34,12 +31,14 @@ func HTTPCallerProviderProvider(
 	if err != nil {
 		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
 	}
+	defaultClient := &http.Client{}
 
 	m := collection.NewOnceMap(func(queues.NamespaceIDAndDestination) HTTPCaller {
 		return func(r *http.Request) (*http.Response, error) {
 			return routeRequest(r,
 				clusterMetadata,
 				httpClientCache,
+				defaultClient,
 				localClient,
 				logger,
 			)
