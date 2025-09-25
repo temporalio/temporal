@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -75,9 +76,10 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 	layout := "2006-01-01 00:00Z"
 	startTime, _ := time.Parse(layout, "2020-01-01 00:00Z")
 	closeTime, _ := time.Parse(layout, "2020-02-01 00:00Z")
+	t := s.T()
 
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
-		s.Equal("test-ns", request.Namespace)
+		assert.Equal(t, "test-ns", request.Namespace)
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
@@ -354,8 +356,9 @@ func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskRetryable
 
 	totalPageCount := 4
 	currentPageCount := 0
+	t := s.T()
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
-		s.Equal("test-ns", request.Namespace)
+		assert.Equal(t, "test-ns", request.Namespace)
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
@@ -402,8 +405,9 @@ func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskNonRetrya
 
 	totalPageCount := 4
 	currentPageCount := 0
+	t := s.T()
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
-		s.Equal("test-ns", request.Namespace)
+		assert.Equal(t, "test-ns", request.Namespace)
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
@@ -457,8 +461,9 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyReplicationTaskNonRetryabl
 
 	totalPageCount := 4
 	currentPageCount := 0
+	t := s.T()
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
-		s.Equal("test-ns", request.Namespace)
+		assert.Equal(t, "test-ns", request.Namespace)
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
@@ -572,24 +577,30 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyPerIterationExecutions() {
 	}).Times(totalPageCount)
 
 	capturedGenerate := make([][]string, 0, totalPageCount)
+	var capturedGenerateMu sync.Mutex
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(func(ctx context.Context, req *generateReplicationTasksRequest) error {
 		ids := make([]string, len(req.Executions))
 		for i, we := range req.Executions {
 			ids[i] = we.GetWorkflowId()
 		}
+		capturedGenerateMu.Lock()
 		capturedGenerate = append(capturedGenerate, ids)
+		capturedGenerateMu.Unlock()
 		// Add a small delay so Verify is scheduled in later iterations when concurrency > 1
-		time.Sleep(1 * time.Second)
+		<-time.After(1 * time.Second)
 		return nil
 	}).Times(totalPageCount)
 
 	capturedVerify := make([][]string, 0, totalPageCount)
+	var capturedVerifyMu sync.Mutex
 	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(func(ctx context.Context, req *verifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
 		ids := make([]string, len(req.Executions))
 		for i, we := range req.Executions {
 			ids[i] = we.GetWorkflowId()
 		}
+		capturedVerifyMu.Lock()
 		capturedVerify = append(capturedVerify, ids)
+		capturedVerifyMu.Unlock()
 		return verifyReplicationTasksResponse{VerifiedWorkflowCount: int64(len(req.Executions))}, nil
 	}).Times(totalPageCount)
 
@@ -616,7 +627,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyPerIterationExecutions() {
 		{"wf-2a", "wf-2b"},
 		{"wf-3a"},
 	}
-	s.Equal(expected, capturedGenerate)
+	s.ElementsMatch(expected, capturedGenerate)
 	s.ElementsMatch(expected, capturedVerify)
 }
 

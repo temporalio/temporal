@@ -585,6 +585,27 @@ func enqueueReplicationTasksLocal(ctx workflow.Context, workflowExecutionsCh wor
 	for workflowExecutionsCh.Receive(ctx, &workflowExecutions) {
 		executions := workflowExecutions
 
+		verifyTaskDone := func(f workflow.Future) {
+			var verifyTaskResponse verifyReplicationTasksResponse
+			if err := f.Get(ctx, &verifyTaskResponse); err != nil {
+				lastActivityErr = err
+			} else {
+				// Update replication status
+				params.ReplicatedWorkflowCount += int64(verifyTaskResponse.VerifiedWorkflowCount)
+				params.QPSQueue.Enqueue(ctx, params.ReplicatedWorkflowCount)
+				params.ReplicatedWorkflowCountPerSecond = params.QPSQueue.CalculateQPS()
+
+				// Report new QPS to metrics
+				tags := map[string]string{
+					metrics.OperationTagName: metrics.MigrationWorkflowScope,
+					NamespaceTagName:         params.Namespace,
+				}
+				workflow.GetMetricsHandler(ctx).WithTags(tags).Gauge(ForceReplicationRpsTagName).Update(params.ReplicatedWorkflowCountPerSecond)
+			}
+
+			pendingVerifyTasks--
+		}
+
 		verifyTask := func() {
 			verifyTaskFuture := workflow.ExecuteLocalActivity(
 				lactx,
@@ -599,26 +620,7 @@ func enqueueReplicationTasksLocal(ctx workflow.Context, workflowExecutionsCh wor
 				})
 
 			pendingVerifyTasks++
-			selector.AddFuture(verifyTaskFuture, func(f workflow.Future) {
-				pendingVerifyTasks--
-
-				var verifyTaskResponse verifyReplicationTasksResponse
-				if err := f.Get(ctx, &verifyTaskResponse); err != nil {
-					lastActivityErr = err
-				} else {
-					// Update replication status
-					params.ReplicatedWorkflowCount += int64(verifyTaskResponse.VerifiedWorkflowCount)
-					params.QPSQueue.Enqueue(ctx, params.ReplicatedWorkflowCount)
-					params.ReplicatedWorkflowCountPerSecond = params.QPSQueue.CalculateQPS()
-
-					// Report new QPS to metrics
-					tags := map[string]string{
-						metrics.OperationTagName: metrics.MigrationWorkflowScope,
-						NamespaceTagName:         params.Namespace,
-					}
-					workflow.GetMetricsHandler(ctx).WithTags(tags).Gauge(ForceReplicationRpsTagName).Update(params.ReplicatedWorkflowCountPerSecond)
-				}
-			})
+			selector.AddFuture(verifyTaskFuture, verifyTaskDone)
 		}
 
 		generateTaskFuture := workflow.ExecuteLocalActivity(
