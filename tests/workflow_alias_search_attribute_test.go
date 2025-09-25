@@ -56,7 +56,7 @@ func (ts *WorkflowAliasSearchAttributeTestSuite) createWorkflow(ctx context.Cont
 		TaskQueue: ts.TaskQueue(),
 	}
 	if scheduleByID != "" {
-		scheduleByIDKey := temporal.NewSearchAttributeKeyKeyword("ScheduleById")
+		scheduleByIDKey := temporal.NewSearchAttributeKeyKeyword("CustomerSA")
 		workflowOptions.TypedSearchAttributes = temporal.NewSearchAttributes(
 			scheduleByIDKey.ValueSet(scheduleByID),
 		)
@@ -140,8 +140,8 @@ func (ts *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribut
 	)
 }
 
-func (ts *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute_WithClash() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30000*time.Second)
+func (ts *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute_WithCustomSA() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	ts.Worker().RegisterWorkflow(ts.WorkflowFunc)
@@ -151,7 +151,7 @@ func (ts *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribut
 	_, err := ts.SdkClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
 		Namespace: ts.Namespace().String(),
 		SearchAttributes: map[string]enumspb.IndexedValueType{
-			"ScheduleById": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			"CustomerSA": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
 	})
 	ts.NoError(err)
