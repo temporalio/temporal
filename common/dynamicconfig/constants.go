@@ -2493,7 +2493,7 @@ that task will be sent to DLQ.`,
 	EnableCHASMSchedulerCreation = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerCreation",
 		false,
-		`EnableCHASMScheduler controls whether new schedules are created using the CHASM (V2) implementation
+		`EnableCHASMSchedulerCreation controls whether new schedules are created using the CHASM (V2) implementation
 instead of the existing (V1) implementation.`,
 	)
 
