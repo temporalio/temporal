@@ -56,9 +56,9 @@ func (ts *WorkflowAliasSearchAttributeTestSuite) createWorkflow(ctx context.Cont
 		TaskQueue: ts.TaskQueue(),
 	}
 	if scheduleByID != "" {
-		scheduleByIdKey := temporal.NewSearchAttributeKeyKeyword("ScheduleById")
+		scheduleByIDKey := temporal.NewSearchAttributeKeyKeyword("ScheduleById")
 		workflowOptions.TypedSearchAttributes = temporal.NewSearchAttributes(
-			scheduleByIdKey.ValueSet(scheduleByID),
+			scheduleByIDKey.ValueSet(scheduleByID),
 		)
 	}
 	workflowRun, err := ts.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
