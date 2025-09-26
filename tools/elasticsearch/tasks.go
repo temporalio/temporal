@@ -184,7 +184,7 @@ func (task *SetupTask) updateIndexMappings() error {
 
 	mappings, ok := template["mappings"]
 	if !ok {
-		return fmt.Errorf("no mappings found in template")
+		return errors.New("no mappings found in template")
 	}
 
 	mappingsBytes, err := json.Marshal(mappings)
@@ -206,7 +206,7 @@ func (task *SetupTask) updateIndexMappings() error {
 	if err != nil {
 		return task.handleOperationFailure("index mapping update failed", err)
 	} else if !success {
-		return task.handleOperationFailure("index mapping update failed without error", fmt.Errorf("acknowledged=false"))
+		return task.handleOperationFailure("index mapping update failed without error", errors.New("acknowledged=false"))
 	}
 
 	task.logger.Info("Index mappings updated successfully", tag.NewStringTag("indexName", indexName))

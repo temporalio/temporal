@@ -2,6 +2,7 @@ package elasticsearch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 
@@ -21,12 +22,12 @@ func createClient(cli *cli.Context, logger log.Logger) (esclient.CLIClient, erro
 	}
 
 	if cfg.AWSRequestSigning.Enabled {
-		awsHttpClient, err := esclient.NewAwsHttpClient(cfg.AWSRequestSigning)
+		awsHTTPClient, err := esclient.NewAwsHttpClient(cfg.AWSRequestSigning)
 		if err != nil {
 			logger.Error("Unable to create AWS HTTP client.", tag.Error(err))
 			return nil, err
 		}
-		cfg.SetHttpClient(awsHttpClient)
+		cfg.SetHttpClient(awsHTTPClient)
 	}
 
 	esClient, err := esclient.NewCLIClient(cfg, logger)
@@ -152,9 +153,8 @@ func updateSchema(cli *cli.Context, logger log.Logger) error {
 	// If index is specified, update index mappings; otherwise update template
 	if indexName != "" {
 		return task.RunIndexUpdate()
-	} else {
-		return task.RunTemplateUpgrade()
 	}
+	return task.RunTemplateUpgrade()
 }
 
 // createIndex creates a new visibility index
@@ -189,7 +189,7 @@ func dropIndex(cli *cli.Context, logger log.Logger) error {
 
 	indexName := cli.String(CLIOptVisibilityIndex)
 	if indexName == "" {
-		err := fmt.Errorf("index name is required")
+		err := errors.New("index name is required")
 		logger.Error("Missing index name.", tag.Error(err))
 		return err
 	}
@@ -205,7 +205,7 @@ func dropIndex(cli *cli.Context, logger log.Logger) error {
 		logger.Warn("Index deletion failed", tag.Error(err), tag.NewStringTag("indexName", indexName))
 		return nil
 	} else if !success {
-		err := fmt.Errorf("acknowledged=false")
+		err := errors.New("acknowledged=false")
 		if !failSilently {
 			logger.Error("Index deletion failed without error", tag.Error(err), tag.NewStringTag("indexName", indexName))
 			return err
