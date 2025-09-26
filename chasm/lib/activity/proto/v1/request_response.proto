@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.activity.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
+
+import "temporal/api/workflowservice/v1/request_response.proto";
+
+message StartActivityExecutionRequest {
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.StartActivityExecutionRequest frontend_request = 2;
+}
+
+message StartActivityExecutionResponse {
+    temporal.api.workflowservice.v1.StartActivityExecutionResponse frontend_response = 1;
+}
