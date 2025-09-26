@@ -17,29 +17,38 @@ import (
 // - Use it to communicate assumptions about the code.
 // - Use it to abort or recover from an unexpected state.
 // - Never use it as a substitute for regular error handling, validation, or control flow.
-func That(logger log.Logger, condition bool, msg string, tags ...tag.Tag) bool {
+func That(logger log.Logger, condition bool, staticMessage string, tags ...tag.Tag) bool {
 	if !condition {
 		// By using the same prefix for all assertions, they can be reliably found in logs.
-		logger.Error("failed assertion: "+msg, append([]tag.Tag{tag.FailedAssertion}, tags...)...)
+		logger.Error("failed assertion: "+staticMessage, append([]tag.Tag{tag.FailedAssertion}, tags...)...)
 	}
 	return condition
 }
 
 // ThatSometimes is used to conditionally log a debug message of a noteworthy but non-problematic event.
-func ThatSometimes(logger log.Logger, condition bool, message string, tags ...tag.Tag) bool {
+func ThatSometimes(logger log.Logger, condition bool, staticMessage string, tags ...tag.Tag) bool {
 	if !condition {
-		logger.Debug(message, tags...)
+		logger.Debug(staticMessage, tags...)
 	}
 	return condition
 }
 
 // Sometimes is used to log a debug message of a noteworthy but non-problematic event.
-func Sometimes(logger log.Logger, message string, tags ...tag.Tag) {
-	logger.Debug(message, tags...)
+func Sometimes(logger log.Logger, staticMessage string, tags ...tag.Tag) {
+	logger.Debug(staticMessage, tags...)
 }
 
-// Fail logs an error message indicating a failed assertion.
-// It works the same as That, but does not require a condition.
-func Fail(logger log.Logger, msg string, tags ...tag.Tag) {
-	logger.Error("failed assertion: "+msg, append([]tag.Tag{tag.FailedAssertion}, tags...)...)
+// Unexpected is used to emit an error log for an unexpected error condition.
+// It returns a FailedAssertion error that can be returned; or converted to a service error.
+//
+// Example:
+// return softassert.Unexpected(logger, "failed to process request", err.Error(), tag.Key("request-id", requestID))
+func Unexpected(logger log.Logger, staticMessage string, errorDetails string, tags ...tag.Tag) *FailedAssertion {
+	fa := FailedAssertion{message: staticMessage, errorDetails: errorDetails}
+	combinedTags := append([]tag.Tag{tag.FailedAssertion}, tags...)
+	if errorDetails != "" {
+		combinedTags = append(combinedTags, tag.NewStringTag("error-details", errorDetails))
+	}
+	logger.Error("failed assertion: "+fa.Error(), combinedTags...)
+	return &fa
 }

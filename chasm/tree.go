@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -299,9 +300,11 @@ func (n *Node) Component(
 
 	componentValue, ok := node.value.(Component)
 	if !ok {
-		return nil, serviceerror.NewInternalf(
-			"component value is not of type Component: %v", reflect.TypeOf(node.value),
-		)
+		return nil, softassert.Unexpected(
+			n.logger,
+			"component value is not of type Component",
+			reflect.TypeOf(node.value).String(),
+		).InternalServiceErr()
 	}
 
 	// Access check always begins on the target node's parent, and ignored for nodes
@@ -374,15 +377,21 @@ func (n *Node) prepareComponentValue(
 	metadata := n.serializedNode.Metadata
 	componentAttr := metadata.GetComponentAttributes()
 	if componentAttr == nil {
-		return serviceerror.NewInternalf(
-			"expect chasm node to have ComponentAttributes, actual attributes: %v", metadata.Attributes,
-		)
+		return softassert.Unexpected(
+			n.logger,
+			"expect chasm node to have ComponentAttributes",
+			fmt.Sprintf("actual attributes: %v", metadata.Attributes),
+		).InternalServiceErr()
 	}
 
 	if n.valueState == valueStateNeedDeserialize {
 		registrableComponent, ok := n.registry.component(componentAttr.GetType())
 		if !ok {
-			return serviceerror.NewInternalf("component type name not registered: %v", componentAttr.GetType())
+			return softassert.Unexpected(
+				n.logger,
+				"component type name not registered",
+				componentAttr.GetType(),
+			).InternalServiceErr()
 		}
 
 		if err := n.deserialize(registrableComponent.goType); err != nil {
@@ -407,9 +416,11 @@ func (n *Node) prepareDataValue(
 	metadata := n.serializedNode.Metadata
 	dataAttr := metadata.GetDataAttributes()
 	if dataAttr == nil {
-		return serviceerror.NewInternalf(
-			"expect chasm node to have DataAttributes, actual attributes: %v", metadata.Attributes,
-		)
+		return softassert.Unexpected(
+			n.logger,
+			"expect chasm node to have DataAttributes",
+			fmt.Sprintf("actual attributes: %v", metadata.Attributes),
+		).InternalServiceErr()
 	}
 
 	if n.valueState == valueStateNeedDeserialize {
@@ -462,7 +473,11 @@ func (n *Node) fieldType() fieldType {
 	}
 
 	if n.serializedNode.GetMetadata().GetCollectionAttributes() != nil {
-		softassert.Fail(n.logger, "fieldType can't be called on Collection node because Collection is not a Field")
+		softassert.Unexpected(
+			n.logger,
+			"fieldType can't be called on Collection node because Collection is not a Field",
+			"",
+		)
 	}
 
 	return fieldTypeUnspecified
@@ -523,7 +538,11 @@ func (n *Node) initSerializedNode(ft fieldType) {
 			},
 		}
 	case fieldTypeUnspecified:
-		softassert.Fail(n.logger, fmt.Sprintf("initSerializedNode can't be called with %v", ft))
+		softassert.Unexpected(
+			n.logger,
+			"initSerializedNode can't be called with unspecified field type",
+			"",
+		)
 	}
 }
 
@@ -603,7 +622,11 @@ func (n *Node) serializeComponentNode() error {
 
 		rc, ok := n.registry.componentFor(n.value)
 		if !ok {
-			return serviceerror.NewInternalf("component type %s is not registered", reflect.TypeOf(n.value).String())
+			return softassert.Unexpected(
+				n.logger,
+				"component type is not registered",
+				reflect.TypeOf(n.value).String(),
+			).InternalServiceErr()
 		}
 
 		n.serializedNode.Data = blob
@@ -654,7 +677,11 @@ func (n *Node) syncSubComponentsInternal() (needsPointerResolution bool, err err
 
 		switch field.kind {
 		case fieldKindUnspecified:
-			softassert.Fail(n.logger, "field.kind can be unspecified only if err is not nil, and there is a check for it above")
+			softassert.Unexpected(
+				n.logger,
+				"field.kind can be unspecified only if err is not nil, and there is a check for it above",
+				"",
+			)
 		case fieldKindData:
 			// Nothing to sync.
 		case fieldKindSubField:
@@ -685,9 +712,11 @@ func (n *Node) syncSubComponentsInternal() (needsPointerResolution bool, err err
 
 			// Validate map type.
 			if field.val.Kind() != reflect.Map {
-				errMsg := fmt.Sprintf("CHASM map must be of map type: value of %s is not of a map type", n.nodeName)
-				softassert.Fail(n.logger, errMsg)
-				return false, serviceerror.NewInternal(errMsg)
+				return false, softassert.Unexpected(
+					n.logger,
+					"CHASM map must be of map type",
+					fmt.Sprintf("node %s", n.nodeName),
+				).InternalServiceErr()
 			}
 
 			if len(field.val.MapKeys()) == 0 {
@@ -697,9 +726,11 @@ func (n *Node) syncSubComponentsInternal() (needsPointerResolution bool, err err
 
 			mapValT := field.typ.Elem()
 			if mapValT.Kind() != reflect.Struct || genericTypePrefix(mapValT) != chasmFieldTypePrefix {
-				errMsg := fmt.Sprintf("CHASM map value must be of Field[T] type: %s collection value type is not Field[T] but %s", n.nodeName, mapValT)
-				softassert.Fail(n.logger, errMsg)
-				return false, serviceerror.NewInternal(errMsg)
+				return false, softassert.Unexpected(
+					n.logger,
+					"CHASM map value must be of Field[T] type",
+					fmt.Sprintf("node %s got %s", n.nodeName, mapValT),
+				).InternalServiceErr()
 			}
 
 			collectionItemsToKeep := make(map[string]struct{})
@@ -744,9 +775,11 @@ func (n *Node) mapKeyToString(keyV reflect.Value) (string, error) {
 	case reflect.Bool:
 		return strconv.FormatBool(keyV.Bool()), nil
 	default:
-		errMsg := fmt.Sprintf("CHASM map key type for node %s must be one of [%s], got %s", n.nodeName, mapKeyTypes, keyV.Type().String())
-		softassert.Fail(n.logger, errMsg)
-		return "", serviceerror.NewInternal(errMsg)
+		return "", softassert.Unexpected(
+			n.logger,
+			"CHASM map key type is not supported",
+			fmt.Sprintf("node %s must be one of [%s], got %s", n.nodeName, mapKeyTypes, keyV.Type().String()),
+		).InternalServiceErr()
 	}
 }
 
@@ -804,7 +837,12 @@ func (n *Node) stringToMapKey(nodeName string, key string, keyT reflect.Type) (r
 		keyV = reflect.ValueOf(b)
 	default:
 		err = fmt.Errorf("unsupported type %s of kind %s: supported key types: %s", keyT.String(), keyT.Kind().String(), mapKeyTypes)
-		softassert.Fail(n.logger, err.Error())
+		softassert.Unexpected(
+			n.logger,
+			"unsupported CHASM map key type",
+			"",
+			tag.Error(err),
+		)
 		// Use softassert only here because this is the only case that indicates "compile" time error.
 		// The other errors below can come from data type mismatch between a component and persisted data.
 	}
@@ -814,7 +852,11 @@ func (n *Node) stringToMapKey(nodeName string, key string, keyT reflect.Type) (r
 	}
 
 	if err != nil {
-		err = serviceerror.NewInternalf("serialized map %s key value %s can't be parsed to CHASM map key type %s: %s", nodeName, key, keyT.String(), err.Error())
+		err = softassert.Unexpected(
+			n.logger,
+			"serialized map key value can't be parsed to CHASM map key type",
+			fmt.Sprintf("nodeName: %s, key: %s, keyType: %s, error: %s", nodeName, key, keyT.String(), err.Error()),
+		).InternalServiceErr()
 	}
 
 	return keyV, err
@@ -854,7 +896,11 @@ func (n *Node) syncSubField(
 		switch internal.fieldType() {
 		case fieldTypePointer:
 			if _, ok := internal.value().([]string); !ok {
-				err = serviceerror.NewInternalf("value must be of type []string for the field of pointer type: got %T", internal.value())
+				err = softassert.Unexpected(
+					n.logger,
+					"value must be of type []string for the field of pointer type",
+					fmt.Sprintf("got %T", internal.value()),
+				).InternalServiceErr()
 				return
 			}
 		case fieldTypeData, fieldTypeComponent:
@@ -865,7 +911,11 @@ func (n *Node) syncSubField(
 			// No-op, validation happens when the pointer is resolved.
 			needsPointerResolution = true
 		default:
-			err = serviceerror.NewInternalf("unexpected field type: %d", internal.fieldType())
+			err = softassert.Unexpected(
+				n.logger,
+				"unexpected field type",
+				fmt.Sprintf("%d", internal.fieldType()),
+			)
 			return
 		}
 		childNode.value = internal.value()
@@ -939,9 +989,11 @@ func (n *Node) serializeCollectionNode() error {
 func (n *Node) serializePointerNode() error {
 	path, isPathValid := n.value.([]string)
 	if !isPathValid {
-		msg := fmt.Sprintf("pointer path is not []string but %T for node %s", n.value, n.nodeName)
-		softassert.Fail(n.logger, msg)
-		return serviceerror.NewInternal(msg)
+		return softassert.Unexpected(
+			n.logger,
+			"pointer path is not []string",
+			fmt.Sprintf("got %T for node %s", n.value, n.nodeName),
+		).InternalServiceErr()
 	}
 
 	n.serializedNode.GetMetadata().GetPointerAttributes().NodePath = path
@@ -981,7 +1033,11 @@ func (n *Node) deserialize(
 	case *persistencespb.ChasmNodeMetadata_DataAttributes:
 		return n.deserializeDataNode(valueT)
 	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
-		softassert.Fail(n.logger, "deserialize shouldn't be called on the collection node because it is deserialized with the parent component.")
+		softassert.Unexpected(
+			n.logger,
+			"deserialize shouldn't be called on the collection node because it is deserialized with the parent component.",
+			"",
+		)
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
 		return n.deserializePointerNode()
 	}
@@ -1001,7 +1057,11 @@ func (n *Node) deserializeComponentNode(
 
 		switch field.kind {
 		case fieldKindUnspecified:
-			softassert.Fail(n.logger, "field.kind can be unspecified only if err is not nil, and there is a check for it above")
+			softassert.Unexpected(
+				n.logger,
+				"field.kind can be unspecified only if err is not nil, and there is a check for it above",
+				fmt.Sprintf("node %s", n.nodeName),
+			)
 		case fieldKindData:
 			value, err := unmarshalProto(n.serializedNode.GetData(), field.typ)
 			if err != nil {
@@ -1255,7 +1315,11 @@ func (n *Node) closeTransactionHandleRootLifecycleChange() (bool, error) {
 		newState = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 		newStatus = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 	default:
-		return false, serviceerror.NewInternalf("unknown component lifecycle state: %v", lifecycleState)
+		return false, softassert.Unexpected(
+			n.logger,
+			"unknown component lifecycle state",
+			fmt.Sprintf("%v", lifecycleState),
+		).InternalServiceErr()
 	}
 
 	return n.backend.UpdateWorkflowStateStatus(newState, newStatus)
@@ -1281,7 +1345,11 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 
 		visibility, ok := visComponent.(*Visibility)
 		if !ok {
-			return serviceerror.NewInternalf("expected visibility component for component with type %s, but got %T", visibilityComponentFqType, visComponent)
+			return softassert.Unexpected(
+				n.logger,
+				"expected visibility component for component type",
+				fmt.Sprintf("type: %s, but got %T", visibilityComponentFqType, visComponent),
+			).InternalServiceErr()
 		}
 		visibility.GenerateTask(mutableContext)
 	}
@@ -1301,7 +1369,11 @@ func (n *Node) closeTransactionSerializeNodes() error {
 		if componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes(); componentAttr != nil &&
 			componentAttr.Type == visibilityComponentFqType &&
 			len(nodePath) != 1 {
-			return serviceerror.NewInternalf("CHASM visibility component must be immeidate child of the root node, but found at path %s", nodePath)
+			return softassert.Unexpected(
+				n.logger,
+				"CHASM visibility component must be immediate child of the root node",
+				fmt.Sprintf("found at path %s", nodePath),
+			).InternalServiceErr()
 		}
 
 		encodedPath, err := node.getEncodedPath()
@@ -1399,7 +1471,11 @@ func (n *Node) deserializeComponentTask(
 ) (any, error) {
 	registableTask, ok := n.registry.task(componentTask.Type)
 	if !ok {
-		return nil, serviceerror.NewInternalf("task type %s is not registered", componentTask.Type)
+		return nil, softassert.Unexpected(
+			n.logger,
+			"task type is not registered",
+			componentTask.Type,
+		).InternalServiceErr()
 	}
 
 	taskValue, err := n.deserializeTaskWithCache(registableTask, componentTask.Data)
@@ -1418,8 +1494,11 @@ func (n *Node) validateTask(
 ) (bool, error) {
 	registableTask, ok := n.registry.taskFor(taskInstance)
 	if !ok {
-		return false, serviceerror.NewInternalf(
-			"task type for goType %s is not registered", reflect.TypeOf(taskInstance).Name())
+		return false, softassert.Unexpected(
+			n.logger,
+			"task type for goType is not registered",
+			reflect.TypeOf(taskInstance).Name(),
+		).InternalServiceErr()
 	}
 
 	retValues := registableTask.validateFn.Call([]reflect.Value{
@@ -1493,7 +1572,11 @@ func (n *Node) closeTransactionHandleNewTasks(
 
 	for _, newTask := range newTasks {
 		if !newTask.attributes.IsValid() {
-			return serviceerror.NewInternalf("task attributes cannot have both destination and scheduled specified, attributes: %v", newTask.attributes)
+			return softassert.Unexpected(
+				n.logger,
+				"task attributes cannot have both destination and scheduled specified",
+				fmt.Sprintf("attributes: %v", newTask.attributes),
+			).InternalServiceErr()
 		}
 
 		valid, err := n.validateTask(
@@ -1510,7 +1593,11 @@ func (n *Node) closeTransactionHandleNewTasks(
 
 		registrableTask, ok := n.registry.taskFor(newTask.task)
 		if !ok {
-			return serviceerror.NewInternalf("task type %s is not registered", reflect.TypeOf(newTask.task).String())
+			return softassert.Unexpected(
+				n.logger,
+				"task type is not registered",
+				reflect.TypeOf(newTask.task).String(),
+			).InternalServiceErr()
 		}
 
 		taskBlob, err := n.serializeTaskWithCache(registrableTask, reflect.ValueOf(newTask.task))
@@ -1625,10 +1712,18 @@ func (n *Node) resolveDeferredPointers() error {
 				case proto.Message:
 					resolvedPath, err = n.dataNodePath(value)
 				default:
-					err = serviceerror.NewInternalf("unable to create a deferred pointer for values of type: %T", value)
+					err = softassert.Unexpected(
+						n.logger,
+						"unable to create a deferred pointer for values of type",
+						fmt.Sprintf("%T", value),
+					).InternalServiceErr()
 				}
 				if err != nil {
-					return serviceerror.NewInternalf("failed to resolve deferred pointer during transaction close: %v", err)
+					return softassert.Unexpected(
+						n.logger,
+						"failed to resolve deferred pointer during transaction close",
+						err.Error(),
+					).InternalServiceErr()
 				}
 
 				// Update the field to be a regular pointer, reusing the existing serializedNode,
@@ -2437,11 +2532,19 @@ func (n *Node) ValidateSideEffectTask(
 	taskType := taskInfo.Type
 	registrableTask, ok := n.registry.task(taskType)
 	if !ok {
-		return false, serviceerror.NewInternalf("unknown task type '%s'", taskType)
+		return false, softassert.Unexpected(
+			n.logger,
+			"unknown task type",
+			taskType,
+		).InternalServiceErr()
 	}
 
 	if registrableTask.isPureTask {
-		return false, serviceerror.NewInternalf("ValidateSideEffectTask called on a Pure task '%s'", taskType)
+		return false, softassert.Unexpected(
+			n.logger,
+			"ValidateSideEffectTask called on a Pure task",
+			taskType,
+		).InternalServiceErr()
 	}
 
 	node, ok := n.findNode(taskInfo.Path)
@@ -2515,10 +2618,18 @@ func (n *Node) ExecuteSideEffectTask(
 	taskType := taskInfo.Type
 	registrableTask, ok := registry.task(taskType)
 	if !ok {
-		return serviceerror.NewInternalf("unknown task type '%s'", taskType)
+		return softassert.Unexpected(
+			n.logger,
+			"unknown task type",
+			taskType,
+		).InternalServiceErr()
 	}
 	if registrableTask.isPureTask {
-		return serviceerror.NewInternalf("ExecuteSideEffectTask called on a Pure task '%s'", taskType)
+		return softassert.Unexpected(
+			n.logger,
+			"ExecuteSideEffectTask called on a Pure task",
+			taskType,
+		).InternalServiceErr()
 	}
 
 	defer func() {
@@ -2589,9 +2700,11 @@ func (n *Node) ComponentByPath(
 
 	componentValue, ok := node.value.(Component)
 	if !ok {
-		return nil, serviceerror.NewInternalf(
-			"component value is not of type Component: %v", reflect.TypeOf(node.value),
-		)
+		return nil, softassert.Unexpected(
+			n.logger,
+			"component value is not of type Component",
+			reflect.TypeOf(node.value).String(),
+		).InternalServiceErr()
 	}
 
 	return componentValue, nil
