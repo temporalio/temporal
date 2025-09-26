@@ -677,8 +677,21 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 
 	// Send an invalid completion request and verify that we get an error that the namespace in the URL doesn't match the namespace in the token.
 	invalidCallbackUrl := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(invalidNamespace)
-	res, snap = s.sendNexusCompletionRequest(ctx, s.T(), invalidCallbackUrl, completion, callbackToken)
+
+	// Make the request directly to check the response body
+	req, err := nexus.NewCompletionHTTPRequest(ctx, invalidCallbackUrl, completion)
+	s.NoError(err)
+	req.Header.Add(commonnexus.CallbackTokenHeader, callbackToken)
+
+	res, err = http.DefaultClient.Do(req)
+	s.NoError(err)
+	body, err := io.ReadAll(res.Body)
+	s.NoError(err)
+	defer res.Body.Close()
+
+	// Verify we get the correct error response
 	s.Equal(http.StatusBadRequest, res.StatusCode)
+	s.Contains(string(body), "invalid callback token", "Response should indicate namespace mismatch")
 
 	// Manipulate the token to verify we get the expected errors in the API.
 	gen := &commonnexus.CallbackTokenGenerator{}
