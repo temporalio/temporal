@@ -83,6 +83,7 @@ def process_flaky(data, output_file):
         if len(transformed) > 10:
             break
 
+    # Write both markdown table (for GitHub) and plain text (for Slack)
     lines = []
     lines.append("|Name with Url|Count|\n")
     lines.append("| -------- | ------- |\n")
@@ -91,6 +92,15 @@ def process_flaky(data, output_file):
 
     with open(output_file, "w") as outfile:
         outfile.writelines(lines)
+    
+    # Also create a plain text version for Slack
+    slack_file = output_file.replace('.txt', '_slack.txt')
+    slack_lines = []
+    for item in transformed:
+        slack_lines.append(f"• {item['name']} - {item['count']} failures\n")
+    
+    with open(slack_file, "w") as outfile:
+        outfile.writelines(slack_lines)
 
 
 def process_json_file(input_filename):

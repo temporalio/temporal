@@ -133,6 +133,7 @@ jobs:
             out.json
             tools/flakes/crash.txt
             tools/flakes/flaky.txt
+            tools/flakes/flaky_slack.txt
             tools/flakes/retry.txt
             tools/flakes/timeout.txt
           retention-days: 30
@@ -385,7 +386,10 @@ jobs:
           message+="• ⏰ Timeouts: ${timeout_count}\n\n"
           
           # Add full flaky tests report if it exists
-          if [ "$flaky_count" -gt 0 ] && [ -f "tools/flakes/flaky.txt" ]; then
+          if [ "$flaky_count" -gt 0 ] && [ -f "tools/flakes/flaky_slack.txt" ]; then
+            message+="*🔄 Flaky Tests Details:*\n"
+            message+="$(cat tools/flakes/flaky_slack.txt)\n"
+          elif [ "$flaky_count" -gt 0 ] && [ -f "tools/flakes/flaky.txt" ]; then
             message+="*🔄 Flaky Tests Details:*\n"
             message+="\`\`\`\n"
             message+="$(cat tools/flakes/flaky.txt)\n"
