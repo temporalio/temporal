@@ -358,7 +358,7 @@ jobs:
           echo "📝 Building comprehensive Slack message..."
           
           # Start with basic summary
-          message="*📊 Flaky Tests Report - Last 7 Days*\n\n"
+          message="*📊 Flaky Tests Report - Last 7 Days*\\n\\n"
           
           # Add failure counts
           crash_count=0
@@ -379,25 +379,27 @@ jobs:
             timeout_count=$(grep -c "|\[" tools/flakes/timeout.txt || echo "0")
           fi
           
-          message+="*📈 Failure Summary:*\n"
-          message+="• 💥 Crashes: ${crash_count}\n"
-          message+="• 🔄 Flaky Tests: ${flaky_count}\n"
-          message+="• 🔁 Retry Failures: ${retry_count}\n"
-          message+="• ⏰ Timeouts: ${timeout_count}\n\n"
+          message+="*📈 Failure Summary:*\\n"
+          message+="• 💥 Crashes: ${crash_count}\\n"
+          message+="• 🔄 Flaky Tests: ${flaky_count}\\n"
+          message+="• 🔁 Retry Failures: ${retry_count}\\n"
+          message+="• ⏰ Timeouts: ${timeout_count}\\n\\n"
           
           # Add full flaky tests report if it exists
           if [ "$flaky_count" -gt 0 ] && [ -f "tools/flakes/flaky_slack.txt" ]; then
-            message+="*🔄 Flaky Tests Details:*\n"
-            message+="$(cat tools/flakes/flaky_slack.txt)\n"
+            message+="*🔄 Flaky Tests Details:*\\n"
+            # Replace newlines in the file content with \\n for Slack
+            flaky_content=$(cat tools/flakes/flaky_slack.txt | sed 's/$/\\n/' | tr -d '\n')
+            message+="${flaky_content}"
           elif [ "$flaky_count" -gt 0 ] && [ -f "tools/flakes/flaky.txt" ]; then
-            message+="*🔄 Flaky Tests Details:*\n"
-            message+="\`\`\`\n"
-            message+="$(cat tools/flakes/flaky.txt)\n"
-            message+="\`\`\`\n\n"
+            message+="*🔄 Flaky Tests Details:*\\n"
+            message+="\`\`\`\\n"
+            message+="$(cat tools/flakes/flaky.txt)\\n"
+            message+="\`\`\`\\n\\n"
           fi
           
           # Add link to full report
-          message+="📋 <https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }}|View Full Report & Download Artifacts>\n"
+          message+="📋 <https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }}|View Full Report & Download Artifacts>\\n"
           message+="🔗 <https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }}|GitHub Actions Run #${{ github.run_number }}>"
           
           echo "✅ Slack message built successfully"
