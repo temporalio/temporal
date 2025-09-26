@@ -80,22 +80,22 @@ CREATE TABLE executions_visibility (
   KeywordList03   JSONB           GENERATED ALWAYS AS (search_attributes->'KeywordList03')            STORED,
 
   -- Pre-allocated Archetype search attributes
-  TemporalBool01            BOOLEAN         GENERATED ALWAYS AS (search_attributes->'TemporalBool01')                 STORED,
-  TemporalBool02            BOOLEAN         GENERATED ALWAYS AS (search_attributes->'TemporalBool02')                 STORED,
+  TemporalBool01            BOOLEAN         GENERATED ALWAYS AS (search_attributes->'TemporalBool01')                  STORED,
+  TemporalBool02            BOOLEAN         GENERATED ALWAYS AS (search_attributes->'TemporalBool02')                  STORED,
   TemporalDatetime01        TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'TemporalDatetime01')) STORED,
   TemporalDatetime02        TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'TemporalDatetime02')) STORED,
-  TemporalDouble01          DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'TemporalDouble01')::decimal)    STORED,
-  TemporalDouble02          DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'TemporalDouble02')::decimal)    STORED,
-  TemporalInt01             BIGINT          GENERATED ALWAYS AS ((search_attributes->'TemporalInt01')::bigint)        STORED,
-  TemporalInt02             BIGINT          GENERATED ALWAYS AS ((search_attributes->'TemporalInt02')::bigint)        STORED,
+  TemporalDouble01          DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'TemporalDouble01')::decimal)     STORED,
+  TemporalDouble02          DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'TemporalDouble02')::decimal)     STORED,
+  TemporalInt01             BIGINT          GENERATED ALWAYS AS ((search_attributes->'TemporalInt01')::bigint)         STORED,
+  TemporalInt02             BIGINT          GENERATED ALWAYS AS ((search_attributes->'TemporalInt02')::bigint)         STORED,
   TemporalKeyword01         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalKeyword01')              STORED,
   TemporalKeyword02         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalKeyword02')              STORED,
   TemporalKeyword03         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalKeyword03')              STORED,
   TemporalKeyword04         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalKeyword04')              STORED, 
   TemporalText01            TSVECTOR        GENERATED ALWAYS AS ((search_attributes->>'TemporalText01')::tsvector)     STORED,
   TemporalText02            TSVECTOR        GENERATED ALWAYS AS ((search_attributes->>'TemporalText02')::tsvector)     STORED,
-  TemporalKeywordList01     JSONB           GENERATED ALWAYS AS (search_attributes->'TemporalKeywordList01')          STORED,
-  TemporalKeywordList02     JSONB           GENERATED ALWAYS AS (search_attributes->'TemporalKeywordList02')          STORED,
+  TemporalKeywordList01     JSONB           GENERATED ALWAYS AS (search_attributes->'TemporalKeywordList01')           STORED,
+  TemporalKeywordList02     JSONB           GENERATED ALWAYS AS (search_attributes->'TemporalKeywordList02')           STORED,
 
   PRIMARY KEY  (namespace_id, run_id)
 );
