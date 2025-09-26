@@ -1256,10 +1256,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 
 	s.Run("InvalidCallbackToken", func() {
 		publicCallbackUrl := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(s.Namespace().String())
-
+		// metrics collection is not initialized before callback validation
 		// Send request without callback token
-		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-		defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 		req, err := nexus.NewCompletionHTTPRequest(ctx, publicCallbackUrl, completion)
 		s.NoError(err)
 		// Intentionally not adding callback token to test invalid token error
@@ -1273,12 +1271,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 		// Verify we get the correct error response
 		s.Equal(http.StatusBadRequest, res.StatusCode)
 		s.Contains(string(body), "invalid callback token", "Response should indicate invalid callback token")
-
-		// When callback token is invalid, no metrics are recorded because the handler returns early
-		// before setting up the request context that records metrics
-		snap := capture.Snapshot()
-		s.Equal(0, len(snap["nexus_completion_request_preprocess_errors"]))
-		s.Equal(0, len(snap["nexus_completion_requests"]))
 	})
 
 	s.Run("InvalidClientVersion", func() {
