@@ -115,7 +115,18 @@ type (
 		forceReplicationMetricsHandler   metrics.Handler
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		generateMigrationTaskViaFrontend dynamicconfig.BoolPropertyFn
+		workflowVerifier                 WorkflowVerifier
 	}
+
+	WorkflowVerifier func(
+		ctx context.Context,
+		request *verifyReplicationTasksRequest,
+		remoteAdminClient adminservice.AdminServiceClient,
+		localAdminClient adminservice.AdminServiceClient,
+		ns *namespace.Namespace,
+		we *commonpb.WorkflowExecution,
+		mu *adminservice.DescribeMutableStateResponse,
+	) (verifyResult, error)
 )
 
 const (
@@ -700,7 +711,7 @@ func (a *activities) verifySingleReplicationTask(
 ) (verifyResult, error) {
 	s := time.Now()
 	// Check if execution exists on remote cluster
-	_, err := remotAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+	mu, err := remotAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace:       request.Namespace,
 		Execution:       we,
 		SkipForceReload: true,
@@ -709,10 +720,11 @@ func (a *activities) verifySingleReplicationTask(
 
 	switch err.(type) {
 	case nil:
-		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
-		return verifyResult{
-			status: verified,
-		}, nil
+		result, err := a.workflowVerifier(ctx, request, remotAdminClient, a.adminClient, ns, we, mu)
+		if err == nil && result.status == verified {
+			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
+		}
+		return result, err
 
 	case *serviceerror.NotFound:
 		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.Name()).Record(1)
