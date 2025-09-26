@@ -2,7 +2,7 @@ package frontend
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -50,7 +50,7 @@ func (s *healthCheckerSuite) SetupTest() {
 			case "1", "3":
 				return enumsspb.HEALTH_STATE_SERVING, nil
 			case "2":
-				return enumsspb.HEALTH_STATE_UNSPECIFIED, fmt.Errorf("test")
+				return enumsspb.HEALTH_STATE_UNSPECIFIED, errors.New("test")
 			case "4":
 				return enumsspb.HEALTH_STATE_DECLINED_SERVING, nil
 			default:

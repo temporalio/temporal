@@ -687,7 +687,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 	s.NoError(err)
 	body, err := io.ReadAll(res.Body)
 	s.NoError(err)
-	defer res.Body.Close()
+	defer func() {
+		s.NoError(res.Body.Close())
+	}()
 
 	// Verify we get the correct error response
 	s.Equal(http.StatusBadRequest, res.StatusCode)
@@ -1279,7 +1281,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 		s.NoError(err)
 		body, err := io.ReadAll(res.Body)
 		s.NoError(err)
-		defer res.Body.Close()
+		defer func() {
+			s.NoError(res.Body.Close())
+		}()
 
 		// Verify we get the correct error response
 		s.Equal(http.StatusBadRequest, res.StatusCode)
