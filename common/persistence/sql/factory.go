@@ -171,8 +171,8 @@ func NewRefCountedDBConn(
 	}
 }
 
-// Get returns a mysql db connection and increments a reference count
-// this method will create a new connection, if an existing connection
+// Get returns a db connection and increments a reference count.
+// This method will create a new connection, if an existing connection
 // does not exist
 func (c *DbConn) Get() (sqlplugin.DB, error) {
 	c.Lock()
