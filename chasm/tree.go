@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -124,6 +125,11 @@ type (
 		// Replication logic (ApplySnapshot/Mutation) will not set this field.
 		// The flag is equivalent to checking if any node's valueState is valueStateNeedSerialize
 		isActiveStateDirty bool
+
+		// Root component's search attributes and memo at the start of a transaction.
+		// They will be updated upon CloseTransaction() if they are changed.
+		currentSearchAttributes map[string]any
+		currentMemo             map[string]any
 	}
 
 	taskWithAttributes struct {
@@ -208,6 +214,9 @@ func NewTree(
 		root.setSerializedNode(nodePath, encodedPath, serializedNode)
 	}
 
+	if err := newTreeInitSearchAttributesAndMemo(root); err != nil {
+		return nil, err
+	}
 	return root, nil
 }
 
@@ -258,6 +267,29 @@ func newTreeHelper(
 	}
 
 	return newNode(base, nil, "")
+}
+
+func newTreeInitSearchAttributesAndMemo(
+	root *Node,
+) error {
+	immutableContext := NewContext(context.Background(), root)
+	rootComponent, err := root.Component(immutableContext, ComponentRef{})
+	if err != nil {
+		return err
+	}
+
+	// Theoritically we should check if the root node has a Visibility component or not.
+	// But that doesn't really matter. Even if it doesn't have one, currentSearchAttributes
+	// and currentMemo will just never be used.
+
+	if saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider); ok {
+		root.currentSearchAttributes = saProvider.SearchAttributes(immutableContext)
+	}
+	if memoProvider, ok := rootComponent.(VisibilityMemoProvider); ok {
+		root.currentMemo = memoProvider.Memo(immutableContext)
+	}
+
+	return nil
 }
 
 func (n *Node) SetRootComponent(
@@ -984,7 +1016,7 @@ func (n *Node) deserialize(
 		return err
 	}
 
-	if n.valueState != valueStateNeedDeserialize {
+	if n.valueState != valueStateNeedDeserialize && reflect.TypeOf(n.value) == valueT {
 		return nil
 	}
 
@@ -1304,19 +1336,6 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 	mutableContext := NewMutableContext(context.Background(), n)
 	immutableContext := mutableContext.ToImmutable()
 
-	// NOTE: It is a HACK to access visibility component with immutable Context,
-	// but later invoke a method that requires MutableContext.
-	//
-	// But here we only know if visibility component needs to be updated or not AFTER
-	// invoking a mutable method on it.
-	// To prevent unnecessary update and replication of its state, we first access it with a immutable Context,
-	// then, at the end of this method, when we are sure it needs to be updated,
-	// access the visibility component again with a MutableContext so that the changes can be
-	// serialized and persisted.
-	//
-	// TODO: have a better story around checking for updates and skip unnecessary updates even if a
-	// component is accessed with a MutableContext, but no changes are actually made.
-	// (Not just state, need to check for if there is any new tasks too.)
 	visComponent, err := visibilityNode.Component(immutableContext, ComponentRef{})
 	if err != nil {
 		return err
@@ -1334,34 +1353,46 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 
 	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
 	if ok {
-		updated, err := visibility.SetSearchAttributes(mutableContext, saProvider.SearchAttributes(immutableContext))
-		if err != nil {
-			return err
+		newSearchAttributes := saProvider.SearchAttributes(immutableContext)
+		if !maps.Equal(n.currentSearchAttributes, newSearchAttributes) {
+			for k, v := range newSearchAttributes {
+				if _, err := payload.Encode(v); err != nil {
+					return fmt.Errorf("unable to encode search attribute, key: %s, value: %v: %w", k, v, err)
+				}
+			}
+
+			needUpdate = true
 		}
-		needUpdate = needUpdate || updated
+		n.currentSearchAttributes = newSearchAttributes
 	}
 
 	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
 	if ok {
-		updated, err := visibility.SetMemo(mutableContext, memoProvider.Memo(immutableContext))
-		if err != nil {
-			return err
+		newMemo := memoProvider.Memo(immutableContext)
+		if !maps.Equal(n.currentMemo, newMemo) {
+			for k, v := range newMemo {
+				if _, err := payload.Encode(v); err != nil {
+					return fmt.Errorf("unable to encode memo, key: %s, value: %v: %w", k, v, err)
+				}
+			}
+			needUpdate = true
 		}
-		needUpdate = needUpdate || updated
+		n.currentMemo = newMemo
 	}
 
-	if !needUpdate {
-		return nil
+	if needUpdate {
+		// Generate a task and mark the node as dirty.
+		//
+		// NOTE: generateTask() will create a new logical task for the visibility component. But it also
+		// invalidates all previous logical tasks and at the end of the transaction, only one physical task
+		// will be created in the visibility queue.
+		visibility.generateTask(mutableContext)
+		visibilityNode.setValueState(valueStateNeedSerialize)
 	}
 
-	// Need visibility update, generate a task and mark the node as dirty (using a MutableContext).
-	visibility.generateTask(mutableContext)
-	if _, err := visibilityNode.Component(mutableContext, ComponentRef{}); err != nil {
-		return err
-	}
-
-	_, err = visibilityNode.syncSubComponentsInternal()
-	return err
+	// We don't need to sync tree structure here for the visiblity node because we only generated a task without
+	// changing any component fields.
+	return nil
 }
 
 func (n *Node) closeTransactionSerializeNodes() error {

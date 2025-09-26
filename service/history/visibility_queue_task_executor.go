@@ -398,6 +398,33 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return err
 	}
 
+	rootComponent, err := tree.ComponentByPath(visTaskContext, nil)
+	if err != nil {
+		return err
+	}
+	if saProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
+		for key, value := range saProvider.SearchAttributes(visTaskContext) {
+			p, err := payload.Encode(value)
+			if err != nil {
+				// This should never happen as we validated the value can be encoded when
+				// closing the transaction. See chasm/tree.go closeTransactionForceUpdateVisibility().
+				return err
+			}
+			searchattributes[key] = p
+		}
+	}
+	if memoProvider, ok := rootComponent.(chasm.VisibilityMemoProvider); ok {
+		for key, value := range memoProvider.Memo(visTaskContext) {
+			p, err := payload.Encode(value)
+			if err != nil {
+				// This should never happen as we validated the value can be encoded when
+				// closing the transaction. See chasm/tree.go closeTransactionForceUpdateVisibility().
+				return err
+			}
+			memo[key] = p
+		}
+	}
+
 	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().
 		GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
 	if err != nil {

@@ -13,14 +13,18 @@ const (
 	visibilityTaskFqType      = "core.visTask"
 )
 
-// VisibilitySearchAttributesProvider ...
-// TODO: add comments
+// VisibilitySearchAttributesProvider if implemented by the root Component,
+// allows the CHASM framework to automatically determine, at the end of
+// a transaction, if a visibility task needs to be generated to update the
+// visibility record with the returned search attributes.
 type VisibilitySearchAttributesProvider interface {
 	SearchAttributes(Context) map[string]any
 }
 
-// VisibilityMemoProvider ...
-// TODO: add comments
+// VisibilityMemoProvider if implemented by the root Component,
+// allows the CHASM framework to automatically determine, at the end of
+// a transaction, if a visibility task needs to be generated to update the
+// visibility record with the returned memo.
 type VisibilityMemoProvider interface {
 	Memo(Context) map[string]any
 }
