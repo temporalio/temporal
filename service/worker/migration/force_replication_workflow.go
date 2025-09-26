@@ -171,6 +171,8 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		workflowExecutionsCh.Close()
 	})
 
+	fmt.Printf("kara start printf enqueueReplicationTasks")
+
 	if err := enqueueReplicationTasks(ctx, workflowExecutionsCh, metadataResp.NamespaceID, &params); err != nil {
 		return err
 	}
@@ -388,6 +390,8 @@ func countWorkflowForReplication(ctx workflow.Context, params ForceReplicationPa
 }
 
 func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow.Channel, namespaceID string, params *ForceReplicationParams) error {
+	fmt.Printf("[enqueue] started, namespaceID=%s targetCluster=%s\n",
+		namespaceID, params.TargetClusterName)
 	selector := workflow.NewSelector(ctx)
 	pendingGenerateTasks := 0
 	pendingVerifyTasks := 0
@@ -409,6 +413,8 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 	}
 
 	for workflowExecutionsCh.Receive(ctx, &workflowExecutions) {
+		fmt.Printf("[enqueue] submitting GenerateReplicationTasks, pendingGenerateTasks=%d\n",
+			pendingGenerateTasks)
 		generateTaskFuture := workflow.ExecuteActivity(
 			actx,
 			a.GenerateReplicationTasks,
@@ -421,15 +427,24 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 			})
 
 		pendingGenerateTasks++
-		selector.AddFuture(generateTaskFuture, func(f workflow.Future) {
-			pendingGenerateTasks--
+		fmt.Printf("[enqueue] generateTask submitted, now pendingGenerateTasks=%d\n",
+			pendingGenerateTasks)
 
+		selector.AddFuture(generateTaskFuture, func(f workflow.Future) {
+			fmt.Printf("[enqueue] generateTaskFuture completed\n")
+			pendingGenerateTasks--
+			fmt.Printf("[enqueue] pendingGenerateTasks decremented=%d\n", pendingGenerateTasks)
 			if err := f.Get(ctx, nil); err != nil {
+				fmt.Printf("[enqueue] generateTask failed: %v\n", err)
 				lastActivityErr = err
+			} else {
+				fmt.Printf("[enqueue] generateTask succeeded\n")
 			}
 		})
 
 		if params.EnableVerification {
+			fmt.Printf("[enqueue] submitting VerifyReplicationTasks, pendingVerifyTasks=%d\n",
+				pendingVerifyTasks)
 			verifyTaskFuture := workflow.ExecuteActivity(
 				actx,
 				a.VerifyReplicationTasks,
@@ -443,17 +458,28 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 				})
 
 			pendingVerifyTasks++
+			fmt.Printf("[enqueue] verifyTask submitted, now pendingVerifyTasks=%d\n",
+				pendingVerifyTasks)
 			selector.AddFuture(verifyTaskFuture, func(f workflow.Future) {
+				fmt.Printf("[enqueue] verifyTaskFuture completed\n")
 				pendingVerifyTasks--
+				fmt.Printf("[enqueue] pendingVerifyTasks decremented=%d\n", pendingVerifyTasks)
 
 				var verifyTaskResponse verifyReplicationTasksResponse
 				if err := f.Get(ctx, &verifyTaskResponse); err != nil {
+					fmt.Printf("[enqueue] verifyTask failed: %v\n", err)
 					lastActivityErr = err
 				} else {
 					// Update replication status
+					fmt.Printf("[enqueue] verifyTask succeeded, verified=%d\n",
+						verifyTaskResponse.VerifiedWorkflowCount)
 					params.ReplicatedWorkflowCount += int64(verifyTaskResponse.VerifiedWorkflowCount)
 					params.QPSQueue.Enqueue(ctx, params.ReplicatedWorkflowCount)
 					params.ReplicatedWorkflowCountPerSecond = params.QPSQueue.CalculateQPS()
+
+					fmt.Printf("[enqueue] updated metrics: ReplicatedWorkflowCount=%d QPS=%.2f\n",
+						params.ReplicatedWorkflowCount,
+						params.ReplicatedWorkflowCountPerSecond)
 
 					// Report new QPS to metrics
 					tags := map[string]string{
@@ -465,21 +491,32 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 			})
 		}
 
+		// --- control concurrency
+		fmt.Printf("[enqueue] loop: pendingGenerate=%d pendingVerify=%d\n",
+			pendingGenerateTasks, pendingVerifyTasks)
 		for pendingGenerateTasks >= params.ConcurrentActivityCount || pendingVerifyTasks >= params.ConcurrentActivityCount {
-			selector.Select(ctx) // this will block until one of the in-flight activities completes
+			fmt.Printf("[enqueue] waiting for selector (pendingGenerate=%d, pendingVerify=%d)\n",
+				pendingGenerateTasks, pendingVerifyTasks)
+			selector.Select(ctx)
 			if lastActivityErr != nil {
+				fmt.Printf("[enqueue] breaking loop with error=%v\n", lastActivityErr)
 				return lastActivityErr
 			}
 		}
 	}
 
+	fmt.Printf("[enqueue] channel closed, draining remaining tasks\n")
 	for pendingGenerateTasks > 0 || pendingVerifyTasks > 0 {
+		fmt.Printf("[enqueue] draining: pendingGenerate=%d pendingVerify=%d\n",
+			pendingGenerateTasks, pendingVerifyTasks)
 		selector.Select(ctx)
 		if lastActivityErr != nil {
+			fmt.Printf("[enqueue] return with error=%v\n", lastActivityErr)
 			return lastActivityErr
 		}
 	}
 
+	fmt.Printf("kara finished printf")
 	return nil
 }
 
