@@ -2,12 +2,8 @@ name: Flaky Tests Report
 
 on:
   schedule:
-    # Run nightly at 2 AM UTC
-    - cron: '0 2 * * *'
-  pull_request:
-    # TODO: Remove this pull_request trigger before merging to main
-    # This is only for testing the workflow during development
-    branches: [ main ]
+    # Run on Tuesdays and Fridays at noon Eastern time (5 PM UTC)
+    - cron: '0 17 * * 2,5'
   workflow_dispatch:
     inputs:
       output_file:
