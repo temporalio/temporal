@@ -63,17 +63,69 @@ jobs:
         run: |
           set -euo pipefail
           
-          rm -rf out.json timeout.txt retry.txt flaky.txt
+          echo "🔧 Starting tringa data collection..."
+          echo "📅 Date range: last 7 days"
+          echo "🌿 Branch: main"
+          echo "🆔 Workflow ID: 80591745"
+          echo "🔑 GH_TOKEN length: ${#GH_TOKEN}"
           
-          tringa --json --since-days 1 repo sql \
+          # Clean up any existing files
+          echo "🧹 Cleaning up existing files..."
+          rm -rf out.json timeout.txt retry.txt flaky.txt crash.txt
+          
+          # Run tringa command with detailed logging
+          echo "🚀 Running tringa command..."
+          echo "Command: tringa --json --since-days 7 repo sql 'select classname, name, count(*) as failure_count, max(artifact) as artifact from test where passed = false and skipped = false group by classname, name order by failure_count desc' --branch main --workflow-id 80591745 https://github.com/temporalio/temporal"
+          
+          tringa --json --since-days 7 repo sql \
             'select classname, name, count(*) as failure_count, max(artifact) as artifact from test where passed = false and skipped = false group by classname, name order by failure_count desc' \
             --branch main --workflow-id 80591745 https://github.com/temporalio/temporal > out.json
+          
+          echo "✅ Tringa command completed"
+          echo "📊 Output file size: $(wc -c < out.json) bytes"
+          echo "📄 First 500 characters of output:"
+          head -c 500 out.json
+          echo ""
+          echo "📄 Full output file:"
+          cat out.json
 
       - name: Run Python script to process flaky tests
         id: process-flaky-tests
         run: |
+          echo "🐍 Starting Python script processing..."
+          echo "📁 Current directory: $(pwd)"
+          echo "📂 Contents of current directory:"
+          ls -la
+          
+          echo "📂 Contents of tools/flakes directory:"
+          ls -la tools/flakes/
+          
+          echo "📄 Checking if out.json exists and its size:"
+          if [ -f "out.json" ]; then
+            echo "✅ out.json exists, size: $(wc -c < out.json) bytes"
+            echo "📄 First 200 characters of out.json:"
+            head -c 200 out.json
+            echo ""
+          else
+            echo "❌ out.json not found!"
+            exit 1
+          fi
+          
+          echo "🚀 Running Python script..."
           cd tools/flakes
+          echo "📁 Changed to tools/flakes directory: $(pwd)"
+          echo "📂 Contents of tools/flakes:"
+          ls -la
+          
+          echo "🐍 Running: uv run main.py --file ../../out.json"
           uv run main.py --file ../../out.json
+          
+          echo "✅ Python script completed"
+          echo "📂 Generated files in tools/flakes:"
+          ls -la
+          
+          echo "📂 Generated files in root directory:"
+          ls -la ../../
 
       - name: Upload generated reports
         uses: actions/upload-artifact@v4
@@ -93,9 +145,16 @@ jobs:
         shell: bash
         id: flaky-summary
         run: |
+          echo "📊 Starting flaky tests summary generation..."
+          echo "📁 Current directory: $(pwd)"
+          echo "📂 Available files:"
+          ls -la
+          
           # Create a comprehensive summary from the generated text files
           title="📊 Flaky Tests Report - Last 7 Days"
           message="*Test Failure Analysis:*\n\n"
+          
+          echo "🔍 Checking for generated report files..."
           
           # Count failures by category
           crash_count=0
@@ -103,21 +162,53 @@ jobs:
           retry_count=0
           timeout_count=0
           
+          echo "📊 Counting failures in each category..."
+          
           if [ -f "crash.txt" ]; then
+            echo "✅ crash.txt exists, size: $(wc -c < crash.txt) bytes"
             crash_count=$(grep -c "|\[" crash.txt || echo "0")
+            echo "💥 Crash count: $crash_count"
+            echo "📄 First 200 chars of crash.txt:"
+            head -c 200 crash.txt
+            echo ""
+          else
+            echo "❌ crash.txt not found"
           fi
           
           if [ -f "flaky.txt" ]; then
+            echo "✅ flaky.txt exists, size: $(wc -c < flaky.txt) bytes"
             flaky_count=$(grep -c "|\[" flaky.txt || echo "0")
+            echo "🔄 Flaky count: $flaky_count"
+            echo "📄 First 200 chars of flaky.txt:"
+            head -c 200 flaky.txt
+            echo ""
+          else
+            echo "❌ flaky.txt not found"
           fi
           
           if [ -f "retry.txt" ]; then
+            echo "✅ retry.txt exists, size: $(wc -c < retry.txt) bytes"
             retry_count=$(grep -c "|\[" retry.txt || echo "0")
+            echo "🔁 Retry count: $retry_count"
+            echo "📄 First 200 chars of retry.txt:"
+            head -c 200 retry.txt
+            echo ""
+          else
+            echo "❌ retry.txt not found"
           fi
           
           if [ -f "timeout.txt" ]; then
+            echo "✅ timeout.txt exists, size: $(wc -c < timeout.txt) bytes"
             timeout_count=$(grep -c "|\[" timeout.txt || echo "0")
+            echo "⏰ Timeout count: $timeout_count"
+            echo "📄 First 200 chars of timeout.txt:"
+            head -c 200 timeout.txt
+            echo ""
+          else
+            echo "❌ timeout.txt not found"
           fi
+          
+          echo "📈 Final counts - Crashes: $crash_count, Flaky: $flaky_count, Retry: $retry_count, Timeout: $timeout_count"
           
           # Create summary section
           message+="*📈 Failure Categories:*\n"
@@ -172,6 +263,11 @@ jobs:
       - name: Create GitHub Actions summary
         if: steps.process-flaky-tests.outcome == 'success'
         run: |
+          echo "📋 Creating GitHub Actions summary..."
+          echo "📁 Current directory: $(pwd)"
+          echo "📂 Available files:"
+          ls -la
+          
           {
             echo "## 📊 Flaky Tests Report - $(date)"
             echo ""
@@ -257,22 +353,42 @@ jobs:
         shell: bash
         id: success-slack-message
         run: |
+          echo "💬 Constructing success Slack message..."
+          echo "📁 Current directory: $(pwd)"
+          echo "📂 Available files:"
+          ls -la
+          
           title="📊 Flaky Tests Report - $(date)"
           
           # Read the step summary content and convert to Slack format
           if [ -f "$GITHUB_STEP_SUMMARY" ]; then
+            echo "✅ Found GitHub step summary file"
+            echo "📄 Step summary size: $(wc -c < "$GITHUB_STEP_SUMMARY") bytes"
+            echo "📄 First 300 chars of step summary:"
+            head -c 300 "$GITHUB_STEP_SUMMARY"
+            echo ""
+            
             # Convert markdown to Slack format
+            echo "🔄 Converting markdown to Slack format..."
             message=$(sed "s/^## /*/g; s/^### /*/g; s/^\- /• /g; s/\*\*\([^*]*\)\*\*/\*\1\*/g; s/\`\([^\`]*\)\`/\`\1\`/g; s/\[\([^]]*\)\](\([^)]*\))/<\2|\1>/g; s/^| /• /g; /^|--/d; s/|/ • /g" "$GITHUB_STEP_SUMMARY")
+            echo "✅ Message conversion completed"
+            echo "📄 Converted message length: ${#message} characters"
+            echo "📄 First 300 chars of converted message:"
+            echo "${message}" | head -c 300
+            echo ""
           else
+            echo "❌ GitHub step summary file not found, using default message"
             message="Flaky tests report generated successfully."
           fi
 
+          echo "📤 Setting Slack environment variables..."
           {
             echo "SLACK_TITLE=${title}"
             echo "SLACK_MESSAGE<<EOF"
             echo "${message}"
             echo "EOF"
           } >> "$GITHUB_ENV"
+          echo "✅ Slack environment variables set"
 
       - name: Send Slack notification
         if: steps.process-flaky-tests.outcome == 'success' && steps.flaky-summary.outcome == 'success'
