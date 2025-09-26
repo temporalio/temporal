@@ -48,7 +48,7 @@ func RegisterHTTPHandler(options HandlerOptions, logger log.Logger, router *mux.
 		r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxNexusAPIRequestBodyBytes)
 		h.ServeHTTP(w, r)
 	})
-	router.Path(commonnexus.RouteCompletionCallbackNoIdentifier).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	router.Path(commonnexus.PathCompletionCallbackNoIdentifier).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Limit the request body to max allowed Payload size.
 		// Content headers are transformed to Payload metadata and contribute to the Payload size as well. A separate
 		// limit is enforced on top of this in the CompleteOperation method.

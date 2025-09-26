@@ -284,6 +284,40 @@ func TestAddressMatchRules_Validate(t *testing.T) {
 				require.ErrorContains(t, err, "invalid url: unknown scheme")
 			},
 		},
+		{
+			name: "invalid url",
+			args: args{
+				rawURL: "../..///../",
+				rules: []AddressMatchRule{
+					func() AddressMatchRule {
+						re := regexp.MustCompile(addressPatternToRegexp("example.com"))
+						return AddressMatchRule{Regexp: re, AllowInsecure: true}
+					}(),
+				},
+			},
+			validateErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+				require.ErrorContains(t, err, "invalid url: unknown scheme")
+			},
+		},
+		{
+			name: "invalid url",
+			args: args{
+				rawURL: "http://",
+				rules: []AddressMatchRule{
+					func() AddressMatchRule {
+						re := regexp.MustCompile(addressPatternToRegexp("example.com"))
+						return AddressMatchRule{Regexp: re, AllowInsecure: true}
+					}(),
+				},
+			},
+			validateErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+				require.ErrorContains(t, err, "invalid url: missing host")
+			},
+		},
 	}
 
 	for _, tt := range tests {

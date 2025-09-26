@@ -534,7 +534,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 			input *nexus.LazyValue,
 			options nexus.StartOperationOptions,
 		) (nexus.HandlerStartOperationResult[any], error) {
-			if options.CallbackURL == commonnexus.RouteCompletionCallbackNoIdentifier {
+			if options.CallbackURL == commonnexus.PathCompletionCallbackNoIdentifier {
 				s.Equal(testClusterInfo.GetClusterId(), options.CallbackHeader.Get("source"))
 			}
 

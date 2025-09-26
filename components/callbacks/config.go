@@ -74,10 +74,13 @@ func (a AddressMatchRules) Validate(rawURL string) error {
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return err
+		return status.Errorf(codes.InvalidArgument, "invalid callback url: %v", err)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
+	}
+	if u.Host == "" {
+		return status.Errorf(codes.InvalidArgument, "invalid url: missing host")
 	}
 	for _, rule := range a.Rules {
 		allow, err := rule.Allow(u)

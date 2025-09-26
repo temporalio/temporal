@@ -21,7 +21,6 @@ func routeRequest(
 	defaultCilent *http.Client,
 	localClient *common.FrontendHTTPClient,
 	logger log.Logger,
-
 ) (*http.Response, error) {
 	// this source header is populated in nexusoperations/executors (via the ClientProvider) for worker targets
 	// if this header is not populated then we assume it's and external target
@@ -41,11 +40,16 @@ func routeRequest(
 			)
 		}
 	}
-	// this should not happen
-	logger.Error(
+	// this cannot happen when a cluster is removed from the group
+	logger.Warn(
 		"HTTPCallerProvider unable to find the target cluster. Using local HTTP Client.",
 		tag.SourceCluster(clusterMetadata.GetCurrentClusterName()),
 	)
+	// we need this check while there is a config to toggle
+	// systemURL usage
+	if r.URL.String() == nexus.SystemCallbackURL {
+		r.URL.Path = nexus.PathCompletionCallbackNoIdentifier
+	}
 	return localClient.Do(r)
 }
 
@@ -75,7 +79,7 @@ func execRequest(
 	// we need this check while there is a config to toggle
 	// systemURL usage
 	if r.URL.String() == nexus.SystemCallbackURL {
-		r.URL.Path = nexus.RouteCompletionCallbackNoIdentifier
+		r.URL.Path = nexus.PathCompletionCallbackNoIdentifier
 	}
 	r.URL.Scheme = frontendClient.Scheme
 	r.URL.Host = frontendClient.Address

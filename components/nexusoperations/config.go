@@ -26,8 +26,8 @@ RPCs. If the remaining request timeout is less than this value, a non-retryable 
 var MinDispatchTaskTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"component.nexusoperations.limit.dispatch.task.timeout.min",
 	time.Second,
-	`MinDispatchTaskTimeout is the minimum time remaining for a request to be dispatched to the handler worker. 
-If the remaining request timeout is less than this value, a timeout error will be returned. Working in conjunction with 
+	`MinDispatchTaskTimeout is the minimum time remaining for a request to be dispatched to the handler worker.
+If the remaining request timeout is less than this value, a timeout error will be returned. Working in conjunction with
 MinRequestTimeout, both configs help ensure that the server has enough time to complete a Nexus request.`,
 )
 
@@ -84,12 +84,14 @@ Uses Go's len() function on header keys and values to determine the total size.`
 var UseSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
 	"component.nexusoperations.useSystemCallbackURL",
 	false,
-	`UseSystemCallbackURL is a global feature toggle that controls how the executor generates callback URLs for worker targets in Nexus Operations.
-When set to true, the executor will use the fixed system callback URL ("temporal://system") for all worker targets, instead of generating URLs from the callback URL template.
-This simplifies configuration and improves reliability for worker callbacks.
-- false (default): The executor uses the callback URL template to generate callback URLs for worker targets.
-- true: The executor uses the fixed system callback URL ("temporal://system") for worker targets.
-Note: The default will switch to true in future releases.`,
+	`UseSystemCallbackURL is a global feature toggle that controls how the executor generates
+	callback URLs for worker targets in Nexus Operations.When set to true,
+	the executor will use the fixed system callback URL ("temporal://system") for all worker targets,
+	instead of generating URLs from the callback URL template.
+	This simplifies configuration and improves reliability for worker callbacks.
+	- false (default): The executor uses the callback URL template to generate callback URLs for worker targets.
+	- true: The executor uses the fixed system callback URL ("temporal://system") for worker targets.
+	Note: The default will switch to true in future releases.`,
 )
 
 var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSettingWithConverter(

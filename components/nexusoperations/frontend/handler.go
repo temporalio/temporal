@@ -130,7 +130,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 	}
 	ctx = rCtx.augmentContext(ctx, r.HTTPRequest.Header)
 	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
-	if r.HTTPRequest.URL.Path != commonnexus.RouteCompletionCallbackNoIdentifier {
+	if r.HTTPRequest.URL.Path != commonnexus.PathCompletionCallbackNoIdentifier {
 		nsNameEscaped := commonnexus.RouteCompletionCallback.Deserialize(mux.Vars(r.HTTPRequest))
 		nsName, err := url.PathUnescape(nsNameEscaped)
 		if err != nil {

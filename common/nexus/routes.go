@@ -28,8 +28,8 @@ var RouteCompletionCallback = routing.NewBuilder[string]().
 	Constant("nexus", "callback").
 	Build()
 
-// RouteCompletionCallbackNoIdentifier is an HTTP route for completing a Nexus operation via callback.
+// PathCompletionCallbackNoIdentifier is an HTTP route for completing a Nexus operation via callback.
 // Unlike  RouteCompletionCallback it does not require any identifying information to be provided in the
 // URL path. Instead the handler for this path is expected to look up identifying information through
 // via the callback token in the headers.
-var RouteCompletionCallbackNoIdentifier = "/nexus/callback"
+var PathCompletionCallbackNoIdentifier = "/nexus/callback"
