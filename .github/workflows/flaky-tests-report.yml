@@ -111,14 +111,13 @@ jobs:
             exit 1
           fi
           
-          echo "🚀 Running Python script..."
-          cd tools/flakes
-          echo "📁 Changed to tools/flakes directory: $(pwd)"
+          echo "🚀 Running Python script from root directory..."
+          echo "📁 Current directory: $(pwd)"
           echo "📂 Contents of tools/flakes:"
-          ls -la
+          ls -la tools/flakes/
           
-          echo "🐍 Running: uv run main.py --file ../../out.json"
-          uv run main.py --file ../../out.json
+          echo "🐍 Running: cd tools/flakes && uv run main.py --file ../../out.json"
+          cd tools/flakes && uv run main.py --file ../../out.json
           
           echo "✅ Python script completed"
           echo "📂 Generated files in tools/flakes:"
@@ -134,10 +133,10 @@ jobs:
           name: flaky-tests-reports-${{ github.run_number }}
           path: |
             out.json
-            crash.txt
-            flaky.txt
-            retry.txt
-            timeout.txt
+            tools/flakes/crash.txt
+            tools/flakes/flaky.txt
+            tools/flakes/retry.txt
+            tools/flakes/timeout.txt
           retention-days: 30
 
       - name: Generate flaky tests summary
@@ -164,48 +163,48 @@ jobs:
           
           echo "📊 Counting failures in each category..."
           
-          if [ -f "crash.txt" ]; then
-            echo "✅ crash.txt exists, size: $(wc -c < crash.txt) bytes"
-            crash_count=$(grep -c "|\[" crash.txt || echo "0")
+          if [ -f "tools/flakes/crash.txt" ]; then
+            echo "✅ crash.txt exists in tools/flakes, size: $(wc -c < tools/flakes/crash.txt) bytes"
+            crash_count=$(grep -c "|\[" tools/flakes/crash.txt || echo "0")
             echo "💥 Crash count: $crash_count"
             echo "📄 First 200 chars of crash.txt:"
-            head -c 200 crash.txt
+            head -c 200 tools/flakes/crash.txt
             echo ""
           else
-            echo "❌ crash.txt not found"
+            echo "❌ crash.txt not found in tools/flakes"
           fi
           
-          if [ -f "flaky.txt" ]; then
-            echo "✅ flaky.txt exists, size: $(wc -c < flaky.txt) bytes"
-            flaky_count=$(grep -c "|\[" flaky.txt || echo "0")
+          if [ -f "tools/flakes/flaky.txt" ]; then
+            echo "✅ flaky.txt exists in tools/flakes, size: $(wc -c < tools/flakes/flaky.txt) bytes"
+            flaky_count=$(grep -c "|\[" tools/flakes/flaky.txt || echo "0")
             echo "🔄 Flaky count: $flaky_count"
             echo "📄 First 200 chars of flaky.txt:"
-            head -c 200 flaky.txt
+            head -c 200 tools/flakes/flaky.txt
             echo ""
           else
-            echo "❌ flaky.txt not found"
+            echo "❌ flaky.txt not found in tools/flakes"
           fi
           
-          if [ -f "retry.txt" ]; then
-            echo "✅ retry.txt exists, size: $(wc -c < retry.txt) bytes"
-            retry_count=$(grep -c "|\[" retry.txt || echo "0")
+          if [ -f "tools/flakes/retry.txt" ]; then
+            echo "✅ retry.txt exists in tools/flakes, size: $(wc -c < tools/flakes/retry.txt) bytes"
+            retry_count=$(grep -c "|\[" tools/flakes/retry.txt || echo "0")
             echo "🔁 Retry count: $retry_count"
             echo "📄 First 200 chars of retry.txt:"
-            head -c 200 retry.txt
+            head -c 200 tools/flakes/retry.txt
             echo ""
           else
-            echo "❌ retry.txt not found"
+            echo "❌ retry.txt not found in tools/flakes"
           fi
           
-          if [ -f "timeout.txt" ]; then
-            echo "✅ timeout.txt exists, size: $(wc -c < timeout.txt) bytes"
-            timeout_count=$(grep -c "|\[" timeout.txt || echo "0")
+          if [ -f "tools/flakes/timeout.txt" ]; then
+            echo "✅ timeout.txt exists in tools/flakes, size: $(wc -c < tools/flakes/timeout.txt) bytes"
+            timeout_count=$(grep -c "|\[" tools/flakes/timeout.txt || echo "0")
             echo "⏰ Timeout count: $timeout_count"
             echo "📄 First 200 chars of timeout.txt:"
-            head -c 200 timeout.txt
+            head -c 200 tools/flakes/timeout.txt
             echo ""
           else
-            echo "❌ timeout.txt not found"
+            echo "❌ timeout.txt not found in tools/flakes"
           fi
           
           echo "📈 Final counts - Crashes: $crash_count, Flaky: $flaky_count, Retry: $retry_count, Timeout: $timeout_count"
@@ -218,31 +217,31 @@ jobs:
           message+="• ⏰ Timeouts: ${timeout_count}\n\n"
           
           # Add detailed tables for each category with failures
-          if [ "$crash_count" -gt 0 ] && [ -f "crash.txt" ]; then
+          if [ "$crash_count" -gt 0 ] && [ -f "tools/flakes/crash.txt" ]; then
             message+="*💥 Crashes:*\n"
             message+="\`\`\`\n"
-            message+="$(cat crash.txt)\n"
+            message+="$(cat tools/flakes/crash.txt)\n"
             message+="\`\`\`\n\n"
           fi
           
-          if [ "$timeout_count" -gt 0 ] && [ -f "timeout.txt" ]; then
+          if [ "$timeout_count" -gt 0 ] && [ -f "tools/flakes/timeout.txt" ]; then
             message+="*⏰ Timeouts:*\n"
             message+="\`\`\`\n"
-            message+="$(cat timeout.txt)\n"
+            message+="$(cat tools/flakes/timeout.txt)\n"
             message+="\`\`\`\n\n"
           fi
           
-          if [ "$flaky_count" -gt 0 ] && [ -f "flaky.txt" ]; then
+          if [ "$flaky_count" -gt 0 ] && [ -f "tools/flakes/flaky.txt" ]; then
             message+="*🔄 Flaky Tests:*\n"
             message+="\`\`\`\n"
-            message+="$(cat flaky.txt)\n"
+            message+="$(cat tools/flakes/flaky.txt)\n"
             message+="\`\`\`\n\n"
           fi
           
-          if [ "$retry_count" -gt 0 ] && [ -f "retry.txt" ]; then
+          if [ "$retry_count" -gt 0 ] && [ -f "tools/flakes/retry.txt" ]; then
             message+="*🔁 Retry Failures:*\n"
             message+="\`\`\`\n"
-            message+="$(cat retry.txt)\n"
+            message+="$(cat tools/flakes/retry.txt)\n"
             message+="\`\`\`\n\n"
           fi
           
@@ -308,38 +307,38 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           
           # Add detailed tables for each category
-          if [ "$crash_count" -gt 0 ] && [ -f "crash.txt" ]; then
+          if [ "$crash_count" -gt 0 ] && [ -f "tools/flakes/crash.txt" ]; then
             {
               echo "### 💥 Crashes"
               echo ""
-              cat crash.txt
+              cat tools/flakes/crash.txt
               echo ""
             } >> "$GITHUB_STEP_SUMMARY"
           fi
           
-          if [ "$timeout_count" -gt 0 ] && [ -f "timeout.txt" ]; then
+          if [ "$timeout_count" -gt 0 ] && [ -f "tools/flakes/timeout.txt" ]; then
             {
               echo "### ⏰ Timeouts"
               echo ""
-              cat timeout.txt
+              cat tools/flakes/timeout.txt
               echo ""
             } >> "$GITHUB_STEP_SUMMARY"
           fi
           
-          if [ "$flaky_count" -gt 0 ] && [ -f "flaky.txt" ]; then
+          if [ "$flaky_count" -gt 0 ] && [ -f "tools/flakes/flaky.txt" ]; then
             {
               echo "### 🔄 Flaky Tests"
               echo ""
-              cat flaky.txt
+              cat tools/flakes/flaky.txt
               echo ""
             } >> "$GITHUB_STEP_SUMMARY"
           fi
           
-          if [ "$retry_count" -gt 0 ] && [ -f "retry.txt" ]; then
+          if [ "$retry_count" -gt 0 ] && [ -f "tools/flakes/retry.txt" ]; then
             {
               echo "### 🔁 Retry Failures"
               echo ""
-              cat retry.txt
+              cat tools/flakes/retry.txt
               echo ""
             } >> "$GITHUB_STEP_SUMMARY"
           fi
