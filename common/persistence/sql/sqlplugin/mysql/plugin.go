@@ -17,12 +17,20 @@ const (
 	PluginName = "mysql8"
 )
 
-type plugin struct{}
+type plugin struct {
+	queryConverter sqlplugin.VisibilityQueryConverter
+}
 
 var _ sqlplugin.Plugin = (*plugin)(nil)
 
 func init() {
-	sql.RegisterPlugin(PluginName, &plugin{})
+	sql.RegisterPlugin(PluginName, &plugin{
+		queryConverter: &queryConverter{},
+	})
+}
+
+func (p *plugin) GetVisibilityQueryConverter() sqlplugin.VisibilityQueryConverter {
+	return p.queryConverter
 }
 
 // CreateDB initialize the db object
