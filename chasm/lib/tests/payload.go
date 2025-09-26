@@ -140,7 +140,7 @@ func (s *PayloadStore) LifecycleState(
 	return chasm.LifecycleStateRunning
 }
 
-// Implements chasm.VisibilitySearchAttributesProvider interface
+// SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface
 func (s *PayloadStore) SearchAttributes(
 	_ chasm.Context,
 ) map[string]any {
@@ -151,7 +151,7 @@ func (s *PayloadStore) SearchAttributes(
 	}
 }
 
-// Implements chasm.VisibilityMemoProvider interface
+// Memo implements chasm.VisibilityMemoProvider interface
 func (s *PayloadStore) Memo(
 	_ chasm.Context,
 ) map[string]any {

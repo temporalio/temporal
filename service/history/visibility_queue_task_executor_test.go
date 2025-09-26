@@ -617,11 +617,13 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_RunningExecution
 			s.Equal("TestLibrary.test_component", actualArchetype)
 
 			var paused bool
-			payload.Decode(request.SearchAttributes.IndexedFields[testComponentPausedSAName], &paused)
+			err = payload.Decode(request.SearchAttributes.IndexedFields[testComponentPausedSAName], &paused)
+			s.NoError(err)
 			s.True(paused)
 
 			s.Len(request.Memo.Fields, 1)
-			payload.Decode(request.Memo.Fields[testComponentPausedSAName], &paused)
+			err = payload.Decode(request.Memo.Fields[testComponentPausedSAName], &paused)
+			s.NoError(err)
 			s.True(paused)
 
 			return nil

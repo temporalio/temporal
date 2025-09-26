@@ -96,9 +96,9 @@ func (v *Visibility) GetSearchAttributes(
 
 func (v *Visibility) SetSearchAttributes(
 	mutableContext MutableContext,
-	updates map[string]any,
+	searchAttributes map[string]any,
 ) (bool, error) {
-	updated, err := v.updatePayloadMap(mutableContext, &v.SA, updates)
+	updated, err := v.updatePayloadMap(mutableContext, &v.SA, searchAttributes)
 	if updated {
 		v.generateTask(mutableContext)
 	}
@@ -121,9 +121,9 @@ func (v *Visibility) GetMemo(
 
 func (v *Visibility) SetMemo(
 	mutableContext MutableContext,
-	updates map[string]any,
+	memo map[string]any,
 ) (bool, error) {
-	updated, err := v.updatePayloadMap(mutableContext, &v.Memo, updates)
+	updated, err := v.updatePayloadMap(mutableContext, &v.Memo, memo)
 	if updated {
 		v.generateTask(mutableContext)
 	}
@@ -223,13 +223,13 @@ func GetSearchAttribute[T any](
 	return getVisibilityPayloadValue[T](chasmContext, visibility.SA, key)
 }
 
-// TODO: only update if value is different and return bool to indicate if updated
 func SetSearchAttribute[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
 	mutableContext MutableContext,
 	visibility *Visibility,
 	name string,
 	value T,
 ) {
+	// TODO: only update if value is different and return bool to indicate if updated
 	upsertVisibilityPayload(mutableContext, &visibility.SA, visibility, name, value)
 }
 
@@ -241,13 +241,13 @@ func GetMemo[T any](
 	return getVisibilityPayloadValue[T](chasmContext, visibility.Memo, key)
 }
 
-// TODO: only update if value is different and return bool to indicate if updated
 func SetMemo[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
 	mutableContext MutableContext,
 	visibility *Visibility,
 	name string,
 	value T,
 ) {
+	// TODO: only update if value is different and return bool to indicate if updated
 	upsertVisibilityPayload(mutableContext, &visibility.Memo, visibility, name, value)
 }
 
