@@ -342,85 +342,17 @@ jobs:
             echo "🎉 **No test failures found in the last 7 days!**" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Prepare Slack data
-        if: steps.process-flaky-tests.outcome == 'success' && steps.flaky-summary.outcome == 'success'
-        shell: bash
-        id: prepare-slack-data
-        run: |
-          echo "💬 Preparing Slack data..."
-          echo "📁 Current directory: $(pwd)"
-          echo "📂 Available files:"
-          ls -la
-          
-          # Count failures by category
-          crash_count=0
-          flaky_count=0
-          retry_count=0
-          timeout_count=0
-          
-          if [ -f "tools/flakes/crash.txt" ]; then
-            crash_count=$(grep -c "|\[" tools/flakes/crash.txt || echo "0")
-          fi
-          if [ -f "tools/flakes/flaky.txt" ]; then
-            flaky_count=$(grep -c "|\[" tools/flakes/flaky.txt || echo "0")
-          fi
-          if [ -f "tools/flakes/retry.txt" ]; then
-            retry_count=$(grep -c "|\[" tools/flakes/retry.txt || echo "0")
-          fi
-          if [ -f "tools/flakes/timeout.txt" ]; then
-            timeout_count=$(grep -c "|\[" tools/flakes/timeout.txt || echo "0")
-          fi
-          
-          # Prepare flaky tests content for Slack
-          flaky_content=""
-          if [ "$flaky_count" -gt 0 ] && [ -f "tools/flakes/flaky_slack.txt" ]; then
-            echo "📝 Reading flaky tests content for Slack..."
-            # Read the content, limit to first 10 items, and properly format for Slack
-            flaky_content=$(head -10 tools/flakes/flaky_slack.txt | sed 's/^/• /' | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-1000)
-            echo "📄 Flaky content length: ${#flaky_content} characters"
-          fi
-          
-          echo "📤 Setting Slack environment variables..."
-          {
-            echo "CRASH_COUNT=${crash_count}"
-            echo "FLAKY_COUNT=${flaky_count}"
-            echo "RETRY_COUNT=${retry_count}"
-            echo "TIMEOUT_COUNT=${timeout_count}"
-            echo "FLAKY_CONTENT=${flaky_content}"
-          } >> "$GITHUB_ENV"
-          echo "✅ Slack environment variables set"
 
       - name: Send Slack notification
-        if: steps.process-flaky-tests.outcome == 'success' && steps.flaky-summary.outcome == 'success' && steps.prepare-slack-data.outcome == 'success'
-        uses: slackapi/slack-github-action@v2.1.1
-        with:
-          webhook: ${{ secrets.SLACK_WEBHOOK }}
-          webhook-type: incoming-webhook
-          payload: |
-            text: "📊 Flaky Tests Report - Last 7 Days"
-            blocks:
-              - type: "section"
-                text:
-                  type: "mrkdwn"
-                  text: "*📊 Flaky Tests Report - Last 7 Days*"
-              - type: "section"
-                fields:
-                  - type: "mrkdwn"
-                    text: "*💥 Crashes:* ${{ env.CRASH_COUNT || '0' }}"
-                  - type: "mrkdwn"
-                    text: "*🔄 Flaky Tests:* ${{ env.FLAKY_COUNT || '0' }}"
-                  - type: "mrkdwn"
-                    text: "*🔁 Retry Failures:* ${{ env.RETRY_COUNT || '0' }}"
-                  - type: "mrkdwn"
-                    text: "*⏰ Timeouts:* ${{ env.TIMEOUT_COUNT || '0' }}"
-              - type: "section"
-                text:
-                  type: "mrkdwn"
-                  text: "*🔄 Flaky Tests Details:*\n${{ env.FLAKY_CONTENT || 'No flaky tests found.' }}"
-              - type: "section"
-                text:
-                  type: "mrkdwn"
-                  text: "📋 <https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }}|View Full Report & Download Artifacts>"
+        if: steps.process-flaky-tests.outcome == 'success' && steps.flaky-summary.outcome == 'success'
+        run: |
+          echo "📤 Sending Slack notification..."
+          cd tools/flakes
+          uv run main.py \
+            --file "../../out.json" \
+            --slack-webhook "${{ secrets.SLACK_WEBHOOK }}" \
+            --slack-message-type success \
+            --run-id "${{ github.run_id }}"
 
       - name: Create GitHub Actions failure summary
         if: steps.process-flaky-tests.outcome == 'failure' || steps.flaky-summary.outcome == 'failure'
@@ -460,32 +392,12 @@ jobs:
 
       - name: Send Slack workflow failure notification
         if: steps.process-flaky-tests.outcome == 'failure' || steps.flaky-summary.outcome == 'failure'
-        uses: slackapi/slack-github-action@v2.1.1
-        with:
-          webhook: ${{ secrets.SLACK_WEBHOOK }}
-          webhook-type: incoming-webhook
-          payload: |
-            text: "❌ Flaky Tests Report Generation Failed"
-            blocks:
-              - type: "section"
-                text:
-                  type: "mrkdwn"
-                  text: "*❌ Flaky Tests Report Generation Failed*"
-              - type: "section"
-                text:
-                  type: "mrkdwn"
-                  text: "The flaky tests report workflow failed to generate the report."
-              - type: "section"
-                fields:
-                  - type: "mrkdwn"
-                    text: "*Run ID:* <https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }}|${{ github.run_id }}>"
-                  - type: "mrkdwn"
-                    text: "*Branch:* \`${{ github.ref_name }}\`"
-                  - type: "mrkdwn"
-                    text: "*Commit:* <https://github.com/temporalio/temporal/commit/${{ github.sha }}|${{ github.sha }}>"
-                  - type: "mrkdwn"
-                    text: "*Status:* Failed"
-              - type: "section"
-                text:
-                  type: "mrkdwn"
-                  text: "Please check the workflow logs for more details."
+        run: |
+          echo "📤 Sending Slack failure notification..."
+          cd tools/flakes
+          uv run main.py \
+            --slack-webhook "${{ secrets.SLACK_WEBHOOK }}" \
+            --slack-message-type failure \
+            --run-id "${{ github.run_id }}" \
+            --ref-name "${{ github.ref_name }}" \
+            --sha "${{ github.sha }}"
