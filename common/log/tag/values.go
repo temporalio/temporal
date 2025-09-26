@@ -126,6 +126,7 @@ var (
 	ComponentVisibilityHandler         = component("visibility-handler")
 	ComponentNamespaceReplication      = component("namespace-replication")
 	ComponentPersistence               = component("persistence")
+	ComponentWorkflowUpdate            = component("workflow-update")
 	ComponentTaskScheduler             = component("task-scheduler")
 	VersionChecker                     = component("version-checker")
 )
