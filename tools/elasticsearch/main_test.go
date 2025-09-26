@@ -30,7 +30,7 @@ func (s *MainTestSuite) TestSetupSchemaError() {
 	osExit = func(i int) {
 		s.Equal(1, i)
 	}
-	args := []string{"./tool", "setup-schema", "--index", ""}
+	args := []string{"./tool", "setup-schema"}
 	app := BuildCLIOptions()
 	err := app.Run(args)
 	s.Nil(err)
