@@ -37,7 +37,7 @@ func (s *queryUtilSuite) TestLoadAndSplitQueryFromReaders() {
 			BEGIN
 				IF ( NOT EXISTS (select extname from pg_extension where extname = 'btree_gin') ) THEN
 					CREATE EXTENSION btree_gin;
-				END IF;
+				END  IF; --Intentionally add multiple spaces between END and IF
 			END
 		$$;
 
@@ -67,7 +67,7 @@ func (s *queryUtilSuite) TestLoadAndSplitQueryFromReaders() {
 			BEGIN
 				IF ( NOT EXISTS (select extname from pg_extension where extname = 'btree_gin') ) THEN
 					CREATE EXTENSION btree_gin;
-				END IF;
+				END  IF;
 			END
 		$$;`,
 		statements[0],
