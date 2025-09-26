@@ -97,7 +97,7 @@ func LoadAndSplitQueryFromReaders(
 								return nil, errors.New("error reading contents: unmatched `END IF` keyword")
 							}
 							st = st[:len(st)-1]
-							j = after + len(sqlIfKeyword)
+							j = after + len(sqlIfKeyword) - 1
 						} else {
 							if len(st) == 0 || st[len(st)-1] != sqlBeginKeyword[0] {
 								return nil, fmt.Errorf("error reading contents: unmatched `END` keyword")
