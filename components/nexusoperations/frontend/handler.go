@@ -117,8 +117,20 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		tag.WorkflowID(completion.GetWorkflowId()),
 		tag.WorkflowRunID(completion.GetRunId()),
 	)
-	noIDpath := commonnexus.RouteCompletionCallbackNoIdentifier
-	if r.HTTPRequest.URL.Path != noIDpath {
+	rCtx := &requestContext{
+		completionHandler: h,
+		namespace:         ns,
+		logger:            log.With(h.Logger, tag.WorkflowNamespace(ns.Name().String())),
+		metricsHandler:    h.MetricsHandler.WithTags(metrics.NamespaceTag(ns.Name().String())),
+		metricsHandlerForInterceptors: h.MetricsHandler.WithTags(
+			metrics.OperationTag(methodNameForMetrics),
+			metrics.NamespaceTag(ns.Name().String()),
+		),
+		requestStartTime: startTime,
+	}
+	ctx = rCtx.augmentContext(ctx, r.HTTPRequest.Header)
+	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
+	if r.HTTPRequest.URL.Path != commonnexus.RouteCompletionCallbackNoIdentifier {
 		nsNameEscaped := commonnexus.RouteCompletionCallback.Deserialize(mux.Vars(r.HTTPRequest))
 		nsName, err := url.PathUnescape(nsNameEscaped)
 		if err != nil {
@@ -136,19 +148,6 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 		}
 	}
-	rCtx := &requestContext{
-		completionHandler: h,
-		namespace:         ns,
-		logger:            log.With(h.Logger, tag.WorkflowNamespace(ns.Name().String())),
-		metricsHandler:    h.MetricsHandler.WithTags(metrics.NamespaceTag(ns.Name().String())),
-		metricsHandlerForInterceptors: h.MetricsHandler.WithTags(
-			metrics.OperationTag(methodNameForMetrics),
-			metrics.NamespaceTag(ns.Name().String()),
-		),
-		requestStartTime: startTime,
-	}
-	ctx = rCtx.augmentContext(ctx, r.HTTPRequest.Header)
-	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	if err := rCtx.interceptRequest(ctx, r); err != nil {
 		var notActiveErr *serviceerror.NamespaceNotActive

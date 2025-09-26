@@ -72,13 +72,13 @@ func execRequest(
 		}
 		frontendClient = fe
 	}
-	r.URL.Scheme = frontendClient.Scheme
-	r.URL.Host = frontendClient.Address
 	// we need this check while there is a config to toggle
 	// systemURL usage
 	if r.URL.String() == nexus.SystemCallbackURL {
 		r.URL.Path = nexus.RouteCompletionCallbackNoIdentifier
 	}
+	r.URL.Scheme = frontendClient.Scheme
+	r.URL.Host = frontendClient.Address
 	r.Host = frontendClient.Address
 	return frontendClient.Do(r)
 }

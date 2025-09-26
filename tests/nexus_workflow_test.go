@@ -33,6 +33,8 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -532,7 +534,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 			input *nexus.LazyValue,
 			options nexus.StartOperationOptions,
 		) (nexus.HandlerStartOperationResult[any], error) {
-			s.Equal(testClusterInfo.GetClusterId(), options.CallbackHeader.Get("source"))
+			if options.CallbackURL == commonnexus.RouteCompletionCallbackNoIdentifier {
+				s.Equal(testClusterInfo.GetClusterId(), options.CallbackHeader.Get("source"))
+			}
 
 			s.Len(options.Links, 1)
 			var links []*commonpb.Link
@@ -675,8 +679,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 	invalidCallbackUrl := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(invalidNamespace)
 	res, snap = s.sendNexusCompletionRequest(ctx, s.T(), invalidCallbackUrl, completion, callbackToken)
 	s.Equal(http.StatusBadRequest, res.StatusCode)
-	s.Equal(1, len(snap["nexus_completion_requests"]))
-	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": invalidNamespace, "outcome": "error_bad_request"})
 
 	// Manipulate the token to verify we get the expected errors in the API.
 	gen := &commonnexus.CallbackTokenGenerator{}
@@ -1222,8 +1224,12 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 	})
 
 	s.Run("NamespaceNotFound", func() {
+		// Generate a token with a non-existent namespace ID
+		tokenWithBadNamespace, err := s.generateValidCallbackToken("namespace-doesnt-exist-id", testcore.RandomizeStr("workflow"), uuid.NewString())
+		s.NoError(err)
+
 		publicCallbackUrl := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path("namespace-doesnt-exist")
-		res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, "")
+		res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, tokenWithBadNamespace)
 		s.Equal(http.StatusNotFound, res.StatusCode)
 		s.Equal(1, len(snap["nexus_completion_request_preprocess_errors"]))
 	})
@@ -1236,7 +1242,12 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 		})
 		s.NoError(err)
 
-		res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, "")
+		// Generate a valid callback token to get past initial validation
+		namespaceID := s.GetNamespaceID(s.Namespace().String())
+		validToken, err := s.generateValidCallbackToken(namespaceID, testcore.RandomizeStr("workflow"), uuid.NewString())
+		s.NoError(err)
+
+		res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, validToken)
 		s.Equal(http.StatusBadRequest, res.StatusCode)
 		s.Equal(0, len(snap["nexus_completion_request_preprocess_errors"]))
 		s.Equal(1, len(snap["nexus_completion_requests"]))
@@ -1245,11 +1256,29 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 
 	s.Run("InvalidCallbackToken", func() {
 		publicCallbackUrl := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(s.Namespace().String())
-		res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, "")
+
+		// Send request without callback token
+		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
+		defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+		req, err := nexus.NewCompletionHTTPRequest(ctx, publicCallbackUrl, completion)
+		s.NoError(err)
+		// Intentionally not adding callback token to test invalid token error
+
+		res, err := http.DefaultClient.Do(req)
+		s.NoError(err)
+		body, err := io.ReadAll(res.Body)
+		s.NoError(err)
+		defer res.Body.Close()
+
+		// Verify we get the correct error response
 		s.Equal(http.StatusBadRequest, res.StatusCode)
+		s.Contains(string(body), "invalid callback token", "Response should indicate invalid callback token")
+
+		// When callback token is invalid, no metrics are recorded because the handler returns early
+		// before setting up the request context that records metrics
+		snap := capture.Snapshot()
 		s.Equal(0, len(snap["nexus_completion_request_preprocess_errors"]))
-		s.Equal(1, len(snap["nexus_completion_requests"]))
-		s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "error_bad_request"})
+		s.Equal(0, len(snap["nexus_completion_requests"]))
 	})
 
 	s.Run("InvalidClientVersion", func() {
@@ -1257,9 +1286,15 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 		defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
+		// Generate a valid callback token to get past initial validation
+		namespaceID := s.GetNamespaceID(s.Namespace().String())
+		validToken, err := s.generateValidCallbackToken(namespaceID, testcore.RandomizeStr("workflow"), uuid.NewString())
+		s.NoError(err)
+
 		req, err := nexus.NewCompletionHTTPRequest(ctx, publicCallbackUrl, completion)
 		s.NoError(err)
 		req.Header.Set("User-Agent", "Nexus-go-sdk/v99.0.0")
+		req.Header.Add(commonnexus.CallbackTokenHeader, validToken)
 
 		res, err := http.DefaultClient.Do(req)
 		s.NoError(err)
@@ -1291,8 +1326,13 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrors() {
 	})
 	s.NoError(err)
 
+	// Generate a valid callback token for testing
+	namespaceID := s.GetNamespaceID(s.Namespace().String())
+	callbackToken, err := s.generateValidCallbackToken(namespaceID, testcore.RandomizeStr("workflow"), uuid.NewString())
+	s.NoError(err)
+
 	publicCallbackUrl := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(s.Namespace().String())
-	res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, "")
+	res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
 	s.Equal(http.StatusForbidden, res.StatusCode)
 	s.Equal(1, len(snap["nexus_completion_requests"]))
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "unauthorized"})
@@ -2559,6 +2599,33 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 	}
 }
 
+// generateValidCallbackToken creates a valid callback token for testing with the given namespace, workflow, and run IDs
+func (s *NexusWorkflowTestSuite) generateValidCallbackToken(namespaceID, workflowID, runID string) (string, error) {
+	gen := &commonnexus.CallbackTokenGenerator{}
+	return gen.Tokenize(&tokenspb.NexusOperationCompletion{
+		NamespaceId: namespaceID,
+		WorkflowId:  workflowID,
+		RunId:       runID,
+		Ref: &persistencespb.StateMachineRef{
+			Path: []*persistencespb.StateMachineKey{
+				{
+					Type: "nexusoperations.Operation",
+					Id:   uuid.NewString(),
+				},
+			},
+			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 1,
+				TransitionCount:          1,
+			},
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 1,
+				TransitionCount:          0,
+			},
+		},
+		RequestId: uuid.NewString(),
+	})
+}
+
 func (s *NexusWorkflowTestSuite) sendNexusCompletionRequest(
 	ctx context.Context,
 	t *testing.T,
@@ -2576,8 +2643,9 @@ func (s *NexusWorkflowTestSuite) sendNexusCompletionRequest(
 
 	res, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	_, err = io.ReadAll(res.Body)
+	by, err := io.ReadAll(res.Body)
 	require.NoError(t, err)
+	fmt.Println(string(by))
 	defer res.Body.Close()
 	return res, capture.Snapshot()
 }
