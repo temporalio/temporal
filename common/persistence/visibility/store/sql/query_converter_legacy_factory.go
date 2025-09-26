@@ -8,7 +8,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 )
 
-func NewQueryConverter(
+func NewQueryConverterLegacy(
 	pluginName string,
 	namespaceName namespace.Name,
 	namespaceID namespace.ID,

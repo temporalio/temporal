@@ -171,7 +171,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		return nil, err
 	}
 
-	converter := NewQueryConverter(
+	converter := NewQueryConverterLegacy(
 		s.GetName(),
 		request.Namespace,
 		request.NamespaceID,
@@ -242,7 +242,7 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 		return nil, err
 	}
 
-	converter := NewQueryConverter(
+	converter := NewQueryConverterLegacy(
 		s.GetName(),
 		request.Namespace,
 		request.NamespaceID,
