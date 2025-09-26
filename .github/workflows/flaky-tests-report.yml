@@ -375,7 +375,8 @@ jobs:
           flaky_content=""
           if [ "$flaky_count" -gt 0 ] && [ -f "tools/flakes/flaky_slack.txt" ]; then
             echo "📝 Reading flaky tests content for Slack..."
-            flaky_content=$(cat tools/flakes/flaky_slack.txt | sed 's/^/• /' | tr -d '\n' | sed 's/• /• /g')
+            # Read the content, limit to first 10 items, and properly format for Slack
+            flaky_content=$(head -10 tools/flakes/flaky_slack.txt | sed 's/^/• /' | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-1000)
             echo "📄 Flaky content length: ${#flaky_content} characters"
           fi
           
@@ -385,9 +386,7 @@ jobs:
             echo "FLAKY_COUNT=${flaky_count}"
             echo "RETRY_COUNT=${retry_count}"
             echo "TIMEOUT_COUNT=${timeout_count}"
-            echo "FLAKY_CONTENT<<EOF"
-            echo "${flaky_content}"
-            echo "EOF"
+            echo "FLAKY_CONTENT=${flaky_content}"
           } >> "$GITHUB_ENV"
           echo "✅ Slack environment variables set"
 
