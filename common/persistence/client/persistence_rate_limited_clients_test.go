@@ -167,6 +167,7 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 				nil,
 				nil,
 				nil,
+				func() bool { return false },
 			)
 			shardManager, _ := factory.NewShardManager()
 			executionManager, _ := factory.NewExecutionManager()

@@ -28,6 +28,16 @@ func NewSequentialTaskQueue(task TrackableExecutableTask) ctasks.SequentialTaskQ
 	}
 }
 
+func NewSequentialTaskQueueWithID(id interface{}) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
+	return &SequentialTaskQueue{
+		id: id,
+
+		taskQueue: collection.NewPriorityQueue[TrackableExecutableTask](
+			SequentialTaskQueueCompareLess,
+		),
+	}
+}
+
 func (q *SequentialTaskQueue) ID() interface{} {
 	return q.id
 }

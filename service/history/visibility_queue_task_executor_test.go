@@ -745,7 +745,7 @@ func (s *visibilityQueueTaskExecutorSuite) buildChasmVisTask(
 		Info: &persistencespb.ChasmTaskInfo{
 			ComponentInitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 			ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
-			Path:                                   "Visibility",
+			Path:                                   []string{"Visibility"},
 			Type:                                   "core.visTask",
 			Data: &commonpb.DataBlob{
 				Data:         data,

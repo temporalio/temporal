@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"fmt"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -54,4 +55,14 @@ func (a *DeleteHistoryEventTask) GetCategory() Category {
 
 func (a *DeleteHistoryEventTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT
+}
+
+func (a *DeleteHistoryEventTask) String() string {
+	return fmt.Sprintf("DeleteHistoryEventTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, Version: %v, ProcessStage: %v}",
+		a.WorkflowKey.String(),
+		a.VisibilityTimestamp,
+		a.TaskID,
+		a.Version,
+		a.ProcessStage,
+	)
 }

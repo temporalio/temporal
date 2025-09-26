@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"strconv"
 	"strings"
@@ -34,9 +33,7 @@ import (
 const (
 	PersistenceName = "elasticsearch"
 
-	delimiter                    = "~"
-	scrollKeepAliveInterval      = "1m"
-	pointInTimeKeepAliveInterval = "1m"
+	delimiter = "~"
 )
 
 type (
@@ -54,12 +51,6 @@ type (
 
 	visibilityPageToken struct {
 		SearchAfter []interface{}
-
-		// For ScanWorkflowExecutions API.
-		// For ES<7.10.0 and "oss" flavor.
-		ScrollID string
-		// For ES>=7.10.0 and "default" flavor.
-		PointInTimeID string
 	}
 
 	fieldSort struct {
@@ -368,91 +359,6 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	return s.GetListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
 }
 
-func (s *VisibilityStore) ScanWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequestV2,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-	// Point in time is only supported in Elasticsearch 7.10+ in default flavor.
-	if s.esClient.IsPointInTimeSupported(ctx) {
-		return s.scanWorkflowExecutionsWithPit(ctx, request)
-	}
-	return s.scanWorkflowExecutionsWithScroll(ctx, request)
-}
-
-func (s *VisibilityStore) scanWorkflowExecutionsWithScroll(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequestV2,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-	var (
-		searchResult *elastic.SearchResult
-		scrollErr    error
-	)
-
-	p, err := s.BuildSearchParametersV2(request, s.getScanFieldSorter)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(request.NextPageToken) == 0 {
-		searchResult, scrollErr = s.esClient.OpenScroll(ctx, p, scrollKeepAliveInterval)
-	} else if p.ScrollID != "" {
-		searchResult, scrollErr = s.esClient.Scroll(ctx, p.ScrollID, scrollKeepAliveInterval)
-	} else {
-		return nil, serviceerror.NewInvalidArgument("scrollId must present in pagination token")
-	}
-
-	if scrollErr != nil && scrollErr != io.EOF {
-		return nil, ConvertElasticsearchClientError("ScanWorkflowExecutions failed", scrollErr)
-	}
-
-	// Both io.IOF and empty hits list indicate that this is a last page.
-	if (searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize) ||
-		scrollErr == io.EOF {
-		err := s.esClient.CloseScroll(ctx, searchResult.ScrollId)
-		if err != nil {
-			return nil, ConvertElasticsearchClientError("Unable to close scroll", err)
-		}
-	}
-
-	return s.GetListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
-func (s *VisibilityStore) scanWorkflowExecutionsWithPit(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequestV2,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-	p, err := s.BuildSearchParametersV2(request, s.getScanFieldSorter)
-	if err != nil {
-		return nil, err
-	}
-
-	// The first call doesn't have a token with PointInTimeID.
-	if len(request.NextPageToken) == 0 {
-		pitID, err := s.esClient.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
-		if err != nil {
-			return nil, ConvertElasticsearchClientError("Unable to create point in time", err)
-		}
-		p.PointInTime = elastic.NewPointInTimeWithKeepAlive(pitID, pointInTimeKeepAliveInterval)
-	} else if p.PointInTime == nil {
-		return nil, serviceerror.NewInvalidArgument("pointInTimeId must present in pagination token")
-	}
-
-	searchResult, err := s.esClient.Search(ctx, p)
-	if err != nil {
-		return nil, ConvertElasticsearchClientError("ScanWorkflowExecutions failed", err)
-	}
-
-	// Number hits smaller than the page size indicates that this is the last page.
-	if searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize {
-		_, err := s.esClient.ClosePointInTime(ctx, searchResult.PitId)
-		if err != nil {
-			return nil, ConvertElasticsearchClientError("Unable to close point in time", err)
-		}
-	}
-
-	return s.GetListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
 func (s *VisibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
@@ -551,57 +457,6 @@ func (s *VisibilityStore) GetWorkflowExecution(
 	}, nil
 }
 
-func (s *VisibilityStore) buildSearchParameters(
-	request *manager.ListWorkflowExecutionsRequest,
-	boolQuery *elastic.BoolQuery,
-	overStartTime bool,
-) (*client.SearchParameters, error) {
-
-	token, err := s.deserializePageToken(request.NextPageToken)
-	if err != nil {
-		return nil, err
-	}
-
-	boolQuery.Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID.String()))
-
-	if request.NamespaceDivision == "" {
-		boolQuery.MustNot(elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision))
-	} else {
-		boolQuery.Filter(elastic.NewTermQuery(searchattribute.TemporalNamespaceDivision, request.NamespaceDivision))
-	}
-
-	if !request.EarliestStartTime.IsZero() || !request.LatestStartTime.IsZero() {
-		var rangeQuery *elastic.RangeQuery
-		if overStartTime {
-			rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime)
-		} else {
-			rangeQuery = elastic.NewRangeQuery(searchattribute.CloseTime)
-		}
-
-		if !request.EarliestStartTime.IsZero() {
-			rangeQuery = rangeQuery.Gte(request.EarliestStartTime)
-		}
-
-		if !request.LatestStartTime.IsZero() {
-			rangeQuery = rangeQuery.Lte(request.LatestStartTime)
-		}
-		boolQuery.Filter(rangeQuery)
-	}
-
-	params := &client.SearchParameters{
-		Index:    s.index,
-		Query:    boolQuery,
-		PageSize: request.PageSize,
-		Sorter:   defaultSorter,
-	}
-
-	if token != nil && len(token.SearchAfter) > 0 {
-		params.SearchAfter = token.SearchAfter
-	}
-
-	return params, nil
-}
-
 func (s *VisibilityStore) BuildSearchParametersV2(
 	request *manager.ListWorkflowExecutionsRequestV2,
 	getFieldSorter func([]elastic.Sorter) ([]elastic.Sorter, error),
@@ -665,19 +520,7 @@ func (s *VisibilityStore) processPageToken(
 	if pageToken == nil {
 		return nil
 	}
-	if pageToken.ScrollID != "" {
-		params.ScrollID = pageToken.ScrollID
-		return nil
-	}
 	if len(pageToken.SearchAfter) == 0 {
-		return nil
-	}
-	if pageToken.PointInTimeID != "" {
-		params.SearchAfter = pageToken.SearchAfter
-		params.PointInTime = elastic.NewPointInTimeWithKeepAlive(
-			pageToken.PointInTimeID,
-			pointInTimeKeepAliveInterval,
-		)
 		return nil
 	}
 	if len(pageToken.SearchAfter) != len(params.Sorter) {
@@ -761,15 +604,6 @@ func (s *VisibilityStore) convertQuery(
 	return queryParams, nil
 }
 
-func (s *VisibilityStore) getScanFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
-	// custom order is not supported by Scan API
-	if len(fieldSorts) > 0 {
-		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
-	}
-
-	return docSorter, nil
-}
-
 func (s *VisibilityStore) GetListFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
 	if len(fieldSorts) == 0 {
 		return defaultSorter, nil
@@ -814,9 +648,7 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 
 	if len(searchResult.Hits.Hits) == pageSize { // this means the response might not the last page
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
-			SearchAfter:   lastHitSort,
-			ScrollID:      searchResult.ScrollId,
-			PointInTimeID: searchResult.PitId,
+			SearchAfter: lastHitSort,
 		})
 		if err != nil {
 			return nil, err

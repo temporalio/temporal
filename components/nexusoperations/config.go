@@ -16,11 +16,19 @@ var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	`RequestTimeout is the timeout for making a single nexus start or cancel request.`,
 )
 
-var MinOperationTimeout = dynamicconfig.NewNamespaceDurationSetting(
-	"componenet.nexusoperations.limit.operation.timeout.min",
-	0,
-	`MinOperationTimeout is the minimum time remaining for an operation to complete for the server to make
-RPCs. If the remaining operation timeout is less than this value, a non-retryable timeout error will be returned.`,
+var MinRequestTimeout = dynamicconfig.NewNamespaceDurationSetting(
+	"component.nexusoperations.limit.request.timeout.min",
+	time.Millisecond*1500,
+	`MinRequestTimeout is the minimum time remaining for a request to complete for the server to make
+RPCs. If the remaining request timeout is less than this value, a non-retryable timeout error will be returned.`,
+)
+
+var MinDispatchTaskTimeout = dynamicconfig.NewNamespaceDurationSetting(
+	"component.nexusoperations.limit.dispatch.task.timeout.min",
+	time.Second,
+	`MinDispatchTaskTimeout is the minimum time remaining for a request to be dispatched to the handler worker. 
+If the remaining request timeout is less than this value, a timeout error will be returned. Working in conjunction with 
+MinRequestTimeout, both configs help ensure that the server has enough time to complete a Nexus request.`,
 )
 
 var MaxConcurrentOperations = dynamicconfig.NewNamespaceIntSetting(
@@ -149,7 +157,7 @@ NexusOperationCancelRequestFailed events. Default true.`,
 type Config struct {
 	Enabled                             dynamicconfig.BoolPropertyFn
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
-	MinOperationTimeout                 dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperations             dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxServiceNameLength                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationNameLength              dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -168,7 +176,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		Enabled:                             dynamicconfig.EnableNexus.Get(dc),
 		RequestTimeout:                      RequestTimeout.Get(dc),
-		MinOperationTimeout:                 MinOperationTimeout.Get(dc),
+		MinRequestTimeout:                   MinRequestTimeout.Get(dc),
 		MaxConcurrentOperations:             MaxConcurrentOperations.Get(dc),
 		MaxServiceNameLength:                MaxServiceNameLength.Get(dc),
 		MaxOperationNameLength:              MaxOperationNameLength.Get(dc),

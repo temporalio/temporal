@@ -38,7 +38,7 @@ func TestDatabaseHandleReconnect(t *testing.T) {
 				return nil, errTest
 			}
 			fakeTimeSource := clock.NewEventTimeSource().Update(time.Now())
-			dbHandle := NewDatabaseHandle(connectFunc, needsRefreshFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, fakeTimeSource)
+			dbHandle := NewDatabaseHandle(DbKindUnknown, connectFunc, needsRefreshFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, fakeTimeSource)
 			assert.NotNil(t, dbHandle)
 
 			for i := 0; i < tc.numRetries; i++ {
