@@ -1817,6 +1817,11 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}
 	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
+
+	if payloadSize := request.Details.Size(); payloadSize > 0 {
+		ms.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
+			int64(payloadSize), metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope))
+	}
 }
 
 // UpdateActivityInfo applies the necessary activity information

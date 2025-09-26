@@ -2249,7 +2249,12 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 	svc := nexus.NewService("test")
 
 	handlerWF := func(ctx workflow.Context, _ nexus.NoValue) (nexus.NoValue, error) {
-		return nil, workflow.Sleep(ctx, 1*time.Second)
+		signalChan := workflow.GetSignalChannel(ctx, "test-signal")
+		if ok, _ := signalChan.ReceiveWithTimeout(ctx, 10*time.Second, nil); !ok {
+			return nil, errors.New("receive signal timed out")
+		}
+
+		return nil, nil
 	}
 
 	op := temporalnexus.NewWorkflowRunOperation("op", handlerWF, func(ctx context.Context, _ nexus.NoValue, soo nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
@@ -2260,7 +2265,7 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 	callerWF := func(ctx workflow.Context) error {
 		c := workflow.NewNexusClient(endpointName, svc.Name)
 		fut := c.ExecuteOperation(ctx, op, nil, workflow.NexusOperationOptions{})
-		return fut.Get(ctx, nil)
+		return fut.GetNexusOperationExecution().Get(ctx, nil)
 	}
 
 	w.RegisterNexusService(svc)
@@ -2270,13 +2275,13 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 	s.T().Cleanup(w.Stop)
 
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		TaskQueue:          taskQueue,
-		WorkflowRunTimeout: 200 * time.Millisecond,
+		TaskQueue: taskQueue,
 	}, callerWF)
 	s.NoError(err)
+	s.NoError(run.Get(ctx, nil))
 
-	wfErr := run.Get(ctx, nil)
-	s.Error(wfErr)
+	err = s.SdkClient().SignalWorkflow(ctx, handlerWorkflowID, "", "test-signal", nil)
+	s.NoError(err)
 
 	s.EventuallyWithT(func(ct *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
