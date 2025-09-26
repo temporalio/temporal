@@ -83,8 +83,7 @@ jobs:
           
           echo "✅ Tringa command completed"
           echo "📊 Output file size: $(wc -c < out.json) bytes"
-          echo "📄 First 500 characters of output:"
-          head -c 500 out.json
+          head out.json
           echo ""
           echo "📄 Full output file:"
           cat out.json
@@ -103,8 +102,7 @@ jobs:
           echo "📄 Checking if out.json exists and its size:"
           if [ -f "out.json" ]; then
             echo "✅ out.json exists, size: $(wc -c < out.json) bytes"
-            echo "📄 First 200 characters of out.json:"
-            head -c 200 out.json
+            head out.json
             echo ""
           else
             echo "❌ out.json not found!"
@@ -167,8 +165,7 @@ jobs:
             echo "✅ crash.txt exists in tools/flakes, size: $(wc -c < tools/flakes/crash.txt) bytes"
             crash_count=$(grep -c "|\[" tools/flakes/crash.txt || echo "0")
             echo "💥 Crash count: $crash_count"
-            echo "📄 First 200 chars of crash.txt:"
-            head -c 200 tools/flakes/crash.txt
+            head tools/flakes/crash.txt
             echo ""
           else
             echo "❌ crash.txt not found in tools/flakes"
@@ -178,8 +175,7 @@ jobs:
             echo "✅ flaky.txt exists in tools/flakes, size: $(wc -c < tools/flakes/flaky.txt) bytes"
             flaky_count=$(grep -c "|\[" tools/flakes/flaky.txt || echo "0")
             echo "🔄 Flaky count: $flaky_count"
-            echo "📄 First 200 chars of flaky.txt:"
-            head -c 200 tools/flakes/flaky.txt
+            head tools/flakes/flaky.txt
             echo ""
           else
             echo "❌ flaky.txt not found in tools/flakes"
@@ -189,8 +185,7 @@ jobs:
             echo "✅ retry.txt exists in tools/flakes, size: $(wc -c < tools/flakes/retry.txt) bytes"
             retry_count=$(grep -c "|\[" tools/flakes/retry.txt || echo "0")
             echo "🔁 Retry count: $retry_count"
-            echo "📄 First 200 chars of retry.txt:"
-            head -c 200 tools/flakes/retry.txt
+            head tools/flakes/retry.txt
             echo ""
           else
             echo "❌ retry.txt not found in tools/flakes"
@@ -200,8 +195,7 @@ jobs:
             echo "✅ timeout.txt exists in tools/flakes, size: $(wc -c < tools/flakes/timeout.txt) bytes"
             timeout_count=$(grep -c "|\[" tools/flakes/timeout.txt || echo "0")
             echo "⏰ Timeout count: $timeout_count"
-            echo "📄 First 200 chars of timeout.txt:"
-            head -c 200 tools/flakes/timeout.txt
+            head tools/flakes/timeout.txt
             echo ""
           else
             echo "❌ timeout.txt not found in tools/flakes"
@@ -359,26 +353,54 @@ jobs:
           
           title="📊 Flaky Tests Report - $(date)"
           
-          # Read the step summary content and convert to Slack format
-          if [ -f "$GITHUB_STEP_SUMMARY" ]; then
-            echo "✅ Found GitHub step summary file"
-            echo "📄 Step summary size: $(wc -c < "$GITHUB_STEP_SUMMARY") bytes"
-            echo "📄 First 300 chars of step summary:"
-            head -c 300 "$GITHUB_STEP_SUMMARY"
-            echo ""
-            
-            # Convert markdown to Slack format
-            echo "🔄 Converting markdown to Slack format..."
-            message=$(sed "s/^## /*/g; s/^### /*/g; s/^\- /• /g; s/\*\*\([^*]*\)\*\*/\*\1\*/g; s/\`\([^\`]*\)\`/\`\1\`/g; s/\[\([^]]*\)\](\([^)]*\))/<\2|\1>/g; s/^| /• /g; /^|--/d; s/|/ • /g" "$GITHUB_STEP_SUMMARY")
-            echo "✅ Message conversion completed"
-            echo "📄 Converted message length: ${#message} characters"
-            echo "📄 First 300 chars of converted message:"
-            echo "${message}" | head -c 300
-            echo ""
-          else
-            echo "❌ GitHub step summary file not found, using default message"
-            message="Flaky tests report generated successfully."
+          # Build comprehensive Slack message with full flaky report
+          echo "📝 Building comprehensive Slack message..."
+          
+          # Start with basic summary
+          message="*📊 Flaky Tests Report - Last 7 Days*\n\n"
+          
+          # Add failure counts
+          crash_count=0
+          flaky_count=0
+          retry_count=0
+          timeout_count=0
+          
+          if [ -f "tools/flakes/crash.txt" ]; then
+            crash_count=$(grep -c "|\[" tools/flakes/crash.txt || echo "0")
           fi
+          if [ -f "tools/flakes/flaky.txt" ]; then
+            flaky_count=$(grep -c "|\[" tools/flakes/flaky.txt || echo "0")
+          fi
+          if [ -f "tools/flakes/retry.txt" ]; then
+            retry_count=$(grep -c "|\[" tools/flakes/retry.txt || echo "0")
+          fi
+          if [ -f "tools/flakes/timeout.txt" ]; then
+            timeout_count=$(grep -c "|\[" tools/flakes/timeout.txt || echo "0")
+          fi
+          
+          message+="*📈 Failure Summary:*\n"
+          message+="• 💥 Crashes: ${crash_count}\n"
+          message+="• 🔄 Flaky Tests: ${flaky_count}\n"
+          message+="• 🔁 Retry Failures: ${retry_count}\n"
+          message+="• ⏰ Timeouts: ${timeout_count}\n\n"
+          
+          # Add full flaky tests report if it exists
+          if [ "$flaky_count" -gt 0 ] && [ -f "tools/flakes/flaky.txt" ]; then
+            message+="*🔄 Flaky Tests Details:*\n"
+            message+="\`\`\`\n"
+            message+="$(cat tools/flakes/flaky.txt)\n"
+            message+="\`\`\`\n\n"
+          fi
+          
+          # Add link to full report
+          message+="📋 <https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }}|View Full Report & Download Artifacts>\n"
+          message+="🔗 <https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }}|GitHub Actions Run #${{ github.run_number }}>"
+          
+          echo "✅ Slack message built successfully"
+          echo "📄 Message length: ${#message} characters"
+          echo "📄 First 500 chars of message:"
+          echo "${message}" | head -c 500
+          echo ""
 
           echo "📤 Setting Slack environment variables..."
           {
