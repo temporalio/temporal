@@ -1817,6 +1817,11 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}
 	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
+
+	if payloadSize := request.Details.Size(); payloadSize > 0 {
+		ms.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
+			int64(payloadSize), metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope))
+	}
 }
 
 // UpdateActivityInfo applies the necessary activity information
@@ -1840,6 +1845,7 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	ai.ScheduledTime = incomingActivityInfo.GetScheduledTime()
 	// we don't need to update FirstScheduledTime
 	ai.StartedEventId = incomingActivityInfo.GetStartedEventId()
+	ai.StartVersion = incomingActivityInfo.GetStartVersion()
 	ai.LastHeartbeatUpdateTime = incomingActivityInfo.GetLastHeartbeatTime()
 	if ai.StartedEventId == common.EmptyEventID {
 		ai.StartedTime = nil
@@ -3441,6 +3447,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		ScheduledTime:           event.GetEventTime(),
 		FirstScheduledTime:      event.GetEventTime(),
 		StartedEventId:          common.EmptyEventID,
+		StartVersion:            common.EmptyVersion,
 		StartedTime:             nil,
 		ActivityId:              attributes.ActivityId,
 		ScheduleToStartTimeout:  attributes.GetScheduleToStartTimeout(),
@@ -3605,6 +3612,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		// instead update mutable state and will record started event when activity task is closed
 		activityInfo.Version = ms.GetCurrentVersion()
 		activityInfo.StartedEventId = common.TransientEventID
+		activityInfo.StartVersion = ms.GetCurrentVersion()
 		activityInfo.RequestId = requestID
 		activityInfo.StartedTime = timestamppb.New(ms.timeSource.Now())
 		activityInfo.StartedIdentity = identity
@@ -3634,6 +3642,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskStartedEvent(
 
 	ai.Version = event.GetVersion()
 	ai.StartedEventId = event.GetEventId()
+	ai.StartVersion = event.GetVersion()
 	ai.RequestId = attributes.GetRequestId()
 	ai.StartedTime = event.GetEventTime()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
@@ -5699,6 +5708,7 @@ func (ms *MutableStateImpl) RetryActivity(
 		// need to update activity
 		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
 			activityInfo.StartedEventId = common.EmptyEventID
+			activityInfo.StartVersion = common.EmptyVersion
 			activityInfo.StartedTime = nil
 			activityInfo.RequestId = ""
 			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)

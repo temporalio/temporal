@@ -14,7 +14,9 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -448,4 +450,18 @@ func (s *xdcBaseSuite) mustToPayload(v any) *commonpb.Payload {
 	payload, err := conv.ToPayload(v)
 	s.NoError(err)
 	return payload
+}
+
+func (s *xdcBaseSuite) newClientAndWorker(hostport, ns, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  hostport,
+		Namespace: ns,
+	})
+	s.NoError(err)
+
+	worker := sdkworker.New(sdkClient, taskqueue, sdkworker.Options{
+		Identity: identity,
+	})
+
+	return sdkClient, worker
 }

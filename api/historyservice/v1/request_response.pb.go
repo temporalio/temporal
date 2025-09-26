@@ -1735,6 +1735,7 @@ type RecordActivityTaskStartedResponse struct {
 	Version                     int64                  `protobuf:"varint,9,opt,name=version,proto3" json:"version,omitempty"`
 	Priority                    *v14.Priority          `protobuf:"bytes,10,opt,name=priority,proto3" json:"priority,omitempty"`
 	RetryPolicy                 *v14.RetryPolicy       `protobuf:"bytes,11,opt,name=retry_policy,json=retryPolicy,proto3" json:"retry_policy,omitempty"`
+	StartVersion                int64                  `protobuf:"varint,12,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
 	unknownFields               protoimpl.UnknownFields
 	sizeCache                   protoimpl.SizeCache
 }
@@ -1844,6 +1845,13 @@ func (x *RecordActivityTaskStartedResponse) GetRetryPolicy() *v14.RetryPolicy {
 		return x.RetryPolicy
 	}
 	return nil
+}
+
+func (x *RecordActivityTaskStartedResponse) GetStartVersion() int64 {
+	if x != nil {
+		return x.StartVersion
+	}
+	return 0
 }
 
 type RespondWorkflowTaskCompletedRequest struct {
@@ -4358,6 +4366,7 @@ type SyncActivityRequest struct {
 	RetryMaximumInterval    *durationpb.Duration `protobuf:"bytes,23,opt,name=retry_maximum_interval,json=retryMaximumInterval,proto3" json:"retry_maximum_interval,omitempty"`
 	RetryMaximumAttempts    int32                `protobuf:"varint,24,opt,name=retry_maximum_attempts,json=retryMaximumAttempts,proto3" json:"retry_maximum_attempts,omitempty"`
 	RetryBackoffCoefficient float64              `protobuf:"fixed64,25,opt,name=retry_backoff_coefficient,json=retryBackoffCoefficient,proto3" json:"retry_backoff_coefficient,omitempty"`
+	StartVersion            int64                `protobuf:"varint,26,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -4567,6 +4576,13 @@ func (x *SyncActivityRequest) GetRetryBackoffCoefficient() float64 {
 	return 0
 }
 
+func (x *SyncActivityRequest) GetStartVersion() int64 {
+	if x != nil {
+		return x.StartVersion
+	}
+	return 0
+}
+
 type SyncActivitiesRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId    string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
@@ -4665,6 +4681,7 @@ type ActivitySyncInfo struct {
 	RetryMaximumInterval    *durationpb.Duration `protobuf:"bytes,23,opt,name=retry_maximum_interval,json=retryMaximumInterval,proto3" json:"retry_maximum_interval,omitempty"`
 	RetryMaximumAttempts    int32                `protobuf:"varint,24,opt,name=retry_maximum_attempts,json=retryMaximumAttempts,proto3" json:"retry_maximum_attempts,omitempty"`
 	RetryBackoffCoefficient float64              `protobuf:"fixed64,25,opt,name=retry_backoff_coefficient,json=retryBackoffCoefficient,proto3" json:"retry_backoff_coefficient,omitempty"`
+	StartVersion            int64                `protobuf:"varint,26,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -4842,6 +4859,13 @@ func (x *ActivitySyncInfo) GetRetryMaximumAttempts() int32 {
 func (x *ActivitySyncInfo) GetRetryBackoffCoefficient() float64 {
 	if x != nil {
 		return x.RetryBackoffCoefficient
+	}
+	return 0
+}
+
+func (x *ActivitySyncInfo) GetStartVersion() int64 {
+	if x != nil {
+		return x.StartVersion
 	}
 	return 0
 }
@@ -9806,7 +9830,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x05stamp\x18\t \x01(\x05R\x05stamp\x12Y\n" +
 	"\x14scheduled_deployment\x18\n" +
 	" \x01(\v2&.temporal.api.deployment.v1.DeploymentR\x13scheduledDeployment\x12c\n" +
-	"\x11version_directive\x18\f \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05J\x04\b\v\x10\f\"\xd7\x05\n" +
+	"\x11version_directive\x18\f \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05J\x04\b\v\x10\f\"\xfc\x05\n" +
 	"!RecordActivityTaskStartedResponse\x12N\n" +
 	"\x0fscheduled_event\x18\x01 \x01(\v2%.temporal.api.history.v1.HistoryEventR\x0escheduledEvent\x12=\n" +
 	"\fstarted_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vstartedTime\x12\x18\n" +
@@ -9819,7 +9843,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\aversion\x18\t \x01(\x03R\aversion\x12<\n" +
 	"\bpriority\x18\n" +
 	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12F\n" +
-	"\fretry_policy\x18\v \x01(\v2#.temporal.api.common.v1.RetryPolicyR\vretryPolicy\"\xdc\x01\n" +
+	"\fretry_policy\x18\v \x01(\v2#.temporal.api.common.v1.RetryPolicyR\vretryPolicy\x12#\n" +
+	"\rstart_version\x18\f \x01(\x03R\fstartVersion\"\xdc\x01\n" +
 	"#RespondWorkflowTaskCompletedRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12o\n" +
 	"\x10complete_request\x18\x02 \x01(\v2D.temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequestR\x0fcompleteRequest:!\x92\xc4\x03\x1d2\x1bcomplete_request.task_token\"\xa7\x03\n" +
@@ -9971,7 +9996,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\vstatus_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"statusTime:\x0e\x92\xc4\x03\n" +
 	"\x1a\bshard_id\"\x19\n" +
-	"\x17SyncShardStatusResponse\"\xac\v\n" +
+	"\x17SyncShardStatusResponse\"\xd1\v\n" +
 	"\x13SyncActivityRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -9999,13 +10024,14 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x16retry_initial_interval\x18\x16 \x01(\v2\x19.google.protobuf.DurationR\x14retryInitialInterval\x12O\n" +
 	"\x16retry_maximum_interval\x18\x17 \x01(\v2\x19.google.protobuf.DurationR\x14retryMaximumInterval\x124\n" +
 	"\x16retry_maximum_attempts\x18\x18 \x01(\x05R\x14retryMaximumAttempts\x12:\n" +
-	"\x19retry_backoff_coefficient\x18\x19 \x01(\x01R\x17retryBackoffCoefficient:\x11\x92\xc4\x03\r*\vworkflow_id\"\xe7\x01\n" +
+	"\x19retry_backoff_coefficient\x18\x19 \x01(\x01R\x17retryBackoffCoefficient\x12#\n" +
+	"\rstart_version\x18\x1a \x01(\x03R\fstartVersion:\x11\x92\xc4\x03\r*\vworkflow_id\"\xe7\x01\n" +
 	"\x15SyncActivitiesRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
 	"\x06run_id\x18\x03 \x01(\tR\x05runId\x12`\n" +
-	"\x0factivities_info\x18\x04 \x03(\v27.temporal.server.api.historyservice.v1.ActivitySyncInfoR\x0eactivitiesInfo:\x11\x92\xc4\x03\r*\vworkflow_id\"\xd7\t\n" +
+	"\x0factivities_info\x18\x04 \x03(\v27.temporal.server.api.historyservice.v1.ActivitySyncInfoR\x0eactivitiesInfo:\x11\x92\xc4\x03\r*\vworkflow_id\"\xfc\t\n" +
 	"\x10ActivitySyncInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x12,\n" +
 	"\x12scheduled_event_id\x18\x02 \x01(\x03R\x10scheduledEventId\x12A\n" +
@@ -10028,7 +10054,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x16retry_initial_interval\x18\x16 \x01(\v2\x19.google.protobuf.DurationR\x14retryInitialInterval\x12O\n" +
 	"\x16retry_maximum_interval\x18\x17 \x01(\v2\x19.google.protobuf.DurationR\x14retryMaximumInterval\x124\n" +
 	"\x16retry_maximum_attempts\x18\x18 \x01(\x05R\x14retryMaximumAttempts\x12:\n" +
-	"\x19retry_backoff_coefficient\x18\x19 \x01(\x01R\x17retryBackoffCoefficient\"\x16\n" +
+	"\x19retry_backoff_coefficient\x18\x19 \x01(\x01R\x17retryBackoffCoefficient\x12#\n" +
+	"\rstart_version\x18\x1a \x01(\x03R\fstartVersion\"\x16\n" +
 	"\x14SyncActivityResponse\"\xd2\x01\n" +
 	"\x1bDescribeMutableStateRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +

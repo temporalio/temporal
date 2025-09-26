@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"fmt"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -63,4 +64,16 @@ func (r *ActivityRetryTimerTask) GetStamp() int32 {
 
 func (r *ActivityRetryTimerTask) SetStamp(stamp int32) {
 	r.Stamp = stamp
+}
+
+func (r *ActivityRetryTimerTask) String() string {
+	return fmt.Sprintf("ActivityRetryTimerTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, EventID: %v, Version: %v, Attempt: %v, Stamp: %v}",
+		r.WorkflowKey.String(),
+		r.VisibilityTimestamp,
+		r.TaskID,
+		r.EventID,
+		r.Version,
+		r.Attempt,
+		r.Stamp,
+	)
 }
