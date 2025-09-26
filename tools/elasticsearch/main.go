@@ -107,11 +107,12 @@ func BuildCLIOptions() *cli.App {
 		},
 		{
 			Name:  "update-schema",
-			Usage: "update elasticsearch index template, or index mappings if --index is specified",
+			Usage: "update elasticsearch index template, and index mappings if --index is specified",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:  CLIFlagVisibilityIndex,
-					Usage: "name of the visibility index to update mappings for (optional)",
+					Name:    CLIFlagVisibilityIndex,
+					Usage:   "name of the visibility index to update mappings for (optional)",
+					EnvVars: []string{"ES_VISIBILITY_INDEX"},
 				},
 				&cli.BoolFlag{
 					Name:  CLIFlagFailSilently,
@@ -131,6 +132,7 @@ func BuildCLIOptions() *cli.App {
 					Name:     CLIFlagVisibilityIndex,
 					Usage:    "name of the visibility index to create",
 					Required: true,
+					EnvVars:  []string{"ES_VISIBILITY_INDEX"},
 				},
 				&cli.BoolFlag{
 					Name:  CLIFlagFailSilently,
@@ -150,6 +152,7 @@ func BuildCLIOptions() *cli.App {
 					Name:     CLIFlagVisibilityIndex,
 					Usage:    "name of the visibility index to delete",
 					Required: true,
+					EnvVars:  []string{"ES_VISIBILITY_INDEX"},
 				},
 				&cli.BoolFlag{
 					Name:  CLIFlagFailSilently,

@@ -29,6 +29,7 @@ GLOBAL OPTIONS:
    --password value           password for elasticsearch or aws_secret_access_key if using static aws credentials [$ES_PWD]
    --aws-credentials value    AWS credentials provider (supported ['static', 'environment', 'aws-sdk-default']) [$AWS_CREDENTIALS]
    --aws-session-token value  AWS sessiontoken for use with 'static' AWS credentials provider [$AWS_SESSION_TOKEN]
+   --index value              name of the visibility index [$ES_VISIBILITY_INDEX]
    --quiet                    don't log errors to stderr (default: false)
    --help, -h                 show help
    --version, -v              print the version
@@ -77,16 +78,17 @@ The tool now uses embedded schema files (cluster settings and index template) an
 export ES_SERVER=http://127.0.0.1:9200
 export ES_USER=$USER
 export ES_PWD=$PWD
+export ES_VISIBILITY_INDEX=temporal_visibility_v1
 
 # Setup cluster settings and index template
 temporal-elasticsearch-tool setup-schema
 
-# Create the visibility index
-temporal-elasticsearch-tool create-index --index temporal_visibility_v1
+# Create the visibility index (uses ES_VISIBILITY_INDEX environment variable)
+temporal-elasticsearch-tool create-index
 
 # Or combine both operations
 temporal-elasticsearch-tool setup-schema && \
-temporal-elasticsearch-tool create-index --index temporal_visibility_v1
+temporal-elasticsearch-tool create-index
 ```
 
 ### Ping
@@ -107,18 +109,20 @@ The CLI supports 3 AWS authentication mechanisms: `aws-sdk-default`, `environmen
 # aws-go-sdk defaults
 export AWS_REGION=us-east-1
 export ES_SERVER=http://127.0.0.1:9200
+export ES_VISIBILITY_INDEX=temporal_visibility_v1
 
 temporal-elasticsearch-tool --aws aws-sdk-default setup-schema
-temporal-elasticsearch-tool --aws aws-sdk-default create-index --index temporal_visibility_v1
+temporal-elasticsearch-tool --aws aws-sdk-default create-index
 ```
 
 ```
 # Environment Credentials
 export AWS_REGION=us-east-1
 export ES_SERVER=http://127.0.0.1:9200
+export ES_VISIBILITY_INDEX=temporal_visibility_v1
 
 temporal-elasticsearch-tool --aws environment setup-schema
-temporal-elasticsearch-tool --aws environment create-index --index temporal_visibility_v1
+temporal-elasticsearch-tool --aws environment create-index
 ```
 
 ```
@@ -127,9 +131,10 @@ export AWS_REGION=us-east-1
 export ES_SERVER=http://127.0.0.1:9200
 export ES_USER=$AWS_ACCESS_KEY_ID
 export ES_PWD=$AWS_SECRET_ACCESS_KEY
+export ES_VISIBILITY_INDEX=temporal_visibility_v1
 
 temporal-elasticsearch-tool --aws static setup-schema
-temporal-elasticsearch-tool --aws static create-index --index temporal_visibility_v1
+temporal-elasticsearch-tool --aws static create-index
 ```
 
 ```
@@ -139,9 +144,10 @@ export ES_SERVER=http://127.0.0.1:9200
 export ES_USER=$AWS_ACCESS_KEY_ID
 export ES_PWD=$AWS_SECRET_ACCESS_KEY
 export AWS_SESSION_TOKEN
+export ES_VISIBILITY_INDEX=temporal_visibility_v1
 
 temporal-elasticsearch-tool --aws static setup-schema
-temporal-elasticsearch-tool --aws static create-index --index temporal_visibility_v1
+temporal-elasticsearch-tool --aws static create-index
 ```
 
 ### Additional Commands
@@ -159,10 +165,22 @@ Update both template and index mappings:
 temporal-elasticsearch-tool update-schema --index temporal_visibility_v1
 ```
 
+Update both template and index mappings using environment variable:
+```bash
+export ES_VISIBILITY_INDEX=temporal_visibility_v1
+temporal-elasticsearch-tool update-schema
+```
+
 #### Drop Index
 Deletes a visibility index:
 ```bash
 temporal-elasticsearch-tool drop-index --index temporal_visibility_v1
+```
+
+Or using environment variable:
+```bash
+export ES_VISIBILITY_INDEX=temporal_visibility_v1
+temporal-elasticsearch-tool drop-index
 ```
 
 #### Command Summary
