@@ -39,7 +39,7 @@ type (
 		NumberOfHosts() int
 	}
 
-	CertThumbprint [16]byte
+	CertThumbprint [32]byte
 
 	CertExpirationData struct {
 		Thumbprint CertThumbprint
