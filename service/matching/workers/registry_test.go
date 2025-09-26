@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -67,7 +68,7 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(
 				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries,
-				defaultEvictionInterval,
+				defaultEvictionInterval, metrics.NoopMetricsHandler,
 			)
 			tt.setup(r)
 
@@ -166,7 +167,7 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(
 				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries,
-				defaultEvictionInterval,
+				defaultEvictionInterval, metrics.NoopMetricsHandler,
 			)
 			tt.setup(r)
 
@@ -290,7 +291,7 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(
 				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries,
-				defaultEvictionInterval,
+				defaultEvictionInterval, metrics.NoopMetricsHandler,
 			)
 			tt.setup(r)
 
@@ -394,7 +395,7 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(
 				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries,
-				defaultEvictionInterval,
+				defaultEvictionInterval, metrics.NoopMetricsHandler,
 			)
 			tt.setup(r)
 
