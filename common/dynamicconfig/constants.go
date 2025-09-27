@@ -2441,6 +2441,11 @@ that task will be sent to DLQ.`,
 		true,
 		`ReplicationEnableRateLimit is the feature flag to enable replication global rate limiter`,
 	)
+	ReplicationEnableRateLimitShadowMode = NewGlobalBoolSetting(
+		"history.ReplicationEnableRateLimitShadowMode",
+		false,
+		`ReplicationEnableRateLimit is the feature flag to enable replication global rate limiter in shadow mode`,
+	)
 	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
 		"history.workflowIdReuseMinimalInterval",
 		1*time.Second,
