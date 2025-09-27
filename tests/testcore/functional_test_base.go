@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -47,6 +46,7 @@ import (
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/tests/testcore/sharding"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -85,6 +85,9 @@ type (
 
 		// TODO (alex): replace with v2
 		taskPoller *taskpoller.TaskPoller
+
+		// Shard distribution monitoring
+		distMonitor *sharding.Monitor
 	}
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
@@ -291,6 +294,9 @@ func (s *FunctionalTestBase) SetupTest() {
 	s.setupSdk()
 	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 
+	// Initialize distribution monitoring
+	s.initDistributionMonitoring()
+
 	// Annotate gRPC requests with the test name for OTEL tracing.
 	s.testCluster.host.grpcClientInterceptor.Set(func(ctx context.Context) context.Context {
 		return metadata.AppendToOutgoingContext(ctx, "temporal-test-name", s.T().Name())
@@ -314,7 +320,7 @@ func (s *FunctionalTestBase) initAssertions() {
 	s.UpdateUtils = updateutils.New(s.T())
 }
 
-// checkTestShard supports test sharding based on environment variables.
+// checkTestShard supports test sharding based on environment variables with dynamic salt optimization.
 func (s *FunctionalTestBase) checkTestShard() {
 	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
 	indexStr := os.Getenv("TEST_SHARD_INDEX")
@@ -330,17 +336,23 @@ func (s *FunctionalTestBase) checkTestShard() {
 		s.T().Fatal("Couldn't convert TEST_SHARD_INDEX")
 	}
 
-	// This was determined empirically to distribute our existing test names
-	// reasonably well. This can be adjusted from time to time.
-	// For parallelism 4, use 11. For 3, use 26. For 2, use 20.
-	const salt = "-salt-26"
+	// Use consistent hashing if enabled, otherwise fall back to optimized salt approach
+	shardChecker := sharding.NewShardChecker(total)
+	testIndex := shardChecker(s.T().Name())
 
-	nameToHash := s.T().Name() + salt
-	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
 	if testIndex != index {
 		s.T().Skipf("Skipping %s in test shard %d/%d (it runs in %d)", s.T().Name(), index+1, total, testIndex+1)
 	}
-	s.T().Logf("Running %s in test shard %d/%d", s.T().Name(), index+1, total)
+
+	// Log with enhanced information
+	method := "optimized-salt"
+	if config := sharding.GetConsistentHashConfig(); config.Enabled {
+		method = fmt.Sprintf("consistent-hash(vnodes:%d,func:%s)", config.VirtualNodes, config.HashFunction)
+	} else {
+		salt := sharding.GetOptimalSalt(total)
+		method = fmt.Sprintf("optimized-salt(%s)", salt)
+	}
+	s.T().Logf("Running %s in test shard %d/%d (method: %s)", s.T().Name(), index+1, total, method)
 }
 
 func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
@@ -657,3 +669,88 @@ func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.Workf
 
 	return err
 }
+
+
+// initDistributionMonitoring initializes the distribution monitoring for this test
+func (s *FunctionalTestBase) initDistributionMonitoring() {
+	// Use the global monitor from sharding package
+	s.distMonitor = sharding.GetGlobalMonitor()
+
+	// Record this test if sharding is enabled
+	if totalStr := os.Getenv("TEST_TOTAL_SHARDS"); totalStr != "" {
+		if total, err := strconv.Atoi(totalStr); err == nil {
+			shardChecker := sharding.NewShardChecker(total)
+			testIndex := shardChecker(s.T().Name())
+			s.distMonitor.RecordTest(s.T().Name(), testIndex)
+		}
+	}
+}
+
+// GetDistributionMetrics returns current distribution metrics for monitoring
+func (s *FunctionalTestBase) GetDistributionMetrics() *sharding.ValidationResult {
+	if s.distMonitor == nil {
+		return &sharding.ValidationResult{IsValid: true}
+	}
+
+	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
+	if totalStr == "" {
+		return &sharding.ValidationResult{IsValid: true}
+	}
+
+	total, err := strconv.Atoi(totalStr)
+	if err != nil {
+		return &sharding.ValidationResult{IsValid: false, Errors: []string{"Invalid TEST_TOTAL_SHARDS"}}
+	}
+
+	salt := sharding.GetOptimalSalt(total)
+	if config := sharding.GetConsistentHashConfig(); config.Enabled {
+		salt = fmt.Sprintf("consistent-hash-vnodes-%d", config.VirtualNodes)
+	}
+
+	return s.distMonitor.GenerateReport(total, salt)
+}
+
+// PrintDistributionReport prints a distribution report for debugging
+func (s *FunctionalTestBase) PrintDistributionReport() {
+	metrics := s.GetDistributionMetrics()
+	if metrics.Stats != nil {
+		fmt.Printf("=== Test Distribution Report ===\n")
+		fmt.Printf("Total Tests: %d, Shards: %d\n", metrics.TotalTests, metrics.NumShards)
+		fmt.Printf("Method: %s\n", metrics.Salt)
+		fmt.Printf("Uniformity Score: %.3f\n", metrics.Stats.UniformityScore)
+		fmt.Printf("Load Imbalance: %.2f\n", metrics.Stats.LoadImbalance)
+		fmt.Printf("Standard Deviation: %.2f\n", metrics.Stats.StdDev)
+
+		fmt.Printf("Distribution: ")
+		for i, count := range metrics.Stats.ShardCounts {
+			if i > 0 {
+				fmt.Printf(", ")
+			}
+			fmt.Printf("%d", count)
+		}
+		fmt.Printf("\n================================\n")
+	}
+}
+
+// ValidateCurrentDistribution validates the current shard distribution
+func (s *FunctionalTestBase) ValidateCurrentDistribution() bool {
+	validator := sharding.NewValidator()
+
+	metrics := s.GetDistributionMetrics()
+	if metrics == nil || metrics.Stats == nil {
+		return true
+	}
+
+	// Generate representative test names for validation
+	testNames := sharding.GenerateRepresentativeTestNames(1000)
+	result := validator.ValidateDistribution(testNames, metrics.NumShards, metrics.Salt)
+
+	if !result.IsValid {
+		s.T().Logf("Distribution validation failed: %v", result.Errors)
+	} else if len(result.Warnings) > 0 {
+		s.T().Logf("Distribution validation warnings: %v", result.Warnings)
+	}
+
+	return result.IsValid
+}
+
