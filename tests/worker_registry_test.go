@@ -20,6 +20,7 @@ type WorkerRegistryTestSuite struct {
 }
 
 func TestWorkerRegistryTestSuite(t *testing.T) {
+	t.Parallel()
 	s := new(WorkerRegistryTestSuite)
 	suite.Run(t, s)
 }
