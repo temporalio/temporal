@@ -97,7 +97,7 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 		}
 		nodeValue = f.Internal.node.value
 	case fieldTypePointer:
-		if err := f.Internal.node.preparePointerValue(chasmContext); err != nil {
+		if err := f.Internal.node.preparePointerValue(); err != nil {
 			return nilT, err
 		}
 		//nolint:revive // value is guaranteed to be of type []string.

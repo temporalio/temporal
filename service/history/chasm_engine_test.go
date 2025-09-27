@@ -602,6 +602,11 @@ func (s *chasmEngineSuite) serializeComponentState(
 	return blob
 }
 
+const (
+	testComponentPausedSAName   = "PausedSA"
+	testComponentPausedMemoName = "PausedMemo"
+)
+
 type testComponent struct {
 	chasm.UnimplementedComponent
 
@@ -610,6 +615,26 @@ type testComponent struct {
 
 func (l *testComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
+}
+
+func (l *testComponent) SearchAttributes(_ chasm.Context) map[string]any {
+	return map[string]any{
+		testComponentPausedSAName: l.ActivityInfo.Paused,
+	}
+}
+
+func (l *testComponent) Memo(_ chasm.Context) map[string]any {
+	return map[string]any{
+		testComponentPausedMemoName: l.ActivityInfo.Paused,
+	}
+}
+
+func newTestComponentStateBlob(info *persistencespb.ActivityInfo) *commonpb.DataBlob {
+	data, _ := info.Marshal()
+	return &commonpb.DataBlob{
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		Data:         data,
+	}
 }
 
 type testChasmLibrary struct {

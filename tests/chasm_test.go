@@ -123,6 +123,43 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields[tests.TestKeywordSAFieldName], &strVal))
 	s.Equal(tests.TestKeywordSAFieldValue, strVal)
 
+	addPayloadResp, err := tests.AddPayloadHandler(
+		engineContext,
+		tests.AddPayloadRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+			PayloadKey:  "key1",
+			Payload:     payload.EncodeString("value1"),
+		},
+	)
+	s.NoError(err)
+
+	s.Eventually(
+		func() bool {
+			resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				PageSize:  10,
+				Query:     visQuery,
+			})
+			s.NoError(err)
+			if len(resp.Executions) != 1 {
+				return false
+			}
+
+			visRecord = resp.Executions[0]
+			var intVal int
+			s.NoError(payload.Decode(visRecord.GetMemo().GetFields()[tests.TotalCountMemoFieldName], &intVal))
+			return intVal == int(addPayloadResp.State.TotalCount)
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+	// We validated Count memo field above, just checking for size here.
+	p, ok = visRecord.Memo.Fields[tests.TotalSizeMemoFieldName]
+	s.True(ok)
+	s.NoError(payload.Decode(p, &intVal))
+	s.Equal(addPayloadResp.State.TotalSize, int64(intVal))
+
 	_, err = tests.ClosePayloadStoreHandler(
 		engineContext,
 		tests.ClosePayloadStoreRequest{
@@ -151,7 +188,7 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 		100*time.Millisecond,
 	)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, visRecord.Status)
-	s.Equal(int64(2), visRecord.StateTransitionCount)
+	s.Equal(int64(3), visRecord.StateTransitionCount)
 	s.NotEmpty(visRecord.CloseTime)
 	s.NotEmpty(visRecord.ExecutionDuration)
 	s.Empty(visRecord.HistoryLength)

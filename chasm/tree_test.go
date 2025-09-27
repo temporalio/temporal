@@ -89,6 +89,11 @@ func (s *nodeSuite) TestNewTree() {
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+					},
+				},
 			},
 		},
 		"child1": {
@@ -599,14 +604,11 @@ func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
 func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 	serializedNodes := testComponentSerializedNodes()
 
+	// Root component will be deserialized as part of the initialization process,
+	// for initializing search attributes and memo.
 	node, err := s.newTestTree(serializedNodes)
 	s.NoError(err)
-	s.Nil(node.value)
 	s.NotNil(node.serializedNode)
-	s.Equal(valueStateNeedDeserialize, node.valueState)
-
-	err = node.deserialize(reflect.TypeFor[*TestComponent]())
-	s.NoError(err)
 	s.NotNil(node.value)
 	s.IsType(&TestComponent{}, node.value)
 	tc := node.value.(*TestComponent)
@@ -627,13 +629,11 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
 	serializedNodes := testComponentSerializedNodes()
 
+	// Root component will be deserialized as part of the initialization process,
+	// for initializing search attributes and memo.
 	node, err := s.newTestTree(serializedNodes)
 	s.NoError(err)
-	s.Nil(node.value)
 	s.NotNil(node.serializedNode)
-
-	err = node.deserialize(reflect.TypeFor[*TestComponent]())
-	s.NoError(err)
 	s.NotNil(node.value)
 	s.Equal(valueStateSynced, node.valueState)
 
@@ -661,8 +661,6 @@ func (s *nodeSuite) TestFieldInterface() {
 	serializedNodes := testComponentSerializedNodes()
 	node, err := s.newTestTree(serializedNodes)
 	s.NoError(err)
-	s.Nil(node.value)
-	s.NotNil(node.serializedNode)
 
 	err = node.deserialize(reflect.TypeFor[*testComponent]())
 	s.NoError(err)
@@ -714,6 +712,11 @@ func (s *nodeSuite) TestNodeSnapshot() {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+					},
+				},
 			},
 		},
 		"child1": {
@@ -768,6 +771,11 @@ func (s *nodeSuite) TestApplyMutation() {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+					},
+				},
 			},
 		},
 		"child": {
@@ -857,6 +865,11 @@ func (s *nodeSuite) TestApplySnapshot() {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+					},
+				},
 			},
 		},
 		"child": {
@@ -894,6 +907,11 @@ func (s *nodeSuite) TestApplySnapshot() {
 				Metadata: &persistencespb.ChasmNodeMetadata{
 					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
 					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							Type: "TestLibrary.test_component",
+						},
+					},
 				},
 			},
 			"child": {
@@ -996,13 +1014,13 @@ func (s *nodeSuite) TestRefreshTasks() {
 				},
 			},
 		},
-		"child1": {
+		"SubComponent1": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						Type: "TestLibrary.test_child_component",
+						Type: "TestLibrary.test_sub_component_1",
 						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
 							{
 								Type:                      "TestLibrary.test_pure_task",
@@ -1016,13 +1034,13 @@ func (s *nodeSuite) TestRefreshTasks() {
 				},
 			},
 		},
-		"child2": {
+		"SubComponent2": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						Type: "TestLibrary.test_child_component",
+						Type: "TestLibrary.test_sub_component_2",
 						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
 							{
 								Type:                      "TestLibrary.test_side_effect_task",
@@ -1765,7 +1783,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	s.NoError(err)
 }
 
-func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility() {
+func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChanged() {
 	node := s.testComponentTree()
 	tv := testvars.New(s.T())
 
@@ -1820,6 +1838,53 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	).Return(true, nil).Times(1)
+	mutation, err = node.CloseTransaction()
+	s.NoError(err)
+	pVisibilityNode, ok = mutation.UpdatedNodes["Visibility"]
+	s.True(ok)
+	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().SideEffectTasks, 1)
+}
+
+func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootSAMemoChanged() {
+	node := s.testComponentTree()
+	tv := testvars.New(s.T())
+
+	chasmCtx := NewMutableContext(context.Background(), node)
+	testComponent, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	s.NoError(err)
+
+	nextTransitionCount := int64(1)
+	s.nodeBackend.EXPECT().NextTransitionCount().DoAndReturn(func() int64 {
+		return nextTransitionCount
+	}).AnyTimes()
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
+
+	// Init visiblity component
+	testComponent.(*TestComponent).Visibility = NewComponentField(chasmCtx, NewVisibility(chasmCtx))
+	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	).Return(true, nil).Times(1)
+	mutation, err := node.CloseTransaction()
+	s.NoError(err)
+	pVisibilityNode, ok := mutation.UpdatedNodes["Visibility"]
+	s.True(ok)
+	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().SideEffectTasks, 1)
+
+	// Update root component state, which results in a change to the search attributes and memo.
+	// CHASM framework should automatically detect the change and generate a visibility task.
+	nextTransitionCount = 2
+	testComponent, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+	s.NoError(err)
+	testComponent.(*TestComponent).ComponentData = &protoMessageType{
+		StartTime: timestamppb.Now(),
+	}
+	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	).Return(false, nil).Times(1)
 	mutation, err = node.CloseTransaction()
 	s.NoError(err)
 	pVisibilityNode, ok = mutation.UpdatedNodes["Visibility"]
