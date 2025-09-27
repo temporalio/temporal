@@ -91,20 +91,21 @@ func LoadAndSplitQueryFromReaders(
 					}
 
 				case sqlEndKeyword[0]:
-					if hasWordAt(contentStr, sqlEndKeyword, j) {
-						if ok, after := hasWordAfter(contentStr, sqlIfKeyword, j+len(sqlEndKeyword)); ok {
-							if len(st) == 0 || st[len(st)-1] != sqlIfKeyword[0] {
-								return nil, errors.New("error reading contents: unmatched `END IF` keyword")
-							}
-							st = st[:len(st)-1]
-							j = after + len(sqlIfKeyword) - 1
-						} else {
-							if len(st) == 0 || st[len(st)-1] != sqlBeginKeyword[0] {
-								return nil, fmt.Errorf("error reading contents: unmatched `END` keyword")
-							}
-							st = st[:len(st)-1]
-							j += len(sqlEndKeyword) - 1
+					if !hasWordAt(contentStr, sqlEndKeyword, j) {
+						continue
+					}
+					if ok, after := hasWordAfter(contentStr, sqlIfKeyword, j+len(sqlEndKeyword)); ok {
+						if len(st) == 0 || st[len(st)-1] != sqlIfKeyword[0] {
+							return nil, errors.New("error reading contents: unmatched `END IF` keyword")
 						}
+						st = st[:len(st)-1]
+						j = after + len(sqlIfKeyword) - 1
+					} else {
+						if len(st) == 0 || st[len(st)-1] != sqlBeginKeyword[0] {
+							return nil, errors.New("error reading contents: unmatched `END` keyword")
+						}
+						st = st[:len(st)-1]
+						j += len(sqlEndKeyword) - 1
 					}
 
 				case sqlSingleQuote, sqlDoubleQuote:
@@ -173,13 +174,11 @@ func hasWordAt(s, word string, pos int) bool {
 // separated by at least one space, and is a whole word.
 func hasWordAfter(s, word string, pos int) (bool, int) {
 	after := pos
-	if after < len(s) && unicode.IsSpace(rune(s[after])) {
-		after++
-	} else {
-		return false, after
-	}
 	for after < len(s) && unicode.IsSpace(rune(s[after])) {
 		after++
+	}
+	if after == pos {
+		return false, after
 	}
 	return hasWordAt(s, word, after), after
 }
