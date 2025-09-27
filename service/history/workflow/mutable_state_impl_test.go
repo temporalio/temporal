@@ -762,6 +762,8 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 		workflowID,
 		runID,
 	)
+	s.EqualValues(0, s.mutableState.executionInfo.WorkflowTaskStamp)
+	s.mutableState.executionInfo.Attempt = 5 // pretend we are in the middle workflow task retries
 
 	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
@@ -770,6 +772,8 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 	err = s.mutableState.StartDeploymentTransition(deployment)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+	s.EqualValues(1, s.mutableState.executionInfo.Attempt,
+		"workflow task attempt must be reset to 1 since pending tasks are rescheduled")
 
 	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		wft.ScheduledEventID,
@@ -1056,7 +1060,6 @@ func (s *mutableStateSuite) TestOverride_RedirectFails() {
 }
 
 func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
-	s.T().Skip("TODO (Shahab)")
 	tq := &taskqueuepb.TaskQueue{Name: "tq"}
 	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
@@ -5123,8 +5126,6 @@ func (s *mutableStateSuite) TestHasRequestID() {
 }
 
 func (s *mutableStateSuite) TestHasRequestID_StateConsistency() {
-	s.SetupTest()
-
 	// Test that HasRequestID is consistent with AttachRequestID
 	requestID := "consistency-test-request-id"
 
@@ -5141,8 +5142,6 @@ func (s *mutableStateSuite) TestHasRequestID_StateConsistency() {
 }
 
 func (s *mutableStateSuite) TestHasRequestID_EmptyExecutionState() {
-	s.SetupTest()
-
 	// Ensure execution state has no request IDs initially
 	if s.mutableState.executionState.RequestIds == nil {
 		s.mutableState.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo)
