@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -240,20 +241,14 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskCompletedEvent(
 }
 
 func (m *workflowTaskStateMachine) ApplyWorkflowTaskFailedEvent() error {
-	m.failWorkflowTask(true)
-	return nil
+	return m.failWorkflowTask(true)
 }
 
-func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(
-	timeoutType enumspb.TimeoutType,
-) error {
-	incrementAttempt := true
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(timeoutType enumspb.TimeoutType) error {
 	// Do not increment workflow task attempt in the case of sticky timeout to prevent creating next workflow task as transient.
-	if timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
-		incrementAttempt = false
-	}
-	m.failWorkflowTask(incrementAttempt)
-	return nil
+	incrementAttempt := timeoutType != enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
+
+	return m.failWorkflowTask(incrementAttempt)
 }
 
 func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
@@ -752,6 +747,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		metrics.FirstAttemptTag(workflowTask.Attempt),
 	)
 
+	numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())
+	if numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0 {
+		if err := m.ms.RemoveReportedProblemsSearchAttribute(); err != nil {
+			return nil, err
+		}
+	}
+
 	return event, nil
 }
 
@@ -808,6 +810,12 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			forkEventVersion,
 			binaryChecksum,
 		)
+
+		if event != nil {
+			m.ms.executionInfo.LastWorkflowTaskFailure = &persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause{
+				LastWorkflowTaskFailureCause: cause,
+			}
+		}
 	}
 
 	if err := m.ApplyWorkflowTaskFailedEvent(); err != nil {
@@ -867,6 +875,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 			workflowTask.StartedEventID,
 			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		)
+
+		if m.ms.executionInfo.LastWorkflowTaskFailure == nil {
+			m.ms.executionInfo.LastWorkflowTaskFailure = &persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType{
+				LastWorkflowTaskTimedOutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			}
+		}
+
 	}
 
 	if err := m.ApplyWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
@@ -877,7 +892,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 
 func (m *workflowTaskStateMachine) failWorkflowTask(
 	incrementAttempt bool,
-) {
+) error {
 	// Increment attempts only if workflow task is failing on non-sticky task queue.
 	// If it was sticky task queue, clear sticky task queue first and try again before creating transient workflow task.
 	if m.ms.IsStickyTaskQueueSet() {
@@ -907,6 +922,14 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	}
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
+
+	consecutiveFailuresRequired := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())
+	if consecutiveFailuresRequired > 0 && failWorkflowTaskInfo.Attempt == int32(consecutiveFailuresRequired) {
+		if err := m.ms.UpdateReportedProblemsSearchAttribute(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // deleteWorkflowTask deletes a workflow task.
