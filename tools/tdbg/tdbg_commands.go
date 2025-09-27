@@ -68,6 +68,12 @@ func getCommands(
 			Usage:       "Decode payload",
 			Subcommands: newDecodeCommands(taskBlobEncoder),
 		},
+		{
+			Name: "config",
+			Usage: "Command to get dynamic config values",
+			Aliases: []string{"cfg"},
+			Subcommands: newGetConfigValuesCommands(clientFactory),
+		},
 	}
 }
 
@@ -595,6 +601,26 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 			Action: func(c *cli.Context) error {
 				return AdminForceUnloadTaskQueuePartition(c, clientFactory)
+			},
+		},
+	}
+}
+
+func newGetConfigValuesCommands(ClientFactory ClientFactory) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:    "get",
+			Aliases: []string{"g"},
+			Usage:   "Get frontend dynamic configuration",
+			Flags: []cli.Flag{
+				&cli.StringSliceFlag{
+					Name:  FlagKey,
+					Usage: "Enter keys",
+					Aliases: []string{"k"},
+				}, 
+			},
+			Action: func(c *cli.Context) error {
+			 	return AdminGetDynamicConfig(c, ClientFactory)
 			},
 		},
 	}

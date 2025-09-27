@@ -126,8 +126,7 @@ func (x *StateMachineNode) GetTransitionCount() int64 {
 type StateMachineMap struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
+	//     aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
 	MachinesById  map[string]*StateMachineNode `protobuf:"bytes,1,rep,name=machines_by_id,json=machinesById,proto3" json:"machines_by_id,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -393,8 +392,7 @@ type StateMachineTimerGroup struct {
 	Infos []*StateMachineTaskInfo `protobuf:"bytes,1,rep,name=infos,proto3" json:"infos,omitempty"`
 	// When this timer should be fired.
 	// (-- api-linter: core::0142::time-field-names=disabled
-	//
-	//	aip.dev/not-precedent: Ignoring lint rules. --)
+	//     aip.dev/not-precedent: Ignoring lint rules. --)
 	Deadline *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=deadline,proto3" json:"deadline,omitempty"`
 	// Whether or not a task was put in the queue for this group's deadline.
 	Scheduled     bool `protobuf:"varint,3,opt,name=scheduled,proto3" json:"scheduled,omitempty"`
