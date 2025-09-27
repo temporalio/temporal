@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +16,7 @@ const (
 
 	sqlLeftParenthesis  = '('
 	sqlRightParenthesis = ')'
+	sqlIfKeyword        = "if"
 	sqlBeginKeyword     = "begin"
 	sqlEndKeyword       = "end"
 	sqlLineComment      = "--"
@@ -76,6 +78,12 @@ func LoadAndSplitQueryFromReaders(
 					}
 					st = st[:len(st)-1]
 
+				case sqlIfKeyword[0]:
+					if hasWordAt(contentStr, sqlIfKeyword, j) {
+						st = append(st, sqlIfKeyword[0])
+						j += len(sqlIfKeyword) - 1
+					}
+
 				case sqlBeginKeyword[0]:
 					if hasWordAt(contentStr, sqlBeginKeyword, j) {
 						st = append(st, sqlBeginKeyword[0])
@@ -83,9 +91,18 @@ func LoadAndSplitQueryFromReaders(
 					}
 
 				case sqlEndKeyword[0]:
-					if hasWordAt(contentStr, sqlEndKeyword, j) {
+					if !hasWordAt(contentStr, sqlEndKeyword, j) {
+						continue
+					}
+					if ok, after := hasWordAfter(contentStr, sqlIfKeyword, j+len(sqlEndKeyword)); ok {
+						if len(st) == 0 || st[len(st)-1] != sqlIfKeyword[0] {
+							return nil, errors.New("error reading contents: unmatched `END IF` keyword")
+						}
+						st = st[:len(st)-1]
+						j = after + len(sqlIfKeyword) - 1
+					} else {
 						if len(st) == 0 || st[len(st)-1] != sqlBeginKeyword[0] {
-							return nil, fmt.Errorf("error reading contents: unmatched `END` keyword")
+							return nil, errors.New("error reading contents: unmatched `END` keyword")
 						}
 						st = st[:len(st)-1]
 						j += len(sqlEndKeyword) - 1
@@ -139,7 +156,7 @@ func LoadAndSplitQueryFromReaders(
 }
 
 // hasWordAt is a simple test to check if it matches the whole word:
-// it checks if the adjacent charactes are not alphanumeric if they exist.
+// it checks if the adjacent characters are not alphanumeric if they exist.
 func hasWordAt(s, word string, pos int) bool {
 	if pos+len(word) > len(s) || s[pos:pos+len(word)] != word {
 		return false
@@ -151,6 +168,19 @@ func hasWordAt(s, word string, pos int) bool {
 		return false
 	}
 	return true
+}
+
+// hasWordAfter checks if the given word appears after position pos in s,
+// separated by at least one space, and is a whole word.
+func hasWordAfter(s, word string, pos int) (bool, int) {
+	after := pos
+	for after < len(s) && unicode.IsSpace(rune(s[after])) {
+		after++
+	}
+	if after == pos {
+		return false, after
+	}
+	return hasWordAt(s, word, after), after
 }
 
 func isAlphanumeric(c byte) bool {

@@ -33,6 +33,14 @@ func (s *queryUtilSuite) SetupTest() {
 
 func (s *queryUtilSuite) TestLoadAndSplitQueryFromReaders() {
 	input := `
+		DO LANGUAGE 'plpgsql' $$
+			BEGIN
+				IF ( NOT EXISTS (select extname from pg_extension where extname = 'btree_gin') ) THEN
+					CREATE EXTENSION btree_gin;
+				END  IF; --Intentionally add multiple spaces between END and IF
+			END
+		$$;
+
 		CREATE TABLE test (
 			id BIGINT not null,
 			col1 BIGINT, -- comment with unmatched parenthesis )
@@ -53,7 +61,17 @@ func (s *queryUtilSuite) TestLoadAndSplitQueryFromReaders() {
 	`
 	statements, err := LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBufferString(input)})
 	s.NoError(err)
-	s.Equal(3, len(statements))
+	s.Equal(4, len(statements))
+	s.Equal(
+		`DO LANGUAGE 'plpgsql' $$
+			BEGIN
+				IF ( NOT EXISTS (select extname from pg_extension where extname = 'btree_gin') ) THEN
+					CREATE EXTENSION btree_gin;
+				END  IF;
+			END
+		$$;`,
+		statements[0],
+	)
 	s.Equal(
 		`CREATE TABLE test (
 			id BIGINT not null,
@@ -61,9 +79,9 @@ func (s *queryUtilSuite) TestLoadAndSplitQueryFromReaders() {
 			col2 VARCHAR(255),
 			PRIMARY KEY (id)
 		);`,
-		statements[0],
+		statements[1],
 	)
-	s.Equal(`CREATE INDEX test_idx ON test (col1);`, statements[1])
+	s.Equal(`CREATE INDEX test_idx ON test (col1);`, statements[2])
 	// comments are removed, but the inner content is not trimmed
 	s.Equal(
 		`CREATE TRIGGER test_ai AFTER INSERT ON test
@@ -71,7 +89,7 @@ func (s *queryUtilSuite) TestLoadAndSplitQueryFromReaders() {
 			SELECT *, 'string with unmatched chars ")' FROM test;
 			
 		END;`,
-		statements[2],
+		statements[3],
 	)
 
 	input = "CREATE TABLE test (;"
