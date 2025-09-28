@@ -41,13 +41,31 @@ var (
 	errTaskNotValid      = serviceerror.NewNotFound("task is no longer valid")
 )
 
+// valueState is an in-memory indicator of the dirtiness of a deserialized node value.
+// The dirtiness has two parts:
+//  1. If the data part of the value is in sync with the serializedNode field.
+//  2. For component node, if the structure of the component is in sync with the children field.
+//
+// The enum value below is defined in increasing order of "dirtiness".
+// - NeedDeserialize: Value is not even deserialized yet.
+// - Synced: Value is deserialized, but are in sync with both serializedNode and children.
+// - NeedSerialize: Value is deserialized, but data part is not in sync with serializedNode, but the tree structure has been synced.
+// - NeedSyncStructure: Value is deserialized, neither data nor tree structure is synced.
+//
+// For simplicity, for a dirty component node, the logic always sync structure (potentially multiple times within a transaction) first,
+// and the serialize the data at the very end of a transaction. So there will never base a case where value is synced with seralizedNode,
+// but not with children.
+//
+// NOTE: This is a different concept from the IsDirty() method which is needed by MutableState implementation to determine
+// if the state in memory matches the state in DB.
 type valueState uint8
 
 const (
 	valueStateUndefined valueState = iota
-	valueStateSynced
 	valueStateNeedDeserialize
+	valueStateSynced
 	valueStateNeedSerialize
+	valueStateNeedSyncStructure
 )
 
 const (
@@ -70,14 +88,7 @@ type (
 		// Type of attributes controls the type of the node.
 		serializedNode *persistencespb.ChasmNode // serialized component | data | collection with metadata
 		value          any                       // deserialized component | data | map
-
-		// valueState indicates if the value field and the persistence field serializedNode are in sync.
-		// If new value might be changed since it was deserialized and serialize method wasn't called yet, then valueState is valueStateNeedSerialize.
-		// If a node is constructed from the database, then valueState is valueStateNeedDeserialize.
-		// If serialize or deserialize method were called, then valueState is valueStateSynced, and next calls to them would be no-op.
-		// NOTE: This is a different concept from the IsDirty() method needed by MutableState which means
-		// if the state in memory matches the state in DB.
-		valueState valueState
+		valueState     valueState
 
 		// Cached encoded path for this node.
 		// DO NOT read this field directly. Always use getEncodedPath() method to retrieve the encoded path.
@@ -256,7 +267,7 @@ func (n *Node) SetRootComponent(
 ) {
 	root := n.root()
 	root.value = rootComponent
-	root.valueState = valueStateNeedSerialize
+	root.valueState = valueStateNeedSyncStructure
 }
 
 // Component retrieves a component from the tree rooted at node n
@@ -394,7 +405,7 @@ func (n *Node) prepareComponentValue(
 	// its value will be mutated and no longer in sync with the serializedNode.
 	_, componentCanBeMutated := chasmContext.(MutableContext)
 	if componentCanBeMutated {
-		n.valueState = valueStateNeedSerialize
+		n.valueState = valueStateNeedSyncStructure
 	}
 
 	return nil
@@ -428,9 +439,7 @@ func (n *Node) prepareDataValue(
 	return nil
 }
 
-func (n *Node) preparePointerValue(
-	chasmContext Context,
-) error {
+func (n *Node) preparePointerValue() error {
 	metadata := n.serializedNode.Metadata
 	pointerAttr := metadata.GetPointerAttributes()
 	if pointerAttr == nil {
@@ -565,10 +574,6 @@ func (n *Node) setSerializedNode(
 // serialize sets or updates serializedValue field of the node n with serialized value.
 // It sets node's valueState to valueStateSynced and updates LastUpdateVersionedTransition.
 func (n *Node) serialize() error {
-	if n.valueState != valueStateNeedSerialize {
-		return nil
-	}
-
 	switch n.serializedNode.GetMetadata().GetAttributes().(type) {
 	case *persistencespb.ChasmNodeMetadata_ComponentAttributes:
 		return n.serializeComponentNode()
@@ -629,23 +634,20 @@ func (n *Node) serializeComponentNode() error {
 // All removed paths are added to mutation.DeletedNodes (which is shared between all nodes in the tree).
 //
 // True is returned when CHASM must perform deferred pointer resolution.
-func (n *Node) syncSubComponents() (bool, error) {
-	if n.parent != nil {
-		return false, serviceerror.NewInternal("syncSubComponents must be called on root node")
-	}
-	// If node value is nil, then it means there are no subcomponents to sync.
-	if n.value == nil {
-		return false, nil
-	}
-	return n.syncSubComponentsInternal()
-}
-
-// syncSubComponentsInternal syncs a subcomponent's fields, managing the
-// associated node lifecycles. True is returned when CHASM must perform deferred
-// pointer resolution.
 //
 // nolint:revive,cognitive-complexity
-func (n *Node) syncSubComponentsInternal() (needsPointerResolution bool, err error) {
+func (n *Node) syncSubComponents() (needsPointerResolution bool, err error) {
+	if n.valueState < valueStateNeedSyncStructure {
+		for _, childNode := range n.children {
+			needsResolve, err := childNode.syncSubComponents()
+			if err != nil {
+				return false, err
+			}
+			needsPointerResolution = needsPointerResolution || needsResolve
+		}
+		return needsPointerResolution, nil
+	}
+
 	childrenToKeep := make(map[string]struct{})
 	for field := range n.valueFields() {
 		if field.err != nil {
@@ -679,7 +681,7 @@ func (n *Node) syncSubComponentsInternal() (needsPointerResolution bool, err err
 			if collectionNode == nil {
 				collectionNode = newNode(n.nodeBase, n, field.name)
 				collectionNode.initSerializedCollectionNode()
-				collectionNode.valueState = valueStateNeedSerialize
+				collectionNode.valueState = valueStateNeedSyncStructure
 				n.children[field.name] = collectionNode
 			}
 
@@ -725,11 +727,14 @@ func (n *Node) syncSubComponentsInternal() (needsPointerResolution bool, err err
 			if err := collectionNode.deleteChildren(collectionItemsToKeep); err != nil {
 				return false, err
 			}
+			collectionNode.valueState = min(valueStateNeedSerialize, collectionNode.valueState)
 			childrenToKeep[field.name] = struct{}{}
 		}
 	}
 
 	err = n.deleteChildren(childrenToKeep)
+	n.valueState = valueStateNeedSerialize
+
 	return needsPointerResolution, err
 }
 
@@ -870,7 +875,11 @@ func (n *Node) syncSubField(
 		}
 		childNode.value = internal.value()
 		childNode.initSerializedNode(internal.fieldType())
-		childNode.valueState = valueStateNeedSerialize
+		if internal.fieldType() == fieldTypeComponent {
+			childNode.valueState = valueStateNeedSyncStructure
+		} else {
+			childNode.valueState = valueStateNeedSerialize
+		}
 
 		n.children[fieldN] = childNode
 		internal.node = childNode
@@ -879,7 +888,7 @@ func (n *Node) syncSubField(
 		updatedFieldV.FieldByName(internalFieldName).Set(reflect.ValueOf(internal))
 	}
 	if internal.fieldType() == fieldTypeComponent && internal.value() != nil {
-		needsPointerResolution, err = internal.node.syncSubComponentsInternal()
+		needsPointerResolution, err = internal.node.syncSubComponents()
 		if err != nil {
 			return
 		}
@@ -1284,6 +1293,9 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 			return serviceerror.NewInternalf("expected visibility component for component with type %s, but got %T", visibilityComponentFqType, visComponent)
 		}
 		visibility.GenerateTask(mutableContext)
+
+		// we know structure won't change here, manually set the valueState to NeedSerialize
+		child.valueState = valueStateNeedSerialize
 	}
 
 	return nil
@@ -1291,9 +1303,14 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 
 func (n *Node) closeTransactionSerializeNodes() error {
 	for nodePath, node := range n.andAllChildren() {
-		if node.valueState != valueStateNeedSerialize {
+		if node.valueState > valueStateNeedSerialize {
+			return serviceerror.NewInternalf("invalid valueState for serializing: %v", node.valueState)
+		}
+
+		if node.valueState < valueStateNeedSerialize {
 			continue
 		}
+
 		if err := node.serialize(); err != nil {
 			return err
 		}
@@ -1309,6 +1326,13 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			return err
 		}
 		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
+		// DeletedNodes map is populated when syncing tree structure. However, since we may sync tree structure
+		// multiple times in one transaction, if node at the same path was previously deleted, have structure synced,
+		// then get re-created, the same encoded path will exists in both UpdatedNodes and DeletedNodes maps.
+		//
+		// serializeNode only happens once at the end of a transaction, and here we know the node at this encoded path exists,
+		// remove it from the DeletedNodes map.
+		delete(n.mutation.DeletedNodes, encodedPath)
 	}
 
 	return nil
@@ -1988,7 +2012,7 @@ func (n *Node) IsStateDirty() bool {
 		return true
 	}
 
-	return n.isValueNeedSerialize()
+	return n.isValueDirty()
 }
 
 func (n *Node) IsStale(
@@ -2006,13 +2030,13 @@ func (n *Node) IsStale(
 	)
 }
 
-func (n *Node) isValueNeedSerialize() bool {
-	if n.valueState == valueStateNeedSerialize {
+func (n *Node) isValueDirty() bool {
+	if n.valueState >= valueStateNeedSerialize {
 		return true
 	}
 
 	for _, childNode := range n.children {
-		if childNode.isValueNeedSerialize() {
+		if childNode.isValueDirty() {
 			return true
 		}
 	}

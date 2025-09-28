@@ -200,7 +200,12 @@ func (s *nodeSuite) TestSerializeNode_ClearComponentData() {
 func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	node := s.testComponentTree()
 
-	node.value.(*TestComponent).SubData1 = NewEmptyField[*protoMessageType]()
+	mutableContext := NewMutableContext(context.Background(), node)
+	component, err := node.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	testComponent.SubData1 = NewEmptyField[*protoMessageType]()
 
 	sd1Node := node.children["SubData1"]
 	s.NotNil(sd1Node)
@@ -276,8 +281,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			initComponent: func() *TestComponent {
 				return &TestComponent{
 					SubComponents: Map[string, *TestSubComponent1]{
-						"SubComponent1": NewComponentField[*TestSubComponent1](nil, sc1),
-						"SubComponent2": NewComponentField[*TestSubComponent1](nil, sc2),
+						"SubComponent1": NewComponentField(nil, sc1),
+						"SubComponent2": NewComponentField(nil, sc2),
 					},
 				}
 			},
@@ -288,8 +293,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			initComponent: func() *TestComponent {
 				return &TestComponent{
 					PendingActivities: Map[int, *TestSubComponent1]{
-						1: NewComponentField[*TestSubComponent1](nil, sc1),
-						2: NewComponentField[*TestSubComponent1](nil, sc2),
+						1: NewComponentField(nil, sc1),
+						2: NewComponentField(nil, sc2),
 					},
 				}
 			},
@@ -308,7 +313,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 
 			rootComponent := tc.initComponent()
 			rootNode.value = rootComponent
-			rootNode.valueState = valueStateNeedSerialize
+			rootNode.valueState = valueStateNeedSyncStructure
 
 			mutations, err := rootNode.CloseTransaction()
 			s.NoError(err)
@@ -370,7 +375,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 
 			rootComponent := rootNode.value.(*TestComponent)
 
-			rootNode.valueState = valueStateNeedSerialize
+			rootNode.valueState = valueStateNeedSyncStructure
 			switch tc.mapField {
 			case "SubComponents":
 				rootComponent.SubComponents = nil
@@ -394,7 +399,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			rootComponent := rootNode.value.(*TestComponent)
 
 			// Delete collection item 1.
-			rootNode.valueState = valueStateNeedSerialize
+			rootNode.valueState = valueStateNeedSyncStructure
 			switch tc.mapField {
 			case "SubComponents":
 				delete(rootComponent.SubComponents, "SubComponent1")
@@ -418,7 +423,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			rootComponent := rootNode.value.(*TestComponent)
 
 			// Delete both collection items.
-			rootNode.valueState = valueStateNeedSerialize
+			rootNode.valueState = valueStateNeedSyncStructure
 			switch tc.mapField {
 			case "SubComponents":
 				delete(rootComponent.SubComponents, "SubComponent1")
@@ -457,7 +462,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		SubComponent1Data: &protoMessageType{
 			RunId: tv.WithWorkflowIDNumber(1).WorkflowID(),
 		},
-		SubComponent11: NewComponentField[*TestSubComponent11](nil, sc11),
+		SubComponent11: NewComponentField(nil, sc11),
 	}
 
 	s.Run("Sync and serialize component with pointer", func() {
@@ -465,16 +470,15 @@ func (s *nodeSuite) TestPointerAttributes() {
 		rootNode, err := s.newTestTree(nilSerializedNodes)
 		s.NoError(err)
 
-		rootComponent := &TestComponent{
-			SubComponent1:                NewComponentField[*TestSubComponent1](nil, sc1),
-			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
-		}
-
-		rootNode.value = rootComponent
-		rootNode.valueState = valueStateNeedSerialize
-
 		ctx := NewMutableContext(context.Background(), rootNode)
-		rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, sc11)
+
+		rootComponent := &TestComponent{
+			SubComponent1:                NewComponentField(nil, sc1),
+			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
+			SubComponent11Pointer:        ComponentPointerTo(ctx, sc11),
+		}
+		rootNode.SetRootComponent(rootComponent)
+
 		s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.ft)
 
 		mutations, err := rootNode.CloseTransaction()
@@ -494,18 +498,18 @@ func (s *nodeSuite) TestPointerAttributes() {
 		rootNode, err := s.newTestTree(persistedNodes)
 		s.NoError(err)
 
-		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+		mutableContext := NewMutableContext(context.Background(), rootNode)
+		component, err := rootNode.Component(mutableContext, ComponentRef{})
 		s.NoError(err)
-
-		rootComponent := rootNode.value.(*TestComponent)
+		testComponent := component.(*TestComponent)
 
 		chasmContext := NewMutableContext(context.Background(), rootNode)
-		sc11Des, err := rootComponent.SubComponent11Pointer.Get(chasmContext)
+		sc11Des, err := testComponent.SubComponent11Pointer.Get(chasmContext)
 		s.NoError(err)
 		s.NotNil(sc11Des)
 		s.Equal(sc11.SubComponent11Data.GetRunId(), sc11Des.SubComponent11Data.GetRunId())
 
-		ifacePtr, err := rootComponent.SubComponentInterfacePointer.Get(chasmContext)
+		ifacePtr, err := testComponent.SubComponentInterfacePointer.Get(chasmContext)
 		s.NoError(err)
 		s.NotNil(ifacePtr)
 
@@ -518,16 +522,16 @@ func (s *nodeSuite) TestPointerAttributes() {
 		rootNode, err := s.newTestTree(persistedNodes)
 		s.NoError(err)
 
-		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+		mutableContext := NewMutableContext(context.Background(), rootNode)
+		component, err := rootNode.Component(mutableContext, ComponentRef{})
 		s.NoError(err)
+		testComponent := component.(*TestComponent)
 
-		rootComponent := rootNode.value.(*TestComponent)
-
-		rootComponent.SubComponent11Pointer = NewEmptyField[*TestSubComponent11]()
+		testComponent.SubComponent11Pointer = NewEmptyField[*TestSubComponent11]()
 
 		mutation, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.Empty(mutation.UpdatedNodes, "no nodes should be updated")
+		s.Len(mutation.UpdatedNodes, 1, "root should be updated")
 		s.Len(mutation.DeletedNodes, 1, "SubComponent11Pointer must be deleted")
 	})
 }
@@ -535,10 +539,12 @@ func (s *nodeSuite) TestPointerAttributes() {
 func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	node := s.testComponentTree()
 
-	component := node.value.(*TestComponent)
+	mutableContext := NewMutableContext(context.Background(), node)
+	component, err := node.ComponentByPath(mutableContext, []string{"SubComponent1"})
+	s.NoError(err)
 
-	// Set very leaf node to empty.
-	component.SubComponent1.Internal.v.(*TestSubComponent1).SubComponent11 = NewEmptyField[*TestSubComponent11]()
+	sc1 := component.(*TestSubComponent1)
+	sc1.SubComponent11 = NewEmptyField[*TestSubComponent11]()
 	s.NotNil(node.children["SubComponent1"].children["SubComponent11"])
 
 	needsPointerResolution, err := node.syncSubComponents()
@@ -553,10 +559,13 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 func (s *nodeSuite) TestSyncSubComponents_DeleteMiddleNode() {
 	node := s.testComponentTree()
 
-	component := node.value.(*TestComponent)
+	mutableContext := NewMutableContext(context.Background(), node)
+	component, err := node.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
 
 	// Set subcomponent at middle node to nil.
-	component.SubComponent1 = NewEmptyField[*TestSubComponent1]()
+	testComponent.SubComponent1 = NewEmptyField[*TestSubComponent1]()
 	s.NotNil(node.children["SubComponent1"])
 
 	needsPointerResolution, err := node.syncSubComponents()
@@ -1463,7 +1472,7 @@ func (s *nodeSuite) TestGetComponent() {
 				componentPath: []string{}, // root
 			},
 			expectedErr:     nil,
-			valueState:      valueStateNeedSerialize,
+			valueState:      valueStateNeedSyncStructure,
 			assertComponent: assertTestComponent,
 		},
 	}
@@ -2391,7 +2400,7 @@ func (s *nodeSuite) testComponentTree() *Node {
 
 	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{componentPath: rootPath})
 	s.NoError(err)
-	s.Equal(valueStateNeedSerialize, node.valueState)
+	s.Equal(valueStateNeedSyncStructure, node.valueState)
 	// Create subcomponents by assigning fields to TestComponent instance.
 	setTestComponentFields(tc.(*TestComponent))
 
