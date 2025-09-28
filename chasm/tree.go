@@ -126,6 +126,8 @@ type (
 		newTasks       map[any][]taskWithAttributes // component value -> task & attributes
 
 		taskValueCache map[*commonpb.DataBlob]reflect.Value
+
+		needsPointerResolution bool
 	}
 
 	taskWithAttributes struct {
@@ -255,8 +257,9 @@ func newTreeHelper(
 			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
 			DeletedNodes: make(map[string]struct{}),
 		},
-		newTasks:       make(map[any][]taskWithAttributes),
-		taskValueCache: make(map[*commonpb.DataBlob]reflect.Value),
+		newTasks:               make(map[any][]taskWithAttributes),
+		taskValueCache:         make(map[*commonpb.DataBlob]reflect.Value),
+		needsPointerResolution: false,
 	}
 
 	return newNode(base, nil, "")
@@ -636,22 +639,21 @@ func (n *Node) serializeComponentNode() error {
 // True is returned when CHASM must perform deferred pointer resolution.
 //
 // nolint:revive,cognitive-complexity
-func (n *Node) syncSubComponents() (needsPointerResolution bool, err error) {
+func (n *Node) syncSubComponents() error {
 	if n.valueState < valueStateNeedSyncStructure {
 		for _, childNode := range n.children {
-			needsResolve, err := childNode.syncSubComponents()
+			err := childNode.syncSubComponents()
 			if err != nil {
-				return false, err
+				return err
 			}
-			needsPointerResolution = needsPointerResolution || needsResolve
 		}
-		return needsPointerResolution, nil
+		return nil
 	}
 
 	childrenToKeep := make(map[string]struct{})
 	for field := range n.valueFields() {
 		if field.err != nil {
-			return false, field.err
+			return field.err
 		}
 
 		switch field.kind {
@@ -660,10 +662,9 @@ func (n *Node) syncSubComponents() (needsPointerResolution bool, err error) {
 		case fieldKindData:
 			// Nothing to sync.
 		case fieldKindSubField:
-			keepChild, updatedFieldV, needsResolve, err := n.syncSubField(field.val, field.name)
-			needsPointerResolution = needsPointerResolution || needsResolve
+			keepChild, updatedFieldV, err := n.syncSubField(field.val, field.name)
 			if err != nil {
-				return false, err
+				return err
 			}
 			if updatedFieldV.IsValid() {
 				field.val.Set(updatedFieldV)
@@ -689,7 +690,7 @@ func (n *Node) syncSubComponents() (needsPointerResolution bool, err error) {
 			if field.val.Kind() != reflect.Map {
 				errMsg := fmt.Sprintf("CHASM map must be of map type: value of %s is not of a map type", n.nodeName)
 				softassert.Fail(n.logger, errMsg)
-				return false, serviceerror.NewInternal(errMsg)
+				return serviceerror.NewInternal(errMsg)
 			}
 
 			if len(field.val.MapKeys()) == 0 {
@@ -701,7 +702,7 @@ func (n *Node) syncSubComponents() (needsPointerResolution bool, err error) {
 			if mapValT.Kind() != reflect.Struct || genericTypePrefix(mapValT) != chasmFieldTypePrefix {
 				errMsg := fmt.Sprintf("CHASM map value must be of Field[T] type: %s collection value type is not Field[T] but %s", n.nodeName, mapValT)
 				softassert.Fail(n.logger, errMsg)
-				return false, serviceerror.NewInternal(errMsg)
+				return serviceerror.NewInternal(errMsg)
 			}
 
 			collectionItemsToKeep := make(map[string]struct{})
@@ -709,12 +710,11 @@ func (n *Node) syncSubComponents() (needsPointerResolution bool, err error) {
 				mapItemV := field.val.MapIndex(mapKeyV)
 				collectionKey, err := n.mapKeyToString(mapKeyV)
 				if err != nil {
-					return false, err
+					return err
 				}
-				keepItem, updatedMapItemV, needsResolve, err := collectionNode.syncSubField(mapItemV, collectionKey)
-				needsPointerResolution = needsPointerResolution || needsResolve
+				keepItem, updatedMapItemV, err := collectionNode.syncSubField(mapItemV, collectionKey)
 				if err != nil {
-					return false, err
+					return err
 				}
 				if updatedMapItemV.IsValid() {
 					// The only way to update item in the map is to set it back.
@@ -725,17 +725,17 @@ func (n *Node) syncSubComponents() (needsPointerResolution bool, err error) {
 				}
 			}
 			if err := collectionNode.deleteChildren(collectionItemsToKeep); err != nil {
-				return false, err
+				return err
 			}
 			collectionNode.valueState = min(valueStateNeedSerialize, collectionNode.valueState)
 			childrenToKeep[field.name] = struct{}{}
 		}
 	}
 
-	err = n.deleteChildren(childrenToKeep)
+	err := n.deleteChildren(childrenToKeep)
 	n.valueState = valueStateNeedSerialize
 
-	return needsPointerResolution, err
+	return err
 }
 
 func (n *Node) mapKeyToString(keyV reflect.Value) (string, error) {
@@ -832,8 +832,6 @@ func (n *Node) stringToMapKey(nodeName string, key string, keyT reflect.Type) (r
 //   - updatedFieldV if fieldV needs to be updated with new value.
 //     If updatedFieldV is invalid, then fieldV doesn't need to be updated.
 //     NOTE: this function doesn't update fieldV because it might come from the map which is not addressable.
-//   - needsPointerResolution indicates if a new deferred pointer has been added,
-//     in which case CHASM needs to resolve it as part of the current transaction.
 //   - error.
 func (n *Node) syncSubField(
 	fieldV reflect.Value,
@@ -841,7 +839,6 @@ func (n *Node) syncSubField(
 ) (
 	keepNode bool,
 	updatedFieldV reflect.Value,
-	needsPointerResolution bool,
 	err error,
 ) {
 	internalV := fieldV.FieldByName(internalFieldName)
@@ -868,7 +865,7 @@ func (n *Node) syncSubField(
 			}
 		case fieldTypeDeferredPointer:
 			// No-op, validation happens when the pointer is resolved.
-			needsPointerResolution = true
+			n.needsPointerResolution = true
 		default:
 			err = serviceerror.NewInternalf("unexpected field type: %d", internal.fieldType())
 			return
@@ -888,12 +885,12 @@ func (n *Node) syncSubField(
 		updatedFieldV.FieldByName(internalFieldName).Set(reflect.ValueOf(internal))
 	}
 	if internal.fieldType() == fieldTypeComponent && internal.value() != nil {
-		needsPointerResolution, err = internal.node.syncSubComponents()
+		err = internal.node.syncSubComponents()
 		if err != nil {
 			return
 		}
 	}
-	return true, updatedFieldV, needsPointerResolution, nil
+	return true, updatedFieldV, nil
 }
 
 func (n *Node) deleteChildren(
@@ -1190,12 +1187,11 @@ func (n *Node) AddTask(
 func (n *Node) CloseTransaction() (NodesMutation, error) {
 	defer n.cleanupTransaction()
 
-	needsPointerResolution, err := n.syncSubComponents()
-	if err != nil {
+	if err := n.syncSubComponents(); err != nil {
 		return NodesMutation{}, err
 	}
 
-	if needsPointerResolution {
+	if n.needsPointerResolution {
 		if err := n.resolveDeferredPointers(); err != nil {
 			return NodesMutation{}, err
 		}
@@ -1705,6 +1701,8 @@ func (n *Node) cleanupTransaction() {
 	}
 
 	n.newTasks = make(map[any][]taskWithAttributes)
+
+	n.needsPointerResolution = false
 }
 
 // Snapshot returns all nodes in the tree that have been modified after the given min versioned transition.
