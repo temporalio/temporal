@@ -184,7 +184,7 @@ type (
 	// NodePureTask is intended to be implemented and used within the CHASM
 	// framework only.
 	NodePureTask interface {
-		ExecutePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) error
+		ExecutePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) (bool, error)
 		ValidatePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) (bool, error)
 	}
 )
@@ -2102,53 +2102,94 @@ func isComponentTaskExpired(
 // close).
 func (n *Node) EachPureTask(
 	referenceTime time.Time,
-	callback func(executor NodePureTask, taskAttributes TaskAttributes, taskInstance any) error,
+	callback func(executor NodePureTask, taskAttributes TaskAttributes, taskInstance any) (bool, error),
 ) error {
 	ctx := NewContext(context.Background(), n)
 
-	// Walk the tree to find all runnable tasks.
-	for _, node := range n.andAllChildren() {
-		// Skip nodes that aren't serialized yet.
-		if node.serializedNode == nil || node.serializedNode.Metadata == nil {
-			continue
+	needSyncComponents := false
+
+	// TODO: instead of tracking processed nodes,
+	// consider removing processed pure tasks from the componentAttr.PureTasks slice
+	// which also addresses the concern of user provided task validator doesn't invalidate
+	// a task even if it's processed.
+	processedNodes := make(map[*Node]struct{})
+
+TreeLoop:
+	for {
+		if needSyncComponents {
+			// If tasks from other nodes are processed before, tree structure might have changed.
+			// We can not follow the existing tree structure to find tasks from other nodes.
+			if err := n.syncSubComponents(); err != nil {
+				return err
+			}
+			needSyncComponents = false
 		}
 
-		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
-		// Skip nodes that aren't components.
-		if componentAttr == nil {
-			continue
-		}
+	NodeLoop:
+		for _, node := range n.andAllChildren() {
+			if _, processed := processedNodes[node]; processed {
+				continue NodeLoop
+			}
+			processedNodes[node] = struct{}{}
 
-		// Hydrate nodes before the task validator is called.
-		err := node.prepareComponentValue(ctx)
-		if err != nil {
-			return err
-		}
-
-		for _, task := range componentAttr.GetPureTasks() {
-			if !isComponentTaskExpired(referenceTime, task) {
-				// Pure tasks are stored in-order, so we can skip scanning the rest once we hit
-				// an unexpired task deadline.
-				break
+			// Skip nodes that aren't serialized yet.
+			if node.serializedNode == nil || node.serializedNode.Metadata == nil {
+				continue NodeLoop
 			}
 
-			taskInstance, err := node.deserializeComponentTask(task)
+			componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
+			// Skip nodes that aren't components.
+			if componentAttr == nil {
+				continue NodeLoop
+			}
+
+			// Hydrate nodes before the task validator is called.
+			err := node.prepareComponentValue(ctx)
 			if err != nil {
 				return err
 			}
 
-			taskAttributes := TaskAttributes{
-				ScheduledTime: task.ScheduledTime.AsTime(),
-				Destination:   task.Destination,
+		TaskLoop:
+			for _, task := range componentAttr.GetPureTasks() {
+				if !isComponentTaskExpired(referenceTime, task) {
+					// Pure tasks are stored in-order, so we can skip scanning the rest once we hit
+					// an unexpired task deadline.
+					break TaskLoop
+				}
+
+				taskInstance, err := node.deserializeComponentTask(task)
+				if err != nil {
+					return err
+				}
+
+				taskAttributes := TaskAttributes{
+					ScheduledTime: task.ScheduledTime.AsTime(),
+					Destination:   task.Destination,
+				}
+
+				needSyncComponents = true
+				executed, err := callback(node, taskAttributes, taskInstance)
+				if err != nil {
+					return err
+				}
+				needSyncComponents = needSyncComponents || executed
+
+				// TODO: sync structure after each task since it's possible for a task to delete the node generated it
+				// when pointers are involved. E.g. Component call a method on its parent which deletes the component.
+				//
+				// This requires either deleting processed pure tasks or tracking which tasks get processed.
 			}
 
-			if err = callback(node, taskAttributes, taskInstance); err != nil {
-				return err
+			if needSyncComponents {
+				// Can not continue using the current node iterator to find the next node,
+				// need to sync tree structure and start over.
+				continue TreeLoop
 			}
 		}
-	}
 
-	return nil
+		// If code reaches here, it means all tasks have been processed.
+		return nil
+	}
 }
 
 func newNode(
@@ -2377,14 +2418,14 @@ func (n *Node) ExecutePureTask(
 	baseCtx context.Context,
 	taskAttributes TaskAttributes,
 	taskInstance any,
-) error {
+) (bool, error) {
 	registrableTask, ok := n.registry.taskFor(taskInstance)
 	if !ok {
-		return fmt.Errorf("unknown task type for task instance goType '%s'", reflect.TypeOf(taskInstance).Name())
+		return false, fmt.Errorf("unknown task type for task instance goType '%s'", reflect.TypeOf(taskInstance).Name())
 	}
 
 	if !registrableTask.isPureTask {
-		return fmt.Errorf("ExecutePureTask called on a SideEffect task '%s'", registrableTask.fqType())
+		return false, fmt.Errorf("ExecutePureTask called on a SideEffect task '%s'", registrableTask.fqType())
 	}
 
 	ctx := NewMutableContext(
@@ -2396,16 +2437,16 @@ func (n *Node) ExecutePureTask(
 	// will also check access rules.
 	component, err := n.Component(ctx, ComponentRef{})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Run the task's registered value before execution.
 	valid, err := n.validateTask(ctx, taskAttributes, taskInstance)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !valid {
-		return nil
+		return false, nil
 	}
 
 	result := registrableTask.executeFn.Call([]reflect.Value{
@@ -2416,7 +2457,7 @@ func (n *Node) ExecutePureTask(
 	})
 	if !result[0].IsNil() {
 		//nolint:revive // type cast result is unchecked
-		return result[0].Interface().(error)
+		return true, result[0].Interface().(error)
 	}
 
 	// TODO - a task validator must succeed validation after a task executes
@@ -2426,7 +2467,7 @@ func (n *Node) ExecutePureTask(
 	//
 	// See: https://github.com/temporalio/temporal/pull/7701#discussion_r2072026993
 
-	return nil
+	return true, nil
 }
 
 // ValidatePureTask runs a pure task's associated validator, returning true

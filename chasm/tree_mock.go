@@ -239,11 +239,12 @@ func (m *MockNodePureTask) EXPECT() *MockNodePureTaskMockRecorder {
 }
 
 // ExecutePureTask mocks base method.
-func (m *MockNodePureTask) ExecutePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) error {
+func (m *MockNodePureTask) ExecutePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ExecutePureTask", baseCtx, taskAttributes, taskInstance)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ExecutePureTask indicates an expected call of ExecutePureTask.
