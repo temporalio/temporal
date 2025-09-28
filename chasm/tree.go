@@ -122,8 +122,9 @@ type (
 		// mutation field captures all user state changes (those will be replicated)
 		mutation NodesMutation
 		// systemMutation field captures all cell specific system changes (those will NOT be replicated)
-		systemMutation NodesMutation
-		newTasks       map[any][]taskWithAttributes // component value -> task & attributes
+		systemMutation     NodesMutation
+		newTasks           map[any][]taskWithAttributes // component value -> task & attributes
+		immediatePureTasks map[any][]taskWithAttributes // similar to newTasks, but will be executed at the end of the transaction
 
 		taskValueCache map[*commonpb.DataBlob]reflect.Value
 
@@ -258,6 +259,7 @@ func newTreeHelper(
 			DeletedNodes: make(map[string]struct{}),
 		},
 		newTasks:               make(map[any][]taskWithAttributes),
+		immediatePureTasks:     make(map[any][]taskWithAttributes),
 		taskValueCache:         make(map[*commonpb.DataBlob]reflect.Value),
 		needsPointerResolution: false,
 	}
@@ -1176,6 +1178,16 @@ func (n *Node) AddTask(
 	taskAttributes TaskAttributes,
 	task any,
 ) {
+	rt, ok := n.registry.taskFor(task)
+	if ok && rt.isPureTask && taskAttributes.IsImmediate() {
+		// Those tasks will be executed in the current transaction.
+		n.immediatePureTasks[component] = append(n.immediatePureTasks[component], taskWithAttributes{
+			task:       task,
+			attributes: taskAttributes,
+		})
+		return
+	}
+
 	n.nodeBase.newTasks[component] = append(n.nodeBase.newTasks[component], taskWithAttributes{
 		task:       task,
 		attributes: taskAttributes,
@@ -1186,6 +1198,10 @@ func (n *Node) AddTask(
 // track changes made in the current transaction.
 func (n *Node) CloseTransaction() (NodesMutation, error) {
 	defer n.cleanupTransaction()
+
+	if err := n.executeImmedidatePureTasks(); err != nil {
+		return NodesMutation{}, err
+	}
 
 	if err := n.syncSubComponents(); err != nil {
 		return NodesMutation{}, err
@@ -1226,6 +1242,54 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	maps.Copy(n.mutation.DeletedNodes, n.systemMutation.DeletedNodes)
 
 	return n.mutation, nil
+}
+
+func (n *Node) executeImmedidatePureTasks() error {
+	// We must sync structure before running any tasks here because,
+	// those tasks might be for a newly created component which doesn't even have a node yet.
+	// And we want to make sure we only run tasks for components that are still part of the tree.
+	syncStructure := true
+
+	for componentValue, tasks := range n.immediatePureTasks {
+		if syncStructure {
+			if err := n.syncSubComponents(); err != nil {
+				return err
+			}
+		}
+
+		// TODO: Maintain a mapping from deserialized component value to node
+		// and avoid this look up.
+		var taskNode *Node
+		for _, node := range n.andAllChildren() {
+			if node.fieldType() == fieldTypeComponent && node.value == componentValue {
+				taskNode = node
+				break
+			}
+		}
+
+		if taskNode == nil || len(tasks) == 0 {
+			// NOTE: this is not necessarily an error because this function is executed at the end of a transaction
+			// which could contain multiple transitions. So it's possible that a task added for a component in one
+			// transition and in a later transition that component get removed.
+			continue
+		}
+
+		// TODO: sync structure after every task execution instead of once per node to handle the case
+		// where a task deletes the component it is executing on.
+		//
+		// This is possible if component as a pointer to it's ancestors and that ancestor deletes this component.
+		// For example, a child activity fires a timeout timer, it notifies the parent node which is a workflow,
+		// and workflow deletes the activity from it's activities map.
+		syncStructure = true
+		for _, task := range tasks {
+			fmt.Println("Executing immediate pure task for component")
+			if err := taskNode.ExecutePureTask(context.Background(), task.attributes, task.task); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (n *Node) closeTransactionHandleRootLifecycleChange() (bool, error) {
@@ -1701,6 +1765,7 @@ func (n *Node) cleanupTransaction() {
 	}
 
 	n.newTasks = make(map[any][]taskWithAttributes)
+	n.immediatePureTasks = make(map[any][]taskWithAttributes)
 
 	n.needsPointerResolution = false
 }
@@ -2450,6 +2515,10 @@ func (n *Node) ExecutePureTask(
 	// will also check access rules.
 	component, err := n.Component(ctx, ComponentRef{})
 	if err != nil {
+		// NotFound errors are expected here and we can safely skip the task execution.
+		if errors.As(err, new(*serviceerror.NotFound)) {
+			return false, nil
+		}
 		return false, err
 	}
 

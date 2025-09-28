@@ -2416,6 +2416,64 @@ func (s *nodeSuite) testComponentTree() *Node {
 	return node // maybe tc too
 }
 
+func (s *nodeSuite) TestExecuteImmediatePureTask() {
+	tv := testvars.New(s.T())
+	root := s.testComponentTree()
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
+
+	mutations, err := root.CloseTransaction()
+	s.NoError(err)
+
+	// Start a clean transaction.
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	taskAttributes := TaskAttributes{ScheduledTime: TaskScheduledTimeImmediate}
+	mutableContext.AddTask(
+		testComponent,
+		taskAttributes,
+		&TestPureTask{
+			Payload: &commonpb.Payload{Data: []byte("root-task-payload")},
+		},
+	)
+
+	sc1, err := testComponent.SubComponent1.Get(mutableContext)
+	s.NoError(err)
+
+	mutableContext.AddTask(
+		sc1,
+		taskAttributes,
+		&TestPureTask{
+			Payload: &commonpb.Payload{Data: []byte("sc1-task-payload")},
+		},
+	)
+
+	// One valid task, one invalid task
+	s.testLibrary.mockPureTaskValidator.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(false, nil).Times(1)
+	s.testLibrary.mockPureTaskValidator.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(true, nil).Times(1)
+	s.testLibrary.mockPureTaskExecutor.EXPECT().
+		Execute(
+			gomock.AssignableToTypeOf(&MutableContextImpl{}),
+			gomock.Any(),
+			gomock.Eq(taskAttributes),
+			gomock.Any(),
+		).Return(nil).Times(1)
+
+	mutations, err = root.CloseTransaction()
+	s.NoError(err)
+	s.Len(mutations.UpdatedNodes, 2, "root and subcomponent1 should be updated")
+	s.Empty(mutations.DeletedNodes)
+}
+
 func (s *nodeSuite) TestEachPureTask() {
 	now := s.timeSource.Now()
 
