@@ -2,8 +2,6 @@ package chasm
 
 import (
 	"reflect"
-
-	enumspb "go.temporal.io/api/enums/v1"
 )
 
 type (
@@ -18,11 +16,6 @@ type (
 	}
 
 	RegistrableComponentOption func(*RegistrableComponent)
-
-	VisibilityIndexedAttribute struct {
-		Name string // CHASM framework will automatically add "TemporalCAT" prefix
-		Type enumspb.IndexedValueType
-	}
 )
 
 func NewRegistrableComponent[C Component](

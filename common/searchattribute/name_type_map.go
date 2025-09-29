@@ -51,10 +51,6 @@ func (m NameTypeMap) Custom() map[string]enumspb.IndexedValueType {
 	return m.customSearchAttributes
 }
 
-func (m NameTypeMap) Archetype() map[string]enumspb.IndexedValueType {
-	return m.archetypeSearchAttributes
-}
-
 func (m NameTypeMap) All() map[string]enumspb.IndexedValueType {
 	allSearchAttributes := make(map[string]enumspb.IndexedValueType, len(system)+len(predefined)+len(m.customSearchAttributes)+len(m.archetypeSearchAttributes))
 	for saName, saType := range system {
