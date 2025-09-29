@@ -216,6 +216,25 @@ var (
 		"KeywordList02": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		"KeywordList03": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
+
+	archetypeSearchAttributes = map[string]enumspb.IndexedValueType{
+		"TemporalBool01":        enumspb.INDEXED_VALUE_TYPE_BOOL,
+		"TemporalBool02":        enumspb.INDEXED_VALUE_TYPE_BOOL,
+		"TemporalDatetime01":    enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		"TemporalDatetime02":    enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		"TemporalDouble01":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		"TemporalDouble02":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		"TemporalInt01":         enumspb.INDEXED_VALUE_TYPE_INT,
+		"TemporalInt02":         enumspb.INDEXED_VALUE_TYPE_INT,
+		"TemporalKeyword01":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"TemporalKeyword02":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"TemporalKeyword03":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"TemporalKeyword04":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"TemporalText01":        enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"TemporalText02":        enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"TemporalKeywordList01": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		"TemporalKeywordList02": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+	}
 )
 
 // IsSystem returns true if name is system search attribute
@@ -260,8 +279,14 @@ func GetSqlDbColName(name string) string {
 
 func GetSqlDbIndexSearchAttributes() *persistencespb.IndexSearchAttributes {
 	return &persistencespb.IndexSearchAttributes{
-		CustomSearchAttributes: sqlDbCustomSearchAttributes,
+		CustomSearchAttributes:    sqlDbCustomSearchAttributes,
+		ArchetypeSearchAttributes: archetypeSearchAttributes,
 	}
+}
+
+// GetArchetypeIndexSearchAttributes returns the predefined Archetype search attributes.
+func GetArchetypeIndexSearchAttributes() map[string]enumspb.IndexedValueType {
+	return archetypeSearchAttributes
 }
 
 // QueryWithAnyNamespaceDivision returns a modified workflow visibility query that disables

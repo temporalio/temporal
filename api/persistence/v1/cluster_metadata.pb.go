@@ -166,10 +166,11 @@ func (x *ClusterMetadata) GetTags() map[string]string {
 }
 
 type IndexSearchAttributes struct {
-	state                  protoimpl.MessageState          `protogen:"open.v1"`
-	CustomSearchAttributes map[string]v11.IndexedValueType `protobuf:"bytes,1,rep,name=custom_search_attributes,json=customSearchAttributes,proto3" json:"custom_search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=temporal.api.enums.v1.IndexedValueType"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state                     protoimpl.MessageState          `protogen:"open.v1"`
+	CustomSearchAttributes    map[string]v11.IndexedValueType `protobuf:"bytes,1,rep,name=custom_search_attributes,json=customSearchAttributes,proto3" json:"custom_search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=temporal.api.enums.v1.IndexedValueType"`
+	ArchetypeSearchAttributes map[string]v11.IndexedValueType `protobuf:"bytes,2,rep,name=archetype_search_attributes,json=archetypeSearchAttributes,proto3" json:"archetype_search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=temporal.api.enums.v1.IndexedValueType"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *IndexSearchAttributes) Reset() {
@@ -205,6 +206,13 @@ func (*IndexSearchAttributes) Descriptor() ([]byte, []int) {
 func (x *IndexSearchAttributes) GetCustomSearchAttributes() map[string]v11.IndexedValueType {
 	if x != nil {
 		return x.CustomSearchAttributes
+	}
+	return nil
+}
+
+func (x *IndexSearchAttributes) GetArchetypeSearchAttributes() map[string]v11.IndexedValueType {
+	if x != nil {
+		return x.ArchetypeSearchAttributes
 	}
 	return nil
 }

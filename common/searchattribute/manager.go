@@ -84,6 +84,7 @@ func (m *managerImpl) GetSearchAttributes(
 	}
 	if indexSearchAttributes, ok := saCache.searchAttributes[indexName]; ok {
 		result.customSearchAttributes = maps.Clone(indexSearchAttributes.customSearchAttributes)
+		result.archetypeSearchAttributes = maps.Clone(indexSearchAttributes.archetypeSearchAttributes)
 	}
 	return result, nil
 }
@@ -177,7 +178,16 @@ func (m *managerImpl) SaveSearchAttributes(
 	if clusterMetadata.IndexSearchAttributes == nil {
 		clusterMetadata.IndexSearchAttributes = map[string]*persistencespb.IndexSearchAttributes{indexName: nil}
 	}
-	clusterMetadata.IndexSearchAttributes[indexName] = &persistencespb.IndexSearchAttributes{CustomSearchAttributes: newCustomSearchAttributes}
+	// Preserve any existing ArchetypeSearchAttributes while updating custom ones.
+	existing := clusterMetadata.IndexSearchAttributes[indexName]
+	var archetype map[string]enumspb.IndexedValueType
+	if existing != nil {
+		archetype = existing.GetArchetypeSearchAttributes()
+	}
+	clusterMetadata.IndexSearchAttributes[indexName] = &persistencespb.IndexSearchAttributes{
+		CustomSearchAttributes:    newCustomSearchAttributes,
+		ArchetypeSearchAttributes: archetype,
+	}
 	_, err = m.clusterMetadataManager.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: clusterMetadata,
 		Version:         clusterMetadataResponse.Version,
