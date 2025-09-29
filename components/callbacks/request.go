@@ -22,62 +22,41 @@ func routeRequest(
 	localClient *common.FrontendHTTPClient,
 	logger log.Logger,
 ) (*http.Response, error) {
-	// this source header is populated in nexusoperations/executors (via the ClientProvider) for worker targets
-	// if this header is not populated then we assume it's and external target
+	// This source header is populated in nexusoperations/executors (via the ClientProvider) for worker targets
+	// if this header is not populated then we assume it's and external target.
 	if r.Header == nil || r.Header.Get(callbackSourceHeader) == "" {
 		return defaultCilent.Do(r)
 	}
+	// If we got here, we assume that the endpoint in the original call was a worker target, and we should route
+	// internally, either to a local frontend, or one of the other connected clusters' frontends.
+	var frontendClient *common.FrontendHTTPClient
 	callbackSource := r.Header.Get(callbackSourceHeader)
 	for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
 		if callbackSource == clusterInfo.ClusterID {
-			return execRequest(
-				r,
-				httpClientCache,
-				localClient,
-				logger,
-				clusterMetadata.GetCurrentClusterName(),
-				clusterName,
-			)
+			fec, err := httpClientCache.Get(clusterName)
+			if err != nil {
+				logger.Warn(
+					"HTTPCallerProvider unable to get FrontendHTTPClient for callback target cluster. Using local HTTP Client.",
+					tag.SourceCluster(clusterMetadata.GetCurrentClusterName()),
+					tag.TargetCluster(clusterName),
+					tag.Error(err),
+				)
+				frontendClient = localClient
+			} else {
+				frontendClient = fec
+			}
+			break
 		}
 	}
-	// this cannot happen when a cluster is removed from the group
-	logger.Warn(
-		"HTTPCallerProvider unable to find the target cluster. Using local HTTP Client.",
-		tag.SourceCluster(clusterMetadata.GetCurrentClusterName()),
-	)
-	// we need this check while there is a config to toggle
-	// systemURL usage
-	if r.URL.String() == nexus.SystemCallbackURL {
-		r.URL.Path = nexus.PathCompletionCallbackNoIdentifier
-	}
-	return localClient.Do(r)
-}
-
-func execRequest(
-	r *http.Request,
-	httpClientCache *cluster.FrontendHTTPClientCache,
-	localClient *common.FrontendHTTPClient,
-	logger log.Logger,
-	currentClusterName, targetClusterName string,
-) (*http.Response, error) {
-	var frontendClient *common.FrontendHTTPClient
-	if targetClusterName == currentClusterName {
+	if frontendClient == nil {
+		// This can happen when a cluster is disconnected.
+		logger.Warn(
+			"HTTPCallerProvider unable to find the target cluster. Using local HTTP Client.",
+			tag.SourceCluster(clusterMetadata.GetCurrentClusterName()),
+		)
 		frontendClient = localClient
-	} else {
-		fe, err := httpClientCache.Get(targetClusterName)
-		if err != nil {
-			logger.Warn(
-				"HTTPCallerProvider unable to get FrontendHTTPClient for callback target cluster. Using local HTTP Client.",
-				tag.SourceCluster(currentClusterName),
-				tag.TargetCluster(targetClusterName),
-				tag.Error(err),
-			)
-			return localClient.Do(r)
-		}
-		frontendClient = fe
 	}
-	// we need this check while there is a config to toggle
-	// systemURL usage
+
 	if r.URL.String() == nexus.SystemCallbackURL {
 		r.URL.Path = nexus.PathCompletionCallbackNoIdentifier
 	}
