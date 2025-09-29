@@ -321,6 +321,7 @@ message RecordActivityTaskStartedResponse {
     int64 version = 9;
     temporal.api.common.v1.Priority priority = 10;
     temporal.api.common.v1.RetryPolicy retry_policy = 11;
+    int64 start_version = 12;
 }
 
 message RespondWorkflowTaskCompletedRequest {
@@ -658,6 +659,7 @@ message SyncActivityRequest {
     google.protobuf.Duration retry_maximum_interval = 23;
     int32 retry_maximum_attempts = 24;
     double retry_backoff_coefficient = 25;
+    int64 start_version = 26;
 }
 
 message SyncActivitiesRequest {
@@ -699,6 +701,7 @@ message ActivitySyncInfo {
     google.protobuf.Duration retry_maximum_interval = 23;
     int32 retry_maximum_attempts = 24;
     double retry_backoff_coefficient = 25;
+    int64 start_version = 26;
 
 }
 

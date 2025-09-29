@@ -134,6 +134,7 @@ func (s *activitiesSuite) SetupTest() {
 		forceReplicationMetricsHandler:   s.mockMetricsHandler,
 		generateMigrationTaskViaFrontend: dynamicconfig.GetBoolPropertyFn(false),
 		enableHistoryRateLimiter:         dynamicconfig.GetBoolPropertyFn(false),
+		workflowVerifier:                 workflowVerifierProvider(),
 	}
 }
 

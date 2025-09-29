@@ -298,7 +298,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 
 	workflow.RecordActivityCompletionMetrics(
 		t.shardContext,
-		namespace.Name(mutableState.GetNamespaceEntry().Name()),
+		mutableState.GetNamespaceEntry().Name(),
 		ai.TaskQueue,
 		workflow.ActivityCompletionMetrics{
 			Status:             workflow.ActivityStatusTimeout,
@@ -310,7 +310,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		metrics.OperationTag(metrics.TimerActiveTaskActivityTimeoutScope),
 		metrics.WorkflowTypeTag(mutableState.GetWorkflowType().GetName()),
 		metrics.ActivityTypeTag(ai.ActivityType.GetName()),
-	)
+		metrics.VersioningBehaviorTag(mutableState.GetEffectiveVersioningBehavior()))
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		// TODO uncommment once RETRY_STATE_PAUSED is supported
@@ -925,6 +925,7 @@ func (t *timerQueueActiveTaskExecutor) processActivityWorkflowRules(
 		// need to update activity
 		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
 			activityInfo.StartedEventId = common.EmptyEventID
+			activityInfo.StartVersion = common.EmptyVersion
 			activityInfo.StartedTime = nil
 			activityInfo.RequestId = ""
 			return nil
@@ -1009,8 +1010,6 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	// Execute all fired pure tasks for a component while holding the workflow lock.
 	processedTimers := 0
 	err = t.executeChasmPureTimers(
-		ctx,
-		wfCtx,
 		ms,
 		task,
 		func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, taskInstance any) error {

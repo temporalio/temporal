@@ -248,6 +248,12 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 		`PersistenceQPSBurstRatio is the burst ratio for persistence QPS. This flag controls the burst ratio for all services.`,
 	)
 
+	EnableDataLossMetrics = NewGlobalBoolSetting(
+		"system.enableDataLossMetrics",
+		false,
+		`EnableDataLossMetrics determines whether dataloss metrics are emitted when dataloss errors are encountered`,
+	)
+
 	// deadlock detector
 
 	DeadlockDumpGoroutines = NewGlobalBoolSetting(
@@ -904,10 +910,10 @@ Concrete type should be list of strings.`,
 	FrontendNexusForwardRequestUseEndpointDispatch = NewGlobalBoolSetting(
 		"frontend.nexusForwardRequestUseEndpointDispatch",
 		false,
-		`!EXPERIMENTAL! NB: This config will be removed in a future release. Controls whether to use Nexus 
-task dispatch by endpoint URLs for forwarded Nexus requests. If set to true, forwarded requests will use the same 
+		`!EXPERIMENTAL! NB: This config will be removed in a future release. Controls whether to use Nexus
+task dispatch by endpoint URLs for forwarded Nexus requests. If set to true, forwarded requests will use the same
 dispatch type (by endpoint or by namespace + task queue) as the original request. If false, dispatch by namespace + task
-queue will always be used for forwarded requests. Defaults to false because Nexus endpoints do not support replication, 
+queue will always be used for forwarded requests. Defaults to false because Nexus endpoints do not support replication,
 so forwarding by endpoint ID will not work out of the box.`,
 	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
@@ -1281,7 +1287,7 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 	MatchingPollerScalingBacklogAgeScaleUp = NewTaskQueueDurationSetting(
 		"matching.pollerScalingMinimumBacklog",
 		200*time.Millisecond,
-		`MatchingPollerScalingBacklogAgeScaleUp is the minimum backlog age that must be accumulated before 
+		`MatchingPollerScalingBacklogAgeScaleUp is the minimum backlog age that must be accumulated before
 a decision to scale up the number of pollers will be issued`,
 	)
 	MatchingPollerScalingWaitTime = NewTaskQueueDurationSetting(
@@ -2484,6 +2490,20 @@ that task will be sent to DLQ.`,
 		"Use real chasm tree implementation instead of the noop one",
 	)
 
+	EnableCHASMSchedulerCreation = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerCreation",
+		false,
+		`EnableCHASMSchedulerCreation controls whether new schedules are created using the CHASM (V2) implementation
+instead of the existing (V1) implementation.`,
+	)
+
+	EnableCHASMSchedulerMigration = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerMigration",
+		false,
+		`EnableCHASMSchedulerMigration controls whether existing V1 schedules are automatically migrated
+to the CHASM (V2) implementation on active scheduler workflows.`,
+	)
+
 	// keys for worker
 
 	WorkerPersistenceMaxQPS = NewGlobalIntSetting(
@@ -2617,7 +2637,7 @@ Should be at least WorkerESProcessorFlushInterval+<time to process request>.`,
 	ExecutionsScannerEnabled = NewGlobalBoolSetting(
 		"worker.executionsScannerEnabled",
 		false,
-		`ExecutionsScannerEnabled indicates if executions scanner should be started as part of worker.Scanner. This flag has no effect when SQL persistence is used, 
+		`ExecutionsScannerEnabled indicates if executions scanner should be started as part of worker.Scanner. This flag has no effect when SQL persistence is used,
 because executions scanner support for SQL is not yet implemented.`,
 	)
 	HistoryScannerDataMinAge = NewGlobalDurationSetting(

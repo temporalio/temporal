@@ -129,24 +129,6 @@ func (m *visibilityManagerMetrics) ListWorkflowExecutions(
 	return response, m.updateErrorMetric(handler, err)
 }
 
-func (m *visibilityManagerMetrics) ScanWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequestV2,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	handler, startTime := m.tagScope(metrics.VisibilityPersistenceScanWorkflowExecutionsScope)
-	response, err := m.delegate.ScanWorkflowExecutions(ctx, request)
-	elapsed := time.Since(startTime)
-	if elapsed > m.slowQueryThreshold() {
-		m.logger.Warn("Count query exceeded threshold",
-			tag.NewDurationTag("duration", elapsed),
-			tag.NewStringTag("visibility-query", request.Query),
-			tag.NewStringerTag("namespace", request.Namespace),
-		)
-	}
-	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
-	return response, m.updateErrorMetric(handler, err)
-}
-
 func (m *visibilityManagerMetrics) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,

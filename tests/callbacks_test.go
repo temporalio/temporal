@@ -3,9 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
-	"fmt"
-	"net"
-	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -24,7 +22,6 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
@@ -53,27 +50,13 @@ func TestCallbacksSuite(t *testing.T) {
 	suite.Run(t, new(CallbacksSuite))
 }
 
-func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler, listenAddr string) {
+func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler) string {
 	hh := nexus.NewCompletionHTTPHandler(nexus.CompletionHandlerOptions{Handler: h})
-	srv := &http.Server{Addr: listenAddr, Handler: hh}
-	listener, err := net.Listen("tcp", listenAddr)
-	s.NoError(err)
-
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- srv.Serve(listener)
-	}()
-
+	srv := httptest.NewServer(hh)
 	t.Cleanup(func() {
-		// Graceful shutdown
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		err = srv.Shutdown(ctx)
-		if ctx.Err() != nil {
-			require.NoError(t, err)
-			require.ErrorIs(t, <-errCh, http.ErrServerClosed)
-		}
+		srv.Close()
 	})
+	return srv.URL
 }
 
 func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
@@ -243,8 +226,11 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				requestCh:         make(chan *nexus.CompletionRequest, 2),
 				requestCompleteCh: make(chan error, 2),
 			}
-			callbackAddress := fmt.Sprintf("localhost:%d", freeport.MustGetFreePort())
-			s.runNexusCompletionHTTPServer(s.T(), ch, callbackAddress)
+			defer func() {
+				close(ch.requestCh)
+				close(ch.requestCompleteCh)
+			}()
+			callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
 
 			w := worker.New(sdkClient, taskQueue, worker.Options{})
 			w.RegisterWorkflowWithOptions(tc.wf, workflow.RegisterOptions{Name: workflowType})
@@ -276,7 +262,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				{
 					Variant: &commonpb.Callback_Nexus_{
 						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://" + callbackAddress + "/cb1",
+							Url: callbackAddress + "/cb1",
 						},
 					},
 					Links: []*commonpb.Link{links[0]},
@@ -284,7 +270,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				{
 					Variant: &commonpb.Callback_Nexus_{
 						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://" + callbackAddress + "/cb2",
+							Url: callbackAddress + "/cb2",
 						},
 					},
 					Links: []*commonpb.Link{links[1]},
@@ -449,8 +435,11 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		requestCh:         make(chan *nexus.CompletionRequest, 2),
 		requestCompleteCh: make(chan error, 2),
 	}
-	callbackAddress := fmt.Sprintf("localhost:%d", freeport.MustGetFreePort())
-	s.runNexusCompletionHTTPServer(s.T(), ch, callbackAddress)
+	defer func() {
+		close(ch.requestCh)
+		close(ch.requestCompleteCh)
+	}()
+	callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
 
 	w := worker.New(sdkClient, taskQueue.GetName(), worker.Options{})
 
@@ -473,14 +462,14 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		{
 			Variant: &commonpb.Callback_Nexus_{
 				Nexus: &commonpb.Callback_Nexus{
-					Url: "http://" + callbackAddress + "/cb1",
+					Url: callbackAddress + "/cb1",
 				},
 			},
 		},
 		{
 			Variant: &commonpb.Callback_Nexus_{
 				Nexus: &commonpb.Callback_Nexus{
-					Url: "http://" + callbackAddress + "/cb2",
+					Url: callbackAddress + "/cb2",
 				},
 			},
 		},
@@ -493,7 +482,6 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		WorkflowType:        &commonpb.WorkflowType{Name: "longRunningWorkflow"},
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  durationpb.New(20 * time.Second),
 		Identity:            s.T().Name(),
 		CompletionCallbacks: []*commonpb.Callback{cbs[0]},
 	}
@@ -572,9 +560,17 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	s.NoError(err)
 
 	for range cbs {
-		completion := <-ch.requestCh
-		s.Equal(nexus.OperationStateSucceeded, completion.State)
-		ch.requestCompleteCh <- nil
+		select {
+		case completion := <-ch.requestCh:
+			s.Equal(nexus.OperationStateSucceeded, completion.State)
+		case <-time.After(time.Second):
+			s.Fail("timeout waiting for callback")
+		}
+		select {
+		case ch.requestCompleteCh <- nil:
+		case <-time.After(time.Second):
+			s.Fail("timeout writing to completion channel")
+		}
 	}
 
 	s.EventuallyWithT(
@@ -600,4 +596,130 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		2*time.Second,
 		100*time.Millisecond,
 	)
+}
+
+func blockingWorkflow(ctx workflow.Context) error {
+	return workflow.Await(ctx, func() bool {
+		return false
+	})
+}
+
+func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() {
+	s.OverrideDynamicConfig(
+		callbacks.AllowedAddresses,
+		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+	)
+
+	/*
+	 * 1. Start WF w/ no callbacks and immediately terminate
+	 * 2. Start WF second time w/ a callback
+	 * 3. Reset WF back to the first run
+	 * 4. Verify callback is called
+	 */
+
+	tv := testvars.New(s.T())
+	ctx := testcore.NewContext()
+	sdkClient, err := client.Dial(client.Options{
+		HostPort:  s.FrontendGRPCAddress(),
+		Namespace: s.Namespace().String(),
+	})
+	s.NoError(err)
+
+	taskQueue := tv.TaskQueue()
+	workflowID := tv.WorkflowID()
+
+	ch := &completionHandler{
+		requestCh:         make(chan *nexus.CompletionRequest, 1),
+		requestCompleteCh: make(chan error, 1),
+	}
+	defer func() {
+		close(ch.requestCh)
+		close(ch.requestCompleteCh)
+	}()
+	callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
+
+	w := worker.New(sdkClient, taskQueue.GetName(), worker.Options{})
+
+	w.RegisterWorkflow(blockingWorkflow)
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	// 1. Start WF w/ no callbacks and immediately terminate
+	request1 := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:          uuid.NewString(),
+		Namespace:          s.Namespace().String(),
+		WorkflowId:         workflowID,
+		WorkflowType:       &commonpb.WorkflowType{Name: "blockingWorkflow"},
+		TaskQueue:          taskQueue,
+		Input:              nil,
+		WorkflowRunTimeout: durationpb.New(20 * time.Second),
+		Identity:           s.T().Name(),
+	}
+
+	startResponse1, err := s.FrontendClient().StartWorkflowExecution(ctx, request1)
+	s.NoError(err)
+
+	// Validate the workflow started, then terminate it
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      startResponse1.RunId,
+	}
+	s.WaitForHistoryEvents(`
+			1 WorkflowExecutionStarted
+			2 WorkflowTaskScheduled
+			3 WorkflowTaskStarted
+			4 WorkflowTaskCompleted`,
+		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
+		5*time.Second,
+		10*time.Millisecond)
+
+	_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         s.Namespace().String(),
+		WorkflowExecution: workflowExecution,
+		Reason:            s.T().Name(),
+		Identity:          tv.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	// 2. Start WF second time w/ callbacks (new run)
+	cbs := []*commonpb.Callback{
+		{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress + "/cb1"}}},
+	}
+
+	request2 := proto.Clone(request1).(*workflowservice.StartWorkflowExecutionRequest)
+	request2.RequestId = uuid.NewString()
+	request2.CompletionCallbacks = cbs
+
+	_, err = s.FrontendClient().StartWorkflowExecution(ctx, request2)
+	s.NoError(err)
+
+	// 3. Reset workflow back to the first (terminated) run as base; must copy callbacks
+	_, err = sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.Namespace().String(),
+		WorkflowExecution:         workflowExecution, // base = first (terminated) run
+		Reason:                    s.T().Name(),
+		WorkflowTaskFinishEventId: 4,
+		RequestId:                 "test_id",
+	})
+	s.NoError(err)
+
+	// 4. Wait for callback deliveries via the handler channels
+	select {
+	case completion := <-ch.requestCh:
+		s.Equal(nexus.OperationStateFailed, completion.State)
+		ch.requestCompleteCh <- nil
+	case <-ctx.Done():
+		s.FailNow("timed out waiting for callback")
+	}
+
+	// Ensure the original workflow runs to completion to avoid leaving dangling runs
+	_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+		},
+		Reason:   s.T().Name(),
+		Identity: tv.WorkerIdentity(),
+	})
+	s.NoError(err)
 }
