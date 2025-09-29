@@ -1,6 +1,6 @@
 # Flaky Tests Analysis Tool
 
-This tool processes test failure data and generates reports, with optional Slack notifications.
+This tool processes test failure data and generates reports, with optional GitHub Actions summaries and Slack notifications.
 
 ## Usage
 
@@ -10,24 +10,22 @@ This tool processes test failure data and generates reports, with optional Slack
 uv run main.py --file out.json
 ```
 
-### With Slack Notifications
-
-#### Success Notification
+### With GitHub Actions Summary
 ```bash
-# Process data and send success notification to Slack
+# Process data and generate GitHub Actions summary
 uv run main.py \
   --file out.json \
-  --slack-webhook "https://hooks.slack.com/services/..." \
-  --slack-message-type success \
+  --github-summary \
   --run-id "123456789"
 ```
 
-#### Failure Notification
+### With Slack Notifications
 ```bash
-# Send failure notification to Slack (no file processing needed)
+# Process data, generate summary, and send Slack notification
 uv run main.py \
+  --file out.json \
+  --github-summary \
   --slack-webhook "https://hooks.slack.com/services/..." \
-  --slack-message-type failure \
   --run-id "123456789" \
   --ref-name "main" \
   --sha "abc123def456"
@@ -35,9 +33,9 @@ uv run main.py \
 
 ## Command Line Options
 
-- `--file`, `-f`: Input JSON file to process (default: out7.json)
+- `--file`, `-f`: Input JSON file to process (default: out.json)
+- `--github-summary`: Generate GitHub Actions summary (writes to GITHUB_STEP_SUMMARY)
 - `--slack-webhook`: Slack webhook URL for notifications
-- `--slack-message-type`: Type of message ('success' or 'failure')
 - `--run-id`: GitHub Actions run ID
 - `--ref-name`: Git branch name (required for failure messages)
 - `--sha`: Git commit SHA (required for failure messages)
@@ -53,4 +51,27 @@ The tool generates several report files:
 
 ## GitHub Actions Integration
 
-The tool is designed to work seamlessly with GitHub Actions workflows. It reads environment variables and generates structured Slack messages with proper formatting and links back to the workflow run.
+### Automatic Error Handling
+- **Success Case**: Processes data, generates GitHub Actions summary, and sends success Slack notification
+- **Failure Case**: Detects failures and sends Slack notification with workflow failure details
+
+### GitHub Actions Summary
+When `--github-summary` is specified, the tool:
+- Creates a comprehensive summary with failure counts by category
+- Includes detailed tables for each failure type
+- Writes directly to the GitHub Actions step summary
+- Provides links back to the workflow run
+
+### Workflow Integration
+The tool is typically called once in the workflow with all necessary parameters:
+```yaml
+- name: Run Python script to process flaky tests
+  run: |
+    cd tools/flakes && uv run main.py \
+      --file ../../out.json \
+      --github-summary \
+      --slack-webhook "${{ secrets.SLACK_WEBHOOK }}" \
+      --run-id "${{ github.run_id }}" \
+      --ref-name "${{ github.ref_name }}" \
+      --sha "${{ github.sha }}"
+```

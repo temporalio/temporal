@@ -372,11 +372,6 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
     # Slack notification options
     parser.add_argument("--slack-webhook", help="Slack webhook URL for notifications")
-    parser.add_argument(
-        "--slack-message-type",
-        choices=["success", "failure"],
-        help="Type of Slack message to send",
-    )
     parser.add_argument("--run-id", help="GitHub Actions run ID")
     parser.add_argument("--ref-name", help="Git branch name")
     parser.add_argument("--sha", help="Git commit SHA")
@@ -409,8 +404,7 @@ def handle_success_case(args) -> None:
         )
         write_github_actions_summary(summary_content)
 
-    # Send success Slack notification if requested
-    if args.slack_webhook and args.slack_message_type == "success":
+    if args.slack_webhook:
         send_success_slack_notification(args, crash_count, flaky_count, retry_count, timeout_count)
 
 
@@ -459,8 +453,7 @@ def handle_failure_case(args, error_msg: str) -> None:
     """Handle the failure case with appropriate error reporting and notifications."""
     print(error_msg, file=sys.stderr)
     
-    # Send failure notification if webhook is configured
-    if args.slack_webhook and args.slack_message_type == "success":
+    if args.slack_webhook:
         send_failure_slack_notification(args)
     
     sys.exit(1)

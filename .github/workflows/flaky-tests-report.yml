@@ -72,12 +72,11 @@ jobs:
           echo "Starting Python script processing..."
           echo "Current directory: $(pwd)"
           
-          echo "Running: cd tools/flakes && uv run main.py --file ../../out.json --github-summary --slack-webhook ${{ secrets.SLACK_WEBHOOK }} --slack-message-type success --run-id ${{ github.run_id }}"
+          echo "Running: cd tools/flakes && uv run main.py --file ../../out.json --github-summary --slack-webhook ${{ secrets.SLACK_WEBHOOK }} --run-id ${{ github.run_id }}"
           cd tools/flakes && uv run main.py \
             --file ../../out.json \
             --github-summary \
             --slack-webhook "${{ secrets.SLACK_WEBHOOK }}" \
-            --slack-message-type success \
             --run-id "${{ github.run_id }}" \
             --ref-name "${{ github.ref_name }}" \
             --sha "${{ github.sha }}"
