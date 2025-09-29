@@ -2,6 +2,7 @@ package searchattribute
 
 import (
 	"fmt"
+	"maps"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -34,12 +35,8 @@ func buildIndexNameTypeMap(indexSearchAttributes map[string]*persistencespb.Inde
 
 func (m NameTypeMap) System() map[string]enumspb.IndexedValueType {
 	allSystem := make(map[string]enumspb.IndexedValueType, len(system)+len(predefined))
-	for saName, saType := range system {
-		allSystem[saName] = saType
-	}
-	for saName, saType := range predefined {
-		allSystem[saName] = saType
-	}
+	maps.Copy(allSystem, system)
+	maps.Copy(allSystem, predefined)
 	return allSystem
 }
 
@@ -49,15 +46,9 @@ func (m NameTypeMap) Custom() map[string]enumspb.IndexedValueType {
 
 func (m NameTypeMap) All() map[string]enumspb.IndexedValueType {
 	allSearchAttributes := make(map[string]enumspb.IndexedValueType, len(system)+len(m.customSearchAttributes)+len(predefined))
-	for saName, saType := range system {
-		allSearchAttributes[saName] = saType
-	}
-	for saName, saType := range predefined {
-		allSearchAttributes[saName] = saType
-	}
-	for saName, saType := range m.customSearchAttributes {
-		allSearchAttributes[saName] = saType
-	}
+	maps.Copy(allSearchAttributes, system)
+	maps.Copy(allSearchAttributes, predefined)
+	maps.Copy(allSearchAttributes, m.customSearchAttributes)
 	return allSearchAttributes
 }
 

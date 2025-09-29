@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -28,195 +30,88 @@ func TestWorkflowAliasSearchAttributeTestSuite(t *testing.T) {
 
 func (ts *WorkflowAliasSearchAttributeTestSuite) SetupTest() {
 	ts.FunctionalTestBase.SetupTest()
+
+	ts.Worker().RegisterWorkflow(ts.WorkflowFunc)
 }
 
 func (ts *WorkflowAliasSearchAttributeTestSuite) WorkflowFunc(ctx workflow.Context) error {
-	err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		ActivityID:             "activity-id",
-		DisableEagerExecution:  true,
-		StartToCloseTimeout:    10 * time.Second,
-		ScheduleToCloseTimeout: 10 * time.Second,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    1 * time.Second,
-			BackoffCoefficient: 1,
-			MaximumInterval:    10 * time.Second,
-			MaximumAttempts:    3,
-		},
-	}), ts.ActivityFunc).Get(ctx, nil)
-	return err
+	return nil
 }
 
-func (ts *WorkflowAliasSearchAttributeTestSuite) ActivityFunc() (string, error) {
-	return "done!", nil
-}
-
-func (ts *WorkflowAliasSearchAttributeTestSuite) createWorkflow(ctx context.Context, workflowFn WorkflowFunction, prefix string, scheduleByID string) sdkclient.WorkflowRun {
+func (ts *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
+	ctx context.Context,
+	workflowFn WorkflowFunction,
+	prefix, customSA string) (sdkclient.WorkflowRun, error) {
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr(prefix + "-" + ts.T().Name()),
 		TaskQueue: ts.TaskQueue(),
 	}
-	if scheduleByID != "" {
-		scheduleByIDKey := temporal.NewSearchAttributeKeyKeyword("CustomerSA")
+	if customSA != "" {
+		customSAKey := temporal.NewSearchAttributeKeyKeyword("CustomSA")
 		workflowOptions.TypedSearchAttributes = temporal.NewSearchAttributes(
-			scheduleByIDKey.ValueSet(scheduleByID),
+			customSAKey.ValueSet(customSA),
 		)
 	}
-	workflowRun, err := ts.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	ts.NoError(err)
-	ts.NotNil(workflowRun)
-
-	return workflowRun
+	return ts.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 }
 
-func (ts *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute() {
+func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	ts.Worker().RegisterWorkflow(ts.WorkflowFunc)
-	ts.Worker().RegisterActivity(ts.ActivityFunc)
-
-	workflowRun1 := ts.createWorkflow(ctx, ts.WorkflowFunc, "wf_id_1", "")
-	workflowRun2 := ts.createWorkflow(ctx, ts.WorkflowFunc, "wf_id_2", "")
-
-	// Wait for workflows to complete
-	err := workflowRun1.Get(ctx, nil)
-	ts.NoError(err)
-	err = workflowRun2.Get(ctx, nil)
-	ts.NoError(err)
-
-	getWFResponse, err := ts.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
-	ts.NoError(err)
-	ts.NotNil(getWFResponse)
-	ts.Equal(workflowRun1.GetID(), getWFResponse.GetWorkflowExecutionInfo().Execution.WorkflowId)
-	ts.Equal(workflowRun1.GetRunID(), getWFResponse.GetWorkflowExecutionInfo().Execution.RunId)
-
-	getWFResponse, err = ts.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
-	ts.NoError(err)
-	ts.NotNil(getWFResponse)
-	ts.Equal(workflowRun2.GetID(), getWFResponse.GetWorkflowExecutionInfo().Execution.WorkflowId)
-	ts.Equal(workflowRun2.GetRunID(), getWFResponse.GetWorkflowExecutionInfo().Execution.RunId)
-
-	// Use Eventually pattern to wait for visibility store to be updated
-	ts.Eventually(
-		func() bool {
-			resp, err := ts.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: ts.Namespace().String(),
-				Query:     "WorkflowId = '" + workflowRun1.GetID() + "' OR WorkflowId = '" + workflowRun2.GetID() + "'",
-			})
-			ts.NoError(err)
-			ts.NotNil(resp)
-			return len(resp.GetExecutions()) == 2
-		},
-		testcore.WaitForESToSettle,
-		100*time.Millisecond,
-	)
-
-	ts.Eventually(
-		func() bool {
-			resp, err := ts.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: ts.Namespace().String(),
-				Query:     "TemporalScheduledById IS NULL",
-			})
-			ts.NoError(err)
-			ts.NotNil(resp)
-			return len(resp.GetExecutions()) == 2
-		},
-		testcore.WaitForESToSettle,
-		100*time.Millisecond,
-	)
-
-	ts.Eventually(
-		func() bool {
-			resp, err := ts.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: ts.Namespace().String(),
-				Query:     "ScheduledById IS NULL",
-			})
-			ts.NoError(err)
-			ts.NotNil(resp)
-			return len(resp.GetExecutions()) == 2
-		},
-		testcore.WaitForESToSettle,
-		100*time.Millisecond,
-	)
-}
-
-func (ts *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute_WithCustomSA() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	ts.Worker().RegisterWorkflow(ts.WorkflowFunc)
-	ts.Worker().RegisterActivity(ts.ActivityFunc)
-
-	// Add `ScheduleById = Randy` search attribute to the workflow
-	_, err := ts.SdkClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
-		Namespace: ts.Namespace().String(),
+	_, err := s.SdkClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+		Namespace: s.Namespace().String(),
 		SearchAttributes: map[string]enumspb.IndexedValueType{
-			"CustomerSA": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			"CustomSA": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
 	})
-	ts.NoError(err)
+	require.NoError(s.T(), err)
 
-	workflowRun1 := ts.createWorkflow(ctx, ts.WorkflowFunc, "wf_id_1", "Randy")
-	workflowRun2 := ts.createWorkflow(ctx, ts.WorkflowFunc, "wf_id_2", "Randy")
+	workflowRun1, err := s.createWorkflow(ctx, s.WorkflowFunc, "wf_id_1", "CustomValue1")
+	require.NoError(s.T(), err)
+	workflowRun2, err := s.createWorkflow(ctx, s.WorkflowFunc, "wf_id_2", "CustomValue2")
+	require.NoError(s.T(), err)
 
 	// Wait for workflows to complete
-	err = workflowRun1.Get(ctx, nil)
-	ts.NoError(err)
-	err = workflowRun2.Get(ctx, nil)
-	ts.NoError(err)
+	require.NoError(s.T(), workflowRun1.Get(ctx, nil))
+	require.NoError(s.T(), workflowRun2.Get(ctx, nil))
 
-	getWFResponse, err := ts.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
-	ts.NoError(err)
-	ts.NotNil(getWFResponse)
-	ts.Equal(workflowRun1.GetID(), getWFResponse.GetWorkflowExecutionInfo().Execution.WorkflowId)
-	ts.Equal(workflowRun1.GetRunID(), getWFResponse.GetWorkflowExecutionInfo().Execution.RunId)
+	searchAttributePairs := []struct {
+		sa1       string
+		sa2       string
+		predicate string
+	}{
+		{sa1: "CustomSA", sa2: "CustomSA", predicate: "IS NOT NULL"},
+		{sa1: "ExecutionStatus", sa2: "ExecutionStatus", predicate: "IS NOT NULL"},
+		{sa1: "ScheduledStartTime", sa2: "TemporalScheduledStartTime", predicate: "IS NULL"},
+		{sa1: "SchedulePaused", sa2: "TemporalSchedulePaused", predicate: "IS NULL"},
+		{sa1: "PauseInfo", sa2: "TemporalPauseInfo", predicate: "IS NULL"},
+		{sa1: searchattribute.ScheduleID, sa2: searchattribute.WorkflowID, predicate: "IS NOT NULL"},
+	}
 
-	getWFResponse, err = ts.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
-	ts.NoError(err)
-	ts.NotNil(getWFResponse)
-	ts.Equal(workflowRun2.GetID(), getWFResponse.GetWorkflowExecutionInfo().Execution.WorkflowId)
-	ts.Equal(workflowRun2.GetRunID(), getWFResponse.GetWorkflowExecutionInfo().Execution.RunId)
+	for _, pair := range searchAttributePairs {
+		s.EventuallyWithT(
+			func(t *assert.CollectT) {
+				resp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+					Namespace: s.Namespace().String(),
+					Query:     fmt.Sprintf("%s %s", pair.sa1, pair.predicate),
+				})
+				require.NoError(t, err, fmt.Sprintf("expected %s to return no error", pair.sa1))
+				require.NotNil(t, resp, fmt.Sprintf("expected %s to return results", pair.sa1))
+				require.Equal(t, len(resp.GetExecutions()), 2, fmt.Sprintf("expected %s to return 2 results", pair.sa1))
 
-	// Use Eventually pattern to wait for visibility store to be updated
-	ts.EventuallyWithT(
-		func(c *assert.CollectT) {
-			resp, err := ts.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: ts.Namespace().String(),
-				Query:     "WorkflowId = '" + workflowRun1.GetID() + "' OR WorkflowId = '" + workflowRun2.GetID() + "'",
-			})
-			require.NoError(c, err)
-			require.NotNil(c, resp)
-			require.Equal(c, len(resp.GetExecutions()), 2)
-		},
-		30*time.Second,
-		250*time.Millisecond,
-	)
+				resp2, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+					Namespace: s.Namespace().String(),
+					Query:     fmt.Sprintf("%s %s", pair.sa2, pair.predicate),
+				})
+				require.NoError(t, err, fmt.Sprintf("expected %s to return no error", pair.sa2))
+				require.NotNil(t, resp2, fmt.Sprintf("expected %s to return results", pair.sa2))
+				require.Equal(t, len(resp2.GetExecutions()), 2, fmt.Sprintf("expected %s to return 2 results", pair.sa2))
 
-	ts.EventuallyWithT(
-		func(c *assert.CollectT) {
-			resp, err := ts.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: ts.Namespace().String(),
-				Query:     "TemporalScheduledById IS NULL",
-			})
-			require.NoError(c, err)
-			require.NotNil(c, resp)
-			require.Equal(c, len(resp.GetExecutions()), 0)
-		},
-		30*time.Second,
-		250*time.Millisecond,
-	)
-
-	ts.EventuallyWithT(
-		func(c *assert.CollectT) {
-			resp, err := ts.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: ts.Namespace().String(),
-				Query:     "ScheduledById IS NOT NULL",
-			})
-			require.NoError(c, err)
-			require.NotNil(c, resp)
-			require.Equal(c, len(resp.GetExecutions()), 2)
-		},
-		30*time.Second,
-		250*time.Millisecond,
-	)
+				require.Equal(t, resp.GetExecutions(), resp2.GetExecutions(), fmt.Sprintf("expected %s and %s to return same results", pair.sa1, pair.sa2))
+			},
+			testcore.WaitForESToSettle,
+			100*time.Millisecond,
+		)
+	}
 }

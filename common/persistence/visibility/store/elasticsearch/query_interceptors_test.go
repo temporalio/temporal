@@ -5,9 +5,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
@@ -220,66 +217,4 @@ func (s *QueryInterceptorSuite) createMockNameInterceptor(mapper searchattribute
 		searchAttributesTypeMap:        searchattribute.TestNameTypeMap,
 		searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(mapper),
 	}
-}
-
-func (s *QueryInterceptorSuite) TestResolveSearchAttributeAlias() {
-	cases := []struct {
-		name              string
-		expectedFieldName string
-		expectedFieldType enumspb.IndexedValueType
-		expectedErr       bool
-	}{
-		{name: "MyCustomField", expectedFieldName: "MyCustomField", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_KEYWORD, expectedErr: false},
-		{name: "ExecutionStatus", expectedFieldName: "ExecutionStatus", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_KEYWORD, expectedErr: false},
-		{name: "ScheduledStartTime", expectedFieldName: "TemporalScheduledStartTime", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_DATETIME, expectedErr: false},
-		{name: "SchedulePaused", expectedFieldName: "TemporalSchedulePaused", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_BOOL, expectedErr: false},
-		{name: "TemporalPauseInfo", expectedFieldName: "TemporalPauseInfo", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, expectedErr: false},
-		{name: "NonExistentField", expectedFieldName: "", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, expectedErr: true},
-		{name: searchattribute.ScheduleID, expectedFieldName: searchattribute.WorkflowID, expectedFieldType: enumspb.INDEXED_VALUE_TYPE_KEYWORD, expectedErr: false},
-	}
-
-	ns := namespace.Name("test-namespace")
-	saTypeMap := searchattribute.NewNameTypeMapStub(map[string]enumspb.IndexedValueType{
-		"MyCustomField":   enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"ExecutionStatus": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	})
-	mapper := customMapper{
-		fieldToAlias: map[string]string{
-			"MyCustomField":   "some-alias",
-			"ExecutionStatus": "some-alias2",
-		},
-		aliasToField: map[string]string{
-			"some-alias":  "MyCustomField",
-			"some-alias2": "ExecutionStatus",
-		},
-	}
-	mapperProvider := searchattribute.NewTestMapperProvider(&mapper)
-
-	for _, tc := range cases {
-		s.Run(tc.name, func() {
-			fieldName, fieldType, err := resolveSearchAttributeAlias(tc.name, ns, mapperProvider, saTypeMap)
-			s.Equal(tc.expectedFieldName, fieldName)
-			s.Equal(tc.expectedFieldType, fieldType)
-			s.Equal(tc.expectedErr, err != nil)
-		})
-	}
-}
-
-type customMapper struct {
-	fieldToAlias map[string]string
-	aliasToField map[string]string
-}
-
-func (m *customMapper) GetAlias(fieldName string, ns string) (string, error) {
-	if fn, ok := m.fieldToAlias[fieldName]; ok {
-		return fn, nil
-	}
-	return "", serviceerror.NewInvalidArgument("invalid field name")
-}
-
-func (m *customMapper) GetFieldName(alias string, ns string) (string, error) {
-	if fn, ok := m.aliasToField[alias]; ok {
-		return fn, nil
-	}
-	return "", serviceerror.NewInvalidArgument("invalid alias")
 }
