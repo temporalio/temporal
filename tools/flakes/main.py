@@ -2,12 +2,13 @@ import argparse
 import json
 import os
 import sys
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict
 
 import requests
 
 
-def process_tests(data, pattern, output_file):
+def process_tests(data, pattern, output_file: str):
     lines = []
     lines.append(f"|{pattern}, Name with Url|Count|\n")
     lines.append("| -------- | ------- |\n")
@@ -37,7 +38,7 @@ def process_tests(data, pattern, output_file):
         outfile.writelines(lines)
 
 
-def process_crash(data, pattern, output_file):
+def process_crash(data, pattern, output_file: str):
     lines = []
     lines.append(f"|{pattern}, Name with Url|Count|\n")
     lines.append("| -------- | ------- |\n")
@@ -58,7 +59,7 @@ def process_crash(data, pattern, output_file):
         outfile.writelines(lines)
 
 
-def process_flaky(data, output_file):
+def process_flaky(data, output_file: str):
     transformed = []
     for item in data:
         name_parts = item["name"].split("/")
@@ -265,7 +266,81 @@ def count_failures_in_file(file_path: str) -> int:
         return 0
 
 
-def process_json_file(input_filename):
+def create_github_actions_summary(
+    crash_count: int,
+    flaky_count: int,
+    retry_count: int,
+    timeout_count: int,
+    run_id: str,
+) -> str:
+    """Create GitHub Actions summary content."""
+    summary_lines = []
+    
+    # Header
+    summary_lines.append(f"## 📊 Flaky Tests Report - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    summary_lines.append("")
+    
+    # Summary table
+    summary_lines.append("### 📈 Failure Categories Summary")
+    summary_lines.append("")
+    summary_lines.append("| Category | Count |")
+    summary_lines.append("|----------|-------|")
+    summary_lines.append(f"| 💥 Crashes | {crash_count} |")
+    summary_lines.append(f"| ⏰ Timeouts | {timeout_count} |")
+    summary_lines.append(f"| 🔄 Flaky Tests | {flaky_count} |")
+    summary_lines.append(f"| 🔁 Retry Failures | {retry_count} |")
+    summary_lines.append("")
+    
+    # Add detailed tables for each category
+    if crash_count > 0 and os.path.exists("crash.txt"):
+        summary_lines.append("### 💥 Crashes")
+        summary_lines.append("")
+        with open("crash.txt", "r") as f:
+            summary_lines.append(f.read())
+        summary_lines.append("")
+    
+    if timeout_count > 0 and os.path.exists("timeout.txt"):
+        summary_lines.append("### ⏰ Timeouts")
+        summary_lines.append("")
+        with open("timeout.txt", "r") as f:
+            summary_lines.append(f.read())
+        summary_lines.append("")
+    
+    if flaky_count > 0 and os.path.exists("flaky.txt"):
+        summary_lines.append("### 🔄 Flaky Tests")
+        summary_lines.append("")
+        with open("flaky.txt", "r") as f:
+            summary_lines.append(f.read())
+        summary_lines.append("")
+    
+    if retry_count > 0 and os.path.exists("retry.txt"):
+        summary_lines.append("### 🔁 Retry Failures")
+        summary_lines.append("")
+        with open("retry.txt", "r") as f:
+            summary_lines.append(f.read())
+        summary_lines.append("")
+    
+    if crash_count == 0 and flaky_count == 0 and retry_count == 0 and timeout_count == 0:
+        summary_lines.append("🎉 **No test failures found in the last 7 days!**")
+    
+    return "\n".join(summary_lines)
+
+
+def write_github_actions_summary(summary_content: str) -> None:
+    """Write GitHub Actions summary to the step summary file."""
+    try:
+        summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary_file:
+            with open(summary_file, "w") as f:
+                f.write(summary_content)
+            print(f"✅ GitHub Actions summary written to {summary_file}")
+        else:
+            print("⚠️ GITHUB_STEP_SUMMARY environment variable not set, skipping summary creation")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not write GitHub Actions summary: {e}", file=sys.stderr)
+
+
+def process_json_file(input_filename: str):
     with open(input_filename, "r") as file:
         # Load the file content as JSON
         data = json.load(file)
@@ -278,13 +353,20 @@ def process_json_file(input_filename):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Process flaky test data and optionally send Slack notifications"
+        description="Process flaky test data, generate GitHub Actions summary, and optionally send Slack notifications"
     )
     parser.add_argument(
         "--file",
         "-f",
-        default="out7.json",
-        help="Input JSON file to process (default: out7.json)",
+        default="out.json",
+        help="Input JSON file to process (default: out.json)",
+    )
+
+    # GitHub Actions summary options
+    parser.add_argument(
+        "--github-summary",
+        action="store_true",
+        help="Generate GitHub Actions summary",
     )
 
     # Slack notification options
@@ -314,6 +396,22 @@ def main():
         print(f"Error processing {args.file}: {e}", file=sys.stderr)
         sys.exit(1)
 
+    # Count failures from generated files
+    crash_count = count_failures_in_file("crash.txt")
+    flaky_count = count_failures_in_file("flaky.txt")
+    retry_count = count_failures_in_file("retry.txt")
+    timeout_count = count_failures_in_file("timeout.txt")
+
+    print(f"📊 Failure counts - Crashes: {crash_count}, Flaky: {flaky_count}, Retry: {retry_count}, Timeout: {timeout_count}")
+
+    # Generate GitHub Actions summary if requested
+    if args.github_summary:
+        print("📋 Generating GitHub Actions summary...")
+        summary_content = create_github_actions_summary(
+            crash_count, flaky_count, retry_count, timeout_count, args.run_id or "unknown"
+        )
+        write_github_actions_summary(summary_content)
+
     # Handle Slack notification if requested
     if args.slack_webhook and args.slack_message_type:
         print("📤 Sending Slack notification...")
@@ -325,12 +423,6 @@ def main():
                     file=sys.stderr,
                 )
                 sys.exit(1)
-
-            # Count failures from generated files
-            crash_count = count_failures_in_file("crash.txt")
-            flaky_count = count_failures_in_file("flaky.txt")
-            retry_count = count_failures_in_file("retry.txt")
-            timeout_count = count_failures_in_file("timeout.txt")
 
             # Read flaky content
             flaky_content = read_flaky_content("flaky_slack.txt")
@@ -355,8 +447,7 @@ def main():
             message = create_failure_message(args.run_id, args.ref_name, args.sha)
 
         # Send the message
-        success = send_slack_message(args.slack_webhook, message)
-        if not success:
+        if not send_slack_message(args.slack_webhook, message):
             sys.exit(1)
 
 

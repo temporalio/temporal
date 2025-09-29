@@ -1,10 +1,9 @@
 [project]
 name = "flakes"
 version = "0.1.0"
-description = "Add your description here"
+description = "A tool for analyzing flaky tests in the Temporal server repo"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "tringa>=0.2.0",
     "requests>=2.31.0",
 ]

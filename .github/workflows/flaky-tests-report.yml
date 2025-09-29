@@ -4,12 +4,10 @@ on:
   schedule:
     # Run on Tuesdays and Fridays at noon Eastern time (5 PM UTC)
     - cron: '0 17 * * 2,5'
-  workflow_dispatch:
-    inputs:
-      output_file:
-        description: 'Output file from bash script'
-        required: false
-        default: 'out.json'
+  pull_request:
+    # TODO: Remove this pull_request trigger before merging to main
+    # This is only for testing the workflow during development
+    branches: [ main ]
 
 permissions:
   contents: read
@@ -17,8 +15,7 @@ permissions:
 
 jobs:
   flaky-tests-report:
-    runs-on: ubuntu-latest
-    
+    runs-on: ubuntu-latest    
     steps:
       - name: Generate token
         id: generate_token
@@ -41,7 +38,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
-          version: "latest"
+          version: ">=0.8.0"
 
       - name: Install Python dependencies
         run: |
@@ -50,7 +47,7 @@ jobs:
 
       - name: Install tringa
         run: |
-          uv tool install git+https://github.com/spkane31/tringa@spk/skip-xml-parsing-errors --force
+          uv tool install git+https://github.com/dandavison/tringa@main --force
 
       - name: Run bash script to generate output file
         id: generate-output-file
@@ -59,66 +56,33 @@ jobs:
         run: |
           set -euo pipefail
           
-          echo "🔧 Starting tringa data collection..."
-          echo "📅 Date range: last 7 days"
-          echo "🌿 Branch: main"
-          echo "🆔 Workflow ID: 80591745"
-          echo "🔑 GH_TOKEN length: ${#GH_TOKEN}"
-          
           # Clean up any existing files
-          echo "🧹 Cleaning up existing files..."
           rm -rf out.json timeout.txt retry.txt flaky.txt crash.txt
-          
-          # Run tringa command with detailed logging
-          echo "🚀 Running tringa command..."
-          echo "Command: tringa --json --since-days 7 repo sql 'select classname, name, count(*) as failure_count, max(artifact) as artifact from test where passed = false and skipped = false group by classname, name order by failure_count desc' --branch main --workflow-id 80591745 https://github.com/temporalio/temporal"
           
           tringa --json --since-days 7 repo sql \
             'select classname, name, count(*) as failure_count, max(artifact) as artifact from test where passed = false and skipped = false group by classname, name order by failure_count desc' \
-            --branch main --workflow-id 80591745 https://github.com/temporalio/temporal > out.json
+            --branch main \
+            --workflow-id 80591745 \
+            https://github.com/temporalio/temporal > out.json
           
           echo "✅ Tringa command completed"
           echo "📊 Output file size: $(wc -c < out.json) bytes"
-          head out.json
-          echo ""
           echo "📄 Full output file:"
           cat out.json
 
       - name: Run Python script to process flaky tests
         id: process-flaky-tests
         run: |
-          echo "🐍 Starting Python script processing..."
-          echo "📁 Current directory: $(pwd)"
-          echo "📂 Contents of current directory:"
-          ls -la
+          echo "Starting Python script processing..."
+          echo "Current directory: $(pwd)"
           
-          echo "📂 Contents of tools/flakes directory:"
-          ls -la tools/flakes/
-          
-          echo "📄 Checking if out.json exists and its size:"
-          if [ -f "out.json" ]; then
-            echo "✅ out.json exists, size: $(wc -c < out.json) bytes"
-            head out.json
-            echo ""
-          else
-            echo "❌ out.json not found!"
-            exit 1
-          fi
-          
-          echo "🚀 Running Python script from root directory..."
-          echo "📁 Current directory: $(pwd)"
-          echo "📂 Contents of tools/flakes:"
-          ls -la tools/flakes/
-          
-          echo "🐍 Running: cd tools/flakes && uv run main.py --file ../../out.json"
-          cd tools/flakes && uv run main.py --file ../../out.json
-          
-          echo "✅ Python script completed"
-          echo "📂 Generated files in tools/flakes:"
-          ls -la
-          
-          echo "📂 Generated files in root directory:"
-          ls -la ../../
+          echo "Running: cd tools/flakes && uv run main.py --file ../../out.json --github-summary --slack-webhook ${{ secrets.SLACK_WEBHOOK }} --slack-message-type success --run-id ${{ github.run_id }}"
+          cd tools/flakes && uv run main.py \
+            --file ../../out.json \
+            --github-summary \
+            --slack-webhook "${{ secrets.SLACK_WEBHOOK }}" \
+            --slack-message-type success \
+            --run-id "${{ github.run_id }}"
 
       - name: Upload generated reports
         uses: actions/upload-artifact@v4
@@ -134,224 +98,8 @@ jobs:
             tools/flakes/timeout.txt
           retention-days: 30
 
-      - name: Generate flaky tests summary
-        if: steps.process-flaky-tests.outcome == 'success'
-        shell: bash
-        id: flaky-summary
-        run: |
-          echo "📊 Starting flaky tests summary generation..."
-          echo "📁 Current directory: $(pwd)"
-          echo "📂 Available files:"
-          ls -la
-          
-          # Create a comprehensive summary from the generated text files
-          title="📊 Flaky Tests Report - Last 7 Days"
-          message="*Test Failure Analysis:*\n\n"
-          
-          echo "🔍 Checking for generated report files..."
-          
-          # Count failures by category
-          crash_count=0
-          flaky_count=0
-          retry_count=0
-          timeout_count=0
-          
-          echo "📊 Counting failures in each category..."
-          
-          if [ -f "tools/flakes/crash.txt" ]; then
-            echo "✅ crash.txt exists in tools/flakes, size: $(wc -c < tools/flakes/crash.txt) bytes"
-            crash_count=$(grep -c "|\[" tools/flakes/crash.txt || echo "0")
-            echo "💥 Crash count: $crash_count"
-            head tools/flakes/crash.txt
-            echo ""
-          else
-            echo "❌ crash.txt not found in tools/flakes"
-          fi
-          
-          if [ -f "tools/flakes/flaky.txt" ]; then
-            echo "✅ flaky.txt exists in tools/flakes, size: $(wc -c < tools/flakes/flaky.txt) bytes"
-            flaky_count=$(grep -c "|\[" tools/flakes/flaky.txt || echo "0")
-            echo "🔄 Flaky count: $flaky_count"
-            head tools/flakes/flaky.txt
-            echo ""
-          else
-            echo "❌ flaky.txt not found in tools/flakes"
-          fi
-          
-          if [ -f "tools/flakes/retry.txt" ]; then
-            echo "✅ retry.txt exists in tools/flakes, size: $(wc -c < tools/flakes/retry.txt) bytes"
-            retry_count=$(grep -c "|\[" tools/flakes/retry.txt || echo "0")
-            echo "🔁 Retry count: $retry_count"
-            head tools/flakes/retry.txt
-            echo ""
-          else
-            echo "❌ retry.txt not found in tools/flakes"
-          fi
-          
-          if [ -f "tools/flakes/timeout.txt" ]; then
-            echo "✅ timeout.txt exists in tools/flakes, size: $(wc -c < tools/flakes/timeout.txt) bytes"
-            timeout_count=$(grep -c "|\[" tools/flakes/timeout.txt || echo "0")
-            echo "⏰ Timeout count: $timeout_count"
-            head tools/flakes/timeout.txt
-            echo ""
-          else
-            echo "❌ timeout.txt not found in tools/flakes"
-          fi
-          
-          echo "📈 Final counts - Crashes: $crash_count, Flaky: $flaky_count, Retry: $retry_count, Timeout: $timeout_count"
-          
-          # Create summary section
-          message+="*📈 Failure Categories:*\n"
-          message+="• 💥 Crashes: ${crash_count}\n"
-          message+="• 🔄 Flaky Tests: ${flaky_count}\n"
-          message+="• 🔁 Retry Failures: ${retry_count}\n"
-          message+="• ⏰ Timeouts: ${timeout_count}\n\n"
-          
-          # Add detailed tables for each category with failures
-          if [ "$crash_count" -gt 0 ] && [ -f "tools/flakes/crash.txt" ]; then
-            message+="*💥 Crashes:*\n"
-            message+="\`\`\`\n"
-            message+="$(cat tools/flakes/crash.txt)\n"
-            message+="\`\`\`\n\n"
-          fi
-          
-          if [ "$timeout_count" -gt 0 ] && [ -f "tools/flakes/timeout.txt" ]; then
-            message+="*⏰ Timeouts:*\n"
-            message+="\`\`\`\n"
-            message+="$(cat tools/flakes/timeout.txt)\n"
-            message+="\`\`\`\n\n"
-          fi
-          
-          if [ "$flaky_count" -gt 0 ] && [ -f "tools/flakes/flaky.txt" ]; then
-            message+="*🔄 Flaky Tests:*\n"
-            message+="\`\`\`\n"
-            message+="$(cat tools/flakes/flaky.txt)\n"
-            message+="\`\`\`\n\n"
-          fi
-          
-          if [ "$retry_count" -gt 0 ] && [ -f "tools/flakes/retry.txt" ]; then
-            message+="*🔁 Retry Failures:*\n"
-            message+="\`\`\`\n"
-            message+="$(cat tools/flakes/retry.txt)\n"
-            message+="\`\`\`\n\n"
-          fi
-          
-          if [ "$crash_count" -eq 0 ] && [ "$flaky_count" -eq 0 ] && [ "$retry_count" -eq 0 ] && [ "$timeout_count" -eq 0 ]; then
-            message+="🎉 No test failures found in the last 7 days!\n"
-          fi
-          
-          message+="\n📋 <https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }}|View Detailed Report>"
-          
-          # Set environment variables for Slack
-          {
-            echo "SLACK_TITLE=${title}"
-            echo "SLACK_MESSAGE<<EOF"
-            echo "${message}"
-            echo "EOF"
-          } >> "$GITHUB_ENV"
-
-      - name: Create GitHub Actions summary
-        if: steps.process-flaky-tests.outcome == 'success'
-        run: |
-          echo "📋 Creating GitHub Actions summary..."
-          echo "📁 Current directory: $(pwd)"
-          echo "📂 Available files:"
-          ls -la
-          
-          {
-            echo "## 📊 Flaky Tests Report - $(date)"
-            echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
-          
-          # Count failures by category
-          crash_count=0
-          flaky_count=0
-          retry_count=0
-          timeout_count=0
-          
-          if [ -f "crash.txt" ]; then
-            crash_count=$(grep -c "|\[" crash.txt || echo "0")
-          fi
-          
-          if [ -f "flaky.txt" ]; then
-            flaky_count=$(grep -c "|\[" flaky.txt || echo "0")
-          fi
-          
-          if [ -f "retry.txt" ]; then
-            retry_count=$(grep -c "|\[" retry.txt || echo "0")
-          fi
-          
-          if [ -f "timeout.txt" ]; then
-            timeout_count=$(grep -c "|\[" timeout.txt || echo "0")
-          fi
-          
-          {
-            echo "### 📈 Failure Categories Summary"
-            echo ""
-            echo "| Category | Count |"
-            echo "|----------|-------|"
-            echo "| 💥 Crashes | ${crash_count} |"
-            echo "| ⏰ Timeouts | ${timeout_count} |"
-            echo "| 🔄 Flaky Tests | ${flaky_count} |"
-            echo "| 🔁 Retry Failures | ${retry_count} |"
-            echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
-          
-          # Add detailed tables for each category
-          if [ "$crash_count" -gt 0 ] && [ -f "tools/flakes/crash.txt" ]; then
-            {
-              echo "### 💥 Crashes"
-              echo ""
-              cat tools/flakes/crash.txt
-              echo ""
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-          
-          if [ "$timeout_count" -gt 0 ] && [ -f "tools/flakes/timeout.txt" ]; then
-            {
-              echo "### ⏰ Timeouts"
-              echo ""
-              cat tools/flakes/timeout.txt
-              echo ""
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-          
-          if [ "$flaky_count" -gt 0 ] && [ -f "tools/flakes/flaky.txt" ]; then
-            {
-              echo "### 🔄 Flaky Tests"
-              echo ""
-              cat tools/flakes/flaky.txt
-              echo ""
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-          
-          if [ "$retry_count" -gt 0 ] && [ -f "tools/flakes/retry.txt" ]; then
-            {
-              echo "### 🔁 Retry Failures"
-              echo ""
-              cat tools/flakes/retry.txt
-              echo ""
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-          
-          if [ "$crash_count" -eq 0 ] && [ "$flaky_count" -eq 0 ] && [ "$retry_count" -eq 0 ] && [ "$timeout_count" -eq 0 ]; then
-            echo "🎉 **No test failures found in the last 7 days!**" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-
-      - name: Send Slack notification
-        if: steps.process-flaky-tests.outcome == 'success' && steps.flaky-summary.outcome == 'success'
-        run: |
-          echo "📤 Sending Slack notification..."
-          cd tools/flakes
-          uv run main.py \
-            --file "../../out.json" \
-            --slack-webhook "${{ secrets.SLACK_WEBHOOK }}" \
-            --slack-message-type success \
-            --run-id "${{ github.run_id }}"
-
       - name: Create GitHub Actions failure summary
-        if: steps.process-flaky-tests.outcome == 'failure' || steps.flaky-summary.outcome == 'failure'
+        if: steps.process-flaky-tests.outcome == 'failure'
         run: |
           {
             echo "## ❌ Flaky Tests Report Generation Failed"
@@ -364,30 +112,15 @@ jobs:
             echo "- **Branch**: \`${{ github.ref_name }}\`"
             echo "- **Commit**: [${{ github.sha }}](https://github.com/temporalio/temporal/commit/${{ github.sha }})"
             echo ""
+            echo "### Failure Point"
+            echo ""
+            echo "Python script processing failed"
+            echo ""
+            echo "Please check the workflow logs for more details."
           } >> "$GITHUB_STEP_SUMMARY"
-          
-          # Add specific failure information
-          if [[ "${{ steps.process-flaky-tests.outcome }}" == "failure" ]]; then
-            {
-              echo "### Failure Point"
-              echo ""
-              echo "Python script processing failed"
-              echo ""
-            } >> "$GITHUB_STEP_SUMMARY"
-          elif [[ "${{ steps.flaky-summary.outcome }}" == "failure" ]]; then
-            {
-              echo "### Failure Point"
-              echo ""
-              echo "Summary generation failed"
-              echo ""
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-          
-          echo "Please check the workflow logs for more details." >> "$GITHUB_STEP_SUMMARY"
-
 
       - name: Send Slack workflow failure notification
-        if: steps.process-flaky-tests.outcome == 'failure' || steps.flaky-summary.outcome == 'failure'
+        if: steps.process-flaky-tests.outcome == 'failure'
         run: |
           echo "📤 Sending Slack failure notification..."
           cd tools/flakes
