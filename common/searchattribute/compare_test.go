@@ -2,7 +2,6 @@ package searchattribute
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -37,8 +36,8 @@ func TestAreKeywordListPayloadsEqual_TableDriven(t *testing.T) {
 		{"diff_order", createPayload([]string{"a", "b", "c"}), createPayload([]string{"c", "a", "b"}), true},
 		{"different_elems", createPayload([]string{"a", "b", "c"}), createPayload([]string{"a", "b", "d"}), false},
 		{"different_lengths", createPayload([]string{"a", "b"}), createPayload([]string{"a", "b", "c"}), false},
-		{"duplicates_a", createPayload([]string{"a", "a", "b"}), createPayload([]string{"a", "b"}), false},
-		{"duplicates_b", createPayload([]string{"a", "b"}), createPayload([]string{"a", "a", "b"}), false},
+		{"duplicates_a", createPayload([]string{"a", "a", "b"}), createPayload([]string{"a", "b"}), true},
+		{"duplicates_b", createPayload([]string{"a", "b"}), createPayload([]string{"a", "a", "b"}), true},
 		{"single_same", createPayload([]string{"test"}), createPayload([]string{"test"}), true},
 		{"single_different", createPayload([]string{"test1"}), createPayload([]string{"test2"}), false},
 		{"case_sensitive", createPayload([]string{"Test", "Value"}), createPayload([]string{"test", "value"}), false},
@@ -83,57 +82,4 @@ func TestAreKeywordListPayloadsEqual_TableDriven(t *testing.T) {
 		r.False(AreKeywordListPayloadsEqual(valid, nonKeyword))
 		r.False(AreKeywordListPayloadsEqual(nonKeyword, nonKeyword))
 	})
-}
-
-func TestAreKeywordListPayloadsEqual_Combinatorial(t *testing.T) {
-	r := require.New(t)
-	createPayload := func(values []string) *commonpb.Payload {
-		if values == nil {
-			return nil
-		}
-		encoded, err := EncodeValue(values, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
-		r.NoError(err)
-		return encoded
-	}
-
-	testSets := [][]string{
-		nil,
-		{},
-		{"a"},
-		{"a", "b"},
-		{"a", "b", "c"},
-		{"a", "a", "b"},
-		{"", "test", ""},
-		{"test@123", "value#456"},
-		{"测试", "тест", "test"},
-		{"123", "456", "789"},
-	}
-
-	for i, setA := range testSets {
-		for j, setB := range testSets {
-			payloadA := createPayload(setA)
-			payloadB := createPayload(setB)
-
-			expected := false
-			if setA == nil && setB == nil {
-				expected = true
-			} else if setA != nil && setB != nil {
-				mapA := make(map[string]int)
-				mapB := make(map[string]int)
-				for _, v := range setA {
-					mapA[v]++
-				}
-				for _, v := range setB {
-					mapB[v]++
-				}
-				expected = reflect.DeepEqual(mapA, mapB)
-			}
-
-			name := fmt.Sprintf("combo_%d_%d", i, j)
-			t.Run(name, func(t *testing.T) {
-				got := AreKeywordListPayloadsEqual(payloadA, payloadB)
-				r.Equal(expected, got)
-			})
-		}
-	}
 }

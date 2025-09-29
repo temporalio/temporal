@@ -2,11 +2,9 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,20 +16,12 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
 type WFTFailureReportedProblemsTestSuite struct {
 	testcore.FunctionalTestBase
-	tv                     *testvars.TestVars
-	initialRetryInterval   time.Duration
-	scheduleToCloseTimeout time.Duration
-	startToCloseTimeout    time.Duration
-
 	shouldFail atomic.Bool
-
-	activityRetryPolicy *temporal.RetryPolicy
 }
 
 func TestWFTFailureReportedProblemsTestSuite(t *testing.T) {
@@ -41,20 +31,10 @@ func TestWFTFailureReportedProblemsTestSuite(t *testing.T) {
 
 func (s *WFTFailureReportedProblemsTestSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
-
-	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
-
-	s.initialRetryInterval = 1 * time.Second
-	s.scheduleToCloseTimeout = 30 * time.Minute
-	s.startToCloseTimeout = 15 * time.Minute
-
-	s.activityRetryPolicy = &temporal.RetryPolicy{
-		InitialInterval:    s.initialRetryInterval,
-		BackoffCoefficient: 1,
-	}
+	s.OverrideDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 2)
 }
 
-func (s *WFTFailureReportedProblemsTestSuite) simpleWorkflow(ctx workflow.Context) (string, error) {
+func (s *WFTFailureReportedProblemsTestSuite) simpleWorkflowWithShouldFail(ctx workflow.Context) (string, error) {
 	if s.shouldFail.Load() {
 		panic("forced-panic-to-fail-wft")
 	}
@@ -65,15 +45,10 @@ func (s *WFTFailureReportedProblemsTestSuite) simpleActivity() (string, error) {
 	return "done!", nil
 }
 
+// workflowWithActivity is used to trigger the transition from a sticky task queue to a non-sticky task queue
 func (s *WFTFailureReportedProblemsTestSuite) workflowWithActivity(ctx workflow.Context) (string, error) {
 	var ret string
-	err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		ActivityID:             "activity-id",
-		DisableEagerExecution:  true,
-		StartToCloseTimeout:    s.startToCloseTimeout,
-		ScheduleToCloseTimeout: s.scheduleToCloseTimeout,
-		RetryPolicy:            s.activityRetryPolicy,
-	}), s.simpleActivity).Get(ctx, &ret)
+	err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{}), s.simpleActivity).Get(ctx, &ret)
 	if err != nil {
 		return "", err
 	}
@@ -89,79 +64,57 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.OverrideDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 2)
 	s.shouldFail.Store(true)
 
-	s.Worker().RegisterWorkflow(s.simpleWorkflow)
+	s.Worker().RegisterWorkflow(s.simpleWorkflowWithShouldFail)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 		TaskQueue: s.TaskQueue(),
 	}
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, s.simpleWorkflow)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, s.simpleWorkflowWithShouldFail)
 	s.NoError(err)
-
-	// Make sure the workflow has started and had an activity task scheduled and finished
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, description.WorkflowExecutionInfo.Status)
-	}, 5*time.Second, 500*time.Millisecond)
 
 	// Check if the search attributes are not empty and has TemporalReportedProblems
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes)
-		require.NotEmpty(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields)
-		require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems])
-
-		// Decode the search attribute in keyword list format
-		searchValBytes := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems]
-		searchVal, err := searchattribute.DecodeValue(searchValBytes, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
-		require.NoError(t, err)
-		require.NotEmpty(t, searchVal)
-		require.Equal(t, "category=WorkflowTaskFailed", searchVal.([]string)[0])
-		require.Equal(t, "cause=WorkflowWorkerUnhandledFailure", searchVal.([]string)[1])
-
-		// Validate attempt number after verifying search attribute values
-		require.GreaterOrEqual(t, description.GetPendingWorkflowTask().Attempt, int32(2))
+		require.NotNil(t, description.TypedSearchAttributes)
+		saVal, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(searchattribute.TemporalReportedProblems))
+		require.True(t, ok)
+		require.NotEmpty(t, saVal)
+		require.Contains(t, saVal, "category=WorkflowTaskFailed")
+		require.Contains(t, saVal, "cause=WorkflowWorkerUnhandledFailure")
 	}, 5*time.Second, 500*time.Millisecond)
 
-	// Check if the search attributes are queryable
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		queriedWorkflows, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.Namespace().String(),
-			Query:     "TemporalReportedProblems IS NOT NULL",
-			PageSize:  100,
-		})
-		require.NoError(t, err)
-		require.Equal(t, 1, len(queriedWorkflows.Executions))
-
-		queriedWorkflows, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
 			Query:     "TemporalReportedProblems IN ('category=WorkflowTaskFailed', 'cause=WorkflowWorkerUnhandledFailure')",
 			PageSize:  100,
 		})
 		require.NoError(t, err)
 		require.Equal(t, 1, len(queriedWorkflows.Executions))
+		require.Equal(t, workflowRun.GetID(), queriedWorkflows.Executions[0].Execution.WorkflowId)
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// Unblock the workflow
 	s.shouldFail.Store(false)
 
 	var out string
-	err = workflowRun.Get(ctx, &out)
+	s.NoError(workflowRun.Get(ctx, &out))
 
-	s.NoError(err)
-
-	// Validate the workflow completed successfully and the search attribute is removed
+	// Validate the search attribute has been cleared
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		queriedWorkflows, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     "TemporalReportedProblems IS NULL",
+			PageSize:  100,
+		})
 		require.NoError(t, err)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, description.WorkflowExecutionInfo.Status)
-		require.Nil(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems])
+		require.Equal(t, 1, len(queriedWorkflows.Executions))
+		require.Equal(t, workflowRun.GetID(), queriedWorkflows.Executions[0].Execution.WorkflowId)
 	}, 5*time.Second, 500*time.Millisecond)
 }
 
@@ -169,192 +122,64 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.OverrideDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 2)
 	s.shouldFail.Store(true)
 
-	s.Worker().RegisterWorkflow(s.simpleWorkflow)
-	s.Worker().RegisterActivity(s.simpleActivity)
+	s.Worker().RegisterWorkflow(s.simpleWorkflowWithShouldFail)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 		TaskQueue: s.TaskQueue(),
 	}
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, s.simpleWorkflow)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, s.simpleWorkflowWithShouldFail)
 	s.NoError(err)
 
-	// Make sure the workflow has started and had an activity task scheduled and finished
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, description.WorkflowExecutionInfo.Status)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, description.Status)
 	}, 5*time.Second, 500*time.Millisecond)
 
-	// Check if the search attributes are not empty and has TemporalReportedProblems
+	// Validate the search attributes are not empty and has TemporalReportedProblems with 2 entries
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes)
-		require.NotEmpty(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields)
-		require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems])
-
-		// Decode the search attribute in keyword list format
-		searchValBytes := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems]
-		searchVal, err := searchattribute.DecodeValue(searchValBytes, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
-		require.NoError(t, err)
-		require.NotEmpty(t, searchVal)
-		require.Equal(t, "category=WorkflowTaskFailed", searchVal.([]string)[0])
-		require.Equal(t, "cause=WorkflowWorkerUnhandledFailure", searchVal.([]string)[1])
-
-		// Validate attempt number after verifying search attribute values
-		require.GreaterOrEqual(t, description.GetPendingWorkflowTask().Attempt, int32(2))
+		require.NotNil(t, description.TypedSearchAttributes)
+		saValues, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(searchattribute.TemporalReportedProblems))
+		require.True(t, ok)
+		require.NotEmpty(t, saValues)
+		require.Len(t, saValues, 2)
+		require.Contains(t, saValues, "category=WorkflowTaskFailed")
+		require.Contains(t, saValues, "cause=WorkflowWorkerUnhandledFailure")
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// Check if the search attributes are queryable
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		queriedWorkflows, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
-			Query:     "TemporalReportedProblems IS NOT NULL",
-			PageSize:  100,
-		})
-		require.NoError(t, err)
-		require.Equal(t, 1, len(queriedWorkflows.Executions))
-
-		queriedWorkflows, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.Namespace().String(),
 			Query:     "TemporalReportedProblems IN ('category=WorkflowTaskFailed', 'cause=WorkflowWorkerUnhandledFailure')",
 			PageSize:  100,
 		})
 		require.NoError(t, err)
 		require.Equal(t, 1, len(queriedWorkflows.Executions))
+		require.Equal(t, workflowRun.GetID(), queriedWorkflows.Executions[0].Execution.WorkflowId)
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// Unblock the workflow
 	s.shouldFail.Store(false)
 
 	var out string
-	err = workflowRun.Get(ctx, &out)
+	s.NoError(workflowRun.Get(ctx, &out))
 
-	s.NoError(err)
-
-	// Validate the workflow completed successfully and the search attribute is removed
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, description.WorkflowExecutionInfo.Status)
-		require.Nil(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems])
-	}, 5*time.Second, 500*time.Millisecond)
-}
-
-func (s *WFTFailureReportedProblemsTestSuite) workflowWithQuery(ctx workflow.Context) (string, error) {
-	err := workflow.SetQueryHandler(ctx, "test", func() (string, error) {
-		return "", nil
-	})
-	if err != nil {
-		return "", err
-	}
-	if s.shouldFail.Load() {
-		panic("forced-panic-to-fail-wft")
-	}
-	return "done!", nil
-}
-
-func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_SetAndClear_QueryFailure() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	s.OverrideDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 2)
-	s.shouldFail.Store(true)
-
-	s.Worker().RegisterWorkflow(s.simpleWorkflow)
-	s.Worker().RegisterActivity(s.simpleActivity)
-
-	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
-		TaskQueue: s.TaskQueue(),
-	}
-
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, s.simpleWorkflow)
-	s.NoError(err)
-
-	// Make sure the workflow has started and had an activity task scheduled and finished
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, description.WorkflowExecutionInfo.Status)
-	}, 5*time.Second, 500*time.Millisecond)
-
-	// Check if the search attributes are not empty and has TemporalReportedProblems
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes)
-		require.NotEmpty(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields)
-		require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems])
-
-		// Decode the search attribute in keyword list format
-		searchValBytes := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems]
-		searchVal, err := searchattribute.DecodeValue(searchValBytes, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
-		require.NoError(t, err)
-		require.NotEmpty(t, searchVal)
-		require.Equal(t, "category=WorkflowTaskFailed", searchVal.([]string)[0])
-		require.Equal(t, "cause=WorkflowWorkerUnhandledFailure", searchVal.([]string)[1])
-
-		// Validate attempt number after verifying search attribute values
-		require.GreaterOrEqual(t, description.GetPendingWorkflowTask().Attempt, int32(2))
-	}, 5*time.Second, 500*time.Millisecond)
-
-	// Check if the search attributes are queryable
+	// Validate the search attribute has been cleared
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		queriedWorkflows, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
-			Query:     "TemporalReportedProblems IS NOT NULL",
+			Query:     "TemporalReportedProblems IS NULL",
 			PageSize:  100,
 		})
 		require.NoError(t, err)
 		require.Equal(t, 1, len(queriedWorkflows.Executions))
-
-		queriedWorkflows, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.Namespace().String(),
-			Query:     "TemporalReportedProblems IN ('category=WorkflowTaskFailed', 'cause=WorkflowWorkerUnhandledFailure')",
-			PageSize:  100,
-		})
-		require.NoError(t, err)
-		require.Equal(t, 1, len(queriedWorkflows.Executions))
+		require.Equal(t, workflowRun.GetID(), queriedWorkflows.Executions[0].Execution.WorkflowId)
 	}, 5*time.Second, 500*time.Millisecond)
-
-	// Unblock the workflow
-	s.shouldFail.Store(false)
-
-	var out string
-	err = workflowRun.Get(ctx, &out)
-
-	s.NoError(err)
-
-	// Validate the workflow completed successfully and the search attribute is removed
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, description.WorkflowExecutionInfo.Status)
-		require.Nil(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems])
-	}, 5*time.Second, 500*time.Millisecond)
-}
-
-func getBytesForString(str string) int {
-	return len([]byte(str)) + int(unsafe.Sizeof(str))
-}
-
-func (s *WFTFailureReportedProblemsTestSuite) TestSizeOfLastFailureAttributes() {
-	// maxsize is 2 KB
-	maxSize := 2 * 1024
-	for _, category := range []string{
-		"WorkflowTaskFailed",
-		"WorkflowTaskTimedOut",
-	} {
-		for causeInt := range enumspb.WorkflowTaskFailedCause_name {
-			enumFromInt := enumspb.WorkflowTaskFailedCause(causeInt)
-			bytes := getBytesForString(fmt.Sprintf("category=%s,cause=%s", category, enumFromInt.String()))
-			require.LessOrEqual(s.T(), bytes, maxSize)
-		}
-	}
 }

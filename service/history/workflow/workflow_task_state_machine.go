@@ -870,15 +870,16 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 	var event *historypb.HistoryEvent
 	// Avoid creating WorkflowTaskTimedOut history event when workflow task is transient.
 	if !m.ms.IsTransientWorkflowTask() {
+		timeoutType := enumspb.TIMEOUT_TYPE_START_TO_CLOSE
 		event = m.ms.hBuilder.AddWorkflowTaskTimedOutEvent(
 			workflowTask.ScheduledEventID,
 			workflowTask.StartedEventID,
-			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			timeoutType,
 		)
 
 		if m.ms.executionInfo.LastWorkflowTaskFailure == nil {
 			m.ms.executionInfo.LastWorkflowTaskFailure = &persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType{
-				LastWorkflowTaskTimedOutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+				LastWorkflowTaskTimedOutType: timeoutType,
 			}
 		}
 

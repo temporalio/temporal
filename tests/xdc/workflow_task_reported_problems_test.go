@@ -12,6 +12,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -69,38 +70,25 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) checkReportedProblemsSear
 	shouldExist bool,
 ) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := client.DescribeWorkflowExecution(context.Background(), workflowID, runID)
+		description, err := client.DescribeWorkflow(context.Background(), workflowID, runID)
 		require.NoError(t, err)
 
 		if shouldExist {
-			require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes)
-			require.NotEmpty(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields)
-			require.NotNil(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems])
-
-			// Decode the search attribute in keyword list format
-			searchValBytes := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems]
-			searchVal, err := searchattribute.DecodeValue(searchValBytes, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
-			require.NoError(t, err)
-			require.NotEmpty(t, searchVal)
-
-			searchValList := searchVal.([]string)
-			require.Len(t, searchValList, 2)
-			require.Equal(t, "category="+expectedCategory, searchValList[0])
-			require.Equal(t, "cause="+expectedCause, searchValList[1])
-
-			// Validate attempt number after verifying search attribute values
-			require.GreaterOrEqual(t, description.GetPendingWorkflowTask().Attempt, int32(2))
+			require.NotNil(t, description.TypedSearchAttributes)
+			saValues, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(searchattribute.TemporalReportedProblems))
+			require.True(t, ok)
+			require.NotEmpty(t, saValues)
+			require.Len(t, saValues, 2)
+			require.Contains(t, saValues, "category="+expectedCategory)
+			require.Contains(t, saValues, "cause="+expectedCause)
 
 			category, cause, err := s.getWFTFailure(admin, namespace, workflowID, runID)
 			require.NoError(t, err)
 			require.Equal(t, expectedCategory, category)
 			require.Equal(t, expectedCause, cause)
 		} else {
-			// Check that the search attribute is not present or is nil
-			if description.WorkflowExecutionInfo.SearchAttributes != nil &&
-				description.WorkflowExecutionInfo.SearchAttributes.IndexedFields != nil {
-				require.Nil(t, description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.TemporalReportedProblems])
-			}
+			_, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(searchattribute.TemporalReportedProblems))
+			require.False(t, ok)
 		}
 	}, 20*time.Second, 500*time.Millisecond)
 }
@@ -148,7 +136,6 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	s.NoError(worker1.Start())
 	defer worker1.Stop()
 
-	// start a workflow
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wfid-" + s.T().Name()),
 		TaskQueue: taskQueue,
@@ -157,11 +144,10 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	workflowRun, err := activeSDKClient.ExecuteWorkflow(ctx, workflowOptions, s.simpleWorkflow)
 	s.NoError(err)
 
-	// wait for workflow to start and fail
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := activeSDKClient.DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, description.WorkflowExecutionInfo.Status)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, description.Status)
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// verify search attributes are set in cluster0 using the helper function
@@ -196,19 +182,12 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 		true,
 	)
 
-	// start worker2 in cluster1
-	worker2 := sdkworker.New(standbyClient, taskQueue, sdkworker.Options{})
-	worker2.RegisterWorkflow(s.simpleWorkflow)
-	s.NoError(worker2.Start())
-	defer worker2.Stop()
-
 	// allow the workflow to succeed
 	s.shouldFail.Store(false)
 
 	// wait for workflow to complete
 	var out string
-	err = workflowRun.Get(ctx, &out)
-	s.NoError(err)
+	s.NoError(workflowRun.Get(ctx, &out))
 
 	// verify search attributes are cleared in cluster1 using the helper function
 	s.checkReportedProblemsSearchAttribute(

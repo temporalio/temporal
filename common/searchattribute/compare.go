@@ -6,7 +6,7 @@ import (
 )
 
 // AreKeywordListPayloadsEqual compares two payloads assumed to be of type KeywordList.
-// Returns true if both are nil or decode to equal multisets (order-insensitive, counts match).
+// Returns true if both are nil or decode to equal multisets (order-insensitive).
 func AreKeywordListPayloadsEqual(a, b *commonpb.Payload) bool {
 	if a == nil && b == nil {
 		return true
@@ -34,24 +34,24 @@ func AreKeywordListPayloadsEqual(a, b *commonpb.Payload) bool {
 		return false
 	}
 
-	if len(keywordListA) != len(keywordListB) {
+	// Convert to sets to compare unique values only
+	setA := make(map[string]bool, len(keywordListA))
+	for _, v := range keywordListA {
+		setA[v] = true
+	}
+	setB := make(map[string]bool, len(keywordListB))
+	for _, v := range keywordListB {
+		setB[v] = true
+	}
+
+	if len(setA) != len(setB) {
 		return false
 	}
 
-	counts := make(map[string]int, len(keywordListA))
-	for _, v := range keywordListA {
-		counts[v]++
-	}
-	for _, v := range keywordListB {
-		c := counts[v]
-		if c == 0 {
+	for v := range setA {
+		if !setB[v] {
 			return false
 		}
-		if c == 1 {
-			delete(counts, v)
-		} else {
-			counts[v] = c - 1
-		}
 	}
-	return len(counts) == 0
+	return true
 }

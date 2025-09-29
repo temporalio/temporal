@@ -5907,7 +5907,6 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
 
-	// This is not guaranteed to be accurate because of ordering non-determinism. Needs to be fixed.
 	if searchattribute.AreKeywordListPayloadsEqual(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], reportedProblemsPayload) {
 		return nil
 	}
