@@ -49,7 +49,7 @@ jobs:
         run: |
           uv tool install git+https://github.com/dandavison/tringa@main --force
 
-      - name: Run bash script to generate output file
+      - name: Run tringa
         id: generate-output-file
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
@@ -82,7 +82,9 @@ jobs:
             --github-summary \
             --slack-webhook "${{ secrets.SLACK_WEBHOOK }}" \
             --slack-message-type success \
-            --run-id "${{ github.run_id }}"
+            --run-id "${{ github.run_id }}" \
+            --ref-name "${{ github.ref_name }}" \
+            --sha "${{ github.sha }}"
 
       - name: Upload generated reports
         uses: actions/upload-artifact@v4
@@ -97,36 +99,3 @@ jobs:
             tools/flakes/retry.txt
             tools/flakes/timeout.txt
           retention-days: 30
-
-      - name: Create GitHub Actions failure summary
-        if: steps.process-flaky-tests.outcome == 'failure'
-        run: |
-          {
-            echo "## ❌ Flaky Tests Report Generation Failed"
-            echo ""
-            echo "The flaky tests report workflow failed to generate the report."
-            echo ""
-            echo "### Workflow Details"
-            echo ""
-            echo "- **Run ID**: [${{ github.run_id }}](https://github.com/temporalio/temporal/actions/runs/${{ github.run_id }})"
-            echo "- **Branch**: \`${{ github.ref_name }}\`"
-            echo "- **Commit**: [${{ github.sha }}](https://github.com/temporalio/temporal/commit/${{ github.sha }})"
-            echo ""
-            echo "### Failure Point"
-            echo ""
-            echo "Python script processing failed"
-            echo ""
-            echo "Please check the workflow logs for more details."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Send Slack workflow failure notification
-        if: steps.process-flaky-tests.outcome == 'failure'
-        run: |
-          echo "📤 Sending Slack failure notification..."
-          cd tools/flakes
-          uv run main.py \
-            --slack-webhook "${{ secrets.SLACK_WEBHOOK }}" \
-            --slack-message-type failure \
-            --run-id "${{ github.run_id }}" \
-            --ref-name "${{ github.ref_name }}" \
-            --sha "${{ github.sha }}"

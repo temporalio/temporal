@@ -351,7 +351,8 @@ def process_json_file(input_filename: str):
     process_crash(data, "(crash)", "crash.txt")
 
 
-def main():
+def create_argument_parser() -> argparse.ArgumentParser:
+    """Create and configure the argument parser."""
     parser = argparse.ArgumentParser(
         description="Process flaky test data, generate GitHub Actions summary, and optionally send Slack notifications"
     )
@@ -380,29 +381,25 @@ def main():
     parser.add_argument("--ref-name", help="Git branch name")
     parser.add_argument("--sha", help="Git commit SHA")
 
-    args = parser.parse_args()
+    return parser
 
-    # Process the JSON file first
-    try:
-        process_json_file(args.file)
-        print(f"Successfully processed {args.file}")
-    except FileNotFoundError:
-        print(f"Error: File {args.file} not found", file=sys.stderr)
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        print(f"Error: Invalid JSON in {args.file}: {e}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error processing {args.file}: {e}", file=sys.stderr)
-        sys.exit(1)
 
-    # Count failures from generated files
+def get_failure_counts() -> tuple[int, int, int, int]:
+    """Count failures from generated report files."""
     crash_count = count_failures_in_file("crash.txt")
     flaky_count = count_failures_in_file("flaky.txt")
     retry_count = count_failures_in_file("retry.txt")
     timeout_count = count_failures_in_file("timeout.txt")
-
+    
     print(f"📊 Failure counts - Crashes: {crash_count}, Flaky: {flaky_count}, Retry: {retry_count}, Timeout: {timeout_count}")
+    
+    return crash_count, flaky_count, retry_count, timeout_count
+
+
+def handle_success_case(args) -> None:
+    """Handle the successful processing case."""
+    # Count failures from generated files
+    crash_count, flaky_count, retry_count, timeout_count = get_failure_counts()
 
     # Generate GitHub Actions summary if requested
     if args.github_summary:
@@ -412,43 +409,80 @@ def main():
         )
         write_github_actions_summary(summary_content)
 
-    # Handle Slack notification if requested
-    if args.slack_webhook and args.slack_message_type:
-        print("📤 Sending Slack notification...")
+    # Send success Slack notification if requested
+    if args.slack_webhook and args.slack_message_type == "success":
+        send_success_slack_notification(args, crash_count, flaky_count, retry_count, timeout_count)
 
-        if args.slack_message_type == "success":
-            if not args.run_id:
-                print(
-                    "❌ Error: --run-id is required for success messages",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
 
-            # Read flaky content
-            flaky_content = read_flaky_content("flaky_slack.txt")
+def send_success_slack_notification(args, crash_count: int, flaky_count: int, retry_count: int, timeout_count: int) -> None:
+    """Send success Slack notification."""
+    print("📤 Sending success Slack notification...")
+    if not args.run_id:
+        print(
+            "❌ Error: --run-id is required for success messages",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
-            message = create_success_message(
-                crash_count,
-                flaky_count,
-                retry_count,
-                timeout_count,
-                flaky_content,
-                args.run_id,
-            )
+    # Read flaky content
+    flaky_content = read_flaky_content("flaky_slack.txt")
 
-        elif args.slack_message_type == "failure":
-            if not all([args.run_id, args.ref_name, args.sha]):
-                print(
-                    "❌ Error: --run-id, --ref-name, and --sha are required for failure messages",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
+    message = create_success_message(
+        crash_count,
+        flaky_count,
+        retry_count,
+        timeout_count,
+        flaky_content,
+        args.run_id,
+    )
 
-            message = create_failure_message(args.run_id, args.ref_name, args.sha)
+    # Send the message
+    if not send_slack_message(args.slack_webhook, message):
+        sys.exit(1)
 
-        # Send the message
-        if not send_slack_message(args.slack_webhook, message):
-            sys.exit(1)
+
+def send_failure_slack_notification(args) -> None:
+    """Send failure Slack notification."""
+    print("📤 Sending failure Slack notification...")
+    if not all([args.run_id, args.ref_name, args.sha]):
+        print(
+            "❌ Error: --run-id, --ref-name, and --sha are required for failure messages",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    message = create_failure_message(args.run_id, args.ref_name, args.sha)
+    if not send_slack_message(args.slack_webhook, message):
+        sys.exit(1)
+
+
+def handle_failure_case(args, error_msg: str) -> None:
+    """Handle the failure case with appropriate error reporting and notifications."""
+    print(error_msg, file=sys.stderr)
+    
+    # Send failure notification if webhook is configured
+    if args.slack_webhook and args.slack_message_type == "success":
+        send_failure_slack_notification(args)
+    
+    sys.exit(1)
+
+
+def main():
+    """Main entry point for the flaky tests processing script."""
+    parser = create_argument_parser()
+    args = parser.parse_args()
+
+    # Try to process the JSON file and handle both success and failure cases
+    try:
+        process_json_file(args.file)
+        print(f"Successfully processed {args.file}")
+        handle_success_case(args)
+
+    except FileNotFoundError:
+        handle_failure_case(args, f"Error: File {args.file} not found")
+    except json.JSONDecodeError as e:
+        handle_failure_case(args, f"Error: Invalid JSON in {args.file}: {e}")
+    except Exception as e:
+        handle_failure_case(args, f"Error processing {args.file}: {e}")
 
 
 if __name__ == "__main__":
