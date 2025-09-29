@@ -66,16 +66,11 @@ func tryVisibilityMapper(name string, ns namespace.Name, mapper searchattribute.
 		return resolveResult{}, false
 	}
 
-	// Check if this is a mapper error that should be returned vs ignored
-	// Based on the TestMapper comments, "mapper error" should be returned,
-	// but "unmapped alias" and "invalid alias" should be ignored
 	var internalErr serviceerror.Internal
 	if errors.Is(err, &internalErr) {
 		return resolveResult{err: err}, true
 	}
 
-	// For other mapper errors (like "unmapped alias", "invalid alias"), ignore and continue
-	// Special case: ScheduleID mapping
 	var invalidArgument *serviceerror.InvalidArgument
 	if errors.As(err, &invalidArgument) && name == searchattribute.ScheduleID {
 		saType, err := saTypeMap.GetType(searchattribute.WorkflowID)
