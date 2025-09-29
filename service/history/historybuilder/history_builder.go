@@ -282,6 +282,12 @@ func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
 	event, _ = b.EventStore.add(event)
+
+	if payloadSize := command.Input.Size(); payloadSize > 0 {
+		b.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
+			int64(payloadSize), metrics.OperationTag(metrics.HistoryRecordActivityTaskStartedScope))
+	}
+
 	return event
 }
 
@@ -307,6 +313,12 @@ func (b *HistoryBuilder) AddActivityTaskCompletedEvent(
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateActivityTaskCompletedEvent(scheduledEventID, startedEventID, identity, result)
 	event, _ = b.EventStore.add(event)
+
+	if payloadSize := result.Size(); payloadSize > 0 {
+		b.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
+			int64(payloadSize), metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope))
+	}
+
 	return event
 }
 
@@ -326,6 +338,12 @@ func (b *HistoryBuilder) AddActivityTaskFailedEvent(
 	)
 
 	event, _ = b.EventStore.add(event)
+
+	if payloadSize := failure.Size(); payloadSize > 0 {
+		b.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
+			int64(payloadSize), metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope))
+	}
+
 	return event
 }
 

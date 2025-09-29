@@ -1922,7 +1922,6 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
-		gomock.Any(),
 	).Times(1).Return(nil)
 
 	// Mock mutable state.
@@ -1950,7 +1949,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_
 		Info: &persistencespb.ChasmTaskInfo{
 			ComponentInitialVersionedTransition:    &persistencespb.VersionedTransition{},
 			ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{},
-			Path:                                   "",
+			Path:                                   []string{},
 			Type:                                   "Testlib.TestSideEffectTask",
 			Data: &commonpb.DataBlob{
 				EncodingType: enumspb.ENCODING_TYPE_PROTO3,

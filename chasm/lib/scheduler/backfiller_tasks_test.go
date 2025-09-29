@@ -241,13 +241,9 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 	// Either type of request will spawn a Backfiller and schedule an immediate pure task.
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
-	s.GreaterOrEqual(1, len(s.addedTasks))
-	task, ok := s.addedTasks[0].(*tasks.ChasmTaskPure)
-	s.True(ok)
-	s.Equal(chasm.TaskScheduledTimeImmediate, task.GetVisibilityTime())
+	s.True(s.hasTask(&tasks.ChasmTaskPure{}, chasm.TaskScheduledTimeImmediate))
 
 	// Run a backfill task.
-	s.addedTasks = make([]tasks.Task, 0) // Clear old tasks.
 	err = s.executor.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
 	s.NoError(err)
 	_, err = s.node.CloseTransaction() // TODO - remove this when CHASM has unit testing hooks for task generation
@@ -260,7 +256,11 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 		s.NoError(err)
 		s.Nil(res)
 	} else {
-		s.GreaterOrEqual(1, len(s.addedTasks))
+		// TODO - check that a pure task to continue driving backfill exists here. Because
+		// a pure task in the tree already has the physically-created status, closing the
+		// transaction won't call our backend mock for AddTasks twice. Fix this when CHASM
+		// offers unit testing hooks for task generation.
+
 		s.Equal(int64(c.ExpectedAttempt), backfiller.GetAttempt())
 		s.Equal(c.ExpectedLastProcessedTime.UTC(), backfiller.GetLastProcessedTime().AsTime())
 	}

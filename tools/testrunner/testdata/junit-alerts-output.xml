@@ -1,0 +1,12 @@
+<testsuites tests="2" failures="2">
+    <testsuite name="ALERTS" tests="2" failures="2" errors="0" id="0" time="">
+        <testcase name="DATA RACE: Data race detected — in go.temporal.io/server/tools/testrunner.TestShowPanic" classname="">
+            <failure message="DATA RACE"><![CDATA[Detected in tests:
+	go.temporal.io/server/tools/testrunner.TestShowPanic]]></failure>
+        </testcase>
+        <testcase name="PANIC: This is a panic — in TestPanicExample" classname="">
+            <failure message="PANIC"><![CDATA[Detected in tests:
+	TestPanicExample]]></failure>
+        </testcase>
+    </testsuite>
+</testsuites>
