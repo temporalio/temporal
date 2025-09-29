@@ -431,7 +431,6 @@ func (c *QueryConverter) convertRangeCond(exprRef *sqlparser.Expr) error {
 	return nil
 }
 
-// TODO chasm-visibility: entry point for field name resolution in SQL queries
 func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, error) {
 	expr, ok := (*exprRef).(*sqlparser.ColName)
 	if !ok {
