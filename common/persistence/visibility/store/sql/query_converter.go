@@ -443,7 +443,11 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 	saAlias := strings.ReplaceAll(sqlparser.String(expr), "`", "")
 	saFieldName, saType, err := query.ResolveSearchAttributeAlias(saAlias, c.namespaceName, c.saMapper, c.saTypeMap)
 	if err != nil {
-		return nil, err
+		return nil, query.NewConverterError(
+			"%s: column name '%s' is not a valid search attribute",
+			query.InvalidExpressionErrMessage,
+			saAlias,
+		)
 	}
 	if saFieldName == searchattribute.TemporalNamespaceDivision {
 		c.seenNamespaceDivision = true

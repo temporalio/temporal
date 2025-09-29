@@ -79,6 +79,13 @@ func tryVisibilityMapper(name string, ns namespace.Name, mapper searchattribute.
 		}
 	}
 
+	// If the mapper returns an InvalidArgument error for a mappable field,
+	// and the error message is "mapper error", then the mapper is authoritative
+	// for this namespace and we should propagate the error instead of falling back
+	if errors.As(err, &invalidArgument) && searchattribute.IsMappable(name) && invalidArgument.Message == "mapper error" {
+		return resolveResult{err: err}, true
+	}
+
 	return resolveResult{}, false
 }
 
