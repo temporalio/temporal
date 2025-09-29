@@ -4,10 +4,6 @@ on:
   schedule:
     # Run on Tuesdays and Fridays at noon Eastern time (5 PM UTC)
     - cron: '0 17 * * 2,5'
-  pull_request:
-    # TODO: Remove this pull_request trigger before merging to main
-    # This is only for testing the workflow during development
-    branches: [ main ]
 
 permissions:
   contents: read
