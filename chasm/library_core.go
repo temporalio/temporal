@@ -19,8 +19,8 @@ func (b *CoreLibrary) Tasks() []*RegistrableTask {
 	return []*RegistrableTask{
 		NewRegistrableSideEffectTask(
 			"visTask",
-			&visibilityTaskValidator{},
-			&visibilityTaskExecutor{},
+			defaultVisibilityTaskHandler,
+			defaultVisibilityTaskHandler,
 		),
 	}
 }

@@ -404,24 +404,12 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	}
 	if saProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
 		for key, value := range saProvider.SearchAttributes(visTaskContext) {
-			p, err := payload.Encode(value)
-			if err != nil {
-				// This should never happen as we validated the value can be encoded when
-				// closing the transaction. See chasm/tree.go closeTransactionForceUpdateVisibility().
-				return err
-			}
-			searchattributes[key] = p
+			searchattributes[key] = value.Marshal()
 		}
 	}
 	if memoProvider, ok := rootComponent.(chasm.VisibilityMemoProvider); ok {
 		for key, value := range memoProvider.Memo(visTaskContext) {
-			p, err := payload.Encode(value)
-			if err != nil {
-				// This should never happen as we validated the value can be encoded when
-				// closing the transaction. See chasm/tree.go closeTransactionForceUpdateVisibility().
-				return err
-			}
-			memo[key] = p
+			memo[key] = value.Marshal()
 		}
 	}
 

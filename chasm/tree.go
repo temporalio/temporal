@@ -21,7 +21,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -128,8 +127,8 @@ type (
 
 		// Root component's search attributes and memo at the start of a transaction.
 		// They will be updated upon CloseTransaction() if they are changed.
-		currentSearchAttributes map[string]any
-		currentMemo             map[string]any
+		currentSA   map[string]VisibilityValue
+		currentMemo map[string]VisibilityValue
 	}
 
 	taskWithAttributes struct {
@@ -283,7 +282,7 @@ func newTreeInitSearchAttributesAndMemo(
 	// and currentMemo will just never be used.
 
 	if saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider); ok {
-		root.currentSearchAttributes = saProvider.SearchAttributes(immutableContext)
+		root.currentSA = saProvider.SearchAttributes(immutableContext)
 	}
 	if memoProvider, ok := rootComponent.(VisibilityMemoProvider); ok {
 		root.currentMemo = memoProvider.Memo(immutableContext)
@@ -1353,28 +1352,17 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 
 	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
 	if ok {
-		newSearchAttributes := saProvider.SearchAttributes(immutableContext)
-		if !maps.Equal(n.currentSearchAttributes, newSearchAttributes) {
-			for k, v := range newSearchAttributes {
-				if _, err := payload.Encode(v); err != nil {
-					return fmt.Errorf("unable to encode search attribute, key: %s, value: %v: %w", k, v, err)
-				}
-			}
-
+		newSA := saProvider.SearchAttributes(immutableContext)
+		if !maps.EqualFunc(n.currentSA, newSA, isVisibilityValueEqual) {
 			needUpdate = true
 		}
-		n.currentSearchAttributes = newSearchAttributes
+		n.currentSA = newSA
 	}
 
 	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
 	if ok {
 		newMemo := memoProvider.Memo(immutableContext)
-		if !maps.Equal(n.currentMemo, newMemo) {
-			for k, v := range newMemo {
-				if _, err := payload.Encode(v); err != nil {
-					return fmt.Errorf("unable to encode memo, key: %s, value: %v: %w", k, v, err)
-				}
-			}
+		if !maps.EqualFunc(n.currentMemo, newMemo, isVisibilityValueEqual) {
 			needUpdate = true
 		}
 		n.currentMemo = newMemo
@@ -1849,6 +1837,8 @@ func (n *Node) ApplyMutation(
 	}
 
 	return n.applyUpdates(mutation.UpdatedNodes)
+
+	// TODO: update search attributes and memo
 }
 
 // ApplySnapshot is used by replication stack to apply node

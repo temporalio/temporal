@@ -23,6 +23,11 @@ const (
 	TestKeywordSAFieldValue = "test-keyword-value"
 )
 
+var (
+	_ chasm.VisibilitySearchAttributesProvider = (*PayloadStore)(nil)
+	_ chasm.VisibilityMemoProvider             = (*PayloadStore)(nil)
+)
+
 type (
 	PayloadStore struct {
 		chasm.UnimplementedComponent
@@ -143,20 +148,20 @@ func (s *PayloadStore) LifecycleState(
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface
 func (s *PayloadStore) SearchAttributes(
 	_ chasm.Context,
-) map[string]any {
+) map[string]chasm.VisibilityValue {
 	// TODO: UpsertSearchAttribute as well when CHASM framework supports Per-Component SearchAttributes
 	// For now, we just update a random existing pre-defined SA to make sure the logic works.
-	return map[string]any{
-		TestKeywordSAFieldName: TestKeywordSAFieldValue,
+	return map[string]chasm.VisibilityValue{
+		TestKeywordSAFieldName: chasm.VisibilityValueString(TestKeywordSAFieldValue),
 	}
 }
 
 // Memo implements chasm.VisibilityMemoProvider interface
 func (s *PayloadStore) Memo(
 	_ chasm.Context,
-) map[string]any {
-	return map[string]any{
-		TotalCountMemoFieldName: s.State.TotalCount,
-		TotalSizeMemoFieldName:  s.State.TotalSize,
+) map[string]chasm.VisibilityValue {
+	return map[string]chasm.VisibilityValue{
+		TotalCountMemoFieldName: chasm.VisibilityValueInt64(s.State.TotalCount),
+		TotalSizeMemoFieldName:  chasm.VisibilityValueInt64(s.State.TotalSize),
 	}
 }

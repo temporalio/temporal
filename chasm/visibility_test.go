@@ -5,8 +5,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/payload"
 	"go.uber.org/mock/gomock"
 )
 
@@ -15,8 +17,9 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller       *gomock.Controller
-		mockChasmContext *MockMutableContext
+		controller         *gomock.Controller
+		mockContext        *MockContext
+		mockMutableContext *MockMutableContext
 
 		registry *Registry
 
@@ -31,14 +34,16 @@ func TestVisibilitySuite(t *testing.T) {
 func (s *visibilitySuite) SetupTest() {
 	s.initAssertions()
 	s.controller = gomock.NewController(s.T())
-	s.mockChasmContext = NewMockMutableContext(s.controller)
+	s.mockContext = NewMockContext(s.controller)
+	s.mockMutableContext = NewMockMutableContext(s.controller)
 
 	s.registry = NewRegistry(log.NewTestLogger())
 	err := s.registry.Register(&CoreLibrary{})
 	s.NoError(err)
 
-	s.mockChasmContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
-	s.visibility = NewVisibility(s.mockChasmContext)
+	s.mockMutableContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+	s.mockMutableContext.EXPECT().ToImmutable().Return(s.mockContext).AnyTimes()
+	s.visibility = NewVisibility(s.mockMutableContext)
 }
 
 func (s *visibilitySuite) SetupSubTest() {
@@ -62,11 +67,11 @@ func (s *visibilitySuite) TestTaskFqType() {
 }
 
 func (s *visibilitySuite) TestLifeCycleState() {
-	s.Equal(LifecycleStateRunning, s.visibility.LifecycleState(s.mockChasmContext))
+	s.Equal(LifecycleStateRunning, s.visibility.LifecycleState(s.mockMutableContext))
 }
 
 func (s *visibilitySuite) TestSearchAttributes() {
-	sa, err := s.visibility.GetSearchAttributes(s.mockChasmContext)
+	sa, err := s.visibility.GetSearchAttributes(s.mockMutableContext)
 	s.NoError(err)
 	s.Empty(sa)
 
@@ -75,100 +80,146 @@ func (s *visibilitySuite) TestSearchAttributes() {
 	floatKey, floatVal := "floatKey", 3.14
 
 	// Add SA via Visibility struct method.
-	s.mockChasmContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}).Times(1)
-	updated, err := s.visibility.SetSearchAttributes(s.mockChasmContext, map[string]any{
-		stringKey: stringVal,
-		intKey:    intVal,
+	s.mockMutableContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}).Times(1)
+	updated, err := s.visibility.SetSearchAttributes(s.mockMutableContext, map[string]*commonpb.Payload{
+		stringKey: s.mustEncode(stringVal),
+		intKey:    s.mustEncode(intVal),
+		floatKey:  s.mustEncode(floatVal),
 	})
 	s.NoError(err)
 	s.True(updated)
-	s.Equal(int64(2), s.visibility.Data.TransitionCount)
 
-	// Add SA via generic UpdateSearchAttribute helper function.
-	s.mockChasmContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}).Times(1)
-	SetSearchAttribute(s.mockChasmContext, s.visibility, floatKey, floatVal)
-	s.Equal(int64(3), s.visibility.Data.TransitionCount)
+	// Set the same SA again, should be no-op.
+	updated, err = s.visibility.SetSearchAttributes(s.mockMutableContext, map[string]*commonpb.Payload{
+		stringKey: s.mustEncode(stringVal),
+		intKey:    s.mustEncode(intVal),
+		floatKey:  s.mustEncode(floatVal),
+	})
+	s.NoError(err)
+	s.False(updated)
 
-	sa, err = s.visibility.GetSearchAttributes(s.mockChasmContext)
+	sa, err = s.visibility.GetSearchAttributes(s.mockMutableContext)
 	s.NoError(err)
 	s.Len(sa, 3)
-	actualStringVal, err := GetSearchAttribute[string](s.mockChasmContext, s.visibility, stringKey)
+
+	var actualStringVal string
+	err = payload.Decode(sa[stringKey], &actualStringVal)
 	s.NoError(err)
 	s.Equal(stringVal, actualStringVal)
-	actualIntVal, err := GetSearchAttribute[int](s.mockChasmContext, s.visibility, intKey)
+
+	var actualIntVal int
+	err = payload.Decode(sa[intKey], &actualIntVal)
 	s.NoError(err)
 	s.Equal(intVal, actualIntVal)
-	actualFloatVal, err := GetSearchAttribute[float64](s.mockChasmContext, s.visibility, floatKey)
+
+	var actualFloatVal float64
+	err = payload.Decode(sa[floatKey], &actualFloatVal)
 	s.NoError(err)
 	s.Equal(floatVal, actualFloatVal)
 
-	s.mockChasmContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 4}).Times(1)
-	s.visibility.RemoveSearchAttributes(s.mockChasmContext, stringKey)
-	s.Equal(int64(4), s.visibility.Data.TransitionCount)
-	sa, err = s.visibility.GetSearchAttributes(s.mockChasmContext)
+	s.mockMutableContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}).Times(1)
+	s.visibility.RemoveSearchAttributes(s.mockMutableContext, stringKey)
+	sa, err = s.visibility.GetSearchAttributes(s.mockMutableContext)
 	s.NoError(err)
 	s.Len(sa, 2)
+
+	// Test remove search attributes by setting payload to nil.
+	s.mockMutableContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 4}).Times(1)
+	updated, err = s.visibility.SetSearchAttributes(s.mockMutableContext, map[string]*commonpb.Payload{
+		intKey:   s.mustEncode(intVal),
+		floatKey: nil,
+	})
+	s.NoError(err)
+	s.True(updated)
+	sa, err = s.visibility.GetSearchAttributes(s.mockMutableContext)
+	s.NoError(err)
+	s.Len(sa, 1)
 }
 
 func (s *visibilitySuite) TestMemo() {
-	sa, err := s.visibility.GetMemo(s.mockChasmContext)
+	memo, err := s.visibility.GetMemo(s.mockMutableContext)
 	s.NoError(err)
-	s.Empty(sa)
+	s.Empty(memo)
 
 	stringKey, stringVal := "stringKey", "stringValue"
 	intKey, intVal := "intKey", 42
 	floatKey, floatVal := "floatKey", 3.14
 
 	// Add memo via Visibility struct method.
-	s.mockChasmContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}).Times(1)
-	updated, err := s.visibility.SetMemo(s.mockChasmContext, map[string]any{
-		stringKey: stringVal,
-		intKey:    intVal,
+	s.mockMutableContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}).Times(1)
+	updated, err := s.visibility.SetMemo(s.mockMutableContext, map[string]*commonpb.Payload{
+		stringKey: s.mustEncode(stringVal),
+		intKey:    s.mustEncode(intVal),
+		floatKey:  s.mustEncode(floatVal),
 	})
 	s.NoError(err)
 	s.True(updated)
-	s.Equal(int64(2), s.visibility.Data.TransitionCount)
 
-	// Add memo via generic UpdateSearchAttribute helper function.
-	s.mockChasmContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}).Times(1)
-	SetMemo(s.mockChasmContext, s.visibility, floatKey, floatVal)
-	s.Equal(int64(3), s.visibility.Data.TransitionCount)
-
-	sa, err = s.visibility.GetMemo(s.mockChasmContext)
+	// Set the same memo again, should be no-op.
+	updated, err = s.visibility.SetMemo(s.mockMutableContext, map[string]*commonpb.Payload{
+		stringKey: s.mustEncode(stringVal),
+		intKey:    s.mustEncode(intVal),
+		floatKey:  s.mustEncode(floatVal),
+	})
 	s.NoError(err)
-	s.Len(sa, 3)
-	actualStringVal, err := GetMemo[string](s.mockChasmContext, s.visibility, stringKey)
+	s.False(updated)
+
+	memo, err = s.visibility.GetMemo(s.mockMutableContext)
+	s.NoError(err)
+	s.Len(memo, 3)
+
+	var actualStringVal string
+	err = payload.Decode(memo[stringKey], &actualStringVal)
 	s.NoError(err)
 	s.Equal(stringVal, actualStringVal)
-	actualIntVal, err := GetMemo[int](s.mockChasmContext, s.visibility, intKey)
+
+	var actualIntVal int
+	err = payload.Decode(memo[intKey], &actualIntVal)
 	s.NoError(err)
 	s.Equal(intVal, actualIntVal)
-	actualFloatVal, err := GetMemo[float64](s.mockChasmContext, s.visibility, floatKey)
+
+	var actualFloatVal float64
+	err = payload.Decode(memo[floatKey], &actualFloatVal)
 	s.NoError(err)
 	s.Equal(floatVal, actualFloatVal)
 
-	s.mockChasmContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 4}).Times(1)
-	s.visibility.RemoveMemo(s.mockChasmContext, stringKey)
-	s.Equal(int64(4), s.visibility.Data.TransitionCount)
-	sa, err = s.visibility.GetMemo(s.mockChasmContext)
+	s.mockMutableContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}).Times(1)
+	s.visibility.RemoveMemo(s.mockMutableContext, stringKey)
+	memo, err = s.visibility.GetMemo(s.mockMutableContext)
 	s.NoError(err)
-	s.Len(sa, 2)
+	s.Len(memo, 2)
+
+	// Test remove memo by setting payload to nil.
+	s.mockMutableContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 4}).Times(1)
+	updated, err = s.visibility.SetMemo(s.mockMutableContext, map[string]*commonpb.Payload{
+		intKey:   s.mustEncode(intVal),
+		floatKey: nil,
+	})
+	s.NoError(err)
+	s.True(updated)
+	memo, err = s.visibility.GetMemo(s.mockMutableContext)
+	s.NoError(err)
+	s.Len(memo, 1)
 }
 
 func (s *visibilitySuite) TestTaskValidator() {
-	validator := &visibilityTaskValidator{}
-
 	task := &persistencespb.ChasmVisibilityTaskData{
 		TransitionCount: 3,
 	}
 
 	s.visibility.Data.TransitionCount = 1
-	valid, err := validator.Validate(s.mockChasmContext, s.visibility, TaskAttributes{}, task)
+	valid, err := defaultVisibilityTaskHandler.Validate(s.mockMutableContext, s.visibility, TaskAttributes{}, task)
 	s.NoError(err)
 	s.False(valid)
 
 	s.visibility.Data.TransitionCount = task.TransitionCount
-	valid, err = validator.Validate(s.mockChasmContext, s.visibility, TaskAttributes{}, task)
+	valid, err = defaultVisibilityTaskHandler.Validate(s.mockMutableContext, s.visibility, TaskAttributes{}, task)
 	s.NoError(err)
 	s.True(valid)
+}
+
+func (s *visibilitySuite) mustEncode(v any) *commonpb.Payload {
+	p, err := payload.Encode(v)
+	s.NoError(err)
+	return p
 }

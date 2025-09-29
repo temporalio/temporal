@@ -607,6 +607,11 @@ const (
 	testComponentPausedMemoName = "PausedMemo"
 )
 
+var (
+	_ chasm.VisibilitySearchAttributesProvider = (*testComponent)(nil)
+	_ chasm.VisibilityMemoProvider             = (*testComponent)(nil)
+)
+
 type testComponent struct {
 	chasm.UnimplementedComponent
 
@@ -617,15 +622,15 @@ func (l *testComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
-func (l *testComponent) SearchAttributes(_ chasm.Context) map[string]any {
-	return map[string]any{
-		testComponentPausedSAName: l.ActivityInfo.Paused,
+func (l *testComponent) SearchAttributes(_ chasm.Context) map[string]chasm.VisibilityValue {
+	return map[string]chasm.VisibilityValue{
+		testComponentPausedSAName: chasm.VisibilityValueBool(l.ActivityInfo.Paused),
 	}
 }
 
-func (l *testComponent) Memo(_ chasm.Context) map[string]any {
-	return map[string]any{
-		testComponentPausedMemoName: l.ActivityInfo.Paused,
+func (l *testComponent) Memo(_ chasm.Context) map[string]chasm.VisibilityValue {
+	return map[string]chasm.VisibilityValue{
+		testComponentPausedMemoName: chasm.VisibilityValueBool(l.ActivityInfo.Paused),
 	}
 }
 
