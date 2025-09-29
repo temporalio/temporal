@@ -25,7 +25,7 @@ type (
 		*require.Assertions
 
 		controller  *gomock.Controller
-		connections *MockconnectionPool
+		connections *mockConnectionPool[historyservice.HistoryServiceClient]
 		logger      log.Logger
 		resolver    *membership.MockServiceResolver
 	}
@@ -40,7 +40,7 @@ func (s *cachingRedirectorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
-	s.connections = NewMockconnectionPool(s.controller)
+	s.connections = &mockConnectionPool[historyservice.HistoryServiceClient]{}
 	s.logger = log.NewNoopLogger()
 	s.resolver = membership.NewMockServiceResolver(s.controller)
 	s.resolver.EXPECT().AddListener(cachingRedirectorListener, gomock.Any()).Return(nil).AnyTimes()
@@ -51,8 +51,8 @@ func (s *cachingRedirectorSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *cachingRedirectorSuite) newCachingDirector(staleTTL time.Duration) *cachingRedirector {
-	return newCachingRedirector(
+func (s *cachingRedirectorSuite) newCachingDirector(staleTTL time.Duration) *CachingRedirector[historyservice.HistoryServiceClient] {
+	return NewCachingRedirector(
 		s.connections,
 		s.resolver,
 		s.logger,
@@ -65,7 +65,7 @@ func (s *cachingRedirectorSuite) TestShardCheck() {
 	defer r.stop()
 
 	invalErr := &serviceerror.InvalidArgument{}
-	err := r.execute(
+	err := r.Execute(
 		context.Background(),
 		-1,
 		func(_ context.Context, _ historyservice.HistoryServiceClient) error {
@@ -87,14 +87,7 @@ func cacheRetainingTest(s *cachingRedirectorSuite, opErr error, verify func(erro
 		Times(1)
 
 	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
-	clientConn := clientConnection{
-		historyClient: mockClient,
-	}
-	s.connections.EXPECT().
-		getOrCreateClientConn(testAddr).
-		Return(clientConn)
-	s.connections.EXPECT().
-		resetConnectBackoff(clientConn)
+	s.connections.client = mockClient
 
 	clientOp := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		if client != mockClient {
@@ -102,17 +95,18 @@ func cacheRetainingTest(s *cachingRedirectorSuite, opErr error, verify func(erro
 		}
 		return opErr
 	}
-	r := newCachingRedirector(s.connections, s.resolver, s.logger, dynamicconfig.GetDurationPropertyFn(0))
+	r := NewCachingRedirector(s.connections, s.resolver, s.logger, dynamicconfig.GetDurationPropertyFn(0))
 	defer r.stop()
 
 	for i := 0; i < 3; i++ {
-		err := r.execute(
+		err := r.Execute(
 			context.Background(),
 			shardID,
 			clientOp,
 		)
 		verify(err)
 	}
+	s.Equal(1, s.connections.resetCalls)
 }
 
 func (s *cachingRedirectorSuite) TestExecuteShardSuccess() {
@@ -129,7 +123,7 @@ func (s *cachingRedirectorSuite) TestExecuteCacheRetainingError() {
 	})
 }
 
-func hostDownErrorTest(s *cachingRedirectorSuite, clientOp clientOperation, verify func(err error)) {
+func hostDownErrorTest(s *cachingRedirectorSuite, clientOp ClientOperation[historyservice.HistoryServiceClient], verify func(err error)) {
 	testAddr := rpcAddress("testaddr")
 	shardID := int32(1)
 
@@ -139,16 +133,7 @@ func hostDownErrorTest(s *cachingRedirectorSuite, clientOp clientOperation, veri
 		Times(1)
 
 	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
-	clientConn := clientConnection{
-		historyClient: mockClient,
-	}
-	s.connections.EXPECT().
-		getOrCreateClientConn(testAddr).
-		Return(clientConn).
-		Times(1)
-	s.connections.EXPECT().
-		resetConnectBackoff(clientConn).
-		Times(1)
+	s.connections.client = mockClient
 
 	r := s.newCachingDirector(0)
 	defer r.stop()
@@ -156,12 +141,13 @@ func hostDownErrorTest(s *cachingRedirectorSuite, clientOp clientOperation, veri
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	err := r.execute(
+	err := r.Execute(
 		ctx,
 		shardID,
 		clientOp,
 	)
 	verify(err)
+	s.Equal(1, s.connections.resetCalls)
 }
 
 func (s *cachingRedirectorSuite) TestDeadlineExceededError() {
@@ -191,46 +177,30 @@ func (s *cachingRedirectorSuite) TestShardOwnershipLostErrors() {
 	testAddr2 := rpcAddress("testaddr2")
 	shardID := int32(1)
 
-	mockClient1 := historyservicemock.NewMockHistoryServiceClient(s.controller)
-	mockClient2 := historyservicemock.NewMockHistoryServiceClient(s.controller)
+	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
 
 	r := s.newCachingDirector(0)
 	defer r.stop()
 	opCalls := 1
 	doExecute := func() error {
-		return r.execute(
+		return r.Execute(
 			context.Background(),
 			shardID,
 			func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 				switch opCalls {
 				case 1:
-					if client != mockClient1 {
-						return errors.New("wrong client")
-					}
 					opCalls++
 					return serviceerrors.NewShardOwnershipLost(string(testAddr1), "current")
 				case 2:
-					if client != mockClient1 {
-						return errors.New("wrong client")
-					}
 					opCalls++
 					return serviceerrors.NewShardOwnershipLost("", "current")
 				case 3:
-					if client != mockClient1 {
-						return errors.New("wrong client")
-					}
 					opCalls++
 					return serviceerrors.NewShardOwnershipLost(string(testAddr2), "current")
 				case 4:
-					if client != mockClient2 {
-						return errors.New("wrong client")
-					}
 					opCalls++
 					return nil
 				case 5:
-					if client != mockClient2 {
-						return errors.New("wrong client")
-					}
 					opCalls++
 					return nil
 				}
@@ -245,35 +215,19 @@ func (s *cachingRedirectorSuite) TestShardOwnershipLostErrors() {
 		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).
 		Times(1)
 
-	clientConn1 := clientConnection{
-		historyClient: mockClient1,
-	}
-	s.connections.EXPECT().
-		getOrCreateClientConn(testAddr1).
-		Return(clientConn1).
-		Times(1)
-	s.connections.EXPECT().
-		resetConnectBackoff(clientConn1).
-		Times(1)
+	s.connections.client = mockClient
 
 	err := doExecute()
 	s.Error(err)
 	solErr := &serviceerrors.ShardOwnershipLost{}
 	s.ErrorAs(err, &solErr)
 	s.Equal(string(testAddr1), solErr.OwnerHost)
+	s.Equal(1, s.connections.resetCalls)
 
 	// opCall 2: return SOL, but with empty new owner hint.
 	s.resolver.EXPECT().
 		Lookup(convert.Int32ToString(shardID)).
 		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).
-		Times(1)
-
-	s.connections.EXPECT().
-		getOrCreateClientConn(testAddr1).
-		Return(clientConn1).
-		Times(1)
-	s.connections.EXPECT().
-		resetConnectBackoff(clientConn1).
 		Times(1)
 
 	err = doExecute()
@@ -282,6 +236,7 @@ func (s *cachingRedirectorSuite) TestShardOwnershipLostErrors() {
 	s.ErrorAs(err, &solErr)
 	s.Empty(solErr.OwnerHost)
 	s.Equal(3, opCalls)
+	s.Equal(2, s.connections.resetCalls)
 
 	// opCall 3 & 4: return SOL with new owner hint.
 	s.resolver.EXPECT().
@@ -289,32 +244,15 @@ func (s *cachingRedirectorSuite) TestShardOwnershipLostErrors() {
 		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).
 		Times(1)
 
-	s.connections.EXPECT().
-		getOrCreateClientConn(testAddr1).
-		Return(clientConn1).
-		Times(1)
-	s.connections.EXPECT().
-		resetConnectBackoff(clientConn1).
-		Times(1)
-
-	clientConn2 := clientConnection{
-		historyClient: mockClient2,
-	}
-	s.connections.EXPECT().
-		getOrCreateClientConn(testAddr2).
-		Return(clientConn2).
-		Times(1)
-	s.connections.EXPECT().
-		resetConnectBackoff(clientConn2).
-		Times(1)
-
 	err = doExecute()
 	s.NoError(err)
 	s.Equal(5, opCalls)
+	s.Equal(4, s.connections.resetCalls)
 
 	// OpCall 5: should use cached lookup & connection, so no additional mocks.
 	err = doExecute()
 	s.NoError(err)
+	s.Equal(4, s.connections.resetCalls)
 }
 
 func (s *cachingRedirectorSuite) TestClientForTargetByShard() {
@@ -327,15 +265,7 @@ func (s *cachingRedirectorSuite) TestClientForTargetByShard() {
 		Times(1)
 
 	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
-	clientConn := clientConnection{
-		historyClient: mockClient,
-	}
-	s.connections.EXPECT().
-		getOrCreateClientConn(testAddr).
-		Return(clientConn)
-	s.connections.EXPECT().
-		resetConnectBackoff(clientConn).
-		Times(1)
+	s.connections.client = mockClient
 
 	r := s.newCachingDirector(0)
 	defer r.stop()
@@ -347,15 +277,14 @@ func (s *cachingRedirectorSuite) TestClientForTargetByShard() {
 	cli, err = r.clientForShardID(shardID)
 	s.NoError(err)
 	s.Equal(mockClient, cli)
+	s.Equal(1, s.connections.resetCalls)
 }
 
 func (s *cachingRedirectorSuite) TestStaleTTL() {
 	testAddr1 := rpcAddress("testaddr1")
 	shardID := int32(1)
-	mockClient1 := historyservicemock.NewMockHistoryServiceClient(s.controller)
-	clientConn1 := clientConnection{
-		historyClient: mockClient1,
-	}
+	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
+	s.connections.client = mockClient
 
 	staleTTL := 500 * time.Millisecond
 	r := s.newCachingDirector(staleTTL)
@@ -367,23 +296,12 @@ func (s *cachingRedirectorSuite) TestStaleTTL() {
 		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).
 		Times(1)
 
-	s.connections.EXPECT().
-		getOrCreateClientConn(testAddr1).
-		Return(clientConn1).
-		Times(1)
-	s.connections.EXPECT().
-		resetConnectBackoff(clientConn1).
-		Times(1)
-
 	cli, err := r.clientForShardID(shardID)
 	s.NoError(err)
-	s.Equal(mockClient1, cli)
+	s.Equal(mockClient, cli)
+	s.Equal(1, s.connections.resetCalls)
 
 	// Now simulate a membership update that changes the shard owner.
-	mockClient2 := historyservicemock.NewMockHistoryServiceClient(s.controller)
-	clientConn2 := clientConnection{
-		historyClient: mockClient2,
-	}
 	testAddr2 := rpcAddress("testaddr2")
 	s.resolver.EXPECT().
 		Lookup(convert.Int32ToString(shardID)).
@@ -403,15 +321,9 @@ func (s *cachingRedirectorSuite) TestStaleTTL() {
 		Lookup(convert.Int32ToString(shardID)).
 		Return(membership.NewHostInfoFromAddress(string(testAddr2)), nil).
 		Times(1)
-	s.connections.EXPECT().
-		getOrCreateClientConn(testAddr2).
-		Return(clientConn2).
-		Times(1)
-	s.connections.EXPECT().
-		resetConnectBackoff(clientConn2).
-		Times(1)
 
 	cli, err = r.clientForShardID(shardID)
 	s.NoError(err)
-	s.Equal(mockClient2, cli)
+	s.Equal(mockClient, cli)
+	s.Equal(2, s.connections.resetCalls)
 }

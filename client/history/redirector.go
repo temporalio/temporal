@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/membership"
@@ -12,19 +11,18 @@ import (
 )
 
 type (
-	// A redirector executes a client operation against a history instance.
+	// A Redirector executes a client operation against a history instance.
 	// If the operation is intended for the owner of a shard, and the request
 	// returns a shard ownership lost error with a hint for a new shard owner,
 	// the redirector will retry the request to the new owner.
-	redirector interface {
-		clientForShardID(int32) (historyservice.HistoryServiceClient, error)
-		execute(context.Context, int32, clientOperation) error
+	Redirector[C any] interface {
+		Execute(ctx context.Context, shardID int32, op ClientOperation[C]) error
+		clientForShardID(int32) (C, error)
 	}
+	ClientOperation[C any] func(ctx context.Context, client C) error
 
-	clientOperation func(ctx context.Context, client historyservice.HistoryServiceClient) error
-
-	basicRedirector struct {
-		connections            connectionPool
+	BasicRedirector[C any] struct {
+		connections            connectionPool[C]
 		historyServiceResolver membership.ServiceResolver
 	}
 )
@@ -37,29 +35,30 @@ func shardLookup(resolver membership.ServiceResolver, shardID int32) (rpcAddress
 	return rpcAddress(hostInfo.GetAddress()), nil
 }
 
-func newBasicRedirector(
-	connections connectionPool,
+func NewBasicRedirector[C any](
+	connections connectionPool[C],
 	historyServiceResolver membership.ServiceResolver,
-) *basicRedirector {
-	return &basicRedirector{
+) *BasicRedirector[C] {
+	return &BasicRedirector[C]{
 		connections:            connections,
 		historyServiceResolver: historyServiceResolver,
 	}
 }
 
-func (r *basicRedirector) clientForShardID(shardID int32) (historyservice.HistoryServiceClient, error) {
+func (r *BasicRedirector[C]) clientForShardID(shardID int32) (C, error) {
+	var zero C
 	if err := checkShardID(shardID); err != nil {
-		return nil, err
+		return zero, err
 	}
 	address, err := shardLookup(r.historyServiceResolver, shardID)
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	clientConn := r.connections.getOrCreateClientConn(address)
-	return clientConn.historyClient, nil
+	return clientConn.grpcClient, nil
 }
 
-func (r *basicRedirector) execute(ctx context.Context, shardID int32, op clientOperation) error {
+func (r *BasicRedirector[C]) Execute(ctx context.Context, shardID int32, op ClientOperation[C]) error {
 	if err := checkShardID(shardID); err != nil {
 		return err
 	}
@@ -70,13 +69,13 @@ func (r *basicRedirector) execute(ctx context.Context, shardID int32, op clientO
 	return r.redirectLoop(ctx, address, op)
 }
 
-func (r *basicRedirector) redirectLoop(ctx context.Context, address rpcAddress, op clientOperation) error {
+func (r *BasicRedirector[C]) redirectLoop(ctx context.Context, address rpcAddress, op ClientOperation[C]) error {
 	for {
 		if err := common.IsValidContext(ctx); err != nil {
 			return err
 		}
 		clientConn := r.connections.getOrCreateClientConn(address)
-		err := op(ctx, clientConn.historyClient)
+		err := op(ctx, clientConn.grpcClient)
 		var solErr *serviceerrors.ShardOwnershipLost
 		if !errors.As(err, &solErr) || len(solErr.OwnerHost) == 0 {
 			return err
