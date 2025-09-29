@@ -634,7 +634,7 @@ func (s *queryConverterSuite) TestConvertColName() {
 	}
 
 	for _, tc := range tests {
-		s.Run(tc.name, func() {
+		s.T().Run(tc.name, func(t *testing.T) {
 			// Reset to original state
 			s.queryConverter.saMapper = originalSaMapper
 			s.queryConverter.saTypeMap = originalSaTypeMap
@@ -649,25 +649,25 @@ func (s *queryConverterSuite) TestConvertColName() {
 
 			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
 			stmt, err := sqlparser.Parse(sql)
-			s.NoError(err)
+			require.NoError(t, err)
 			expr := stmt.(*sqlparser.Select).Where.Expr
 			saColNameExpr, err := s.queryConverter.convertColName(&expr)
 			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, sqlparser.String(expr))
-				s.Equal(tc.retValue, saColNameExpr)
+				require.NoError(t, err)
+				require.Equal(t, tc.output, sqlparser.String(expr))
+				require.Equal(t, tc.retValue, saColNameExpr)
 				if tc.input != searchattribute.CloseTime {
 					_, ok := expr.(*saColName)
-					s.True(ok)
+					require.True(t, ok)
 				}
 				if tc.input == searchattribute.TemporalNamespaceDivision {
-					s.True(s.queryConverter.seenNamespaceDivision)
+					require.True(t, s.queryConverter.seenNamespaceDivision)
 				} else {
-					s.False(s.queryConverter.seenNamespaceDivision)
+					require.False(t, s.queryConverter.seenNamespaceDivision)
 				}
 			} else {
-				s.Error(err)
-				s.Equal(err, tc.err)
+				require.Error(t, err)
+				require.Equal(t, tc.err, err)
 			}
 		})
 	}

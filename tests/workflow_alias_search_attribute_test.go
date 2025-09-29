@@ -28,23 +28,23 @@ func TestWorkflowAliasSearchAttributeTestSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (ts *WorkflowAliasSearchAttributeTestSuite) SetupTest() {
-	ts.FunctionalTestBase.SetupTest()
+func (s *WorkflowAliasSearchAttributeTestSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
 
-	ts.Worker().RegisterWorkflow(ts.WorkflowFunc)
+	s.Worker().RegisterWorkflow(s.WorkflowFunc)
 }
 
-func (ts *WorkflowAliasSearchAttributeTestSuite) WorkflowFunc(ctx workflow.Context) error {
+func (s *WorkflowAliasSearchAttributeTestSuite) WorkflowFunc(ctx workflow.Context) error {
 	return nil
 }
 
-func (ts *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
+func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 	ctx context.Context,
 	workflowFn WorkflowFunction,
 	prefix, customSA string) (sdkclient.WorkflowRun, error) {
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        testcore.RandomizeStr(prefix + "-" + ts.T().Name()),
-		TaskQueue: ts.TaskQueue(),
+		ID:        testcore.RandomizeStr(prefix + "-" + s.T().Name()),
+		TaskQueue: s.TaskQueue(),
 	}
 	if customSA != "" {
 		customSAKey := temporal.NewSearchAttributeKeyKeyword("CustomSA")
@@ -52,7 +52,7 @@ func (ts *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 			customSAKey.ValueSet(customSA),
 		)
 	}
-	return ts.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	return s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute() {
@@ -87,6 +87,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 		{sa1: "SchedulePaused", sa2: "TemporalSchedulePaused", predicate: "IS NULL"},
 		{sa1: "PauseInfo", sa2: "TemporalPauseInfo", predicate: "IS NULL"},
 		{sa1: searchattribute.ScheduleID, sa2: searchattribute.WorkflowID, predicate: "IS NOT NULL"},
+		// BuildIds should return same as TemporalBuildIds
 	}
 
 	for _, pair := range searchAttributePairs {

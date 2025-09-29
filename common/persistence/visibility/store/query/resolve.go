@@ -1,10 +1,12 @@
 package query
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -34,13 +36,17 @@ func ResolveSearchAttributeAlias(
 					return fieldName, fieldType, nil
 				}
 			} else {
-				// Check if this is a mapper error that should be returned vs ignored
-				// Based on the TestMapper comments, "mapper error" should be returned,
-				// but "unmapped alias" and "invalid alias" should be ignored
-				if err.Error() == "mapper error" {
+				var invalidArgument *serviceerror.InvalidArgument
+				if errors.As(err, &invalidArgument) {
+					if name == searchattribute.ScheduleID {
+						saType, err := saTypeMap.GetType(searchattribute.WorkflowID)
+						if err == nil {
+							return searchattribute.WorkflowID, saType, nil
+						}
+					}
+
 					return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, err
 				}
-				// For other mapper errors (like "unmapped alias", "invalid alias"), ignore and continue
 			}
 		}
 	}
