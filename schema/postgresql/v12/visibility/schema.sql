@@ -80,8 +80,8 @@ CREATE TABLE executions_visibility (
   KeywordList03   JSONB           GENERATED ALWAYS AS (search_attributes->'KeywordList03')            STORED,
 
   -- Pre-allocated Archetype search attributes
-  TemporalBool01            BOOLEAN         GENERATED ALWAYS AS (search_attributes->'TemporalBool01')                  STORED,
-  TemporalBool02            BOOLEAN         GENERATED ALWAYS AS (search_attributes->'TemporalBool02')                  STORED,
+  TemporalBool01            BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'TemporalBool01')::boolean)       STORED,
+  TemporalBool02            BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'TemporalBool02')::boolean)       STORED,
   TemporalDatetime01        TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'TemporalDatetime01')) STORED,
   TemporalDatetime02        TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'TemporalDatetime02')) STORED,
   TemporalDouble01          DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'TemporalDouble01')::decimal)     STORED,
