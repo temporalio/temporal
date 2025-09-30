@@ -765,7 +765,6 @@ func (s *nodeSuite) TestNodeSnapshot() {
 }
 
 func (s *nodeSuite) TestApplyMutation() {
-	// Setup initial tree with a root, a child, and a grandchild.
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
@@ -778,19 +777,19 @@ func (s *nodeSuite) TestApplyMutation() {
 				},
 			},
 		},
-		"child": {
+		"SubComponent1": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
 			},
 		},
-		"child/grandchild": {
+		"SubComponent1/SubComponent11": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 3},
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
 			},
 		},
-		"child/grandchild/grandgrandchild": {
+		"SubComponent1/SubComponent11/SubComponent11Data": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 4},
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 4},
@@ -799,18 +798,39 @@ func (s *nodeSuite) TestApplyMutation() {
 	}
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
+	s.Len(root.currentSA, 1)
+	s.Len(root.currentMemo, 1)
 
 	// This decoded value should be reset after applying the mutation
-	root.children["child"].value = "some-random-decoded-value"
+	root.children["SubComponent1"].value = "some-random-decoded-value"
 
-	// Prepare mutation: update "child" node, delete "child/grandchild", and add "newchild".
-	updatedChild := &persistencespb.ChasmNode{
+	// Prepare mutation: update root and "SubComponent1" node, delete "SubComponent1/SubComponent11", and add "newchild".
+
+	now := timestamppb.Now()
+	updatedRootData, err := serialization.ProtoEncode(&protoMessageType{
+		StartTime: now,
+	})
+	s.NoError(err)
+
+	updatedRoot := &persistencespb.ChasmNode{
+		Metadata: &persistencespb.ChasmNodeMetadata{
+			InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 30},
+			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 30},
+			Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+				ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+					Type: "TestLibrary.test_component",
+				},
+			},
+		},
+		Data: updatedRootData,
+	}
+	updatedSC1 := &persistencespb.ChasmNode{
 		Metadata: &persistencespb.ChasmNodeMetadata{
 			InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 20},
 			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 20},
 		},
 	}
-	newChild := &persistencespb.ChasmNode{
+	newSC2 := &persistencespb.ChasmNode{
 		Metadata: &persistencespb.ChasmNodeMetadata{
 			InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 100},
 			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 100},
@@ -818,48 +838,57 @@ func (s *nodeSuite) TestApplyMutation() {
 	}
 	mutation := NodesMutation{
 		UpdatedNodes: map[string]*persistencespb.ChasmNode{
-			"child":    updatedChild,
-			"newchild": newChild,
+			"":              updatedRoot,
+			"SubComponent1": updatedSC1,
+			"SubComponent2": newSC2,
 		},
 		DeletedNodes: map[string]struct{}{
-			"child/grandchild":           {}, // this should remove the entire "grandchild" subtree
-			"child/non-exist-grandchild": {},
+			"SubComponent1/SubComponent11":  {}, // this should remove the entire "SubComponent11" subtree
+			"SubComponent1/non-exist-child": {},
 		},
 	}
 	err = root.ApplyMutation(mutation)
 	s.NoError(err)
 
+	// Validate root node got updated.
+	s.Equal(updatedRoot, root.serializedNode)
+	s.NotNil(root.value)
+	s.Len(root.currentSA, 1)
+	s.Len(root.currentMemo, 1)
+	s.True(root.currentSA[testComponentStartTimeSAKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
+	s.True(root.currentMemo[testComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
+
 	// Validate the "child" node got updated.
-	childNode, ok := root.children["child"]
+	nodeSC1, ok := root.children["SubComponent1"]
 	s.True(ok)
-	s.Equal(updatedChild, childNode.serializedNode)
-	s.Nil(childNode.value) // value should be reset after mutation
+	s.Equal(updatedSC1, nodeSC1.serializedNode)
+	s.Nil(nodeSC1.value) // value should be reset after mutation
 
 	// Validate the "newchild" node is added.
-	newChildNode, ok := root.children["newchild"]
+	nodeSC2, ok := root.children["SubComponent2"]
 	s.True(ok)
-	s.Equal(newChild, newChildNode.serializedNode)
+	s.Equal(newSC2, nodeSC2.serializedNode)
 
 	// Validate the "grandchild" node is deleted.
-	s.Empty(childNode.children)
+	s.Empty(nodeSC1.children)
 
 	// Validate that nodeBase.mutation reflects the applied mutation.
 	// Only updates on existing nodes are recorded; new nodes are inserted without a mutation record.
 	expectedMutation := NodesMutation{
 		UpdatedNodes: map[string]*persistencespb.ChasmNode{
-			"child":    updatedChild,
-			"newchild": newChild,
+			"":              updatedRoot,
+			"SubComponent1": updatedSC1,
+			"SubComponent2": newSC2,
 		},
 		DeletedNodes: map[string]struct{}{
-			"child/grandchild":                 {},
-			"child/grandchild/grandgrandchild": {},
+			"SubComponent1/SubComponent11":                    {},
+			"SubComponent1/SubComponent11/SubComponent11Data": {},
 		},
 	}
 	s.Equal(expectedMutation, root.mutation)
 }
 
 func (s *nodeSuite) TestApplySnapshot() {
-	// Setup initial tree with a root, a child, and a grandchild.
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
@@ -872,19 +901,19 @@ func (s *nodeSuite) TestApplySnapshot() {
 				},
 			},
 		},
-		"child": {
+		"SubComponent1": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
 			},
 		},
-		"child/grandchild": {
+		"SubComponent1/SubComponent11": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 3},
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
 			},
 		},
-		"child/grandchild/grandgrandchild": {
+		"SubComponent1/SubComponent11/SubComponent11Data": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 4},
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 4},
@@ -895,32 +924,39 @@ func (s *nodeSuite) TestApplySnapshot() {
 	s.NoError(err)
 
 	// Set a decoded value that should be reset after applying the snapshot.
-	root.children["child"].value = "decoded-value"
+	root.children["SubComponent1"].value = "decoded-value"
 
 	// Prepare an incoming snapshot representing the target state:
-	// - The "child" node is updated (LastUpdateTransition becomes 20),
-	// - the "child/grandchild" node is removed,
-	// - a new node "newchild" is added.
+	// - The "SubComponent1" node is updated (LastUpdateTransition becomes 20),
+	// - the "SubComponent1/SubComponent11" node is removed,
+	// - a new node "SubComponent2" is added.
+
+	now := timestamppb.Now()
+	updatedRootData, err := serialization.ProtoEncode(&protoMessageType{
+		StartTime: now,
+	})
+	s.NoError(err)
 	incomingSnapshot := NodesSnapshot{
 		Nodes: map[string]*persistencespb.ChasmNode{
 			"": {
 				Metadata: &persistencespb.ChasmNodeMetadata{
 					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 10},
 					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
 							Type: "TestLibrary.test_component",
 						},
 					},
 				},
+				Data: updatedRootData,
 			},
-			"child": {
+			"SubComponent1": {
 				Metadata: &persistencespb.ChasmNodeMetadata{
 					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
 					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 20},
 				},
 			},
-			"newchild": {
+			"SubComponent2": {
 				Metadata: &persistencespb.ChasmNodeMetadata{
 					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 100},
 					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 100},
@@ -932,33 +968,54 @@ func (s *nodeSuite) TestApplySnapshot() {
 	s.NoError(err)
 
 	s.Equal(incomingSnapshot, root.Snapshot(nil))
-	s.Nil(root.children["child"].value) // value should be reset after snapshot
+	s.Nil(root.children["SubComponent1"].value) // value should be reset after snapshot
 
 	// Validate that nodeBase.mutation reflects the applied snapshot.
 	expectedMutation := NodesMutation{
 		UpdatedNodes: map[string]*persistencespb.ChasmNode{
-			"child":    incomingSnapshot.Nodes["child"],
-			"newchild": incomingSnapshot.Nodes["newchild"],
+			"":              incomingSnapshot.Nodes[""],
+			"SubComponent1": incomingSnapshot.Nodes["SubComponent1"],
+			"SubComponent2": incomingSnapshot.Nodes["SubComponent2"],
 		},
 		DeletedNodes: map[string]struct{}{
-			"child/grandchild":                 {},
-			"child/grandchild/grandgrandchild": {},
+			"SubComponent1/SubComponent11":                    {},
+			"SubComponent1/SubComponent11/SubComponent11Data": {},
 		},
 	}
 	s.Equal(expectedMutation, root.mutation)
+
+	// Validate visibility search attributes and memo are updated as well.
+	s.Len(root.currentSA, 1)
+	s.Len(root.currentMemo, 1)
+	s.True(root.currentSA[testComponentStartTimeSAKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
+	s.True(root.currentMemo[testComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
 }
 
-func (s *nodeSuite) TestApply_OutOfOrder() {
+func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 
-	root, err := s.newTestTree(nil)
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_component",
+					},
+				},
+			},
+		},
+	}
+
+	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 
 	// Test the case where child node is applied before parent node.
 	err = root.ApplySnapshot(NodesSnapshot{
 		Nodes: map[string]*persistencespb.ChasmNode{
-			"child/grandchild": {
+			"SubComponent1/SubComponent11": {
 				Metadata: &persistencespb.ChasmNodeMetadata{
 					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
 					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 20},
@@ -973,13 +1030,18 @@ func (s *nodeSuite) TestApply_OutOfOrder() {
 			"": {
 				Metadata: &persistencespb.ChasmNodeMetadata{
 					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							Type: "TestLibrary.test_component",
+						},
+					},
 				},
 			},
-			"child": {
+			"SubComponent1": {
 				Metadata: &persistencespb.ChasmNodeMetadata{
 					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
 				},
 			},
 		},
@@ -2229,7 +2291,7 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_SideEffectTasks() {
 		RunID:       "run-id",
 	}).AnyTimes()
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
-	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
 
 	expectedCategories := []tasks.Category{tasks.CategoryTimer, tasks.CategoryOutbound, tasks.CategoryTransfer}
 	for _, category := range expectedCategories {
@@ -2266,13 +2328,13 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
 				},
 			},
 		},
-		"child": {
+		"SubComponent1": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						Type: "TestLibrary.test_child_component",
+						Type: "TestLibrary.test_sub_component_1",
 						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
 							{
 								Type:                      "TestLibrary.test_pure_task",
@@ -2325,7 +2387,7 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
 		RunID:       "run-id",
 	}).AnyTimes()
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
-	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
 
 	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).Do(func(addedTask tasks.Task) {
 		s.IsType(&tasks.ChasmTaskPure{}, addedTask)

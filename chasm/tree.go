@@ -1308,42 +1308,10 @@ func (n *Node) closeTransactionHandleRootLifecycleChange() (bool, error) {
 func (n *Node) closeTransactionForceUpdateVisibility(
 	rootLifecycleChanged bool,
 ) error {
-	var visibilityNode *Node
-	for _, child := range n.children {
-		componentAttr := child.serializedNode.Metadata.GetComponentAttributes()
-		if componentAttr == nil {
-			continue
-		}
-
-		if child.valueState == valueStateNeedSerialize {
-			if rc, ok := n.registry.componentFor(child.value); ok && rc.fqType() == visibilityComponentFqType {
-				visibilityNode = child
-				break
-			}
-		} else if componentAttr.Type == visibilityComponentFqType {
-			visibilityNode = child
-			break
-		}
-
-	}
-	if visibilityNode == nil {
-		return nil
-	}
-
-	needUpdate := rootLifecycleChanged
 
 	mutableContext := NewMutableContext(context.Background(), n)
 	immutableContext := mutableContext.ToImmutable()
-
-	visComponent, err := visibilityNode.Component(immutableContext, ComponentRef{})
-	if err != nil {
-		return err
-	}
-
-	visibility, ok := visComponent.(*Visibility)
-	if !ok {
-		return serviceerror.NewInternalf("expected visibility component for component with type %s, but got %T", visibilityComponentFqType, visComponent)
-	}
+	needUpdate := rootLifecycleChanged
 
 	rootComponent, err := n.Component(immutableContext, ComponentRef{})
 	if err != nil {
@@ -1368,15 +1336,49 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 		n.currentMemo = newMemo
 	}
 
-	if needUpdate {
-		// Generate a task and mark the node as dirty.
-		//
-		// NOTE: generateTask() will create a new logical task for the visibility component. But it also
-		// invalidates all previous logical tasks and at the end of the transaction, only one physical task
-		// will be created in the visibility queue.
-		visibility.generateTask(mutableContext)
-		visibilityNode.setValueState(valueStateNeedSerialize)
+	if !needUpdate {
+		return nil
 	}
+
+	var visibilityNode *Node
+	for _, child := range n.children {
+		componentAttr := child.serializedNode.Metadata.GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+
+		if child.valueState == valueStateNeedSerialize {
+			if rc, ok := n.registry.componentFor(child.value); ok && rc.fqType() == visibilityComponentFqType {
+				visibilityNode = child
+				break
+			}
+		} else if componentAttr.Type == visibilityComponentFqType {
+			visibilityNode = child
+			break
+		}
+
+	}
+	if visibilityNode == nil {
+		return nil
+	}
+
+	visComponent, err := visibilityNode.Component(immutableContext, ComponentRef{})
+	if err != nil {
+		return err
+	}
+
+	visibility, ok := visComponent.(*Visibility)
+	if !ok {
+		return serviceerror.NewInternalf("expected visibility component for component with type %s, but got %T", visibilityComponentFqType, visComponent)
+	}
+
+	// Generate a task and mark the node as dirty.
+	//
+	// NOTE: generateTask() will create a new logical task for the visibility component. But it also
+	// invalidates all previous logical tasks at the end of the transaction, and only one physical task
+	// will be created in the visibility queue.
+	visibility.generateTask(mutableContext)
+	visibilityNode.setValueState(valueStateNeedSerialize)
 
 	// We don't need to sync tree structure here for the visiblity node because we only generated a task without
 	// changing any component fields.
@@ -1836,9 +1838,35 @@ func (n *Node) ApplyMutation(
 		return err
 	}
 
-	return n.applyUpdates(mutation.UpdatedNodes)
+	if err := n.applyUpdates(mutation.UpdatedNodes); err != nil {
+		return err
+	}
 
-	// TODO: update search attributes and memo
+	// For replication case, we only update the search attributes and memo
+	// but not force updating the visibility component itself to generate a task.
+	//
+	// This is because the visibility component is already force updated in the active
+	// cluster and that forced update will be replicated as well. Standby cluster
+	// only needs to track the current SA and memo to prevent generating an unnecessary
+	// visibility component update & task if there is a failover.
+	//
+	// TODO: combine this with the logic in CloseTransactionForceUpdateVisibility
+	// right that force update logic only applies to the active cluster.
+	immutableContext := NewContext(context.Background(), n)
+	rootComponent, err := n.root().Component(immutableContext, ComponentRef{})
+	if err != nil {
+		return err
+	}
+	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
+	if ok {
+		n.currentSA = saProvider.SearchAttributes(immutableContext)
+	}
+	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
+	if ok {
+		n.currentMemo = memoProvider.Memo(immutableContext)
+	}
+
+	return nil
 }
 
 // ApplySnapshot is used by replication stack to apply node
