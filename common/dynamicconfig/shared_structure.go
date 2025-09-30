@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/softassert"
 )
 
@@ -24,7 +25,10 @@ func warnDefaultSharedStructure(key Key, def any) {
 func logSharedStructureWarnings(logger log.Logger) {
 	logSharedStructureWarningsOnce.Do(func() {
 		sharedStructureWarnings.Range(func(key, path any) bool {
-			softassert.Fail(logger, fmt.Sprintf("default value for %v contains shared structure at %v", key, path))
+			softassert.Fail(logger,
+				"default value contains shared structure",
+				tag.Key(fmt.Sprintf("%v", key)),
+				tag.Value(path))
 			return true
 		})
 	})

@@ -67,7 +67,10 @@ func (s *NexusStateReplicationSuite) SetupSuite() {
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                               1 * time.Millisecond,
-		callbacks.AllowedAddresses.Key():                                               []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+		// tests use external endpoints so we need to allow them
+		callbacks.AllowedAddresses.Key(): []any{map[string]any{
+			"Pattern": "*", "AllowInsecure": true,
+		}},
 	}
 	s.setupSuite()
 }
