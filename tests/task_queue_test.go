@@ -211,7 +211,6 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 		defer wg.Done()
 		mu.Lock()
 		*runTimes = append(*runTimes, time.Now())
-		time.Sleep(250 * time.Millisecond) //nolint
 		mu.Unlock()
 		return nil
 	}
@@ -233,6 +232,8 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 	activityWorker = worker.New(s.SdkClient(), activityTaskQueue, worker.Options{
 		// Setting rate limit at worker level (this will be ignored in favor of the limit set through the api)
 		TaskQueueActivitiesPerSecond: workerRPS,
+		// Setting rate limit to throttle the worker to 4 activities per second
+		WorkerActivitiesPerSecond: 4,
 	})
 	activityWorker.RegisterActivityWithOptions(activityFunc, activity.RegisterOptions{Name: activityName})
 	s.NoError(activityWorker.Start())
@@ -491,30 +492,23 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 		firstGap, secondGap)
 }
 
-func (s *TaskQueueSuite) setupPerKeyRateLimitWorkflow(
-	ctx context.Context,
-	tv *testvars.TestVars,
-	keys []string,
-	tasksPerKey int,
-	wholeQueueRPS float64,
-	perKeyRPS float64,
-) (map[string][]time.Time, []time.Time) {
+func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced() {
+	const (
+		wholeQueueRPS = 10.0 // tighter
+		perKeyRPS     = 50.0 // looser than whole queue, should not bind
+		tasksPerKey   = 30
+		buffer        = 3 * time.Second // CI jitter
+	)
+	fairnessKeysWithWeight := map[string]float32{"A": 1.0, "B": 1.0, "C": 1.0}
+	tv := testvars.New(s.T())
 
-	total := len(keys) * tasksPerKey
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	// Enable fairness
-	s.OverrideDynamicConfig(dynamicconfig.MatchingEnableFairness, true)
-	// Single partition for simplicity.
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-	// Fast refresh so limiter state picks up config quickly.
+	// Fast refresh so ratelimiter picks up config quickly.
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
 
-	// generate a unique base so IDs don't collide across shards/tests
-	base := uuid.NewString()
-	parsePattern := fmt.Sprintf("perkey-wf-%s-%%d", base) // for Sscanf later
-
-	// Set up the task queue config with whole-queue and per-key rate limits.
+	// configure task queue
 	_, err := s.FrontendClient().UpdateTaskQueueConfig(ctx, &workflowservice.UpdateTaskQueueConfigRequest{
 		Namespace:     s.Namespace().String(),
 		Identity:      tv.ClientIdentity(),
@@ -531,117 +525,13 @@ func (s *TaskQueueSuite) setupPerKeyRateLimitWorkflow(
 	})
 	s.NoError(err)
 
-	// Start workflows (each will schedule one activity tagged with a fairness key).
-	for i := range total {
-		wfID := fmt.Sprintf("perkey-wf-%s-%d", base, i)
-		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:    s.Namespace().String(),
-			WorkflowId:   wfID,
-			WorkflowType: tv.WorkflowType(),
-			TaskQueue:    tv.TaskQueue(),
-		})
-		s.NoError(err)
-	}
-
-	// Drain workflow tasks -> schedule activities with Priority.FairnessKey.
-	wfHandled := 0
-	for wfHandled < total {
-		if err := ctx.Err(); err != nil {
-			s.T().Fatalf("context deadline while draining workflow tasks: handled=%d/%d: %v", wfHandled, total, err)
-		}
-		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
-			tv,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Equal(3, len(task.History.Events))
-
-				var idx int
-				_, scanErr := fmt.Sscanf(task.WorkflowExecution.WorkflowId, parsePattern, &idx)
-				s.NoError(scanErr)
-
-				key := keys[idx%len(keys)]
-				input, encErr := payloads.Encode(key)
-				s.NoError(encErr)
-
-				cmd := &commandpb.Command{
-					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-							ActivityId:             fmt.Sprintf("act-%d", idx),
-							ActivityType:           tv.ActivityType(),
-							TaskQueue:              tv.TaskQueue(),
-							ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
-							Priority:               &commonpb.Priority{FairnessKey: key},
-							Input:                  input,
-						},
-					},
-				}
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{cmd}}, nil
-			},
-			taskpoller.WithContext(ctx),
-		)
-		if err == nil {
-			wfHandled++
-		}
-	}
-	s.Equal(total, wfHandled)
-
-	// Drain activity tasks, recording times.
-	perKeyTimes := make(map[string][]time.Time, len(keys))
-	for _, k := range keys {
-		perKeyTimes[k] = []time.Time{}
-	}
-	allTimes := make([]time.Time, 0, total)
-
-	actsHandled := 0
-	for actsHandled < total {
-		if err := ctx.Err(); err != nil {
-			s.T().Fatalf("context deadline while draining activity tasks: handled=%d/%d: %v", actsHandled, total, err)
-		}
-		_, err := s.TaskPoller().PollAndHandleActivityTask(
-			tv,
-			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-				var key string
-				s.NoError(payloads.Decode(task.Input, &key))
-				now := time.Now()
-				perKeyTimes[key] = append(perKeyTimes[key], now)
-				allTimes = append(allTimes, now)
-				nothing, encErr := payloads.Encode()
-				s.NoError(encErr)
-				return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
-			},
-			taskpoller.WithContext(ctx),
-		)
-		if err == nil {
-			actsHandled++
-		}
-	}
-	s.Equal(total, actsHandled)
-
-	// perKeyTimes : Used to verify that each key's activities are throttled correctly.
-	// allTimes : Used to verify the overall throughput of the task queue.
-	return perKeyTimes, allTimes
-}
-
-func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced() {
-	const (
-		wholeQueueRPS = 10.0 // tighter
-		perKeyRPS     = 50.0 // looser than whole queue, should not bind
-		tasksPerKey   = 30
-		buffer        = 3 * time.Second // CI jitter
-	)
-	keys := []string{"A", "B", "C"}
-	tv := testvars.New(s.T())
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	_, allTimes := s.setupPerKeyRateLimitWorkflow(ctx, tv, keys, tasksPerKey, wholeQueueRPS, perKeyRPS)
+	_, allTimes := s.runActivitiesWithPriorities(ctx, tv, fairnessKeysWithWeight, tasksPerKey)
 
 	// Measure overall throughput after initial burst, which should be limited by wholeQueueRPS.
 	start := allTimes[0]
 	end := allTimes[len(allTimes)-1]
 
-	expected := time.Duration(float64(tasksPerKey*len(keys))/wholeQueueRPS) * time.Second
+	expected := time.Duration(float64(tasksPerKey*len(fairnessKeysWithWeight))/wholeQueueRPS) * time.Second
 	actual := end.Sub(start)
 
 	s.T().Logf("Time taken for tasks across fairness keys to drain is %v vs expected %v", actual, expected)
@@ -659,16 +549,36 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 		tasksPerKey   = 30
 		buffer        = 3 * time.Second // relax for CI jitter
 	)
-	keys := []string{"A", "B", "C"}
+	fairnessKeysWithWeight := map[string]float32{"A": 1.0, "B": 1.0, "C": 1.0}
 
 	tv := testvars.New(s.T())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	perKeyTimes, _ := s.setupPerKeyRateLimitWorkflow(ctx, tv, keys, tasksPerKey, wholeQueueRPS, perKeyRPS)
+	// Fast refresh so ratelimiter picks up config quickly.
+	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
 
-	for _, key := range keys {
+	// configure task queue
+	_, err := s.FrontendClient().UpdateTaskQueueConfig(ctx, &workflowservice.UpdateTaskQueueConfigRequest{
+		Namespace:     s.Namespace().String(),
+		Identity:      tv.ClientIdentity(),
+		TaskQueue:     tv.TaskQueue().GetName(),
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: float32(wholeQueueRPS)},
+			Reason:    "test: whole-queue limit",
+		},
+		UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: float32(perKeyRPS)},
+			Reason:    "test: per-key default",
+		},
+	})
+	s.NoError(err)
+
+	perKeyTimes, _ := s.runActivitiesWithPriorities(ctx, tv, fairnessKeysWithWeight, tasksPerKey)
+
+	for key := range fairnessKeysWithWeight {
 		times := perKeyTimes[key]
 		s.Len(times, tasksPerKey, "unexpected count for key %s", key)
 
@@ -688,10 +598,76 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 	}
 }
 
+func (s *TaskQueueSuite) TestPerKeyRateLimit_WeightOverride_IsEnforcedAcrossThreeKeys() {
+	const (
+		perKeyRPS     = 5.0    // base per-key limit
+		wholeQueueRPS = 1000.0 // keep high so only per-key gates
+		tasksPerKey   = 30
+		buffer        = 3 * time.Second
+	)
+
+	// Fast refresh so ratelimiter picks up config quickly.
+	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
+
+	// Fairness key overrides take precedence over default.
+	// Override A and C to default and make B twice as heavy (ie ~2x effective RPS).
+	fairnessKeysWithWeight := map[string]float32{"A": 6666.0, "B": 0.0, "C": 6666.0} // defaults are opposite of override
+	fairnessWeightOverrides := map[string]float32{"A": 1.0, "B": 2.0, "C": 1.0}
+
+	tv := testvars.New(s.T())
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// configure task queue
+	_, err := s.FrontendClient().UpdateTaskQueueConfig(ctx, &workflowservice.UpdateTaskQueueConfigRequest{
+		Namespace:     s.Namespace().String(),
+		Identity:      tv.ClientIdentity(),
+		TaskQueue:     tv.TaskQueue().GetName(),
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: float32(wholeQueueRPS)},
+			Reason:    "test: whole-queue limit",
+		},
+		UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: float32(perKeyRPS)},
+			Reason:    "test: per-key default",
+		},
+		SetFairnessWeightOverrides: fairnessWeightOverrides,
+	})
+	s.NoError(err)
+
+	perKeyTimes, _ := s.runActivitiesWithPriorities(ctx, tv, fairnessKeysWithWeight, tasksPerKey)
+
+	for key, fairnessWeightOverride := range fairnessWeightOverrides {
+		times := perKeyTimes[key]
+		s.Len(times, tasksPerKey, "unexpected count for key %s", key)
+
+		start := times[0]
+		end := times[len(times)-1]
+
+		expected := time.Duration(float64(tasksPerKey)/(perKeyRPS*float64(fairnessWeightOverride))) * time.Second
+		actual := end.Sub(start)
+
+		s.T().Logf("Time taken for fairness key %s with weight %v to drain : %v vs expected %v",
+			key, fairnessWeightOverride, actual, expected)
+		s.GreaterOrEqual(actual, expected-buffer,
+			"per-key RPS violated for key %s with weight %v: actual %v < expected %v (-%v buffer)",
+			key, fairnessWeightOverride, actual, expected)
+
+		s.LessOrEqual(actual, expected+buffer,
+			"too slow for key %s with weight %v: actual %v > expected %v (+%v buffer)",
+			key, fairnessWeightOverride, actual, expected, buffer)
+	}
+}
+
 // TestUpdateAndDescribeTaskQueueConfig tests the update and describe task queue config functionality.
 // It updates the task queue config via the frontend API and then describes the task queue to verify,
 // that the updated configuration is reflected correctly.
 func (s *TaskQueueSuite) TestUpdateAndDescribeTaskQueueConfig() {
+	// Enforce a smaller limit for max fairness key weight overrides for this test
+	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxFairnessKeyWeightOverrides, 5)
+
+	// Send update.
 	tv := testvars.New(s.T())
 	taskQueueName := tv.TaskQueue().Name
 	namespace := s.Namespace().String()
@@ -699,6 +675,7 @@ func (s *TaskQueueSuite) TestUpdateAndDescribeTaskQueueConfig() {
 	updateRPS := float32(42)
 	updateReason := "frontend-update-test"
 	updateIdentity := "test-identity"
+	fairnessOverrides := map[string]float32{"k1": 1.0, "k2": 1.5, "k3": 2.0, "k4": 0.5, "k5": 3.0}
 	updateReq := &workflowservice.UpdateTaskQueueConfigRequest{
 		Namespace:     namespace,
 		Identity:      updateIdentity,
@@ -716,6 +693,7 @@ func (s *TaskQueueSuite) TestUpdateAndDescribeTaskQueueConfig() {
 			},
 			Reason: updateReason,
 		},
+		SetFairnessWeightOverrides: fairnessOverrides,
 	}
 	updateResp, err := s.FrontendClient().UpdateTaskQueueConfig(testcore.NewContext(), updateReq)
 	s.NoError(err)
@@ -727,7 +705,9 @@ func (s *TaskQueueSuite) TestUpdateAndDescribeTaskQueueConfig() {
 	s.Equal(updateRPS, updateResp.Config.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
 	s.Equal(updateReason, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
 	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
+	s.Equal(fairnessOverrides, updateResp.Config.FairnessWeightOverrides)
 
+	// Request describe.
 	describeReq := &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     namespace,
 		TaskQueue:     &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -745,6 +725,24 @@ func (s *TaskQueueSuite) TestUpdateAndDescribeTaskQueueConfig() {
 	s.Equal(updateRPS, describeResp.Config.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
 	s.Equal(updateReason, describeResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
 	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
+	s.Equal(fairnessOverrides, describeResp.Config.FairnessWeightOverrides)
+
+	// Attempt to exceed the maximum allowed fairness weight overrides.
+	exceedReq := &workflowservice.UpdateTaskQueueConfigRequest{
+		Namespace:                  namespace,
+		Identity:                   updateIdentity,
+		TaskQueue:                  taskQueueName,
+		TaskQueueType:              taskQueueType,
+		SetFairnessWeightOverrides: map[string]float32{"k6": 1.0}, // Exceeds the limit of 5
+	}
+	_, err = s.FrontendClient().UpdateTaskQueueConfig(testcore.NewContext(), exceedReq)
+	s.Error(err)
+	s.ErrorContains(err, "fairness weight overrides update rejected")
+
+	// Verify no change after rejected update.
+	describeResp, err = s.FrontendClient().DescribeTaskQueue(testcore.NewContext(), describeReq)
+	s.NoError(err)
+	s.Equal(fairnessOverrides, describeResp.Config.FairnessWeightOverrides)
 }
 
 func (s *TaskQueueSuite) TestUpdateUnsetAndDescribeTaskQueueConfig() {
@@ -830,4 +828,120 @@ func (s *TaskQueueSuite) TestUpdateUnsetAndDescribeTaskQueueConfig() {
 	s.Nil(describeResp.Config.FairnessKeysRateLimitDefault.RateLimit)
 	s.Equal(unsetReasonFairness, describeResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
 	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
+}
+
+// removed: inlined where needed
+
+func (s *TaskQueueSuite) runActivitiesWithPriorities(
+	ctx context.Context,
+	tv *testvars.TestVars,
+	fairnessKeysWithWeight map[string]float32,
+	activitiesPerKey int,
+) (map[string][]time.Time, []time.Time) {
+	fairnessKeys := make([]string, 0, len(fairnessKeysWithWeight))
+	for k := range fairnessKeysWithWeight {
+		fairnessKeys = append(fairnessKeys, k)
+	}
+	total := len(fairnessKeys) * activitiesPerKey
+
+	// Enable fairness
+	s.OverrideDynamicConfig(dynamicconfig.MatchingEnableFairness, true)
+	// Single partition for simplicity.
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+
+	// generate a unique base so IDs don't collide across shards/tests
+	base := uuid.NewString()
+	parsePattern := fmt.Sprintf("perkey-wf-%s-%%d", base) // for Sscanf later
+
+	// Start workflows (each will schedule one activity tagged with a fairness key).
+	for i := range total {
+		wfID := fmt.Sprintf("perkey-wf-%s-%d", base, i)
+		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			WorkflowId:   wfID,
+			WorkflowType: tv.WorkflowType(),
+			TaskQueue:    tv.TaskQueue(),
+		})
+		s.NoError(err)
+	}
+
+	// Drain workflow tasks -> schedule activities with Priority.FairnessKey.
+	wfHandled := 0
+	for wfHandled < total {
+		if err := ctx.Err(); err != nil {
+			s.T().Fatalf("context deadline while draining workflow tasks: handled=%d/%d: %v", wfHandled, total, err)
+		}
+		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
+			tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.Equal(3, len(task.History.Events))
+
+				var idx int
+				_, scanErr := fmt.Sscanf(task.WorkflowExecution.WorkflowId, parsePattern, &idx)
+				s.NoError(scanErr)
+
+				key := fairnessKeys[idx%len(fairnessKeys)]
+				weight := fairnessKeysWithWeight[key]
+				input, encErr := payloads.Encode(key)
+				s.NoError(encErr)
+
+				cmd := &commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+							ActivityId:             fmt.Sprintf("act-%d", idx),
+							ActivityType:           tv.ActivityType(),
+							TaskQueue:              tv.TaskQueue(),
+							ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
+							Priority:               &commonpb.Priority{FairnessKey: key, FairnessWeight: weight},
+							Input:                  input,
+						},
+					},
+				}
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{cmd}}, nil
+			},
+			taskpoller.WithContext(ctx),
+		)
+		if err == nil {
+			wfHandled++
+		}
+	}
+	s.Equal(total, wfHandled)
+
+	// Drain activity tasks, recording times.
+	perKeyTimes := make(map[string][]time.Time, len(fairnessKeys))
+	for _, k := range fairnessKeys {
+		perKeyTimes[k] = []time.Time{}
+	}
+	allTimes := make([]time.Time, 0, total)
+
+	actsHandled := 0
+	for actsHandled < total {
+		if err := ctx.Err(); err != nil {
+			s.T().Fatalf("context deadline while draining activity tasks: handled=%d/%d: %v", actsHandled, total, err)
+		}
+		_, err := s.TaskPoller().PollAndHandleActivityTask(
+			tv,
+			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+				var key string
+				s.NoError(payloads.Decode(task.Input, &key))
+				now := time.Now()
+				perKeyTimes[key] = append(perKeyTimes[key], now)
+				allTimes = append(allTimes, now)
+				nothing, encErr := payloads.Encode()
+				s.NoError(encErr)
+				return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
+			},
+			taskpoller.WithContext(ctx),
+		)
+		if err == nil {
+			actsHandled++
+		}
+	}
+	s.Equal(total, actsHandled)
+
+	// perKeyTimes : Used to verify that each key's activities are throttled correctly.
+	// allTimes : Used to verify the overall throughput of the task queue.
+	return perKeyTimes, allTimes
 }

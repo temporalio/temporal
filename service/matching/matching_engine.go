@@ -3040,18 +3040,41 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request 
 			}
 			now := hlc.Next(existingClock, e.timeSource)
 			protoTs := hlc.ProtoTimestamp(now)
+
 			// Update relevant config fields
 			cfg := data.PerType[int32(taskQueueType)].Config
 			updateTaskQueueConfig := request.GetUpdateTaskqueueConfig()
 			updateIdentity := updateTaskQueueConfig.GetIdentity()
+
 			// Queue Rate Limit
 			if qrl := updateTaskQueueConfig.GetUpdateQueueRateLimit(); qrl != nil {
 				cfg.QueueRateLimit = buildRateLimitConfig(qrl, protoTs, updateIdentity)
 			}
+
 			// Fairness Queue Rate Limit
 			if fkrl := updateTaskQueueConfig.GetUpdateFairnessKeyRateLimitDefault(); fkrl != nil {
 				cfg.FairnessKeysRateLimitDefault = buildRateLimitConfig(fkrl, protoTs, updateIdentity)
 			}
+
+			// Fairness Weight Overrides
+			if len(updateTaskQueueConfig.GetSetFairnessWeightOverrides()) > 0 ||
+				len(updateTaskQueueConfig.GetUnsetFairnessWeightOverrides()) > 0 {
+				maxFairnessKeyWeightOverrides := e.config.MaxFairnessKeyWeightOverrides(
+					request.NamespaceId,
+					request.UpdateTaskqueueConfig.GetTaskQueue(),
+					taskQueueType)
+
+				cfg.FairnessWeightOverrides, err = mergeFairnessWeightOverrides(
+					cfg.FairnessWeightOverrides,
+					updateTaskQueueConfig.GetSetFairnessWeightOverrides(),
+					updateTaskQueueConfig.GetUnsetFairnessWeightOverrides(),
+					maxFairnessKeyWeightOverrides,
+				)
+				if err != nil {
+					return nil, false, err
+				}
+			}
+
 			// Update the clock on TaskQueueUserData to enforce LWW on config updates
 			data.Clock = now
 			return data, true, nil
