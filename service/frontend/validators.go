@@ -1,6 +1,8 @@
 package frontend
 
 import (
+	"strings"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -37,5 +39,49 @@ func validateStringField(fieldName string, value string, maxLen int, required bo
 	if len(value) > maxLen {
 		return serviceerror.NewInvalidArgumentf("%s field too long (max %d characters).", fieldName, maxLen)
 	}
+	return nil
+}
+
+func validateFairnessWeightUpdate(
+	set map[string]float32,
+	unset []string,
+	maxConfigLimit int,
+) error {
+	total := len(set) + len(unset)
+	if total > maxConfigLimit {
+		return serviceerror.NewInvalidArgumentf(
+			"too many fairness weight overrides in request: got %d, maximum %d",
+			total, maxConfigLimit,
+		)
+	}
+
+	for k, w := range set {
+		if strings.TrimSpace(k) == "" {
+			return serviceerror.NewInvalidArgument(
+				"fairness weight override key must not be empty")
+		}
+		if w <= 0 {
+			return serviceerror.NewInvalidArgumentf(
+				"invalid fairness weight weight for key %q: must be greater than zero", k,
+			)
+		}
+	}
+
+	for _, k := range unset {
+		if strings.TrimSpace(k) == "" {
+			return serviceerror.NewInvalidArgument(
+				"fairness weight override key must not be empty")
+		}
+	}
+
+	for k := range set {
+		for _, u := range unset {
+			if k == u {
+				return serviceerror.NewInvalidArgumentf(
+					"fairness weight override key %q present in both set and unset lists", k)
+			}
+		}
+	}
+
 	return nil
 }

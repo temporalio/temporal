@@ -78,6 +78,8 @@ type Config struct {
 	ShutdownDrainDuration                                             dynamicconfig.DurationPropertyFn
 	ShutdownFailHealthCheckDuration                                   dynamicconfig.DurationPropertyFn
 
+	MaxFairnessWeightOverrideConfigLimit dynamicconfig.IntPropertyFn
+
 	MaxBadBinaries dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// security protection settings
@@ -317,6 +319,8 @@ func NewConfig(
 		DeleteNamespacePagesPerExecution:                    dynamicconfig.DeleteNamespacePagesPerExecution.Get(dc),
 		DeleteNamespaceConcurrentDeleteExecutionsActivities: dynamicconfig.DeleteNamespaceConcurrentDeleteExecutionsActivities.Get(dc),
 		DeleteNamespaceNamespaceDeleteDelay:                 dynamicconfig.DeleteNamespaceNamespaceDeleteDelay.Get(dc),
+
+		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.FrontendMaxFairnessWeightOverrideConfigLimit.Get(dc),
 
 		EnableSchedules: dynamicconfig.FrontendEnableSchedules.Get(dc),
 

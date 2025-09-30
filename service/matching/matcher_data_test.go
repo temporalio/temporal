@@ -313,7 +313,7 @@ func (s *MatcherDataSuite) TestTaskForward() {
 
 func (s *MatcherDataSuite) TestRateLimitedBacklog() {
 	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(10.0, enumspb.RATE_LIMIT_SOURCE_API)
-	s.md.rateLimitManager.UpdateSimpleRateLimitForTesting(300 * time.Millisecond)
+	s.md.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(300 * time.Millisecond)
 
 	// register some backlog with old tasks
 	for i := range 100 {
@@ -352,7 +352,7 @@ func (s *MatcherDataSuite) TestRateLimitedBacklog() {
 
 func (s *MatcherDataSuite) TestPerKeyRateLimit() {
 	s.md.rateLimitManager.SetFairnessKeyRateLimitDefaultForTesting(10.0, enumspb.RATE_LIMIT_SOURCE_API)
-	s.md.rateLimitManager.UpdatePerKeySimpleRateLimitForTesting(300 * time.Millisecond)
+	s.md.rateLimitManager.UpdatePerKeySimpleRateLimitWithBurstForTesting(300 * time.Millisecond)
 	// register some backlog with three keys
 	keys := []string{"key1", "key2", "key3"}
 	for i := range 300 {

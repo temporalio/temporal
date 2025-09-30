@@ -24,3 +24,29 @@ func getEffectiveWeight(overrides fairnessWeightOverrides, pri *commonpb.Priorit
 	}
 	return weight
 }
+
+func mergeFairnessWeightOverrides(
+	existing map[string]float32,
+	set map[string]float32,
+	unset []string,
+	maxFairnessKeyWeightOverrides int,
+) (map[string]float32, error) {
+	res := make(map[string]float32, len(existing))
+	for k, v := range existing {
+		res[k] = v
+	}
+
+	for _, k := range unset {
+		delete(res, k)
+	}
+
+	for k, w := range set {
+		res[k] = w
+	}
+
+	if len(res) > maxFairnessKeyWeightOverrides {
+		return nil, errFairnessOverridesUpdateRejected
+	}
+
+	return res, nil
+}

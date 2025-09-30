@@ -861,6 +861,11 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
 	)
+	FrontendMaxFairnessWeightOverrideConfigLimit = NewGlobalIntSetting(
+		"frontend.maxFairnessWeightOverrideConfigLimit",
+		1000,
+		`Maximum number of fairness key overrides that can be set in a single request`,
+	)
 	// [cleanup-wv-pre-release]
 	EnableDeployments = NewNamespaceBoolSetting(
 		"system.enableDeployments",
@@ -1343,6 +1348,11 @@ second per poller by one physical queue manager`,
 		"matching.fairnessKeyRateLimitCacheSize",
 		2000,
 		"Cache size for fairness key rate limits.",
+	)
+	MatchingMaxFairnessKeyWeightOverrides = NewTaskQueueIntSetting(
+		"matching.maxFairnessKeyWeightOverrides",
+		1000,
+		"Maximum number of fairness key weight overrides that can be configured for a task queue at a time.",
 	)
 
 	// keys for history
