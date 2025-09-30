@@ -66,9 +66,8 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) workflowSwitchesLastFailu
 	if s.shouldFail.Load() {
 		if s.failureCount.Load()%2 == 0 {
 			panic("forced-panic-to-fail-wft")
-		} else {
-			time.Sleep(15 * time.Second) //nolint:forbidigo
 		}
+		time.Sleep(15 * time.Second) //nolint:forbidigo
 	}
 
 	return "done!", nil
