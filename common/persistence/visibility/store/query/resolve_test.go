@@ -21,6 +21,8 @@ func TestResolveSearchAttributeAlias(t *testing.T) {
 		{name: "ExecutionStatus", expectedFieldName: "ExecutionStatus", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_KEYWORD, expectedErr: false},
 		{name: "ScheduledStartTime", expectedFieldName: "TemporalScheduledStartTime", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_DATETIME, expectedErr: false},
 		{name: "SchedulePaused", expectedFieldName: "TemporalSchedulePaused", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_BOOL, expectedErr: false},
+		{name: "BuildIds", expectedFieldName: "BuildIds", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, expectedErr: false},
+		{name: "TemporalBuildIds", expectedFieldName: "BuildIds", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, expectedErr: false},
 		{name: "TemporalPauseInfo", expectedFieldName: "TemporalPauseInfo", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, expectedErr: false},
 		{name: "NonExistentField", expectedFieldName: "", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, expectedErr: true},
 		{name: searchattribute.ScheduleID, expectedFieldName: searchattribute.WorkflowID, expectedFieldType: enumspb.INDEXED_VALUE_TYPE_KEYWORD, expectedErr: false},

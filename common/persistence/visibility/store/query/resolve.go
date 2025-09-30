@@ -18,6 +18,13 @@ func ResolveSearchAttributeAlias(
 	saTypeMap searchattribute.NameTypeMap,
 ) (string, enumspb.IndexedValueType, error) {
 	if strings.HasPrefix(name, "Temporal") {
+		if name == "TemporalBuildIds" {
+			saType, err := saTypeMap.GetType(searchattribute.BuildIds)
+			if err != nil {
+				return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, NewConverterError("invalid search attribute: %s", searchattribute.BuildIds)
+			}
+			return searchattribute.BuildIds, saType, nil
+		}
 		saType, err := saTypeMap.GetType(name)
 		if err != nil {
 			return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, NewConverterError("invalid search attribute: %s", name)
