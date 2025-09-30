@@ -26,9 +26,6 @@ const (
 	ReceiverModeUnset       ReceiverMode = 0
 	ReceiverModeSingleStack ReceiverMode = 1 // default mode. It only uses High Priority Task Tracker for processing tasks.
 	ReceiverModeTieredStack ReceiverMode = 2
-
-	// ReceiveTaskIntervalMultiplier is based on ReplicationStreamSendEmptyTaskDuration. Default duration: 1 min.
-	ReceiveTaskIntervalMultiplier = 3
 )
 
 type (
@@ -126,7 +123,14 @@ func (r *StreamReceiverImpl) Start() {
 
 	go WrapEventLoop(context.Background(), r.sendEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, r.Config)
 	go WrapEventLoop(context.Background(), r.recvEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, r.Config)
-	go livenessMonitor(r.recvSignalChan, r.Config.ReplicationStreamSendEmptyTaskDuration()*ReceiveTaskIntervalMultiplier, r.shutdownChan, r.Stop, r.logger)
+	go livenessMonitor(
+		r.recvSignalChan,
+		r.Config.ReplicationStreamSendEmptyTaskDuration,
+		r.Config.ReplicationStreamReceiverLivenessMultiplier,
+		r.shutdownChan,
+		r.Stop,
+		r.logger,
+	)
 	r.logger.Info("StreamReceiver started.")
 }
 

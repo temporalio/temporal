@@ -17,6 +17,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -1051,7 +1052,8 @@ func (s *streamSenderSuite) TestLivenessMonitor() {
 
 	livenessMonitor(
 		s.streamSender.recvSignalChan,
-		time.Millisecond,
+		dynamicconfig.GetDurationPropertyFn(time.Second),
+		dynamicconfig.GetIntPropertyFn(1),
 		s.streamSender.shutdownChan,
 		s.streamSender.Stop,
 		s.streamSender.logger,

@@ -36,9 +36,6 @@ import (
 
 const (
 	TaskMaxSkipCount = 1000
-
-	// SyncTaskIntervalMultiplier is based on ReplicationStreamSyncStatusDuration. Default duration is 1s.
-	SyncTaskIntervalMultiplier = 10
 )
 
 type (
@@ -133,7 +130,14 @@ func (s *StreamSenderImpl) Start() {
 	}
 
 	go WrapEventLoop(s.server.Context(), s.recvEventLoop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
-	go livenessMonitor(s.recvSignalChan, s.config.ReplicationStreamSyncStatusDuration()*SyncTaskIntervalMultiplier, s.shutdownChan, s.Stop, s.logger)
+	go livenessMonitor(
+		s.recvSignalChan,
+		s.config.ReplicationStreamSyncStatusDuration,
+		s.config.ReplicationStreamSenderLivenessMultiplier,
+		s.shutdownChan,
+		s.Stop,
+		s.logger,
+	)
 	s.logger.Info("StreamSender started.")
 }
 
