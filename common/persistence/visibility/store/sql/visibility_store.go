@@ -228,13 +228,6 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	}, nil
 }
 
-func (s *VisibilityStore) ScanWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequestV2,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.ListWorkflowExecutions(ctx, request)
-}
-
 func (s *VisibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
@@ -406,15 +399,6 @@ func (s *VisibilityStore) prepareSearchAttributesForDb(
 		if value == nil {
 			delete(searchAttributes, name)
 			continue
-		}
-		tp, err := saTypeMap.GetType(name)
-		if err != nil {
-			return nil, err
-		}
-		if tp == enumspb.INDEXED_VALUE_TYPE_DATETIME {
-			if dt, ok := value.(time.Time); ok {
-				searchAttributes[name] = dt.Format(time.RFC3339Nano)
-			}
 		}
 	}
 	return &searchAttributes, nil

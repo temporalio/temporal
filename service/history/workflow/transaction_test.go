@@ -7,9 +7,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/cluster/clustertest"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
@@ -140,6 +147,82 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 		true, // isWorkflow
 	)
 	s.Equal(timeoutErr, err)
+}
+
+func (s *transactionSuite) TestUpdateWorkflowExecution_CompletionMetrics() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	s.mockShard.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
+	s.mockShard.EXPECT().GetClusterMetadata().Return(clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true))).AnyTimes()
+	s.mockShard.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
+
+	s.mockShard.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil).AnyTimes()
+	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
+
+	cases := []struct {
+		name                   string
+		updateMode             persistence.UpdateWorkflowMode
+		expectCompletionMetric bool
+	}{
+		{
+			name:                   "UpdateCurrent",
+			updateMode:             persistence.UpdateWorkflowModeUpdateCurrent,
+			expectCompletionMetric: true,
+		},
+		{
+			name:                   "BypassCurrent",
+			updateMode:             persistence.UpdateWorkflowModeBypassCurrent,
+			expectCompletionMetric: true,
+		},
+		{
+			name:                   "IgnoreCurrent",
+			updateMode:             persistence.UpdateWorkflowModeIgnoreCurrent,
+			expectCompletionMetric: false,
+		},
+	}
+
+	for _, tc := range cases {
+		s.T().Run(tc.name, func(t *testing.T) {
+
+			capture := metricsHandler.StartCapture()
+
+			_, _, err := s.transaction.UpdateWorkflowExecution(
+				context.Background(),
+				tc.updateMode,
+				0,
+				&persistence.WorkflowMutation{
+					ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+						NamespaceId:      tests.NamespaceID.String(),
+						WorkflowId:       tests.WorkflowID,
+						VersionHistories: &historyspb.VersionHistories{},
+					},
+					ExecutionState: &persistencespb.WorkflowExecutionState{
+						RunId:  tests.RunID,
+						Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+						State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+					},
+				},
+				[]*persistence.WorkflowEvents{},
+				nil,
+				nil,
+				nil,
+				true, // isWorkflow
+			)
+			s.NoError(err)
+
+			snapshot := capture.Snapshot()
+			completionMetric := snapshot[metrics.WorkflowSuccessCount.Name()]
+
+			if tc.expectCompletionMetric {
+				s.Len(completionMetric, 1)
+			} else {
+				s.Empty(completionMetric)
+			}
+
+			metricsHandler.StopCapture(capture)
+		})
+	}
+
 }
 
 func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFailed() {

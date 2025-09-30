@@ -823,7 +823,7 @@ func MuxRouterProvider() *mux.Router {
 
 func httpEnabled(cfg *config.Config, serviceName primitives.ServiceName) bool {
 	// If the service is not the frontend service, HTTP API is disabled
-	if serviceName != primitives.FrontendService {
+	if serviceName != primitives.FrontendService && serviceName != primitives.InternalFrontendService {
 		return false
 	}
 	// If HTTP API port is 0, it is disabled

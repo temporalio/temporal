@@ -48,6 +48,7 @@ message Task {
     int64 started_event_id = 10;
     int64 version = 11;
     google.protobuf.Timestamp started_time = 12;
+    int64 start_version = 13;
 }
 
 message QueryTask {

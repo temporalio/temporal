@@ -87,7 +87,11 @@ func ClientProviderFactory(
 	if err != nil {
 		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
 	}
+	var clusterID string
 
+	if clusterInfo, ok := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]; ok {
+		clusterID = clusterInfo.ClusterID
+	}
 	// TODO(bergundy): This should use an LRU or other form of cache that supports eviction.
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
 		transport := httpTransportProvider(key.namespaceID, key.endpointID)
@@ -95,9 +99,11 @@ func ClientProviderFactory(
 			Transport: ResponseSizeLimiter{transport},
 		}, nil
 	})
+
 	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
 		var url string
 		var httpClient *http.Client
+		httpCaller := httpClient.Do
 		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
 		case *persistencespb.NexusEndpointTarget_External_:
 			url = variant.External.GetUrl()
@@ -106,21 +112,28 @@ func ClientProviderFactory(
 			if err != nil {
 				return nil, err
 			}
+			if clusterID != "" {
+				httpCaller = func(r *http.Request) (*http.Response, error) {
+					resp, callErr := httpClient.Do(r)
+					commonnexus.SetFailureSourceOnContext(ctx, resp)
+					return resp, callErr
+				}
+			}
 		case *persistencespb.NexusEndpointTarget_Worker_:
 			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.Id)
 			httpClient = &cl.Client
+			if clusterID != "" {
+				httpCaller = func(r *http.Request) (*http.Response, error) {
+					r.Header.Set(NexusCallbackSourceHeader, clusterID)
+					resp, callErr := httpClient.Do(r)
+					commonnexus.SetFailureSourceOnContext(ctx, resp)
+					return resp, callErr
+				}
+			}
 		default:
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}
-		httpCaller := httpClient.Do
-		if clusterInfo, ok := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]; ok {
-			httpCaller = func(r *http.Request) (*http.Response, error) {
-				r.Header.Set(NexusCallbackSourceHeader, clusterInfo.ClusterID)
-				resp, callErr := httpClient.Do(r)
-				commonnexus.SetFailureSourceOnContext(ctx, resp)
-				return resp, callErr
-			}
-		}
+		// still need to override the caller
 		return nexus.NewHTTPClient(nexus.HTTPClientOptions{
 			BaseURL:    url,
 			Service:    service,

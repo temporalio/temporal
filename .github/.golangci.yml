@@ -16,6 +16,7 @@ linters:
     - forbidigo
     - exhaustive
     - godox
+    - iotamixing
   settings:
     staticcheck:
       checks:

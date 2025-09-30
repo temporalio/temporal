@@ -160,9 +160,9 @@ jobs:
           [Helm Chart](https://github.com/temporalio/helm-charts)
 
           ### Docker images for this release (use the tag \`${TAG#v}\`)
-          [Server](https://hub.docker.com/repository/docker/temporalio/server)
-          [Server With Auto Setup](https://hub.docker.com/repository/docker/temporalio/auto-setup) ([what is Auto-Setup?](https://docs.temporal.io/blog/auto-setup))
-          [Admin-Tools](https://hub.docker.com/repository/docker/temporalio/admin-tools)
+          [Server](https://hub.docker.com/r/temporalio/server)
+          [Server With Auto Setup](https://hub.docker.com/r/temporalio/auto-setup) ([what is Auto-Setup?](https://docs.temporal.io/blog/auto-setup))
+          [Admin-Tools](https://hub.docker.com/r/temporalio/admin-tools)
 
           **Full Changelog**: https://github.com/temporalio/temporal/compare/${BASE_TAG}...${TAG}
           EOF
