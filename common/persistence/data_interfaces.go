@@ -417,8 +417,7 @@ type (
 		TaskCategory tasks.Category
 		TaskKey      tasks.Key
 
-		// BestEffort indicates that this request is a suggestion only.
-		// The system may choose to ignore it without error.
+		// BestEffort indicates that this request is a suggestion. System may choose to ignore it without error.
 		BestEffort bool
 	}
 
