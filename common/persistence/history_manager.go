@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/softassert"
 )
 
 const (
@@ -931,7 +932,7 @@ func (m *executionManagerImpl) readHistoryBranch(
 			return nil, nil, nil, nil, dataSize, err
 		}
 		if len(events) == 0 {
-			m.logger.Error(dataLossMsg, dataLossTags(errEmptyEvents)...)
+			softassert.Fail(m.logger, dataLossMsg, dataLossTags(errEmptyEvents)...)
 			return nil, nil, nil, nil, dataSize, serviceerror.NewDataLoss(errEmptyEvents)
 		}
 
@@ -941,11 +942,11 @@ func (m *executionManagerImpl) readHistoryBranch(
 
 		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
 			// in a single batch, version should be the same, and ID should be contiguous
-			m.logger.Error(dataLossMsg, dataLossTags(errWrongVersion)...)
+			softassert.Fail(m.logger, dataLossMsg, dataLossTags(errWrongVersion)...)
 			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errWrongVersion)
 		}
 		if firstEvent.GetEventId() != token.LastEventID+1 {
-			m.logger.Error(dataLossMsg, dataLossTags(errNonContiguousEventID)...)
+			softassert.Fail(m.logger, dataLossMsg, dataLossTags(errNonContiguousEventID)...)
 			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errNonContiguousEventID)
 		}
 
@@ -998,7 +999,7 @@ func (m *executionManagerImpl) readHistoryBranchReverse(
 			return nil, nil, nil, dataSize, err
 		}
 		if len(events) == 0 {
-			m.logger.Error(dataLossMsg, datalossTags(errEmptyEvents)...)
+			softassert.Fail(m.logger, dataLossMsg, datalossTags(errEmptyEvents)...)
 			return nil, nil, nil, dataSize, serviceerror.NewDataLoss(errEmptyEvents)
 		}
 
@@ -1008,11 +1009,11 @@ func (m *executionManagerImpl) readHistoryBranchReverse(
 
 		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
 			// in a single batch, version should be the same, and ID should be contiguous
-			m.logger.Error(dataLossMsg, datalossTags(errWrongVersion)...)
+			softassert.Fail(m.logger, dataLossMsg, datalossTags(errWrongVersion)...)
 			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errWrongVersion)
 		}
 		if (token.LastEventID != common.EmptyEventID) && (lastEvent.GetEventId() != token.LastEventID-1) {
-			m.logger.Error(dataLossMsg, datalossTags(errNonContiguousEventID)...)
+			softassert.Fail(m.logger, dataLossMsg, datalossTags(errNonContiguousEventID)...)
 			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errNonContiguousEventID)
 		}
 

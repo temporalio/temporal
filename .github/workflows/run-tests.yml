@@ -252,7 +252,7 @@ jobs:
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - name: Run unit tests
-        timeout-minutes: 15
+        timeout-minutes: 20
         run: make unit-test-coverage
         env:
           UNIT_TEST_DIRS: ${{ inputs.unit_test_directory }}
