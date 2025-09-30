@@ -416,6 +416,9 @@ type (
 		ShardID      int32
 		TaskCategory tasks.Category
 		TaskKey      tasks.Key
+
+		// BestEffort indicates that this request is a suggestion. System may choose to ignore it without error.
+		BestEffort bool
 	}
 
 	// RangeCompleteHistoryTasksRequest deletes a range of history tasks

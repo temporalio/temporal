@@ -50,6 +50,10 @@ func (m *sqlExecutionStore) CompleteHistoryTask(
 	ctx context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
+	// Ignore the request if it is best effort
+	if request.BestEffort {
+		return nil
+	}
 	switch request.TaskCategory.Type() {
 	case tasks.CategoryTypeImmediate:
 		return m.completeHistoryImmediateTask(ctx, request)
