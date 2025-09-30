@@ -404,12 +404,12 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	}
 	if saProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
 		for key, value := range saProvider.SearchAttributes(visTaskContext) {
-			searchattributes[key] = value.Marshal()
+			searchattributes[key] = value.MustEncode()
 		}
 	}
 	if memoProvider, ok := rootComponent.(chasm.VisibilityMemoProvider); ok {
 		for key, value := range memoProvider.Memo(visTaskContext) {
-			memo[key] = value.Marshal()
+			memo[key] = value.MustEncode()
 		}
 	}
 
