@@ -150,11 +150,15 @@ func updateSchema(cli *cli.Context, logger log.Logger) error {
 		},
 	}
 
-	// If index is specified, update index mappings; otherwise update template
+	err = task.RunTemplateUpgrade()
+	if err != nil {
+		return err
+	}
+
 	if indexName != "" {
 		return task.RunIndexUpdate()
 	}
-	return task.RunTemplateUpgrade()
+	return nil
 }
 
 // createIndex creates a new visibility index
