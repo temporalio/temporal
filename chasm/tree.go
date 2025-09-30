@@ -1199,7 +1199,7 @@ func (n *Node) AddTask(
 func (n *Node) CloseTransaction() (NodesMutation, error) {
 	defer n.cleanupTransaction()
 
-	if err := n.executeImmedidatePureTasks(); err != nil {
+	if err := n.executeImmediatePureTasks(); err != nil {
 		return NodesMutation{}, err
 	}
 
@@ -1244,11 +1244,31 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	return n.mutation, nil
 }
 
-func (n *Node) executeImmedidatePureTasks() error {
+func (n *Node) executeImmediatePureTasks() error {
+
+	if len(n.immediatePureTasks) == 0 {
+		return nil
+	}
+
 	// We must sync structure before running any tasks here because,
 	// those tasks might be for a newly created component which doesn't even have a node yet.
 	// And we want to make sure we only run tasks for components that are still part of the tree.
-	syncStructure := true
+	if err := n.syncSubComponents(); err != nil {
+		return err
+	}
+	syncStructure := false
+
+	// TODO: Maintain a mapping from deserialized component value to node
+	// and avoid this look up.
+	componentValueToNode := make(map[any]*Node)
+	for _, node := range n.andAllChildren() {
+		if node.fieldType() != fieldTypeComponent {
+			continue
+		}
+		if _, ok := n.immediatePureTasks[node.value]; ok {
+			componentValueToNode[node.value] = node
+		}
+	}
 
 	for componentValue, tasks := range n.immediatePureTasks {
 		if syncStructure {
@@ -1257,18 +1277,9 @@ func (n *Node) executeImmedidatePureTasks() error {
 			}
 		}
 
-		// TODO: Maintain a mapping from deserialized component value to node
-		// and avoid this look up.
-		var taskNode *Node
-		for _, node := range n.andAllChildren() {
-			if node.fieldType() == fieldTypeComponent && node.value == componentValue {
-				taskNode = node
-				break
-			}
-		}
-
+		taskNode := componentValueToNode[componentValue]
 		if taskNode == nil || len(tasks) == 0 {
-			// NOTE: this is not necessarily an error because this function is executed at the end of a transaction
+			// NOTE: taskNode being nil is not necessarily an error because this function is executed at the end of a transaction
 			// which could contain multiple transitions. So it's possible that a task added for a component in one
 			// transition and in a later transition that component get removed.
 			continue
@@ -1282,7 +1293,6 @@ func (n *Node) executeImmedidatePureTasks() error {
 		// and workflow deletes the activity from it's activities map.
 		syncStructure = true
 		for _, task := range tasks {
-			fmt.Println("Executing immediate pure task for component")
 			if err := taskNode.ExecutePureTask(context.Background(), task.attributes, task.task); err != nil {
 				return err
 			}
