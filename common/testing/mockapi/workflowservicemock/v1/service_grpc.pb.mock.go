@@ -25,46 +25,6 @@ type MockWorkflowServiceClient struct {
 	isgomock struct{}
 }
 
-func (m *MockWorkflowServiceClient) StartActivityExecution(ctx context.Context, in *workflowservice.StartActivityExecutionRequest, opts ...grpc.CallOption) (*workflowservice.StartActivityExecutionResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockWorkflowServiceClient) DescribeActivityExecution(ctx context.Context, in *workflowservice.DescribeActivityExecutionRequest, opts ...grpc.CallOption) (*workflowservice.DescribeActivityExecutionResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockWorkflowServiceClient) ListActivityExecutions(ctx context.Context, in *workflowservice.ListActivityExecutionsRequest, opts ...grpc.CallOption) (*workflowservice.ListActivityExecutionsResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockWorkflowServiceClient) CountActivityExecutions(ctx context.Context, in *workflowservice.CountActivityExecutionsRequest, opts ...grpc.CallOption) (*workflowservice.CountActivityExecutionsResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockWorkflowServiceClient) GetActivityResult(ctx context.Context, in *workflowservice.GetActivityResultRequest, opts ...grpc.CallOption) (*workflowservice.GetActivityResultResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockWorkflowServiceClient) RequestCancelActivityExecution(ctx context.Context, in *workflowservice.RequestCancelActivityExecutionRequest, opts ...grpc.CallOption) (*workflowservice.RequestCancelActivityExecutionResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockWorkflowServiceClient) TerminateActivityExecution(ctx context.Context, in *workflowservice.TerminateActivityExecutionRequest, opts ...grpc.CallOption) (*workflowservice.TerminateActivityExecutionResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockWorkflowServiceClient) DeleteActivityExecution(ctx context.Context, in *workflowservice.DeleteActivityExecutionRequest, opts ...grpc.CallOption) (*workflowservice.DeleteActivityExecutionResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
 // MockWorkflowServiceClientMockRecorder is the mock recorder for MockWorkflowServiceClient.
 type MockWorkflowServiceClientMockRecorder struct {
 	mock *MockWorkflowServiceClient
