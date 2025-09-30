@@ -243,10 +243,14 @@ const file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDesc = "
 	"\x05value\x18\x02 \x01(\v29.temporal.server.api.persistence.v1.IndexSearchAttributesR\x05value:\x028\x01\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9d\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xaf\x04\n" +
 	"\x15IndexSearchAttributes\x12\x8f\x01\n" +
-	"\x18custom_search_attributes\x18\x01 \x03(\v2U.temporal.server.api.persistence.v1.IndexSearchAttributes.CustomSearchAttributesEntryR\x16customSearchAttributes\x1ar\n" +
+	"\x18custom_search_attributes\x18\x01 \x03(\v2U.temporal.server.api.persistence.v1.IndexSearchAttributes.CustomSearchAttributesEntryR\x16customSearchAttributes\x12\x98\x01\n" +
+	"\x1barchetype_search_attributes\x18\x02 \x03(\v2X.temporal.server.api.persistence.v1.IndexSearchAttributes.ArchetypeSearchAttributesEntryR\x19archetypeSearchAttributes\x1ar\n" +
 	"\x1bCustomSearchAttributesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12=\n" +
+	"\x05value\x18\x02 \x01(\x0e2'.temporal.api.enums.v1.IndexedValueTypeR\x05value:\x028\x01\x1au\n" +
+	"\x1eArchetypeSearchAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12=\n" +
 	"\x05value\x18\x02 \x01(\x0e2'.temporal.api.enums.v1.IndexedValueTypeR\x05value:\x028\x01B6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 
@@ -262,28 +266,31 @@ func file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDescGZIP(
 	return file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDescData
 }
 
-var file_temporal_server_api_persistence_v1_cluster_metadata_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_temporal_server_api_persistence_v1_cluster_metadata_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_temporal_server_api_persistence_v1_cluster_metadata_proto_goTypes = []any{
 	(*ClusterMetadata)(nil),       // 0: temporal.server.api.persistence.v1.ClusterMetadata
 	(*IndexSearchAttributes)(nil), // 1: temporal.server.api.persistence.v1.IndexSearchAttributes
 	nil,                           // 2: temporal.server.api.persistence.v1.ClusterMetadata.IndexSearchAttributesEntry
 	nil,                           // 3: temporal.server.api.persistence.v1.ClusterMetadata.TagsEntry
 	nil,                           // 4: temporal.server.api.persistence.v1.IndexSearchAttributes.CustomSearchAttributesEntry
-	(*v1.VersionInfo)(nil),        // 5: temporal.api.version.v1.VersionInfo
-	(v11.IndexedValueType)(0),     // 6: temporal.api.enums.v1.IndexedValueType
+	nil,                           // 5: temporal.server.api.persistence.v1.IndexSearchAttributes.ArchetypeSearchAttributesEntry
+	(*v1.VersionInfo)(nil),        // 6: temporal.api.version.v1.VersionInfo
+	(v11.IndexedValueType)(0),     // 7: temporal.api.enums.v1.IndexedValueType
 }
 var file_temporal_server_api_persistence_v1_cluster_metadata_proto_depIdxs = []int32{
-	5, // 0: temporal.server.api.persistence.v1.ClusterMetadata.version_info:type_name -> temporal.api.version.v1.VersionInfo
+	6, // 0: temporal.server.api.persistence.v1.ClusterMetadata.version_info:type_name -> temporal.api.version.v1.VersionInfo
 	2, // 1: temporal.server.api.persistence.v1.ClusterMetadata.index_search_attributes:type_name -> temporal.server.api.persistence.v1.ClusterMetadata.IndexSearchAttributesEntry
 	3, // 2: temporal.server.api.persistence.v1.ClusterMetadata.tags:type_name -> temporal.server.api.persistence.v1.ClusterMetadata.TagsEntry
 	4, // 3: temporal.server.api.persistence.v1.IndexSearchAttributes.custom_search_attributes:type_name -> temporal.server.api.persistence.v1.IndexSearchAttributes.CustomSearchAttributesEntry
-	1, // 4: temporal.server.api.persistence.v1.ClusterMetadata.IndexSearchAttributesEntry.value:type_name -> temporal.server.api.persistence.v1.IndexSearchAttributes
-	6, // 5: temporal.server.api.persistence.v1.IndexSearchAttributes.CustomSearchAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	5, // 4: temporal.server.api.persistence.v1.IndexSearchAttributes.archetype_search_attributes:type_name -> temporal.server.api.persistence.v1.IndexSearchAttributes.ArchetypeSearchAttributesEntry
+	1, // 5: temporal.server.api.persistence.v1.ClusterMetadata.IndexSearchAttributesEntry.value:type_name -> temporal.server.api.persistence.v1.IndexSearchAttributes
+	7, // 6: temporal.server.api.persistence.v1.IndexSearchAttributes.CustomSearchAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
+	7, // 7: temporal.server.api.persistence.v1.IndexSearchAttributes.ArchetypeSearchAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_cluster_metadata_proto_init() }
@@ -297,7 +304,7 @@ func file_temporal_server_api_persistence_v1_cluster_metadata_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDesc), len(file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
