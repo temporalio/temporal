@@ -856,10 +856,10 @@ func (d *namespaceHandler) createResponse(
 		Id:          info.Id,
 
 		Capabilities: &namespacepb.NamespaceInfo_Capabilities{
-			EagerWorkflowStart:         d.config.EnableEagerWorkflowStart(info.Name),
-			SyncUpdate:                 d.config.EnableUpdateWorkflowExecution(info.Name),
-			AsyncUpdate:                d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
-			DegradedWorkflowVisibility: numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0,
+			EagerWorkflowStart:              d.config.EnableEagerWorkflowStart(info.Name),
+			SyncUpdate:                      d.config.EnableUpdateWorkflowExecution(info.Name),
+			AsyncUpdate:                     d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
+			ReportedProblemsSearchAttribute: numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0,
 		},
 		SupportsSchedules: d.config.EnableSchedules(info.Name),
 	}

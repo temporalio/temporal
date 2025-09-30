@@ -396,7 +396,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 	s.False(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
 	s.False(resp.NamespaceInfo.Capabilities.SyncUpdate)
 	s.False(resp.NamespaceInfo.Capabilities.AsyncUpdate)
-	s.False(resp.NamespaceInfo.Capabilities.DegradedWorkflowVisibility)
+	s.False(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 }
 
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithOneCluster() {
