@@ -7,12 +7,17 @@ import (
 	"regexp"
 	"strings"
 
+	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/log"
 )
 
 var (
 	// This is golang type identifier regex.
 	nameValidator = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	// Set of Chasm request methods for interceptors to detect a Chasm vs. non-Chasm call
+	ChasmRequestMethods = map[string]struct{}{
+		activitypb.ActivityService_StartActivityExecution_FullMethodName: {},
+	}
 )
 
 type (

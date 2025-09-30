@@ -261,6 +261,11 @@ func (g *generator) generateProtoMocks(ctx context.Context) error {
 			return nil
 		}
 
+		// Don't generate mocks for CHASM services, generation is broken and not required.
+		if strings.HasPrefix(path, "api.new/temporal/server/chasm") {
+			return nil
+		}
+
 		if strings.HasSuffix(path, "service.pb.go") || strings.HasSuffix(path, "service_grpc.pb.go") {
 			// Convert service/ to servicemock/ and .go to .mock.go
 			dst := strings.ReplaceAll(path, "service/", "servicemock/")
