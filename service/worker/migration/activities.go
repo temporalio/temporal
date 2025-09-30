@@ -401,7 +401,7 @@ func (a *activities) generateWorkflowReplicationTask(
 	// in such situation.
 	count := min(stateTransitionCount, historyLength)
 	if a.enableHistoryRateLimiter() {
-		count = historyLength / largeHistoryLength
+		count = max(1, historyLength/largeHistoryLength)
 	}
 	for count > 0 {
 		token := min(int(count), rateLimiter.Burst())
