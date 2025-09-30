@@ -5888,12 +5888,12 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause:
 		reportedProblems = []string{
 			"category=WorkflowTaskFailed",
-			fmt.Sprintf("cause=%s", wftFailure.LastWorkflowTaskFailureCause.String()),
+			fmt.Sprintf("cause=WorkflowTaskFailedCause%s", wftFailure.LastWorkflowTaskFailureCause.String()),
 		}
 	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType:
 		reportedProblems = []string{
 			"category=WorkflowTaskTimedOut",
-			fmt.Sprintf("cause=%s", wftFailure.LastWorkflowTaskTimedOutType.String()),
+			fmt.Sprintf("cause=WorkflowTaskTimedOutCause%s", wftFailure.LastWorkflowTaskTimedOutType.String()),
 		}
 	}
 
