@@ -292,31 +292,31 @@ def create_github_actions_summary(
     summary_lines.append("")
     
     # Add detailed tables for each category
-    if crash_count > 0 and os.path.exists("crash.txt"):
+    if crash_count > 0 and os.path.exists("out/crash.txt"):
         summary_lines.append("### 💥 Crashes")
         summary_lines.append("")
-        with open("crash.txt", "r") as f:
+        with open("out/crash.txt", "r") as f:
             summary_lines.append(f.read())
         summary_lines.append("")
     
-    if timeout_count > 0 and os.path.exists("timeout.txt"):
+    if timeout_count > 0 and os.path.exists("out/timeout.txt"):
         summary_lines.append("### ⏰ Timeouts")
         summary_lines.append("")
-        with open("timeout.txt", "r") as f:
+        with open("out/timeout.txt", "r") as f:
             summary_lines.append(f.read())
         summary_lines.append("")
     
-    if flaky_count > 0 and os.path.exists("flaky.txt"):
+    if flaky_count > 0 and os.path.exists("out/flaky.txt"):
         summary_lines.append("### 🔄 Flaky Tests")
         summary_lines.append("")
-        with open("flaky.txt", "r") as f:
+        with open("out/flaky.txt", "r") as f:
             summary_lines.append(f.read())
         summary_lines.append("")
     
-    if retry_count > 0 and os.path.exists("retry.txt"):
+    if retry_count > 0 and os.path.exists("out/retry.txt"):
         summary_lines.append("### 🔁 Retry Failures")
         summary_lines.append("")
-        with open("retry.txt", "r") as f:
+        with open("out/retry.txt", "r") as f:
             summary_lines.append(f.read())
         summary_lines.append("")
     
@@ -345,10 +345,13 @@ def process_json_file(input_filename: str):
         # Load the file content as JSON
         data = json.load(file)
 
-    process_flaky(data, "flaky.txt")
-    process_tests(data, "(timeout)", "timeout.txt")
-    process_tests(data, "(retry 2)", "retry.txt")
-    process_crash(data, "(crash)", "crash.txt")
+    # Create output directory if it doesn't exist
+    os.makedirs("out", exist_ok=True)
+
+    process_flaky(data, "out/flaky.txt")
+    process_tests(data, "(timeout)", "out/timeout.txt")
+    process_tests(data, "(retry 2)", "out/retry.txt")
+    process_crash(data, "(crash)", "out/crash.txt")
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -381,10 +384,10 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
 def get_failure_counts() -> tuple[int, int, int, int]:
     """Count failures from generated report files."""
-    crash_count = count_failures_in_file("crash.txt")
-    flaky_count = count_failures_in_file("flaky.txt")
-    retry_count = count_failures_in_file("retry.txt")
-    timeout_count = count_failures_in_file("timeout.txt")
+    crash_count = count_failures_in_file("out/crash.txt")
+    flaky_count = count_failures_in_file("out/flaky.txt")
+    retry_count = count_failures_in_file("out/retry.txt")
+    timeout_count = count_failures_in_file("out/timeout.txt")
     
     print(f"📊 Failure counts - Crashes: {crash_count}, Flaky: {flaky_count}, Retry: {retry_count}, Timeout: {timeout_count}")
     
@@ -419,7 +422,7 @@ def send_success_slack_notification(args, crash_count: int, flaky_count: int, re
         sys.exit(1)
 
     # Read flaky content
-    flaky_content = read_flaky_content("flaky_slack.txt")
+    flaky_content = read_flaky_content("out/flaky_slack.txt")
 
     message = create_success_message(
         crash_count,

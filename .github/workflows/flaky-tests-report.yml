@@ -52,29 +52,26 @@ jobs:
         run: |
           set -euo pipefail
           
-          # Clean up any existing files
-          rm -rf out.json timeout.txt retry.txt flaky.txt crash.txt
+          # Create output directory
+          mkdir -p tools/flakes/out
           
           tringa --json --since-days 7 repo sql \
             'select classname, name, count(*) as failure_count, max(artifact) as artifact from test where passed = false and skipped = false group by classname, name order by failure_count desc' \
             --branch main \
             --workflow-id 80591745 \
-            https://github.com/temporalio/temporal > out.json
+            https://github.com/temporalio/temporal > tools/flakes/out/out.json
           
           echo "✅ Tringa command completed"
-          echo "📊 Output file size: $(wc -c < out.json) bytes"
+          echo "📊 Output file size: $(wc -c < tools/flakes/out/out.json) bytes"
           echo "📄 Full output file:"
-          cat out.json
+          cat tools/flakes/out/out.json
 
       - name: Run Python script to process flaky tests
         id: process-flaky-tests
         run: |
-          echo "Starting Python script processing..."
-          echo "Current directory: $(pwd)"
-          
-          echo "Running: cd tools/flakes && uv run main.py --file ../../out.json --github-summary --slack-webhook ${{ secrets.SLACK_WEBHOOK }} --run-id ${{ github.run_id }}"
+          set -x
           cd tools/flakes && uv run main.py \
-            --file ../../out.json \
+            --file out/out.json \
             --github-summary \
             --slack-webhook "${{ secrets.SLACK_WEBHOOK }}" \
             --run-id "${{ github.run_id }}" \
@@ -86,11 +83,5 @@ jobs:
         if: steps.process-flaky-tests.outcome == 'success'
         with:
           name: flaky-tests-reports-${{ github.run_number }}
-          path: |
-            out.json
-            tools/flakes/crash.txt
-            tools/flakes/flaky.txt
-            tools/flakes/flaky_slack.txt
-            tools/flakes/retry.txt
-            tools/flakes/timeout.txt
+          path: tools/flakes/out/*
           retention-days: 30
