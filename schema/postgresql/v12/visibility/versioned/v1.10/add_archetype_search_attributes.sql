@@ -15,7 +15,7 @@ ALTER TABLE executions_visibility
   ADD COLUMN TemporalText01         TSVECTOR        GENERATED ALWAYS AS ((search_attributes->>'TemporalText01')::tsvector)      STORED,
   ADD COLUMN TemporalText02         TSVECTOR        GENERATED ALWAYS AS ((search_attributes->>'TemporalText02')::tsvector)      STORED,
   ADD COLUMN TemporalKeywordList01  JSONB           GENERATED ALWAYS AS (search_attributes->'TemporalKeywordList01')            STORED,
-  ADD COLUMN TemporalKeywordList02  JSONB           GENERATED ALWAYS AS (search_attributes->'TemporalKeywordList02')            STORED,
+  ADD COLUMN TemporalKeywordList02  JSONB           GENERATED ALWAYS AS (search_attributes->'TemporalKeywordList02')            STORED;
 
 -- Indexes for the pre-allocated Archetype search attributes
 CREATE INDEX by_temporal_bool_01          ON executions_visibility (namespace_id, TemporalBool01, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
