@@ -1,8 +1,0 @@
-{
-  "CurrVersion": "1.10",
-  "MinCompatibleVersion": "0.1",
-  "Description": "add archetype search attributes table and indices",
-  "SchemaUpdateCqlFiles": [
-    "add_archetype_search_attributes.sql"
-  ]
-}
