@@ -51,7 +51,9 @@ func (s *WFTFailureReportedProblemsTestSuite) simpleActivity() (string, error) {
 // to clear the sticky task queue and transition to a normal task queue for subsequent workflow tasks.
 func (s *WFTFailureReportedProblemsTestSuite) workflowWithActivity(ctx workflow.Context) (string, error) {
 	var ret string
-	err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{}), s.simpleActivity).Get(ctx, &ret)
+	err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 1 * time.Second,
+	}), s.simpleActivity).Get(ctx, &ret)
 	if err != nil {
 		return "", err
 	}
@@ -124,6 +126,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 	s.shouldFail.Store(true)
 
 	s.Worker().RegisterWorkflow(s.workflowWithActivity)
+	s.Worker().RegisterActivity(s.simpleActivity)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
