@@ -118,12 +118,10 @@
         "type": "date_nanos"
       },
       "TemporalDouble01": {
-        "type": "scaled_float",
-        "scaling_factor": 10000
+        "type": "double"
       },
       "TemporalDouble02": {
-        "type": "scaled_float",
-        "scaling_factor": 10000
+        "type": "double"
       },
       "TemporalInt01": {
         "type": "int"
