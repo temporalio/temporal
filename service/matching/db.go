@@ -282,8 +282,10 @@ func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue subqueueIndex, new
 	dbQueue := db.subqueues[subqueue]
 	if newAckLevel < dbQueue.AckLevel {
 		softassert.Fail(db.logger,
-			fmt.Sprintf("ack level in subqueue %d should not move backwards (from %v to %v)",
-				subqueue, dbQueue.AckLevel, newAckLevel))
+			"ack level in subqueue should not move backwards",
+			tag.NewInt("subqueue-id", int(subqueue)),
+			tag.NewAnyTag("cur-ack-level", dbQueue.AckLevel),
+			tag.NewAnyTag("new-ack-level", newAckLevel))
 	}
 	if dbQueue.AckLevel != newAckLevel {
 		db.lastChange = time.Now()
@@ -311,8 +313,10 @@ func (db *taskQueueDB) updateFairAckLevel(subqueue subqueueIndex, newAckLevel fa
 	dbQueue := db.subqueues[subqueue]
 	if prev := fairLevelFromProto(dbQueue.FairAckLevel); newAckLevel.less(prev) {
 		softassert.Fail(db.logger,
-			fmt.Sprintf("ack level in subqueue %d should not move backwards (from %v to %v)",
-				subqueue, prev, newAckLevel))
+			"ack level in subqueue should not move backwards",
+			tag.NewInt("subqueue-id", int(subqueue)),
+			tag.NewAnyTag("cur-ack-level", prev),
+			tag.NewAnyTag("new-ack-level", newAckLevel))
 	}
 	dbQueue.FairAckLevel = newAckLevel.toProto()
 
@@ -765,4 +769,16 @@ func (db *taskQueueDB) cloneSubqueues() []persistencespb.SubqueueInfo {
 		proto.Merge(&infos[i], &db.subqueues[i].SubqueueInfo)
 	}
 	return infos
+}
+
+func (db *taskQueueDB) emitZeroBacklogGauges() {
+	if !db.config.BreakdownMetricsByTaskQueue() ||
+		!db.config.BreakdownMetricsByPartition() ||
+		(db.queue.IsVersioned() && !db.config.BreakdownMetricsByBuildID()) {
+		return
+	}
+
+	metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(0)
+	metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
+	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(0)
 }

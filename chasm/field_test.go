@@ -270,12 +270,22 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	s.NoError(err)
 	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
 
+	// For a new transaction, get the components from the tree again,
+	// otherwise those nodes will not be marked as dirty.
+
+	ctx2 := NewMutableContext(context.Background(), rootNode)
+	rootComponentInterface, err := rootNode.Component(ctx2, ComponentRef{})
+	s.NoError(err)
+
+	rootComponent = rootComponentInterface.(*TestComponent)
+	sc1, err = rootComponent.SubComponent1.Get(ctx2)
+	s.NoError(err)
+
 	// Now, add a new component and deferred pointer for it.
 	newComponent := &TestSubComponent2{
 		SubComponent2Data: &protoMessageType{CreateRequestId: "new-component"},
 	}
 
-	ctx2 := NewMutableContext(context.Background(), rootNode)
 	sc1.SubComponent2Pointer = ComponentPointerTo(ctx2, newComponent)
 
 	// Now add the component to the tree so it can be resolved during CloseTransaction.

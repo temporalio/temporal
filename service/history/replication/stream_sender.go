@@ -611,11 +611,11 @@ Loop:
 			return nil
 		}
 
-		retryPolicy := backoff.NewExponentialRetryPolicy(1 * time.Second).
-			WithBackoffCoefficient(1.2).
-			WithMaximumInterval(3 * time.Second).
-			WithMaximumAttempts(80).
-			WithExpirationInterval(3 * time.Minute)
+		retryPolicy := backoff.NewExponentialRetryPolicy(s.config.ReplicationStreamSenderErrorRetryWait()).
+			WithBackoffCoefficient(s.config.ReplicationStreamSenderErrorRetryBackoffCoefficient()).
+			WithMaximumInterval(s.config.ReplicationStreamSenderErrorRetryMaxInterval()).
+			WithMaximumAttempts(s.config.ReplicationStreamSenderErrorRetryMaxAttempts()).
+			WithExpirationInterval(s.config.ReplicationStreamSenderErrorRetryExpiration())
 
 		err = backoff.ThrottleRetry(operation, retryPolicy, isRetryableError)
 		metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(

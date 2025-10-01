@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -205,14 +206,19 @@ func (s *nodeSuite) TestSerializeNode_ClearComponentData() {
 func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	node := s.testComponentTree()
 
-	node.value.(*TestComponent).SubData1 = NewEmptyField[*protoMessageType]()
+	mutableContext := NewMutableContext(context.Background(), node)
+	component, err := node.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	testComponent.SubData1 = NewEmptyField[*protoMessageType]()
 
 	sd1Node := node.children["SubData1"]
 	s.NotNil(sd1Node)
 
-	needsPointerResolution, err := node.syncSubComponents()
+	err = node.syncSubComponents()
 	s.NoError(err)
-	s.False(needsPointerResolution)
+	s.False(node.needsPointerResolution)
 	s.Len(node.mutation.DeletedNodes, 1)
 
 	sd1Node = node.children["SubData1"]
@@ -281,8 +287,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			initComponent: func() *TestComponent {
 				return &TestComponent{
 					SubComponents: Map[string, *TestSubComponent1]{
-						"SubComponent1": NewComponentField[*TestSubComponent1](nil, sc1),
-						"SubComponent2": NewComponentField[*TestSubComponent1](nil, sc2),
+						"SubComponent1": NewComponentField(nil, sc1),
+						"SubComponent2": NewComponentField(nil, sc2),
 					},
 				}
 			},
@@ -293,8 +299,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			initComponent: func() *TestComponent {
 				return &TestComponent{
 					PendingActivities: Map[int, *TestSubComponent1]{
-						1: NewComponentField[*TestSubComponent1](nil, sc1),
-						2: NewComponentField[*TestSubComponent1](nil, sc2),
+						1: NewComponentField(nil, sc1),
+						2: NewComponentField(nil, sc2),
 					},
 				}
 			},
@@ -313,7 +319,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 
 			rootComponent := tc.initComponent()
 			rootNode.value = rootComponent
-			rootNode.valueState = valueStateNeedSerialize
+			rootNode.valueState = valueStateNeedSyncStructure
 
 			mutations, err := rootNode.CloseTransaction()
 			s.NoError(err)
@@ -375,7 +381,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 
 			rootComponent := rootNode.value.(*TestComponent)
 
-			rootNode.valueState = valueStateNeedSerialize
+			rootNode.valueState = valueStateNeedSyncStructure
 			switch tc.mapField {
 			case "SubComponents":
 				rootComponent.SubComponents = nil
@@ -399,7 +405,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			rootComponent := rootNode.value.(*TestComponent)
 
 			// Delete collection item 1.
-			rootNode.valueState = valueStateNeedSerialize
+			rootNode.valueState = valueStateNeedSyncStructure
 			switch tc.mapField {
 			case "SubComponents":
 				delete(rootComponent.SubComponents, "SubComponent1")
@@ -423,7 +429,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			rootComponent := rootNode.value.(*TestComponent)
 
 			// Delete both collection items.
-			rootNode.valueState = valueStateNeedSerialize
+			rootNode.valueState = valueStateNeedSyncStructure
 			switch tc.mapField {
 			case "SubComponents":
 				delete(rootComponent.SubComponents, "SubComponent1")
@@ -462,7 +468,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		SubComponent1Data: &protoMessageType{
 			RunId: tv.WithWorkflowIDNumber(1).WorkflowID(),
 		},
-		SubComponent11: NewComponentField[*TestSubComponent11](nil, sc11),
+		SubComponent11: NewComponentField(nil, sc11),
 	}
 
 	s.Run("Sync and serialize component with pointer", func() {
@@ -470,16 +476,15 @@ func (s *nodeSuite) TestPointerAttributes() {
 		rootNode, err := s.newTestTree(nilSerializedNodes)
 		s.NoError(err)
 
-		rootComponent := &TestComponent{
-			SubComponent1:                NewComponentField[*TestSubComponent1](nil, sc1),
-			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
-		}
-
-		rootNode.value = rootComponent
-		rootNode.valueState = valueStateNeedSerialize
-
 		ctx := NewMutableContext(context.Background(), rootNode)
-		rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, sc11)
+
+		rootComponent := &TestComponent{
+			SubComponent1:                NewComponentField(nil, sc1),
+			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
+			SubComponent11Pointer:        ComponentPointerTo(ctx, sc11),
+		}
+		rootNode.SetRootComponent(rootComponent)
+
 		s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.ft)
 
 		mutations, err := rootNode.CloseTransaction()
@@ -499,18 +504,18 @@ func (s *nodeSuite) TestPointerAttributes() {
 		rootNode, err := s.newTestTree(persistedNodes)
 		s.NoError(err)
 
-		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+		mutableContext := NewMutableContext(context.Background(), rootNode)
+		component, err := rootNode.Component(mutableContext, ComponentRef{})
 		s.NoError(err)
-
-		rootComponent := rootNode.value.(*TestComponent)
+		testComponent := component.(*TestComponent)
 
 		chasmContext := NewMutableContext(context.Background(), rootNode)
-		sc11Des, err := rootComponent.SubComponent11Pointer.Get(chasmContext)
+		sc11Des, err := testComponent.SubComponent11Pointer.Get(chasmContext)
 		s.NoError(err)
 		s.NotNil(sc11Des)
 		s.Equal(sc11.SubComponent11Data.GetRunId(), sc11Des.SubComponent11Data.GetRunId())
 
-		ifacePtr, err := rootComponent.SubComponentInterfacePointer.Get(chasmContext)
+		ifacePtr, err := testComponent.SubComponentInterfacePointer.Get(chasmContext)
 		s.NoError(err)
 		s.NotNil(ifacePtr)
 
@@ -523,16 +528,16 @@ func (s *nodeSuite) TestPointerAttributes() {
 		rootNode, err := s.newTestTree(persistedNodes)
 		s.NoError(err)
 
-		err = rootNode.deserialize(reflect.TypeFor[*TestComponent]())
+		mutableContext := NewMutableContext(context.Background(), rootNode)
+		component, err := rootNode.Component(mutableContext, ComponentRef{})
 		s.NoError(err)
+		testComponent := component.(*TestComponent)
 
-		rootComponent := rootNode.value.(*TestComponent)
-
-		rootComponent.SubComponent11Pointer = NewEmptyField[*TestSubComponent11]()
+		testComponent.SubComponent11Pointer = NewEmptyField[*TestSubComponent11]()
 
 		mutation, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.Empty(mutation.UpdatedNodes, "no nodes should be updated")
+		s.Len(mutation.UpdatedNodes, 1, "root should be updated")
 		s.Len(mutation.DeletedNodes, 1, "SubComponent11Pointer must be deleted")
 	})
 }
@@ -540,15 +545,17 @@ func (s *nodeSuite) TestPointerAttributes() {
 func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	node := s.testComponentTree()
 
-	component := node.value.(*TestComponent)
+	mutableContext := NewMutableContext(context.Background(), node)
+	component, err := node.ComponentByPath(mutableContext, []string{"SubComponent1"})
+	s.NoError(err)
 
-	// Set very leaf node to empty.
-	component.SubComponent1.Internal.v.(*TestSubComponent1).SubComponent11 = NewEmptyField[*TestSubComponent11]()
+	sc1 := component.(*TestSubComponent1)
+	sc1.SubComponent11 = NewEmptyField[*TestSubComponent11]()
 	s.NotNil(node.children["SubComponent1"].children["SubComponent11"])
 
-	needsPointerResolution, err := node.syncSubComponents()
+	err = node.syncSubComponents()
 	s.NoError(err)
-	s.False(needsPointerResolution)
+	s.False(node.needsPointerResolution)
 
 	s.Len(node.mutation.DeletedNodes, 1)
 	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
@@ -558,15 +565,18 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 func (s *nodeSuite) TestSyncSubComponents_DeleteMiddleNode() {
 	node := s.testComponentTree()
 
-	component := node.value.(*TestComponent)
+	mutableContext := NewMutableContext(context.Background(), node)
+	component, err := node.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
 
 	// Set subcomponent at middle node to nil.
-	component.SubComponent1 = NewEmptyField[*TestSubComponent1]()
+	testComponent.SubComponent1 = NewEmptyField[*TestSubComponent1]()
 	s.NotNil(node.children["SubComponent1"])
 
-	needsPointerResolution, err := node.syncSubComponents()
+	err = node.syncSubComponents()
 	s.NoError(err)
-	s.False(needsPointerResolution)
+	s.False(node.needsPointerResolution)
 
 	s.Len(node.mutation.DeletedNodes, 3)
 	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
@@ -1543,7 +1553,7 @@ func (s *nodeSuite) TestGetComponent() {
 				componentPath: []string{}, // root
 			},
 			expectedErr:     nil,
-			valueState:      valueStateNeedSerialize,
+			valueState:      valueStateNeedSyncStructure,
 			assertComponent: assertTestComponent,
 		},
 	}
@@ -2518,19 +2528,77 @@ func (s *nodeSuite) testComponentTree() *Node {
 
 	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{componentPath: rootPath})
 	s.NoError(err)
-	s.Equal(valueStateNeedSerialize, node.valueState)
+	s.Equal(valueStateNeedSyncStructure, node.valueState)
 	// Create subcomponents by assigning fields to TestComponent instance.
 	setTestComponentFields(tc.(*TestComponent))
 
 	// Sync tree with subcomponents of TestComponent.
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(4) // for InitialVersionedTransition of children.
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(4)
-	needsPointerResolution, err := node.syncSubComponents()
-	s.False(needsPointerResolution)
+	err = node.syncSubComponents()
+	s.False(node.needsPointerResolution)
 	s.NoError(err)
 	s.Empty(node.mutation.DeletedNodes)
 
 	return node // maybe tc too
+}
+
+func (s *nodeSuite) TestExecuteImmediatePureTask() {
+	tv := testvars.New(s.T())
+	root := s.testComponentTree()
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
+
+	mutations, err := root.CloseTransaction()
+	s.NoError(err)
+
+	// Start a clean transaction.
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	taskAttributes := TaskAttributes{ScheduledTime: TaskScheduledTimeImmediate}
+	mutableContext.AddTask(
+		testComponent,
+		taskAttributes,
+		&TestPureTask{
+			Payload: &commonpb.Payload{Data: []byte("root-task-payload")},
+		},
+	)
+
+	sc1, err := testComponent.SubComponent1.Get(mutableContext)
+	s.NoError(err)
+
+	mutableContext.AddTask(
+		sc1,
+		taskAttributes,
+		&TestPureTask{
+			Payload: &commonpb.Payload{Data: []byte("sc1-task-payload")},
+		},
+	)
+
+	// One valid task, one invalid task
+	s.testLibrary.mockPureTaskValidator.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(false, nil).Times(1)
+	s.testLibrary.mockPureTaskValidator.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(true, nil).Times(1)
+	s.testLibrary.mockPureTaskExecutor.EXPECT().
+		Execute(
+			gomock.AssignableToTypeOf(&MutableContextImpl{}),
+			gomock.Any(),
+			gomock.Eq(taskAttributes),
+			gomock.Any(),
+		).Return(nil).Times(1)
+
+	mutations, err = root.CloseTransaction()
+	s.NoError(err)
+	s.Len(mutations.UpdatedNodes, 2, "root and subcomponent1 should be updated")
+	s.Empty(mutations.DeletedNodes)
 }
 
 func (s *nodeSuite) TestEachPureTask() {
@@ -2567,22 +2635,22 @@ func (s *nodeSuite) TestEachPureTask() {
 				},
 			},
 		},
-		"child": {
+		"SubComponent1": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						Type: "TestLibrary.test_component",
+						Type: "TestLibrary.test_sub_component_1",
 						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
 							{
 								Type: "TestLibrary.test_pure_task",
 								// Not expired yet.
 								ScheduledTime:             timestamppb.New(now.Add(time.Hour)),
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 1,
+								VersionedTransitionOffset: 2,
 								PhysicalTaskStatus:        physicalTaskStatusCreated,
 								Data: mustEncode(&commonpb.Payload{
-									Data: []byte("some-random-data-child"),
+									Data: []byte("some-random-data-sc1"),
 								}),
 							},
 						},
@@ -2590,22 +2658,22 @@ func (s *nodeSuite) TestEachPureTask() {
 				},
 			},
 		},
-		"child/grandchild1": {
+		"SubComponent1/SubComponent11": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						Type: "TestLibrary.test_component",
+						Type: "TestLibrary.test_sub_component_11",
 						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
 							{
 								Type: "TestLibrary.test_pure_task",
 								// Expired, and physical task not created
 								ScheduledTime:             timestamppb.New(now),
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 2,
+								VersionedTransitionOffset: 3,
 								PhysicalTaskStatus:        physicalTaskStatusNone,
 								Data: mustEncode(&commonpb.Payload{
-									Data: []byte("some-random-data-grandchild-1"),
+									Data: []byte("some-random-data-sc11-1"),
 								}),
 							},
 							{
@@ -2613,10 +2681,34 @@ func (s *nodeSuite) TestEachPureTask() {
 								// Expired
 								ScheduledTime:             timestamppb.New(now),
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 1,
+								VersionedTransitionOffset: 4,
 								PhysicalTaskStatus:        physicalTaskStatusCreated,
 								Data: mustEncode(&commonpb.Payload{
-									Data: []byte("some-random-data-grandchild-2"),
+									Data: []byte("some-random-data-sc11-2"),
+								}),
+							},
+						},
+					},
+				},
+			},
+		},
+		"SubComponent2": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_sub_component_2",
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								Type: "TestLibrary.test_pure_task",
+								// Expired. However, this task won't be executed because the node is deleted
+								// when processing the pure task from the root component.
+								ScheduledTime:             timestamppb.New(now),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 5,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+								Data: mustEncode(&commonpb.Payload{
+									Data: []byte("some-random-data-sc2"),
 								}),
 							},
 						},
@@ -2631,15 +2723,28 @@ func (s *nodeSuite) TestEachPureTask() {
 	s.NotNil(root)
 
 	actualTaskCount := 0
-	err = root.EachPureTask(now.Add(time.Minute), func(executor NodePureTask, taskAttributes TaskAttributes, task any) error {
+	err = root.EachPureTask(now.Add(time.Minute), func(executor NodePureTask, taskAttributes TaskAttributes, task any) (bool, error) {
 		s.NotNil(executor)
 		s.NotNil(taskAttributes)
 
-		_, ok := task.(*TestPureTask)
+		testPureTask, ok := task.(*TestPureTask)
 		s.True(ok)
 
 		actualTaskCount += 1
-		return nil
+
+		if slices.Equal(
+			testPureTask.Payload.Data,
+			[]byte("some-random-data-root"),
+		) {
+			mutableContext := NewMutableContext(context.Background(), root)
+			rootComponent, err := root.Component(mutableContext, ComponentRef{})
+			s.NoError(err)
+
+			// delete
+			rootComponent.(*TestComponent).SubComponent2 = Field[*TestSubComponent2]{}
+		}
+
+		return true, nil
 	})
 	s.NoError(err)
 	s.Equal(3, actualTaskCount)
@@ -2690,25 +2795,27 @@ func (s *nodeSuite) TestExecutePureTask() {
 	// Succeed task execution and validation (happy case).
 	expectExecute(nil)
 	expectValidate(true, nil)
-	err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
+	executed, err := root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.NoError(err)
+	s.True(executed)
 
 	expectedErr := errors.New("dummy")
 
 	// Succeed validation, fail execution.
 	expectExecute(expectedErr)
 	expectValidate(true, nil)
-	err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
+	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
 
 	// Fail task validation (no execution occurs).
 	expectValidate(false, nil)
-	err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
+	executed, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.NoError(err)
+	s.False(executed)
 
 	// Error during task validation (no execution occurs).
 	expectValidate(false, expectedErr)
-	err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
+	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
 }
 
