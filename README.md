@@ -73,6 +73,12 @@ Helpful links to get started:
 - [learn about the Temporal Server architecture](./docs/architecture/README.md)
 - [learn how to build and run the Temporal Server locally](./CONTRIBUTING.md)
 - [learn about Temporal Server testing tools and best practices](./docs/development/testing.md)
+- [learn about dynamic configuration options](./config/dynamicconfig/README.md)
+- [learn about database schema management for Cassandra](./schema/cassandra/README.md)
+- [learn about database schema management for SQL](./tools/sql/README.md)
+- [learn about testing with temporaltest package](./temporaltest/README.md)
+- [learn about implementing custom archiver plugins](./common/archiver/README.md)
+- [learn about the Worker service and replication](./service/worker/README.md)
 - join the Temporal community [forum](https://community.temporal.io) and [Slack](https://t.mp/slack)
 
 ## License

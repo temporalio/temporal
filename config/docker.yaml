@@ -1,86 +1,271 @@
+# =============================================================================
+# Temporal Server Static Configuration - Docker/Container Template
+# =============================================================================
+#
+# This file contains the STATIC server configuration for Temporal.
+# Changes to this file REQUIRE A SERVER RESTART to take effect.
+#
+# This file uses Go template syntax (enable-template flag on line 1) to allow
+# environment variable substitution at server startup.
+#
+# For runtime-tunable settings that DON'T require restart, see:
+# config/dynamicconfig/docker.yaml (loaded via dynamicConfigClient section below)
+#
+# Configuration Reference:
+# - Static config struct: common/config/config.go
+# - All settings here require restart
+# - Use dynamic config for runtime-tunable settings
+# - Self-hosted deployment guide: https://docs.temporal.io/self-hosted-guide
+# =============================================================================
+
 # enable-template
 
+# =============================================================================
+# LOGGING
+# Controls log output format and verbosity
+# REQUIRES RESTART
+# =============================================================================
 log:
+    # Output logs to stdout (true) or files (false)
+    # Default: true (recommended for containers)
     stdout: true
+
+    # Log level: debug, info, warn, error
+    # Environment: LOG_LEVEL
+    # Default: info
+    # debug = verbose logging, error = minimal logging
     level: {{ default "info" (env "LOG_LEVEL") }}
 
+# =============================================================================
+# PERSISTENCE
+# Database configuration for workflow execution and visibility data
+# REQUIRES RESTART
+# =============================================================================
 persistence:
+    # Number of history shards for horizontal scaling
+    # Environment: NUM_HISTORY_SHARDS
+    # Default: 4
+    # IMPORTANT: Cannot be changed after initial deployment without migration
+    # Higher values = better throughput but more resources
+    # Recommended: 4-16 for most deployments, up to 512 for very large scale
     numHistoryShards: {{ default "4" (env "NUM_HISTORY_SHARDS") }}
 
+    # Name of the datastore for workflow execution data
+    # References a key in the datastores map below
     defaultStore: default
+
+    # Name of the datastore for visibility data (workflow search/list)
+    # References a key in the datastores map below
+    # Recommended: Use Elasticsearch for production visibility workloads
     visibilityStore: visibility
 
+    # Database type selection
+    # Environment: DB
+    # Required: must be one of: cassandra, mysql8, postgres12, postgres12_pgx
     {{- $db := env "DB" -}}
     {{- if not (eq $db "cassandra" "mysql8" "postgres12" "postgres12_pgx") -}}
       {{- fail "Invalid DB value. Supported values are cassandra, mysql8, postgres12, postgres12_pgx" -}}
     {{- end }}
 
+    # Datastore definitions
+    # Each datastore is referenced by name from defaultStore/visibilityStore above
     datastores:
+        # ---------------------------------------------------------------------
+        # DEFAULT STORE - Workflow execution data (histories, activities, timers)
+        # ---------------------------------------------------------------------
         default:
         {{- if eq $db "cassandra" }}
+            # Cassandra configuration
             cassandra:
+                # Cassandra seed nodes (comma-separated)
+                # Environment: CASSANDRA_SEEDS
+                # Example: "cassandra1.example.com,cassandra2.example.com"
                 hosts: {{ env "CASSANDRA_SEEDS" }}
+
+                # Keyspace name for Temporal data
+                # Environment: KEYSPACE
+                # Default: temporal
+                # Must exist before starting Temporal (create with schema tools)
                 keyspace: {{ default "temporal" (env "KEYSPACE") | quote }}
+
+                # Authentication credentials
+                # Environment: CASSANDRA_USER, CASSANDRA_PASSWORD
                 user: {{ env "CASSANDRA_USER" | quote }}
                 password: {{ env "CASSANDRA_PASSWORD" | quote }}
+
+                # Allowed authentication mechanisms
+                # Environment: CASSANDRA_ALLOWED_AUTHENTICATORS (comma-separated)
+                # Optional: Leave empty to use Cassandra defaults
                 {{- if env "CASSANDRA_ALLOWED_AUTHENTICATORS" }}
                 allowedAuthenticators: {{ range splitList "," (env "CASSANDRA_ALLOWED_AUTHENTICATORS") }}
                     - {{ trim . }}
                   {{- end }}
                 {{- end }}
+
+                # Cassandra native transport port
+                # Environment: CASSANDRA_PORT
+                # Default: 9042
                 port: {{ default "9042" (env "CASSANDRA_PORT") }}
+
+                # Maximum concurrent connections to Cassandra
+                # Environment: CASSANDRA_MAX_CONNS
+                # Default: 20
+                # Tune based on expected load and Cassandra capacity
                 maxConns: {{ default "20" (env "CASSANDRA_MAX_CONNS") }}
+
+                # TLS configuration for Cassandra connection
                 tls:
+                    # Enable TLS encryption
+                    # Environment: CASSANDRA_TLS_ENABLED
+                    # Default: false
+                    # Production: set to true for security
                     enabled: {{ default "false" (env "CASSANDRA_TLS_ENABLED") }}
+
+                    # Certificate authority file (PEM format)
+                    # Environment: CASSANDRA_CA
                     caFile: {{ env "CASSANDRA_CA" }}
+
+                    # Client certificate file (PEM format)
+                    # Environment: CASSANDRA_CERT
                     certFile: {{ env "CASSANDRA_CERT" }}
+
+                    # Client private key file (PEM format)
+                    # Environment: CASSANDRA_CERT_KEY
                     keyFile: {{ env "CASSANDRA_CERT_KEY" }}
+
+                    # Alternative: Base64-encoded certificate data
+                    # Environment: CASSANDRA_CA_DATA, CASSANDRA_CERT_DATA, CASSANDRA_CERT_KEY_DATA
+                    # Use instead of *File options for inline certificate data
                     caData: {{ env "CASSANDRA_CA_DATA" }}
                     certData: {{ env "CASSANDRA_CERT_DATA" }}
                     keyData: {{ env "CASSANDRA_CERT_KEY_DATA" }}
+
+                    # Verify Cassandra server hostname against certificate
+                    # Environment: CASSANDRA_HOST_VERIFICATION
+                    # Default: false
+                    # Production: set to true for security
                     enableHostVerification: {{ default "false" (env "CASSANDRA_HOST_VERIFICATION") }}
+
+                    # Expected server name in certificate
+                    # Environment: CASSANDRA_HOST_NAME
+                    # Required if enableHostVerification is true
                     serverName: {{ env "CASSANDRA_HOST_NAME" }}
+
+                # Address translation for NAT/containerized environments
+                # Environment: CASSANDRA_ADDRESS_TRANSLATOR
+                # Optional: Only needed when Cassandra reports internal IPs
                 {{- if env "CASSANDRA_ADDRESS_TRANSLATOR" }}
                 addressTranslator:
+                    # Translator implementation name
                     translator: {{ env "CASSANDRA_ADDRESS_TRANSLATOR" }}
                     {{- if env "CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS" }}
+                    # Translator-specific options
                     options:
                         advertised-hostname: {{ env "CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS" }}
                     {{- end }}
                 {{- end }}
         {{- else if eq $db "mysql8" }}
+            # MySQL 8.x configuration
             sql:
+                # SQL driver/plugin name
+                # Fixed: mysql8 (for MySQL 8.x)
                 pluginName: {{ $db }}
+
+                # Database name
+                # Environment: DBNAME
+                # Default: temporal
+                # Must exist before starting Temporal (create with schema tools)
                 databaseName: {{ default "temporal" (env "DBNAME") | quote }}
+
+                # Database connection address
+                # Environment: MYSQL_SEEDS, DB_PORT
+                # Format: host:port
+                # Example: mysql.example.com:3306
                 connectAddr: {{ env "MYSQL_SEEDS" }}:{{ default "3306" (env "DB_PORT") }}
+
+                # Connection protocol
+                # Fixed: tcp (can also be unix for socket connections)
                 connectProtocol: "tcp"
+
+                # Authentication credentials
+                # Environment: MYSQL_USER, MYSQL_PWD
                 user: {{ env "MYSQL_USER" | quote }}
                 password: {{ env "MYSQL_PWD" | quote }}
+
+                # MySQL transaction isolation compatibility mode
+                # Environment: MYSQL_TX_ISOLATION_COMPAT
+                # Optional: Set for older MySQL versions that use tx_isolation
                 {{- if env "MYSQL_TX_ISOLATION_COMPAT" }}
                 connectAttributes:
                     tx_isolation: "'READ-COMMITTED'"
                 {{- end }}
+
+                # Connection pool settings
+                # Environment: SQL_MAX_CONNS, SQL_MAX_IDLE_CONNS, SQL_MAX_CONN_TIME
+                # Defaults: 20 connections, 20 idle, 1h lifetime
+                # Tune based on expected load and database capacity
                 maxConns: {{ default "20" (env "SQL_MAX_CONNS") }}
                 maxIdleConns: {{ default "20" (env "SQL_MAX_IDLE_CONNS") }}
                 maxConnLifetime: {{ default "1h" (env "SQL_MAX_CONN_TIME") }}
+
+                # TLS configuration for MySQL connection
                 tls:
+                    # Enable TLS encryption
+                    # Environment: SQL_TLS_ENABLED
+                    # Default: false
+                    # Production: set to true for security
                     enabled: {{ default "false" (env "SQL_TLS_ENABLED") }}
+
+                    # Certificate files (PEM format)
+                    # Environment: SQL_CA, SQL_CERT, SQL_CERT_KEY
                     caFile: {{ env "SQL_CA" }}
                     certFile: {{ env "SQL_CERT" }}
                     keyFile: {{ env "SQL_CERT_KEY" }}
+
+                    # Verify server hostname against certificate
+                    # Environment: SQL_HOST_VERIFICATION
+                    # Default: false
+                    # Production: set to true for security
                     enableHostVerification: {{ default "false" (env "SQL_HOST_VERIFICATION") }}
+
+                    # Expected server name in certificate
+                    # Environment: SQL_HOST_NAME
                     serverName: {{ env "SQL_HOST_NAME" }}
         {{- else if eq $db "postgres12" "postgres12_pgx" }}
+            # PostgreSQL 12+ configuration
+            # postgres12 = standard driver, postgres12_pgx = pgx driver (recommended)
             sql:
+                # SQL driver/plugin name
                 pluginName: {{ $db }}
+
+                # Database name
+                # Environment: DBNAME
+                # Default: temporal
+                # Must exist before starting Temporal (create with schema tools)
                 databaseName: {{ default "temporal" (env "DBNAME") | quote }}
+
+                # Database connection address
+                # Environment: POSTGRES_SEEDS, DB_PORT
+                # Format: host:port
                 connectAddr: {{ env "POSTGRES_SEEDS" }}:{{ default "5432" (env "DB_PORT") }}
+
+                # Connection protocol
+                # Fixed: tcp
                 connectProtocol: "tcp"
+
+                # Authentication credentials
+                # Environment: POSTGRES_USER, POSTGRES_PWD
                 user: {{ env "POSTGRES_USER" | quote }}
                 password: {{ env "POSTGRES_PWD" | quote }}
+
+                # Connection pool settings
+                # Environment: SQL_MAX_CONNS, SQL_MAX_IDLE_CONNS, SQL_MAX_CONN_TIME
+                # Defaults: 20 connections, 20 idle, 1h lifetime
                 maxConns: {{ default "20" (env "SQL_MAX_CONNS") }}
                 maxIdleConns: {{ default "20" (env "SQL_MAX_IDLE_CONNS") }}
                 maxConnLifetime: {{ default "1h" (env "SQL_MAX_CONN_TIME") }}
+
+                # TLS configuration for PostgreSQL connection
                 tls:
                     enabled: {{ default "false" (env "SQL_TLS_ENABLED") }}
                     caFile: {{ env "SQL_CA" }}
@@ -90,28 +275,74 @@ persistence:
                     serverName: {{ env "SQL_HOST_NAME" }}
         {{- end }}
 
+        # ---------------------------------------------------------------------
+        # VISIBILITY STORE - Workflow search and list operations
+        # ---------------------------------------------------------------------
         visibility:
             {{- if eq (env "ENABLE_ES") "true" }}
+            # Elasticsearch configuration (RECOMMENDED for production)
+            # Provides advanced search capabilities for workflow visibility
             elasticsearch:
+                # Elasticsearch version
+                # Environment: ES_VERSION
+                # Required: Must match your Elasticsearch cluster version
+                # Supported: v6, v7, v8
                 version: {{ env "ES_VERSION" }}
+
+                # Elasticsearch connection URL
                 url:
+                    # Connection scheme
+                    # Environment: ES_SCHEME
+                    # Default: http
+                    # Production: use https with proper TLS setup
                     scheme: {{ default "http" (env "ES_SCHEME") }}
+
+                    # Elasticsearch host and port
+                    # Environment: ES_SEEDS, ES_PORT
+                    # Example: elasticsearch.example.com:9200
                     host: {{ env "ES_SEEDS" }}:{{ default "9200" (env "ES_PORT") }}
+
+                # Authentication credentials
+                # Environment: ES_USER, ES_PWD
+                # Optional: Leave empty if authentication is not required
                 username: {{ env "ES_USER" | quote }}
                 password: {{ env "ES_PWD" | quote }}
+
+                # Index configuration
                 indices:
+                    # Primary visibility index name
+                    # Environment: ES_VIS_INDEX
+                    # Default: temporal_visibility_v1_dev
+                    # Will be created if it doesn't exist
                     visibility: {{ default "temporal_visibility_v1_dev" (env "ES_VIS_INDEX") | quote }}
+
+                    # Secondary visibility index (for dual-write during migration)
+                    # Environment: ES_SEC_VIS_INDEX
+                    # Optional: Used when migrating between visibility stores
                     {{- with env "ES_SEC_VIS_INDEX" }}
                     secondary_visibility: {{ . | quote }}
                     {{- end }}
             {{- else if eq $db "mysql8" }}
+            # MySQL visibility configuration (alternative to Elasticsearch)
+            # Note: SQL visibility has limited search capabilities vs Elasticsearch
             sql:
+                # Environment variables can override defaults for visibility DB
+                # VISIBILITY_MYSQL_SEEDS overrides MYSQL_SEEDS
+                # VISIBILITY_DB_PORT overrides DB_PORT
+                # VISIBILITY_MYSQL_USER overrides MYSQL_USER
+                # VISIBILITY_MYSQL_PWD overrides MYSQL_PWD
                 {{ $visibility_seeds := coalesce (env "VISIBILITY_MYSQL_SEEDS") (env "MYSQL_SEEDS") }}
                 {{ $visibility_port := coalesce (env "VISIBILITY_DB_PORT") (env "DB_PORT") "3306" }}
                 {{ $visibility_user := coalesce (env "VISIBILITY_MYSQL_USER") (env "MYSQL_USER") }}
                 {{ $visibility_pwd := coalesce (env "VISIBILITY_MYSQL_PWD") (env "MYSQL_PWD") }}
                 pluginName: {{ $db }}
+
+                # Visibility database name
+                # Environment: VISIBILITY_DBNAME
+                # Default: temporal_visibility
+                # Should be separate from main execution database
                 databaseName: {{ default "temporal_visibility" (env "VISIBILITY_DBNAME") | quote }}
+
                 connectAddr: {{ $visibility_seeds }}:{{ $visibility_port }}
                 connectProtocol: "tcp"
                 user: {{ $visibility_user | quote }}
@@ -120,6 +351,10 @@ persistence:
                 connectAttributes:
                     tx_isolation: "'READ-COMMITTED'"
                 {{- end }}
+
+                # Connection pool settings for visibility DB
+                # Environment: SQL_VIS_MAX_CONNS, SQL_VIS_MAX_IDLE_CONNS, SQL_VIS_MAX_CONN_TIME
+                # Defaults: 10 connections (lower than main DB)
                 maxConns: {{ default "10" (env "SQL_VIS_MAX_CONNS") }}
                 maxIdleConns: {{ default "10" (env "SQL_VIS_MAX_IDLE_CONNS")  }}
                 maxConnLifetime: {{ default "1h" (env "SQL_VIS_MAX_CONN_TIME") }}
@@ -131,6 +366,7 @@ persistence:
                     enableHostVerification: {{ default "false" (env "SQL_HOST_VERIFICATION") }}
                     serverName: {{ env "SQL_HOST_NAME" }}
             {{- else if eq $db "postgres12" "postgres12_pgx" }}
+            # PostgreSQL visibility configuration (alternative to Elasticsearch)
             sql:
                 {{ $visibility_seeds := coalesce (env "VISIBILITY_POSTGRES_SEEDS") (env "POSTGRES_SEEDS") }}
                 {{ $visibility_port := coalesce (env "VISIBILITY_DB_PORT") (env "POSTGRES_PORT") "5432" }}
@@ -156,32 +392,88 @@ persistence:
               {{- fail "No visibility configured. Cassandra is no longer supported for visibility." -}}
             {{- end }}
 
+# =============================================================================
+# GLOBAL SETTINGS
+# Process-wide configuration for all services
+# REQUIRES RESTART
+# =============================================================================
 global:
+    # Cluster membership configuration (gossip protocol)
     membership:
+        # Maximum time to wait when joining the cluster ring
+        # Fixed: 30s
+        # Increase if nodes have trouble joining in slow networks
         maxJoinDuration: 30s
+
+        # IP address to advertise to other cluster members
+        # Environment: TEMPORAL_BROADCAST_ADDRESS
+        # Optional: Auto-detected if empty
+        # Set explicitly in NAT/container environments
         broadcastAddress: "{{ env "TEMPORAL_BROADCAST_ADDRESS" }}"
+
+    # Profiling endpoint (pprof) configuration
     pprof:
+        # Port for pprof HTTP server
+        # Environment: PPROF_PORT
+        # Default: 0 (disabled)
+        # Set to non-zero (e.g., 7936) to enable profiling
+        # Access via http://host:port/debug/pprof/
         port: {{ default "0" (env "PPROF_PORT") }}
+
+    # TLS configuration for inter-service and client communication
     tls:
+        # Certificate refresh interval
+        # Environment: TEMPORAL_TLS_REFRESH_INTERVAL
+        # Default: 0s (no refresh)
+        # Set to enable automatic certificate rotation (e.g., "1h")
         refreshInterval: {{ default "0s" (env "TEMPORAL_TLS_REFRESH_INTERVAL") }}
+
+        # Certificate expiration monitoring
         expirationChecks:
+            # Log warnings when certificates expire within this window
+            # Environment: TEMPORAL_TLS_EXPIRATION_CHECKS_WARNING_WINDOW
+            # Default: 0s (disabled)
+            # Recommended: 720h (30 days)
             warningWindow: {{ default "0s" (env "TEMPORAL_TLS_EXPIRATION_CHECKS_WARNING_WINDOW") }}
+
+            # Log errors when certificates expire within this window
+            # Environment: TEMPORAL_TLS_EXPIRATION_CHECKS_ERROR_WINDOW
+            # Default: 0s (disabled)
+            # Recommended: 168h (7 days)
             errorWindow: {{ default "0s" (env "TEMPORAL_TLS_EXPIRATION_CHECKS_ERROR_WINDOW") }}
+
+            # Interval between expiration checks
+            # Environment: TEMPORAL_TLS_EXPIRATION_CHECKS_CHECK_INTERVAL
+            # Default: 0s (disabled)
+            # Recommended: 1h
             checkInterval: {{ default "0s" (env "TEMPORAL_TLS_EXPIRATION_CHECKS_CHECK_INTERVAL") }}
+
+        # Internode TLS (history, matching, internal-frontend communication)
         internode:
-            # This server section configures the TLS certificate that internal temporal
-            # cluster nodes (history, matching, and internal-frontend) present to other
-            # clients within the Temporal Cluster.
+            # Server-side TLS configuration
+            # TLS certificate presented to other internal services
             server:
+                # Require client certificate authentication (mTLS)
+                # Environment: TEMPORAL_TLS_REQUIRE_CLIENT_AUTH
+                # Default: false
+                # Production: consider true for enhanced security
                 requireClientAuth: {{ default "false" (env "TEMPORAL_TLS_REQUIRE_CLIENT_AUTH") }}
 
+                # Server certificate and key (file-based)
+                # Environment: TEMPORAL_TLS_SERVER_CERT, TEMPORAL_TLS_SERVER_KEY
                 certFile: {{ env "TEMPORAL_TLS_SERVER_CERT" }}
                 keyFile: {{ env "TEMPORAL_TLS_SERVER_KEY" }}
+
+                # Client CA certificates (for verifying client certs if mTLS enabled)
+                # Environment: TEMPORAL_TLS_SERVER_CA_CERT
                 {{- with env "TEMPORAL_TLS_SERVER_CA_CERT" }}
                 clientCaFiles:
                     - {{ . }}
                 {{- end }}
 
+                # Alternative: Base64-encoded certificate data
+                # Environment: TEMPORAL_TLS_SERVER_CERT_DATA, TEMPORAL_TLS_SERVER_KEY_DATA
+                # Use instead of *File options for inline certificate data
                 certData: {{ env "TEMPORAL_TLS_SERVER_CERT_DATA" }}
                 keyData: {{ env "TEMPORAL_TLS_SERVER_KEY_DATA" }}
                 {{- with env "TEMPORAL_TLS_SERVER_CA_CERT_DATA" }}
@@ -189,12 +481,21 @@ global:
                     - {{ . }}
                 {{- end }}
 
-            # This client section is used to configure the TLS clients within
-            # the Temporal Cluster that connect to an Internode (history, matching, or
-            # internal-frontend)
+            # Client-side TLS configuration
+            # Used by internal services to connect to other internal services
             client:
+                # Expected server name in certificate
+                # Environment: TEMPORAL_TLS_INTERNODE_SERVER_NAME
+                # Required if host verification is enabled
                 serverName: {{ env "TEMPORAL_TLS_INTERNODE_SERVER_NAME" }}
+
+                # Disable hostname verification (NOT RECOMMENDED for production)
+                # Environment: TEMPORAL_TLS_INTERNODE_DISABLE_HOST_VERIFICATION
+                # Default: false
                 disableHostVerification: {{ default "false" (env "TEMPORAL_TLS_INTERNODE_DISABLE_HOST_VERIFICATION") }}
+
+                # Root CA certificates for verifying server certificates
+                # Environment: TEMPORAL_TLS_SERVER_CA_CERT
                 {{- with env "TEMPORAL_TLS_SERVER_CA_CERT" }}
                 rootCaFiles:
                     - {{ . }}
@@ -203,19 +504,31 @@ global:
                 rootCaData:
                     - {{ . }}
                 {{- end }}
+
+        # Frontend TLS (external client connections)
         frontend:
-            # This server section configures the TLS certificate that the Frontend
-            # server presents to external clients.
+            # Server-side TLS configuration
+            # TLS certificate presented to external clients (SDK, CLI, UI)
             server:
+                # Require client certificate authentication (mTLS)
+                # Environment: TEMPORAL_TLS_REQUIRE_CLIENT_AUTH
+                # Default: false
                 requireClientAuth: {{ default "false" (env "TEMPORAL_TLS_REQUIRE_CLIENT_AUTH") }}
+
+                # Frontend server certificate and key
+                # Environment: TEMPORAL_TLS_FRONTEND_CERT, TEMPORAL_TLS_FRONTEND_KEY
                 certFile: {{ env "TEMPORAL_TLS_FRONTEND_CERT" }}
                 keyFile: {{ env "TEMPORAL_TLS_FRONTEND_KEY" }}
+
+                # Client CA certificates (for verifying client certs if mTLS enabled)
+                # Environment: TEMPORAL_TLS_CLIENT1_CA_CERT, TEMPORAL_TLS_CLIENT2_CA_CERT
                 {{- if env "TEMPORAL_TLS_CLIENT1_CA_CERT" }}
                 clientCaFiles:
                     - {{ env "TEMPORAL_TLS_CLIENT1_CA_CERT" }}
                     - {{ env "TEMPORAL_TLS_CLIENT2_CA_CERT" }}
                 {{- end }}
 
+                # Alternative: Base64-encoded certificate data
                 certData: {{ env "TEMPORAL_TLS_FRONTEND_CERT_DATA" }}
                 keyData: {{ env "TEMPORAL_TLS_FRONTEND_KEY_DATA" }}
                 {{- if env "TEMPORAL_TLS_CLIENT1_CA_CERT_DATA" }}
@@ -224,11 +537,19 @@ global:
                     - {{ env "TEMPORAL_TLS_CLIENT2_CA_CERT_DATA" }}
                 {{- end }}
 
-            # This client section is used to configure the TLS clients within
-            # the Temporal Cluster (specifically the Worker role) that connect to the Frontend service
+            # Client-side TLS configuration
+            # Used by internal worker service to connect to frontend
             client:
+                # Expected server name in certificate
+                # Environment: TEMPORAL_TLS_FRONTEND_SERVER_NAME
                 serverName: {{ env "TEMPORAL_TLS_FRONTEND_SERVER_NAME" }}
+
+                # Disable hostname verification
+                # Environment: TEMPORAL_TLS_FRONTEND_DISABLE_HOST_VERIFICATION
+                # Default: false
                 disableHostVerification: {{ default "false" (env "TEMPORAL_TLS_FRONTEND_DISABLE_HOST_VERIFICATION") }}
+
+                # Root CA certificates for verifying frontend certificate
                 {{- with env "TEMPORAL_TLS_SERVER_CA_CERT" }}
                 rootCaFiles:
                     - {{ . }}
@@ -237,20 +558,46 @@ global:
                 rootCaData:
                     - {{ . }}
                 {{- end }}
+
+    # Metrics export configuration
+    # Choose ONE of: statsd or prometheus
+
+    # StatsD metrics export
+    # Environment: STATSD_ENDPOINT
+    # Example: "localhost:8125"
     {{- with env "STATSD_ENDPOINT" }}
     metrics:
         statsd:
             hostPort: {{ . }}
             prefix: "temporal"
     {{- end }}
+
+    # Prometheus metrics export
+    # Environment: PROMETHEUS_ENDPOINT
+    # Example: "0.0.0.0:8000"
     {{- with env "PROMETHEUS_ENDPOINT" }}
     metrics:
         prometheus:
+            # Timer metric representation
+            # Environment: PROMETHEUS_TIMER_TYPE
+            # Default: histogram
+            # Options: histogram, summary
+            # Recommendation: histogram for better percentile accuracy
             timerType: {{ default "histogram" (env "PROMETHEUS_TIMER_TYPE") }}
+
+            # Address to serve Prometheus metrics endpoint
+            # Access via http://host:port/metrics
             listenAddress: {{ . }}
     {{- end }}
+
+    # Authorization and authentication configuration
     authorization:
+        # JWT key provider for token validation
         jwtKeyProvider:
+            # URIs to fetch JWT signing keys
+            # Environment: TEMPORAL_JWT_KEY_SOURCE1, TEMPORAL_JWT_KEY_SOURCE2
+            # Supports JWKS endpoints (https://...) or file paths (file://...)
+            # Leave empty to disable JWT validation
             keySourceURIs:
                 {{- with env "TEMPORAL_JWT_KEY_SOURCE1" }}
                 - {{ . }}
@@ -258,100 +605,295 @@ global:
                 {{- with env "TEMPORAL_JWT_KEY_SOURCE2" }}
                 - {{ . }}
                 {{- end }}
+
+            # Interval to refresh signing keys
+            # Environment: TEMPORAL_JWT_KEY_REFRESH
+            # Default: 1m
             refreshInterval: {{ default "1m" (env "TEMPORAL_JWT_KEY_REFRESH") }}
+
+        # JWT claim containing permissions
+        # Environment: TEMPORAL_JWT_PERMISSIONS_CLAIM
+        # Default: permissions
         permissionsClaimName: {{ default "permissions" (env "TEMPORAL_JWT_PERMISSIONS_CLAIM") }}
+
+        # Regex to parse permissions claim value
+        # Environment: TEMPORAL_JWT_PERMISSIONS_REGEX
+        # Should contain named groups "namespace" and "role"
+        # Example: ^(?P<role>\w+):(?P<namespace>\w+)$
         permissionsRegex: {{ default "" (env "TEMPORAL_JWT_PERMISSIONS_REGEX") }}
+
+        # Authorizer implementation
+        # Environment: TEMPORAL_AUTH_AUTHORIZER
+        # Options: "" (noop), "default"
+        # Empty = no authorization enforcement
         authorizer: {{ env "TEMPORAL_AUTH_AUTHORIZER" }}
+
+        # Claim mapper implementation
+        # Environment: TEMPORAL_AUTH_CLAIM_MAPPER
+        # Options: "" (noop), "default"
+        # Empty = no claim mapping
         claimMapper: {{ env "TEMPORAL_AUTH_CLAIM_MAPPER" }}
 
+# =============================================================================
+# SERVICES
+# Individual service RPC configuration
+# REQUIRES RESTART
+# =============================================================================
 {{- $temporalGrpcPort := default "7233" (env "FRONTEND_GRPC_PORT") }}
 {{- $temporalHTTPPort := default "7243" (env "FRONTEND_HTTP_PORT") }}
 {{- $temporalInternalHTTPPort := default "7246" (env "INTERNAL_FRONTEND_HTTP_PORT") }}
 services:
+    # Frontend service - handles external client connections
     frontend:
         rpc:
+            # gRPC port for client connections (SDKs, CLI, UI)
+            # Environment: FRONTEND_GRPC_PORT
+            # Default: 7233
             grpcPort: {{ $temporalGrpcPort }}
+
+            # Port for membership/gossip communication
+            # Environment: FRONTEND_MEMBERSHIP_PORT
+            # Default: 6933
             membershipPort: {{ default "6933" (env "FRONTEND_MEMBERSHIP_PORT") }}
+
+            # IP address to bind to
+            # Environment: BIND_ON_IP
+            # Default: 127.0.0.1 (localhost only)
+            # Production: use 0.0.0.0 to bind to all interfaces
             bindOnIP: {{ default "127.0.0.1" (env "BIND_ON_IP") }}
+
+            # HTTP port for REST API and health checks
+            # Environment: FRONTEND_HTTP_PORT
+            # Default: 7243
+            # Set to 0 to disable HTTP endpoint
             httpPort: {{ $temporalHTTPPort }}
 
+    # Internal frontend service (optional)
+    # Used when separating internal and external frontend traffic
+    # Environment: USE_INTERNAL_FRONTEND (set to any value to enable)
     {{- if env "USE_INTERNAL_FRONTEND" }}
     internal-frontend:
         rpc:
+            # gRPC port for internal service connections
+            # Environment: INTERNAL_FRONTEND_GRPC_PORT
+            # Default: 7236
             grpcPort: {{ default "7236" (env "INTERNAL_FRONTEND_GRPC_PORT") }}
+
+            # Membership port
+            # Environment: INTERNAL_FRONTEND_MEMBERSHIP_PORT
+            # Default: 6936
             membershipPort: {{ default "6936" (env "INTERNAL_FRONTEND_MEMBERSHIP_PORT") }}
+
+            # Bind address
+            # Environment: BIND_ON_IP
             bindOnIP: {{ default "127.0.0.1" (env "BIND_ON_IP") }}
+
+            # HTTP port
+            # Environment: INTERNAL_FRONTEND_HTTP_PORT
+            # Default: 7246
             httpPort: {{ $temporalInternalHTTPPort }}
     {{- end }}
 
+    # Matching service - manages task queues and dispatching
     matching:
         rpc:
+            # gRPC port
+            # Environment: MATCHING_GRPC_PORT
+            # Default: 7235
             grpcPort: {{ default "7235" (env "MATCHING_GRPC_PORT") }}
+
+            # Membership port
+            # Environment: MATCHING_MEMBERSHIP_PORT
+            # Default: 6935
             membershipPort: {{ default "6935" (env "MATCHING_MEMBERSHIP_PORT") }}
+
+            # Bind address
+            # Environment: BIND_ON_IP
             bindOnIP: {{ default "127.0.0.1" (env "BIND_ON_IP") }}
 
+    # History service - maintains workflow execution history
     history:
         rpc:
+            # gRPC port
+            # Environment: HISTORY_GRPC_PORT
+            # Default: 7234
             grpcPort: {{ default "7234" (env "HISTORY_GRPC_PORT") }}
+
+            # Membership port
+            # Environment: HISTORY_MEMBERSHIP_PORT
+            # Default: 6934
             membershipPort: {{ default "6934" (env "HISTORY_MEMBERSHIP_PORT") }}
+
+            # Bind address
+            # Environment: BIND_ON_IP
             bindOnIP: {{ default "127.0.0.1" (env "BIND_ON_IP") }}
 
+    # Worker service - runs system workflows (archival, etc.)
     worker:
         rpc:
+            # gRPC port
+            # Environment: WORKER_GRPC_PORT
+            # Default: 7239
             grpcPort: {{ default "7239" (env "WORKER_GRPC_PORT") }}
+
+            # Membership port
+            # Environment: WORKER_MEMBERSHIP_PORT
+            # Default: 6939
             membershipPort: {{ default "6939" (env "WORKER_MEMBERSHIP_PORT") }}
+
+            # Bind address
+            # Environment: BIND_ON_IP
             bindOnIP: {{ default "127.0.0.1" (env "BIND_ON_IP") }}
 
+# =============================================================================
+# CLUSTER METADATA
+# Multi-cluster replication configuration
+# REQUIRES RESTART
+# =============================================================================
 clusterMetadata:
+    # Enable global namespaces (multi-cluster replication)
+    # Fixed: false (single cluster mode)
+    # Set to true for multi-cluster deployments
     enableGlobalNamespace: false
+
+    # Failover version increment
+    # Fixed: 10
+    # Must be unique across all clusters in replication group
     failoverVersionIncrement: 10
+
+    # Name of the primary/master cluster
+    # Fixed: active
     masterClusterName: "active"
+
+    # Name of this cluster
+    # Fixed: active (matches master for single cluster)
     currentClusterName: "active"
+
+    # Information about all clusters
     clusterInformation:
         active:
+            # Cluster enabled status
             enabled: true
+
+            # Initial failover version
             initialFailoverVersion: 1
+
+            # RPC service name for this cluster
             rpcName: "frontend"
+
+            # Frontend gRPC address
             rpcAddress: "127.0.0.1:{{ $temporalGrpcPort }}"
+
+            # Frontend HTTP address
             httpAddress: "127.0.0.1:{{ $temporalHTTPPort }}"
 
+# =============================================================================
+# DATACENTER REDIRECTION
+# Cross-datacenter request routing policy
+# REQUIRES RESTART
+# =============================================================================
 dcRedirectionPolicy:
+    # Redirection policy
+    # Fixed: noop (no redirection)
+    # Options: "noop", "selected-apis-forwarding"
     policy: "noop"
 
+# =============================================================================
+# ARCHIVAL
+# Long-term storage for completed workflow histories
+# REQUIRES RESTART
+# =============================================================================
 archival:
+  # History archival configuration
   history:
+    # Archival state
+    # Fixed: enabled
+    # Options: "enabled", "disabled", "paused"
     state: "enabled"
+
+    # Allow reading from archived histories
+    # Fixed: true
+    # Required for retrieving archived workflow histories
     enableRead: true
+
+    # Archival provider configuration
     provider:
+      # Local filesystem archival
       filestore:
+        # File permissions for archived files
         fileMode: "0666"
+        # Directory permissions for archive directories
         dirMode: "0766"
+
+  # Visibility archival configuration
   visibility:
+    # Archival state
     state: "enabled"
+
+    # Allow reading from archived visibility records
     enableRead: true
+
+    # Archival provider configuration
     provider:
       filestore:
         fileMode: "0666"
         dirMode: "0766"
 
+# =============================================================================
+# NAMESPACE DEFAULTS
+# Default settings applied to all new namespaces
+# REQUIRES RESTART
+# =============================================================================
 namespaceDefaults:
   archival:
+    # Default history archival settings for new namespaces
     history:
+      # Default state
+      # Fixed: disabled
+      # Options: "enabled", "disabled"
       state: "disabled"
+
+      # Default archival URI
+      # Fixed: file:///tmp/temporal_archival/development
+      # Format depends on provider: file://, s3://, etc.
       URI: "file:///tmp/temporal_archival/development"
+
+    # Default visibility archival settings for new namespaces
     visibility:
       state: "disabled"
       URI: "file:///tmp/temporal_vis_archival/development"
 
+# =============================================================================
+# PUBLIC CLIENT
+# Configuration for internal services connecting to frontend
+# REQUIRES RESTART
+# =============================================================================
 {{- if or (env "USE_INTERNAL_FRONTEND") (and (not (env "TEMPORAL_AUTH_AUTHORIZER")) (not (env "TEMPORAL_AUTH_CLAIM_MAPPER"))) }}
 {{/* publicClient is not needed with internal frontend, or if not using authorizer + claim mapper */}}
 {{- else }}
 {{ $publicIp := default "127.0.0.1" (env "BIND_ON_IP") -}}
 {{- $defaultPublicHostPost := print $publicIp ":" $temporalGrpcPort -}}
 publicClient:
+    # Frontend address for internal services to connect to
+    # Environment: PUBLIC_FRONTEND_ADDRESS
+    # Default: BIND_ON_IP:FRONTEND_GRPC_PORT
+    # Override for load balancer or external endpoint
     hostPort: "{{ default $defaultPublicHostPost (env "PUBLIC_FRONTEND_ADDRESS") }}"
 {{- end }}
 
+# =============================================================================
+# DYNAMIC CONFIG CLIENT
+# Links to the dynamic configuration file for runtime-tunable settings
+# REQUIRES RESTART (only the filepath/pollInterval, not the dynamic config contents)
+# =============================================================================
 dynamicConfigClient:
+    # Path to dynamic configuration file
+    # Environment: DYNAMIC_CONFIG_FILE_PATH
+    # Default: /etc/temporal/config/dynamicconfig/docker.yaml
+    # Dynamic config changes do NOT require restart (polled automatically)
     filepath: "{{ default "/etc/temporal/config/dynamicconfig/docker.yaml" (env "DYNAMIC_CONFIG_FILE_PATH") }}"
+
+    # Interval to poll for dynamic config changes
+    # Fixed: 60s
+    # Dynamic config is automatically reloaded at this interval
     pollInterval: "60s"
