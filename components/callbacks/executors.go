@@ -154,7 +154,7 @@ func (e taskExecutor) loadInvocationArgs(
 
 			// CHASM internal callbacks make use of Nexus as their callback delivery
 			// mechanism, but with a special prefix.
-			if _, ok := variant.Nexus.Header[chasm.NexusCompletionHandlerURL]; ok {
+			if _, ok := variant.Nexus.Header[chasm.NexusComponentRefHeader]; ok {
 				invokable = chasmInvocation{
 					nexus:      variant.Nexus,
 					attempt:    callback.Attempt,

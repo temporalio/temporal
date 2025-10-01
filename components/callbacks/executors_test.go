@@ -451,73 +451,193 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 		NamespaceId: "namespace-id",
 		BusinessId:  "business-id",
 		EntityId:    "entity-id",
+		Archetype:   "test-archetype",
 	}
 	serializedRef, err := dummyRef.Marshal()
 	require.NoError(t, err)
 	encodedRef := base64.RawURLEncoding.EncodeToString(serializedRef)
+	dummyTime := time.Now().UTC()
 
 	cases := []struct {
-		name             string
-		setupChasmEngine func(*gomock.Controller) *chasm.MockEngine
-		headerValue      string
-		expectedError    error
-		assertOutcome    func(*testing.T, callbacks.Callback)
+		name               string
+		setupHistoryClient func(*testing.T, *gomock.Controller) *historyservicemock.MockHistoryServiceClient
+		completion         nexus.OperationCompletion
+		headerValue        string
+		expectedError      error
+		assertOutcome      func(*testing.T, callbacks.Callback)
 	}{
 		{
-			name: "success",
-			setupChasmEngine: func(ctrl *gomock.Controller) *chasm.MockEngine {
-				engine := chasm.NewMockEngine(ctrl)
-				engine.EXPECT().UpdateComponent(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
-				return engine
+			name: "success-with-successful-operation",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).DoAndReturn(func(ctx context.Context, req *historyservice.CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+					// Verify completion token
+					require.NotNil(t, req.Completion)
+					require.Equal(t, "namespace-id", req.Completion.NamespaceId)
+					require.Equal(t, "business-id", req.Completion.BusinessId)
+					require.Equal(t, "entity-id", req.Completion.EntityId)
+					require.Equal(t, "request-id", req.Completion.RequestId)
+					require.NotNil(t, req.Completion.Ref)
+					require.Equal(t, "test-archetype", req.Completion.Ref.Archetype)
+
+					// Verify successful operation data
+					require.Equal(t, string(nexus.OperationStateSucceeded), req.State)
+					require.NotNil(t, req.GetSuccess())
+					require.Equal(t, []byte("result-data"), req.GetSuccess().Data)
+					require.Equal(t, req.StartTime.AsTime(), dummyTime)
+					require.Equal(t, req.CloseTime.AsTime(), dummyTime)
+					require.Equal(t, "test-op-token", req.OperationToken)
+
+					return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+				})
+				return client
 			},
+			completion: func() nexus.OperationCompletion {
+				comp, err := nexus.NewOperationCompletionSuccessful(
+					[]byte("result-data"),
+					nexus.OperationCompletionSuccessfulOptions{
+						OperationToken: "test-op-token",
+						StartTime:      dummyTime,
+						CloseTime:      dummyTime,
+					},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
 			headerValue: encodedRef,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_SUCCEEDED, cb.State())
 			},
 		},
 		{
-			name: "unimplemented-handler",
-			setupChasmEngine: func(ctrl *gomock.Controller) *chasm.MockEngine {
-				engine := chasm.NewMockEngine(ctrl)
-				engine.EXPECT().UpdateComponent(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, callbacks.ErrUnimplementedHandler)
-				return engine
+			name: "success-with-failed-operation",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).DoAndReturn(func(ctx context.Context, req *historyservice.CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+					// Verify completion token
+					require.NotNil(t, req.Completion)
+					require.Equal(t, "namespace-id", req.Completion.NamespaceId)
+
+					// Verify failed operation data
+					require.Equal(t, string(nexus.OperationStateFailed), req.State)
+					require.NotNil(t, req.GetFailure())
+					require.Equal(t, req.StartTime.AsTime(), dummyTime)
+					require.Equal(t, req.CloseTime.AsTime(), dummyTime)
+
+					return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+				})
+				return client
 			},
-			headerValue:   encodedRef,
-			expectedError: errors.New("unprocessable task: component does not implement NexusCompletionHandler"),
+			completion: func() nexus.OperationCompletion {
+				comp, err := nexus.NewOperationCompletionUnsuccessful(
+					&nexus.OperationError{
+						State: nexus.OperationStateFailed,
+						Cause: &nexus.FailureError{Failure: nexus.Failure{Message: "operation failed"}},
+					},
+					nexus.OperationCompletionUnsuccessfulOptions{
+						OperationToken: "test-op-token",
+						StartTime:      dummyTime,
+						CloseTime:      dummyTime,
+					},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue: encodedRef,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
-				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
+				require.Equal(t, enumsspb.CALLBACK_STATE_SUCCEEDED, cb.State())
 			},
 		},
 		{
-			name: "retryable-error",
-			setupChasmEngine: func(ctrl *gomock.Controller) *chasm.MockEngine {
-				engine := chasm.NewMockEngine(ctrl)
-				engine.EXPECT().UpdateComponent(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("some retryable error"))
-				return engine
+			name: "retryable-rpc-error",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).Return(nil, status.Error(codes.Unavailable, "service unavailable"))
+				return client
 			},
+			completion: func() nexus.OperationCompletion {
+				comp, err := nexus.NewOperationCompletionSuccessful(
+					[]byte("result-data"),
+					nexus.OperationCompletionSuccessfulOptions{},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
 			headerValue:   encodedRef,
-			expectedError: errors.New("destination down: some retryable error"),
+			expectedError: errors.New("destination down: failed to complete Nexus operation: rpc error: code = Unavailable desc = service unavailable"),
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
 			},
 		},
 		{
-			name: "missing-header",
-			setupChasmEngine: func(ctrl *gomock.Controller) *chasm.MockEngine {
-				return chasm.NewMockEngine(ctrl)
+			name: "non-retryable-rpc-error",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).Return(nil, status.Error(codes.InvalidArgument, "invalid request"))
+				return client
 			},
-			expectedError: errors.New("unprocessable task: callback missing CHASM header"),
+			completion: func() nexus.OperationCompletion {
+				comp, err := nexus.NewOperationCompletionSuccessful(
+					[]byte("result-data"),
+					nexus.OperationCompletionSuccessfulOptions{},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue:   encodedRef,
+			expectedError: errors.New("destination down: failed to complete Nexus operation: rpc error: code = InvalidArgument desc = invalid request"),
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
+			},
+		},
+		{
+			name: "invalid-base64-header",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				// No RPC call expected
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			completion: func() nexus.OperationCompletion {
+				comp, err := nexus.NewOperationCompletionSuccessful(
+					[]byte("result-data"),
+					nexus.OperationCompletionSuccessfulOptions{},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue:   "invalid-base64!!!",
+			expectedError: errors.New("unprocessable task: failed to decode CHASM ComponentRef: illegal base64 data at input byte 14"),
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},
 		},
 		{
-			name: "invalid-base64-header",
-			setupChasmEngine: func(ctrl *gomock.Controller) *chasm.MockEngine {
-				return chasm.NewMockEngine(ctrl)
+			name: "invalid-protobuf-in-ref",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				// No RPC call expected
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
 			},
-			headerValue:   "invalid-base64!!!",
-			expectedError: errors.New("unprocessable task: failed to decode CHASM ComponentRef: illegal base64 data at input byte 14"),
+			completion: func() nexus.OperationCompletion {
+				comp, err := nexus.NewOperationCompletionSuccessful(
+					[]byte("result-data"),
+					nexus.OperationCompletionSuccessfulOptions{},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue:   base64.RawURLEncoding.EncodeToString([]byte("not-valid-protobuf")),
+			expectedError: errors.New("unprocessable task: failed to unmarshal CHASM ComponentRef: proto:"),
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},
@@ -538,14 +658,25 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				}),
 				nil,
 			)
-			chasmEngine := tc.setupChasmEngine(ctrl)
+			historyClient := tc.setupHistoryClient(t, ctrl)
 
 			headers := make(map[string]string)
 			if tc.headerValue != "" {
 				headers[chasm.NexusComponentRefHeader] = tc.headerValue
 			}
 
-			root := newRoot(t)
+			// Create mutable state with the test completion
+			mutableState := mutableState{
+				completionNexus: tc.completion,
+			}
+
+			reg := hsm.NewRegistry()
+			require.NoError(t, workflow.RegisterStateMachine(reg))
+			require.NoError(t, callbacks.RegisterStateMachine(reg))
+
+			root, err := hsm.NewRoot(reg, workflow.StateMachineType, mutableState, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
+			require.NoError(t, err)
+
 			cb := callbacks.Callback{
 				CallbackInfo: &persistencespb.CallbackInfo{
 					Callback: &persistencespb.Callback{
@@ -562,11 +693,10 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				},
 			}
 
-			reg := hsm.NewRegistry()
 			require.NoError(t, callbacks.RegisterExecutor(reg, callbacks.TaskExecutorOptions{
 				NamespaceRegistry: namespaceRegistryMock,
 				MetricsHandler:    metrics.NoopMetricsHandler,
-				ChasmEngine:       chasmEngine,
+				HistoryClient:     historyClient,
 				Logger:            log.NewNoopLogger(),
 				Config: &callbacks.Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
@@ -599,7 +729,8 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			)
 
 			if tc.expectedError != nil {
-				require.EqualError(t, err, tc.expectedError.Error())
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectedError.Error())
 			} else {
 				require.NoError(t, err)
 			}

@@ -56,7 +56,7 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		return invocationResultFail{fmt.Errorf("failed to decode CHASM ComponentRef: %v", err)}
 	}
 
-	var ref *persistencespb.ChasmComponentRef
+	ref := &persistencespb.ChasmComponentRef{}
 	err = proto.Unmarshal(decodedRef, ref)
 	if err != nil {
 		return invocationResultFail{fmt.Errorf("failed to unmarshal CHASM ComponentRef: %v", err)}
