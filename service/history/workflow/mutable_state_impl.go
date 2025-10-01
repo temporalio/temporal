@@ -214,7 +214,7 @@ type (
 		InsertTasks map[tasks.Category][]tasks.Task
 
 		// DeleteTasks holds keys of history tasks to be deleted after a successful
-		// persistence update. These are surfaced via WorkflowMutation.TasksToDelete
+		// persistence update. These are surfaced via WorkflowMutation.DeleteTasks
 		// and consumed by ExecutionManagerImpl when the dynamic gate is enabled.
 		DeleteTasks map[tasks.Category][]tasks.Key
 

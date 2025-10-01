@@ -254,13 +254,6 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 		`EnableDataLossMetrics determines whether dataloss metrics are emitted when dataloss errors are encountered`,
 	)
 
-	EnableDeleteHistoryTasksOnWorkflowUpdate = NewGlobalBoolSetting(
-		"system.enableDeleteHistoryTasksOnWorkflowUpdate",
-		false,
-		`Enable deletion of requested history tasks (e.g., WFT timeout tasks) right after a successful UpdateWorkflowExecution.
-		WARNING: Turning on this config can create a large number of tombstones in cassandra and degrade performance, use with caution.`,
-	)
-
 	// deadlock detector
 
 	DeadlockDumpGoroutines = NewGlobalBoolSetting(
@@ -1391,6 +1384,12 @@ If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS`,
 		`HistoryPersistenceDynamicRateLimitingParams is a struct that contains all adjustable dynamic rate limiting params.
 Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
 See DynamicRateLimitingParams comments for more details.`,
+	)
+	EnableDeleteTasksOnWorkflowUpdate = NewGlobalBoolSetting(
+		"history.enableDeleteTasksOnWorkflowUpdate",
+		false,
+		`Enable deletion of requested history tasks (e.g., WFT timeout tasks) right after a successful UpdateWorkflowExecution.
+		WARNING: Turning on this config can create a large number of tombstones in cassandra and degrade performance, use with caution.`,
 	)
 	HistoryLongPollExpirationInterval = NewNamespaceDurationSetting(
 		"history.longPollExpirationInterval",

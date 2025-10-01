@@ -683,10 +683,12 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 
 	// Record persisted workflow task timeout tasks for deletion after successful persistence update.
 	if workflowTask != nil {
-		if t := workflowTask.ScheduleToStartTimeoutTask; t != nil && !t.InMemory && t.VisibilityTimestamp.Sub(workflowTask.ScheduledTime) < maxWorkflowTaskTimeoutToDelete {
+		if t := workflowTask.ScheduleToStartTimeoutTask; t != nil && !t.InMemory &&
+			t.VisibilityTimestamp.Sub(workflowTask.ScheduledTime) < maxWorkflowTaskTimeoutToDelete {
 			m.ms.DeleteTasks[t.GetCategory()] = append(m.ms.DeleteTasks[t.GetCategory()], t.GetKey())
 		}
-		if t := workflowTask.StartToCloseTimeoutTask; t != nil && !t.InMemory && t.VisibilityTimestamp.Sub(workflowTask.StartedTime) < maxWorkflowTaskTimeoutToDelete {
+		if t := workflowTask.StartToCloseTimeoutTask; t != nil && !t.InMemory &&
+			t.VisibilityTimestamp.Sub(workflowTask.StartedTime) < maxWorkflowTaskTimeoutToDelete {
 			m.ms.DeleteTasks[t.GetCategory()] = append(m.ms.DeleteTasks[t.GetCategory()], t.GetKey())
 		}
 	}

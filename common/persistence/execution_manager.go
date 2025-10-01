@@ -25,13 +25,13 @@ import (
 type (
 	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and Serializer
 	executionManagerImpl struct {
-		serializer                               serialization.Serializer
-		eventBlobCache                           XDCCache
-		persistence                              ExecutionStore
-		logger                                   log.Logger
-		pagingTokenSerializer                    *jsonHistoryTokenSerializer
-		transactionSizeLimit                     dynamicconfig.IntPropertyFn
-		enableDeleteHistoryTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
+		serializer                         serialization.Serializer
+		eventBlobCache                     XDCCache
+		persistence                        ExecutionStore
+		logger                             log.Logger
+		pagingTokenSerializer              *jsonHistoryTokenSerializer
+		transactionSizeLimit               dynamicconfig.IntPropertyFn
+		enableDeleteTasksOnWorkflowUpdate  dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -44,16 +44,16 @@ func NewExecutionManager(
 	eventBlobCache XDCCache,
 	logger log.Logger,
 	transactionSizeLimit dynamicconfig.IntPropertyFn,
-	enableDeleteHistoryTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn,
+	enableDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn,
 ) ExecutionManager {
 	return &executionManagerImpl{
-		serializer:                               serializer,
-		eventBlobCache:                           eventBlobCache,
-		persistence:                              persistence,
-		logger:                                   logger,
-		pagingTokenSerializer:                    newJSONHistoryTokenSerializer(),
-		transactionSizeLimit:                     transactionSizeLimit,
-		enableDeleteHistoryTasksOnWorkflowUpdate: enableDeleteHistoryTasksOnWorkflowUpdate,
+		serializer:                        serializer,
+		eventBlobCache:                    eventBlobCache,
+		persistence:                       persistence,
+		logger:                            logger,
+		pagingTokenSerializer:             newJSONHistoryTokenSerializer(),
+		transactionSizeLimit:              transactionSizeLimit,
+		enableDeleteTasksOnWorkflowUpdate: enableDeleteTasksOnWorkflowUpdate,
 	}
 }
 
@@ -238,7 +238,7 @@ func (m *executionManagerImpl) deleteHistoryTasks(
 	shardID int32,
 	toDelete map[tasks.Category][]tasks.Key,
 ) {
-	if !m.enableDeleteHistoryTasksOnWorkflowUpdate() {
+	if !m.enableDeleteTasksOnWorkflowUpdate() || len(toDelete) == 0 {
 		return
 	}
 	for category, keys := range toDelete {

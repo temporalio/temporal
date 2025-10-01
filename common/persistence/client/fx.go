@@ -33,8 +33,8 @@ type (
 
 	DynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 
-	EnableDataLossMetrics                    dynamicconfig.BoolPropertyFn
-	EnableDeleteHistoryTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
+	EnableDataLossMetrics             dynamicconfig.BoolPropertyFn
+	EnableDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
 
 	ClusterName string
 
@@ -55,8 +55,8 @@ type (
 		Logger                                   log.Logger
 		HealthSignals                            persistence.HealthSignalAggregator
 		DynamicRateLimitingParams                DynamicRateLimitingParams
-		EnableDataLossMetrics                    EnableDataLossMetrics
-		EnableDeleteHistoryTasksOnWorkflowUpdate EnableDeleteHistoryTasksOnWorkflowUpdate
+		EnableDataLossMetrics             EnableDataLossMetrics
+		EnableDeleteTasksOnWorkflowUpdate EnableDeleteTasksOnWorkflowUpdate
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -80,7 +80,7 @@ var Module = fx.Options(
 	fx.Provide(persistence.NewDLQMetricsEmitter),
 	fx.Provide(EventBlobCacheProvider),
 	fx.Provide(EnableDataLossMetricsProvider),
-	fx.Provide(EnableDeleteHistoryTasksOnWorkflowUpdateProvider),
+	fx.Provide(EnableDeleteTasksOnWorkflowUpdateProvider),
 )
 
 func ClusterNameProvider(config *cluster.Config) ClusterName {
@@ -104,10 +104,10 @@ func EnableDataLossMetricsProvider(
 	return EnableDataLossMetrics(dynamicconfig.EnableDataLossMetrics.Get(dc))
 }
 
-func EnableDeleteHistoryTasksOnWorkflowUpdateProvider(
+func EnableDeleteTasksOnWorkflowUpdateProvider(
 	dc *dynamicconfig.Collection,
-) EnableDeleteHistoryTasksOnWorkflowUpdate {
-	return EnableDeleteHistoryTasksOnWorkflowUpdate(dynamicconfig.EnableDeleteHistoryTasksOnWorkflowUpdate.Get(dc))
+) EnableDeleteTasksOnWorkflowUpdate {
+	return EnableDeleteTasksOnWorkflowUpdate(dynamicconfig.EnableDeleteTasksOnWorkflowUpdate.Get(dc))
 }
 
 func FactoryProvider(
@@ -154,7 +154,7 @@ func FactoryProvider(
 		params.Logger,
 		params.HealthSignals,
 		params.EnableDataLossMetrics,
-		params.EnableDeleteHistoryTasksOnWorkflowUpdate,
+		params.EnableDeleteTasksOnWorkflowUpdate,
 	)
 }
 

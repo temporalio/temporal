@@ -23,6 +23,7 @@ type Config struct {
 	PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
+	EnableDeleteTasksOnWorkflowUpdate    dynamicconfig.BoolPropertyFn
 	PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 
 	VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
@@ -36,14 +37,13 @@ type Config struct {
 	VisibilityAllowList                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	SuppressErrorSetSystemSearchAttribute   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	EmitShardLagLog                          dynamicconfig.BoolPropertyFn
-	EnableDataLossMetrics                    dynamicconfig.BoolPropertyFn
-	EnableDeleteHistoryTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
-	ThrottledLogRPS                          dynamicconfig.IntPropertyFn
-	EnableStickyQuery                        dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	AlignMembershipChange                    dynamicconfig.DurationPropertyFn
-	ShutdownDrainDuration                    dynamicconfig.DurationPropertyFn
-	StartupMembershipJoinDelay               dynamicconfig.DurationPropertyFn
+	EmitShardLagLog            dynamicconfig.BoolPropertyFn
+	EnableDataLossMetrics      dynamicconfig.BoolPropertyFn
+	ThrottledLogRPS            dynamicconfig.IntPropertyFn
+	EnableStickyQuery          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	AlignMembershipChange      dynamicconfig.DurationPropertyFn
+	ShutdownDrainDuration      dynamicconfig.DurationPropertyFn
+	StartupMembershipJoinDelay dynamicconfig.DurationPropertyFn
 
 	// Workflow reset related settings.
 	AllowResetWithPendingChildren dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -422,9 +422,8 @@ func NewConfig(
 		VisibilityAllowList:                     dynamicconfig.VisibilityAllowList.Get(dc),
 		SuppressErrorSetSystemSearchAttribute:   dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dc),
 
-		EmitShardLagLog:                          dynamicconfig.EmitShardLagLog.Get(dc),
-		EnableDataLossMetrics:                    dynamicconfig.EnableDataLossMetrics.Get(dc),
-		EnableDeleteHistoryTasksOnWorkflowUpdate: dynamicconfig.EnableDeleteHistoryTasksOnWorkflowUpdate.Get(dc),
+		EmitShardLagLog:       dynamicconfig.EmitShardLagLog.Get(dc),
+		EnableDataLossMetrics: dynamicconfig.EnableDataLossMetrics.Get(dc),
 		// HistoryCacheLimitSizeBased should not change during runtime.
 		HistoryCacheLimitSizeBased:            dynamicconfig.HistoryCacheSizeBasedLimit.Get(dc)(),
 		HistoryHostLevelCacheMaxSize:          dynamicconfig.HistoryCacheHostLevelMaxSize.Get(dc),
