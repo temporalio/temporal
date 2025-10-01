@@ -133,7 +133,12 @@ type (
 		// isActiveStateDirty is true if any user data is mutated.
 		// NOTE: this only captures active cluster's user data mutation.
 		// Replication logic (ApplySnapshot/Mutation) will not set this field.
-		// The flag is equivalent to checking if any node's valueState >= valueStateNeedSerialize
+		//
+		// This flag in a CHASM tree level, while valueState is on node level.
+		// Tracking this flag on tree level avoids traversing the whole tree every time
+		// we want to know if something is updated.
+		//
+		// This flag is equivalent to checking if any node's valueState >= valueStateNeedSerialize
 		isActiveStateDirty bool
 
 		// Root component's search attributes and memo at the start of a transaction.
