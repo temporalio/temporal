@@ -16,6 +16,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
@@ -2373,6 +2374,25 @@ func (h *Handler) CompleteNexusOperationChasm(
 	}
 
 	ref := chasm.ProtoRefToComponentRef(request.Completion.Ref)
+	info := &persistencespb.ChasmNexusCompletionInfo{
+		State:          request.State,
+		OperationToken: request.OperationToken,
+		StartTime:      request.StartTime,
+		CloseTime:      request.CloseTime,
+		Links:          request.Links,
+	}
+	switch variant := request.Outcome.(type) {
+	case *historyservice.CompleteNexusOperationChasmRequest_Failure:
+		info.Outcome = &persistencespb.ChasmNexusCompletionInfo_Failure{
+			Failure: variant.Failure,
+		}
+	case *historyservice.CompleteNexusOperationChasmRequest_Success:
+		info.Outcome = &persistencespb.ChasmNexusCompletionInfo_Success{
+			Success: variant.Success,
+		}
+	default:
+		return nil, serviceerror.NewUnimplemented("unhandled Nexus operation outcome")
+	}
 
 	// Attempt to access the component and call its invocation method. We execute
 	// this similarly as we would a pure task (holding an exclusive lock), as the
@@ -2384,7 +2404,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 			return serviceerror.NewUnimplementedf("component '%T' does not implement NexusCompletionHandler", component)
 		}
 
-		return handler.HandleNexusCompletion(ctx, request.Completion)
+		return handler.HandleNexusCompletion(ctx, info)
 	})
 	if err != nil {
 		return nil, h.convertError(err)

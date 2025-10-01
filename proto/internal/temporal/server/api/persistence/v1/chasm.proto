@@ -103,7 +103,7 @@ message ChasmComponentRef {
 }
 
 // ChasmNexusCompletion includes details about a completed Nexus operation.
-message ChasmNexusCompletion {
+message ChasmNexusCompletionInfo {
     // Operation state - may only be successful / failed / canceled.
     string state = 1;
     oneof outcome {

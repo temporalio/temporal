@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	commonpb "go.temporal.io/api/common/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 // NexusCompletionHandler is implemented by CHASM components that want to handle
 // Nexus operation completion callbacks.
 type NexusCompletionHandler interface {
-	HandleNexusCompletion(MutableContext, *tokenspb.NexusOperationChasmCompletion) error
+	HandleNexusCompletion(MutableContext, *persistencespb.ChasmNexusCompletionInfo) error
 }
 
 // GetNexusCallback generates a Callback message indicating a CHASM component
