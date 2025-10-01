@@ -2106,8 +2106,6 @@ func (n *Node) EachPureTask(
 ) error {
 	ctx := NewContext(context.Background(), n)
 
-	needSyncComponents := false
-
 	// TODO: instead of tracking processed nodes,
 	// consider removing processed pure tasks from the componentAttr.PureTasks slice
 	// which also addresses the concern of user provided task validator doesn't invalidate
@@ -2116,15 +2114,6 @@ func (n *Node) EachPureTask(
 
 TreeLoop:
 	for {
-		if needSyncComponents {
-			// If tasks from other nodes are processed before, tree structure might have changed.
-			// We can not follow the existing tree structure to find tasks from other nodes.
-			if err := n.syncSubComponents(); err != nil {
-				return err
-			}
-			needSyncComponents = false
-		}
-
 	NodeLoop:
 		for _, node := range n.andAllChildren() {
 			if _, processed := processedNodes[node]; processed {
@@ -2132,57 +2121,22 @@ TreeLoop:
 			}
 			processedNodes[node] = struct{}{}
 
-			// Skip nodes that aren't serialized yet.
-			if node.serializedNode == nil || node.serializedNode.Metadata == nil {
-				continue NodeLoop
-			}
-
-			componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
-			// Skip nodes that aren't components.
-			if componentAttr == nil {
-				continue NodeLoop
-			}
-
-			// Hydrate nodes before the task validator is called.
-			err := node.prepareComponentValue(ctx)
+			needSyncComponents, err := node.eachNodePureTask(
+				ctx,
+				referenceTime,
+				callback,
+			)
 			if err != nil {
 				return err
 			}
 
-		TaskLoop:
-			for _, task := range componentAttr.GetPureTasks() {
-				if !isComponentTaskExpired(referenceTime, task) {
-					// Pure tasks are stored in-order, so we can skip scanning the rest once we hit
-					// an unexpired task deadline.
-					break TaskLoop
-				}
-
-				taskInstance, err := node.deserializeComponentTask(task)
-				if err != nil {
-					return err
-				}
-
-				taskAttributes := TaskAttributes{
-					ScheduledTime: task.ScheduledTime.AsTime(),
-					Destination:   task.Destination,
-				}
-
-				needSyncComponents = true
-				executed, err := callback(node, taskAttributes, taskInstance)
-				if err != nil {
-					return err
-				}
-				needSyncComponents = needSyncComponents || executed
-
-				// TODO: sync structure after each task since it's possible for a task to delete the node generated it
-				// when pointers are involved. E.g. Component call a method on its parent which deletes the component.
-				//
-				// This requires either deleting processed pure tasks or tracking which tasks get processed.
-			}
-
 			if needSyncComponents {
+				// If any pure task is executed, the tree structure may change.
 				// Can not continue using the current node iterator to find the next node,
 				// need to sync tree structure and start over.
+				if err := n.syncSubComponents(); err != nil {
+					return err
+				}
 				continue TreeLoop
 			}
 		}
@@ -2190,6 +2144,65 @@ TreeLoop:
 		// If code reaches here, it means all tasks have been processed.
 		return nil
 	}
+}
+
+// eachNodePureTask runs the callback on all expired pure tasks for a single node.
+// This is a helper function for EachPureTask() which runs the callback for pure tasks
+// in all nodes in the tree.
+//
+// Returns a boolean indicating if any pure task in the node is actually executed and error if any.
+func (n *Node) eachNodePureTask(
+	chasmContext Context,
+	referenceTime time.Time,
+	callback func(executor NodePureTask, taskAttributes TaskAttributes, taskInstance any) (bool, error),
+) (bool, error) {
+	// Skip nodes that aren't serialized yet.
+	if n.serializedNode == nil || n.serializedNode.Metadata == nil {
+		return false, nil
+	}
+
+	componentAttr := n.serializedNode.Metadata.GetComponentAttributes()
+	// Skip nodes that aren't components.
+	if componentAttr == nil {
+		return false, nil
+	}
+
+	// Hydrate nodes before the task validator is called.
+	err := n.prepareComponentValue(chasmContext)
+	if err != nil {
+		return false, err
+	}
+
+	taskExecuted := false
+	for _, task := range componentAttr.GetPureTasks() {
+		if !isComponentTaskExpired(referenceTime, task) {
+			// Pure tasks are stored in-order, so we can skip scanning the rest once we hit
+			// an unexpired task deadline.
+			return taskExecuted, nil
+		}
+
+		taskInstance, err := n.deserializeComponentTask(task)
+		if err != nil {
+			return false, err
+		}
+
+		taskAttributes := TaskAttributes{
+			ScheduledTime: task.ScheduledTime.AsTime(),
+			Destination:   task.Destination,
+		}
+
+		executed, err := callback(n, taskAttributes, taskInstance)
+		if err != nil {
+			return false, err
+		}
+		taskExecuted = taskExecuted || executed
+
+		// TODO: sync structure after each task since it's possible for a task to delete the node generated it
+		// when pointers are involved. E.g. Component call a method on its parent which deletes the component.
+		//
+		// This requires either deleting processed pure tasks or tracking which tasks get processed.
+	}
+	return taskExecuted, nil
 }
 
 func newNode(
