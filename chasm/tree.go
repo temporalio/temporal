@@ -1135,7 +1135,7 @@ func (n *Node) componentNodePath(
 	// It's unnecessary to deserialize entire tree as calling this method means
 	// caller already have the deserialized value.
 	for path, node := range n.andAllChildren() {
-		if node.fieldType() != fieldTypeComponent {
+		if node.serializedNode.GetMetadata().GetComponentAttributes() == nil {
 			continue
 		}
 
@@ -1153,7 +1153,7 @@ func (n *Node) dataNodePath(
 	// It's unnecessary to deserialize entire tree as calling this method means
 	// caller already have the deserialized value.
 	for path, node := range n.andAllChildren() {
-		if node.fieldType() != fieldTypeData {
+		if node.serializedNode.GetMetadata().GetDataAttributes() == nil {
 			continue
 		}
 
@@ -1262,7 +1262,7 @@ func (n *Node) executeImmediatePureTasks() error {
 	// and avoid this look up.
 	componentValueToNode := make(map[any]*Node)
 	for _, node := range n.andAllChildren() {
-		if node.fieldType() != fieldTypeComponent {
+		if node.serializedNode.GetMetadata().GetComponentAttributes() == nil {
 			continue
 		}
 		if _, ok := n.immediatePureTasks[node.value]; ok {
@@ -1270,7 +1270,7 @@ func (n *Node) executeImmediatePureTasks() error {
 		}
 	}
 
-	for componentValue, tasks := range n.immediatePureTasks {
+	for componentValue, componentTasks := range n.immediatePureTasks {
 		if syncStructure {
 			if err := n.syncSubComponents(); err != nil {
 				return err
@@ -1278,7 +1278,7 @@ func (n *Node) executeImmediatePureTasks() error {
 		}
 
 		taskNode := componentValueToNode[componentValue]
-		if taskNode == nil || len(tasks) == 0 {
+		if taskNode == nil || len(componentTasks) == 0 {
 			// NOTE: taskNode being nil is not necessarily an error because this function is executed at the end of a transaction
 			// which could contain multiple transitions. So it's possible that a task added for a component in one
 			// transition and in a later transition that component get removed.
@@ -1292,7 +1292,7 @@ func (n *Node) executeImmediatePureTasks() error {
 		// For example, a child activity fires a timeout timer, it notifies the parent node which is a workflow,
 		// and workflow deletes the activity from it's activities map.
 		syncStructure = true
-		for _, task := range tasks {
+		for _, task := range componentTasks {
 			if err := taskNode.ExecutePureTask(context.Background(), task.attributes, task.task); err != nil {
 				return err
 			}
@@ -1692,7 +1692,10 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask(
 // cannot be persisted after transaction close.
 func (n *Node) resolveDeferredPointers() error {
 	for _, node := range n.andAllChildren() {
-		if node.value == nil || node.fieldType() != fieldTypeComponent {
+		if node.value == nil {
+			continue
+		}
+		if node.serializedNode.GetMetadata().GetComponentAttributes() == nil {
 			continue
 		}
 
