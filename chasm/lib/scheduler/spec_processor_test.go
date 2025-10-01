@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
@@ -69,7 +70,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_LimitedActions() {
 	sched.Schedule.State.RemainingActions = 1
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.Equal(1, len(res.BufferedStarts))
 
 	// When a schedule has an action limit that has been exceeded, we don't bother
@@ -77,13 +78,13 @@ func (s *specProcessorSuite) TestProcessTimeRange_LimitedActions() {
 	sched.Schedule.State.RemainingActions = 0
 
 	res, err = s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.Equal(0, len(res.BufferedStarts))
 
 	// Manual starts should always be allowed.
 	backfillID := "backfill"
 	res, err = s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, backfillID, true, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.Equal(1, len(res.BufferedStarts))
 	bufferedStart := res.BufferedStarts[0]
 	s.True(bufferedStart.Manual)
@@ -103,7 +104,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_UpdateAfterHighWatermark() {
 	sched.Info.UpdateTime = timestamppb.Now()
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.Equal(3, len(res.BufferedStarts))
 }
 
@@ -132,7 +133,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_UpdateBetweenNominalAndJitter(
 
 	// A single start should have been buffered.
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.Equal(1, len(res.BufferedStarts))
 
 	// Validates the test case.
@@ -152,7 +153,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_CatchupWindow() {
 	start := end.Add(-defaultCatchupWindow * 2)
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.Equal(5, len(res.BufferedStarts))
 }
 
@@ -168,7 +169,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_Limit() {
 	limit := 2
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, &limit)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.Equal(2, len(res.BufferedStarts))
 	s.Equal(0, limit)
 }
@@ -183,7 +184,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_OverlapPolicy() {
 	sched.Schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.Equal(5, len(res.BufferedStarts))
 	for _, b := range res.BufferedStarts {
 		s.Equal(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, b.OverlapPolicy)
@@ -194,7 +195,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_OverlapPolicy() {
 	sched.Schedule.Policies.OverlapPolicy = overlapPolicy
 
 	res, err = s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.Equal(5, len(res.BufferedStarts))
 	for _, b := range res.BufferedStarts {
 		s.Equal(overlapPolicy, b.OverlapPolicy)
@@ -209,7 +210,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_Basic() {
 
 	// Validate returned BufferedStarts for unique action times and request IDs.
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.Equal(5, len(res.BufferedStarts))
 
 	uniqueTimes := make(map[time.Time]bool)

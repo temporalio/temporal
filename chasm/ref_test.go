@@ -15,9 +15,8 @@ import (
 
 type componentRefSuite struct {
 	suite.Suite
-	*require.Assertions
-	protorequire.ProtoAssertions
 
+	protorequire.ProtoAssertions
 	controller *gomock.Controller
 
 	registry *Registry
@@ -29,14 +28,12 @@ func TestComponentRefSuite(t *testing.T) {
 
 func (s *componentRefSuite) SetupTest() {
 	// Do this in SetupSubTest() as well, if we have sub tests in this suite.
-	s.Assertions = require.New(s.T())
-	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 
 	s.registry = NewRegistry(log.NewTestLogger())
 	err := s.registry.Register(newTestLibrary(s.controller))
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *componentRefSuite) TestArchetype() {
@@ -49,7 +46,7 @@ func (s *componentRefSuite) TestArchetype() {
 	ref := NewComponentRef[*TestComponent](entityKey)
 
 	archetype, err := ref.Archetype(s.registry)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	rc, ok := s.registry.ComponentOf(reflect.TypeFor[*TestComponent]())
 	s.True(ok)
@@ -67,7 +64,7 @@ func (s *componentRefSuite) TestShardingKey() {
 	ref := NewComponentRef[*TestComponent](entityKey)
 
 	shardingKey, err := ref.ShardingKey(s.registry)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	rc, ok := s.registry.ComponentOf(reflect.TypeFor[*TestComponent]())
 	s.True(ok)
@@ -97,10 +94,10 @@ func (s *componentRefSuite) TestSerializeDeserialize() {
 	}
 
 	serializedRef, err := ref.Serialize(s.registry)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	deserializedRef, err := DeserializeComponentRef(serializedRef)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.ProtoEqual(ref.entityLastUpdateVT, deserializedRef.entityLastUpdateVT)
 	s.ProtoEqual(ref.componentInitialVT, deserializedRef.componentInitialVT)

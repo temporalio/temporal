@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
@@ -45,7 +46,7 @@ func (s *generatorTasksSuite) TestExecute_ProcessTimeRangeFails() {
 
 	// Execute the generate task.
 	generator, err := sched.Generator.Get(ctx)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	err = s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	s.True(common.IsInternalError(err))
 }
@@ -55,7 +56,7 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 	sched := s.scheduler
 
 	generator, err := sched.Generator.Get(ctx)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// Use a real SpecProcessor implementation.
 	specProcessor := newTestSpecProcessor(s.controller)
@@ -68,11 +69,11 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 
 	// Execute the generate task.
 	err = s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// We expect 5 buffered starts.
 	invoker, err := sched.Invoker.Get(ctx)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.Equal(5, len(invoker.BufferedStarts))
 
 	// Generator's high water mark should have advanced.
@@ -81,6 +82,6 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 
 	// Ensure we scheduled an immediate physical pure task on the tree.
 	_, err = s.node.CloseTransaction()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.True(s.hasTask(&tasks.ChasmTaskPure{}, chasm.TaskScheduledTimeImmediate))
 }

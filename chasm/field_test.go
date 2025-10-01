@@ -18,7 +18,6 @@ import (
 
 type fieldSuite struct {
 	suite.Suite
-	*require.Assertions
 	protorequire.ProtoAssertions
 
 	controller  *gomock.Controller
@@ -42,7 +41,7 @@ func (s *fieldSuite) SetupTest() {
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 	s.registry = NewRegistry(s.logger)
 	err := s.registry.Register(newTestLibrary(s.controller))
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.timeSource = clock.NewEventTimeSource()
 	s.nodePathEncoder = &testNodePathEncoder{}
@@ -59,8 +58,6 @@ func (s *fieldSuite) initAssertions() {
 	// If these helpers are not reinitialized on subtest level, any failed `assert` in
 	// subtest will fail the entire test (not subtest) immediately without running other subtests.
 
-	s.Assertions = require.New(s.T())
-	s.ProtoAssertions = protorequire.New(s.T())
 }
 
 func (s *fieldSuite) TestInternalFieldName() {
@@ -102,7 +99,7 @@ func (s *fieldSuite) TestFieldGetSimple() {
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
 			result, err := tt.field.Get(nil)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			s.Equal(tt.expected, result)
 		})
 	}
@@ -112,25 +109,25 @@ func (s *fieldSuite) TestFieldGetComponent() {
 	serializedNodes := testComponentSerializedNodes()
 
 	node, err := s.newTestTree(serializedNodes)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	chasmContext := NewMutableContext(context.Background(), node)
 
 	c, err := node.Component(chasmContext, ComponentRef{componentPath: rootPath})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.NotNil(c)
 
 	tc := c.(*TestComponent)
 
 	sc1, err := tc.SubComponent1.Get(chasmContext)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.NotNil(sc1)
 	s.ProtoEqual(&protoMessageType{
 		CreateRequestId: "sub-component1-data",
 	}, sc1.SubComponent1Data)
 
 	sd1, err := tc.SubData1.Get(chasmContext)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.NotNil(sd1)
 	s.ProtoEqual(&protoMessageType{
 		CreateRequestId: "sub-data1",
@@ -212,7 +209,7 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 	}
 
 	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// Create deferred pointers.
 	sc1.SubComponent2Pointer = ComponentPointerTo(ctx, sc2)
@@ -230,7 +227,7 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 
 	// CloseTransaction should resolve the deferred pointer.
 	mutations, err := rootNode.CloseTransaction()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.NotEmpty(mutations.UpdatedNodes)
 
 	// Verify the pointers were resolved to a regular pointer with path.
@@ -246,7 +243,7 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 
 	// Verify we can dereference the pointers.
 	resolvedComponent, err := sc1.SubComponent2Pointer.Get(ctx)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.Equal(sc2, resolvedComponent)
 
 	// TODO - this doesn't resolve, but I've manually verified the tree structure looks correct
@@ -280,13 +277,13 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	}
 
 	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, existingComponent)
 
 	// Close the transaction to resolve SubComponent11Pointer's field to existingComponent.
 	_, err = rootNode.CloseTransaction()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
 
 	// For a new transaction, get the components from the tree again,
@@ -294,11 +291,11 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 
 	ctx2 := NewMutableContext(context.Background(), rootNode)
 	rootComponentInterface, err := rootNode.Component(ctx2, ComponentRef{})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	rootComponent = rootComponentInterface.(*TestComponent)
 	sc1, err = rootComponent.SubComponent1.Get(ctx2)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// Now, add a new component and deferred pointer for it.
 	newComponent := &TestSubComponent2{
@@ -314,18 +311,18 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	s.Equal(fieldTypeDeferredPointer, sc1.SubComponent2Pointer.Internal.fieldType())
 
 	_, err = rootNode.CloseTransaction()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// Ensure both pointers have been resolved.
 	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
 	s.Equal(fieldTypePointer, sc1.SubComponent2Pointer.Internal.fieldType())
 
 	resolved1, err := rootComponent.SubComponent11Pointer.Get(ctx2)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.Equal(existingComponent, resolved1)
 
 	resolved2, err := sc1.SubComponent2Pointer.Get(ctx2)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.Equal(newComponent, resolved2)
 }
 
@@ -350,7 +347,7 @@ func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
 	}
 
 	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, orphanComponent)
 	s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.fieldType())

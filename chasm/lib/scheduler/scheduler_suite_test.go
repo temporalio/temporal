@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/tasks"
@@ -22,8 +21,6 @@ import (
 // for use with the Scheduler library.
 type schedulerSuite struct {
 	suite.Suite
-	*require.Assertions
-	protorequire.ProtoAssertions
 
 	controller    *gomock.Controller
 	nodeBackend   *chasm.MockNodeBackend
@@ -43,8 +40,7 @@ type schedulerSuite struct {
 
 // SetupSuite initializes the CHASM tree to a default scheduler.
 func (s *schedulerSuite) SetupSuite() {
-	s.Assertions = require.New(s.T())
-	s.ProtoAssertions = protorequire.New(s.T())
+
 	s.addedTasks = make([]tasks.Task, 0)
 
 	s.controller = gomock.NewController(s.T())
@@ -56,7 +52,7 @@ func (s *schedulerSuite) SetupSuite() {
 
 	s.registry = chasm.NewRegistry(s.logger)
 	err := s.registry.Register(&scheduler.Library{})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// Advance here, because otherwise ctx.Now().IsZero() will be true.
 	s.timeSource = clock.NewEventTimeSource()

@@ -5,14 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
 )
 
 type fieldsIteratorSuite struct {
 	suite.Suite
-	*require.Assertions
 
 	controller *gomock.Controller
 }
@@ -37,7 +35,6 @@ func (s *fieldsIteratorSuite) initAssertions() {
 	// If these helpers are not reinitialized on subtest level, any failed `assert` in
 	// subtest will fail the entire test (not subtest) immediately without running other subtests.
 
-	s.Assertions = require.New(s.T())
 }
 
 func (s *fieldsIteratorSuite) TestGenericTypePrefix() {

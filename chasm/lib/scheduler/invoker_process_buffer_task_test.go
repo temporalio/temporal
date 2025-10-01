@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -301,7 +302,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_NeedsCancel() {
 func (s *invokerProcessBufferTaskSuite) runProcessBufferTestCase(c *processBufferTestCase) {
 	ctx := s.newMutableContext()
 	invoker, err := s.scheduler.Invoker.Get(ctx)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// Set up initial state
 	invoker.BufferedStarts = c.InitialBufferedStarts
@@ -313,9 +314,9 @@ func (s *invokerProcessBufferTaskSuite) runProcessBufferTestCase(c *processBuffe
 	invoker.LastProcessedTime = timestamppb.New(s.timeSource.Now())
 
 	err = s.executor.Execute(ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerProcessBufferTask{})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	_, err = s.node.CloseTransaction()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// Validate the results
 	s.Equal(c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -323,7 +324,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxActionsPerExecution(
 func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 	ctx := s.newMutableContext()
 	invoker, err := s.scheduler.Invoker.Get(ctx)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// Set up initial state
 	invoker.BufferedStarts = c.InitialBufferedStarts
@@ -342,9 +343,9 @@ func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 	// Create engine context for side effect task execution
 	engineCtx := s.newEngineContext()
 	err = s.executor.Execute(engineCtx, chasm.ComponentRef{}, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	_, err = s.node.CloseTransaction()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// Validate the results
 	s.Equal(c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))
