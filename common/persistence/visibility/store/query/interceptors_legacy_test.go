@@ -50,6 +50,7 @@ func TestNameInterceptor(t *testing.T) {
 	queryParams, err := c.ConvertWhereOrderBy("ExecutionStatus='Running' order by StartTime")
 	assert.NoError(t, err)
 	actualQueryMap, _ := queryParams.Query.Source()
+	//nolint:staticcheck
 	actualQueryJson, _ := json.Marshal(actualQueryMap)
 	assert.Equal(t, `{"bool":{"filter":{"term":{"ExecutionStatus1":"Running"}}}}`, string(actualQueryJson))
 	var actualSorterMaps []interface{}
@@ -57,6 +58,7 @@ func TestNameInterceptor(t *testing.T) {
 		actualSorterMap, _ := sorter.Source()
 		actualSorterMaps = append(actualSorterMaps, actualSorterMap)
 	}
+	//nolint:staticcheck
 	actualSorterJson, _ := json.Marshal(actualSorterMaps)
 	assert.Equal(t, `[{"StartTime1":{"order":"asc"}}]`, string(actualSorterJson))
 
@@ -70,6 +72,7 @@ func TestValuesInterceptor(t *testing.T) {
 	queryParams, err := c.ConvertWhereOrderBy("ExecutionStatus=1")
 	assert.NoError(t, err)
 	actualQueryMap, _ := queryParams.Query.Source()
+	//nolint:staticcheck
 	actualQueryJson, _ := json.Marshal(actualQueryMap)
 	assert.Equal(t, `{"bool":{"filter":{"term":{"ExecutionStatus":"Status1"}}}}`, string(actualQueryJson))
 
@@ -90,7 +93,7 @@ func TestValuesInterceptor(t *testing.T) {
 	assert.Contains(t, err.Error(), "interceptor error")
 }
 
-func getTestConverter(fnInterceptor FieldNameInterceptor, fvInterceptor FieldValuesInterceptor) *Converter {
+func getTestConverter(fnInterceptor FieldNameInterceptor, fvInterceptor FieldValuesInterceptor) *ConverterLegacy {
 	testNameTypeMap := searchattribute.NewNameTypeMapStub(
 		map[string]enumspb.IndexedValueType{
 			"ExecutionStatus1": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -103,5 +106,5 @@ func getTestConverter(fnInterceptor FieldNameInterceptor, fvInterceptor FieldVal
 		NewRangeCondConverter(fnInterceptor, fvInterceptor, false),
 		NewComparisonExprConverter(fnInterceptor, fvInterceptor, map[string]struct{}{sqlparser.EqualStr: {}, sqlparser.InStr: {}}, testNameTypeMap),
 		nil)
-	return NewConverter(fnInterceptor, whereConverter)
+	return NewConverterLegacy(fnInterceptor, whereConverter)
 }

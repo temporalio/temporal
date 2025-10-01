@@ -171,7 +171,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		return nil, err
 	}
 
-	converter := NewQueryConverter(
+	converter := NewQueryConverterLegacy(
 		s.GetName(),
 		request.Namespace,
 		request.NamespaceID,
@@ -213,7 +213,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		if lastRow.CloseTime != nil {
 			closeTime = *lastRow.CloseTime
 		}
-		nextPageToken, err = serializePageToken(&pageToken{
+		nextPageToken, err = serializePageTokenLegacy(&pageTokenLegacy{
 			CloseTime: closeTime,
 			StartTime: lastRow.StartTime,
 			RunID:     lastRow.RunID,
@@ -242,7 +242,7 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 		return nil, err
 	}
 
-	converter := NewQueryConverter(
+	converter := NewQueryConverterLegacy(
 		s.GetName(),
 		request.Namespace,
 		request.NamespaceID,

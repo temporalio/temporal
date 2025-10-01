@@ -64,7 +64,7 @@ func getQueryFields(
 	queryString string,
 ) ([]string, error) {
 	fnInterceptor := newFieldNameAggInterceptor(namespaceName, saNameType, saMapperProvider)
-	queryConverter := elasticsearch.NewQueryConverter(fnInterceptor, nil, saNameType)
+	queryConverter := elasticsearch.NewQueryConverterLegacy(fnInterceptor, nil, saNameType)
 	_, err := queryConverter.ConvertWhereOrderBy(queryString)
 	if err != nil {
 		var converterErr *query.ConverterError

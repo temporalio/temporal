@@ -22,8 +22,8 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		pqc            pluginQueryConverter
-		queryConverter *QueryConverter
+		pqc            pluginQueryConverterLegacy
+		queryConverter *QueryConverterLegacy
 	}
 
 	testCase struct {
@@ -61,43 +61,43 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 		{
 			name:   "empty string",
 			input:  "",
-			output: &queryParams{queryString: "TemporalNamespaceDivision is null"},
+			output: &queryParamsLegacy{queryString: "TemporalNamespaceDivision is null"},
 			err:    nil,
 		},
 		{
 			name:   "single condition int",
 			input:  "AliasForInt01 = 1",
-			output: &queryParams{queryString: "(Int01 = 1) and TemporalNamespaceDivision is null"},
+			output: &queryParamsLegacy{queryString: "(Int01 = 1) and TemporalNamespaceDivision is null"},
 			err:    nil,
 		},
 		{
 			name:   "single condition keyword",
 			input:  "AliasForKeyword01 = 1",
-			output: &queryParams{queryString: "(Keyword01 = 1) and TemporalNamespaceDivision is null"},
+			output: &queryParamsLegacy{queryString: "(Keyword01 = 1) and TemporalNamespaceDivision is null"},
 			err:    nil,
 		},
 		{
 			name:   "or condition keyword",
 			input:  "AliasForInt01 = 1 OR AliasForKeyword01 = 1",
-			output: &queryParams{queryString: "(Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision is null"},
+			output: &queryParamsLegacy{queryString: "(Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision is null"},
 			err:    nil,
 		},
 		{
 			name:   "no double parenthesis",
 			input:  "(AliasForInt01 = 1 OR AliasForKeyword01 = 1)",
-			output: &queryParams{queryString: "(Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision is null"},
+			output: &queryParamsLegacy{queryString: "(Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision is null"},
 			err:    nil,
 		},
 		{
 			name:   "has namespace division",
 			input:  "(AliasForInt01 = 1 OR AliasForKeyword01 = 1) AND TemporalNamespaceDivision = 'foo'",
-			output: &queryParams{queryString: "((Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision = 'foo')"},
+			output: &queryParamsLegacy{queryString: "((Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision = 'foo')"},
 			err:    nil,
 		},
 		{
 			name:  "group by one field",
 			input: "GROUP BY ExecutionStatus",
-			output: &queryParams{
+			output: &queryParamsLegacy{
 				queryString: "TemporalNamespaceDivision is null",
 				groupBy:     []string{searchattribute.ExecutionStatus},
 			},
@@ -853,7 +853,7 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 				"saName": "AliasForDatetime01",
 				"saType": enumspb.INDEXED_VALUE_TYPE_DATETIME,
 			},
-			retValue: fmt.Sprintf("%s", dt.Format(s.queryConverter.getDatetimeFormat())),
+			retValue: dt.Format(s.queryConverter.getDatetimeFormat()),
 			err:      nil,
 		},
 		{
