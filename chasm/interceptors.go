@@ -36,8 +36,6 @@ func (i *ChasmRequestInterceptor) Intercept(
 	if strings.HasPrefix(info.FullMethod, chasmRequestPrefix) {
 		defer metrics.CapturePanic(i.logger, i.metricsHandler, &retError)
 
-		i.logger.Error("Inside ChasmRequestInterceptor.Intercept ")
-
 		ctx = NewEngineContext(ctx, i.engine)
 	}
 
