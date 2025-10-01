@@ -13,6 +13,7 @@ import (
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"
+	grpc "google.golang.org/grpc"
 )
 
 // MockLibrary is a mock of Library interface.
@@ -65,6 +66,18 @@ func (m *MockLibrary) Name() string {
 func (mr *MockLibraryMockRecorder) Name() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockLibrary)(nil).Name))
+}
+
+// RegisterServices mocks base method.
+func (m *MockLibrary) RegisterServices(server *grpc.Server) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RegisterServices", server)
+}
+
+// RegisterServices indicates an expected call of RegisterServices.
+func (mr *MockLibraryMockRecorder) RegisterServices(server any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterServices", reflect.TypeOf((*MockLibrary)(nil).RegisterServices), server)
 }
 
 // Tasks mocks base method.
