@@ -462,6 +462,10 @@ func (n *Node) preparePointerValue() error {
 	return nil
 }
 
+func (n *Node) isComponent() bool {
+	return n.serializedNode.GetMetadata().GetComponentAttributes() != nil
+}
+
 func (n *Node) fieldType() fieldType {
 	if n.serializedNode.GetMetadata().GetComponentAttributes() != nil {
 		return fieldTypeComponent
@@ -1135,7 +1139,7 @@ func (n *Node) componentNodePath(
 	// It's unnecessary to deserialize entire tree as calling this method means
 	// caller already have the deserialized value.
 	for path, node := range n.andAllChildren() {
-		if node.serializedNode.GetMetadata().GetComponentAttributes() == nil {
+		if !node.isComponent() {
 			continue
 		}
 
@@ -1257,13 +1261,12 @@ func (n *Node) executeImmediatePureTasks() error {
 	if err := n.syncSubComponents(); err != nil {
 		return err
 	}
-	syncStructure := false
 
 	// TODO: Maintain a mapping from deserialized component value to node
 	// and avoid this look up.
 	componentValueToNode := make(map[any]*Node)
 	for _, node := range n.andAllChildren() {
-		if node.serializedNode.GetMetadata().GetComponentAttributes() == nil {
+		if !node.isComponent() {
 			continue
 		}
 		if _, ok := n.immediatePureTasks[node.value]; ok {
@@ -1272,11 +1275,6 @@ func (n *Node) executeImmediatePureTasks() error {
 	}
 
 	for componentValue, componentTasks := range n.immediatePureTasks {
-		if syncStructure {
-			if err := n.syncSubComponents(); err != nil {
-				return err
-			}
-		}
 
 		taskNode := componentValueToNode[componentValue]
 		if taskNode == nil || len(componentTasks) == 0 {
@@ -1292,9 +1290,17 @@ func (n *Node) executeImmediatePureTasks() error {
 		// This is possible if component as a pointer to it's ancestors and that ancestor deletes this component.
 		// For example, a child activity fires a timeout timer, it notifies the parent node which is a workflow,
 		// and workflow deletes the activity from it's activities map.
-		syncStructure = true
+		syncStructure := true
 		for _, task := range componentTasks {
-			if err := taskNode.ExecutePureTask(context.Background(), task.attributes, task.task); err != nil {
+			executed, err := taskNode.ExecutePureTask(context.Background(), task.attributes, task.task)
+			if err != nil {
+				return err
+			}
+			syncStructure = syncStructure || executed
+		}
+
+		if syncStructure {
+			if err := n.syncSubComponents(); err != nil {
 				return err
 			}
 		}
@@ -1693,10 +1699,7 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask(
 // cannot be persisted after transaction close.
 func (n *Node) resolveDeferredPointers() error {
 	for _, node := range n.andAllChildren() {
-		if node.value == nil {
-			continue
-		}
-		if node.serializedNode.GetMetadata().GetComponentAttributes() == nil {
+		if node.value == nil || !node.isComponent() {
 			continue
 		}
 
