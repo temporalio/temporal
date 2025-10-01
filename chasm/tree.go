@@ -48,8 +48,8 @@ var (
 //
 // The enum value below is defined in increasing order of "dirtiness".
 // - NeedDeserialize: Value is not even deserialized yet.
-// - Synced: Value is deserialized, but are in sync with both serializedNode and children.
-// - NeedSerialize: Value is deserialized, but data part is not in sync with serializedNode, but the tree structure has been synced.
+// - Synced: Value is deserialized and in sync with both serializedNode and children.
+// - NeedSerialize: Value is deserialized, the child tree structure is synced, but the value is not in sync with serializedNode.
 // - NeedSyncStructure: Value is deserialized, neither data nor tree structure is synced.
 //
 // For simplicity, for a dirty component node, the logic always sync structure (potentially multiple times within a transaction) first,
