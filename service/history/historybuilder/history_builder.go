@@ -279,9 +279,18 @@ func (b *HistoryBuilder) AddWorkflowTaskFailedEvent(
 func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.ScheduleActivityTaskCommandAttributes,
+	ns namespace.Name,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
 	event, _ = b.EventStore.add(event)
+
+	if payloadSize := command.Input.Size(); payloadSize > 0 {
+		b.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
+			int64(payloadSize),
+			metrics.OperationTag(metrics.HistoryRecordActivityTaskStartedScope),
+			metrics.NamespaceTag(ns.String()))
+	}
+
 	return event
 }
 
@@ -304,9 +313,18 @@ func (b *HistoryBuilder) AddActivityTaskCompletedEvent(
 	startedEventID int64,
 	identity string,
 	result *commonpb.Payloads,
+	ns namespace.Name,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateActivityTaskCompletedEvent(scheduledEventID, startedEventID, identity, result)
 	event, _ = b.EventStore.add(event)
+
+	if payloadSize := result.Size(); payloadSize > 0 {
+		b.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
+			int64(payloadSize),
+			metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope),
+			metrics.NamespaceTag(ns.String()))
+	}
+
 	return event
 }
 
@@ -316,6 +334,7 @@ func (b *HistoryBuilder) AddActivityTaskFailedEvent(
 	failure *failurepb.Failure,
 	retryState enumspb.RetryState,
 	identity string,
+	ns namespace.Name,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateActivityTaskFailedEvent(
 		scheduledEventID,
@@ -326,6 +345,14 @@ func (b *HistoryBuilder) AddActivityTaskFailedEvent(
 	)
 
 	event, _ = b.EventStore.add(event)
+
+	if payloadSize := failure.Size(); payloadSize > 0 {
+		b.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
+			int64(payloadSize),
+			metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
+			metrics.NamespaceTag(ns.String()))
+	}
+
 	return event
 }
 

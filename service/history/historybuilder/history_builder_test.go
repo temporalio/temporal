@@ -29,6 +29,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const defaultNamespace = "default"
+
 type (
 	historyBuilderSuite struct {
 		suite.Suite
@@ -807,6 +809,7 @@ func (s *historyBuilderSuite) TestActivityTaskScheduled() {
 	event := s.historyBuilder.AddActivityTaskScheduledEvent(
 		workflowTaskCompletionEventID,
 		attributes,
+		defaultNamespace,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -897,6 +900,7 @@ func (s *historyBuilderSuite) TestActivityTaskCompleted() {
 		startedEventID,
 		testIdentity,
 		testPayloads,
+		defaultNamespace,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -926,6 +930,7 @@ func (s *historyBuilderSuite) TestActivityTaskFailed() {
 		testFailure,
 		retryState,
 		testIdentity,
+		defaultNamespace,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
