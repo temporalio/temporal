@@ -41,22 +41,22 @@ type (
 	NewFactoryParams struct {
 		fx.In
 
-		DataStoreFactory                         persistence.DataStoreFactory
-		EventBlobCache                           persistence.XDCCache
-		Cfg                                      *config.Persistence
-		PersistenceMaxQPS                        PersistenceMaxQps
-		PersistenceNamespaceMaxQPS               PersistenceNamespaceMaxQps
-		PersistencePerShardNamespaceMaxQPS       PersistencePerShardNamespaceMaxQPS
-		OperatorRPSRatio                         OperatorRPSRatio
-		PersistenceBurstRatio                    PersistenceBurstRatio
-		ClusterName                              ClusterName
-		ServiceName                              primitives.ServiceName
-		MetricsHandler                           metrics.Handler
-		Logger                                   log.Logger
-		HealthSignals                            persistence.HealthSignalAggregator
-		DynamicRateLimitingParams                DynamicRateLimitingParams
-		EnableDataLossMetrics             EnableDataLossMetrics
-		EnableDeleteTasksOnWorkflowUpdate EnableDeleteTasksOnWorkflowUpdate
+		DataStoreFactory                   persistence.DataStoreFactory
+		EventBlobCache                     persistence.XDCCache
+		Cfg                                *config.Persistence
+		PersistenceMaxQPS                  PersistenceMaxQps
+		PersistenceNamespaceMaxQPS         PersistenceNamespaceMaxQps
+		PersistencePerShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS
+		OperatorRPSRatio                   OperatorRPSRatio
+		PersistenceBurstRatio              PersistenceBurstRatio
+		ClusterName                        ClusterName
+		ServiceName                        primitives.ServiceName
+		MetricsHandler                     metrics.Handler
+		Logger                             log.Logger
+		HealthSignals                      persistence.HealthSignalAggregator
+		DynamicRateLimitingParams          DynamicRateLimitingParams
+		EnableDataLossMetrics              EnableDataLossMetrics
+		EnableDeleteTasksOnWorkflowUpdate  EnableDeleteTasksOnWorkflowUpdate
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory

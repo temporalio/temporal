@@ -25,13 +25,13 @@ import (
 type (
 	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and Serializer
 	executionManagerImpl struct {
-		serializer                         serialization.Serializer
-		eventBlobCache                     XDCCache
-		persistence                        ExecutionStore
-		logger                             log.Logger
-		pagingTokenSerializer              *jsonHistoryTokenSerializer
-		transactionSizeLimit               dynamicconfig.IntPropertyFn
-		enableDeleteTasksOnWorkflowUpdate  dynamicconfig.BoolPropertyFn
+		serializer                        serialization.Serializer
+		eventBlobCache                    XDCCache
+		persistence                       ExecutionStore
+		logger                            log.Logger
+		pagingTokenSerializer             *jsonHistoryTokenSerializer
+		transactionSizeLimit              dynamicconfig.IntPropertyFn
+		enableDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
 	}
 )
 

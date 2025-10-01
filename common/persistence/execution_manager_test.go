@@ -6,6 +6,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -94,6 +95,67 @@ func TestExecutionManager_DoesNotDeleteTasksWhenDisabled(t *testing.T) {
 
 	keys := []tasks.Key{tasks.NewKey(time.Now().UTC(), 789)}
 	_, err := em.UpdateWorkflowExecution(context.Background(), newTestUpdateRequest(keys))
+	if err != nil {
+		t.Fatalf("UpdateWorkflowExecution returned error: %v", err)
+	}
+}
+
+func TestExecutionManager_DeleteTasksError_DoesNotFailUpdate(t *testing.T) {
+	// Test that errors in CompleteHistoryTask don't cause the UpdateWorkflowExecution to fail.
+	// Task deletion is best-effort and should only be logged.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockp.NewMockExecutionStore(ctrl)
+	store.EXPECT().GetName().AnyTimes().Return("mock-store")
+	// Expect the main update call to succeed
+	store.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+
+	// Expect CompleteHistoryTask to fail
+	expectedKeys := []tasks.Key{
+		tasks.NewKey(time.Now().UTC(), 123),
+	}
+	store.EXPECT().CompleteHistoryTask(gomock.Any(), gomock.Any()).Times(len(expectedKeys)).Return(
+		serviceerror.NewInternal("simulated deletion error"),
+	)
+
+	em := p.NewExecutionManager(
+		store,
+		serialization.NewSerializer(),
+		nil,
+		log.NewNoopLogger(),
+		dynamicconfig.GetIntPropertyFn(1024*1024),
+		dynamicconfig.GetBoolPropertyFn(true),
+	)
+
+	// UpdateWorkflowExecution should succeed even though CompleteHistoryTask failed
+	_, err := em.UpdateWorkflowExecution(context.Background(), newTestUpdateRequest(expectedKeys))
+	if err != nil {
+		t.Fatalf("UpdateWorkflowExecution should succeed even if task deletion fails, got error: %v", err)
+	}
+}
+
+func TestExecutionManager_EmptyDeleteTasks_NoOp(t *testing.T) {
+	// Test that when DeleteTasks is empty, no deletion calls are made
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockp.NewMockExecutionStore(ctrl)
+	store.EXPECT().GetName().AnyTimes().Return("mock-store")
+	store.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	// No CompleteHistoryTask expected when DeleteTasks is empty
+
+	em := p.NewExecutionManager(
+		store,
+		serialization.NewSerializer(),
+		nil,
+		log.NewNoopLogger(),
+		dynamicconfig.GetIntPropertyFn(1024*1024),
+		dynamicconfig.GetBoolPropertyFn(true),
+	)
+
+	// Pass empty keys slice
+	_, err := em.UpdateWorkflowExecution(context.Background(), newTestUpdateRequest([]tasks.Key{}))
 	if err != nil {
 		t.Fatalf("UpdateWorkflowExecution returned error: %v", err)
 	}
