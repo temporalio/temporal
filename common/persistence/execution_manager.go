@@ -202,26 +202,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	switch err.(type) {
 	case nil:
 		// After a successful workflow update, delete any requested history tasks if enabled.
-		if m.enableDeleteHistoryTasksOnUpdate() {
-			// These are best-effort cleanups and should not fail the update response.
-			for category, keys := range updateMutation.DeleteTasks {
-				for _, key := range keys {
-					if delErr := m.persistence.CompleteHistoryTask(ctx, &CompleteHistoryTaskRequest{
-						ShardID:      request.ShardID,
-						TaskCategory: category,
-						TaskKey:      key,
-						BestEffort:   true,
-					}); delErr != nil {
-						m.logger.Warn("Failed to delete history task after workflow update",
-							tag.TaskCategoryID(category.ID()),
-							tag.Timestamp(key.FireTime),
-							tag.TaskID(key.TaskID),
-							tag.Error(delErr),
-						)
-					}
-				}
-			}
-		}
+		m.deleteHistoryTasks(ctx, request.ShardID, updateMutation.DeleteTasks)
 		m.addXDCCacheKV(updateWorkflowXDCKVs)
 		m.addXDCCacheKV(newWorkflowXDCKVs)
 		return &UpdateWorkflowExecutionResponse{
@@ -247,6 +228,35 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		return nil, err
 	default:
 		return nil, err
+	}
+}
+
+// deleteHistoryTasks iterates over provided task keys and completes them when
+// the dynamic config is enabled. Completion is best-effort and failures are logged.
+func (m *executionManagerImpl) deleteHistoryTasks(
+	ctx context.Context,
+	shardID int32,
+	toDelete map[tasks.Category][]tasks.Key,
+) {
+	if !m.enableDeleteHistoryTasksOnUpdate() {
+		return
+	}
+	for category, keys := range toDelete {
+		for _, key := range keys {
+			if err := m.persistence.CompleteHistoryTask(ctx, &CompleteHistoryTaskRequest{
+				ShardID:      shardID,
+				TaskCategory: category,
+				TaskKey:      key,
+				BestEffort:   true,
+			}); err != nil {
+				m.logger.Warn("Failed to delete history task after workflow update",
+					tag.TaskCategoryID(category.ID()),
+					tag.Timestamp(key.FireTime),
+					tag.TaskID(key.TaskID),
+					tag.Error(err),
+				)
+			}
+		}
 	}
 }
 
