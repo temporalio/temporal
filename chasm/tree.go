@@ -1309,8 +1309,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 	rootLifecycleChanged bool,
 ) error {
 
-	mutableContext := NewMutableContext(context.Background(), n)
-	immutableContext := mutableContext.ToImmutable()
+	immutableContext := NewContext(context.TODO(), n)
 	needUpdate := rootLifecycleChanged
 
 	rootComponent, err := n.Component(immutableContext, ComponentRef{})
@@ -1356,8 +1355,8 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 			visibilityNode = child
 			break
 		}
-
 	}
+
 	if visibilityNode == nil {
 		return nil
 	}
@@ -1377,6 +1376,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 	// NOTE: generateTask() will create a new logical task for the visibility component. But it also
 	// invalidates all previous logical tasks at the end of the transaction, and only one physical task
 	// will be created in the visibility queue.
+	mutableContext := NewMutableContext(context.TODO(), n)
 	visibility.generateTask(mutableContext)
 	visibilityNode.setValueState(valueStateNeedSerialize)
 
