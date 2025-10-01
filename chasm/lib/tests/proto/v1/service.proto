@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.tests.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/tests/gen/testspb;testspb";
+
+import "chasm/lib/tests/proto/v1/request_response.proto";
+
+service TestService {
+    rpc Test(TestRequest) returns (TestResponse) {}
+}
