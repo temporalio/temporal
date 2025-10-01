@@ -995,6 +995,10 @@ func (s *NexusApiTestSuite) versionedNexusTaskPoller(ctx context.Context, taskQu
 	if err != nil {
 		panic(err)
 	}
+	// Got an empty response, just return.
+	if res.TaskToken == nil {
+		return
+	}
 	if res.Request.GetStartOperation().GetService() != "test-service" && res.Request.GetCancelOperation().GetService() != "test-service" {
 		panic("expected service to be test-service")
 	}
@@ -1007,7 +1011,8 @@ func (s *NexusApiTestSuite) versionedNexusTaskPoller(ctx context.Context, taskQu
 			Error:     handlerError,
 		})
 		// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
-		if err != nil && ctx.Err() == nil {
+		// NotFound is possible if the task got timed out/canceled while we were processing it.
+		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
 			panic(err)
 		}
 	} else if response != nil {
@@ -1018,7 +1023,8 @@ func (s *NexusApiTestSuite) versionedNexusTaskPoller(ctx context.Context, taskQu
 			Response:  response,
 		})
 		// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
-		if err != nil && ctx.Err() == nil {
+		// NotFound is possible if the task got timed out/canceled while we were processing it.
+		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
 			panic(err)
 		}
 	}
