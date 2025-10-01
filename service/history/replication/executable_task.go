@@ -48,11 +48,6 @@ const (
 )
 
 var (
-	TaskRetryPolicy = backoff.NewExponentialRetryPolicy(1 * time.Second).
-			WithBackoffCoefficient(1.2).
-			WithMaximumInterval(5 * time.Second).
-			WithMaximumAttempts(80).
-			WithExpirationInterval(10 * time.Minute)
 	ErrResendAttemptExceeded = serviceerror.NewInternal("resend history attempts exceeded")
 )
 
@@ -261,7 +256,11 @@ func (e *ExecutableTaskImpl) IsRetryableError(err error) bool {
 }
 
 func (e *ExecutableTaskImpl) RetryPolicy() backoff.RetryPolicy {
-	return TaskRetryPolicy
+	return backoff.NewExponentialRetryPolicy(e.Config.ReplicationExecutableTaskErrorRetryWait()).
+		WithBackoffCoefficient(e.Config.ReplicationExecutableTaskErrorRetryBackoffCoefficient()).
+		WithMaximumInterval(e.Config.ReplicationExecutableTaskErrorRetryMaxInterval()).
+		WithMaximumAttempts(e.Config.ReplicationExecutableTaskErrorRetryMaxAttempts()).
+		WithExpirationInterval(e.Config.ReplicationExecutableTaskErrorRetryExpiration())
 }
 
 func (e *ExecutableTaskImpl) State() ctasks.State {
