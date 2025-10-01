@@ -4,8 +4,8 @@ import (
 	"encoding/base64"
 	"errors"
 
-	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 )
 
 const (
@@ -13,13 +13,13 @@ const (
 	NexusComponentRefHeader = "X-CHASM-Component-Ref"
 
 	// Base URL for Nexus->CHASM callbacks.
-	NexusCompletionHandlerURL = "temporal://internal/chasm"
+	NexusCompletionHandlerURL = "temporal://system/nexus/callback/chasm"
 )
 
 // NexusCompletionHandler is implemented by CHASM components that want to handle
 // Nexus operation completion callbacks.
 type NexusCompletionHandler interface {
-	HandleNexusCompletion(MutableContext, nexus.OperationCompletion) error
+	HandleNexusCompletion(MutableContext, *tokenspb.NexusOperationChasmCompletion) error
 }
 
 // GetNexusCallback generates a Callback message indicating a CHASM component

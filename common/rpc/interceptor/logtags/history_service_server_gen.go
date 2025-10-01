@@ -24,6 +24,10 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		}
 	case *historyservice.CompleteNexusOperationResponse:
 		return nil
+	case *historyservice.CompleteNexusOperationChasmRequest:
+		return nil
+	case *historyservice.CompleteNexusOperationChasmResponse:
+		return nil
 	case *historyservice.DeepHealthCheckRequest:
 		return nil
 	case *historyservice.DeepHealthCheckResponse:

@@ -2361,6 +2361,38 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 	return &historyservice.CompleteNexusOperationResponse{}, nil
 }
 
+func (h *Handler) CompleteNexusOperationChasm(
+	ctx context.Context,
+	request *historyservice.CompleteNexusOperationChasmRequest,
+) (_ *historyservice.CompleteNexusOperationChasmResponse, retErr error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retErr)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	ref := chasm.ProtoRefToComponentRef(request.Completion.Ref)
+
+	// Attempt to access the component and call its invocation method. We execute
+	// this similarly as we would a pure task (holding an exclusive lock), as the
+	// assumption is that the accessed component will be recording (or generating a
+	// task) based on this result.
+	_, err := h.chasmEngine.UpdateComponent(ctx, ref, func(ctx chasm.MutableContext, component chasm.Component) error {
+		handler, ok := component.(chasm.NexusCompletionHandler)
+		if !ok {
+			return serviceerror.NewUnimplementedf("component '%T' does not implement NexusCompletionHandler", component)
+		}
+
+		return handler.HandleNexusCompletion(ctx, request.Completion)
+	})
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+}
+
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.

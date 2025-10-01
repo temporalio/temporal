@@ -4,9 +4,9 @@ package temporal.server.api.persistence.v1;
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "google/protobuf/timestamp.proto";
-
-import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/nexus/v1/message.proto";
+import "temporal/server/api/persistence/v1/hsm.proto";
 
 message ChasmNode {
     // Metadata present for all nodes. 
@@ -100,4 +100,24 @@ message ChasmComponentRef {
 
     repeated string component_path = 6;
     VersionedTransition component_initial_versioned_transition = 7;
+}
+
+// ChasmNexusCompletion includes details about a completed Nexus operation.
+message ChasmNexusCompletion {
+    // Operation state - may only be successful / failed / canceled.
+    string state = 1;
+    oneof outcome {
+        // Result of a successful operation, only set if state == successful.
+        temporal.api.common.v1.Payload success = 2;
+        // Operation failure, only set if state != successful.
+        temporal.api.nexus.v1.Failure failure = 3;
+    }
+    // Operation token - used when the completion is received before the started response.
+    string operation_token = 4;
+    // Time the operation was started. Used when completion is received before the started response.
+    google.protobuf.Timestamp start_time = 5;
+    // Time when the operation was closed.
+    google.protobuf.Timestamp close_time = 6;
+    // Links to be attached to a fabricated start event if completion is received before started response.
+    repeated temporal.api.common.v1.Link links = 7;
 }
