@@ -51,18 +51,18 @@ func (s *visibilitySuite) initAssertions() {
 
 func (s *visibilitySuite) TestComponentFqType() {
 	rc, ok := s.registry.ComponentFor(&Visibility{})
-	s.True(ok)
-	s.Equal(visibilityComponentFqType, rc.FqType())
+	require.True(s.T(),ok)
+	require.Equal(s.T(),visibilityComponentFqType, rc.FqType())
 }
 
 func (s *visibilitySuite) TestTaskFqType() {
 	rc, ok := s.registry.TaskFor(&persistencespb.ChasmVisibilityTaskData{})
-	s.True(ok)
-	s.Equal(visibilityTaskFqType, rc.FqType())
+	require.True(s.T(),ok)
+	require.Equal(s.T(),visibilityTaskFqType, rc.FqType())
 }
 
 func (s *visibilitySuite) TestLifeCycleState() {
-	s.Equal(LifecycleStateRunning, s.visibility.LifecycleState(s.mockChasmContext))
+	require.Equal(s.T(),LifecycleStateRunning, s.visibility.LifecycleState(s.mockChasmContext))
 }
 
 func (s *visibilitySuite) TestSearchAttributes() {
@@ -81,29 +81,29 @@ func (s *visibilitySuite) TestSearchAttributes() {
 		intKey:    intVal,
 	})
 	require.NoError(s.T(), err)
-	s.Equal(int64(2), s.visibility.Data.TransitionCount)
+	require.Equal(s.T(),int64(2), s.visibility.Data.TransitionCount)
 
 	// Add SA via generic UpdateSearchAttribute helper function.
 	s.mockChasmContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}).Times(1)
 	UpsertSearchAttribute(s.mockChasmContext, s.visibility, floatKey, floatVal)
-	s.Equal(int64(3), s.visibility.Data.TransitionCount)
+	require.Equal(s.T(),int64(3), s.visibility.Data.TransitionCount)
 
 	sa, err = s.visibility.GetSearchAttributes(s.mockChasmContext)
 	require.NoError(s.T(), err)
 	s.Len(sa, 3)
 	actualStringVal, err := GetSearchAttribute[string](s.mockChasmContext, s.visibility, stringKey)
 	require.NoError(s.T(), err)
-	s.Equal(stringVal, actualStringVal)
+	require.Equal(s.T(),stringVal, actualStringVal)
 	actualIntVal, err := GetSearchAttribute[int](s.mockChasmContext, s.visibility, intKey)
 	require.NoError(s.T(), err)
-	s.Equal(intVal, actualIntVal)
+	require.Equal(s.T(),intVal, actualIntVal)
 	actualFloatVal, err := GetSearchAttribute[float64](s.mockChasmContext, s.visibility, floatKey)
 	require.NoError(s.T(), err)
-	s.Equal(floatVal, actualFloatVal)
+	require.Equal(s.T(),floatVal, actualFloatVal)
 
 	s.mockChasmContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 4}).Times(1)
 	s.visibility.RemoveSearchAttributes(s.mockChasmContext, stringKey)
-	s.Equal(int64(4), s.visibility.Data.TransitionCount)
+	require.Equal(s.T(),int64(4), s.visibility.Data.TransitionCount)
 	sa, err = s.visibility.GetSearchAttributes(s.mockChasmContext)
 	require.NoError(s.T(), err)
 	s.Len(sa, 2)
@@ -125,29 +125,29 @@ func (s *visibilitySuite) TestMemo() {
 		intKey:    intVal,
 	})
 	require.NoError(s.T(), err)
-	s.Equal(int64(2), s.visibility.Data.TransitionCount)
+	require.Equal(s.T(),int64(2), s.visibility.Data.TransitionCount)
 
 	// Add memo via generic UpdateSearchAttribute helper function.
 	s.mockChasmContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}).Times(1)
 	UpsertMemo(s.mockChasmContext, s.visibility, floatKey, floatVal)
-	s.Equal(int64(3), s.visibility.Data.TransitionCount)
+	require.Equal(s.T(),int64(3), s.visibility.Data.TransitionCount)
 
 	sa, err = s.visibility.GetMemo(s.mockChasmContext)
 	require.NoError(s.T(), err)
 	s.Len(sa, 3)
 	actualStringVal, err := GetMemo[string](s.mockChasmContext, s.visibility, stringKey)
 	require.NoError(s.T(), err)
-	s.Equal(stringVal, actualStringVal)
+	require.Equal(s.T(),stringVal, actualStringVal)
 	actualIntVal, err := GetMemo[int](s.mockChasmContext, s.visibility, intKey)
 	require.NoError(s.T(), err)
-	s.Equal(intVal, actualIntVal)
+	require.Equal(s.T(),intVal, actualIntVal)
 	actualFloatVal, err := GetMemo[float64](s.mockChasmContext, s.visibility, floatKey)
 	require.NoError(s.T(), err)
-	s.Equal(floatVal, actualFloatVal)
+	require.Equal(s.T(),floatVal, actualFloatVal)
 
 	s.mockChasmContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 4}).Times(1)
 	s.visibility.RemoveMemo(s.mockChasmContext, stringKey)
-	s.Equal(int64(4), s.visibility.Data.TransitionCount)
+	require.Equal(s.T(),int64(4), s.visibility.Data.TransitionCount)
 	sa, err = s.visibility.GetMemo(s.mockChasmContext)
 	require.NoError(s.T(), err)
 	s.Len(sa, 2)
@@ -168,5 +168,5 @@ func (s *visibilitySuite) TestTaskValidator() {
 	s.visibility.Data.TransitionCount = task.TransitionCount
 	valid, err = validator.Validate(s.mockChasmContext, s.visibility, TaskAttributes{}, task)
 	require.NoError(s.T(), err)
-	s.True(valid)
+	require.True(s.T(),valid)
 }

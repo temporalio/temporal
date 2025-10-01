@@ -52,12 +52,7 @@ func (s *fieldSuite) SetupSubTest() {
 }
 
 func (s *fieldSuite) initAssertions() {
-	// `s.Assertions` (as well as other test helpers which depends on `s.T()`) must be initialized on
-	// both test and subtest levels (but not suite level, where `s.T()` is `nil`).
-	//
-	// If these helpers are not reinitialized on subtest level, any failed `assert` in
-	// subtest will fail the entire test (not subtest) immediately without running other subtests.
-
+	s.ProtoAssertions = protorequire.New(s.T())
 }
 
 func (s *fieldSuite) TestInternalFieldName() {
@@ -65,7 +60,7 @@ func (s *fieldSuite) TestInternalFieldName() {
 	fT := reflect.TypeOf(f)
 
 	_, ok := fT.FieldByName(internalFieldName)
-	s.True(ok, "expected field %s not found", internalFieldName)
+	require.True(s.T(),ok, "expected field %s not found", internalFieldName)
 }
 
 func (s *fieldSuite) TestFieldGetSimple() {
@@ -100,7 +95,7 @@ func (s *fieldSuite) TestFieldGetSimple() {
 		s.Run(tt.name, func() {
 			result, err := tt.field.Get(nil)
 			require.NoError(s.T(), err)
-			s.Equal(tt.expected, result)
+			require.Equal(s.T(),tt.expected, result)
 		})
 	}
 }
@@ -115,20 +110,20 @@ func (s *fieldSuite) TestFieldGetComponent() {
 
 	c, err := node.Component(chasmContext, ComponentRef{componentPath: rootPath})
 	require.NoError(s.T(), err)
-	s.NotNil(c)
+	require.NotNil(s.T(),c)
 
 	tc := c.(*TestComponent)
 
 	sc1, err := tc.SubComponent1.Get(chasmContext)
 	require.NoError(s.T(), err)
-	s.NotNil(sc1)
+	require.NotNil(s.T(),sc1)
 	s.ProtoEqual(&protoMessageType{
 		CreateRequestId: "sub-component1-data",
 	}, sc1.SubComponent1Data)
 
 	sd1, err := tc.SubData1.Get(chasmContext)
 	require.NoError(s.T(), err)
-	s.NotNil(sd1)
+	require.NotNil(s.T(),sd1)
 	s.ProtoEqual(&protoMessageType{
 		CreateRequestId: "sub-data1",
 	}, sd1)
@@ -220,10 +215,10 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 	rootComponent.SubData1 = NewDataField(ctx, data)
 
 	// Verify it's a deferred pointer storing the component directly.
-	s.Equal(fieldTypeDeferredPointer, sc1.SubComponent2Pointer.Internal.fieldType())
-	s.Equal(fieldTypeDeferredPointer, sc1.DataPointer.Internal.fieldType())
-	s.Equal(sc2, sc1.SubComponent2Pointer.Internal.v)
-	s.Equal(data, sc1.DataPointer.Internal.v)
+	require.Equal(s.T(),fieldTypeDeferredPointer, sc1.SubComponent2Pointer.Internal.fieldType())
+	require.Equal(s.T(),fieldTypeDeferredPointer, sc1.DataPointer.Internal.fieldType())
+	require.Equal(s.T(),sc2, sc1.SubComponent2Pointer.Internal.v)
+	require.Equal(s.T(),data, sc1.DataPointer.Internal.v)
 
 	// CloseTransaction should resolve the deferred pointer.
 	mutations, err := rootNode.CloseTransaction()
@@ -231,20 +226,20 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 	s.NotEmpty(mutations.UpdatedNodes)
 
 	// Verify the pointers were resolved to a regular pointer with path.
-	s.Equal(fieldTypePointer, sc1.SubComponent2Pointer.Internal.fieldType())
-	s.Equal(fieldTypePointer, sc1.DataPointer.Internal.fieldType())
+	require.Equal(s.T(),fieldTypePointer, sc1.SubComponent2Pointer.Internal.fieldType())
+	require.Equal(s.T(),fieldTypePointer, sc1.DataPointer.Internal.fieldType())
 
 	cResolvedPath, ok := sc1.SubComponent2Pointer.Internal.v.([]string)
-	s.True(ok)
-	s.Equal([]string{"SubComponent2"}, cResolvedPath)
+	require.True(s.T(),ok)
+	require.Equal(s.T(),[]string{"SubComponent2"}, cResolvedPath)
 	dResolvedPath, ok := sc1.DataPointer.Internal.v.([]string)
-	s.True(ok)
-	s.Equal([]string{"SubData1"}, dResolvedPath)
+	require.True(s.T(),ok)
+	require.Equal(s.T(),[]string{"SubData1"}, dResolvedPath)
 
 	// Verify we can dereference the pointers.
 	resolvedComponent, err := sc1.SubComponent2Pointer.Get(ctx)
 	require.NoError(s.T(), err)
-	s.Equal(sc2, resolvedComponent)
+	require.Equal(s.T(),sc2, resolvedComponent)
 
 	// TODO - this doesn't resolve, but I've manually verified the tree structure looks correct
 	// TODO
@@ -284,7 +279,7 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	// Close the transaction to resolve SubComponent11Pointer's field to existingComponent.
 	_, err = rootNode.CloseTransaction()
 	require.NoError(s.T(), err)
-	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
+	require.Equal(s.T(),fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
 
 	// For a new transaction, get the components from the tree again,
 	// otherwise those nodes will not be marked as dirty.
@@ -307,23 +302,23 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	// Now add the component to the tree so it can be resolved during CloseTransaction.
 	rootComponent.SubComponent2 = NewComponentField(ctx, newComponent)
 
-	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
-	s.Equal(fieldTypeDeferredPointer, sc1.SubComponent2Pointer.Internal.fieldType())
+	require.Equal(s.T(),fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
+	require.Equal(s.T(),fieldTypeDeferredPointer, sc1.SubComponent2Pointer.Internal.fieldType())
 
 	_, err = rootNode.CloseTransaction()
 	require.NoError(s.T(), err)
 
 	// Ensure both pointers have been resolved.
-	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
-	s.Equal(fieldTypePointer, sc1.SubComponent2Pointer.Internal.fieldType())
+	require.Equal(s.T(),fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
+	require.Equal(s.T(),fieldTypePointer, sc1.SubComponent2Pointer.Internal.fieldType())
 
 	resolved1, err := rootComponent.SubComponent11Pointer.Get(ctx2)
 	require.NoError(s.T(), err)
-	s.Equal(existingComponent, resolved1)
+	require.Equal(s.T(),existingComponent, resolved1)
 
 	resolved2, err := sc1.SubComponent2Pointer.Get(ctx2)
 	require.NoError(s.T(), err)
-	s.Equal(newComponent, resolved2)
+	require.Equal(s.T(),newComponent, resolved2)
 }
 
 func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
@@ -350,7 +345,7 @@ func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
 	require.NoError(s.T(), err)
 
 	rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, orphanComponent)
-	s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
+	require.Equal(s.T(),fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
 
 	_, err = rootNode.CloseTransaction()
 	s.Error(err)

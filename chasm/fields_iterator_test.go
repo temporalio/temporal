@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
 )
@@ -69,7 +70,7 @@ func (s *fieldsIteratorSuite) TestGenericTypePrefix() {
 		s.Run(tt.name, func() {
 			typ := reflect.TypeOf(tt.input)
 			result := genericTypePrefix(typ)
-			s.Equal(tt.expected, result)
+			require.Equal(s.T(), tt.expected, result)
 		})
 	}
 }
@@ -77,13 +78,13 @@ func (s *fieldsIteratorSuite) TestGenericTypePrefix() {
 func (s *fieldsIteratorSuite) TestChasmFieldTypePrefix() {
 	f := Field[any]{}
 	fT := reflect.TypeOf(f)
-	s.True(strings.HasPrefix(fT.String(), chasmFieldTypePrefix))
+	require.True(s.T(),strings.HasPrefix(fT.String(), chasmFieldTypePrefix))
 }
 
 func (s *fieldsIteratorSuite) TestChasmMapTypePrefix() {
 	c := Map[string, any]{}
 	cT := reflect.TypeOf(c)
-	s.True(strings.HasPrefix(cT.String(), chasmMapTypePrefix))
+	require.True(s.T(),strings.HasPrefix(cT.String(), chasmMapTypePrefix))
 }
 
 func (s *fieldsIteratorSuite) TestFieldsOf() {
@@ -186,10 +187,10 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 				}
 			}
 
-			s.Equal(tt.expectedKinds, actualKinds)
-			s.Equal(tt.expectedNames, actualNames)
-			s.Equal(tt.expectedTypes, actualTypes)
-			s.Equal(tt.expectedErrors, actualErrors)
+			require.Equal(s.T(), tt.expectedKinds, actualKinds)
+			require.Equal(s.T(), tt.expectedNames, actualNames)
+			require.Equal(s.T(), tt.expectedTypes, actualTypes)
+			require.Equal(s.T(), tt.expectedErrors, actualErrors)
 		})
 	}
 }
@@ -208,6 +209,6 @@ func (s *fieldsIteratorSuite) TestUnmanagedFieldsOf() {
 	for r := range unmanagedFieldsOf(reflect.TypeFor[unmanagedFields]()) {
 		result = append(result, r.name)
 	}
-	s.Equal(2, len(result))
+	require.Equal(s.T(), 2, len(result))
 	s.ElementsMatch([]string{"unmanaged", "anotherPtr"}, result)
 }

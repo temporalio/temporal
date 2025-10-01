@@ -119,11 +119,11 @@ func (s *nodeSuite) TestNewTree() {
 
 	root, err := s.newTestTree(persistenceNodes)
 	require.NoError(s.T(), err)
-	s.NotNil(root)
+	require.NotNil(s.T(), root)
 
 	preorderNodes := s.preorderAndAssertParent(root, nil)
 	s.Len(preorderNodes, 5)
-	s.Equal(expectedPreorderNodes, preorderNodes)
+	require.Equal(s.T(), expectedPreorderNodes, preorderNodes)
 }
 
 func (s *nodeSuite) TestInitSerializedNode_TypeComponent() {
@@ -133,49 +133,49 @@ func (s *nodeSuite) TestInitSerializedNode_TypeComponent() {
 	node := newNode(s.nodeBase(), nil, "")
 	node.initSerializedNode(fieldTypeComponent)
 
-	s.NotNil(node.serializedNode.GetMetadata().GetComponentAttributes(), "node serializedNode must have attributes created")
-	s.Nil(node.serializedNode.GetData(), "node serializedNode must not have data before serialize is called")
+	require.NotNil(s.T(), node.serializedNode.GetMetadata().GetComponentAttributes(), "node serializedNode must have attributes created")
+	require.Nil(s.T(), node.serializedNode.GetData(), "node serializedNode must not have data before serialize is called")
 }
 
 func (s *nodeSuite) TestSerializeNode_ComponentAttributes() {
 	node := s.testComponentTree()
 
 	s.Len(node.children, 2)
-	s.NotNil(node.children["SubComponent1"].value)
+	require.NotNil(s.T(), node.children["SubComponent1"].value)
 	s.Len(node.children["SubComponent1"].children, 2)
-	s.NotNil(node.children["SubComponent1"].children["SubComponent11"].value)
+	require.NotNil(s.T(), node.children["SubComponent1"].children["SubComponent11"].value)
 	s.Empty(node.children["SubComponent1"].children["SubComponent11"].children)
 
 	// Serialize root component.
-	s.NotNil(node.serializedNode.GetMetadata().GetComponentAttributes())
-	s.Nil(node.serializedNode.GetData())
+	require.NotNil(s.T(), node.serializedNode.GetMetadata().GetComponentAttributes())
+	require.Nil(s.T(), node.serializedNode.GetData())
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(1) // for LastUpdatesVersionedTransition for TestComponent
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(1)
 	err := node.serialize()
 	require.NoError(s.T(), err)
-	s.NotNil(node.serializedNode)
-	s.NotNil(node.serializedNode.GetData(), "node serialized value must have data after serialize is called")
-	s.Equal("TestLibrary.test_component", node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
-	s.Equal(valueStateSynced, node.valueState)
+	require.NotNil(s.T(), node.serializedNode)
+	require.NotNil(s.T(), node.serializedNode.GetData(), "node serialized value must have data after serialize is called")
+	require.Equal(s.T(), "TestLibrary.test_component", node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
+	require.Equal(s.T(), valueStateSynced, node.valueState)
 
 	// Serialize subcomponents (there are 2 subcomponents).
 	sc1Node := node.children["SubComponent1"]
-	s.NotNil(sc1Node.serializedNode.GetMetadata().GetComponentAttributes())
-	s.Nil(sc1Node.serializedNode.GetData())
+	require.NotNil(s.T(), sc1Node.serializedNode.GetMetadata().GetComponentAttributes())
+	require.Nil(s.T(), sc1Node.serializedNode.GetData())
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(2) // for LastUpdatesVersionedTransition of TestSubComponent1
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(2)
 	for _, childNode := range node.children {
 		err = childNode.serialize()
 		require.NoError(s.T(), err)
-		s.Equal(valueStateSynced, childNode.valueState)
+		require.Equal(s.T(), valueStateSynced, childNode.valueState)
 	}
-	s.NotNil(sc1Node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
-	s.Equal("TestLibrary.test_sub_component_1", sc1Node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
+	require.NotNil(s.T(), sc1Node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
+	require.Equal(s.T(), "TestLibrary.test_sub_component_1", sc1Node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
 
 	// Check SubData too.
 	sd1Node := node.children["SubData1"]
 	require.NoError(s.T(), err)
-	s.NotNil(sd1Node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
+	require.NotNil(s.T(), sd1Node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
 }
 
 func (s *nodeSuite) TestSerializeNode_ClearComponentData() {
@@ -187,11 +187,11 @@ func (s *nodeSuite) TestSerializeNode_ClearComponentData() {
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(1)
 	err := node.serialize()
 	require.NoError(s.T(), err)
-	s.NotNil(node.serializedNode, "node serialized value must be not nil after serialize is called")
-	s.NotNil(node.serializedNode.GetMetadata().GetComponentAttributes(), "metadata must have component attributes")
-	s.Nil(node.serializedNode.GetData(), "data field must cleared to nil")
-	s.Equal("TestLibrary.test_component", node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "type must present")
-	s.Equal(valueStateSynced, node.valueState)
+	require.NotNil(s.T(), node.serializedNode, "node serialized value must be not nil after serialize is called")
+	require.NotNil(s.T(), node.serializedNode.GetMetadata().GetComponentAttributes(), "metadata must have component attributes")
+	require.Nil(s.T(), node.serializedNode.GetData(), "data field must cleared to nil")
+	require.Equal(s.T(), "TestLibrary.test_component", node.serializedNode.GetMetadata().GetComponentAttributes().GetType(), "type must present")
+	require.Equal(s.T(), valueStateSynced, node.valueState)
 }
 
 func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
@@ -205,7 +205,7 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	testComponent.SubData1 = NewEmptyField[*protoMessageType]()
 
 	sd1Node := node.children["SubData1"]
-	s.NotNil(sd1Node)
+	require.NotNil(s.T(), sd1Node)
 
 	err = node.syncSubComponents()
 	require.NoError(s.T(), err)
@@ -213,7 +213,7 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	s.Len(node.mutation.DeletedNodes, 1)
 
 	sd1Node = node.children["SubData1"]
-	s.Nil(sd1Node)
+	require.Nil(s.T(), sd1Node)
 }
 
 func (s *nodeSuite) TestInitSerializedNode_TypeData() {
@@ -222,8 +222,8 @@ func (s *nodeSuite) TestInitSerializedNode_TypeData() {
 
 	node := newNode(s.nodeBase(), nil, "")
 	node.initSerializedNode(fieldTypeData)
-	s.NotNil(node.serializedNode.GetMetadata().GetDataAttributes(), "node serializedNode must have attributes created")
-	s.Nil(node.serializedNode.GetData(), "node serializedNode must not have data before serialize is called")
+	require.NotNil(s.T(), node.serializedNode.GetMetadata().GetDataAttributes(), "node serializedNode must have attributes created")
+	require.Nil(s.T(), node.serializedNode.GetData(), "node serializedNode must not have data before serialize is called")
 }
 
 func (s *nodeSuite) TestSerializeNode_DataAttributes() {
@@ -243,9 +243,9 @@ func (s *nodeSuite) TestSerializeNode_DataAttributes() {
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
 	err := node.serialize()
 	require.NoError(s.T(), err)
-	s.NotNil(node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
-	s.Equal([]byte{0xa, 0x2, 0x32, 0x32}, node.serializedNode.GetData().GetData())
-	s.Equal(valueStateSynced, node.valueState)
+	require.NotNil(s.T(), node.serializedNode.GetData(), "child node serialized value must have data after serialize is called")
+	require.Equal(s.T(), []byte{0xa, 0x2, 0x32, 0x32}, node.serializedNode.GetData().GetData())
+	require.Equal(s.T(), valueStateSynced, node.valueState)
 }
 
 func (s *nodeSuite) TestCollectionAttributes() {
@@ -330,7 +330,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			persistedNodes = common.CloneProtoMap(mutations.UpdatedNodes)
 		})
 
-		s.NotNil(persistedNodes)
+		require.NotNil(s.T(), persistedNodes)
 
 		s.Run("Deserialize component with map "+tc.name, func() {
 			rootNode, err := s.newTestTree(persistedNodes)
@@ -344,11 +344,11 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			var sc1Field, sc2Field Field[*TestSubComponent1]
 			switch tc.mapField {
 			case "SubComponents":
-				s.NotNil(rootComponent.SubComponents)
+				require.NotNil(s.T(), rootComponent.SubComponents)
 				s.Len(rootComponent.SubComponents, 2)
 				sc1Field, sc2Field = rootComponent.SubComponents["SubComponent1"], rootComponent.SubComponents["SubComponent2"]
 			case "PendingActivities":
-				s.NotNil(rootComponent.PendingActivities)
+				require.NotNil(s.T(), rootComponent.PendingActivities)
 				s.Len(rootComponent.PendingActivities, 2)
 				sc1Field, sc2Field = rootComponent.PendingActivities[1], rootComponent.PendingActivities[2]
 			}
@@ -356,11 +356,11 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			chasmContext := NewMutableContext(context.Background(), rootNode)
 			sc1Des, err := sc1Field.Get(chasmContext)
 			require.NoError(s.T(), err)
-			s.Equal(sc1.SubComponent1Data.GetRunId(), sc1Des.SubComponent1Data.GetRunId())
+			require.Equal(s.T(), sc1.SubComponent1Data.GetRunId(), sc1Des.SubComponent1Data.GetRunId())
 
 			sc2Des, err := sc2Field.Get(chasmContext)
 			require.NoError(s.T(), err)
-			s.Equal(sc2.SubComponent1Data.GetRunId(), sc2Des.SubComponent1Data.GetRunId())
+			require.Equal(s.T(), sc2.SubComponent1Data.GetRunId(), sc2Des.SubComponent1Data.GetRunId())
 		})
 
 		s.Run("Clear map "+tc.name+" by setting it to nil", func() {
@@ -476,20 +476,20 @@ func (s *nodeSuite) TestPointerAttributes() {
 		}
 		rootNode.SetRootComponent(rootComponent)
 
-		s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.ft)
+		require.Equal(s.T(), fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.ft)
 
 		mutations, err := rootNode.CloseTransaction()
 		require.NoError(s.T(), err)
 		s.Len(mutations.UpdatedNodes, 5, "root, SubComponent1, SubComponent11, SubComponent11Pointer, and SubComponentInterfacePointer must be updated")
 		s.Empty(mutations.DeletedNodes)
 
-		s.Equal([]string{"SubComponent1", "SubComponent11"}, rootNode.children["SubComponent11Pointer"].serializedNode.GetMetadata().GetPointerAttributes().GetNodePath())
+		require.Equal(s.T(), []string{"SubComponent1", "SubComponent11"}, rootNode.children["SubComponent11Pointer"].serializedNode.GetMetadata().GetPointerAttributes().GetNodePath())
 
 		// Save it use in other subtests.
 		persistedNodes = common.CloneProtoMap(mutations.UpdatedNodes)
 	})
 
-	s.NotNil(persistedNodes)
+	require.NotNil(s.T(), persistedNodes)
 
 	s.Run("Deserialize pointer component", func() {
 		rootNode, err := s.newTestTree(persistedNodes)
@@ -503,15 +503,15 @@ func (s *nodeSuite) TestPointerAttributes() {
 		chasmContext := NewMutableContext(context.Background(), rootNode)
 		sc11Des, err := testComponent.SubComponent11Pointer.Get(chasmContext)
 		require.NoError(s.T(), err)
-		s.NotNil(sc11Des)
-		s.Equal(sc11.SubComponent11Data.GetRunId(), sc11Des.SubComponent11Data.GetRunId())
+		require.NotNil(s.T(), sc11Des)
+		require.Equal(s.T(), sc11.SubComponent11Data.GetRunId(), sc11Des.SubComponent11Data.GetRunId())
 
 		ifacePtr, err := testComponent.SubComponentInterfacePointer.Get(chasmContext)
 		require.NoError(s.T(), err)
-		s.NotNil(ifacePtr)
+		require.NotNil(s.T(), ifacePtr)
 
 		sc1ptr, ok := ifacePtr.(*TestSubComponent1)
-		s.True(ok)
+		require.True(s.T(),ok)
 		s.ProtoEqual(sc1ptr.SubComponent1Data, sc1.SubComponent1Data)
 	})
 
@@ -542,15 +542,15 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 
 	sc1 := component.(*TestSubComponent1)
 	sc1.SubComponent11 = NewEmptyField[*TestSubComponent11]()
-	s.NotNil(node.children["SubComponent1"].children["SubComponent11"])
+	require.NotNil(s.T(), node.children["SubComponent1"].children["SubComponent11"])
 
 	err = node.syncSubComponents()
 	require.NoError(s.T(), err)
 	s.False(node.needsPointerResolution)
 
 	s.Len(node.mutation.DeletedNodes, 1)
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
-	s.Nil(node.children["SubComponent1"].children["SubComponent11"])
+	require.NotNil(s.T(), node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
+	require.Nil(s.T(), node.children["SubComponent1"].children["SubComponent11"])
 }
 
 func (s *nodeSuite) TestSyncSubComponents_DeleteMiddleNode() {
@@ -563,18 +563,18 @@ func (s *nodeSuite) TestSyncSubComponents_DeleteMiddleNode() {
 
 	// Set subcomponent at middle node to nil.
 	testComponent.SubComponent1 = NewEmptyField[*TestSubComponent1]()
-	s.NotNil(node.children["SubComponent1"])
+	require.NotNil(s.T(), node.children["SubComponent1"])
 
 	err = node.syncSubComponents()
 	require.NoError(s.T(), err)
 	s.False(node.needsPointerResolution)
 
 	s.Len(node.mutation.DeletedNodes, 3)
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1/SubData11"])
-	s.NotNil(node.mutation.DeletedNodes["SubComponent1"])
+	require.NotNil(s.T(), node.mutation.DeletedNodes["SubComponent1/SubComponent11"])
+	require.NotNil(s.T(), node.mutation.DeletedNodes["SubComponent1/SubData11"])
+	require.NotNil(s.T(), node.mutation.DeletedNodes["SubComponent1"])
 
-	s.Nil(node.children["SubComponent1"])
+	require.Nil(s.T(), node.children["SubComponent1"])
 }
 
 func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
@@ -585,20 +585,20 @@ func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
 
 	node, err := s.newTestTree(serializedNodes)
 	require.NoError(s.T(), err)
-	s.Nil(node.value)
-	s.NotNil(node.serializedNode)
+	require.Nil(s.T(), node.value)
+	require.NotNil(s.T(), node.serializedNode)
 
 	err = node.deserialize(reflect.TypeFor[*TestComponent]())
 	require.NoError(s.T(), err)
-	s.NotNil(node.value)
+	require.NotNil(s.T(), node.value)
 	s.IsType(&TestComponent{}, node.value)
 	tc := node.value.(*TestComponent)
-	s.Equal(valueStateSynced, node.valueState)
-	s.Nil(tc.SubComponent1.Internal.node)
-	s.Nil(tc.SubComponent1.Internal.value())
+	require.Equal(s.T(), valueStateSynced, node.valueState)
+	require.Nil(s.T(), tc.SubComponent1.Internal.node)
+	require.Nil(s.T(), tc.SubComponent1.Internal.value())
 
 	// nil component data should decode into zero value
-	s.NotNil(tc.ComponentData)
+	require.NotNil(s.T(), tc.ComponentData)
 	s.ProtoEqual(&protoMessageType{}, tc.ComponentData)
 }
 
@@ -607,27 +607,27 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 
 	node, err := s.newTestTree(serializedNodes)
 	require.NoError(s.T(), err)
-	s.Nil(node.value)
-	s.NotNil(node.serializedNode)
-	s.Equal(valueStateNeedDeserialize, node.valueState)
+	require.Nil(s.T(), node.value)
+	require.NotNil(s.T(), node.serializedNode)
+	require.Equal(s.T(), valueStateNeedDeserialize, node.valueState)
 
 	err = node.deserialize(reflect.TypeFor[*TestComponent]())
 	require.NoError(s.T(), err)
-	s.NotNil(node.value)
+	require.NotNil(s.T(), node.value)
 	s.IsType(&TestComponent{}, node.value)
 	tc := node.value.(*TestComponent)
-	s.Equal(tc.SubComponent1.Internal.node, node.children["SubComponent1"])
-	s.Equal(tc.ComponentData.CreateRequestId, "component-data")
-	s.Equal(valueStateSynced, node.valueState)
+	require.Equal(s.T(), tc.SubComponent1.Internal.node, node.children["SubComponent1"])
+	require.Equal(s.T(), tc.ComponentData.CreateRequestId, "component-data")
+	require.Equal(s.T(), valueStateSynced, node.valueState)
 
-	s.Nil(tc.SubComponent1.Internal.value())
-	s.Equal(valueStateNeedDeserialize, tc.SubComponent1.Internal.node.valueState)
+	require.Nil(s.T(), tc.SubComponent1.Internal.value())
+	require.Equal(s.T(), valueStateNeedDeserialize, tc.SubComponent1.Internal.node.valueState)
 	err = tc.SubComponent1.Internal.node.deserialize(reflect.TypeFor[*TestSubComponent1]())
 	require.NoError(s.T(), err)
-	s.NotNil(tc.SubComponent1.Internal.node.value)
+	require.NotNil(s.T(), tc.SubComponent1.Internal.node.value)
 	s.IsType(&TestSubComponent1{}, tc.SubComponent1.Internal.node.value)
-	s.Equal("sub-component1-data", tc.SubComponent1.Internal.node.value.(*TestSubComponent1).SubComponent1Data.CreateRequestId)
-	s.Equal(valueStateSynced, tc.SubComponent1.Internal.node.valueState)
+	require.Equal(s.T(), "sub-component1-data", tc.SubComponent1.Internal.node.value.(*TestSubComponent1).SubComponent1Data.CreateRequestId)
+	require.Equal(s.T(), valueStateSynced, tc.SubComponent1.Internal.node.valueState)
 }
 
 func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
@@ -635,26 +635,26 @@ func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
 
 	node, err := s.newTestTree(serializedNodes)
 	require.NoError(s.T(), err)
-	s.Nil(node.value)
-	s.NotNil(node.serializedNode)
+	require.Nil(s.T(), node.value)
+	require.NotNil(s.T(), node.serializedNode)
 
 	err = node.deserialize(reflect.TypeFor[*TestComponent]())
 	require.NoError(s.T(), err)
-	s.NotNil(node.value)
-	s.Equal(valueStateSynced, node.valueState)
+	require.NotNil(s.T(), node.value)
+	require.Equal(s.T(), valueStateSynced, node.valueState)
 
 	s.IsType(&TestComponent{}, node.value)
 	tc := node.value.(*TestComponent)
 
-	s.Equal(tc.SubData1.Internal.node, node.children["SubData1"])
+	require.Equal(s.T(), tc.SubData1.Internal.node, node.children["SubData1"])
 
-	s.Nil(tc.SubData1.Internal.value())
+	require.Nil(s.T(), tc.SubData1.Internal.value())
 	err = tc.SubData1.Internal.node.deserialize(reflect.TypeFor[*protoMessageType]())
 	require.NoError(s.T(), err)
-	s.NotNil(tc.SubData1.Internal.node.value)
-	s.Equal(valueStateSynced, tc.SubData1.Internal.node.valueState)
+	require.NotNil(s.T(), tc.SubData1.Internal.node.value)
+	require.Equal(s.T(), valueStateSynced, tc.SubData1.Internal.node.valueState)
 	s.IsType(&protoMessageType{}, tc.SubData1.Internal.node.value)
-	s.Equal("sub-data1", tc.SubData1.Internal.node.value.(*protoMessageType).CreateRequestId)
+	require.Equal(s.T(), "sub-data1", tc.SubData1.Internal.node.value.(*protoMessageType).CreateRequestId)
 }
 
 func (s *nodeSuite) TestFieldInterface() {
@@ -667,20 +667,20 @@ func (s *nodeSuite) TestFieldInterface() {
 	serializedNodes := testComponentSerializedNodes()
 	node, err := s.newTestTree(serializedNodes)
 	require.NoError(s.T(), err)
-	s.Nil(node.value)
-	s.NotNil(node.serializedNode)
+	require.Nil(s.T(), node.value)
+	require.NotNil(s.T(), node.serializedNode)
 
 	err = node.deserialize(reflect.TypeFor[*testComponent]())
 	require.NoError(s.T(), err)
-	s.NotNil(node.value)
+	require.NotNil(s.T(), node.value)
 	s.IsType(&testComponent{}, node.value)
 	tc := node.value.(*testComponent)
 
 	chasmContext := NewMutableContext(context.Background(), node)
 	sc1, err := tc.SubComponent1.Get(chasmContext)
 	require.NoError(s.T(), err)
-	s.NotNil(sc1)
-	s.Equal("sub-component1-data", sc1.GetData())
+	require.NotNil(s.T(), sc1)
+	require.Equal(s.T(), "sub-component1-data", sc1.GetData())
 }
 
 func (s *nodeSuite) TestGenerateSerializedNodes() {
@@ -750,11 +750,11 @@ func (s *nodeSuite) TestNodeSnapshot() {
 
 	root, err := s.newTestTree(persistenceNodes)
 	require.NoError(s.T(), err)
-	s.NotNil(root)
+	require.NotNil(s.T(), root)
 
 	// Test snapshot with nil exclusiveMinVT, which should return all nodes
 	snapshot := root.Snapshot(nil)
-	s.Equal(persistenceNodes, snapshot.Nodes)
+	require.Equal(s.T(), persistenceNodes, snapshot.Nodes)
 
 	// Test snapshot with non-nil exclusiveMinVT, which should return only nodes with higher
 	// LastUpdateVersionedTransition than the exclusiveMinVT
@@ -764,7 +764,7 @@ func (s *nodeSuite) TestNodeSnapshot() {
 		expectedNodes[path] = persistenceNodes[path]
 	}
 	snapshot = root.Snapshot(&persistencespb.VersionedTransition{TransitionCount: 3})
-	s.Equal(expectedNodes, snapshot.Nodes)
+	require.Equal(s.T(), expectedNodes, snapshot.Nodes)
 }
 
 func (s *nodeSuite) TestApplyMutation() {
@@ -829,14 +829,14 @@ func (s *nodeSuite) TestApplyMutation() {
 
 	// Validate the "child" node got updated.
 	childNode, ok := root.children["child"]
-	s.True(ok)
-	s.Equal(updatedChild, childNode.serializedNode)
-	s.Nil(childNode.value) // value should be reset after mutation
+	require.True(s.T(),ok)
+	require.Equal(s.T(), updatedChild, childNode.serializedNode)
+	require.Nil(s.T(), childNode.value) // value should be reset after mutation
 
 	// Validate the "newchild" node is added.
 	newChildNode, ok := root.children["newchild"]
-	s.True(ok)
-	s.Equal(newChild, newChildNode.serializedNode)
+	require.True(s.T(),ok)
+	require.Equal(s.T(), newChild, newChildNode.serializedNode)
 
 	// Validate the "grandchild" node is deleted.
 	s.Empty(childNode.children)
@@ -853,7 +853,7 @@ func (s *nodeSuite) TestApplyMutation() {
 			"child/grandchild/grandgrandchild": {},
 		},
 	}
-	s.Equal(expectedMutation, root.mutation)
+	require.Equal(s.T(), expectedMutation, root.mutation)
 }
 
 func (s *nodeSuite) TestApplySnapshot() {
@@ -919,8 +919,8 @@ func (s *nodeSuite) TestApplySnapshot() {
 	err = root.ApplySnapshot(incomingSnapshot)
 	require.NoError(s.T(), err)
 
-	s.Equal(incomingSnapshot, root.Snapshot(nil))
-	s.Nil(root.children["child"].value) // value should be reset after snapshot
+	require.Equal(s.T(), incomingSnapshot, root.Snapshot(nil))
+	require.Nil(s.T(), root.children["child"].value) // value should be reset after snapshot
 
 	// Validate that nodeBase.mutation reflects the applied snapshot.
 	expectedMutation := NodesMutation{
@@ -933,7 +933,7 @@ func (s *nodeSuite) TestApplySnapshot() {
 			"child/grandchild/grandgrandchild": {},
 		},
 	}
-	s.Equal(expectedMutation, root.mutation)
+	require.Equal(s.T(), expectedMutation, root.mutation)
 }
 
 func (s *nodeSuite) TestApply_OutOfOrder() {
@@ -1049,7 +1049,7 @@ func (s *nodeSuite) TestRefreshTasks() {
 	err = root.RefreshTasks()
 	require.NoError(s.T(), err)
 
-	s.True(root.IsDirty())
+	require.True(s.T(),root.IsDirty())
 	s.False(root.IsStateDirty())
 
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{
@@ -1068,7 +1068,7 @@ func (s *nodeSuite) TestRefreshTasks() {
 	mutation, err := root.CloseTransaction()
 	require.NoError(s.T(), err)
 	s.Len(mutation.UpdatedNodes, 2) // TaskStatus for the root node is not reset, so no need to persist it.
-	s.Equal(2, addedTasks)
+	require.Equal(s.T(), 2, addedTasks)
 }
 
 func (s *nodeSuite) TestCarryOverTaskStatus() {
@@ -1266,7 +1266,7 @@ func (s *nodeSuite) TestCarryOverTaskStatus() {
 	err = root.ApplyMutation(mutations)
 	require.NoError(s.T(), err)
 
-	s.Equal(expectedNodes, root.Snapshot(nil).Nodes)
+	require.Equal(s.T(), expectedNodes, root.Snapshot(nil).Nodes)
 }
 
 func (s *nodeSuite) TestValidateAccess() {
@@ -1346,7 +1346,7 @@ func (s *nodeSuite) TestValidateAccess() {
 
 			// Find target node
 			node, ok := root.findNode(nodePath)
-			s.True(ok)
+			require.True(s.T(),ok)
 			err = node.prepareComponentValue(ctx)
 			require.NoError(s.T(), err)
 
@@ -1356,7 +1356,7 @@ func (s *nodeSuite) TestValidateAccess() {
 
 			// Validation always begins on the target node's parent.
 			parent := node.parent
-			s.NotNil(parent)
+			require.NotNil(s.T(), parent)
 			err = parent.validateAccess(ctx)
 			if tc.valid {
 				require.NoError(s.T(), err)
@@ -1378,7 +1378,7 @@ func (s *nodeSuite) TestGetComponent() {
 	setTestComponentFields(expectedTestComponent)
 	assertTestComponent := func(component Component) {
 		testComponent, ok := component.(*TestComponent)
-		s.True(ok)
+		require.True(s.T(),ok)
 		protoassert.ProtoEqual(s.T(), expectedTestComponent.ComponentData, testComponent.ComponentData)
 
 		// TODO: Can we assert other fields?
@@ -1477,14 +1477,14 @@ func (s *nodeSuite) TestGetComponent() {
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			component, err := root.Component(tc.chasmContext, tc.ref)
-			s.Equal(tc.expectedErr, err)
+			require.Equal(s.T(), tc.expectedErr, err)
 			if tc.expectedErr == nil {
 				// s.Equal(tc.expectedComponent, component)
 
 				node, ok := root.findNode(tc.ref.componentPath)
-				s.True(ok)
-				s.Equal(component, node.value)
-				s.Equal(tc.valueState, node.valueState)
+				require.True(s.T(),ok)
+				require.Equal(s.T(), component, node.value)
+				require.Equal(s.T(), tc.valueState, node.valueState)
 			}
 		})
 	}
@@ -1513,10 +1513,10 @@ func (s *nodeSuite) TestRef() {
 	rootComponent, err := root.Component(chasmContext, NewComponentRef[*TestComponent](entityKey))
 	require.NoError(s.T(), err)
 	testComponent, ok := rootComponent.(*TestComponent)
-	s.True(ok)
+	require.True(s.T(),ok)
 
 	rc, ok := s.registry.ComponentFor(testComponent)
-	s.True(ok)
+	require.True(s.T(),ok)
 	archetype := Archetype(rc.FqType())
 
 	subComponent1, err := testComponent.SubComponent1.Get(chasmContext)
@@ -1595,7 +1595,7 @@ func (s *nodeSuite) TestRef() {
 
 			actualRef.entityLastUpdateVT = nil
 			actualRef.componentInitialVT = nil
-			s.Equal(expectedRef, actualRef)
+			require.Equal(s.T(), expectedRef, actualRef)
 		})
 	}
 }
@@ -1630,7 +1630,7 @@ func (s *nodeSuite) TestSerializeDeserializeTask() {
 			equalFn: func(t1, t2 any) {
 				s.IsType(TestOutboundSideEffectTask{}, t1)
 				s.IsType(TestOutboundSideEffectTask{}, t2)
-				s.Equal(t1, t2)
+				require.Equal(s.T(), t1, t2)
 			},
 		},
 		{
@@ -1648,14 +1648,14 @@ func (s *nodeSuite) TestSerializeDeserializeTask() {
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			rt, ok := s.registry.taskFor(tc.task)
-			s.True(ok)
+			require.True(s.T(),ok)
 
 			blob, err := serializeTask(rt, reflect.ValueOf(tc.task))
 			require.NoError(s.T(), err)
 
-			s.NotNil(blob)
-			s.Equal(enumspb.ENCODING_TYPE_PROTO3, blob.GetEncodingType())
-			s.Equal(tc.expectedData, blob.GetData())
+			require.NotNil(s.T(), blob)
+			require.Equal(s.T(), enumspb.ENCODING_TYPE_PROTO3, blob.GetEncodingType())
+			require.Equal(s.T(), tc.expectedData, blob.GetData())
 
 			deserializedTaskValue, err := deserializeTask(rt, blob)
 			require.NoError(s.T(), err)
@@ -1691,7 +1691,7 @@ func (s *nodeSuite) TestCloseTransaction_Success() {
 
 	sc1, err := tc.(*TestComponent).SubComponent1.Get(chasmCtx)
 	require.NoError(s.T(), err)
-	s.NotNil(sc1)
+	require.NotNil(s.T(), sc1)
 
 	mutations, err = node.CloseTransaction()
 	require.NoError(s.T(), err)
@@ -1708,7 +1708,7 @@ func (s *nodeSuite) TestCloseTransaction_EmptyNode() {
 	// Create an empty tree.
 	node, err := s.newTestTree(nilSerializedNodes)
 	require.NoError(s.T(), err)
-	s.Nil(node.value)
+	require.Nil(s.T(), node.value)
 
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1)
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
@@ -1796,7 +1796,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility() {
 	mutation, err := node.CloseTransaction()
 	require.NoError(s.T(), err)
 	pVisibilityNode, ok := mutation.UpdatedNodes["Visibility"]
-	s.True(ok)
+	require.True(s.T(),ok)
 	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().SideEffectTasks, 1)
 
 	// Some change unrelated to visibility
@@ -1829,7 +1829,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility() {
 	mutation, err = node.CloseTransaction()
 	require.NoError(s.T(), err)
 	pVisibilityNode, ok = mutation.UpdatedNodes["Visibility"]
-	s.True(ok)
+	require.True(s.T(),ok)
 	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().SideEffectTasks, 1)
 }
 
@@ -1912,7 +1912,7 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	componentAttr := root.serializedNode.Metadata.GetComponentAttributes()
 	s.Empty(componentAttr.PureTasks)
 	s.Len(componentAttr.SideEffectTasks, 1)
-	s.Equal("TestLibrary.test_outbound_side_effect_task", componentAttr.SideEffectTasks[0].GetType())
+	require.Equal(s.T(), "TestLibrary.test_outbound_side_effect_task", componentAttr.SideEffectTasks[0].GetType())
 }
 
 func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
@@ -2036,7 +2036,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	s.Len(rootAttr.SideEffectTasks, 1) // Only one valid side effect task.
 	newSideEffectTask := rootAttr.SideEffectTasks[0]
 	newSideEffectTask.Data = nil // This is tested by TestSerializeTask()
-	s.Equal(&persistencespb.ChasmComponentAttributes_Task{
+	require.Equal(s.T(), &persistencespb.ChasmComponentAttributes_Task{
 		Type:                      "TestLibrary.test_side_effect_task",
 		ScheduledTime:             timestamppb.New(time.Time{}),
 		VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
@@ -2056,7 +2056,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	s.Len(rootAttr.PureTasks, 1) // Only one valid side effect task.
 	newPureTask := rootAttr.PureTasks[0]
 	newPureTask.Data = nil // This is tested by TestSerializeTask()
-	s.Equal(&persistencespb.ChasmComponentAttributes_Task{
+	require.Equal(s.T(), &persistencespb.ChasmComponentAttributes_Task{
 		Type:                      "TestLibrary.test_pure_task",
 		ScheduledTime:             timestamppb.New(s.timeSource.Now()),
 		VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
@@ -2065,13 +2065,13 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	}, newPureTask)
 	s.Len(physicalTasks[tasks.CategoryTimer], 1)
 	chasmPureTask := physicalTasks[tasks.CategoryTimer][0].(*tasks.ChasmTaskPure)
-	s.Equal(tasks.CategoryTimer, chasmPureTask.Category)
-	s.True(chasmPureTask.VisibilityTimestamp.Equal(s.timeSource.Now()))
+	require.Equal(s.T(), tasks.CategoryTimer, chasmPureTask.Category)
+	require.True(s.T(),chasmPureTask.VisibilityTimestamp.Equal(s.timeSource.Now()))
 
 	subComponent2Attr := mutation.UpdatedNodes["SubComponent2"].GetMetadata().GetComponentAttributes()
 	newOutboundSideEffectTask := subComponent2Attr.SideEffectTasks[0]
 	newOutboundSideEffectTask.Data = nil // This is tested by TestSerializeTask()
-	s.Equal(&persistencespb.ChasmComponentAttributes_Task{
+	require.Equal(s.T(), &persistencespb.ChasmComponentAttributes_Task{
 		Type:                      "TestLibrary.test_outbound_side_effect_task",
 		Destination:               "destination",
 		ScheduledTime:             timestamppb.New(time.Time{}),
@@ -2176,7 +2176,7 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_SideEffectTasks() {
 	for _, category := range expectedCategories {
 		s.nodeBackend.EXPECT().AddTasks(gomock.Any()).Do(func(addedTask tasks.Task) {
 			s.IsType(&tasks.ChasmTask{}, addedTask)
-			s.Equal(category, addedTask.GetCategory())
+			require.Equal(s.T(), category, addedTask.GetCategory())
 		})
 	}
 
@@ -2270,8 +2270,8 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
 
 	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).Do(func(addedTask tasks.Task) {
 		s.IsType(&tasks.ChasmTaskPure{}, addedTask)
-		s.Equal(tasks.CategoryTimer, addedTask.GetCategory())
-		s.True(now.Add(time.Minute).Equal(addedTask.GetKey().FireTime))
+		require.Equal(s.T(), tasks.CategoryTimer, addedTask.GetCategory())
+		require.True(s.T(),now.Add(time.Minute).Equal(addedTask.GetKey().FireTime))
 	}).Times(1)
 
 	mutation, err := root.CloseTransaction()
@@ -2302,7 +2302,7 @@ func (s *nodeSuite) TestTerminate() {
 	// Then terminate the node and verify only that node will be in the mutation.
 	err = node.Terminate(TerminateComponentRequest{})
 	require.NoError(s.T(), err)
-	s.True(node.terminated)
+	require.True(s.T(),node.terminated)
 
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
@@ -2319,7 +2319,7 @@ func (s *nodeSuite) preorderAndAssertParent(
 	n *Node,
 	parent *Node,
 ) []*persistencespb.ChasmNode {
-	s.Equal(parent, n.parent)
+	require.Equal(s.T(), parent, n.parent)
 
 	var nodes []*persistencespb.ChasmNode
 	nodes = append(nodes, n.serializedNode)
@@ -2386,18 +2386,18 @@ func (s *nodeSuite) testComponentTree() *Node {
 	// Create an empty tree.
 	node, err := s.newTestTree(nilSerializedNodes)
 	require.NoError(s.T(), err)
-	s.Nil(node.value)
+	require.Nil(s.T(), node.value)
 
 	// Get an empty top-level component from the empty tree.
 	err = node.deserialize(reflect.TypeFor[*TestComponent]())
 	require.NoError(s.T(), err)
-	s.NotNil(node.value)
+	require.NotNil(s.T(), node.value)
 	s.IsType(&TestComponent{}, node.value)
-	s.Equal(valueStateSynced, node.valueState)
+	require.Equal(s.T(), valueStateSynced, node.valueState)
 
 	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{componentPath: rootPath})
 	require.NoError(s.T(), err)
-	s.Equal(valueStateNeedSyncStructure, node.valueState)
+	require.Equal(s.T(), valueStateNeedSyncStructure, node.valueState)
 	// Create subcomponents by assigning fields to TestComponent instance.
 	setTestComponentFields(tc.(*TestComponent))
 
@@ -2507,21 +2507,21 @@ func (s *nodeSuite) TestEachPureTask() {
 
 	root, err := s.newTestTree(persistenceNodes)
 	require.NoError(s.T(), err)
-	s.NotNil(root)
+	require.NotNil(s.T(), root)
 
 	actualTaskCount := 0
 	err = root.EachPureTask(now.Add(time.Minute), func(executor NodePureTask, taskAttributes TaskAttributes, task any) error {
-		s.NotNil(executor)
-		s.NotNil(taskAttributes)
+		require.NotNil(s.T(), executor)
+		require.NotNil(s.T(), taskAttributes)
 
 		_, ok := task.(*TestPureTask)
-		s.True(ok)
+		require.True(s.T(),ok)
 
 		actualTaskCount += 1
 		return nil
 	})
 	require.NoError(s.T(), err)
-	s.Equal(3, actualTaskCount)
+	require.Equal(s.T(), 3, actualTaskCount)
 	s.Len(root.taskValueCache, actualTaskCount)
 }
 
@@ -2548,7 +2548,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 
 	root, err := s.newTestTree(persistenceNodes)
 	require.NoError(s.T(), err)
-	s.NotNil(root)
+	require.NotNil(s.T(), root)
 	ctx := context.Background()
 
 	expectExecute := func(result error) {
@@ -2637,7 +2637,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 
 	root, err := s.newTestTree(persistenceNodes)
 	require.NoError(s.T(), err)
-	s.NotNil(root)
+	require.NotNil(s.T(), root)
 
 	mockEngine := NewMockEngine(s.controller)
 	ctx := NewEngineContext(context.Background(), mockEngine)
@@ -2670,7 +2670,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 				gomock.Any(),
 			).DoAndReturn(
 			func(_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestSideEffectTask) error {
-				s.NotNil(ref.validationFn)
+				require.NotNil(s.T(), ref.validationFn)
 
 				// Accessing the Component should trigger the validationFn.
 				_, err := root.Component(chasmContext, ref)
@@ -2686,8 +2686,8 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	expectExecute(nil)
 	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, chasmTask, dummyValidationFn)
 	require.NoError(s.T(), err)
-	s.True(backendValidtionFnCalled)
-	s.True(chasmTask.DeserializedTask.IsValid())
+	require.True(s.T(),backendValidtionFnCalled)
+	require.True(s.T(),chasmTask.DeserializedTask.IsValid())
 
 	// Invalid task.
 	expectValidate(false, nil)
@@ -2695,7 +2695,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, chasmTask, dummyValidationFn)
 	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
-	s.True(chasmTask.DeserializedTask.IsValid())
+	require.True(s.T(),chasmTask.DeserializedTask.IsValid())
 
 	// Failed to validate task.
 	validationErr := errors.New("validation error")
@@ -2711,7 +2711,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	expectExecute(executionErr)
 	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, chasmTask, dummyValidationFn)
 	s.ErrorIs(executionErr, err)
-	s.True(backendValidtionFnCalled)
+	require.True(s.T(),backendValidtionFnCalled)
 	s.False(chasmTask.DeserializedTask.IsValid())
 }
 
@@ -2763,16 +2763,16 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	// Succeed validation as valid.
 	expectValidate((*TestComponent)(nil), true, nil)
 	isValid, err := root.ValidateSideEffectTask(ctx, chasmTask)
-	s.True(isValid)
+	require.True(s.T(),isValid)
 	require.NoError(s.T(), err)
-	s.True(chasmTask.DeserializedTask.IsValid())
+	require.True(s.T(),chasmTask.DeserializedTask.IsValid())
 
 	// Succeed validation as invalid.
 	expectValidate((*TestComponent)(nil), false, nil)
 	isValid, err = root.ValidateSideEffectTask(ctx, chasmTask)
 	s.False(isValid)
 	require.NoError(s.T(), err)
-	s.True(chasmTask.DeserializedTask.IsValid())
+	require.True(s.T(),chasmTask.DeserializedTask.IsValid())
 
 	// Fail validation.
 	expectedErr := errors.New("validation failed")
@@ -2794,9 +2794,9 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	}
 	expectValidate((*TestSubComponent1)(nil), true, nil)
 	isValid, err = root.ValidateSideEffectTask(ctx, childChasmTask)
-	s.True(isValid)
+	require.True(s.T(),isValid)
 	require.NoError(s.T(), err)
-	s.True(childChasmTask.DeserializedTask.IsValid())
+	require.True(s.T(),childChasmTask.DeserializedTask.IsValid())
 }
 
 func (s *nodeSuite) newTestTree(
