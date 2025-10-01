@@ -254,10 +254,11 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 		`EnableDataLossMetrics determines whether dataloss metrics are emitted when dataloss errors are encountered`,
 	)
 
-	EnableDeleteHistoryTasksOnUpdate = NewGlobalBoolSetting(
-		"system.enableDeleteHistoryTasksOnUpdate",
+	EnableDeleteHistoryTasksOnWorkflowUpdate = NewGlobalBoolSetting(
+		"system.enableDeleteHistoryTasksOnWorkflowUpdate",
 		false,
-		`Enable deletion of requested history tasks (e.g., WFT timeout tasks) right after a successful UpdateWorkflowExecution.`,
+		`Enable deletion of requested history tasks (e.g., WFT timeout tasks) right after a successful UpdateWorkflowExecution.
+		WARNING: Turning on this config can create a large number of tombstones in cassandra and degrade performance, use with caution.`,
 	)
 
 	// deadlock detector
