@@ -25,12 +25,13 @@ import (
 type (
 	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and Serializer
 	executionManagerImpl struct {
-		serializer            serialization.Serializer
-		eventBlobCache        XDCCache
-		persistence           ExecutionStore
-		logger                log.Logger
-		pagingTokenSerializer *jsonHistoryTokenSerializer
-		transactionSizeLimit  dynamicconfig.IntPropertyFn
+		serializer                       serialization.Serializer
+		eventBlobCache                   XDCCache
+		persistence                      ExecutionStore
+		logger                           log.Logger
+		pagingTokenSerializer            *jsonHistoryTokenSerializer
+		transactionSizeLimit             dynamicconfig.IntPropertyFn
+		enableDeleteHistoryTasksOnUpdate dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -43,14 +44,16 @@ func NewExecutionManager(
 	eventBlobCache XDCCache,
 	logger log.Logger,
 	transactionSizeLimit dynamicconfig.IntPropertyFn,
+	enableDeleteHistoryTasksOnUpdate dynamicconfig.BoolPropertyFn,
 ) ExecutionManager {
 	return &executionManagerImpl{
-		serializer:            serializer,
-		eventBlobCache:        eventBlobCache,
-		persistence:           persistence,
-		logger:                logger,
-		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
-		transactionSizeLimit:  transactionSizeLimit,
+		serializer:                       serializer,
+		eventBlobCache:                   eventBlobCache,
+		persistence:                      persistence,
+		logger:                           logger,
+		pagingTokenSerializer:            newJSONHistoryTokenSerializer(),
+		transactionSizeLimit:             transactionSizeLimit,
+		enableDeleteHistoryTasksOnUpdate: enableDeleteHistoryTasksOnUpdate,
 	}
 }
 
@@ -198,6 +201,26 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	err = m.persistence.UpdateWorkflowExecution(ctx, newRequest)
 	switch err.(type) {
 	case nil:
+		// After a successful workflow update, delete any requested history tasks if enabled.
+		if m.enableDeleteHistoryTasksOnUpdate() {
+			// These are best-effort cleanups and should not fail the update response.
+			for category, keys := range updateMutation.DeleteTasks {
+				for _, key := range keys {
+					if delErr := m.persistence.CompleteHistoryTask(ctx, &CompleteHistoryTaskRequest{
+						ShardID:      request.ShardID,
+						TaskCategory: category,
+						TaskKey:      key,
+					}); delErr != nil {
+						m.logger.Warn("Failed to delete history task after workflow update",
+							tag.TaskCategoryID(category.ID()),
+							tag.Timestamp(key.FireTime),
+							tag.TaskID(key.TaskID),
+							tag.Error(delErr),
+						)
+					}
+				}
+			}
+		}
 		m.addXDCCacheKV(updateWorkflowXDCKVs)
 		m.addXDCCacheKV(newWorkflowXDCKVs)
 		return &UpdateWorkflowExecutionResponse{

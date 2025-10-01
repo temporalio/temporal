@@ -33,7 +33,8 @@ type (
 
 	DynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 
-	EnableDataLossMetrics dynamicconfig.BoolPropertyFn
+	EnableDataLossMetrics            dynamicconfig.BoolPropertyFn
+	EnableDeleteHistoryTasksOnUpdate dynamicconfig.BoolPropertyFn
 
 	ClusterName string
 
@@ -55,6 +56,7 @@ type (
 		HealthSignals                      persistence.HealthSignalAggregator
 		DynamicRateLimitingParams          DynamicRateLimitingParams
 		EnableDataLossMetrics              EnableDataLossMetrics
+		EnableDeleteHistoryTasksOnUpdate   EnableDeleteHistoryTasksOnUpdate
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -78,6 +80,7 @@ var Module = fx.Options(
 	fx.Provide(persistence.NewDLQMetricsEmitter),
 	fx.Provide(EventBlobCacheProvider),
 	fx.Provide(EnableDataLossMetricsProvider),
+	fx.Provide(EnableDeleteHistoryTasksOnUpdateProvider),
 )
 
 func ClusterNameProvider(config *cluster.Config) ClusterName {
@@ -99,6 +102,12 @@ func EnableDataLossMetricsProvider(
 	dc *dynamicconfig.Collection,
 ) EnableDataLossMetrics {
 	return EnableDataLossMetrics(dynamicconfig.EnableDataLossMetrics.Get(dc))
+}
+
+func EnableDeleteHistoryTasksOnUpdateProvider(
+	dc *dynamicconfig.Collection,
+) EnableDeleteHistoryTasksOnUpdate {
+	return EnableDeleteHistoryTasksOnUpdate(dynamicconfig.EnableDeleteHistoryTasksOnUpdate.Get(dc))
 }
 
 func FactoryProvider(
@@ -145,6 +154,7 @@ func FactoryProvider(
 		params.Logger,
 		params.HealthSignals,
 		params.EnableDataLossMetrics,
+		params.EnableDeleteHistoryTasksOnUpdate,
 	)
 }
 

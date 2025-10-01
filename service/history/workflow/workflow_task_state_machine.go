@@ -42,6 +42,7 @@ type (
 const (
 	workflowTaskRetryBackoffMinAttempts = 3
 	workflowTaskRetryInitialInterval    = 5 * time.Second
+	maxWorkflowTaskTimeoutToDelete      = 120 * time.Second
 )
 
 func newWorkflowTaskStateMachine(
@@ -679,6 +680,16 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 ) (*historypb.HistoryEvent, error) {
 
 	m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
+
+	// Record persisted workflow task timeout tasks for deletion after successful persistence update.
+	if workflowTask != nil {
+		if t := workflowTask.ScheduleToStartTimeoutTask; t != nil && !t.InMemory && t.VisibilityTimestamp.Sub(workflowTask.ScheduledTime) < maxWorkflowTaskTimeoutToDelete {
+			m.ms.DeleteTasks[t.GetCategory()] = append(m.ms.DeleteTasks[t.GetCategory()], t.GetKey())
+		}
+		if t := workflowTask.StartToCloseTimeoutTask; t != nil && !t.InMemory && t.VisibilityTimestamp.Sub(workflowTask.StartedTime) < maxWorkflowTaskTimeoutToDelete {
+			m.ms.DeleteTasks[t.GetCategory()] = append(m.ms.DeleteTasks[t.GetCategory()], t.GetKey())
+		}
+	}
 
 	// Capture if WorkflowTaskScheduled and WorkflowTaskStarted events were created
 	// before calling m.beforeAddWorkflowTaskCompletedEvent() because it will delete workflow task info from mutable state.

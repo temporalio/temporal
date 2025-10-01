@@ -254,6 +254,12 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 		`EnableDataLossMetrics determines whether dataloss metrics are emitted when dataloss errors are encountered`,
 	)
 
+	EnableDeleteHistoryTasksOnUpdate = NewGlobalBoolSetting(
+		"system.enableDeleteHistoryTasksOnUpdate",
+		false,
+		`Enable deletion of requested history tasks (e.g., WFT timeout tasks) right after a successful UpdateWorkflowExecution.`,
+	)
+
 	// deadlock detector
 
 	DeadlockDumpGoroutines = NewGlobalBoolSetting(

@@ -475,6 +475,54 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_UnexpectedSticky() {
 	s.Equal(int64(0), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
 }
 
+func (s *mutableStateSuite) TestPopulateDeleteTasks_WithWorkflowTaskTimeouts() {
+	// Setup a fresh mutable state and make task queue sticky so that ScheduleToStart timeout is created.
+	version := int64(1)
+	workflowID := "wf-timeout-delete"
+	runID := uuid.New()
+	s.mutableState = TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		workflowID,
+		runID,
+	)
+
+	sticky := &taskqueuepb.TaskQueue{Name: "sticky-tq", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+	s.mutableState.SetStickyTaskQueue(sticky.Name, durationpb.New(5*time.Second))
+
+	// Schedule a normal workflow task with task generation enabled (bypass=false)
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+
+	// Start the workflow task on the sticky queue, which will also generate StartToClose timeout task.
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		sticky,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+
+	// Complete the workflow task; this should populate ms.DeleteTasks with timeout task keys.
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+
+	// Validate that DeleteTasks contains CategoryTimer keys for both WFT timeouts (S2S and S2C).
+	del := s.mutableState.DeleteTasks
+	s.Contains(del, tasks.CategoryTimer)
+	s.GreaterOrEqual(len(del[tasks.CategoryTimer]), 1)
+}
+
 // creates a mutable state with first WFT completed on Build ID "b1"
 func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *taskqueuepb.TaskQueue) {
 	version := int64(12)
