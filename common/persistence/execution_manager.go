@@ -210,6 +210,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 						ShardID:      request.ShardID,
 						TaskCategory: category,
 						TaskKey:      key,
+						BestEffort:   true,
 					}); delErr != nil {
 						m.logger.Warn("Failed to delete history task after workflow update",
 							tag.TaskCategoryID(category.ID()),
