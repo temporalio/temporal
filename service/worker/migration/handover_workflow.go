@@ -95,7 +95,7 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		return err
 	}
 
-	// ** Step 2: Get current replication status **
+	// ** Step 2: Get current replication Status **
 	var repStatus replicationStatus
 	err = workflow.ExecuteActivity(ctx, a.GetMaxReplicationTaskIDs).Get(ctx, &repStatus)
 	if err != nil {

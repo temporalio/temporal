@@ -57,7 +57,7 @@ type (
 		// Queue size is determined by Multiplier * Concurrency
 		EstimationMultiplier int
 
-		// Carry over the replication status after continue-as-new.
+		// Carry over the replication Status after continue-as-new.
 		TaskQueueUserDataReplicationStatus TaskQueueUserDataReplicationStatus
 	}
 
@@ -104,7 +104,7 @@ var (
 const (
 	forceReplicationWorkflowName               = "force-replication"
 	forceTaskQueueUserDataReplicationWorkflow  = "force-task-queue-user-data-replication"
-	forceReplicationStatusQueryType            = "force-replication-status"
+	forceReplicationStatusQueryType            = "force-replication-Status"
 	taskQueueUserDataReplicationDoneSignalType = "task-queue-user-data-replication-done"
 	taskQueueUserDataReplicationVersionMarker  = "replicate-task-queue-user-data"
 
@@ -433,7 +433,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 			verifyTaskFuture := workflow.ExecuteActivity(
 				actx,
 				a.VerifyReplicationTasks,
-				&verifyReplicationTasksRequest{
+				&VerifyReplicationTasksRequest{
 					TargetClusterEndpoint: params.TargetClusterEndpoint,
 					TargetClusterName:     params.TargetClusterName,
 					Namespace:             params.Namespace,
@@ -450,7 +450,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 				if err := f.Get(ctx, &verifyTaskResponse); err != nil {
 					lastActivityErr = err
 				} else {
-					// Update replication status
+					// Update replication Status
 					params.ReplicatedWorkflowCount += int64(verifyTaskResponse.VerifiedWorkflowCount)
 					params.QPSQueue.Enqueue(ctx, params.ReplicatedWorkflowCount)
 					params.ReplicatedWorkflowCountPerSecond = params.QPSQueue.CalculateQPS()

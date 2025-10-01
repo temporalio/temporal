@@ -154,7 +154,7 @@ func (s *activitiesSuite) initEnv() (*testsuite.TestActivityEnvironment, *heartb
 func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 	env, iceptor := s.initEnv()
 
-	request := verifyReplicationTasksRequest{
+	request := VerifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
@@ -231,7 +231,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 		},
 	}
 
-	request := verifyReplicationTasksRequest{
+	request := VerifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
@@ -271,7 +271,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 
 func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
 	env, iceptor := s.initEnv()
-	request := verifyReplicationTasksRequest{
+	request := VerifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
@@ -309,7 +309,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
 
 func (s *activitiesSuite) TestVerifyReplicationTasks_AlreadyVerified() {
 	env, iceptor := s.initEnv()
-	request := verifyReplicationTasksRequest{
+	request := VerifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
@@ -329,7 +329,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_AlreadyVerified() {
 }
 
 func (s *activitiesSuite) Test_verifySingleReplicationTask() {
-	request := verifyReplicationTasksRequest{
+	request := VerifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
@@ -416,7 +416,7 @@ func (m *mockHeartBeatRecorder) hearbeat(details replicationTasksHeartbeatDetail
 }
 
 func (s *activitiesSuite) Test_verifyReplicationTasks() {
-	request := verifyReplicationTasksRequest{
+	request := VerifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
@@ -503,7 +503,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 	var recorder mockHeartBeatRecorder
 
-	request := verifyReplicationTasksRequest{
+	request := VerifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
@@ -547,7 +547,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 }
 
 func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
-	request := verifyReplicationTasksRequest{
+	request := VerifyReplicationTasksRequest{
 		Namespace:         mockedNamespace,
 		NamespaceID:       mockedNamespaceID,
 		TargetClusterName: remoteCluster,
