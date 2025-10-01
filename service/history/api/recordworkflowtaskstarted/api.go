@@ -73,7 +73,7 @@ func Invoke(
 				//  - Speculative WFT is lost (ScheduleToStart timeout for speculative WFT will recreate it).
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
-			if workflowTask.Stamp != mutableState.GetExecutionInfo().GetWorkflowTaskStamp() {
+			if req.GetStamp() != mutableState.GetExecutionInfo().GetWorkflowTaskStamp() {
 				// This happens when the workflow task was rescheduled.
 				return nil, serviceerrors.NewObsoleteMatchingTask("Workflow task stamp mismatch")
 			}

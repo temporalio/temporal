@@ -234,6 +234,8 @@ message RecordWorkflowTaskStartedRequest {
     temporal.api.deployment.v1.Deployment scheduled_deployment = 9;
     // Versioning directive that was sent by history when scheduling the task.
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
+    // Stamp value from when the workflow task was scheduled. Used to validate the task is still relevant.
+    int32 stamp = 11;
 }
 
 message RecordWorkflowTaskStartedResponse {
