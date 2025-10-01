@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"go.temporal.io/server/common/log"
+	"google.golang.org/grpc"
 )
 
 var (
@@ -17,6 +18,7 @@ var (
 
 type (
 	Registry struct {
+		libraries         map[string]Library                     // library name -> library
 		componentByType   map[string]*RegistrableComponent       // fully qualified type name -> component
 		componentByGoType map[reflect.Type]*RegistrableComponent // component go type -> component
 
@@ -29,6 +31,7 @@ type (
 
 func NewRegistry(logger log.Logger) *Registry {
 	return &Registry{
+		libraries:         make(map[string]Library),
 		componentByType:   make(map[string]*RegistrableComponent),
 		componentByGoType: make(map[reflect.Type]*RegistrableComponent),
 		taskByType:        make(map[string]*RegistrableTask),
@@ -41,6 +44,11 @@ func (r *Registry) Register(lib Library) error {
 	if err := r.validateName(lib.Name()); err != nil {
 		return err
 	}
+	if _, ok := r.libraries[lib.Name()]; ok {
+		return fmt.Errorf("library %s is already registered", lib.Name())
+	}
+	r.libraries[lib.Name()] = lib
+
 	for _, c := range lib.Components() {
 		if err := r.registerComponent(lib, c); err != nil {
 			return err
@@ -52,6 +60,13 @@ func (r *Registry) Register(lib Library) error {
 		}
 	}
 	return nil
+}
+
+// RegisterServices registers all gRPC services from all registered libraries.
+func (r *Registry) RegisterServices(server *grpc.Server) {
+	for _, lib := range r.libraries {
+		lib.RegisterServices(server)
+	}
 }
 
 func (r *Registry) component(fqn string) (*RegistrableComponent, bool) {
