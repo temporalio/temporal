@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -2449,22 +2450,22 @@ func (s *nodeSuite) TestEachPureTask() {
 				},
 			},
 		},
-		"child": {
+		"SubComponent1": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						Type: "TestLibrary.test_component",
+						Type: "TestLibrary.test_sub_component_1",
 						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
 							{
 								Type: "TestLibrary.test_pure_task",
 								// Not expired yet.
 								ScheduledTime:             timestamppb.New(now.Add(time.Hour)),
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 1,
+								VersionedTransitionOffset: 2,
 								PhysicalTaskStatus:        physicalTaskStatusCreated,
 								Data: mustEncode(&commonpb.Payload{
-									Data: []byte("some-random-data-child"),
+									Data: []byte("some-random-data-sc1"),
 								}),
 							},
 						},
@@ -2472,22 +2473,22 @@ func (s *nodeSuite) TestEachPureTask() {
 				},
 			},
 		},
-		"child/grandchild1": {
+		"SubComponent1/SubComponent11": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						Type: "TestLibrary.test_component",
+						Type: "TestLibrary.test_sub_component_11",
 						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
 							{
 								Type: "TestLibrary.test_pure_task",
 								// Expired, and physical task not created
 								ScheduledTime:             timestamppb.New(now),
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 2,
+								VersionedTransitionOffset: 3,
 								PhysicalTaskStatus:        physicalTaskStatusNone,
 								Data: mustEncode(&commonpb.Payload{
-									Data: []byte("some-random-data-grandchild-1"),
+									Data: []byte("some-random-data-sc11-1"),
 								}),
 							},
 							{
@@ -2495,10 +2496,34 @@ func (s *nodeSuite) TestEachPureTask() {
 								// Expired
 								ScheduledTime:             timestamppb.New(now),
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 1,
+								VersionedTransitionOffset: 4,
 								PhysicalTaskStatus:        physicalTaskStatusCreated,
 								Data: mustEncode(&commonpb.Payload{
-									Data: []byte("some-random-data-grandchild-2"),
+									Data: []byte("some-random-data-sc11-2"),
+								}),
+							},
+						},
+					},
+				},
+			},
+		},
+		"SubComponent2": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_sub_component_2",
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								Type: "TestLibrary.test_pure_task",
+								// Expired. However, this task won't be executed because the node is deleted
+								// when processing the pure task from the root component.
+								ScheduledTime:             timestamppb.New(now),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 5,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+								Data: mustEncode(&commonpb.Payload{
+									Data: []byte("some-random-data-sc2"),
 								}),
 							},
 						},
@@ -2513,15 +2538,28 @@ func (s *nodeSuite) TestEachPureTask() {
 	s.NotNil(root)
 
 	actualTaskCount := 0
-	err = root.EachPureTask(now.Add(time.Minute), func(executor NodePureTask, taskAttributes TaskAttributes, task any) error {
+	err = root.EachPureTask(now.Add(time.Minute), func(executor NodePureTask, taskAttributes TaskAttributes, task any) (bool, error) {
 		s.NotNil(executor)
 		s.NotNil(taskAttributes)
 
-		_, ok := task.(*TestPureTask)
+		testPureTask, ok := task.(*TestPureTask)
 		s.True(ok)
 
 		actualTaskCount += 1
-		return nil
+
+		if slices.Equal(
+			testPureTask.Payload.Data,
+			[]byte("some-random-data-root"),
+		) {
+			mutableContext := NewMutableContext(context.Background(), root)
+			rootComponent, err := root.Component(mutableContext, ComponentRef{})
+			s.NoError(err)
+
+			// delete
+			rootComponent.(*TestComponent).SubComponent2 = Field[*TestSubComponent2]{}
+		}
+
+		return true, nil
 	})
 	s.NoError(err)
 	s.Equal(3, actualTaskCount)
@@ -2572,25 +2610,27 @@ func (s *nodeSuite) TestExecutePureTask() {
 	// Succeed task execution and validation (happy case).
 	expectExecute(nil)
 	expectValidate(true, nil)
-	err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
+	executed, err := root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.NoError(err)
+	s.True(executed)
 
 	expectedErr := errors.New("dummy")
 
 	// Succeed validation, fail execution.
 	expectExecute(expectedErr)
 	expectValidate(true, nil)
-	err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
+	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
 
 	// Fail task validation (no execution occurs).
 	expectValidate(false, nil)
-	err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
+	executed, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.NoError(err)
+	s.False(executed)
 
 	// Error during task validation (no execution occurs).
 	expectValidate(false, expectedErr)
-	err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
+	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
 }
 

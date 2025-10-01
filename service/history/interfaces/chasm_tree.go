@@ -27,7 +27,7 @@ type ChasmTree interface {
 	Archetype() chasm.Archetype
 	EachPureTask(
 		deadline time.Time,
-		callback func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) error,
+		callback func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) (bool, error),
 	) error
 	ExecuteSideEffectTask(
 		ctx context.Context,
