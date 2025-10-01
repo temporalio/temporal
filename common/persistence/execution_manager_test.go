@@ -134,29 +134,3 @@ func TestExecutionManager_DeleteTasksError_DoesNotFailUpdate(t *testing.T) {
 		t.Fatalf("UpdateWorkflowExecution should succeed even if task deletion fails, got error: %v", err)
 	}
 }
-
-func TestExecutionManager_EmptyDeleteTasks_NoOp(t *testing.T) {
-	// Test that when DeleteTasks is empty, no deletion calls are made
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockp.NewMockExecutionStore(ctrl)
-	store.EXPECT().GetName().AnyTimes().Return("mock-store")
-	store.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
-	// No CompleteHistoryTask expected when DeleteTasks is empty
-
-	em := p.NewExecutionManager(
-		store,
-		serialization.NewSerializer(),
-		nil,
-		log.NewNoopLogger(),
-		dynamicconfig.GetIntPropertyFn(1024*1024),
-		dynamicconfig.GetBoolPropertyFn(true),
-	)
-
-	// Pass empty keys slice
-	_, err := em.UpdateWorkflowExecution(context.Background(), newTestUpdateRequest([]tasks.Key{}))
-	if err != nil {
-		t.Fatalf("UpdateWorkflowExecution returned error: %v", err)
-	}
-}

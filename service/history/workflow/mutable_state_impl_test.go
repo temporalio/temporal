@@ -548,6 +548,8 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_WithWorkflowTaskTimeouts() {
 	del := s.mutableState.DeleteTasks
 	s.Contains(del, tasks.CategoryTimer)
 	s.Equal(2, len(del[tasks.CategoryTimer]), "Should have both ScheduleToStart and StartToClose timeout tasks")
+	s.Contains(del[tasks.CategoryTimer], mockScheduleToStartTask.GetKey())
+	s.Contains(del[tasks.CategoryTimer], mockStartToCloseTask.GetKey())
 }
 
 func (s *mutableStateSuite) TestPopulateDeleteTasks_InMemoryTask_NotIncluded() {
