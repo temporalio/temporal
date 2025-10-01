@@ -115,6 +115,7 @@ type (
 		forceReplicationMetricsHandler   metrics.Handler
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		generateMigrationTaskViaFrontend dynamicconfig.BoolPropertyFn
+		enableHistoryRateLimiter         dynamicconfig.BoolPropertyFn
 		workflowVerifier                 WorkflowVerifier
 	}
 
@@ -137,6 +138,8 @@ const (
 	notVerified verifyStatus = 0
 	verified    verifyStatus = 1
 	skipped     verifyStatus = 2
+
+	largeHistoryLength = 1000
 )
 
 func (r verifyResult) isVerified() bool {
@@ -397,6 +400,9 @@ func (a *activities) generateWorkflowReplicationTask(
 	// Take the minimum between StateTransitionCount and HistoryLength as heuristic to avoid unnecessary throttling
 	// in such situation.
 	count := min(stateTransitionCount, historyLength)
+	if a.enableHistoryRateLimiter() {
+		count = max(1, historyLength/largeHistoryLength)
+	}
 	for count > 0 {
 		token := min(int(count), rateLimiter.Burst())
 		count -= int64(token)
