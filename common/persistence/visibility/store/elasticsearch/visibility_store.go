@@ -363,7 +363,7 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	queryParams, err := s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
+	queryParams, err := s.convertQueryLegacy(request.Namespace, request.NamespaceID, request.Query)
 	if err != nil {
 		return nil, err
 	}
@@ -383,7 +383,7 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 
 func (s *VisibilityStore) countGroupByWorkflowExecutions(
 	ctx context.Context,
-	queryParams *query.QueryParams,
+	queryParams *query.QueryParamsLegacy,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
 	groupByFields := queryParams.GroupBy
 
@@ -461,7 +461,7 @@ func (s *VisibilityStore) BuildSearchParametersV2(
 	request *manager.ListWorkflowExecutionsRequestV2,
 	getFieldSorter func([]elastic.Sorter) ([]elastic.Sorter, error),
 ) (*client.SearchParameters, error) {
-	queryParams, err := s.convertQuery(
+	queryParams, err := s.convertQueryLegacy(
 		request.Namespace,
 		request.NamespaceID,
 		request.Query,
@@ -562,17 +562,17 @@ func (s *VisibilityStore) processPageToken(
 	return nil
 }
 
-func (s *VisibilityStore) convertQuery(
+func (s *VisibilityStore) convertQueryLegacy(
 	namespace namespace.Name,
 	namespaceID namespace.ID,
 	requestQueryStr string,
-) (*query.QueryParams, error) {
+) (*query.QueryParamsLegacy, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef("unable to read search attribute types: %v", err)
 	}
 	nameInterceptor := NewNameInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider)
-	queryConverter := NewQueryConverter(
+	queryConverter := NewQueryConverterLegacy(
 		nameInterceptor,
 		NewValuesInterceptor(namespace, saTypeMap),
 		saTypeMap,
