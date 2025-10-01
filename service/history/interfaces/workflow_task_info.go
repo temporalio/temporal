@@ -50,9 +50,8 @@ type WorkflowTaskInfo struct {
 	// Deprecated.
 	BuildId string
 
-	// References to timeout tasks for this workflow task, if created.
-	// These are in-memory only and used to directly complete or remove
-	// timeout tasks when the workflow task completes, avoiding lookups.
+	// References to timeout tasks for this workflow task. These are used to directly complete timeout tasks when the
+	// workflow task completes.
 	ScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
 	StartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
 }

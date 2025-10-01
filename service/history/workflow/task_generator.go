@@ -482,7 +482,6 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 	// This function can be called for speculative WT which just was converted to normal
 	// (it will be of type Normal). In this case persisted timer task needs to be created.
 	r.mutableState.AddTasks(wttt)
-	// Store pointer for direct cleanup on completion.
 	workflowTask.ScheduleToStartTimeoutTask = wttt
 	return nil
 

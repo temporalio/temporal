@@ -201,7 +201,6 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	err = m.persistence.UpdateWorkflowExecution(ctx, newRequest)
 	switch err.(type) {
 	case nil:
-		// After a successful workflow update, delete any requested history tasks if enabled.
 		m.deleteHistoryTasks(ctx, request.ShardID, updateMutation.DeleteTasks)
 		m.addXDCCacheKV(updateWorkflowXDCKVs)
 		m.addXDCCacheKV(newWorkflowXDCKVs)
@@ -231,8 +230,8 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	}
 }
 
-// deleteHistoryTasks iterates over provided task keys and completes them when
-// the dynamic config is enabled. Completion is best-effort and failures are logged.
+// deleteHistoryTasks iterates over provided task keys and completes them when the dynamic config
+// history.enableDeleteTasksOnWorkflowUpdate is enabled. Completion is best-effort and failures are logged.
 func (m *executionManagerImpl) deleteHistoryTasks(
 	ctx context.Context,
 	shardID int32,
