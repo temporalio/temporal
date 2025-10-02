@@ -5696,6 +5696,9 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
 		return nil, err
 	}
+	if err := priorities.Validate(opts.GetPriority()); err != nil {
+		return nil, err
+	}
 	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -5728,6 +5731,9 @@ func (wh *WorkflowHandler) UpdateActivityOptions(
 	}
 	if request.GetActivity() == nil {
 		return nil, errActivityIDOrTypeNotSet
+	}
+	if err := priorities.Validate(request.GetActivityOptions().GetPriority()); err != nil {
+		return nil, err
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
