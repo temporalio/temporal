@@ -239,7 +239,7 @@ func IsReserved(name string) bool {
 }
 
 // IsMappable returns true if name can be mapped to the alias.
-// Mappable search attributes are those that are defined by the user.
+// Mappable search attributes are those that can be defined by the user.
 func IsMappable(name string) bool {
 	if _, ok := system[name]; ok {
 		return false
