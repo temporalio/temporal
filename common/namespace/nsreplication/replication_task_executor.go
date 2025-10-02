@@ -296,6 +296,9 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		request.Namespace.FailoverVersion = task.GetFailoverVersion()
 		request.Namespace.FailoverNotificationVersion = notificationVersion
 		request.Namespace.ReplicationConfig.FailoverHistory = ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory())
+	} else if len(resp.Namespace.ReplicationConfig.FailoverHistory) < len(task.GetFailoverHistory()) {
+		recordUpdated = true
+		request.Namespace.ReplicationConfig.FailoverHistory = ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory())
 	}
 
 	if !recordUpdated {
