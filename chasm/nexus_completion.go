@@ -6,12 +6,10 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	commonnexus "go.temporal.io/server/common/nexus"
 )
 
 const (
-	// Header name for the CHASM ComponentRef.
-	NexusComponentRefHeader = "X-CHASM-Component-Ref"
-
 	// Base URL for Nexus->CHASM callbacks.
 	NexusCompletionHandlerURL = "temporal://internal"
 )
@@ -37,7 +35,7 @@ func GetNexusCallback(ctx Context, component Component) (*commonpb.Callback, err
 
 	encodedRef := base64.RawURLEncoding.EncodeToString(ref)
 	headers := map[string]string{
-		NexusComponentRefHeader: encodedRef,
+		commonnexus.CallbackTokenHeader: encodedRef,
 	}
 
 	return &commonpb.Callback{

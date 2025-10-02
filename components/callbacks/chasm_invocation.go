@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/queues"
@@ -44,9 +43,9 @@ func (c chasmInvocation) WrapError(result invocationResult, err error) error {
 
 func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
 	// Get back the base64-encoded ComponentRef from the header.
-	encodedRef, ok := c.nexus.GetHeader()[chasm.NexusComponentRefHeader]
+	encodedRef, ok := c.nexus.GetHeader()[commonnexus.CallbackTokenHeader]
 	if !ok {
-		return invocationResultFail{errors.New("callback missing CHASM header")}
+		return invocationResultFail{errors.New("callback missing token")}
 	}
 
 	decodedRef, err := base64.RawURLEncoding.DecodeString(encodedRef)

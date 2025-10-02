@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
@@ -658,7 +659,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 
 			headers := make(map[string]string)
 			if tc.headerValue != "" {
-				headers[chasm.NexusComponentRefHeader] = tc.headerValue
+				headers[commonnexus.CallbackTokenHeader] = tc.headerValue
 			}
 
 			// Create mutable state with the test completion
