@@ -5970,12 +5970,12 @@ func (ms *MutableStateImpl) logReportedProblemsChange(oldPayload, newPayload *co
 }
 
 // decodeReportedProblems safely decodes a keyword list payload to []string
-func (ms *MutableStateImpl) decodeReportedProblems(payload *commonpb.Payload) []string {
-	if payload == nil {
+func (ms *MutableStateImpl) decodeReportedProblems(p *commonpb.Payload) []string {
+	if p == nil {
 		return nil
 	}
 
-	decoded, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	decoded, err := searchattribute.DecodeValue(p, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	if err != nil {
 		ms.logger.Warn("Failed to decode TemporalReportedProblems payload for logging",
 			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
