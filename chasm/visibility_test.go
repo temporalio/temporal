@@ -42,7 +42,6 @@ func (s *visibilitySuite) SetupTest() {
 	s.NoError(err)
 
 	s.mockMutableContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
-	s.mockMutableContext.EXPECT().ToImmutable().Return(s.mockContext).AnyTimes()
 	s.visibility = NewVisibility(s.mockMutableContext)
 }
 
