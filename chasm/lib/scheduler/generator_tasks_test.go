@@ -48,7 +48,7 @@ func (s *generatorTasksSuite) TestExecute_ProcessTimeRangeFails() {
 	generator, err := sched.Generator.Get(ctx)
 	require.NoError(s.T(), err)
 	err = s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
-	require.True(s.T(),common.IsInternalError(err))
+	require.True(s.T(), common.IsInternalError(err))
 }
 
 func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
@@ -74,14 +74,14 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 	// We expect 5 buffered starts.
 	invoker, err := sched.Invoker.Get(ctx)
 	require.NoError(s.T(), err)
-	require.Equal(s.T(),5, len(invoker.BufferedStarts))
+	require.Equal(s.T(), 5, len(invoker.BufferedStarts))
 
 	// Generator's high water mark should have advanced.
 	newHighWatermark := generator.LastProcessedTime.AsTime()
-	require.True(s.T(),newHighWatermark.After(highWatermark))
+	require.True(s.T(), newHighWatermark.After(highWatermark))
 
 	// Ensure we scheduled an immediate physical pure task on the tree.
 	_, err = s.node.CloseTransaction()
 	require.NoError(s.T(), err)
-	require.True(s.T(),s.hasTask(&tasks.ChasmTaskPure{}, chasm.TaskScheduledTimeImmediate))
+	require.True(s.T(), s.hasTask(&tasks.ChasmTaskPure{}, chasm.TaskScheduledTimeImmediate))
 }

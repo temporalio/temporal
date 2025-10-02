@@ -49,9 +49,9 @@ func (s *componentRefSuite) TestArchetype() {
 	require.NoError(s.T(), err)
 
 	rc, ok := s.registry.ComponentOf(reflect.TypeFor[*TestComponent]())
-	require.True(s.T(),ok)
+	require.True(s.T(), ok)
 
-	require.Equal(s.T(),rc.FqType(), archetype.String())
+	require.Equal(s.T(), rc.FqType(), archetype.String())
 }
 
 func (s *componentRefSuite) TestShardingKey() {
@@ -67,9 +67,9 @@ func (s *componentRefSuite) TestShardingKey() {
 	require.NoError(s.T(), err)
 
 	rc, ok := s.registry.ComponentOf(reflect.TypeFor[*TestComponent]())
-	require.True(s.T(),ok)
+	require.True(s.T(), ok)
 
-	require.Equal(s.T(),rc.shardingFn(entityKey), shardingKey)
+	require.Equal(s.T(), rc.shardingFn(entityKey), shardingKey)
 }
 
 func (s *componentRefSuite) TestSerializeDeserialize() {
@@ -103,9 +103,9 @@ func (s *componentRefSuite) TestSerializeDeserialize() {
 	s.ProtoEqual(ref.componentInitialVT, deserializedRef.componentInitialVT)
 
 	rootRc, ok := s.registry.ComponentFor(&TestComponent{})
-	require.True(s.T(),ok)
-	require.Equal(s.T(),rootRc.FqType(), deserializedRef.archetype.String())
+	require.True(s.T(), ok)
+	require.Equal(s.T(), rootRc.FqType(), deserializedRef.archetype.String())
 
-	require.Equal(s.T(),ref.EntityKey, deserializedRef.EntityKey)
-	require.Equal(s.T(),ref.componentPath, deserializedRef.componentPath)
+	require.Equal(s.T(), ref.EntityKey, deserializedRef.EntityKey)
+	require.Equal(s.T(), ref.componentPath, deserializedRef.componentPath)
 }

@@ -60,8 +60,8 @@ func (s *backfillerTasksSuite) TestBackfillTask_TriggerImmediate() {
 		ExpectedComplete:       true,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
 			start := invoker.GetBufferedStarts()[0]
-			require.Equal(s.T(),request.OverlapPolicy, start.OverlapPolicy)
-			require.True(s.T(),start.Manual)
+			require.Equal(s.T(), request.OverlapPolicy, start.OverlapPolicy)
+			require.True(s.T(), start.Manual)
 		},
 	})
 }
@@ -103,11 +103,11 @@ func (s *backfillerTasksSuite) TestBackfillTask_CompleteFill() {
 		ExpectedComplete:       true,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
 			for _, start := range invoker.GetBufferedStarts() {
-				require.Equal(s.T(),request.OverlapPolicy, start.OverlapPolicy)
+				require.Equal(s.T(), request.OverlapPolicy, start.OverlapPolicy)
 				startAt := start.GetActualTime().AsTime()
-				require.True(s.T(),startAt.After(startTime))
-				require.True(s.T(),startAt.Before(endTime))
-				require.True(s.T(),start.Manual)
+				require.True(s.T(), startAt.After(startTime))
+				require.True(s.T(), startAt.Before(endTime))
+				require.True(s.T(), start.Manual)
 			}
 		},
 	})
@@ -213,12 +213,12 @@ func (s *backfillerTasksSuite) TestBackfillTask_PartialFill() {
 	require.NoError(s.T(), err)
 	_, err = s.node.CloseTransaction()
 	require.NoError(s.T(), err)
-	require.Equal(s.T(),5, len(invoker.GetBufferedStarts()))
+	require.Equal(s.T(), 5, len(invoker.GetBufferedStarts()))
 
 	// Verify the backfiller is deleted
 	res, err := s.scheduler.Backfillers[backfiller.BackfillId].Get(ctx)
 	require.NoError(s.T(), err)
-	require.Nil(s.T(),res)
+	require.Nil(s.T(), res)
 }
 
 func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
@@ -242,7 +242,7 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 	// Either type of request will spawn a Backfiller and schedule an immediate pure task.
 	_, err = s.node.CloseTransaction()
 	require.NoError(s.T(), err)
-	require.True(s.T(),s.hasTask(&tasks.ChasmTaskPure{}, chasm.TaskScheduledTimeImmediate))
+	require.True(s.T(), s.hasTask(&tasks.ChasmTaskPure{}, chasm.TaskScheduledTimeImmediate))
 
 	// Run a backfill task.
 	err = s.executor.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
@@ -255,19 +255,19 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 		// Backfiller should no longer be present in the backfiller map.
 		res, err := sched.Backfillers[backfiller.BackfillId].Get(ctx)
 		require.NoError(s.T(), err)
-		require.Nil(s.T(),res)
+		require.Nil(s.T(), res)
 	} else {
 		// TODO - check that a pure task to continue driving backfill exists here. Because
 		// a pure task in the tree already has the physically-created status, closing the
 		// transaction won't call our backend mock for AddTasks twice. Fix this when CHASM
 		// offers unit testing hooks for task generation.
 
-		require.Equal(s.T(),int64(c.ExpectedAttempt), backfiller.GetAttempt())
-		require.Equal(s.T(),c.ExpectedLastProcessedTime.UTC(), backfiller.GetLastProcessedTime().AsTime())
+		require.Equal(s.T(), int64(c.ExpectedAttempt), backfiller.GetAttempt())
+		require.Equal(s.T(), c.ExpectedLastProcessedTime.UTC(), backfiller.GetLastProcessedTime().AsTime())
 	}
 
 	// Validate BufferedStarts. More detailed validation must be done in the callbacks.
-	require.Equal(s.T(),c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))
+	require.Equal(s.T(), c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))
 
 	// Callbacks.
 	if c.ValidateInvoker != nil {

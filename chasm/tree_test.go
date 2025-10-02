@@ -511,7 +511,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		require.NotNil(s.T(), ifacePtr)
 
 		sc1ptr, ok := ifacePtr.(*TestSubComponent1)
-		require.True(s.T(),ok)
+		require.True(s.T(), ok)
 		s.ProtoEqual(sc1ptr.SubComponent1Data, sc1.SubComponent1Data)
 	})
 
@@ -829,13 +829,13 @@ func (s *nodeSuite) TestApplyMutation() {
 
 	// Validate the "child" node got updated.
 	childNode, ok := root.children["child"]
-	require.True(s.T(),ok)
+	require.True(s.T(), ok)
 	require.Equal(s.T(), updatedChild, childNode.serializedNode)
 	require.Nil(s.T(), childNode.value) // value should be reset after mutation
 
 	// Validate the "newchild" node is added.
 	newChildNode, ok := root.children["newchild"]
-	require.True(s.T(),ok)
+	require.True(s.T(), ok)
 	require.Equal(s.T(), newChild, newChildNode.serializedNode)
 
 	// Validate the "grandchild" node is deleted.
@@ -1049,7 +1049,7 @@ func (s *nodeSuite) TestRefreshTasks() {
 	err = root.RefreshTasks()
 	require.NoError(s.T(), err)
 
-	require.True(s.T(),root.IsDirty())
+	require.True(s.T(), root.IsDirty())
 	s.False(root.IsStateDirty())
 
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{
@@ -1346,7 +1346,7 @@ func (s *nodeSuite) TestValidateAccess() {
 
 			// Find target node
 			node, ok := root.findNode(nodePath)
-			require.True(s.T(),ok)
+			require.True(s.T(), ok)
 			err = node.prepareComponentValue(ctx)
 			require.NoError(s.T(), err)
 
@@ -1378,7 +1378,7 @@ func (s *nodeSuite) TestGetComponent() {
 	setTestComponentFields(expectedTestComponent)
 	assertTestComponent := func(component Component) {
 		testComponent, ok := component.(*TestComponent)
-		require.True(s.T(),ok)
+		require.True(s.T(), ok)
 		protoassert.ProtoEqual(s.T(), expectedTestComponent.ComponentData, testComponent.ComponentData)
 
 		// TODO: Can we assert other fields?
@@ -1482,7 +1482,7 @@ func (s *nodeSuite) TestGetComponent() {
 				// s.Equal(tc.expectedComponent, component)
 
 				node, ok := root.findNode(tc.ref.componentPath)
-				require.True(s.T(),ok)
+				require.True(s.T(), ok)
 				require.Equal(s.T(), component, node.value)
 				require.Equal(s.T(), tc.valueState, node.valueState)
 			}
@@ -1513,10 +1513,10 @@ func (s *nodeSuite) TestRef() {
 	rootComponent, err := root.Component(chasmContext, NewComponentRef[*TestComponent](entityKey))
 	require.NoError(s.T(), err)
 	testComponent, ok := rootComponent.(*TestComponent)
-	require.True(s.T(),ok)
+	require.True(s.T(), ok)
 
 	rc, ok := s.registry.ComponentFor(testComponent)
-	require.True(s.T(),ok)
+	require.True(s.T(), ok)
 	archetype := Archetype(rc.FqType())
 
 	subComponent1, err := testComponent.SubComponent1.Get(chasmContext)
@@ -1648,7 +1648,7 @@ func (s *nodeSuite) TestSerializeDeserializeTask() {
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			rt, ok := s.registry.taskFor(tc.task)
-			require.True(s.T(),ok)
+			require.True(s.T(), ok)
 
 			blob, err := serializeTask(rt, reflect.ValueOf(tc.task))
 			require.NoError(s.T(), err)
@@ -1796,7 +1796,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility() {
 	mutation, err := node.CloseTransaction()
 	require.NoError(s.T(), err)
 	pVisibilityNode, ok := mutation.UpdatedNodes["Visibility"]
-	require.True(s.T(),ok)
+	require.True(s.T(), ok)
 	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().SideEffectTasks, 1)
 
 	// Some change unrelated to visibility
@@ -1829,7 +1829,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility() {
 	mutation, err = node.CloseTransaction()
 	require.NoError(s.T(), err)
 	pVisibilityNode, ok = mutation.UpdatedNodes["Visibility"]
-	require.True(s.T(),ok)
+	require.True(s.T(), ok)
 	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().SideEffectTasks, 1)
 }
 
@@ -2066,7 +2066,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	s.Len(physicalTasks[tasks.CategoryTimer], 1)
 	chasmPureTask := physicalTasks[tasks.CategoryTimer][0].(*tasks.ChasmTaskPure)
 	require.Equal(s.T(), tasks.CategoryTimer, chasmPureTask.Category)
-	require.True(s.T(),chasmPureTask.VisibilityTimestamp.Equal(s.timeSource.Now()))
+	require.True(s.T(), chasmPureTask.VisibilityTimestamp.Equal(s.timeSource.Now()))
 
 	subComponent2Attr := mutation.UpdatedNodes["SubComponent2"].GetMetadata().GetComponentAttributes()
 	newOutboundSideEffectTask := subComponent2Attr.SideEffectTasks[0]
@@ -2271,7 +2271,7 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
 	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).Do(func(addedTask tasks.Task) {
 		s.IsType(&tasks.ChasmTaskPure{}, addedTask)
 		require.Equal(s.T(), tasks.CategoryTimer, addedTask.GetCategory())
-		require.True(s.T(),now.Add(time.Minute).Equal(addedTask.GetKey().FireTime))
+		require.True(s.T(), now.Add(time.Minute).Equal(addedTask.GetKey().FireTime))
 	}).Times(1)
 
 	mutation, err := root.CloseTransaction()
@@ -2302,7 +2302,7 @@ func (s *nodeSuite) TestTerminate() {
 	// Then terminate the node and verify only that node will be in the mutation.
 	err = node.Terminate(TerminateComponentRequest{})
 	require.NoError(s.T(), err)
-	require.True(s.T(),node.terminated)
+	require.True(s.T(), node.terminated)
 
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
@@ -2515,7 +2515,7 @@ func (s *nodeSuite) TestEachPureTask() {
 		require.NotNil(s.T(), taskAttributes)
 
 		_, ok := task.(*TestPureTask)
-		require.True(s.T(),ok)
+		require.True(s.T(), ok)
 
 		actualTaskCount += 1
 		return nil
@@ -2686,8 +2686,8 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	expectExecute(nil)
 	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, chasmTask, dummyValidationFn)
 	require.NoError(s.T(), err)
-	require.True(s.T(),backendValidtionFnCalled)
-	require.True(s.T(),chasmTask.DeserializedTask.IsValid())
+	require.True(s.T(), backendValidtionFnCalled)
+	require.True(s.T(), chasmTask.DeserializedTask.IsValid())
 
 	// Invalid task.
 	expectValidate(false, nil)
@@ -2695,7 +2695,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, chasmTask, dummyValidationFn)
 	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
-	require.True(s.T(),chasmTask.DeserializedTask.IsValid())
+	require.True(s.T(), chasmTask.DeserializedTask.IsValid())
 
 	// Failed to validate task.
 	validationErr := errors.New("validation error")
@@ -2711,7 +2711,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	expectExecute(executionErr)
 	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, chasmTask, dummyValidationFn)
 	s.ErrorIs(executionErr, err)
-	require.True(s.T(),backendValidtionFnCalled)
+	require.True(s.T(), backendValidtionFnCalled)
 	s.False(chasmTask.DeserializedTask.IsValid())
 }
 
@@ -2763,16 +2763,16 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	// Succeed validation as valid.
 	expectValidate((*TestComponent)(nil), true, nil)
 	isValid, err := root.ValidateSideEffectTask(ctx, chasmTask)
-	require.True(s.T(),isValid)
+	require.True(s.T(), isValid)
 	require.NoError(s.T(), err)
-	require.True(s.T(),chasmTask.DeserializedTask.IsValid())
+	require.True(s.T(), chasmTask.DeserializedTask.IsValid())
 
 	// Succeed validation as invalid.
 	expectValidate((*TestComponent)(nil), false, nil)
 	isValid, err = root.ValidateSideEffectTask(ctx, chasmTask)
 	s.False(isValid)
 	require.NoError(s.T(), err)
-	require.True(s.T(),chasmTask.DeserializedTask.IsValid())
+	require.True(s.T(), chasmTask.DeserializedTask.IsValid())
 
 	// Fail validation.
 	expectedErr := errors.New("validation failed")
@@ -2794,9 +2794,9 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	}
 	expectValidate((*TestSubComponent1)(nil), true, nil)
 	isValid, err = root.ValidateSideEffectTask(ctx, childChasmTask)
-	require.True(s.T(),isValid)
+	require.True(s.T(), isValid)
 	require.NoError(s.T(), err)
-	require.True(s.T(),childChasmTask.DeserializedTask.IsValid())
+	require.True(s.T(), childChasmTask.DeserializedTask.IsValid())
 }
 
 func (s *nodeSuite) newTestTree(

@@ -87,7 +87,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_AllowAll() {
 		ExpectedBufferedStarts: 3,
 		ExpectedOverlapSkipped: 0,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
-			require.Equal(s.T(),3, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
+			require.Equal(s.T(), 3, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 				return start.Attempt > 0
 			})))
 		},
@@ -157,7 +157,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BufferOne() {
 		ExpectedOverlapSkipped: 1,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
 			// Only one start should be set for execution (Attempt > 0)
-			require.Equal(s.T(),1, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
+			require.Equal(s.T(), 1, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 				return start.Attempt > 0
 			})))
 		},
@@ -226,7 +226,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BackingOffReady() 
 		ExpectedBufferedStarts: 1,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
 			// The start should be ready for execution (Attempt > 0)
-			require.Equal(s.T(),1, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
+			require.Equal(s.T(), 1, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 				return start.Attempt > 0
 			})))
 		},
@@ -319,12 +319,12 @@ func (s *invokerProcessBufferTaskSuite) runProcessBufferTestCase(c *processBuffe
 	require.NoError(s.T(), err)
 
 	// Validate the results
-	require.Equal(s.T(),c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))
-	require.Equal(s.T(),c.ExpectedRunningWorkflows, len(s.scheduler.Info.RunningWorkflows))
-	require.Equal(s.T(),c.ExpectedTerminateWorkflows, len(invoker.TerminateWorkflows))
-	require.Equal(s.T(),c.ExpectedCancelWorkflows, len(invoker.CancelWorkflows))
-	require.Equal(s.T(),c.ExpectedOverlapSkipped, s.scheduler.Info.OverlapSkipped)
-	require.Equal(s.T(),c.ExpectedMissedCatchupWindow, s.scheduler.Info.MissedCatchupWindow)
+	require.Equal(s.T(), c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))
+	require.Equal(s.T(), c.ExpectedRunningWorkflows, len(s.scheduler.Info.RunningWorkflows))
+	require.Equal(s.T(), c.ExpectedTerminateWorkflows, len(invoker.TerminateWorkflows))
+	require.Equal(s.T(), c.ExpectedCancelWorkflows, len(invoker.CancelWorkflows))
+	require.Equal(s.T(), c.ExpectedOverlapSkipped, s.scheduler.Info.OverlapSkipped)
+	require.Equal(s.T(), c.ExpectedMissedCatchupWindow, s.scheduler.Info.MissedCatchupWindow)
 
 	// Callbacks
 	if c.ValidateInvoker != nil {

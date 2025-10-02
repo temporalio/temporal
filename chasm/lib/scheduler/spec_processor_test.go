@@ -71,7 +71,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_LimitedActions() {
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	require.NoError(s.T(), err)
-	require.Equal(s.T(),1, len(res.BufferedStarts))
+	require.Equal(s.T(), 1, len(res.BufferedStarts))
 
 	// When a schedule has an action limit that has been exceeded, we don't bother
 	// buffering additional actions.
@@ -79,15 +79,15 @@ func (s *specProcessorSuite) TestProcessTimeRange_LimitedActions() {
 
 	res, err = s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	require.NoError(s.T(), err)
-	require.Equal(s.T(),0, len(res.BufferedStarts))
+	require.Equal(s.T(), 0, len(res.BufferedStarts))
 
 	// Manual starts should always be allowed.
 	backfillID := "backfill"
 	res, err = s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, backfillID, true, nil)
 	require.NoError(s.T(), err)
-	require.Equal(s.T(),1, len(res.BufferedStarts))
+	require.Equal(s.T(), 1, len(res.BufferedStarts))
 	bufferedStart := res.BufferedStarts[0]
-	require.True(s.T(),bufferedStart.Manual)
+	require.True(s.T(), bufferedStart.Manual)
 	s.Contains(bufferedStart.RequestId, backfillID)
 }
 
@@ -105,7 +105,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_UpdateAfterHighWatermark() {
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	require.NoError(s.T(), err)
-	require.Equal(s.T(),3, len(res.BufferedStarts))
+	require.Equal(s.T(), 3, len(res.BufferedStarts))
 }
 
 // Tests that an update between a nominal time and jittered time for a start, that doesn't
@@ -134,13 +134,13 @@ func (s *specProcessorSuite) TestProcessTimeRange_UpdateBetweenNominalAndJitter(
 	// A single start should have been buffered.
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	require.NoError(s.T(), err)
-	require.Equal(s.T(),1, len(res.BufferedStarts))
+	require.Equal(s.T(), 1, len(res.BufferedStarts))
 
 	// Validates the test case.
 	actualTime := res.BufferedStarts[0].GetActualTime().AsTime()
 	nominalTime := res.BufferedStarts[0].GetNominalTime().AsTime()
-	require.True(s.T(),nominalTime.Before(updateTime))
-	require.True(s.T(),actualTime.After(updateTime))
+	require.True(s.T(), nominalTime.Before(updateTime))
+	require.True(s.T(), actualTime.After(updateTime))
 }
 
 func (s *specProcessorSuite) TestProcessTimeRange_CatchupWindow() {
@@ -154,7 +154,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_CatchupWindow() {
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	require.NoError(s.T(), err)
-	require.Equal(s.T(),5, len(res.BufferedStarts))
+	require.Equal(s.T(), 5, len(res.BufferedStarts))
 }
 
 func (s *specProcessorSuite) TestProcessTimeRange_Limit() {
@@ -170,8 +170,8 @@ func (s *specProcessorSuite) TestProcessTimeRange_Limit() {
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, &limit)
 	require.NoError(s.T(), err)
-	require.Equal(s.T(),2, len(res.BufferedStarts))
-	require.Equal(s.T(),0, limit)
+	require.Equal(s.T(), 2, len(res.BufferedStarts))
+	require.Equal(s.T(), 0, limit)
 }
 
 func (s *specProcessorSuite) TestProcessTimeRange_OverlapPolicy() {
@@ -185,9 +185,9 @@ func (s *specProcessorSuite) TestProcessTimeRange_OverlapPolicy() {
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	require.NoError(s.T(), err)
-	require.Equal(s.T(),5, len(res.BufferedStarts))
+	require.Equal(s.T(), 5, len(res.BufferedStarts))
 	for _, b := range res.BufferedStarts {
-		require.Equal(s.T(),enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, b.OverlapPolicy)
+		require.Equal(s.T(), enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, b.OverlapPolicy)
 	}
 
 	// Check that a specified overlap policy is applied.
@@ -196,9 +196,9 @@ func (s *specProcessorSuite) TestProcessTimeRange_OverlapPolicy() {
 
 	res, err = s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	require.NoError(s.T(), err)
-	require.Equal(s.T(),5, len(res.BufferedStarts))
+	require.Equal(s.T(), 5, len(res.BufferedStarts))
 	for _, b := range res.BufferedStarts {
-		require.Equal(s.T(),overlapPolicy, b.OverlapPolicy)
+		require.Equal(s.T(), overlapPolicy, b.OverlapPolicy)
 	}
 }
 
@@ -211,7 +211,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_Basic() {
 	// Validate returned BufferedStarts for unique action times and request IDs.
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	require.NoError(s.T(), err)
-	require.Equal(s.T(),5, len(res.BufferedStarts))
+	require.Equal(s.T(), 5, len(res.BufferedStarts))
 
 	uniqueTimes := make(map[time.Time]bool)
 	uniqueIDs := make(map[string]bool)

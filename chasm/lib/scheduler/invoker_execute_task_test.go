@@ -159,8 +159,8 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_RetryableFailure() {
 			// The failed start should have had a backoff applied.
 			failedStart := invoker.BufferedStarts[0]
 			backoffTime := failedStart.BackoffTime.AsTime()
-			require.True(s.T(),backoffTime.After(s.timeSource.Now()))
-			require.Equal(s.T(),int64(2), failedStart.Attempt)
+			require.True(s.T(), backoffTime.After(s.timeSource.Now()))
+			require.Equal(s.T(), int64(2), failedStart.Attempt)
 		},
 	})
 }
@@ -348,13 +348,13 @@ func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 	require.NoError(s.T(), err)
 
 	// Validate the results
-	require.Equal(s.T(),c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))
-	require.Equal(s.T(),c.ExpectedRunningWorkflows, len(s.scheduler.Info.RunningWorkflows))
-	require.Equal(s.T(),c.ExpectedTerminateWorkflows, len(invoker.TerminateWorkflows))
-	require.Equal(s.T(),c.ExpectedCancelWorkflows, len(invoker.CancelWorkflows))
-	require.Equal(s.T(),c.ExpectedActionCount, s.scheduler.Info.ActionCount)
-	require.Equal(s.T(),c.ExpectedOverlapSkipped, s.scheduler.Info.OverlapSkipped)
-	require.Equal(s.T(),c.ExpectedMissedCatchupWindow, s.scheduler.Info.MissedCatchupWindow)
+	require.Equal(s.T(), c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))
+	require.Equal(s.T(), c.ExpectedRunningWorkflows, len(s.scheduler.Info.RunningWorkflows))
+	require.Equal(s.T(), c.ExpectedTerminateWorkflows, len(invoker.TerminateWorkflows))
+	require.Equal(s.T(), c.ExpectedCancelWorkflows, len(invoker.CancelWorkflows))
+	require.Equal(s.T(), c.ExpectedActionCount, s.scheduler.Info.ActionCount)
+	require.Equal(s.T(), c.ExpectedOverlapSkipped, s.scheduler.Info.OverlapSkipped)
+	require.Equal(s.T(), c.ExpectedMissedCatchupWindow, s.scheduler.Info.MissedCatchupWindow)
 
 	// Callbacks.
 	if c.ValidateInvoker != nil {
