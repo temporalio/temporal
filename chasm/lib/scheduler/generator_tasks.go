@@ -74,7 +74,15 @@ func (g *GeneratorTaskExecutor) Execute(
 		t2 = t1
 	}
 
-	result, err := g.SpecProcessor.ProcessTimeRange(scheduler, t1, t2, scheduler.overlapPolicy(), "", false, nil)
+	result, err := g.SpecProcessor.ProcessTimeRange(
+		scheduler,
+		t1, t2,
+		scheduler.overlapPolicy(),
+		scheduler.GetWorkflowID(),
+		"",
+		false,
+		nil,
+	)
 	if err != nil {
 		// An error here should be impossible, send to the DLQ.
 		logger.Error("error processing time range", tag.Error(err))

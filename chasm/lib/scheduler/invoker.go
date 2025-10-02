@@ -30,7 +30,8 @@ func (i *Invoker) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 func NewInvoker(ctx chasm.MutableContext, scheduler *Scheduler) *Invoker {
 	return &Invoker{
 		InvokerState: &schedulerpb.InvokerState{
-			BufferedStarts: []*schedulespb.BufferedStart{},
+			BufferedStarts:        []*schedulespb.BufferedStart{},
+			RequestIdToWorkflowId: map[string]string{},
 		},
 		Scheduler: chasm.ComponentPointerTo(ctx, scheduler),
 	}
@@ -40,6 +41,10 @@ func NewInvoker(ctx chasm.MutableContext, scheduler *Scheduler) *Invoker {
 // immediately kicking off a processing task.
 func (i *Invoker) EnqueueBufferedStarts(ctx chasm.MutableContext, starts []*schedulespb.BufferedStart) {
 	i.BufferedStarts = append(i.BufferedStarts, starts...)
+
+	for _, start := range starts {
+		i.RequestIdToWorkflowId[start.RequestId] = start.WorkflowId
+	}
 
 	// Immediately begin processing the new starts.
 	ctx.AddTask(i, chasm.TaskAttributes{}, &schedulerpb.InvokerProcessBufferTask{})
@@ -167,6 +172,57 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 
 	// Add tasks if other actions are backing off or still pending execution.
 	i.addTasks(ctx)
+}
+
+// GetWorkflowID returns the workflow ID associated with the given request, or an
+// empty string if not found.
+func (i *Invoker) GetWorkflowID(requestID string) string {
+	wfID := i.RequestIdToWorkflowId[requestID]
+	return wfID
+}
+
+// recordCompletedAction updates Invoker metadata and kicks off tasks after
+// an action completes.
+//
+// If an action being marked as complete is still in BufferedStarts (== we
+// completed it before we recorded our startWorkflow result), it will be removed
+// from BufferedStarts, and the time at which it had been scheduled at is
+// returned. Otherwise, the return value is an initialized time.Time.
+func (i *Invoker) recordCompletedAction(
+	ctx chasm.MutableContext,
+	closeTime time.Time,
+	requestID string,
+) (scheduleTime time.Time) {
+	// Clean up the RequestID map, since we're done with the request.
+	delete(i.RequestIdToWorkflowId, requestID)
+
+	// Check if the action is still in BufferedStarts, clear it out.
+	i.BufferedStarts = slices.DeleteFunc(i.BufferedStarts, func(start *schedulespb.BufferedStart) bool {
+		if start.GetRequestId() == requestID {
+			scheduleTime = start.DesiredTime.AsTime()
+			return true
+		}
+		return false
+	})
+
+	// If we don't have any starts buffered, recording actions is a no-op from
+	// Invoker POV.
+	if len(i.BufferedStarts) < 1 {
+		return
+	}
+
+	// Update DesiredTime on the first start for metrics.
+	i.BufferedStarts[0].DesiredTime = timestamppb.New(closeTime)
+
+	// We add an immediate ProcessBufferTask if we have any queued-up starts, since
+	// a completed action will bump the next buffered action to "ready". The regular
+	// addTasks logic won't apply, since getEligibleBufferedStarts only looks at the
+	// current state of the BufferedStarts queue (it doesn't recompute eligible).
+	ctx.AddTask(i, chasm.TaskAttributes{
+		ScheduledTime: chasm.TaskScheduledTimeImmediate,
+	}, &schedulerpb.InvokerProcessBufferTask{})
+
+	return
 }
 
 // addTasks adds both ProcessBuffer and Execute tasks as needed. It should be

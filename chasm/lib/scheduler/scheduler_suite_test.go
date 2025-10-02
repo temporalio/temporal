@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/common/clock"
@@ -64,10 +65,15 @@ func (s *schedulerSuite) SetupSuite() {
 
 	// Stub NodeBackend for NewEmptytree
 	tv := testvars.New(s.T())
-	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+	currentVT := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 1,
+		TransitionCount:          1,
+	}
+	s.nodeBackend.EXPECT().CurrentVersionedTransition().Return(currentVT).AnyTimes()
 
 	// Collect all tasks added for verification.
 	//
@@ -85,6 +91,8 @@ func (s *schedulerSuite) SetupSuite() {
 	ctx := s.newMutableContext()
 	s.scheduler = scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
 	s.node.SetRootComponent(s.scheduler)
+	_, err = s.node.CloseTransaction()
+	s.NoError(err)
 }
 
 // hasTask returns true if the given task type was added at the end of the
@@ -109,19 +117,17 @@ func (s *schedulerSuite) newEngineContext() context.Context {
 	return chasm.NewEngineContext(context.Background(), s.mockEngine)
 }
 
-func (s *schedulerSuite) ExpectReadComponent(returnedComponent chasm.Component) {
+func (s *schedulerSuite) ExpectReadComponent(ctx chasm.Context, returnedComponent chasm.Component) {
 	s.mockEngine.EXPECT().ReadComponent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, _ ...chasm.TransitionOption) error {
-			chasmCtx := s.newMutableContext()
-			return readFn(chasmCtx, returnedComponent)
+			return readFn(ctx, returnedComponent)
 		}).Times(1)
 }
 
-func (s *schedulerSuite) ExpectUpdateComponent(componentToUpdate chasm.Component) {
+func (s *schedulerSuite) ExpectUpdateComponent(ctx chasm.MutableContext, componentToUpdate chasm.Component) {
 	s.mockEngine.EXPECT().UpdateComponent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, _ ...chasm.TransitionOption) ([]byte, error) {
-			chasmCtx := s.newMutableContext()
-			err := updateFn(chasmCtx, componentToUpdate)
+			err := updateFn(ctx, componentToUpdate)
 			return nil, err
 		}).Times(1)
 }
