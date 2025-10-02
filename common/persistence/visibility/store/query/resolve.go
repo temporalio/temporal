@@ -38,17 +38,23 @@ func ResolveSearchAttributeAlias(
 	}
 
 	if searchattribute.IsMappable(name) {
-		// Handle ScheduleID → WorkflowID transformation first, regardless of mapper
-		if name == searchattribute.ScheduleID {
-			saType, err := saTypeMap.GetType(searchattribute.WorkflowID)
-			if err == nil {
-				return searchattribute.WorkflowID, saType, nil
-			}
-			// If WorkflowID is not in type map, continue with normal flow
-		}
-
+		// First check if the visibility mapper can handle this field (e.g., custom search attributes)
 		if result, found := tryVisibilityMapper(name, ns, mapper, saTypeMap); found {
 			return result.fieldName, result.fieldType, result.err
+		}
+
+		// Handle ScheduleID → WorkflowID transformation, but only if ScheduleID is not defined as a custom search attribute
+		// This fallback only applies when the visibility mapper doesn't handle the field
+		if name == searchattribute.ScheduleID {
+			// First check if ScheduleID exists as a custom search attribute
+			if _, err := saTypeMap.GetType(searchattribute.ScheduleID); err != nil {
+				// ScheduleID is not defined, transform to WorkflowID if WorkflowID exists
+				saType, err := saTypeMap.GetType(searchattribute.WorkflowID)
+				if err == nil {
+					return searchattribute.WorkflowID, saType, nil
+				}
+				// If WorkflowID is not in type map, continue with normal flow
+			}
 		}
 	}
 
@@ -86,18 +92,26 @@ func tryVisibilityMapper(name string, ns namespace.Name, mapper searchattribute.
 			// Check if this looks like a mapper that should handle this field
 			// vs a mapper that doesn't know about this field
 			errMsg := invalidArgument.Error()
-			if strings.Contains(errMsg, "invalid alias") || strings.Contains(errMsg, "invalid field") {
-				// Mapper doesn't handle this field, allow fallback
+			if strings.Contains(errMsg, "invalid alias") || // From GetFieldName() when alias doesn't exist in mapper
+				strings.Contains(errMsg, "invalid field") || // From GetAlias() when field name doesn't exist in mapper
+				strings.Contains(errMsg, "no mapping defined") { // From test mappers and some implementations when field is unknown
+				// Mapper doesn't handle this field, allow fallback to direct/prefixed lookup
 				return resolveResult{}, false
 			}
-			// Other errors suggest mapper tried to handle it but failed
+			// Other InvalidArgument errors suggest mapper tried to handle the field but failed
+			// due to validation issues, malformed data, etc. These should be propagated.
 			return resolveResult{err: err}, true
 		}
+
+		// For other error types (not Internal or InvalidArgument), allow fallback.
+		return resolveResult{}, false
 	}
 
+	// Mapper successfully resolved the field name, now check if it exists in the type map
 	fieldType, err := saTypeMap.GetType(fieldName)
 	if err != nil {
-		// If the mapped field doesn't exist in type map, allow fallback
+		// If the mapped field doesn't exist in type map, allow fallback to direct/prefixed lookup.
+		// This can happen when the mapper returns a field name that's not registered in the namespace.
 		return resolveResult{}, false
 	}
 	return resolveResult{fieldName: fieldName, fieldType: fieldType}, true

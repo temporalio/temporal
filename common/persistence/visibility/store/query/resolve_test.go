@@ -54,6 +54,30 @@ func TestResolveSearchAttributeAlias(t *testing.T) {
 	}
 }
 
+func TestResolveSearchAttributeAlias_CustomScheduleID(t *testing.T) {
+	ns := namespace.Name("test-namespace")
+
+	// Test case where ScheduleID is defined as a custom search attribute
+	saTypeMapWithCustomScheduleID := searchattribute.NewNameTypeMapStub(map[string]enumspb.IndexedValueType{
+		searchattribute.ScheduleID: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+	})
+
+	mapper := customMapper{
+		fieldToAlias: map[string]string{
+			searchattribute.ScheduleID: "schedule-alias",
+		},
+		aliasToField: map[string]string{
+			"schedule-alias": searchattribute.ScheduleID,
+		},
+	}
+
+	// When ScheduleID is a custom search attribute, it should use the custom attribute, not transform to WorkflowID
+	fieldName, fieldType, err := ResolveSearchAttributeAlias(searchattribute.ScheduleID, ns, mapper, saTypeMapWithCustomScheduleID)
+	require.NoError(t, err)
+	require.Equal(t, searchattribute.ScheduleID, fieldName)
+	require.Equal(t, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, fieldType)
+}
+
 type customMapper struct {
 	fieldToAlias map[string]string
 	aliasToField map[string]string

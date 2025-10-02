@@ -50,7 +50,10 @@ func NewValuesInterceptor(
 
 // TODO: this is invoked for non-ES validation code flow. Needs refactoring
 func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
-	mapper, _ := ni.searchAttributesMapperProvider.GetMapper(ni.namespace)
+	mapper, err := ni.searchAttributesMapperProvider.GetMapper(ni.namespace)
+	if err != nil {
+		return "", err
+	}
 	fieldName, fieldType, err := query.ResolveSearchAttributeAlias(name, ni.namespace, mapper, ni.searchAttributesTypeMap)
 	if err != nil {
 		return "", err
