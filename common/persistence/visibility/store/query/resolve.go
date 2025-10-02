@@ -78,15 +78,6 @@ func tryVisibilityMapper(name string, ns namespace.Name, mapper searchattribute.
 
 	fieldName, err := mapper.GetFieldName(name, ns.String())
 	if err != nil {
-		var internalErr serviceerror.Internal
-		if errors.Is(err, &internalErr) {
-			// Internal errors indicate system-level issues that should always be propagated
-			// and not fall back to direct lookup. These could come from the MapperProvider.GetMapper()
-			// call (e.g., namespace registry failures, persistence layer issues) rather than
-			// the mapper methods themselves.
-			return resolveResult{err: err}, true
-		}
-
 		var invalidArgument *serviceerror.InvalidArgument
 		if errors.As(err, &invalidArgument) {
 			// Check if this looks like a mapper that should handle this field
