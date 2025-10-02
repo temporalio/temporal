@@ -80,7 +80,7 @@ func (cp *connPool) Close(cfg *config.SQL) {
 
 	e.refCount--
 	cp.pool[dsn] = e
-	
+
 	if e.refCount == 0 {
 		if e.db != nil {
 			if closeErr := e.db.Close(); closeErr != nil {
