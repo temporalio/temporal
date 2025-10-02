@@ -41,3 +41,6 @@
 .spr.yml
 
 /proto.tmp
+
+**/.venv/
+**/.ruff_cache/

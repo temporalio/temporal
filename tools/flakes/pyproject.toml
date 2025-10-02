@@ -1,0 +1,9 @@
+[project]
+name = "flakes"
+version = "0.1.0"
+description = "A tool for analyzing flaky tests in the Temporal server repo"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "requests>=2.31.0",
+]
