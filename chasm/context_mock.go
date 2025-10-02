@@ -149,20 +149,6 @@ func (mr *MockMutableContextMockRecorder) Ref(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ref", reflect.TypeOf((*MockMutableContext)(nil).Ref), arg0)
 }
 
-// ToImmutable mocks base method.
-func (m *MockMutableContext) ToImmutable() Context {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ToImmutable")
-	ret0, _ := ret[0].(Context)
-	return ret0
-}
-
-// ToImmutable indicates an expected call of ToImmutable.
-func (mr *MockMutableContextMockRecorder) ToImmutable() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToImmutable", reflect.TypeOf((*MockMutableContext)(nil).ToImmutable))
-}
-
 // getContext mocks base method.
 func (m *MockMutableContext) getContext() context.Context {
 	m.ctrl.T.Helper()
