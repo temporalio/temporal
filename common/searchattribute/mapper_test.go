@@ -17,10 +17,9 @@ func Test_AliasFields(t *testing.T) {
 			"wrong_field": {Data: []byte("data23")}, // Wrong unknown name must be ignored.
 		},
 	}
-	_, err := AliasFields(mapperProvider, sa, "error-namespace")
-	assert.Error(t, err)
-	var internalErr *serviceerror.Internal
-	assert.ErrorAs(t, err, &internalErr)
+	sb, err := AliasFields(mapperProvider, sa, "error-namespace")
+	assert.NoError(t, err)
+	assert.Equal(t, sa, sb)
 
 	sa = &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
@@ -28,7 +27,7 @@ func Test_AliasFields(t *testing.T) {
 			"wrong_field": {Data: []byte("data23")}, // Wrong unknown name must be ignored.
 		},
 	}
-	sb, err := AliasFields(mapperProvider, sa, "unknown-namespace")
+	sb, err = AliasFields(mapperProvider, sa, "unknown-namespace")
 	assert.NoError(t, err)
 	assert.Equal(t, sa, sb)
 
@@ -78,8 +77,8 @@ func Test_UnaliasFields(t *testing.T) {
 	}
 	_, err := UnaliasFields(mapperProvider, sa, "error-namespace")
 	assert.Error(t, err)
-	var internalErr *serviceerror.Internal
-	assert.ErrorAs(t, err, &internalErr)
+	var invalidArgumentErr2 *serviceerror.InvalidArgument
+	assert.ErrorAs(t, err, &invalidArgumentErr2)
 
 	sa = &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
