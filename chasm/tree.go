@@ -56,6 +56,8 @@ var (
 // and the serialize the data at the very end of a transaction. So there will never base a case where value is synced with seralizedNode,
 // but not with children.
 //
+// To update this field, ALWAYS use setValueState() method.
+//
 // NOTE: This is a different concept from the IsDirty() method which is needed by MutableState implementation to determine
 // if the state in memory matches the state in DB.
 type valueState uint8
@@ -127,6 +129,22 @@ type (
 		immediatePureTasks map[any][]taskWithAttributes // similar to newTasks, but will be executed at the end of the transaction
 
 		taskValueCache map[*commonpb.DataBlob]reflect.Value
+
+		// isActiveStateDirty is true if any user data is mutated.
+		// NOTE: this only captures active cluster's user data mutation.
+		// Replication logic (ApplySnapshot/Mutation) will not set this field.
+		//
+		// This flag in a CHASM tree level, while valueState is on node level.
+		// Tracking this flag on tree level avoids traversing the whole tree every time
+		// we want to know if something is updated.
+		//
+		// This flag is equivalent to checking if any node's valueState >= valueStateNeedSerialize
+		isActiveStateDirty bool
+
+		// Root component's search attributes and memo at the start of a transaction.
+		// They will be updated upon CloseTransaction() if they are changed.
+		currentSA   map[string]VisibilityValue
+		currentMemo map[string]VisibilityValue
 
 		needsPointerResolution bool
 	}
@@ -213,6 +231,9 @@ func NewTree(
 		root.setSerializedNode(nodePath, encodedPath, serializedNode)
 	}
 
+	if err := newTreeInitSearchAttributesAndMemo(root); err != nil {
+		return nil, err
+	}
 	return root, nil
 }
 
@@ -232,7 +253,7 @@ func NewEmptyTree(
 	// Although both value and serializedNode.Data are nil, they are considered NOT synced
 	// because value has no type and serializedNode does.
 	// deserialize method should set value when called.
-	root.valueState = valueStateNeedDeserialize
+	root.setValueState(valueStateNeedDeserialize)
 	return root
 }
 
@@ -267,12 +288,42 @@ func newTreeHelper(
 	return newNode(base, nil, "")
 }
 
+func newTreeInitSearchAttributesAndMemo(
+	root *Node,
+) error {
+	immutableContext := NewContext(context.Background(), root)
+	rootComponent, err := root.Component(immutableContext, ComponentRef{})
+	if err != nil {
+		return err
+	}
+
+	// Theoritically we should check if the root node has a Visibility component or not.
+	// But that doesn't really matter. Even if it doesn't have one, currentSearchAttributes
+	// and currentMemo will just never be used.
+
+	if saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider); ok {
+		root.currentSA = saProvider.SearchAttributes(immutableContext)
+	}
+	if memoProvider, ok := rootComponent.(VisibilityMemoProvider); ok {
+		root.currentMemo = memoProvider.Memo(immutableContext)
+	}
+
+	return nil
+}
+
 func (n *Node) SetRootComponent(
 	rootComponent Component,
 ) {
 	root := n.root()
 	root.value = rootComponent
-	root.valueState = valueStateNeedSyncStructure
+	root.setValueState(valueStateNeedSyncStructure)
+}
+
+func (n *Node) setValueState(state valueState) {
+	n.valueState = state
+	if state >= valueStateNeedSerialize {
+		n.isActiveStateDirty = true
+	}
 }
 
 // Component retrieves a component from the tree rooted at node n
@@ -301,10 +352,9 @@ func (n *Node) Component(
 		return nil, errComponentNotFound
 	}
 
-	metadata := node.serializedNode.Metadata
 	if ref.componentInitialVT != nil && transitionhistory.Compare(
 		ref.componentInitialVT,
-		metadata.InitialVersionedTransition,
+		node.serializedNode.Metadata.InitialVersionedTransition,
 	) != 0 {
 		return nil, errComponentNotFound
 	}
@@ -387,15 +437,15 @@ func (n *Node) validateAccess(ctx Context) error {
 func (n *Node) prepareComponentValue(
 	chasmContext Context,
 ) error {
-	metadata := n.serializedNode.Metadata
-	componentAttr := metadata.GetComponentAttributes()
-	if componentAttr == nil {
-		return serviceerror.NewInternalf(
-			"expect chasm node to have ComponentAttributes, actual attributes: %v", metadata.Attributes,
-		)
-	}
-
 	if n.valueState == valueStateNeedDeserialize {
+		metadata := n.serializedNode.Metadata
+		componentAttr := metadata.GetComponentAttributes()
+		if componentAttr == nil {
+			return serviceerror.NewInternalf(
+				"expect chasm node to have ComponentAttributes, actual attributes: %v", metadata.Attributes,
+			)
+		}
+
 		registrableComponent, ok := n.registry.component(componentAttr.GetType())
 		if !ok {
 			return serviceerror.NewInternalf("component type name not registered: %v", componentAttr.GetType())
@@ -410,7 +460,7 @@ func (n *Node) prepareComponentValue(
 	// its value will be mutated and no longer in sync with the serializedNode.
 	_, componentCanBeMutated := chasmContext.(MutableContext)
 	if componentCanBeMutated {
-		n.valueState = valueStateNeedSyncStructure
+		n.setValueState(valueStateNeedSyncStructure)
 	}
 
 	return nil
@@ -438,7 +488,7 @@ func (n *Node) prepareDataValue(
 	// its value will be mutated and no longer in sync with the serializedNode.
 	_, componentCanBeMutated := chasmContext.(MutableContext)
 	if componentCanBeMutated {
-		n.valueState = valueStateNeedSerialize
+		n.setValueState(valueStateNeedSerialize)
 	}
 
 	return nil
@@ -566,7 +616,7 @@ func (n *Node) setSerializedNode(
 ) *Node {
 	if len(nodePath) == 0 {
 		n.serializedNode = serializedNode
-		n.valueState = valueStateNeedDeserialize
+		n.setValueState(valueStateNeedDeserialize)
 		n.encodedPath = &encodedPath
 		return n
 	}
@@ -623,7 +673,7 @@ func (n *Node) serializeComponentNode() error {
 		n.serializedNode.Data = blob
 		n.serializedNode.GetMetadata().GetComponentAttributes().Type = rc.fqType()
 		n.updateLastUpdateVersionedTransition()
-		n.valueState = valueStateSynced
+		n.setValueState(valueStateSynced)
 
 		// continue to iterate over fields to validate that there is only one proto field in the component.
 	}
@@ -688,7 +738,7 @@ func (n *Node) syncSubComponents() error {
 			if collectionNode == nil {
 				collectionNode = newNode(n.nodeBase, n, field.name)
 				collectionNode.initSerializedCollectionNode()
-				collectionNode.valueState = valueStateNeedSyncStructure
+				collectionNode.setValueState(valueStateNeedSyncStructure)
 				n.children[field.name] = collectionNode
 			}
 
@@ -733,13 +783,13 @@ func (n *Node) syncSubComponents() error {
 			if err := collectionNode.deleteChildren(collectionItemsToKeep); err != nil {
 				return err
 			}
-			collectionNode.valueState = min(valueStateNeedSerialize, collectionNode.valueState)
+			collectionNode.setValueState(min(valueStateNeedSerialize, collectionNode.valueState))
 			childrenToKeep[field.name] = struct{}{}
 		}
 	}
 
 	err := n.deleteChildren(childrenToKeep)
-	n.valueState = valueStateNeedSerialize
+	n.setValueState(valueStateNeedSerialize)
 
 	return err
 }
@@ -879,9 +929,9 @@ func (n *Node) syncSubField(
 		childNode.value = internal.value()
 		childNode.initSerializedNode(internal.fieldType())
 		if internal.fieldType() == fieldTypeComponent {
-			childNode.valueState = valueStateNeedSyncStructure
+			childNode.setValueState(valueStateNeedSyncStructure)
 		} else {
-			childNode.valueState = valueStateNeedSerialize
+			childNode.setValueState(valueStateNeedSerialize)
 		}
 
 		n.children[fieldN] = childNode
@@ -935,7 +985,7 @@ func (n *Node) serializeDataNode() error {
 	}
 	n.serializedNode.Data = blob
 	n.updateLastUpdateVersionedTransition()
-	n.valueState = valueStateSynced
+	n.setValueState(valueStateSynced)
 
 	return nil
 }
@@ -943,7 +993,7 @@ func (n *Node) serializeDataNode() error {
 func (n *Node) serializeCollectionNode() error {
 	// The collection node has no data; therefore, only metadata needs to be updated.
 	n.updateLastUpdateVersionedTransition()
-	n.valueState = valueStateSynced
+	n.setValueState(valueStateSynced)
 	return nil
 }
 
@@ -958,7 +1008,7 @@ func (n *Node) serializePointerNode() error {
 
 	n.serializedNode.GetMetadata().GetPointerAttributes().NodePath = path
 	n.updateLastUpdateVersionedTransition()
-	n.valueState = valueStateSynced
+	n.setValueState(valueStateSynced)
 
 	return nil
 }
@@ -983,7 +1033,7 @@ func (n *Node) deserialize(
 		return err
 	}
 
-	if n.valueState != valueStateNeedDeserialize {
+	if n.valueState != valueStateNeedDeserialize && reflect.TypeOf(n.value) == valueT {
 		return nil
 	}
 
@@ -1051,7 +1101,7 @@ func (n *Node) deserializeComponentNode(
 	}
 
 	n.value = valueV.Interface()
-	n.valueState = valueStateSynced
+	n.setValueState(valueStateSynced)
 	return nil
 }
 
@@ -1064,14 +1114,14 @@ func (n *Node) deserializeDataNode(
 	}
 
 	n.value = value.Interface()
-	n.valueState = valueStateSynced
+	n.setValueState(valueStateSynced)
 	return nil
 }
 
 // deserializePointerNode doesn't deserialize anything but named this way for consistency.
 func (n *Node) deserializePointerNode() error {
 	n.value = n.serializedNode.GetMetadata().GetPointerAttributes().GetNodePath()
-	n.valueState = valueStateSynced
+	n.setValueState(valueStateSynced)
 	return nil
 }
 
@@ -1228,8 +1278,8 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		return NodesMutation{}, err
 	}
 
-	if rootLifecycleChanged {
-		if err := n.closeTransactionForceUpdateVisibility(nextVersionedTransition); err != nil {
+	if n.isActiveStateDirty {
+		if err := n.closeTransactionForceUpdateVisibility(rootLifecycleChanged); err != nil {
 			return NodesMutation{}, err
 		}
 	}
@@ -1322,11 +1372,11 @@ func (n *Node) closeTransactionHandleRootLifecycleChange() (bool, error) {
 	}
 
 	chasmContext := NewContext(context.Background(), n)
-	component, err := n.Component(chasmContext, ComponentRef{})
+	rootComponent, err := n.Component(chasmContext, ComponentRef{})
 	if err != nil {
 		return false, err
 	}
-	lifecycleState := component.LifecycleState(chasmContext)
+	lifecycleState := rootComponent.LifecycleState(chasmContext)
 
 	var newState enumsspb.WorkflowExecutionState
 	var newStatus enumspb.WorkflowExecutionStatus
@@ -1348,33 +1398,81 @@ func (n *Node) closeTransactionHandleRootLifecycleChange() (bool, error) {
 }
 
 func (n *Node) closeTransactionForceUpdateVisibility(
-	nextVersionedTransition *persistencespb.VersionedTransition,
+	rootLifecycleChanged bool,
 ) error {
+
+	immutableContext := NewContext(context.TODO(), n)
+	needUpdate := rootLifecycleChanged
+
+	rootComponent, err := n.Component(immutableContext, ComponentRef{})
+	if err != nil {
+		return err
+	}
+
+	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
+	if ok {
+		newSA := saProvider.SearchAttributes(immutableContext)
+		if !maps.EqualFunc(n.currentSA, newSA, isVisibilityValueEqual) {
+			needUpdate = true
+		}
+		n.currentSA = newSA
+	}
+
+	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
+	if ok {
+		newMemo := memoProvider.Memo(immutableContext)
+		if !maps.EqualFunc(n.currentMemo, newMemo, isVisibilityValueEqual) {
+			needUpdate = true
+		}
+		n.currentMemo = newMemo
+	}
+
+	if !needUpdate {
+		return nil
+	}
+
+	var visibilityNode *Node
 	for _, child := range n.children {
-		componentAttr := child.serializedNode.Metadata.GetComponentAttributes()
-		if componentAttr == nil ||
-			componentAttr.Type != visibilityComponentFqType ||
-			transitionhistory.Compare(child.serializedNode.Metadata.LastUpdateVersionedTransition, nextVersionedTransition) == 0 {
-			// Skip force update is the node is not a visibility component or already updated in this transition.
+		if !child.isComponent() {
 			continue
 		}
 
-		mutableContext := NewMutableContext(context.Background(), n)
-		visComponent, err := child.Component(mutableContext, ComponentRef{})
-		if err != nil {
-			return err
+		if child.valueState == valueStateNeedSerialize {
+			if rc, ok := n.registry.componentFor(child.value); ok && rc.fqType() == visibilityComponentFqType {
+				visibilityNode = child
+				break
+			}
+		} else if child.serializedNode.Metadata.GetComponentAttributes().Type == visibilityComponentFqType {
+			visibilityNode = child
+			break
 		}
-
-		visibility, ok := visComponent.(*Visibility)
-		if !ok {
-			return serviceerror.NewInternalf("expected visibility component for component with type %s, but got %T", visibilityComponentFqType, visComponent)
-		}
-		visibility.GenerateTask(mutableContext)
-
-		// we know structure won't change here, manually set the valueState to NeedSerialize
-		child.valueState = valueStateNeedSerialize
 	}
 
+	if visibilityNode == nil {
+		return nil
+	}
+
+	visComponent, err := visibilityNode.Component(immutableContext, ComponentRef{})
+	if err != nil {
+		return err
+	}
+
+	visibility, ok := visComponent.(*Visibility)
+	if !ok {
+		return serviceerror.NewInternalf("expected visibility component for component with type %s, but got %T", visibilityComponentFqType, visComponent)
+	}
+
+	// Generate a task and mark the node as dirty.
+	//
+	// NOTE: generateTask() will create a new logical task for the visibility component. But it also
+	// invalidates all previous logical tasks at the end of the transaction, and only one physical task
+	// will be created in the visibility queue.
+	mutableContext := NewMutableContext(context.TODO(), n)
+	visibility.generateTask(mutableContext)
+	visibilityNode.setValueState(valueStateNeedSerialize)
+
+	// We don't need to sync tree structure here for the visiblity node because we only generated a task without
+	// changing any component fields.
 	return nil
 }
 
@@ -1782,6 +1880,8 @@ func (n *Node) cleanupTransaction() {
 	}
 
 	n.newTasks = make(map[any][]taskWithAttributes)
+
+	n.isActiveStateDirty = false
 	n.immediatePureTasks = make(map[any][]taskWithAttributes)
 
 	n.needsPointerResolution = false
@@ -1844,7 +1944,35 @@ func (n *Node) ApplyMutation(
 		return err
 	}
 
-	return n.applyUpdates(mutation.UpdatedNodes)
+	if err := n.applyUpdates(mutation.UpdatedNodes); err != nil {
+		return err
+	}
+
+	// For replication case, we only update the search attributes and memo
+	// but not force updating the visibility component itself to generate a task.
+	//
+	// This is because the visibility component is already force updated in the active
+	// cluster and that forced update will be replicated as well. Standby cluster
+	// only needs to track the current SA and memo to prevent generating an unnecessary
+	// visibility component update & task if there is a failover.
+	//
+	// TODO: combine this with the logic in CloseTransactionForceUpdateVisibility
+	// right that force update logic only applies to the active cluster.
+	immutableContext := NewContext(context.Background(), n)
+	rootComponent, err := n.root().Component(immutableContext, ComponentRef{})
+	if err != nil {
+		return err
+	}
+	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
+	if ok {
+		n.currentSA = saProvider.SearchAttributes(immutableContext)
+	}
+	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
+	if ok {
+		n.currentMemo = memoProvider.Memo(immutableContext)
+	}
+
+	return nil
 }
 
 // ApplySnapshot is used by replication stack to apply node
@@ -1959,7 +2087,7 @@ func (n *Node) applyUpdates(
 			n.mutation.UpdatedNodes[encodedPath] = updatedNode
 			node.serializedNode = updatedNode
 			node.value = nil
-			node.valueState = valueStateNeedDeserialize
+			node.setValueState(valueStateNeedDeserialize)
 
 			// Clearing decoded value for ancestor nodes is not necessary because the value field is not referenced directly.
 			// Parent node is pointing to the Node struct.
@@ -2088,11 +2216,7 @@ func (n *Node) IsDirty() bool {
 // which need to be persisted to DB AND replicated to other clusters.
 // The result will be reset to false after a call to CloseTransaction().
 func (n *Node) IsStateDirty() bool {
-	if len(n.mutation.UpdatedNodes) > 0 || len(n.mutation.DeletedNodes) > 0 {
-		return true
-	}
-
-	return n.isValueDirty()
+	return n.isActiveStateDirty || len(n.mutation.UpdatedNodes) > 0 || len(n.mutation.DeletedNodes) > 0
 }
 
 func (n *Node) IsStale(
@@ -2108,20 +2232,6 @@ func (n *Node) IsStale(
 		n.backend.GetExecutionInfo().TransitionHistory,
 		ref.entityLastUpdateVT,
 	)
-}
-
-func (n *Node) isValueDirty() bool {
-	if n.valueState >= valueStateNeedSerialize {
-		return true
-	}
-
-	for _, childNode := range n.children {
-		if childNode.isValueDirty() {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (n *Node) Terminate(

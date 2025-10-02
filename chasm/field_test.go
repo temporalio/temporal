@@ -150,37 +150,18 @@ func (s *fieldSuite) newTestTree(
 	)
 }
 
-// setupBasicTree creates a minimal tree structure with root node and context.
-func (s *fieldSuite) setupBasicTree() (*Node, MutableContext, error) {
-	serializedNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{},
-				},
-			},
-		},
-	}
-
-	rootNode, err := s.newTestTree(serializedNodes)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	ctx := NewMutableContext(context.Background(), rootNode)
-	return rootNode, ctx, nil
-}
-
 // setupComponentWithTree creates a basic component structure and attaches it to the tree.
 func (s *fieldSuite) setupComponentWithTree(rootComponent *TestComponent) (*Node, MutableContext, error) {
-	rootNode, ctx, err := s.setupBasicTree()
-	if err != nil {
-		return nil, nil, err
-	}
-
+	rootNode := NewEmptyTree(
+		s.registry,
+		s.timeSource,
+		s.nodeBackend,
+		s.nodePathEncoder,
+		s.logger,
+	)
 	rootNode.SetRootComponent(rootComponent)
-	return rootNode, ctx, nil
+
+	return rootNode, NewMutableContext(context.Background(), rootNode), nil
 }
 
 func (s *fieldSuite) TestDeferredPointerResolution() {
