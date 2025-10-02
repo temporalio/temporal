@@ -11,6 +11,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -453,10 +454,18 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 		EntityId:    "entity-id",
 		Archetype:   "test-archetype",
 	}
+
 	serializedRef, err := dummyRef.Marshal()
 	require.NoError(t, err)
 	encodedRef := base64.RawURLEncoding.EncodeToString(serializedRef)
 	dummyTime := time.Now().UTC()
+
+	createPayloadBytes := func(data []byte) []byte {
+		p := &commonpb.Payload{Data: data}
+		payloadBytes, err := proto.Marshal(p)
+		require.NoError(t, err)
+		return payloadBytes
+	}
 
 	cases := []struct {
 		name               string
@@ -476,20 +485,17 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				).DoAndReturn(func(ctx context.Context, req *historyservice.CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
 					// Verify completion token
 					require.NotNil(t, req.Completion)
-					require.Equal(t, "namespace-id", req.Completion.NamespaceId)
-					require.Equal(t, "business-id", req.Completion.BusinessId)
-					require.Equal(t, "entity-id", req.Completion.EntityId)
+					require.Equal(t, "namespace-id", req.Completion.Ref.NamespaceId)
+					require.Equal(t, "business-id", req.Completion.Ref.BusinessId)
+					require.Equal(t, "entity-id", req.Completion.Ref.EntityId)
 					require.Equal(t, "request-id", req.Completion.RequestId)
 					require.NotNil(t, req.Completion.Ref)
 					require.Equal(t, "test-archetype", req.Completion.Ref.Archetype)
 
 					// Verify successful operation data
-					require.Equal(t, string(nexus.OperationStateSucceeded), req.State)
 					require.NotNil(t, req.GetSuccess())
 					require.Equal(t, []byte("result-data"), req.GetSuccess().Data)
-					require.Equal(t, req.StartTime.AsTime(), dummyTime)
 					require.Equal(t, req.CloseTime.AsTime(), dummyTime)
-					require.Equal(t, "test-op-token", req.OperationToken)
 
 					return &historyservice.CompleteNexusOperationChasmResponse{}, nil
 				})
@@ -497,11 +503,9 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			},
 			completion: func() nexus.OperationCompletion {
 				comp, err := nexus.NewOperationCompletionSuccessful(
-					[]byte("result-data"),
+					createPayloadBytes([]byte("result-data")),
 					nexus.OperationCompletionSuccessfulOptions{
-						OperationToken: "test-op-token",
-						StartTime:      dummyTime,
-						CloseTime:      dummyTime,
+						CloseTime: dummyTime,
 					},
 				)
 				require.NoError(t, err)
@@ -520,14 +524,8 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).DoAndReturn(func(ctx context.Context, req *historyservice.CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
-					// Verify completion token
 					require.NotNil(t, req.Completion)
-					require.Equal(t, "namespace-id", req.Completion.NamespaceId)
-
-					// Verify failed operation data
-					require.Equal(t, string(nexus.OperationStateFailed), req.State)
 					require.NotNil(t, req.GetFailure())
-					require.Equal(t, req.StartTime.AsTime(), dummyTime)
 					require.Equal(t, req.CloseTime.AsTime(), dummyTime)
 
 					return &historyservice.CompleteNexusOperationChasmResponse{}, nil
@@ -541,9 +539,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 						Cause: &nexus.FailureError{Failure: nexus.Failure{Message: "operation failed"}},
 					},
 					nexus.OperationCompletionUnsuccessfulOptions{
-						OperationToken: "test-op-token",
-						StartTime:      dummyTime,
-						CloseTime:      dummyTime,
+						CloseTime: dummyTime,
 					},
 				)
 				require.NoError(t, err)
@@ -566,7 +562,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			},
 			completion: func() nexus.OperationCompletion {
 				comp, err := nexus.NewOperationCompletionSuccessful(
-					[]byte("result-data"),
+					createPayloadBytes([]byte("result-data")),
 					nexus.OperationCompletionSuccessfulOptions{},
 				)
 				require.NoError(t, err)
@@ -590,16 +586,16 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			},
 			completion: func() nexus.OperationCompletion {
 				comp, err := nexus.NewOperationCompletionSuccessful(
-					[]byte("result-data"),
+					createPayloadBytes([]byte("result-data")),
 					nexus.OperationCompletionSuccessfulOptions{},
 				)
 				require.NoError(t, err)
 				return comp
 			}(),
 			headerValue:   encodedRef,
-			expectedError: errors.New("destination down: failed to complete Nexus operation: rpc error: code = InvalidArgument desc = invalid request"),
+			expectedError: errors.New("unprocessable task: failed to complete Nexus operation: rpc error: code = InvalidArgument desc = invalid request"),
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
-				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
+				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},
 		},
 		{
@@ -610,7 +606,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			},
 			completion: func() nexus.OperationCompletion {
 				comp, err := nexus.NewOperationCompletionSuccessful(
-					[]byte("result-data"),
+					createPayloadBytes([]byte("result-data")),
 					nexus.OperationCompletionSuccessfulOptions{},
 				)
 				require.NoError(t, err)
@@ -630,14 +626,14 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			},
 			completion: func() nexus.OperationCompletion {
 				comp, err := nexus.NewOperationCompletionSuccessful(
-					[]byte("result-data"),
+					createPayloadBytes([]byte("result-data")),
 					nexus.OperationCompletionSuccessfulOptions{},
 				)
 				require.NoError(t, err)
 				return comp
 			}(),
 			headerValue:   base64.RawURLEncoding.EncodeToString([]byte("not-valid-protobuf")),
-			expectedError: errors.New("unprocessable task: failed to unmarshal CHASM ComponentRef: proto:"),
+			expectedError: errors.New("unprocessable task: failed to unmarshal CHASM ComponentRef: proto:"), //nolint:revive
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},

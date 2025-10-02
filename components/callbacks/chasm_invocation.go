@@ -8,7 +8,6 @@ import (
 	"io"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"go.temporal.io/api/common/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -17,7 +16,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/queues"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -70,7 +68,11 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	// RPC to History for cross-shard completion delivery.
 	_, err = e.HistoryClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
-		return invocationResultRetry{fmt.Errorf("failed to complete Nexus operation: %v", err)}
+		msg := fmt.Errorf("failed to complete Nexus operation: %v", err)
+		if isRetryableRpcResponse(err) {
+			return invocationResultRetry{msg}
+		}
+		return invocationResultFail{msg}
 	}
 
 	return invocationResultOK{}
@@ -82,74 +84,48 @@ func (c chasmInvocation) getHistoryRequest(
 	var req *historyservice.CompleteNexusOperationChasmRequest
 
 	token := &tokenspb.NexusOperationChasmCompletion{
-		NamespaceId: ref.NamespaceId,
-		BusinessId:  ref.BusinessId,
-		EntityId:    ref.EntityId,
-		Ref:         ref,
-		RequestId:   c.requestID,
+		Ref:       ref,
+		RequestId: c.requestID,
 	}
 
 	switch op := c.completion.(type) {
 	case *nexus.OperationCompletionSuccessful:
-		links, err := convertNexusLinksToAPILinks(op.Links)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert Nexus links: %v", err)
-		}
-
-		payload, err := io.ReadAll(op.Reader)
+		payloadBody, err := io.ReadAll(op.Reader)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read payload: %v", err)
 		}
 
+		var payload commonpb.Payload
+		if payloadBody != nil {
+			err := proto.Unmarshal(payloadBody, &payload)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmarshal payload body: %v", err)
+			}
+		}
+
 		req = &historyservice.CompleteNexusOperationChasmRequest{
-			State: string(nexus.OperationStateSucceeded),
 			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Success{
-				Success: &common.Payload{
-					Data: payload,
-				},
+				Success: &payload,
 			},
-			OperationToken: op.OperationToken,
-			StartTime:      timestamppb.New(op.StartTime),
-			CloseTime:      timestamppb.New(op.CloseTime),
-			Links:          links,
-			Completion:     token,
+			CloseTime:  timestamppb.New(op.CloseTime),
+			Completion: token,
 		}
 	case *nexus.OperationCompletionUnsuccessful:
-		links, err := convertNexusLinksToAPILinks(op.Links)
+		apiFailure, err := commonnexus.NexusFailureToAPIFailure(op.Failure, true)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert Nexus links: %v", err)
+			return nil, fmt.Errorf("failed to convert failure type: %v", err)
 		}
 
 		req = &historyservice.CompleteNexusOperationChasmRequest{
 			Completion: token,
-			State:      string(op.State),
 			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Failure{
-				Failure: commonnexus.NexusFailureToProtoFailure(op.Failure),
+				Failure: apiFailure,
 			},
-			OperationToken: op.OperationToken,
-			StartTime:      timestamppb.New(op.StartTime),
-			CloseTime:      timestamppb.New(op.CloseTime),
-			Links:          links,
+			CloseTime: timestamppb.New(op.CloseTime),
 		}
 	default:
 		return nil, fmt.Errorf("unexpected nexus.OperationCompletion: %v", token)
 	}
 
 	return req, nil
-}
-
-func convertNexusLinksToAPILinks(nexusLinks []nexus.Link) (links []*commonpb.Link, err error) {
-	for _, nexusLink := range nexusLinks {
-		link, err := nexusoperations.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
-		if err != nil {
-			return nil, err
-		}
-
-		links = append(links, &commonpb.Link{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: link,
-			},
-		})
-	}
-	return links, nil
 }

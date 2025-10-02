@@ -1143,30 +1143,22 @@ message ListTasksResponse {
 }
 
 message CompleteNexusOperationChasmRequest {
-    // TODO - We're adding support for routing via business_id/archetype, use that here
     option (routing) = {
-        namespace_id: "completion.namespace_id"
-        workflow_id: "completion.business_id"
+        namespace_id: "completion.ref.namespace_id"
+        // TODO - fix after merge
+        // execution_id: "completion.ref.business_id"
+        workflow_id: "completion.ref.business_id"
     };
-
     // Completion token - holds information for locating an entity and the corresponding component.
     temporal.server.api.token.v1.NexusOperationChasmCompletion completion = 1;
-    // Operation state - may only be successful / failed / canceled.
-    string state = 2;
     oneof outcome {
         // Result of a successful operation, only set if state == successful.
-        temporal.api.common.v1.Payload success = 3;
+        temporal.api.common.v1.Payload success = 2;
         // Operation failure, only set if state != successful.
-        temporal.api.nexus.v1.Failure failure = 4;
+        temporal.api.failure.v1.Failure failure = 3;
     }
-    // Operation token - used when the completion is received before the started response.
-    string operation_token = 5;
-    // Time the operation was started. Used when completion is received before the started response.
-    google.protobuf.Timestamp start_time = 6;
     // Time when the operation was closed.
-    google.protobuf.Timestamp close_time = 7;
-    // Links to be attached to a fabricated start event if completion is received before started response.
-    repeated temporal.api.common.v1.Link links = 8;
+    google.protobuf.Timestamp close_time = 4;
 }
 
 message CompleteNexusOperationChasmResponse {}

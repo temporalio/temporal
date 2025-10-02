@@ -13,7 +13,7 @@ const (
 	NexusComponentRefHeader = "X-CHASM-Component-Ref"
 
 	// Base URL for Nexus->CHASM callbacks.
-	NexusCompletionHandlerURL = "temporal://system/nexus/callback/chasm"
+	NexusCompletionHandlerURL = "temporal://internal"
 )
 
 // NexusCompletionHandler is implemented by CHASM components that want to handle

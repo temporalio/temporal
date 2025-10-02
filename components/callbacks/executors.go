@@ -140,6 +140,7 @@ func (e taskExecutor) loadInvocationArgs(
 			return err
 		}
 
+		// variant struct is immutable and ok to reference without copying
 		switch variant := callback.GetCallback().GetVariant().(type) {
 		case *persistencespb.Callback_Nexus_:
 			target, err := hsm.MachineData[CanGetNexusCompletion](node.Parent)
@@ -153,24 +154,22 @@ func (e taskExecutor) loadInvocationArgs(
 			}
 
 			// CHASM internal callbacks make use of Nexus as their callback delivery
-			// mechanism, but with a special prefix.
-			if _, ok := variant.Nexus.Header[chasm.NexusComponentRefHeader]; ok {
+			// mechanism, but with the internal delivery URL.
+			if variant.Nexus.Url == chasm.NexusCompletionHandlerURL {
 				invokable = chasmInvocation{
 					nexus:      variant.Nexus,
 					attempt:    callback.Attempt,
 					completion: completion,
 					requestID:  callback.RequestId,
 				}
-				break
-			}
-
-			// variant struct is immutable and ok to reference without copying
-			invokable = nexusInvocation{
-				nexus:      variant.Nexus,
-				completion: completion,
-				workflowID: ref.WorkflowKey.WorkflowID,
-				runID:      ref.WorkflowKey.RunID,
-				attempt:    callback.Attempt,
+			} else {
+				invokable = nexusInvocation{
+					nexus:      variant.Nexus,
+					completion: completion,
+					workflowID: ref.WorkflowKey.WorkflowID,
+					runID:      ref.WorkflowKey.RunID,
+					attempt:    callback.Attempt,
+				}
 			}
 		// TODO - remove the Callback_Hsm branch and related invokable
 		case *persistencespb.Callback_Hsm:
@@ -178,7 +177,6 @@ func (e taskExecutor) loadInvocationArgs(
 			if err != nil {
 				return err
 			}
-			// variant struct is immutable and ok to reference without copying
 			hsmInvokable := hsmInvocation{}
 			hsmInvokable.hsm = variant.Hsm
 			hsmInvokable.callbackArg, err = target.GetHSMCompletionCallbackArg(ctx)

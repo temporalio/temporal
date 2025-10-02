@@ -643,15 +643,12 @@ func (x *NexusOperationCompletion) GetRequestId() string {
 
 // A completion token for a Nexus operation started from a CHASM component.
 type NexusOperationChasmCompletion struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	BusinessId  string                 `protobuf:"bytes,2,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
-	EntityId    string                 `protobuf:"bytes,3,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// Reference to the CHASM component to be informed of the completion.
-	Ref *v11.ChasmComponentRef `protobuf:"bytes,4,opt,name=ref,proto3" json:"ref,omitempty"`
+	Ref *v11.ChasmComponentRef `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
 	// Request ID embedded in the NexusOperationScheduledEvent.
 	// Allows completing a started operation after a workflow has been reset.
-	RequestId     string `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	RequestId     string `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -684,27 +681,6 @@ func (x *NexusOperationChasmCompletion) ProtoReflect() protoreflect.Message {
 // Deprecated: Use NexusOperationChasmCompletion.ProtoReflect.Descriptor instead.
 func (*NexusOperationChasmCompletion) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_token_v1_message_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *NexusOperationChasmCompletion) GetNamespaceId() string {
-	if x != nil {
-		return x.NamespaceId
-	}
-	return ""
-}
-
-func (x *NexusOperationChasmCompletion) GetBusinessId() string {
-	if x != nil {
-		return x.BusinessId
-	}
-	return ""
-}
-
-func (x *NexusOperationChasmCompletion) GetEntityId() string {
-	if x != nil {
-		return x.EntityId
-	}
-	return ""
 }
 
 func (x *NexusOperationChasmCompletion) GetRef() *v11.ChasmComponentRef {
@@ -788,15 +764,11 @@ const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	"\x06run_id\x18\x03 \x01(\tR\x05runId\x12E\n" +
 	"\x03ref\x18\x04 \x01(\v23.temporal.server.api.persistence.v1.StateMachineRefR\x03ref\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x05 \x01(\tR\trequestId\"\xe8\x01\n" +
-	"\x1dNexusOperationChasmCompletion\x12!\n" +
-	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
-	"\vbusiness_id\x18\x02 \x01(\tR\n" +
-	"businessId\x12\x1b\n" +
-	"\tentity_id\x18\x03 \x01(\tR\bentityId\x12G\n" +
-	"\x03ref\x18\x04 \x01(\v25.temporal.server.api.persistence.v1.ChasmComponentRefR\x03ref\x12\x1d\n" +
+	"request_id\x18\x05 \x01(\tR\trequestId\"\x87\x01\n" +
+	"\x1dNexusOperationChasmCompletion\x12G\n" +
+	"\x03ref\x18\x01 \x01(\v25.temporal.server.api.persistence.v1.ChasmComponentRefR\x03ref\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x05 \x01(\tR\trequestIdB*Z(go.temporal.io/server/api/token/v1;tokenb\x06proto3"
+	"request_id\x18\x02 \x01(\tR\trequestIdB*Z(go.temporal.io/server/api/token/v1;tokenb\x06proto3"
 
 var (
 	file_temporal_server_api_token_v1_message_proto_rawDescOnce sync.Once

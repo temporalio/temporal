@@ -90,14 +90,10 @@ message NexusOperationCompletion {
 
 // A completion token for a Nexus operation started from a CHASM component.
 message NexusOperationChasmCompletion {
-    string namespace_id = 1;
-    string business_id = 2;
-    string entity_id = 3;
-
     // Reference to the CHASM component to be informed of the completion.
-    temporal.server.api.persistence.v1.ChasmComponentRef ref = 4;
+    temporal.server.api.persistence.v1.ChasmComponentRef ref = 1;
 
     // Request ID embedded in the NexusOperationScheduledEvent.
     // Allows completing a started operation after a workflow has been reset.
-    string request_id = 5;
+    string request_id = 2;
 }
