@@ -1995,8 +1995,9 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 	chasmTree := historyi.NewMockChasmTree(s.controller)
 	chasmTree.EXPECT().EachPureTask(gomock.Any(), gomock.Any()).
 		Times(1).Do(
-		func(_ time.Time, callback func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) error) error {
-			return callback(mockEach, chasm.TaskAttributes{}, nil)
+		func(_ time.Time, callback func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) (bool, error)) error {
+			_, err := callback(mockEach, chasm.TaskAttributes{}, nil)
+			return err
 		})
 
 	// Mock mutable state.
