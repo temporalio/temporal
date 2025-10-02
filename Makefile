@@ -652,7 +652,7 @@ update-dependencies-major: $(GOMAJOR)
 
 go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER) $(GOWRAP)
 	@printf $(COLOR) "Process go:generate directives..."
-	@go generate ./...
+	@PATH="$(ROOT)/$(LOCALBIN):$(PATH)" go generate ./...
 
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."

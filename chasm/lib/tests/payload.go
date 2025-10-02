@@ -23,6 +23,11 @@ const (
 	TestKeywordSAFieldValue = "test-keyword-value"
 )
 
+var (
+	_ chasm.VisibilitySearchAttributesProvider = (*PayloadStore)(nil)
+	_ chasm.VisibilityMemoProvider             = (*PayloadStore)(nil)
+)
+
 type (
 	PayloadStore struct {
 		chasm.UnimplementedComponent
@@ -47,9 +52,6 @@ func NewPayloadStore(
 			mutableContext,
 			chasm.NewVisibility(mutableContext),
 		),
-	}
-	if err := store.updateVisibility(mutableContext); err != nil {
-		return nil, err
 	}
 	return store, nil
 }
@@ -100,10 +102,6 @@ func (s *PayloadStore) AddPayload(
 		)
 	}
 
-	if err := s.updateVisibility(mutableContext); err != nil {
-		return nil, err
-	}
-
 	return s.Describe(mutableContext, DescribePayloadStoreRequest{})
 }
 
@@ -135,10 +133,6 @@ func (s *PayloadStore) RemovePayload(
 	delete(s.Payloads, key)
 	delete(s.State.ExpirationTimes, key)
 
-	if err := s.updateVisibility(mutableContext); err != nil {
-		return nil, err
-	}
-
 	return s.Describe(mutableContext, DescribePayloadStoreRequest{})
 }
 
@@ -151,18 +145,23 @@ func (s *PayloadStore) LifecycleState(
 	return chasm.LifecycleStateRunning
 }
 
-func (s *PayloadStore) updateVisibility(
-	mutableContext chasm.MutableContext,
-) error {
-	visibility, err := s.Visibility.Get(mutableContext)
-	if err != nil {
-		return err
-	}
-	chasm.UpsertMemo(mutableContext, visibility, TotalCountMemoFieldName, s.State.TotalCount)
-	chasm.UpsertMemo(mutableContext, visibility, TotalSizeMemoFieldName, s.State.TotalSize)
-
+// SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface
+func (s *PayloadStore) SearchAttributes(
+	_ chasm.Context,
+) map[string]chasm.VisibilityValue {
 	// TODO: UpsertSearchAttribute as well when CHASM framework supports Per-Component SearchAttributes
 	// For now, we just update a random existing pre-defined SA to make sure the logic works.
-	chasm.UpsertSearchAttribute(mutableContext, visibility, TestKeywordSAFieldName, TestKeywordSAFieldValue)
-	return nil
+	return map[string]chasm.VisibilityValue{
+		TestKeywordSAFieldName: chasm.VisibilityValueString(TestKeywordSAFieldValue),
+	}
+}
+
+// Memo implements chasm.VisibilityMemoProvider interface
+func (s *PayloadStore) Memo(
+	_ chasm.Context,
+) map[string]chasm.VisibilityValue {
+	return map[string]chasm.VisibilityValue{
+		TotalCountMemoFieldName: chasm.VisibilityValueInt64(s.State.TotalCount),
+		TotalSizeMemoFieldName:  chasm.VisibilityValueInt64(s.State.TotalSize),
+	}
 }

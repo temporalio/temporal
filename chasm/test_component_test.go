@@ -60,6 +60,11 @@ type (
 	}
 )
 
+const (
+	testComponentStartTimeSAKey   = "StartTimeSAKey"
+	testComponentStartTimeMemoKey = "StartTimeMemoKey"
+)
+
 func (tc *TestComponent) LifecycleState(_ Context) LifecycleState {
 	switch tc.ComponentData.GetStatus() {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
@@ -85,6 +90,20 @@ func (tc *TestComponent) Complete(_ MutableContext) {
 
 func (tc *TestComponent) Fail(_ MutableContext) {
 	tc.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+}
+
+// SearchAttributes implements VisibilitySearchAttributesProvider interface.
+func (tc *TestComponent) SearchAttributes(_ Context) map[string]VisibilityValue {
+	return map[string]VisibilityValue{
+		testComponentStartTimeSAKey: VisibilityValueTime(tc.ComponentData.GetStartTime().AsTime()),
+	}
+}
+
+// Memo implements VisibilityMemoProvider interface.
+func (tc *TestComponent) Memo(_ Context) map[string]VisibilityValue {
+	return map[string]VisibilityValue{
+		testComponentStartTimeMemoKey: VisibilityValueTime(tc.ComponentData.GetStartTime().AsTime()),
+	}
 }
 
 func (tsc1 *TestSubComponent1) LifecycleState(_ Context) LifecycleState {

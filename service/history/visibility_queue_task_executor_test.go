@@ -115,6 +115,8 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	chasmRegistry := s.mockShard.ChasmRegistry()
 	err = chasmRegistry.Register(&chasm.CoreLibrary{})
 	s.NoError(err)
+	err = chasmRegistry.Register(&testChasmLibrary{})
+	s.NoError(err)
 
 	s.mockShard.SetEventsCacheForTesting(events.NewHostLevelEventsCache(
 		s.mockShard.GetExecutionManager(),
@@ -569,7 +571,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_InvalidTask() {
 		"some random ID",
 		uuid.New(),
 	)
-	mutableState := s.buildChasmMutableState(key, "archetype", 5)
+	mutableState := s.buildChasmMutableState(key, 5)
 
 	// Case 1: invalid task with lower transition count than the state
 	visibilityTask := s.buildChasmVisTask(key, 3)
@@ -597,21 +599,33 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_RunningExecution
 		"some random ID",
 		uuid.New(),
 	)
-	archetype := "archetype"
-	mutableState := s.buildChasmMutableState(key, archetype, 5)
+	mutableState := s.buildChasmMutableState(key, 5)
 
 	visibilityTask := s.buildChasmVisTask(key, 5)
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
 	s.mockVisibilityMgr.EXPECT().UpsertWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, request *manager.UpsertWorkflowExecutionRequest) error {
+
+			s.Len(request.SearchAttributes.IndexedFields, 2)
+
 			v, ok := request.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision]
 			s.True(ok)
-
 			var actualArchetype string
 			err := payload.Decode(v, &actualArchetype)
 			s.NoError(err)
-			s.Equal(archetype, actualArchetype)
+			s.Equal("TestLibrary.test_component", actualArchetype)
+
+			var paused bool
+			err = payload.Decode(request.SearchAttributes.IndexedFields[testComponentPausedSAName], &paused)
+			s.NoError(err)
+			s.True(paused)
+
+			s.Len(request.Memo.Fields, 1)
+			err = payload.Decode(request.Memo.Fields[testComponentPausedSAName], &paused)
+			s.NoError(err)
+			s.True(paused)
+
 			return nil
 		},
 	)
@@ -626,9 +640,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_ClosedExecution(
 		"some random ID",
 		uuid.New(),
 	)
-	archetype := "archetype"
-
-	mutableState := s.buildChasmMutableState(key, archetype, 5)
+	mutableState := s.buildChasmMutableState(key, 5)
 
 	closeTime := s.now.Add(5 * time.Minute)
 	mutableState.ExecutionInfo.CloseTime = timestamppb.New(closeTime)
@@ -646,13 +658,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_ClosedExecution(
 			s.Zero(request.HistorySizeBytes)
 			s.NotEmpty(request.StateTransitionCount)
 
-			v, ok := request.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision]
-			s.True(ok)
-
-			var actualArchetype string
-			err := payload.Decode(v, &actualArchetype)
-			s.NoError(err)
-			s.Equal(archetype, actualArchetype)
+			// Other fields are tested in TestProcessChasmTask_RunningExecution
 			return nil
 		},
 	)
@@ -663,7 +669,6 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_ClosedExecution(
 
 func (s *visibilityQueueTaskExecutorSuite) buildChasmMutableState(
 	key definition.WorkflowKey,
-	archetype string,
 	visComponentTransitionCount int64,
 ) *persistencespb.WorkflowMutableState {
 	executionInfo := &persistencespb.WorkflowExecutionInfo{
@@ -697,11 +702,11 @@ func (s *visibilityQueueTaskExecutorSuite) buildChasmMutableState(
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						Type: archetype,
+						Type: "TestLibrary.test_component",
 					},
 				},
 			},
-			Data: &commonpb.DataBlob{Data: []byte("some-random-data")},
+			Data: newTestComponentStateBlob(&persistencespb.ActivityInfo{Paused: true}),
 		},
 		"Visibility": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
