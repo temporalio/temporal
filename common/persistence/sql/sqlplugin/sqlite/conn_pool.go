@@ -5,6 +5,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -12,8 +14,9 @@ import (
 // Internal Temporal services are highly isolated, each will create at least a single connection to the database violating
 // the SQLite concept of safety only within a single thread.
 type connPool struct {
-	mu   sync.Mutex
-	pool map[string]entry
+	mu     sync.Mutex
+	pool   map[string]entry
+	logger log.Logger
 }
 
 type entry struct {
@@ -23,7 +26,8 @@ type entry struct {
 
 func newConnPool() *connPool {
 	return &connPool{
-		pool: make(map[string]entry),
+		pool:   make(map[string]entry),
+		logger: log.NewNoopLogger(),
 	}
 }
 
@@ -44,6 +48,7 @@ func (cp *connPool) Allocate(
 
 	if entry, ok := cp.pool[dsn]; ok {
 		entry.refCount++
+		cp.pool[dsn] = entry
 		return entry.db, nil
 	}
 
@@ -74,11 +79,16 @@ func (cp *connPool) Close(cfg *config.SQL) {
 	}
 
 	e.refCount--
-	// todo: at the moment pool will persist a single connection to the DB for the whole duration of application
-	// temporal will start and stop DB connections multiple times, which will cause the loss of the cache
-	// and "db is closed" error
-	// if e.refCount == 0 {
-	// 	e.db.Close()
-	// 	delete(cp.pool, dsn)
-	// }
+	cp.pool[dsn] = e
+	
+	if e.refCount == 0 {
+		if e.db != nil {
+			if closeErr := e.db.Close(); closeErr != nil {
+				cp.logger.Error("Failed to close SQLite database connection",
+					tag.Error(closeErr),
+					tag.NewStringTag("dsn", dsn))
+			}
+		}
+		delete(cp.pool, dsn)
+	}
 }
