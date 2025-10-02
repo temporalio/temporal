@@ -14,7 +14,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/cluster/clustertest"
 	"go.temporal.io/server/common/locks"
@@ -125,6 +125,147 @@ func TestMergeOptions_FooMask(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestMergeOptions_Priority(t *testing.T) {
+	updateMask := &fieldmaskpb.FieldMask{Paths: []string{"priority"}}
+
+	// Merge priority into empty options
+	merged, err := mergeWorkflowExecutionOptions(
+		emptyOptions,
+		&workflowpb.WorkflowExecutionOptions{
+			Priority: &commonpb.Priority{PriorityKey: 10},
+		}, updateMask)
+	assert.NoError(t, err)
+	assert.Equal(t, int32(10), merged.Priority.PriorityKey)
+
+	// Update priority with all fields set
+	merged, err = mergeWorkflowExecutionOptions(
+		merged,
+		&workflowpb.WorkflowExecutionOptions{
+			Priority: &commonpb.Priority{
+				PriorityKey:    20,
+				FairnessKey:    "key1",
+				FairnessWeight: 3.5,
+			},
+		}, updateMask)
+	assert.NoError(t, err)
+	assert.Equal(t, int32(20), merged.Priority.PriorityKey)
+	assert.Equal(t, "key1", merged.Priority.FairnessKey)
+	assert.Equal(t, float32(3.5), merged.Priority.FairnessWeight)
+
+	// Replace with partial priority and clear unspecified fields
+	merged, err = mergeWorkflowExecutionOptions(
+		merged,
+		&workflowpb.WorkflowExecutionOptions{
+			Priority: &commonpb.Priority{PriorityKey: 30},
+		}, updateMask)
+	assert.NoError(t, err)
+	assert.Equal(t, int32(30), merged.Priority.PriorityKey)
+	assert.Equal(t, "", merged.Priority.FairnessKey)            // cleared
+	assert.Equal(t, float32(0), merged.Priority.FairnessWeight) // cleared
+}
+
+func TestMergeOptions_Priority_FairnessKey(t *testing.T) {
+	updateMask := &fieldmaskpb.FieldMask{Paths: []string{"priority.fairness_key"}}
+
+	init := &workflowpb.WorkflowExecutionOptions{
+		Priority: &commonpb.Priority{
+			PriorityKey:    50,
+			FairnessWeight: 2.5,
+		},
+	}
+
+	merged, err := mergeWorkflowExecutionOptions(
+		init,
+		&workflowpb.WorkflowExecutionOptions{
+			Priority: &commonpb.Priority{FairnessKey: "key1"},
+		}, updateMask)
+	assert.NoError(t, err)
+	assert.Equal(t, "key1", merged.Priority.FairnessKey)
+	assert.Equal(t, int32(50), merged.Priority.PriorityKey)       // preserved
+	assert.Equal(t, float32(2.5), merged.Priority.FairnessWeight) // preserved
+}
+
+func TestMergeOptions_Priority_FairnessWeight(t *testing.T) {
+	updateMask := &fieldmaskpb.FieldMask{Paths: []string{"priority.fairness_weight"}}
+
+	init := &workflowpb.WorkflowExecutionOptions{
+		Priority: &commonpb.Priority{
+			PriorityKey: 75,
+			FairnessKey: "existingKey",
+		},
+	}
+
+	merged, err := mergeWorkflowExecutionOptions(
+		init,
+		&workflowpb.WorkflowExecutionOptions{
+			Priority: &commonpb.Priority{FairnessWeight: 5},
+		}, updateMask)
+	assert.NoError(t, err)
+	assert.Equal(t, float32(5), merged.Priority.FairnessWeight)
+	assert.Equal(t, int32(75), merged.Priority.PriorityKey)     // preserved
+	assert.Equal(t, "existingKey", merged.Priority.FairnessKey) // preserved
+}
+
+func TestMergeOptions_Priority_PriorityKey(t *testing.T) {
+	priorityKeyMask := &fieldmaskpb.FieldMask{Paths: []string{"priority.priority_key"}}
+
+	init := &workflowpb.WorkflowExecutionOptions{
+		Priority: &commonpb.Priority{
+			FairnessKey:    "key1",
+			FairnessWeight: 3.0,
+		},
+	}
+
+	merged, err := mergeWorkflowExecutionOptions(
+		init,
+		&workflowpb.WorkflowExecutionOptions{
+			Priority: &commonpb.Priority{PriorityKey: 100},
+		}, priorityKeyMask)
+	assert.NoError(t, err)
+	assert.Equal(t, int32(100), merged.Priority.PriorityKey)
+	assert.Equal(t, "key1", merged.Priority.FairnessKey)          // preserved
+	assert.Equal(t, float32(3.0), merged.Priority.FairnessWeight) // preserved
+}
+
+func TestMergeOptions_Priority_ClearPriority(t *testing.T) {
+	updateMask := &fieldmaskpb.FieldMask{Paths: []string{"priority"}}
+
+	init := &workflowpb.WorkflowExecutionOptions{
+		Priority: &commonpb.Priority{
+			PriorityKey:    100,
+			FairnessKey:    "key",
+			FairnessWeight: 5,
+		},
+	}
+
+	merged, err := mergeWorkflowExecutionOptions(
+		init,
+		&workflowpb.WorkflowExecutionOptions{
+			Priority: nil,
+		}, updateMask)
+	assert.NoError(t, err)
+	assert.Nil(t, merged.Priority)
+}
+
+func TestMergeOptions_Priority_MultipleFields(t *testing.T) {
+	allFieldsMask := &fieldmaskpb.FieldMask{
+		Paths: []string{"priority.priority_key", "priority.fairness_key", "priority.fairness_weight"}}
+
+	merged, err := mergeWorkflowExecutionOptions(
+		emptyOptions,
+		&workflowpb.WorkflowExecutionOptions{
+			Priority: &commonpb.Priority{
+				PriorityKey:    99,
+				FairnessKey:    "testKey",
+				FairnessWeight: 7.5,
+			},
+		}, allFieldsMask)
+	assert.NoError(t, err)
+	assert.Equal(t, int32(99), merged.Priority.PriorityKey)
+	assert.Equal(t, "testKey", merged.Priority.FairnessKey)
+	assert.Equal(t, float32(7.5), merged.Priority.FairnessWeight)
+}
+
 type (
 	// updateWorkflowOptionsSuite contains tests for the UpdateWorkflowOptions API.
 	updateWorkflowOptionsSuite struct {
@@ -178,7 +319,7 @@ func (s *updateWorkflowOptionsSuite) SetupTest() {
 	s.currentContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.currentMutableState, nil)
 
 	s.workflowCache = wcache.NewMockCache(s.controller)
-	s.workflowCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), chasm.WorkflowArchetypeID, locks.PriorityHigh).
+	s.workflowCache.EXPECT().GetOrCreateChasmEntity(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), chasmworkflow.Archetype, locks.PriorityHigh).
 		Return(s.currentContext, wcache.NoopReleaseFn, nil)
 
 	s.workflowConsistencyChecker = api.NewWorkflowConsistencyChecker(
@@ -192,7 +333,6 @@ func (s *updateWorkflowOptionsSuite) TearDownTest() {
 }
 
 func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
-
 	expectedOverrideOptions := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
@@ -200,7 +340,14 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 		},
 	}
 	s.currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
-	s.currentMutableState.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(expectedOverrideOptions.VersioningOverride, false, "", nil, nil, "").Return(&historypb.HistoryEvent{}, nil)
+	s.currentMutableState.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
+		expectedOverrideOptions.VersioningOverride,
+		false,
+		"",
+		nil,
+		nil,
+		nil,
+	).Return(&historypb.HistoryEvent{}, nil)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), s.shardContext).Return(nil)
 
 	updateReq := &historyservice.UpdateWorkflowExecutionOptionsRequest{

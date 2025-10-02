@@ -384,7 +384,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 	attachRequestID string,
 	attachCompletionCallbacks []*commonpb.Callback,
 	links []*commonpb.Link,
-	identity string,
+	priority *commonpb.Priority,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
@@ -393,7 +393,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 			UnsetVersioningOverride:     unsetVersioningOverride,
 			AttachedRequestId:           attachRequestID,
 			AttachedCompletionCallbacks: attachCompletionCallbacks,
-			Identity:                    identity,
+			Priority:                    priority,
 		},
 	}
 	event.Links = links
@@ -1004,38 +1004,6 @@ func (b *EventFactory) CreateChildWorkflowExecutionTimedOutEvent(
 			WorkflowExecution: execution,
 			WorkflowType:      workflowType,
 			RetryState:        retryState,
-		},
-	}
-	return event
-}
-
-func (b *EventFactory) CreateWorkflowExecutionPausedEvent(
-	identity string,
-	reason string,
-	requestID string,
-) *historypb.HistoryEvent {
-	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED, b.timeSource.Now())
-	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionPausedEventAttributes{
-		WorkflowExecutionPausedEventAttributes: &historypb.WorkflowExecutionPausedEventAttributes{
-			Identity:  identity,
-			Reason:    reason,
-			RequestId: requestID,
-		},
-	}
-	return event
-}
-
-func (b *EventFactory) CreateWorkflowExecutionUnpausedEvent(
-	identity string,
-	reason string,
-	requestID string,
-) *historypb.HistoryEvent {
-	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED, b.timeSource.Now())
-	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionUnpausedEventAttributes{
-		WorkflowExecutionUnpausedEventAttributes: &historypb.WorkflowExecutionUnpausedEventAttributes{
-			Identity:  identity,
-			Reason:    reason,
-			RequestId: requestID,
 		},
 	}
 	return event

@@ -953,7 +953,7 @@ func reapplyEvents(
 				requestID,
 				callbacks,
 				event.Links,
-				attr.GetIdentity(),
+				attr.Priority,
 			); err != nil {
 				return reappliedEvents, err
 			}
@@ -1167,8 +1167,7 @@ func (r *workflowResetterImpl) performPostResetOperations(ctx context.Context, r
 	for _, operation := range postResetOperations {
 		switch op := operation.GetVariant().(type) {
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
-			// TODO(carlydf): Put the reset requester in the event so that with state-based replication this code will run on the passive side.
-			_, _, err := updateworkflowoptions.MergeAndApply(resetMS, op.UpdateWorkflowOptions.GetWorkflowExecutionOptions(), op.UpdateWorkflowOptions.GetUpdateMask(), "")
+			_, _, err := updateworkflowoptions.MergeAndApply(resetMS, op.UpdateWorkflowOptions.GetWorkflowExecutionOptions(), op.UpdateWorkflowOptions.GetUpdateMask())
 			if err != nil {
 				return err
 			}

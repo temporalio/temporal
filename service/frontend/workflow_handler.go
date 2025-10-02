@@ -5987,6 +5987,9 @@ func (wh *WorkflowHandler) UpdateActivityOptions(
 	if request.GetActivity() == nil {
 		return nil, errActivityIDOrTypeNotSet
 	}
+	if err := priorities.Validate(request.GetActivityOptions().GetPriority()); err != nil {
+		return nil, err
+	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
