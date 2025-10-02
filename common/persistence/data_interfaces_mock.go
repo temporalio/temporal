@@ -1374,7 +1374,7 @@ func (mr *MockHistoryTaskQueueManagerMockRecorder) CreateQueue(ctx, request any)
 // DeleteTasks mocks base method.
 func (m *MockHistoryTaskQueueManager) DeleteTasks(ctx context.Context, request *DeleteTasksRequest) (*DeleteTasksResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BestEffortDeleteTasks", ctx, request)
+	ret := m.ctrl.Call(m, "DeleteTasks", ctx, request)
 	ret0, _ := ret[0].(*DeleteTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
@@ -1383,7 +1383,7 @@ func (m *MockHistoryTaskQueueManager) DeleteTasks(ctx context.Context, request *
 // DeleteTasks indicates an expected call of DeleteTasks.
 func (mr *MockHistoryTaskQueueManagerMockRecorder) DeleteTasks(ctx, request any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BestEffortDeleteTasks", reflect.TypeOf((*MockHistoryTaskQueueManager)(nil).DeleteTasks), ctx, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTasks", reflect.TypeOf((*MockHistoryTaskQueueManager)(nil).DeleteTasks), ctx, request)
 }
 
 // EnqueueTask mocks base method.
