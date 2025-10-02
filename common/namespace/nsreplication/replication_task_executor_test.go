@@ -170,6 +170,16 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 			ClusterName: clusterStandby,
 		},
 	}
+	failoverHistory := []*replicationpb.FailoverStatus{
+		{
+			FailoverTime:    timestamppb.New(time.Date(2025, 9, 15, 14, 30, 0, 0, time.UTC)),
+			FailoverVersion: 2,
+		},
+		{
+			FailoverTime:    timestamppb.New(time.Date(2025, 10, 1, 16, 45, 30, 0, time.UTC)),
+			FailoverVersion: 11,
+		},
+	}
 
 	task := &replicationspb.NamespaceTaskAttributes{
 		NamespaceOperation: operation,
@@ -194,6 +204,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		},
 		ConfigVersion:   configVersion,
 		FailoverVersion: failoverVersion,
+		FailoverHistory: failoverHistory,
 	}
 
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: name}).Return(
@@ -218,6 +229,16 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: task.ReplicationConfig.ActiveClusterName,
 				Clusters:          []string{clusterActive, clusterStandby},
+				FailoverHistory: []*persistencespb.FailoverStatus{
+					{
+						FailoverTime:    timestamppb.New(time.Date(2025, 9, 15, 14, 30, 0, 0, time.UTC)),
+						FailoverVersion: 2,
+					},
+					{
+						FailoverTime:    timestamppb.New(time.Date(2025, 10, 1, 16, 45, 30, 0, time.UTC)),
+						FailoverVersion: 11,
+					},
+				},
 			},
 			ConfigVersion:               configVersion,
 			FailoverNotificationVersion: 0,
