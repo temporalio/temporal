@@ -900,6 +900,21 @@ func (mr *MockMetadataManagerMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockMetadataManager)(nil).Close))
 }
 
+// ConvertInternalGetResponse mocks base method.
+func (m *MockMetadataManager) ConvertInternalGetResponse(response *InternalGetNamespaceResponse) (*GetNamespaceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ConvertInternalGetResponse", response)
+	ret0, _ := ret[0].(*GetNamespaceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ConvertInternalGetResponse indicates an expected call of ConvertInternalGetResponse.
+func (mr *MockMetadataManagerMockRecorder) ConvertInternalGetResponse(response any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertInternalGetResponse", reflect.TypeOf((*MockMetadataManager)(nil).ConvertInternalGetResponse), response)
+}
+
 // CreateNamespace mocks base method.
 func (m *MockMetadataManager) CreateNamespace(ctx context.Context, request *CreateNamespaceRequest) (*CreateNamespaceResponse, error) {
 	m.ctrl.T.Helper()

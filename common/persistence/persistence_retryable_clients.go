@@ -913,6 +913,10 @@ func (p *metadataRetryablePersistenceClient) Close() {
 	p.persistence.Close()
 }
 
+func (p *metadataRetryablePersistenceClient) ConvertInternalGetResponse(response *InternalGetNamespaceResponse) (*GetNamespaceResponse, error) {
+	return p.ConvertInternalGetResponse(response)
+}
+
 func (p *clusterMetadataRetryablePersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }

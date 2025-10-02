@@ -749,6 +749,10 @@ func (p *metadataRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
+func (p *metadataRateLimitedPersistenceClient) ConvertInternalGetResponse(response *InternalGetNamespaceResponse) (*GetNamespaceResponse, error) {
+	return p.ConvertInternalGetResponse(response)
+}
+
 // AppendHistoryNodes add a node to history node table
 func (p *executionRateLimitedPersistenceClient) AppendHistoryNodes(
 	ctx context.Context,

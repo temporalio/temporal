@@ -893,6 +893,10 @@ func (p *metadataPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
+func (p *metadataPersistenceClient) ConvertInternalGetResponse(response *InternalGetNamespaceResponse) (*GetNamespaceResponse, error) {
+	return p.ConvertInternalGetResponse(response)
+}
+
 // AppendHistoryNodes add a node to history node table
 func (p *executionPersistenceClient) AppendHistoryNodes(
 	ctx context.Context,
