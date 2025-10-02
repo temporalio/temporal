@@ -476,7 +476,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_UnexpectedSticky() {
 }
 
 func (s *mutableStateSuite) TestPopulateDeleteTasks_WithWorkflowTaskTimeouts() {
-	// Test that workflow task timeout task references are added to DeleteTasks when present.
+	// Test that workflow task timeout task references are added to BestEffortDeleteTasks when present.
 	version := int64(1)
 	workflowID := "wf-timeout-delete"
 	runID := uuid.New()
@@ -535,6 +535,8 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_WithWorkflowTaskTimeouts() {
 	// Manually set the timeout task references (simulating what task_generator does)
 	wft.ScheduleToStartTimeoutTask = mockScheduleToStartTask
 	wft.StartToCloseTimeoutTask = mockStartToCloseTask
+	// Call UpdateWorkflowTask to persist the timeout task info to ExecutionInfo
+	s.mutableState.workflowTaskManager.UpdateWorkflowTask(wft)
 
 	// Complete the workflow task
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -544,8 +546,8 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_WithWorkflowTaskTimeouts() {
 	)
 	s.NoError(err)
 
-	// Verify that DeleteTasks contains the timeout task keys
-	del := s.mutableState.DeleteTasks
+	// Verify that BestEffortDeleteTasks contains the timeout task keys
+	del := s.mutableState.BestEffortDeleteTasks
 	s.Contains(del, tasks.CategoryTimer)
 	s.Equal(2, len(del[tasks.CategoryTimer]), "Should have both ScheduleToStart and StartToClose timeout tasks")
 	s.Contains(del[tasks.CategoryTimer], mockScheduleToStartTask.GetKey())
@@ -553,7 +555,7 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_WithWorkflowTaskTimeouts() {
 }
 
 func (s *mutableStateSuite) TestPopulateDeleteTasks_InMemoryTask_NotIncluded() {
-	// Test that in-memory timeout tasks are NOT added to DeleteTasks.
+	// Test that in-memory timeout tasks are NOT added to BestEffortDeleteTasks.
 	version := int64(1)
 	workflowID := "wf-inmemory"
 	runID := uuid.New()
@@ -608,15 +610,15 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_InMemoryTask_NotIncluded() {
 	)
 	s.NoError(err)
 
-	// Verify that DeleteTasks does NOT contain the in-memory task
-	del := s.mutableState.DeleteTasks
+	// Verify that BestEffortDeleteTasks does NOT contain the in-memory task
+	del := s.mutableState.BestEffortDeleteTasks
 	if timerTasks, exists := del[tasks.CategoryTimer]; exists {
-		s.Equal(0, len(timerTasks), "In-memory tasks should not be added to DeleteTasks")
+		s.Equal(0, len(timerTasks), "In-memory tasks should not be added to BestEffortDeleteTasks")
 	}
 }
 
 func (s *mutableStateSuite) TestPopulateDeleteTasks_LongTimeout_NotIncluded() {
-	// Test that timeout tasks with very long timeouts (> 120s) are NOT added to DeleteTasks.
+	// Test that timeout tasks with very long timeouts (> 120s) are NOT added to BestEffortDeleteTasks.
 	version := int64(1)
 	workflowID := "wf-long-timeout"
 	runID := uuid.New()
@@ -663,6 +665,8 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_LongTimeout_NotIncluded() {
 
 	// Set the long timeout task reference
 	wft.ScheduleToStartTimeoutTask = mockLongTimeoutTask
+	// Call UpdateWorkflowTask to persist the timeout task info to ExecutionInfo
+	s.mutableState.workflowTaskManager.UpdateWorkflowTask(wft)
 
 	// Complete the workflow task
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -672,10 +676,10 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_LongTimeout_NotIncluded() {
 	)
 	s.NoError(err)
 
-	// Verify that DeleteTasks does NOT contain the long timeout task
-	del := s.mutableState.DeleteTasks
+	// Verify that BestEffortDeleteTasks does NOT contain the long timeout task
+	del := s.mutableState.BestEffortDeleteTasks
 	if timerTasks, exists := del[tasks.CategoryTimer]; exists {
-		s.Equal(0, len(timerTasks), "Tasks with timeout > 120s should not be added to DeleteTasks")
+		s.Equal(0, len(timerTasks), "Tasks with timeout > 120s should not be added to BestEffortDeleteTasks")
 	}
 }
 

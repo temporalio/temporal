@@ -213,9 +213,10 @@ type (
 
 		InsertTasks map[tasks.Category][]tasks.Task
 
-		// DeleteTasks holds keys of history tasks to be deleted after a successful
-		// persistence update.
-		DeleteTasks map[tasks.Category][]tasks.Key
+		// BestEffortDeleteTasks holds keys of history tasks to be deleted after a successful
+		// persistence update. This deletion is done on best effort basis. Persistence layer can ignore it without
+		// any errors.
+		BestEffortDeleteTasks map[tasks.Category][]tasks.Key
 
 		speculativeWorkflowTaskTimeoutTask *tasks.WorkflowTaskTimeoutTask
 
@@ -303,7 +304,7 @@ func NewMutableState(
 		namespaceEntry:               namespaceEntry,
 		appliedEvents:                make(map[string]struct{}),
 		InsertTasks:                  make(map[tasks.Category][]tasks.Task),
-		DeleteTasks:                  make(map[tasks.Category][]tasks.Key),
+		BestEffortDeleteTasks:        make(map[tasks.Category][]tasks.Key),
 		transitionHistoryEnabled:     shard.GetConfig().EnableTransitionHistory(),
 		visibilityUpdated:            false,
 		executionStateUpdated:        false,
@@ -6137,8 +6138,8 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		NewBufferedEvents:         result.bufferEvents,
 		ClearBufferedEvents:       result.clearBuffer,
 
-		Tasks:       ms.InsertTasks,
-		DeleteTasks: ms.DeleteTasks,
+		Tasks:                 ms.InsertTasks,
+		BestEffortDeleteTasks: ms.BestEffortDeleteTasks,
 
 		Condition:       ms.nextEventIDInDB,
 		DBRecordVersion: ms.dbRecordVersion,
@@ -6901,7 +6902,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	)
 
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
-	ms.DeleteTasks = make(map[tasks.Category][]tasks.Key)
+	ms.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)
 
 	// Clear outputs for the next transaction.
 	ms.stateMachineNode.ClearTransactionState()

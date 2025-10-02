@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -681,18 +682,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 
 	m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
 
-	// Record persisted workflow task timeout tasks for deletion after successful persistence update.
-	if workflowTask != nil {
-		if t := workflowTask.ScheduleToStartTimeoutTask; t != nil && !t.InMemory &&
-			t.VisibilityTimestamp.Sub(workflowTask.ScheduledTime) < maxWorkflowTaskTimeoutToDelete {
-			m.ms.DeleteTasks[t.GetCategory()] = append(m.ms.DeleteTasks[t.GetCategory()], t.GetKey())
-		}
-		if t := workflowTask.StartToCloseTimeoutTask; t != nil && !t.InMemory &&
-			t.VisibilityTimestamp.Sub(workflowTask.StartedTime) < maxWorkflowTaskTimeoutToDelete {
-			m.ms.DeleteTasks[t.GetCategory()] = append(m.ms.DeleteTasks[t.GetCategory()], t.GetKey())
-		}
-	}
-
 	// Capture if WorkflowTaskScheduled and WorkflowTaskStarted events were created
 	// before calling m.beforeAddWorkflowTaskCompletedEvent() because it will delete workflow task info from mutable state.
 	workflowTaskScheduledStartedEventsCreated := !m.ms.IsTransientWorkflowTask() && workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
@@ -924,6 +913,19 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 
 // deleteWorkflowTask deletes a workflow task.
 func (m *workflowTaskStateMachine) deleteWorkflowTask() {
+	// Get current workflow task info before deleting it, to capture timeout tasks for deletion
+	currentWorkflowTask := m.getWorkflowTaskInfo()
+
+	// Record persisted workflow task timeout tasks for deletion after successful persistence update.
+	if t := currentWorkflowTask.ScheduleToStartTimeoutTask; t != nil && !t.InMemory &&
+		t.VisibilityTimestamp.Sub(currentWorkflowTask.ScheduledTime) < maxWorkflowTaskTimeoutToDelete {
+		m.ms.BestEffortDeleteTasks[t.GetCategory()] = append(m.ms.BestEffortDeleteTasks[t.GetCategory()], t.GetKey())
+	}
+	if t := currentWorkflowTask.StartToCloseTimeoutTask; t != nil && !t.InMemory &&
+		t.VisibilityTimestamp.Sub(currentWorkflowTask.StartedTime) < maxWorkflowTaskTimeoutToDelete {
+		m.ms.BestEffortDeleteTasks[t.GetCategory()] = append(m.ms.BestEffortDeleteTasks[t.GetCategory()], t.GetKey())
+	}
+
 	resetWorkflowTaskInfo := &historyi.WorkflowTaskInfo{
 		Version:             common.EmptyVersion,
 		ScheduledEventID:    common.EmptyEventID,
@@ -936,7 +938,7 @@ func (m *workflowTaskStateMachine) deleteWorkflowTask() {
 
 		TaskQueue: nil,
 		// Keep the last original scheduled Timestamp, so that AddWorkflowTaskScheduledEventAsHeartbeat can continue with it.
-		OriginalScheduledTime: m.getWorkflowTaskInfo().OriginalScheduledTime,
+		OriginalScheduledTime: currentWorkflowTask.OriginalScheduledTime,
 		Type:                  enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
 		SuggestContinueAsNew:  false,
 		HistorySizeBytes:      0,
@@ -985,6 +987,22 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 
 	m.ms.executionInfo.WorkflowTaskBuildId = workflowTask.BuildId
 	m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter = workflowTask.BuildIdRedirectCounter
+
+	// Store timeout task info for later deletion when workflow task completes
+	if workflowTask.ScheduleToStartTimeoutTask != nil {
+		m.ms.executionInfo.WftScheduleStartTimeoutTaskId = workflowTask.ScheduleToStartTimeoutTask.TaskID
+		m.ms.executionInfo.WftScheduleStartTimeoutTime = timestamppb.New(workflowTask.ScheduleToStartTimeoutTask.VisibilityTimestamp)
+	} else {
+		m.ms.executionInfo.WftScheduleStartTimeoutTaskId = 0
+		m.ms.executionInfo.WftScheduleStartTimeoutTime = nil
+	}
+	if workflowTask.StartToCloseTimeoutTask != nil {
+		m.ms.executionInfo.WftStartCloseTimeoutTaskId = workflowTask.StartToCloseTimeoutTask.TaskID
+		m.ms.executionInfo.WftStartCloseTimeoutTime = timestamppb.New(workflowTask.StartToCloseTimeoutTask.VisibilityTimestamp)
+	} else {
+		m.ms.executionInfo.WftStartCloseTimeoutTaskId = 0
+		m.ms.executionInfo.WftStartCloseTimeoutTime = nil
+	}
 
 	m.ms.workflowTaskUpdated = true
 
@@ -1090,7 +1108,7 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 }
 
 func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskInfo {
-	return &historyi.WorkflowTaskInfo{
+	wft := &historyi.WorkflowTaskInfo{
 		Version:                m.ms.executionInfo.WorkflowTaskVersion,
 		ScheduledEventID:       m.ms.executionInfo.WorkflowTaskScheduledEventId,
 		StartedEventID:         m.ms.executionInfo.WorkflowTaskStartedEventId,
@@ -1107,6 +1125,26 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		BuildId:                m.ms.executionInfo.WorkflowTaskBuildId,
 		BuildIdRedirectCounter: m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter,
 	}
+
+	// Reconstruct timeout task references from persisted ExecutionInfo
+	if m.ms.executionInfo.WftScheduleStartTimeoutTaskId != 0 && m.ms.executionInfo.WftScheduleStartTimeoutTime != nil {
+		wft.ScheduleToStartTimeoutTask = &tasks.WorkflowTaskTimeoutTask{
+			WorkflowKey:         m.ms.GetWorkflowKey(),
+			VisibilityTimestamp: m.ms.executionInfo.WftScheduleStartTimeoutTime.AsTime(),
+			TaskID:              m.ms.executionInfo.WftScheduleStartTimeoutTaskId,
+			TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		}
+	}
+	if m.ms.executionInfo.WftStartCloseTimeoutTaskId != 0 && m.ms.executionInfo.WftStartCloseTimeoutTime != nil {
+		wft.StartToCloseTimeoutTask = &tasks.WorkflowTaskTimeoutTask{
+			WorkflowKey:         m.ms.GetWorkflowKey(),
+			VisibilityTimestamp: m.ms.executionInfo.WftStartCloseTimeoutTime.AsTime(),
+			TaskID:              m.ms.executionInfo.WftStartCloseTimeoutTaskId,
+			TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		}
+	}
+
+	return wft
 }
 
 func (m *workflowTaskStateMachine) beforeAddWorkflowTaskCompletedEvent() {

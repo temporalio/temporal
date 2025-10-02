@@ -22,9 +22,9 @@ type Config struct {
 	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
-	EnableDeleteTasksOnWorkflowUpdate    dynamicconfig.BoolPropertyFn
-	PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
+	PersistenceDynamicRateLimitingParams        dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
+	EnableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
+	PersistenceQPSBurstRatio                    dynamicconfig.FloatPropertyFn
 
 	VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn

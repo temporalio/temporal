@@ -27,10 +27,10 @@ func newTestUpdateRequest(keys []tasks.Key) *p.UpdateWorkflowExecutionRequest {
 		RangeID: 1,
 		Mode:    p.UpdateWorkflowModeUpdateCurrent,
 		UpdateWorkflowMutation: p.WorkflowMutation{
-			ExecutionInfo:  &persistencespb.WorkflowExecutionInfo{NamespaceId: "ns", WorkflowId: "wid", ExecutionStats: &persistencespb.ExecutionStats{}},
-			ExecutionState: &persistencespb.WorkflowExecutionState{RunId: "rid", State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
-			NextEventID:    2,
-			DeleteTasks:    toDelete,
+			ExecutionInfo:         &persistencespb.WorkflowExecutionInfo{NamespaceId: "ns", WorkflowId: "wid", ExecutionStats: &persistencespb.ExecutionStats{}},
+			ExecutionState:        &persistencespb.WorkflowExecutionState{RunId: "rid", State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+			NextEventID:           2,
+			BestEffortDeleteTasks: toDelete,
 		},
 	}
 }

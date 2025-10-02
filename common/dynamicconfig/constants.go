@@ -1385,8 +1385,8 @@ If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS`,
 Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
 See DynamicRateLimitingParams comments for more details.`,
 	)
-	EnableDeleteTasksOnWorkflowUpdate = NewGlobalBoolSetting(
-		"history.enableDeleteTasksOnWorkflowUpdate",
+	EnableBestEffortDeleteTasksOnWorkflowUpdate = NewGlobalBoolSetting(
+		"history.enableBestEffortDeleteTasksOnWorkflowUpdate",
 		false,
 		`Enable deletion of requested history tasks (e.g., WFT timeout tasks) right after a successful UpdateWorkflowExecution.
 		WARNING: Turning on this config can create a large number of tombstones in cassandra and degrade performance, use with caution.`,
