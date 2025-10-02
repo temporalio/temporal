@@ -5907,9 +5907,13 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
 
-	if searchattribute.AreKeywordListPayloadsEqual(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], reportedProblemsPayload) {
+	existingPayload := exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems]
+	if searchattribute.AreKeywordListPayloadsEqual(existingPayload, reportedProblemsPayload) {
 		return nil
 	}
+
+	// Log the search attribute change
+	ms.logReportedProblemsChange(existingPayload, reportedProblemsPayload)
 
 	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: reportedProblemsPayload})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
@@ -5925,11 +5929,72 @@ func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
 		return nil
 	}
 
+	// Log the removal of the search attribute
+	ms.logReportedProblemsChange(temporalReportedProblems, nil)
+
 	ms.executionInfo.LastWorkflowTaskFailure = nil
 
 	// Just remove the search attribute entirely for now
 	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: nil})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+}
+
+// logReportedProblemsChange logs changes to the TemporalReportedProblems search attribute
+func (ms *MutableStateImpl) logReportedProblemsChange(oldPayload, newPayload *commonpb.Payload) {
+	oldProblems := ms.decodeReportedProblems(oldPayload)
+	newProblems := ms.decodeReportedProblems(newPayload)
+
+	if oldPayload == nil && newPayload != nil {
+		// Adding search attribute
+		ms.logger.Info("TemporalReportedProblems search attribute added",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.NewStringsTag("reported-problems", newProblems))
+	} else if oldPayload != nil && newPayload == nil {
+		// Removing search attribute
+		ms.logger.Info("TemporalReportedProblems search attribute removed",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.NewStringsTag("previous-reported-problems", oldProblems))
+	} else if oldPayload != nil && newPayload != nil {
+		// Updating search attribute
+		ms.logger.Info("TemporalReportedProblems search attribute updated",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.NewStringsTag("previous-reported-problems", oldProblems),
+			tag.NewStringsTag("reported-problems", newProblems))
+	}
+}
+
+// decodeReportedProblems safely decodes a keyword list payload to []string
+func (ms *MutableStateImpl) decodeReportedProblems(payload *commonpb.Payload) []string {
+	if payload == nil {
+		return nil
+	}
+
+	decoded, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	if err != nil {
+		ms.logger.Warn("Failed to decode TemporalReportedProblems payload for logging",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.Error(err))
+		return []string{"<decode-error>"}
+	}
+
+	problems, ok := decoded.([]string)
+	if !ok {
+		ms.logger.Warn("TemporalReportedProblems payload decoded to unexpected type for logging",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId))
+		return []string{"<type-error>"}
+	}
+
+	return problems
 }
 
 func (ms *MutableStateImpl) truncateRetryableActivityFailure(
