@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -188,15 +189,20 @@ func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
 
 	// send 4th signal, this will fail the started workflow task and force terminate the workflow
 	err = s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// unblock goroutine that runs local activity
 	close(waitSignalChan)
-
-	var sigCount int
-	err = wf1.Get(testCtx, &sigCount)
-	s.NoError(err)
-	s.Equal(4, sigCount)
+	require.Eventually(s.T(), func() bool {
+		ctx, cancel := context.WithTimeout(s.T().Context(), time.Millisecond*500)
+		defer cancel()
+		var sigCount int
+		if err := wf1.Get(ctx, &sigCount); err != nil {
+			return false
+		}
+		require.Equal(s.T(), 4, sigCount)
+		return true
+	}, time.Second*10, time.Millisecond*500)
 
 	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
 	// Not using historyrequire here because history is not deterministic.
