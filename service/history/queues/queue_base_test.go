@@ -67,7 +67,8 @@ var testQueueOptions = &Options{
 	CheckpointInterval:                  dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond),
 	CheckpointIntervalJitterCoefficient: dynamicconfig.GetFloatPropertyFn(0.15),
 	MaxReaderCount:                      dynamicconfig.GetIntPropertyFn(5),
-	MoveGroupTaskCountBase:              dynamicconfig.GetIntPropertyFn(0), // disable the new move group action
+	MoveGroupTaskCountBase:              dynamicconfig.GetIntPropertyFn(0),
+	MoveGroupTaskCountMultiplier:        dynamicconfig.GetFloatPropertyFn(3.0),
 }
 
 func TestQueueBaseSuite(t *testing.T) {

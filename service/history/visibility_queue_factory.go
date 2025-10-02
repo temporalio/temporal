@@ -147,6 +147,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 			CheckpointIntervalJitterCoefficient: f.Config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
 			MaxReaderCount:                      f.Config.VisibilityQueueMaxReaderCount,
 			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
+			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
 		},
 		f.HostReaderRateLimiter,
 		queues.GrouperNamespaceID{},

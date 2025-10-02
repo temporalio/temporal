@@ -191,6 +191,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 			CheckpointIntervalJitterCoefficient: f.Config.ArchivalProcessorUpdateAckIntervalJitterCoefficient,
 			MaxReaderCount:                      f.Config.ArchivalQueueMaxReaderCount,
 			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
+			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
 		},
 		f.HostReaderRateLimiter,
 		logger,

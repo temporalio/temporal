@@ -2,6 +2,7 @@ package queues
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 
@@ -24,10 +25,11 @@ import (
 const (
 	DefaultReaderId = common.DefaultQueueReaderID
 
-	// Non-default readers will use critical pending task count * this coefficient
+	// Non-default readers will use critical pending task count * (this multiplier ^ readerID)
 	// as its max pending task count so that their loading will never trigger pending
 	// task alert & action
-	nonDefaultReaderMaxPendingTaskCoefficient = 0.8
+	maxPendingTaskMultiplier = 0.8
+	minMaxPendingTaskCount   = 1000
 
 	queueIOTimeout = 5 * time.Second * debug.TimeoutMultiplier
 
@@ -95,6 +97,7 @@ type (
 		CheckpointIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 		MaxReaderCount                      dynamicconfig.IntPropertyFn
 		MoveGroupTaskCountBase              dynamicconfig.IntPropertyFn
+		MoveGroupTaskCountMultiplier        dynamicconfig.FloatPropertyFn
 	}
 )
 
@@ -142,9 +145,14 @@ func newQueueBase(
 			// otherwise those readers will keep loading, hit pending task count limit, unload, throttle, load, etc...
 			// use a limit lower than the critical pending task count instead
 
-			// TODO: use lower threshold for higher readerID
+			// Use lower maxPendingTaskCount for lower reader to guarantee that higher reader can
+			// always have some tasks loaded.
 			readerOptions.MaxPendingTasksCount = func() int {
-				return int(float64(options.PendingTasksCriticalCount()) * nonDefaultReaderMaxPendingTaskCoefficient)
+				return max(
+					minMaxPendingTaskCount,
+					int(float64(options.PendingTasksCriticalCount())*
+						math.Pow(maxPendingTaskMultiplier, float64(readerID))),
+				)
 			}
 		}
 
@@ -290,7 +298,7 @@ func (p *queueBase) checkpoint() {
 		// Run an action to proactively move task group with high pending task to non-default reader
 		// so that upon shard reload, those groups won't block other tasks in the default reader from
 		// being loaded.
-		checkpointAction = newMoveGroupAction(maxReaderCount, p.grouper, taskCountBase)
+		checkpointAction = newMoveGroupAction(maxReaderCount, p.grouper, taskCountBase, p.options.MoveGroupTaskCountMultiplier())
 	} else {
 		// Run slicePredicateAction to move slices with non-universal predicate to non-default reader
 		// so that upon shard reload, task loading for those slices won't block other slices in the default reader.

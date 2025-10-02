@@ -1596,7 +1596,14 @@ NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicate
 	QueueMoveGroupTaskCountBase = NewGlobalIntSetting(
 		"history.queueMoveGroupTaskCountBase",
 		500,
-		`The base number of pending tasks count for a task group to be moved to the next level reader. The actual count is calculated as base * 3^level`,
+		`The base number of pending tasks count for a task group to be moved to the next level reader. 
+The actual count is calculated as base * (multiplier ^ level)`,
+	)
+	QueueMoveGroupTaskCountMultiplier = NewGlobalFloatSetting(
+		"history.queueMoveGroupTaskCountMultiplier",
+		3.0,
+		`The multiplier used to calculate the number of pending tasks for a task group to be moved to the next level reader. 
+The actual count is calculated as base * (multiplier ^ level)`,
 	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(

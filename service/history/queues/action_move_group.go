@@ -1,22 +1,23 @@
 package queues
 
-const moveGroupTaskCountMutiplier = 3
-
 type actionMoveGroup struct {
-	maxReaderCount         int
-	grouper                Grouper
-	moveGroupTaskCountBase int
+	maxReaderCount               int
+	grouper                      Grouper
+	moveGroupTaskCountBase       int
+	moveGroupTaskCountMultiplier float64
 }
 
 func newMoveGroupAction(
 	maxReaderCount int,
 	grouper Grouper,
 	moveGroupTaskCountBase int,
+	moveGroupTaskCountMultiplier float64,
 ) *actionMoveGroup {
 	return &actionMoveGroup{
-		maxReaderCount:         maxReaderCount,
-		grouper:                grouper,
-		moveGroupTaskCountBase: moveGroupTaskCountBase,
+		maxReaderCount:               maxReaderCount,
+		grouper:                      grouper,
+		moveGroupTaskCountBase:       moveGroupTaskCountBase,
+		moveGroupTaskCountMultiplier: moveGroupTaskCountMultiplier,
 	}
 }
 
@@ -39,7 +40,7 @@ func (a *actionMoveGroup) Run(readerGroup *ReaderGroup) bool {
 	moveGroupMinTaskCount := a.moveGroupTaskCountBase
 	for readerID := DefaultReaderId; readerID+1 < int64(a.maxReaderCount); readerID++ {
 		if readerID != DefaultReaderId {
-			moveGroupMinTaskCount *= moveGroupTaskCountMutiplier
+			moveGroupMinTaskCount = int(float64(moveGroupMinTaskCount) * a.moveGroupTaskCountMultiplier)
 		}
 
 		reader, ok := readerGroup.ReaderByID(readerID)
