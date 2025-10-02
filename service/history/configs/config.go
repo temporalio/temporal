@@ -96,6 +96,7 @@ type Config struct {
 	QueueCriticalSlicesCount         dynamicconfig.IntPropertyFn
 	QueuePendingTaskMaxCount         dynamicconfig.IntPropertyFn
 	QueueMaxPredicateSize            dynamicconfig.IntPropertyFn
+	QueueMoveGroupTaskCountBase      dynamicconfig.IntPropertyFn
 
 	TaskDLQEnabled                 dynamicconfig.BoolPropertyFn
 	TaskDLQUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
@@ -456,6 +457,7 @@ func NewConfig(
 		QueueCriticalSlicesCount:         dynamicconfig.QueueCriticalSlicesCount.Get(dc),
 		QueuePendingTaskMaxCount:         dynamicconfig.QueuePendingTaskMaxCount.Get(dc),
 		QueueMaxPredicateSize:            dynamicconfig.QueueMaxPredicateSize.Get(dc),
+		QueueMoveGroupTaskCountBase:      dynamicconfig.QueueMoveGroupTaskCountBase.Get(dc),
 
 		TaskDLQEnabled:                 dynamicconfig.HistoryTaskDLQEnabled.Get(dc),
 		TaskDLQUnexpectedErrorAttempts: dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts.Get(dc),

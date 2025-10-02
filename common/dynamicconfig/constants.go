@@ -1593,6 +1593,11 @@ which causes all tasks in the scope's range to eventually be reprocessed without
 NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicateSize.
 `,
 	)
+	QueueMoveGroupTaskCountBase = NewGlobalIntSetting(
+		"history.queueMoveGroupTaskCountBase",
+		500,
+		`The base number of pending tasks count for a task group to be moved to the next level reader. The actual count is calculated as base * 3^level`,
+	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(
 		"history.taskSchedulerEnableRateLimiter",

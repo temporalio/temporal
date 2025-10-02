@@ -99,8 +99,10 @@ func runAction(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) {
+	if action.Run(readerGroup) {
+		return
+	}
+
 	metricsHandler = metricsHandler.WithTags(metrics.QueueActionTag(action.Name()))
 	metrics.QueueActionCounter.With(metricsHandler).Record(1)
-
-	action.Run(readerGroup)
 }

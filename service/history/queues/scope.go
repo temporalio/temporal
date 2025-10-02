@@ -55,10 +55,7 @@ func (s *Scope) SplitByPredicate(
 	)
 	failScope := NewScope(
 		s.Range,
-		predicates.And(
-			s.Predicate,
-			predicates.Not(predicate),
-		),
+		tasks.AndPredicates(s.Predicate, predicates.Not(predicate)),
 	)
 	return passScope, failScope
 }

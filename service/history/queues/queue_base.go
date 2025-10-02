@@ -94,6 +94,7 @@ type (
 		CheckpointInterval                  dynamicconfig.DurationPropertyFn
 		CheckpointIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 		MaxReaderCount                      dynamicconfig.IntPropertyFn
+		MoveGroupTaskCountBase              dynamicconfig.IntPropertyFn
 	}
 )
 
@@ -140,6 +141,8 @@ func newQueueBase(
 			// non-default reader should not trigger task unloading
 			// otherwise those readers will keep loading, hit pending task count limit, unload, throttle, load, etc...
 			// use a limit lower than the critical pending task count instead
+
+			// TODO: use lower threshold for higher readerID
 			readerOptions.MaxPendingTasksCount = func() int {
 				return int(float64(options.PendingTasksCriticalCount()) * nonDefaultReaderMaxPendingTaskCoefficient)
 			}
@@ -281,14 +284,20 @@ func (p *queueBase) checkpoint() {
 		tasksCompleted += r.ShrinkSlices()
 	})
 
-	// Run slicePredicateAction to move slices with non-universal predicate to non-default reader
-	// so that upon shard reload, task loading for those slices won't block other slices in the default reader.
-	runAction(
-		newSlicePredicateAction(p.monitor, p.mitigator.maxReaderCount()),
-		p.readerGroup,
-		p.metricsHandler,
-		p.logger,
-	)
+	var checkpointAction Action
+	maxReaderCount := p.options.MaxReaderCount()
+	if taskCountBase := p.options.MoveGroupTaskCountBase(); taskCountBase > 0 {
+		// Run an action to proactively move task group with high pending task to non-default reader
+		// so that upon shard reload, those groups won't block other tasks in the default reader from
+		// being loaded.
+		checkpointAction = newMoveGroupAction(maxReaderCount, p.grouper, taskCountBase)
+	} else {
+		// Run slicePredicateAction to move slices with non-universal predicate to non-default reader
+		// so that upon shard reload, task loading for those slices won't block other slices in the default reader.
+		checkpointAction = newSlicePredicateAction(p.monitor, maxReaderCount)
+	}
+
+	runAction(checkpointAction, p.readerGroup, p.metricsHandler, p.logger)
 
 	readerScopes := make(map[int64][]Scope)
 	newExclusiveDeletionHighWatermark := p.nonReadableScope.Range.InclusiveMin
