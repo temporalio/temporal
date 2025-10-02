@@ -90,37 +90,64 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		h.preProcessErrorsCounter.Record(1)
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "Nexus APIs are disabled")
 	}
-	nsNameEscaped := commonnexus.RouteCompletionCallback.Deserialize(mux.Vars(r.HTTPRequest))
-	nsName, err := url.PathUnescape(nsNameEscaped)
+	token, err := commonnexus.DecodeCallbackToken(r.HTTPRequest.Header.Get(commonnexus.CallbackTokenHeader))
 	if err != nil {
-		h.Logger.Error("failed to extract namespace from request", tag.Error(err))
-		h.preProcessErrorsCounter.Record(1)
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL")
+		h.Logger.Error("failed to decode callback token", tag.Error(err))
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
-	ns, err := h.NamespaceRegistry.GetNamespace(namespace.Name(nsName))
+
+	completion, err := h.CallbackTokenGenerator.DecodeCompletion(token)
 	if err != nil {
-		h.Logger.Error("failed to get namespace for nexus completion request", tag.WorkflowNamespace(nsName), tag.Error(err))
+		h.Logger.Error("failed to decode completion from token", tag.Error(err))
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
+	}
+	ns, err := h.NamespaceRegistry.GetNamespaceByID(namespace.ID(completion.NamespaceId))
+	if err != nil {
+		h.Logger.Error("failed to get namespace for nexus completion request", tag.WorkflowNamespaceID(completion.NamespaceId), tag.Error(err))
 		h.preProcessErrorsCounter.Record(1)
 		var nfe *serviceerror.NamespaceNotFound
 		if errors.As(err, &nfe) {
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace %q not found", nsName)
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace %q not found", completion.NamespaceId)
 		}
 		return commonnexus.ConvertGRPCError(err, false)
 	}
-
+	logger := log.With(
+		h.Logger,
+		tag.WorkflowNamespace(ns.Name().String()),
+		tag.WorkflowID(completion.GetWorkflowId()),
+		tag.WorkflowRunID(completion.GetRunId()),
+	)
 	rCtx := &requestContext{
 		completionHandler: h,
 		namespace:         ns,
 		logger:            log.With(h.Logger, tag.WorkflowNamespace(ns.Name().String())),
-		metricsHandler:    h.MetricsHandler.WithTags(metrics.NamespaceTag(nsName)),
+		metricsHandler:    h.MetricsHandler.WithTags(metrics.NamespaceTag(ns.Name().String())),
 		metricsHandlerForInterceptors: h.MetricsHandler.WithTags(
 			metrics.OperationTag(methodNameForMetrics),
-			metrics.NamespaceTag(nsName),
+			metrics.NamespaceTag(ns.Name().String()),
 		),
 		requestStartTime: startTime,
 	}
 	ctx = rCtx.augmentContext(ctx, r.HTTPRequest.Header)
 	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
+	if r.HTTPRequest.URL.Path != commonnexus.PathCompletionCallbackNoIdentifier {
+		nsNameEscaped := commonnexus.RouteCompletionCallback.Deserialize(mux.Vars(r.HTTPRequest))
+		nsName, err := url.PathUnescape(nsNameEscaped)
+		if err != nil {
+			h.Logger.Error("failed to extract namespace from request", tag.Error(err))
+			h.preProcessErrorsCounter.Record(1)
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL")
+		}
+		if nsName != ns.Name().String() {
+			logger.Error(
+				"namespace ID in token doesn't match the token",
+				tag.WorkflowNamespaceID(ns.ID().String()),
+				tag.Error(err),
+				tag.NewStringTag("completion-namespace-id", completion.GetNamespaceId()),
+			)
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
+		}
+	}
 
 	if err := rCtx.interceptRequest(ctx, r); err != nil {
 		var notActiveErr *serviceerror.NamespaceNotActive
@@ -134,33 +161,6 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
 	}
 
-	token, err := commonnexus.DecodeCallbackToken(r.HTTPRequest.Header.Get(commonnexus.CallbackTokenHeader))
-	if err != nil {
-		h.Logger.Error("failed to decode callback token", tag.WorkflowNamespace(ns.Name().String()), tag.Error(err))
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
-	}
-
-	completion, err := h.CallbackTokenGenerator.DecodeCompletion(token)
-	if err != nil {
-		h.Logger.Error("failed to decode completion from token", tag.WorkflowNamespace(ns.Name().String()), tag.Error(err))
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
-	}
-
-	logger := log.With(
-		h.Logger,
-		tag.WorkflowNamespace(ns.Name().String()),
-		tag.WorkflowID(completion.GetWorkflowId()),
-		tag.WorkflowRunID(completion.GetRunId()),
-	)
-	if completion.GetNamespaceId() != ns.ID().String() {
-		logger.Error(
-			"namespace ID in token doesn't match the token",
-			tag.WorkflowNamespaceID(ns.ID().String()),
-			tag.Error(err),
-			tag.NewStringTag("completion-namespace-id", completion.GetNamespaceId()),
-		)
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
-	}
 	var links []*commonpb.Link
 	for _, nexusLink := range r.Links {
 		switch nexusLink.Type {
@@ -401,7 +401,7 @@ func (c *requestContext) augmentContext(ctx context.Context, header http.Header)
 		func() string { return c.namespace.Name().String() },
 		func() string { return methodNameForMetrics },
 	)
-	if userAgent := header.Get(http.CanonicalHeaderKey(headerUserAgent)); userAgent != "" {
+	if userAgent := header.Get(headerUserAgent); userAgent != "" {
 		// Preserve original strict behavior: only process if exactly one delimiter present.
 		if strings.Count(userAgent, clientNameVersionDelim) == 1 {
 			parts := strings.SplitN(userAgent, clientNameVersionDelim, 2)

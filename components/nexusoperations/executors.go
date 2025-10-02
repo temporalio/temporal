@@ -89,6 +89,45 @@ type taskExecutor struct {
 	TaskExecutorOptions
 }
 
+func buildCallbackURL(
+	useSystemCallback bool,
+	callbackTemplate string,
+	ns *namespace.Namespace,
+	endpoint *persistencespb.NexusEndpointEntry,
+) (string, error) {
+	target := endpoint.GetEndpoint().GetSpec().GetTarget().GetVariant()
+	if !useSystemCallback {
+		return buildCallbackFromTemplate(callbackTemplate, ns)
+	}
+	switch target.(type) {
+	case *persistencespb.NexusEndpointTarget_Worker_:
+		return commonnexus.SystemCallbackURL, nil
+	case *persistencespb.NexusEndpointTarget_External_:
+		return buildCallbackFromTemplate(callbackTemplate, ns)
+	default:
+		return "", fmt.Errorf("unknown endpoint target type: %T", target)
+	}
+}
+
+func buildCallbackFromTemplate(callbackTemplate string, ns *namespace.Namespace) (string, error) {
+	if callbackTemplate == "unset" {
+		return "", serviceerror.NewInternalf("dynamic config %q is unset", CallbackURLTemplate.Key().String())
+	}
+	callbackURLTemplate, err := template.New("NexusCallbackURL").Parse(callbackTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse callback URL template: %w", err)
+	}
+	builder := &strings.Builder{}
+	err = callbackURLTemplate.Execute(builder, struct{ NamespaceName, NamespaceID string }{
+		NamespaceName: ns.Name().String(),
+		NamespaceID:   ns.ID().String(),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to format callback URL: %w", err)
+	}
+	return builder.String(), nil
+}
+
 func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task InvocationTask) error {
 	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
 	if err != nil {
@@ -117,23 +156,10 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return err
 	}
 
-	if e.Config.CallbackURLTemplate() == "unset" {
-		return serviceerror.NewInternalf("dynamic config %q is unset", CallbackURLTemplate.Key().String())
-	}
-	// TODO(bergundy): Consider caching this template.
-	callbackURLTemplate, err := template.New("NexusCallbackURL").Parse(e.Config.CallbackURLTemplate())
+	callbackURL, err := buildCallbackURL(e.Config.UseSystemCallbackURL(), e.Config.CallbackURLTemplate(), ns, endpoint)
 	if err != nil {
-		return fmt.Errorf("failed to parse callback URL template: %w", err)
+		return err
 	}
-	builder := &strings.Builder{}
-	err = callbackURLTemplate.Execute(builder, struct{ NamespaceName, NamespaceID string }{
-		NamespaceName: ns.Name().String(),
-		NamespaceID:   ns.ID().String(),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to format callback URL: %w", err)
-	}
-	callbackURL := builder.String()
 
 	// Set MachineTransitionCount to 0 since older server versions, which had logic that considers references with
 	// non-zero MachineTransitionCount as "non-concurrent" references, and would fail validation of the reference if the

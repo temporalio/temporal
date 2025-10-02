@@ -243,6 +243,10 @@ func (d *MutableStateTaskStore) CompleteHistoryTask(
 	ctx context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
+	// Ignore the request if it is best effort
+	if request.BestEffort {
+		return nil
+	}
 	switch request.TaskCategory.ID() {
 	case tasks.CategoryIDTransfer:
 		return d.completeTransferTask(ctx, request)

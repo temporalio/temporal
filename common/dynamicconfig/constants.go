@@ -2441,6 +2441,56 @@ that task will be sent to DLQ.`,
 		true,
 		`ReplicationEnableRateLimit is the feature flag to enable replication global rate limiter`,
 	)
+	ReplicationStreamSenderErrorRetryWait = NewGlobalDurationSetting(
+		"history.ReplicationStreamSenderErrorRetryWait",
+		1*time.Second,
+		`ReplicationStreamSenderErrorRetryWait is the initial retry wait when we see errors in sending replication tasks`,
+	)
+	ReplicationStreamSenderErrorRetryBackoffCoefficient = NewGlobalFloatSetting(
+		"history.ReplicationStreamSenderErrorRetryBackoffCoefficient",
+		1.2,
+		`ReplicationStreamSenderErrorRetryBackoffCoefficient is the retry wait backoff time coefficient`,
+	)
+	ReplicationStreamSenderErrorRetryMaxInterval = NewGlobalDurationSetting(
+		"history.ReplicationStreamSenderErrorRetryMaxInterval",
+		3*time.Second,
+		`ReplicationStreamSenderErrorRetryMaxInterval is the retry wait backoff max duration`,
+	)
+	ReplicationStreamSenderErrorRetryMaxAttempts = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderErrorRetryMaxAttempts",
+		80,
+		`ReplicationStreamSenderErrorRetryMaxAttempts is the max retry attempts for sending replication tasks`,
+	)
+	ReplicationStreamSenderErrorRetryExpiration = NewGlobalDurationSetting(
+		"history.ReplicationStreamSenderErrorRetryExpiration",
+		3*time.Minute,
+		`ReplicationStreamSenderErrorRetryExpiration is the max retry duration for sending replication tasks`,
+	)
+	ReplicationExecutableTaskErrorRetryWait = NewGlobalDurationSetting(
+		"history.ReplicationExecutableTaskErrorRetryWait",
+		1*time.Second,
+		`ReplicationExecutableTaskErrorRetryWait is the initial retry wait when we see errors in executing replication tasks`,
+	)
+	ReplicationExecutableTaskErrorRetryBackoffCoefficient = NewGlobalFloatSetting(
+		"history.ReplicationExecutableTaskErrorRetryBackoffCoefficient",
+		1.2,
+		`ReplicationExecutableTaskErrorRetryBackoffCoefficient is the retry wait backoff time coefficient`,
+	)
+	ReplicationExecutableTaskErrorRetryMaxInterval = NewGlobalDurationSetting(
+		"history.ReplicationExecutableTaskErrorRetryMaxInterval",
+		5*time.Second,
+		`ReplicationExecutableTaskErrorRetryMaxInterval is the retry wait backoff max duration`,
+	)
+	ReplicationExecutableTaskErrorRetryMaxAttempts = NewGlobalIntSetting(
+		"history.ReplicationExecutableTaskErrorRetryMaxAttempts",
+		80,
+		`ReplicationExecutableTaskErrorRetryMaxAttempts is the max retry attempts for executing replication tasks`,
+	)
+	ReplicationExecutableTaskErrorRetryExpiration = NewGlobalDurationSetting(
+		"history.ReplicationExecutableTaskErrorRetryExpiration",
+		10*time.Minute,
+		`ReplicationExecutableTaskErrorRetryExpiration is the max retry duration for executing replication tasks`,
+	)
 	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
 		"history.workflowIdReuseMinimalInterval",
 		1*time.Second,
@@ -2736,6 +2786,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"worker.generateMigrationTaskViaFrontend",
 		false,
 		`WorkerGenerateMigrationTaskViaFrontend controls whether to generate migration tasks via frontend admin service.`,
+	)
+	WorkerEnableHistoryRateLimiter = NewGlobalBoolSetting(
+		"worker.enableHistoryRateLimiter",
+		false,
+		`WorkerEnableHistoryRateLimiter decides whether to generate migration tasks with history length rate limiter.`,
 	)
 	MaxUserMetadataSummarySize = NewNamespaceIntSetting(
 		"limit.userMetadataSummarySize",

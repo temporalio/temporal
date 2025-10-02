@@ -393,9 +393,30 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	if err != nil {
 		return err
 	}
+	if searchattributes == nil {
+		searchattributes = make(map[string]*commonpb.Payload)
+	}
 	memo, err := visComponent.GetMemo(visTaskContext)
 	if err != nil {
 		return err
+	}
+	if memo == nil {
+		memo = make(map[string]*commonpb.Payload)
+	}
+
+	rootComponent, err := tree.ComponentByPath(visTaskContext, nil)
+	if err != nil {
+		return err
+	}
+	if saProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
+		for key, value := range saProvider.SearchAttributes(visTaskContext) {
+			searchattributes[key] = value.MustEncode()
+		}
+	}
+	if memoProvider, ok := rootComponent.(chasm.VisibilityMemoProvider); ok {
+		for key, value := range memoProvider.Memo(visTaskContext) {
+			memo[key] = value.MustEncode()
+		}
 	}
 
 	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().
