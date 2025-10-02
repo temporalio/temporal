@@ -2,7 +2,6 @@ package query
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -42,14 +41,6 @@ func ResolveSearchAttributeAlias(
 		return result.fieldName, result.fieldType, result.err
 	}
 
-	if name == searchattribute.ScheduleID {
-		saType, err := saTypeMap.GetType(searchattribute.WorkflowID)
-		if err != nil {
-			return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, NewConverterError("invalid search attribute: %s", searchattribute.ScheduleID)
-		}
-		return searchattribute.WorkflowID, saType, nil
-	}
-
 	return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, NewConverterError("invalid search attribute: %s", name)
 }
 
@@ -70,9 +61,9 @@ func tryVisibilityMapper(name string, ns namespace.Name, mapper searchattribute.
 		if errors.Is(err, &internalErr) {
 			return resolveResult{err: err}, false
 		}
-		
+
 		var invalidArgument *serviceerror.InvalidArgument
-		if errors.As(err, &invalidArgument)
+		if errors.As(err, &invalidArgument) {
 			if name == searchattribute.ScheduleID {
 				fieldName = searchattribute.WorkflowID
 			} else {
