@@ -877,9 +877,25 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 	return event, nil
 }
 
+func (m *workflowTaskStateMachine) recordTimeoutTasksForDeletion(workflowTask *historyi.WorkflowTaskInfo) {
+	// Record persisted workflow task timeout tasks for deletion after successful persistence update.
+	if t := workflowTask.ScheduleToStartTimeoutTask; t != nil && !t.InMemory &&
+		t.VisibilityTimestamp.Sub(workflowTask.ScheduledTime) < maxWorkflowTaskTimeoutToDelete {
+		m.ms.BestEffortDeleteTasks[t.GetCategory()] = append(m.ms.BestEffortDeleteTasks[t.GetCategory()], t.GetKey())
+	}
+	if t := workflowTask.StartToCloseTimeoutTask; t != nil && !t.InMemory &&
+		t.VisibilityTimestamp.Sub(workflowTask.StartedTime) < maxWorkflowTaskTimeoutToDelete {
+		m.ms.BestEffortDeleteTasks[t.GetCategory()] = append(m.ms.BestEffortDeleteTasks[t.GetCategory()], t.GetKey())
+	}
+}
+
 func (m *workflowTaskStateMachine) failWorkflowTask(
 	incrementAttempt bool,
 ) {
+	// Get current workflow task info before clearing it, to capture timeout tasks for deletion
+	currentWorkflowTask := m.getWorkflowTaskInfo()
+	m.recordTimeoutTasksForDeletion(currentWorkflowTask)
+
 	// Increment attempts only if workflow task is failing on non-sticky task queue.
 	// If it was sticky task queue, clear sticky task queue first and try again before creating transient workflow task.
 	if m.ms.IsStickyTaskQueueSet() {
@@ -915,16 +931,7 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 func (m *workflowTaskStateMachine) deleteWorkflowTask() {
 	// Get current workflow task info before deleting it, to capture timeout tasks for deletion
 	currentWorkflowTask := m.getWorkflowTaskInfo()
-
-	// Record persisted workflow task timeout tasks for deletion after successful persistence update.
-	if t := currentWorkflowTask.ScheduleToStartTimeoutTask; t != nil && !t.InMemory &&
-		t.VisibilityTimestamp.Sub(currentWorkflowTask.ScheduledTime) < maxWorkflowTaskTimeoutToDelete {
-		m.ms.BestEffortDeleteTasks[t.GetCategory()] = append(m.ms.BestEffortDeleteTasks[t.GetCategory()], t.GetKey())
-	}
-	if t := currentWorkflowTask.StartToCloseTimeoutTask; t != nil && !t.InMemory &&
-		t.VisibilityTimestamp.Sub(currentWorkflowTask.StartedTime) < maxWorkflowTaskTimeoutToDelete {
-		m.ms.BestEffortDeleteTasks[t.GetCategory()] = append(m.ms.BestEffortDeleteTasks[t.GetCategory()], t.GetKey())
-	}
+	m.recordTimeoutTasksForDeletion(currentWorkflowTask)
 
 	resetWorkflowTaskInfo := &historyi.WorkflowTaskInfo{
 		Version:             common.EmptyVersion,
@@ -989,19 +996,18 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter = workflowTask.BuildIdRedirectCounter
 
 	// Store timeout task info for later deletion when workflow task completes
+	m.ms.executionInfo.WftScheduleStartTimeoutTaskId = 0
+	m.ms.executionInfo.WftScheduleStartTimeoutTime = nil
 	if workflowTask.ScheduleToStartTimeoutTask != nil {
 		m.ms.executionInfo.WftScheduleStartTimeoutTaskId = workflowTask.ScheduleToStartTimeoutTask.TaskID
 		m.ms.executionInfo.WftScheduleStartTimeoutTime = timestamppb.New(workflowTask.ScheduleToStartTimeoutTask.VisibilityTimestamp)
-	} else {
-		m.ms.executionInfo.WftScheduleStartTimeoutTaskId = 0
-		m.ms.executionInfo.WftScheduleStartTimeoutTime = nil
 	}
+
+	m.ms.executionInfo.WftStartCloseTimeoutTaskId = 0
+	m.ms.executionInfo.WftStartCloseTimeoutTime = nil
 	if workflowTask.StartToCloseTimeoutTask != nil {
 		m.ms.executionInfo.WftStartCloseTimeoutTaskId = workflowTask.StartToCloseTimeoutTask.TaskID
 		m.ms.executionInfo.WftStartCloseTimeoutTime = timestamppb.New(workflowTask.StartToCloseTimeoutTask.VisibilityTimestamp)
-	} else {
-		m.ms.executionInfo.WftStartCloseTimeoutTaskId = 0
-		m.ms.executionInfo.WftStartCloseTimeoutTime = nil
 	}
 
 	m.ms.workflowTaskUpdated = true
