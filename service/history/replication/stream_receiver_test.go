@@ -13,6 +13,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -509,7 +510,8 @@ func (s *streamReceiverSuite) TestRecvEventLoop_Panic_Captured() {
 func (s *streamReceiverSuite) TestLivenessMonitor() {
 	livenessMonitor(
 		s.streamReceiver.recvSignalChan,
-		time.Millisecond,
+		dynamicconfig.GetDurationPropertyFn(time.Second),
+		dynamicconfig.GetIntPropertyFn(1),
 		s.streamReceiver.shutdownChan,
 		s.streamReceiver.Stop,
 		s.streamReceiver.logger,

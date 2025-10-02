@@ -2436,6 +2436,16 @@ that task will be sent to DLQ.`,
 		time.Minute,
 		`ReplicationStreamSendEmptyTaskDuration is the interval to sync status when there is no replication task`,
 	)
+	ReplicationStreamReceiverLivenessMultiplier = NewGlobalIntSetting(
+		"history.ReplicationReceiverLivenessMultiplier",
+		3,
+		"ReplicationStreamSendEmptyTask is the multiplier of liveness check interval on stream receiver",
+	)
+	ReplicationStreamSenderLivenessMultiplier = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderLivenessMultiplier",
+		10,
+		"ReplicationStreamSenderLivenessMultiplier is the multiplier of liveness check interval on stream sender",
+	)
 	ReplicationEnableRateLimit = NewGlobalBoolSetting(
 		"history.ReplicationEnableRateLimit",
 		true,
