@@ -626,8 +626,8 @@ func (s *syncWorkflowStateSuite) TestGetNewRunInfo() {
 	// New logic queries start version and checks cluster affinity
 	mu.EXPECT().GetStartVersion().Return(int64(1), nil)
 	cm := cluster.NewMockMetadata(s.controller)
-	cm.EXPECT().ClusterNameForFailoverVersion(true, int64(1)).Return("cluster-a")
-	cm.EXPECT().GetCurrentClusterName().Return("cluster-a")
+	cm.EXPECT().GetClusterID().Return(int64(1))
+	cm.EXPECT().IsVersionFromSameCluster(int64(1), int64(1)).Return(true)
 	s.mockShard.SetClusterMetadata(cm)
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.mockShard, namespace.ID(s.namespaceID), &commonpb.WorkflowExecution{
 		WorkflowId: s.execution.WorkflowId,
@@ -682,8 +682,8 @@ func (s *syncWorkflowStateSuite) TestGetNewRunInfo_NewRunFromDifferentCluster_Re
 	// New logic queries start version and checks cluster affinity
 	mu.EXPECT().GetStartVersion().Return(int64(7), nil)
 	cm := cluster.NewMockMetadata(s.controller)
-	cm.EXPECT().ClusterNameForFailoverVersion(true, int64(7)).Return("remote-cluster")
-	cm.EXPECT().GetCurrentClusterName().Return("current-cluster")
+	cm.EXPECT().GetClusterID().Return(int64(1))
+	cm.EXPECT().IsVersionFromSameCluster(int64(7), int64(1)).Return(false)
 	s.mockShard.SetClusterMetadata(cm)
 
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.mockShard, namespace.ID(s.namespaceID), &commonpb.WorkflowExecution{

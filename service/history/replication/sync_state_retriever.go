@@ -334,9 +334,7 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 		return nil, err
 	}
 	clusterMetadata := s.shardContext.GetClusterMetadata()
-	newRunCluster := clusterMetadata.ClusterNameForFailoverVersion(true, startVersion)
-	currentCluster := clusterMetadata.GetCurrentClusterName()
-	if currentCluster != newRunCluster {
+	if !clusterMetadata.IsVersionFromSameCluster(startVersion, clusterMetadata.GetClusterID()) {
 		return nil, nil
 	}
 
