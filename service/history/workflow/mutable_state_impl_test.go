@@ -532,9 +532,11 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_WithWorkflowTaskTimeouts() {
 	)
 	s.NoError(err)
 
-	// Manually set the timeout task references (simulating what task_generator does)
-	wft.ScheduleToStartTimeoutTask = mockScheduleToStartTask
-	wft.StartToCloseTimeoutTask = mockStartToCloseTask
+	// Manually set the timeout task key references (simulating what task_generator does)
+	scheduleToStartKey := mockScheduleToStartTask.GetKey()
+	startToCloseKey := mockStartToCloseTask.GetKey()
+	wft.ScheduleToStartTimeoutTaskKey = &scheduleToStartKey
+	wft.StartToCloseTimeoutTaskKey = &startToCloseKey
 	// Call UpdateWorkflowTask to persist the timeout task info to ExecutionInfo
 	s.mutableState.workflowTaskManager.UpdateWorkflowTask(wft)
 
@@ -599,8 +601,9 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_InMemoryTask_NotIncluded() {
 	)
 	s.NoError(err)
 
-	// Set the in-memory timeout task reference
-	wft.ScheduleToStartTimeoutTask = mockInMemoryTask
+	// Set the in-memory timeout task key reference
+	inMemoryKey := mockInMemoryTask.GetKey()
+	wft.ScheduleToStartTimeoutTaskKey = &inMemoryKey
 
 	// Complete the workflow task
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -663,8 +666,9 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_LongTimeout_NotIncluded() {
 	)
 	s.NoError(err)
 
-	// Set the long timeout task reference
-	wft.ScheduleToStartTimeoutTask = mockLongTimeoutTask
+	// Set the long timeout task key reference
+	longTimeoutKey := mockLongTimeoutTask.GetKey()
+	wft.ScheduleToStartTimeoutTaskKey = &longTimeoutKey
 	// Call UpdateWorkflowTask to persist the timeout task info to ExecutionInfo
 	s.mutableState.workflowTaskManager.UpdateWorkflowTask(wft)
 

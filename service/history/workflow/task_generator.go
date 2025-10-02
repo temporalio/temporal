@@ -421,7 +421,8 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 			Version:             workflowTask.Version,
 		}
 		r.mutableState.AddTasks(wttt)
-		workflowTask.ScheduleToStartTimeoutTask = wttt
+		key := wttt.GetKey()
+		workflowTask.ScheduleToStartTimeoutTaskKey = &key
 	}
 
 	r.mutableState.AddTasks(&tasks.WorkflowTask{
@@ -482,7 +483,8 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 	// This function can be called for speculative WT which just was converted to normal
 	// (it will be of type Normal). In this case persisted timer task needs to be created.
 	r.mutableState.AddTasks(wttt)
-	workflowTask.ScheduleToStartTimeoutTask = wttt
+	key := wttt.GetKey()
+	workflowTask.ScheduleToStartTimeoutTaskKey = &key
 	return nil
 
 	// Note: no transfer task is created for speculative WT or speculative WT
@@ -517,7 +519,8 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 		return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
 	}
 	r.mutableState.AddTasks(wttt)
-	workflowTask.StartToCloseTimeoutTask = wttt
+	key := wttt.GetKey()
+	workflowTask.StartToCloseTimeoutTaskKey = &key
 
 	return nil
 }

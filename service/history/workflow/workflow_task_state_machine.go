@@ -879,13 +879,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 
 func (m *workflowTaskStateMachine) recordTimeoutTasksForDeletion(workflowTask *historyi.WorkflowTaskInfo) {
 	// Record persisted workflow task timeout tasks for deletion after successful persistence update.
-	if t := workflowTask.ScheduleToStartTimeoutTask; t != nil && !t.InMemory &&
-		t.VisibilityTimestamp.Sub(workflowTask.ScheduledTime) < maxWorkflowTaskTimeoutToDelete {
-		m.ms.BestEffortDeleteTasks[t.GetCategory()] = append(m.ms.BestEffortDeleteTasks[t.GetCategory()], t.GetKey())
+	if key := workflowTask.ScheduleToStartTimeoutTaskKey; key != nil &&
+		key.FireTime.Sub(workflowTask.ScheduledTime) < maxWorkflowTaskTimeoutToDelete {
+		m.ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(m.ms.BestEffortDeleteTasks[tasks.CategoryTimer], *key)
 	}
-	if t := workflowTask.StartToCloseTimeoutTask; t != nil && !t.InMemory &&
-		t.VisibilityTimestamp.Sub(workflowTask.StartedTime) < maxWorkflowTaskTimeoutToDelete {
-		m.ms.BestEffortDeleteTasks[t.GetCategory()] = append(m.ms.BestEffortDeleteTasks[t.GetCategory()], t.GetKey())
+	if key := workflowTask.StartToCloseTimeoutTaskKey; key != nil &&
+		key.FireTime.Sub(workflowTask.StartedTime) < maxWorkflowTaskTimeoutToDelete {
+		m.ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(m.ms.BestEffortDeleteTasks[tasks.CategoryTimer], *key)
 	}
 }
 
@@ -998,16 +998,16 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	// Store timeout task info for later deletion when workflow task completes
 	m.ms.executionInfo.WftScheduleStartTimeoutTaskId = 0
 	m.ms.executionInfo.WftScheduleStartTimeoutTime = nil
-	if workflowTask.ScheduleToStartTimeoutTask != nil {
-		m.ms.executionInfo.WftScheduleStartTimeoutTaskId = workflowTask.ScheduleToStartTimeoutTask.TaskID
-		m.ms.executionInfo.WftScheduleStartTimeoutTime = timestamppb.New(workflowTask.ScheduleToStartTimeoutTask.VisibilityTimestamp)
+	if workflowTask.ScheduleToStartTimeoutTaskKey != nil {
+		m.ms.executionInfo.WftScheduleStartTimeoutTaskId = workflowTask.ScheduleToStartTimeoutTaskKey.TaskID
+		m.ms.executionInfo.WftScheduleStartTimeoutTime = timestamppb.New(workflowTask.ScheduleToStartTimeoutTaskKey.FireTime)
 	}
 
 	m.ms.executionInfo.WftStartCloseTimeoutTaskId = 0
 	m.ms.executionInfo.WftStartCloseTimeoutTime = nil
-	if workflowTask.StartToCloseTimeoutTask != nil {
-		m.ms.executionInfo.WftStartCloseTimeoutTaskId = workflowTask.StartToCloseTimeoutTask.TaskID
-		m.ms.executionInfo.WftStartCloseTimeoutTime = timestamppb.New(workflowTask.StartToCloseTimeoutTask.VisibilityTimestamp)
+	if workflowTask.StartToCloseTimeoutTaskKey != nil {
+		m.ms.executionInfo.WftStartCloseTimeoutTaskId = workflowTask.StartToCloseTimeoutTaskKey.TaskID
+		m.ms.executionInfo.WftStartCloseTimeoutTime = timestamppb.New(workflowTask.StartToCloseTimeoutTaskKey.FireTime)
 	}
 
 	m.ms.workflowTaskUpdated = true
@@ -1132,22 +1132,20 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		BuildIdRedirectCounter: m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter,
 	}
 
-	// Reconstruct timeout task references from persisted ExecutionInfo
+	// Reconstruct timeout task keys from persisted ExecutionInfo
 	if m.ms.executionInfo.WftScheduleStartTimeoutTaskId != 0 && m.ms.executionInfo.WftScheduleStartTimeoutTime != nil {
-		wft.ScheduleToStartTimeoutTask = &tasks.WorkflowTaskTimeoutTask{
-			WorkflowKey:         m.ms.GetWorkflowKey(),
-			VisibilityTimestamp: m.ms.executionInfo.WftScheduleStartTimeoutTime.AsTime(),
-			TaskID:              m.ms.executionInfo.WftScheduleStartTimeoutTaskId,
-			TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		}
+		key := tasks.NewKey(
+			m.ms.executionInfo.WftScheduleStartTimeoutTime.AsTime(),
+			m.ms.executionInfo.WftScheduleStartTimeoutTaskId,
+		)
+		wft.ScheduleToStartTimeoutTaskKey = &key
 	}
 	if m.ms.executionInfo.WftStartCloseTimeoutTaskId != 0 && m.ms.executionInfo.WftStartCloseTimeoutTime != nil {
-		wft.StartToCloseTimeoutTask = &tasks.WorkflowTaskTimeoutTask{
-			WorkflowKey:         m.ms.GetWorkflowKey(),
-			VisibilityTimestamp: m.ms.executionInfo.WftStartCloseTimeoutTime.AsTime(),
-			TaskID:              m.ms.executionInfo.WftStartCloseTimeoutTaskId,
-			TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		}
+		key := tasks.NewKey(
+			m.ms.executionInfo.WftStartCloseTimeoutTime.AsTime(),
+			m.ms.executionInfo.WftStartCloseTimeoutTaskId,
+		)
+		wft.StartToCloseTimeoutTaskKey = &key
 	}
 
 	return wft
