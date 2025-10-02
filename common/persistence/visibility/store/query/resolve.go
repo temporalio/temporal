@@ -17,11 +17,11 @@ func ResolveSearchAttributeAlias(
 	mapper searchattribute.Mapper,
 	saTypeMap searchattribute.NameTypeMap,
 ) (string, enumspb.IndexedValueType, error) {
-	if strings.HasPrefix(name, "Temporal") {
+	if strings.HasPrefix(name, searchattribute.ReservedPrefix) {
 		if name == "TemporalBuildIds" {
 			saType, err := saTypeMap.GetType(searchattribute.BuildIds)
 			if err != nil {
-				return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, NewConverterError("invalid search attribute: %s", searchattribute.BuildIds)
+				return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, NewConverterError("invalid search attribute: %s", name)
 			}
 			return searchattribute.BuildIds, saType, nil
 		}
@@ -65,35 +65,27 @@ func tryVisibilityMapper(name string, ns namespace.Name, mapper searchattribute.
 	}
 
 	fieldName, err := mapper.GetFieldName(name, ns.String())
-	if err == nil {
-		fieldType, err := saTypeMap.GetType(fieldName)
-		if err == nil {
-			return resolveResult{fieldName: fieldName, fieldType: fieldType}, true
+	if err != nil {
+		var internalErr serviceerror.Internal
+		if errors.Is(err, &internalErr) {
+			return resolveResult{err: err}, false
 		}
-		return resolveResult{}, false
-	}
-
-	var internalErr serviceerror.Internal
-	if errors.Is(err, &internalErr) {
-		return resolveResult{err: err}, true
-	}
-
-	var invalidArgument *serviceerror.InvalidArgument
-	if errors.As(err, &invalidArgument) && name == searchattribute.ScheduleID {
-		saType, err := saTypeMap.GetType(searchattribute.WorkflowID)
-		if err == nil {
-			return resolveResult{fieldName: searchattribute.WorkflowID, fieldType: saType}, true
+		
+		var invalidArgument *serviceerror.InvalidArgument
+		if errors.As(err, &invalidArgument)
+			if name == searchattribute.ScheduleID {
+				fieldName = searchattribute.WorkflowID
+			} else {
+				return resolveResult{err: err}, false
+			}
 		}
 	}
 
-	// If the mapper returns an InvalidArgument error for a mappable field,
-	// and the error message is "mapper error", then the mapper is authoritative
-	// for this namespace and we should propagate the error instead of falling back
-	if errors.As(err, &invalidArgument) && searchattribute.IsMappable(name) && invalidArgument.Message == "mapper error" {
-		return resolveResult{err: err}, true
+	fieldType, err := saTypeMap.GetType(fieldName)
+	if err != nil {
+		return resolveResult{err: err}, false
 	}
-
-	return resolveResult{}, false
+	return resolveResult{fieldName: fieldName, fieldType: fieldType}, true
 }
 
 func tryDirectAndPrefixedLookup(name string, saTypeMap searchattribute.NameTypeMap) (resolveResult, bool) {
@@ -101,7 +93,7 @@ func tryDirectAndPrefixedLookup(name string, saTypeMap searchattribute.NameTypeM
 		return resolveResult{fieldName: name, fieldType: saType}, true
 	}
 
-	prefixedName := fmt.Sprintf("Temporal%s", name)
+	prefixedName := searchattribute.ReservedPrefix + name
 	if saType, err := saTypeMap.GetType(prefixedName); err == nil {
 		return resolveResult{fieldName: prefixedName, fieldType: saType}, true
 	}
