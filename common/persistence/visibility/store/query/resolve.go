@@ -64,11 +64,10 @@ func tryVisibilityMapper(name string, ns namespace.Name, mapper searchattribute.
 
 		var invalidArgument *serviceerror.InvalidArgument
 		if errors.As(err, &invalidArgument) {
-			if name == searchattribute.ScheduleID {
-				fieldName = searchattribute.WorkflowID
-			} else {
+			if name != searchattribute.ScheduleID {
 				return resolveResult{err: err}, false
 			}
+			fieldName = searchattribute.WorkflowID
 		}
 	}
 
