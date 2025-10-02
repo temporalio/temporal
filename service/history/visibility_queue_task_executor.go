@@ -393,9 +393,15 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	if err != nil {
 		return err
 	}
+	if searchattributes == nil {
+		searchattributes = make(map[string]*commonpb.Payload)
+	}
 	memo, err := visComponent.GetMemo(visTaskContext)
 	if err != nil {
 		return err
+	}
+	if memo == nil {
+		memo = make(map[string]*commonpb.Payload)
 	}
 
 	rootComponent, err := tree.ComponentByPath(visTaskContext, nil)
