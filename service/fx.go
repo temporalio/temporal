@@ -40,7 +40,6 @@ type (
 
 		Logger                 log.Logger
 		RpcFactory             common.RPCFactory
-		ServiceErrorInterceptor *interceptor.ServiceErrorInterceptor
 		RetryableInterceptor   *interceptor.RetryableInterceptor
 		TelemetryInterceptor   *interceptor.TelemetryInterceptor
 		RateLimitInterceptor   *interceptor.RateLimitInterceptor
@@ -148,7 +147,7 @@ func GrpcServerOptionsProvider(
 
 func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInterceptor {
 	interceptors := []grpc.UnaryServerInterceptor{
-		params.ServiceErrorInterceptor.Intercept,
+		interceptor.ServiceErrorInterceptor,
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		metrics.NewServerMetricsTrailerPropagatorInterceptor(params.Logger),
 		params.TelemetryInterceptor.UnaryIntercept,

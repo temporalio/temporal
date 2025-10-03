@@ -37,7 +37,6 @@ var Module = fx.Options(
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
-	fx.Provide(ServiceErrorInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(VisibilityManagerProvider),
@@ -76,18 +75,6 @@ func ErrorHandlerProvider(
 	return interceptor.NewRequestErrorHandler(
 		logger,
 		serviceConfig.LogAllReqErrors,
-	)
-}
-
-func ServiceErrorInterceptorProvider(
-	requestErrorHandler *interceptor.RequestErrorHandler,
-	metricsHandler metrics.Handler,
-	namespaceRegistry namespace.Registry,
-) *interceptor.ServiceErrorInterceptor {
-	return interceptor.NewServiceErrorInterceptor(
-		requestErrorHandler,
-		metricsHandler,
-		namespaceRegistry,
 	)
 }
 
