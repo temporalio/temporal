@@ -1024,7 +1024,6 @@ func (s *workflowResetterSuite) TestReapplyEvents_WithNoPendingChildren() {
 }
 
 func (s *workflowResetterSuite) TestReapplyEvents() {
-
 	event1 := &historypb.HistoryEvent{
 		EventId:   101,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
@@ -1190,6 +1189,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 						attr.GetAttachedRequestId(),
 						attr.GetAttachedCompletionCallbacks(),
 						event.Links,
+						attr.GetPriority(),
 					).Return(&historypb.HistoryEvent{}, nil)
 				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 					attr := event.GetWorkflowExecutionSignaledEventAttributes()
