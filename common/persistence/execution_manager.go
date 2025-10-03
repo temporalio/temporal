@@ -28,6 +28,7 @@ type (
 	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and Serializer
 	executionManagerImpl struct {
 		serializer                                  serialization.Serializer
+		taskSerializer        serialization.TaskSerializer
 		eventBlobCache                              XDCCache
 		persistence                                 ExecutionStore
 		logger                                      log.Logger
@@ -43,6 +44,7 @@ var _ ExecutionManager = (*executionManagerImpl)(nil)
 func NewExecutionManager(
 	persistence ExecutionStore,
 	serializer serialization.Serializer,
+	taskSerializer serialization.TaskSerializer,
 	eventBlobCache XDCCache,
 	logger log.Logger,
 	transactionSizeLimit dynamicconfig.IntPropertyFn,
@@ -50,6 +52,7 @@ func NewExecutionManager(
 ) ExecutionManager {
 	return &executionManagerImpl{
 		serializer:            serializer,
+		taskSerializer:        taskSerializer,
 		eventBlobCache:        eventBlobCache,
 		persistence:           persistence,
 		logger:                logger,
@@ -589,7 +592,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 	input *WorkflowMutation,
 ) (*InternalWorkflowMutation, error) {
 
-	tasks, err := serializeTasks(m.serializer, input.Tasks)
+	serializedTasks, err := serializeTasks(m.taskSerializer, input.Tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -626,7 +629,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		ExecutionInfo:  input.ExecutionInfo,
 		ExecutionState: input.ExecutionState,
 
-		Tasks: tasks,
+		Tasks: serializedTasks,
 
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
@@ -710,8 +713,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 	input *WorkflowSnapshot,
 ) (*InternalWorkflowSnapshot, error) {
-
-	tasks, err := serializeTasks(m.serializer, input.Tasks)
+	serializedTasks, err := serializeTasks(m.taskSerializer, input.Tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -732,7 +734,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 		ExecutionState:     input.ExecutionState,
 		SignalRequestedIDs: make(map[string]struct{}),
 
-		Tasks: tasks,
+		Tasks: serializedTasks,
 
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
@@ -897,7 +899,7 @@ func (m *executionManagerImpl) AddHistoryTasks(
 	ctx context.Context,
 	input *AddHistoryTasksRequest,
 ) error {
-	tasks, err := serializeTasks(m.serializer, input.Tasks)
+	serializedTasks, err := serializeTasks(m.taskSerializer, input.Tasks)
 	if err != nil {
 		return err
 	}
@@ -911,7 +913,7 @@ func (m *executionManagerImpl) AddHistoryTasks(
 		WorkflowID:  input.WorkflowID,
 		ArchetypeID: archetypeID,
 
-		Tasks: tasks,
+		Tasks: serializedTasks,
 	})
 }
 
@@ -934,7 +936,7 @@ func (m *executionManagerImpl) GetHistoryTasks(
 
 	historyTasks := make([]tasks.Task, 0, len(resp.Tasks))
 	for _, internalTask := range resp.Tasks {
-		task, err := m.serializer.DeserializeTask(request.TaskCategory, internalTask.Blob)
+		task, err := m.taskSerializer.DeserializeTask(request.TaskCategory, internalTask.Blob)
 		if err != nil {
 			return nil, err
 		}
@@ -995,7 +997,7 @@ func (m *executionManagerImpl) GetReplicationTasksFromDLQ(
 	dlqTasks := make([]tasks.Task, 0, len(resp.Tasks))
 	for i := range resp.Tasks {
 		internalTask := resp.Tasks[i]
-		task, err := m.serializer.DeserializeTask(category, internalTask.Blob)
+		task, err := m.taskSerializer.DeserializeTask(category, internalTask.Blob)
 		if err != nil {
 			return nil, err
 		}
@@ -1249,14 +1251,14 @@ func getCurrentBranchLastWriteVersion(
 }
 
 func serializeTasks(
-	serializer serialization.Serializer,
+	taskSerializer serialization.TaskSerializer,
 	inputTasks map[tasks.Category][]tasks.Task,
 ) (map[tasks.Category][]InternalHistoryTask, error) {
 	outputTasks := make(map[tasks.Category][]InternalHistoryTask)
 	for category, tasks := range inputTasks {
 		serializedTasks := make([]InternalHistoryTask, 0, len(tasks))
 		for _, task := range tasks {
-			blob, err := serializer.SerializeTask(task)
+			blob, err := taskSerializer.SerializeTask(task)
 			if err != nil {
 				return nil, err
 			}

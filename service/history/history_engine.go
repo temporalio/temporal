@@ -1044,10 +1044,11 @@ func (e *historyEngineImpl) AddTasks(
 	ctx context.Context,
 	request *historyservice.AddTasksRequest,
 ) (_ *historyservice.AddTasksResponse, retError error) {
+	taskSerializer := serialization.NewTaskSerializer(e.eventSerializer)
 	return addtasks.Invoke(
 		ctx,
 		e.shardContext,
-		e.eventSerializer,
+		taskSerializer,
 		int(e.config.NumberOfShards),
 		request,
 		e.taskCategoryRegistry,

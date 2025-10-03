@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
@@ -112,6 +113,7 @@ func NewService(
 	visibilityManager manager.VisibilityManager,
 	matchingClient resource.MatchingClient,
 	namespaceReplicationTaskExecutor nsreplication.TaskExecutor,
+	serializer serialization.Serializer,
 ) (*Service, error) {
 	workerServiceResolver, err := membershipMonitor.GetResolver(primitives.WorkerService)
 	if err != nil {
@@ -142,7 +144,7 @@ func NewService(
 		matchingClient:                   matchingClient,
 		namespaceReplicationTaskExecutor: namespaceReplicationTaskExecutor,
 	}
-	if err := s.initScanner(); err != nil {
+	if err := s.initScanner(serializer); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -284,7 +286,7 @@ func (s *Service) startParentClosePolicyProcessor() {
 	}
 }
 
-func (s *Service) initScanner() error {
+func (s *Service) initScanner(serializer serialization.Serializer) error {
 	currentCluster := s.clusterMetadata.GetCurrentClusterName()
 	adminClient, err := s.clientBean.GetRemoteAdminClient(currentCluster)
 	if err != nil {
@@ -305,6 +307,7 @@ func (s *Service) initScanner() error {
 		s.namespaceRegistry,
 		currentCluster,
 		s.hostInfo,
+		serializer,
 	)
 	return nil
 }

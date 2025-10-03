@@ -44,7 +44,7 @@ type (
 		Cancel context.CancelFunc
 	}
 
-	testSerializer struct {
+	testTaskSerializer struct {
 		serialization.Serializer
 	}
 )
@@ -52,15 +52,6 @@ type (
 var (
 	fakeImmediateTaskCategory = tasks.NewCategory(1234, tasks.CategoryTypeImmediate, "fake-immediate")
 	fakeScheduledTaskCategory = tasks.NewCategory(2345, tasks.CategoryTypeScheduled, "fake-scheduled")
-
-	taskCategories = []tasks.Category{
-		tasks.CategoryTransfer,
-		tasks.CategoryTimer,
-		tasks.CategoryReplication,
-		tasks.CategoryVisibility,
-		fakeImmediateTaskCategory,
-		fakeScheduledTaskCategory,
-	}
 )
 
 func NewExecutionMutableStateTaskSuite(
@@ -70,7 +61,7 @@ func NewExecutionMutableStateTaskSuite(
 	serializer serialization.Serializer,
 	logger log.Logger,
 ) *ExecutionMutableStateTaskSuite {
-	serializer = newTestSerializer(serializer)
+	taskSerializer := newTestTaskSerializer(serializer)
 	return &ExecutionMutableStateTaskSuite{
 		Assertions: require.New(t),
 		ShardManager: p.NewShardManager(
@@ -80,6 +71,7 @@ func NewExecutionMutableStateTaskSuite(
 		ExecutionManager: p.NewExecutionManager(
 			executionStore,
 			serializer,
+			taskSerializer,
 			nil,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
@@ -662,15 +654,15 @@ func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
 	s.Empty(historyTasks)
 }
 
-func newTestSerializer(
+func newTestTaskSerializer(
 	serializer serialization.Serializer,
-) serialization.Serializer {
-	return &testSerializer{
+) serialization.TaskSerializer {
+	return &testTaskSerializer{
 		Serializer: serializer,
 	}
 }
 
-func (s *testSerializer) SerializeTask(
+func (s *testTaskSerializer) SerializeTask(
 	task tasks.Task,
 ) (*commonpb.DataBlob, error) {
 	if fakeTask, ok := task.(*tasks.FakeTask); ok {
@@ -691,18 +683,18 @@ func (s *testSerializer) SerializeTask(
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		}, nil
 	}
-
-	return s.Serializer.SerializeTask(task)
+	return serialization.NewTaskSerializer(s.Serializer).SerializeTask(task)
 }
 
-func (s *testSerializer) DeserializeTask(
+func (s *testTaskSerializer) DeserializeTask(
 	category tasks.Category,
 	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
 	categoryID := category.ID()
 	if categoryID != fakeImmediateTaskCategory.ID() &&
 		categoryID != fakeScheduledTaskCategory.ID() {
-		return s.Serializer.DeserializeTask(category, blob)
+		taskSerializer := serialization.NewTaskSerializer(s.Serializer)
+		return taskSerializer.DeserializeTask(category, blob)
 	}
 
 	taskInfo := &persistencespb.TransferTaskInfo{}
@@ -722,4 +714,12 @@ func (s *testSerializer) DeserializeTask(
 	fakeTask.SetTaskID(taskInfo.TaskId)
 
 	return fakeTask, nil
+}
+
+func (s *testTaskSerializer) SeralizeReplicationTask(task tasks.Task) (*persistencespb.ReplicationTaskInfo, error) {
+	panic("not implemented")
+}
+
+func (s *testTaskSerializer) DeserializeReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error) {
+	panic("not implemented")
 }
