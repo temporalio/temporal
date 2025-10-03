@@ -349,11 +349,10 @@ func (s *ReplicationMigrationBackTestSuite) assertHistoryEvents(
 		Return(s.passiveCluster.AdminClient(), nil).
 		AnyTimes()
 
-	serializer := serialization.NewSerializer()
 	passiveClusterFetcher := eventhandler.NewHistoryPaginatedFetcher(
 		nil,
 		mockClientBean,
-		serializer,
+		s.serializer,
 		s.logger,
 	)
 
