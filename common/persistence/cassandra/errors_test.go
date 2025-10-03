@@ -228,7 +228,7 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 			},
 		},
 	}
-	blob, err := serialization.WorkflowExecutionStateToBlob(workflowState)
+	blob, err := serialization.NewSerializer().WorkflowExecutionStateToBlob(workflowState)
 	lastWriteVersion := rand.Int63()
 	s.NoError(err)
 	t := rowTypeExecution

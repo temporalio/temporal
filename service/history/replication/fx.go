@@ -42,6 +42,9 @@ var Module = fx.Provide(
 	ClientSchedulerRateLimiterProvider,
 	ServerSchedulerRateLimiterProvider,
 	PersistenceRateLimiterProvider,
+	func(serializer serialization.Serializer) serialization.ReplicationTaskSerializer {
+		return serialization.NewTaskSerializer(serializer)
+	},
 	replicationTaskConverterFactoryProvider,
 	replicationTaskExecutorProvider,
 	fx.Annotated{
@@ -364,10 +367,10 @@ func eventImporterProvider(
 
 func dlqWriterAdapterProvider(
 	dlqWriter *queues.DLQWriter,
-	taskSerializer serialization.Serializer,
+	replicationTaskSerializer serialization.ReplicationTaskSerializer,
 	clusterMetadata cluster.Metadata,
 ) *DLQWriterAdapter {
-	return NewDLQWriterAdapter(dlqWriter, taskSerializer, clusterMetadata.GetCurrentClusterName())
+	return NewDLQWriterAdapter(dlqWriter, replicationTaskSerializer, clusterMetadata.GetCurrentClusterName())
 }
 
 func historyEventsHandlerProvider(
