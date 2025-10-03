@@ -31,7 +31,7 @@ type (
 		logger               log.Logger
 		workflowTags         *logtags.WorkflowTags
 		logAllReqErrors      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		requestErrorHandler  *RequestErrorHandler
+		requestErrorHandler  ErrorHandler
 	}
 )
 
@@ -97,7 +97,7 @@ func NewTelemetryInterceptor(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	logAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	requestErrorHandler *RequestErrorHandler,
+	requestErrorHandler ErrorHandler,
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
 		namespaceRegistry:   namespaceRegistry,

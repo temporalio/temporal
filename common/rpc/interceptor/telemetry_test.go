@@ -37,7 +37,7 @@ func TestEmitActionMetric(t *testing.T) {
 	metricsHandler := metrics.NewMockHandler(controller)
 	logger := log.NewNoopLogger()
 	logAllReqErrors := dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
-	requestErrorHandler := NewRequestErrorHandler(logger, logAllReqErrors)
+	requestErrorHandler := NewMockErrorHandler(controller)
 	telemetry := NewTelemetryInterceptor(register,
 		metricsHandler,
 		logger,

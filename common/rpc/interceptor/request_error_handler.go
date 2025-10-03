@@ -1,5 +1,7 @@
 package interceptor
 
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination request_error_handler_mock.go
+
 import (
 	"errors"
 
@@ -18,6 +20,18 @@ import (
 )
 
 type (
+	// ErrorHandler defines the interface for handling request errors
+	ErrorHandler interface {
+		HandleError(
+			req any,
+			fullMethod string,
+			metricsHandler metrics.Handler,
+			logTags []tag.Tag,
+			err error,
+			nsName namespace.Name,
+		)
+	}
+
 	// RequestErrorHandler handles error recording and logging for RPC interceptors
 	RequestErrorHandler struct {
 		logger          log.Logger
