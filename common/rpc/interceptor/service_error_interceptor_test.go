@@ -7,7 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -25,10 +30,19 @@ func (e *ErrorWithoutStatus) Error() string {
 	return e.Message
 }
 
+func createTestServiceErrorInterceptor() *ServiceErrorInterceptor {
+	logger := log.NewNoopLogger()
+	requestErrorHandler := NewRequestErrorHandler(logger, dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false))
+	metricsHandler := metrics.NoopMetricsHandler
+	namespaceRegistry := namespace.NewMockRegistry(nil)
+	return NewServiceErrorInterceptor(requestErrorHandler, metricsHandler, namespaceRegistry)
+}
+
 // Error returns string message.
 func TestServiceErrorInterceptorUnknown(t *testing.T) {
+	interceptor := createTestServiceErrorInterceptor()
 
-	_, err := ServiceErrorInterceptor(context.Background(), nil, nil,
+	_, err := interceptor.Intercept(context.Background(), nil, &grpc.UnaryServerInfo{},
 		func(ctx context.Context, req any) (any, error) {
 			return nil, status.Error(codes.InvalidArgument, "invalid argument")
 		})
@@ -36,7 +50,7 @@ func TestServiceErrorInterceptorUnknown(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = ServiceErrorInterceptor(context.Background(), nil, nil,
+	_, err = interceptor.Intercept(context.Background(), nil, &grpc.UnaryServerInfo{},
 		func(ctx context.Context, req any) (any, error) {
 			errWithoutStatus := &ErrorWithoutStatus{
 				Message: "unknown error without status",
@@ -49,12 +63,13 @@ func TestServiceErrorInterceptorUnknown(t *testing.T) {
 }
 
 func TestServiceErrorInterceptorSer(t *testing.T) {
+	interceptor := createTestServiceErrorInterceptor()
 	serErrors := []error{
 		serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, nil),
 		serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, nil),
 	}
 	for _, inErr := range serErrors {
-		_, err := ServiceErrorInterceptor(context.Background(), nil, nil,
+		_, err := interceptor.Intercept(context.Background(), nil, &grpc.UnaryServerInfo{},
 			func(_ context.Context, _ any) (any, error) {
 				return nil, inErr
 			})

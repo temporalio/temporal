@@ -12,6 +12,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -225,7 +226,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
-				interceptor.ServiceErrorInterceptor,
+				interceptor.NewServiceErrorInterceptor(interceptor.NewRequestErrorHandler(log.NewTestLogger(), dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)), metrics.NoopMetricsHandler, namespace.NewMockRegistry(nil)).Intercept,
 				interceptor.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
 			))
@@ -581,7 +582,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
-				interceptor.ServiceErrorInterceptor,
+				interceptor.NewServiceErrorInterceptor(interceptor.NewRequestErrorHandler(log.NewTestLogger(), dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)), metrics.NoopMetricsHandler, namespace.NewMockRegistry(nil)).Intercept,
 				interceptor.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
 			))
@@ -768,7 +769,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
-				interceptor.ServiceErrorInterceptor,
+				interceptor.NewServiceErrorInterceptor(interceptor.NewRequestErrorHandler(log.NewTestLogger(), dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)), metrics.NoopMetricsHandler, namespace.NewMockRegistry(nil)).Intercept,
 				interceptor.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
 			))

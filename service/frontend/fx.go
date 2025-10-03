@@ -76,6 +76,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceHandoverInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
+	fx.Provide(ServiceErrorInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
@@ -199,6 +200,7 @@ func GrpcServerOptionsProvider(
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
+	serviceErrorInterceptor *interceptor.ServiceErrorInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
 	healthInterceptor *interceptor.HealthInterceptor,
@@ -242,7 +244,7 @@ func GrpcServerOptionsProvider(
 		// Mask error interceptor should be the most outer interceptor since it handle the errors format
 		// Service Error Interceptor should be the next most outer interceptor on error handling
 		maskInternalErrorDetailsInterceptor.Intercept,
-		interceptor.ServiceErrorInterceptor,
+		serviceErrorInterceptor.Intercept,
 		interceptor.NewFrontendServiceErrorInterceptor(logger),
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
@@ -352,7 +354,6 @@ func NamespaceHandoverInterceptorProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
-	requestErrorHandler *interceptor.RequestErrorHandler,
 ) *interceptor.NamespaceHandoverInterceptor {
 	return interceptor.NewNamespaceHandoverInterceptor(
 		dc,
@@ -360,7 +361,6 @@ func NamespaceHandoverInterceptorProvider(
 		metricsHandler,
 		logger,
 		timeSource,
-		requestErrorHandler,
 	)
 }
 
@@ -371,6 +371,18 @@ func ErrorHandlerProvider(
 	return interceptor.NewRequestErrorHandler(
 		logger,
 		serviceConfig.LogAllReqErrors,
+	)
+}
+
+func ServiceErrorInterceptorProvider(
+	requestErrorHandler *interceptor.RequestErrorHandler,
+	metricsHandler metrics.Handler,
+	namespaceRegistry namespace.Registry,
+) *interceptor.ServiceErrorInterceptor {
+	return interceptor.NewServiceErrorInterceptor(
+		requestErrorHandler,
+		metricsHandler,
+		namespaceRegistry,
 	)
 }
 
