@@ -16,7 +16,7 @@ const (
 // UnexpectedInternalErr creates a serviceerror.Internal from a static message and error details.
 // The error message follows the format "<staticMessage>: <optionalErr>", if optionalErr is not nil.
 //
-// It also logs the error using softassert.Fail.
+// It also logs `staticMessage` using softassert.Fail.
 // `optionalErr` is added as a tag with key "softassert-error-details".
 func UnexpectedInternalErr(logger log.Logger, staticMessage string, optionalErr error, tags ...tag.Tag) error {
 	// (1) trigger softassert
