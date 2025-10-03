@@ -57,7 +57,6 @@ func NewExecutionMutableStateSuite(
 	shardStore p.ShardStore,
 	executionStore p.ExecutionStore,
 	serializer serialization.Serializer,
-	historyBranchUtil p.HistoryBranchUtil,
 	logger log.Logger,
 ) *ExecutionMutableStateSuite {
 	return &ExecutionMutableStateSuite{
@@ -71,11 +70,12 @@ func NewExecutionMutableStateSuite(
 			executionStore,
 			serializer,
 			nil,
+			nil,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 			dynamicconfig.GetBoolPropertyFn(false),
 		),
-		historyBranchUtil: historyBranchUtil,
+		historyBranchUtil: p.NewHistoryBranchUtil(serializer),
 		Logger:            logger,
 	}
 }

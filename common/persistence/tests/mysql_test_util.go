@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
@@ -58,6 +59,7 @@ func setUpMySQLTest(t *testing.T) (MySQLTestData, func()) {
 		*testData.Cfg,
 		resolver.NewNoopResolver(),
 		testMySQLClusterName,
+		serialization.NewSerializer(),
 		testData.Logger,
 		mh,
 	)

@@ -99,8 +99,7 @@ func NewEventsBlobCache(
 				Pin: false,
 			},
 		),
-		logger:     logger,
-		serializer: serialization.NewSerializer(),
+		logger: logger,
 	}
 }
 
