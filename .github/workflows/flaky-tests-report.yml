@@ -4,6 +4,13 @@ on:
   schedule:
     # Run on Tuesdays and Fridays at noon Eastern time (5 PM UTC)
     - cron: '0 17 * * 2,5'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Number of days to look back for flaky tests'
+        required: false
+        default: '7'
+        type: string
 
 permissions:
   contents: read
@@ -49,13 +56,14 @@ jobs:
         id: generate-output-file
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          DAYS_PARAM: ${{ github.event.inputs.days || '7' }}
         run: |
           set -euo pipefail
           
           # Create output directory
           mkdir -p tools/flakes/out
           
-          tringa --json --since-days 7 repo sql \
+          tringa --json --since-days "$DAYS_PARAM" repo sql \
             'select classname, name, count(*) as failure_count, max(artifact) as artifact from test where passed = false and skipped = false group by classname, name order by failure_count desc' \
             --branch main \
             --workflow-id 80591745 \
@@ -68,15 +76,20 @@ jobs:
 
       - name: Run Python script to process flaky tests
         id: process-flaky-tests
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          RUN_ID: ${{ github.run_id }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
         run: |
           set -x
           cd tools/flakes && uv run main.py \
             --file out/out.json \
             --github-summary \
-            --slack-webhook "${{ secrets.SLACK_WEBHOOK }}" \
-            --run-id "${{ github.run_id }}" \
-            --ref-name "${{ github.ref_name }}" \
-            --sha "${{ github.sha }}"
+            --slack-webhook "$SLACK_WEBHOOK" \
+            --run-id "$RUN_ID" \
+            --ref-name "$REF_NAME" \
+            --sha "$SHA"
 
       - name: Upload generated reports
         uses: actions/upload-artifact@v4

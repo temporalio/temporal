@@ -1586,12 +1586,24 @@ NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskM
 	)
 	QueueMaxPredicateSize = NewGlobalIntSetting(
 		"history.queueMaxPredicateSize",
-		0,
+		10*1024,
 		`The max size of the multi-cursor predicate structure stored in the shard info record. 0 is considered
 unlimited. When the predicate size is surpassed for a given scope, the predicate is converted to a universal predicate,
 which causes all tasks in the scope's range to eventually be reprocessed without applying any filtering logic.
 NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicateSize.
 `,
+	)
+	QueueMoveGroupTaskCountBase = NewGlobalIntSetting(
+		"history.queueMoveGroupTaskCountBase",
+		500,
+		`The base number of pending tasks count for a task group to be moved to the next level reader. 
+The actual count is calculated as base * (multiplier ^ level)`,
+	)
+	QueueMoveGroupTaskCountMultiplier = NewGlobalFloatSetting(
+		"history.queueMoveGroupTaskCountMultiplier",
+		3.0,
+		`The multiplier used to calculate the number of pending tasks for a task group to be moved to the next level reader. 
+The actual count is calculated as base * (multiplier ^ level)`,
 	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(
@@ -2435,6 +2447,16 @@ that task will be sent to DLQ.`,
 		"history.ReplicationStreamSendEmptyTaskDuration",
 		time.Minute,
 		`ReplicationStreamSendEmptyTaskDuration is the interval to sync status when there is no replication task`,
+	)
+	ReplicationStreamReceiverLivenessMultiplier = NewGlobalIntSetting(
+		"history.ReplicationReceiverLivenessMultiplier",
+		3,
+		"ReplicationStreamSendEmptyTask is the multiplier of liveness check interval on stream receiver",
+	)
+	ReplicationStreamSenderLivenessMultiplier = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderLivenessMultiplier",
+		10,
+		"ReplicationStreamSenderLivenessMultiplier is the multiplier of liveness check interval on stream sender",
 	)
 	ReplicationEnableRateLimit = NewGlobalBoolSetting(
 		"history.ReplicationEnableRateLimit",

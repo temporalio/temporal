@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -92,12 +93,13 @@ func WrapEventLoop(
 
 func livenessMonitor(
 	signalChan <-chan struct{},
-	timeout time.Duration,
+	timeoutFn dynamicconfig.DurationPropertyFn,
+	timeoutMultiplier dynamicconfig.IntPropertyFn,
 	shutdownChan channel.ShutdownOnce,
 	stopStream func(),
 	logger log.Logger,
 ) {
-	heartbeatTimeout := time.NewTicker(timeout)
+	heartbeatTimeout := time.NewTimer(timeoutFn() * time.Duration(timeoutMultiplier()))
 	defer heartbeatTimeout.Stop()
 
 	for !shutdownChan.IsShutdown() {
@@ -107,6 +109,13 @@ func livenessMonitor(
 		case <-heartbeatTimeout.C:
 			select {
 			case <-signalChan:
+				if !heartbeatTimeout.Stop() {
+					select {
+					case <-heartbeatTimeout.C:
+					default:
+					}
+				}
+				heartbeatTimeout.Reset(timeoutFn() * time.Duration(timeoutMultiplier()))
 				continue
 			default:
 				logger.Warn("No liveness signal received. Stop the replication stream.")
