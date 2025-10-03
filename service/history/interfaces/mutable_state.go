@@ -293,8 +293,10 @@ type (
 		CheckSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) bool
 		RemoveSpeculativeWorkflowTaskTimeoutTask()
 
-		SetWorkflowTaskScheduleToStartTimeoutTaskKey(key *tasks.Key)
-		SetWorkflowTaskStartToCloseTimeoutTaskKey(key *tasks.Key)
+		SetWorkflowTaskScheduleToStartTimeoutTask(task *tasks.WorkflowTaskTimeoutTask)
+		SetWorkflowTaskStartToCloseTimeoutTask(task *tasks.WorkflowTaskTimeoutTask)
+		GetWorkflowTaskScheduleToStartTimeoutTask() *tasks.WorkflowTaskTimeoutTask
+		GetWorkflowTaskStartToCloseTimeoutTask() *tasks.WorkflowTaskTimeoutTask
 
 		IsDirty() bool
 		IsTransitionHistoryEnabled() bool

@@ -220,10 +220,10 @@ type (
 
 		speculativeWorkflowTaskTimeoutTask *tasks.WorkflowTaskTimeoutTask
 
-		// In-memory storage for workflow task timeout task keys. These are set when timeout tasks are
+		// In-memory storage for workflow task timeout tasks. These are set when timeout tasks are
 		// generated and used to delete them when the workflow task completes. Not persisted to storage.
-		wftScheduleToStartTimeoutTaskKey *tasks.Key
-		wftStartToCloseTimeoutTaskKey    *tasks.Key
+		wftScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
+		wftStartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
 
 		// Do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
@@ -6018,12 +6018,20 @@ func (ms *MutableStateImpl) RemoveSpeculativeWorkflowTaskTimeoutTask() {
 	}
 }
 
-func (ms *MutableStateImpl) SetWorkflowTaskScheduleToStartTimeoutTaskKey(key *tasks.Key) {
-	ms.wftScheduleToStartTimeoutTaskKey = key
+func (ms *MutableStateImpl) SetWorkflowTaskScheduleToStartTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) {
+	ms.wftScheduleToStartTimeoutTask = task
 }
 
-func (ms *MutableStateImpl) SetWorkflowTaskStartToCloseTimeoutTaskKey(key *tasks.Key) {
-	ms.wftStartToCloseTimeoutTaskKey = key
+func (ms *MutableStateImpl) SetWorkflowTaskStartToCloseTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) {
+	ms.wftStartToCloseTimeoutTask = task
+}
+
+func (ms *MutableStateImpl) GetWorkflowTaskScheduleToStartTimeoutTask() *tasks.WorkflowTaskTimeoutTask {
+	return ms.wftScheduleToStartTimeoutTask
+}
+
+func (ms *MutableStateImpl) GetWorkflowTaskStartToCloseTimeoutTask() *tasks.WorkflowTaskTimeoutTask {
+	return ms.wftStartToCloseTimeoutTask
 }
 
 func (ms *MutableStateImpl) GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {

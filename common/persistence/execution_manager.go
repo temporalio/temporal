@@ -201,7 +201,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	err = m.persistence.UpdateWorkflowExecution(ctx, newRequest)
 	switch err.(type) {
 	case nil:
-		m.deleteHistoryTasks(ctx, request.ShardID, updateMutation.BestEffortDeleteTasks)
+		m.deleteHistoryTasks(ctx, request.ShardID, updateMutation.BestEffortDeleteTasks, updateMutation.ExecutionInfo.WorkflowId)
 		m.addXDCCacheKV(updateWorkflowXDCKVs)
 		m.addXDCCacheKV(newWorkflowXDCKVs)
 		return &UpdateWorkflowExecutionResponse{
@@ -236,6 +236,7 @@ func (m *executionManagerImpl) deleteHistoryTasks(
 	ctx context.Context,
 	shardID int32,
 	toDelete map[tasks.Category][]tasks.Key,
+	workflowID string,
 ) {
 	if !m.enableBestEffortDeleteTasksOnWorkflowUpdate() || len(toDelete) == 0 {
 		return
@@ -249,6 +250,8 @@ func (m *executionManagerImpl) deleteHistoryTasks(
 				BestEffort:   true,
 			}); err != nil {
 				m.logger.Warn("Failed to delete history task after workflow update",
+					tag.ShardID(shardID),
+					tag.WorkflowID(workflowID),
 					tag.TaskCategoryID(category.ID()),
 					tag.Timestamp(key.FireTime),
 					tag.TaskID(key.TaskID),

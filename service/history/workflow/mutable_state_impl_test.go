@@ -532,12 +532,10 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_WithWorkflowTaskTimeouts() {
 	)
 	s.NoError(err)
 
-	// Manually set the timeout task key references (simulating what task_generator does)
-	scheduleToStartKey := mockScheduleToStartTask.GetKey()
-	startToCloseKey := mockStartToCloseTask.GetKey()
-	wft.ScheduleToStartTimeoutTaskKey = &scheduleToStartKey
-	wft.StartToCloseTimeoutTaskKey = &startToCloseKey
-	// Call UpdateWorkflowTask to persist the timeout task info to ExecutionInfo
+	// Set timeout tasks directly in mutable state (simulating what task_generator does)
+	s.mutableState.SetWorkflowTaskScheduleToStartTimeoutTask(mockScheduleToStartTask)
+	s.mutableState.SetWorkflowTaskStartToCloseTimeoutTask(mockStartToCloseTask)
+	// Call UpdateWorkflowTask to persist the workflow task info to ExecutionInfo
 	s.mutableState.workflowTaskManager.UpdateWorkflowTask(wft)
 
 	// Complete the workflow task
@@ -570,24 +568,9 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_LongTimeout_NotIncluded() {
 		runID,
 	)
 
-	now := time.Now().UTC()
-	// Create a timeout task with timeout > 120s
-	mockLongTimeoutTask := &tasks.WorkflowTaskTimeoutTask{
-		WorkflowKey: definition.NewWorkflowKey(
-			s.mutableState.GetExecutionInfo().NamespaceId,
-			workflowID,
-			runID,
-		),
-		VisibilityTimestamp: now.Add(200 * time.Second), // > 120s
-		TaskID:              123,
-		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		InMemory:            false, // Persisted task
-	}
-
-	// Schedule and start a workflow task
+	// Schedule a workflow task - this sets the scheduled time
 	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
-	wft.ScheduledTime = now // Set scheduled time for timeout calculation
 
 	sticky := &taskqueuepb.TaskQueue{Name: "sticky-tq", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
 	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
@@ -602,11 +585,30 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_LongTimeout_NotIncluded() {
 	)
 	s.NoError(err)
 
-	// Set the long timeout task key reference
-	longTimeoutKey := mockLongTimeoutTask.GetKey()
-	wft.ScheduleToStartTimeoutTaskKey = &longTimeoutKey
-	// Call UpdateWorkflowTask to persist the timeout task info to ExecutionInfo
-	s.mutableState.workflowTaskManager.UpdateWorkflowTask(wft)
+	// Get the actual scheduled time from wft (this is what will be used in the calculation)
+	scheduledTime := wft.ScheduledTime
+	if scheduledTime.IsZero() {
+		// If scheduled time is not set in wft, use current time
+		scheduledTime = time.Now().UTC()
+	}
+
+	// Create a timeout task with timeout > 120s relative to the actual scheduled time
+	mockLongTimeoutTask := &tasks.WorkflowTaskTimeoutTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.mutableState.GetExecutionInfo().NamespaceId,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: scheduledTime.Add(200 * time.Second), // > 120s from scheduled time
+		TaskID:              123,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		InMemory:            false, // Persisted task
+	}
+
+	// Set the long timeout task directly in mutable state
+	s.mutableState.SetWorkflowTaskScheduleToStartTimeoutTask(mockLongTimeoutTask)
+	// Clear the StartToClose task so it doesn't interfere with the test
+	s.mutableState.SetWorkflowTaskStartToCloseTimeoutTask(nil)
 
 	// Complete the workflow task
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(

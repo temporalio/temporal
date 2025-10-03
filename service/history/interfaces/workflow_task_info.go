@@ -50,10 +50,10 @@ type WorkflowTaskInfo struct {
 	// Deprecated.
 	BuildId string
 
-	// Keys of persisted timeout tasks for this workflow task. These are set when the timeout tasks are generated
+	// Persisted timeout tasks for this workflow task. These are set when the timeout tasks are generated
 	// and used to delete them when the workflow task completes.
-	ScheduleToStartTimeoutTaskKey *tasks.Key
-	StartToCloseTimeoutTaskKey    *tasks.Key
+	ScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
+	StartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
 }
 
 type WorkflowTaskCompletionLimits struct {
