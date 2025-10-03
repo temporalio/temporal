@@ -261,8 +261,12 @@ func (g *generator) generateProtoMocks(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-
+		// Don't generate mocks for chasm lib files, it's not needed and broken at the moment.
+		if strings.HasPrefix(path, "api.new/temporal/server/chasm/lib") {
+			return nil
+		}
 		if strings.HasSuffix(path, "service.pb.go") || strings.HasSuffix(path, "service_grpc.pb.go") {
+
 			// Convert service/ to servicemock/ and .go to .mock.go
 			dst := strings.ReplaceAll(path, "service/", "servicemock/")
 			dst = strings.ReplaceAll(dst, ".go", ".mock.go")
