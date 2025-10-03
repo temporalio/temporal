@@ -128,7 +128,7 @@ func (s *sliceSuite) TestSplitByPredicate() {
 	s.Equal(r, passSlice.Scope().Range)
 	s.Equal(r, failSlice.Scope().Range)
 	s.True(tasks.AndPredicates(slice.scope.Predicate, splitPredicate).Equals(passSlice.Scope().Predicate))
-	s.True(predicates.And(slice.scope.Predicate, predicates.Not[tasks.Task](splitPredicate)).Equals(failSlice.Scope().Predicate))
+	s.True(tasks.AndPredicates(slice.scope.Predicate, predicates.Not(splitPredicate)).Equals(failSlice.Scope().Predicate))
 
 	s.validateSliceState(passSlice.(*SliceImpl))
 	s.validateSliceState(failSlice.(*SliceImpl))

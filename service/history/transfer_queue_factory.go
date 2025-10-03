@@ -178,6 +178,8 @@ func (f *transferQueueFactory) CreateQueue(
 			CheckpointInterval:                  f.Config.TransferProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.TransferProcessorUpdateAckIntervalJitterCoefficient,
 			MaxReaderCount:                      f.Config.TransferQueueMaxReaderCount,
+			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
+			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
 		},
 		f.HostReaderRateLimiter,
 		queues.GrouperNamespaceID{},

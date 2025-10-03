@@ -91,11 +91,13 @@ type Config struct {
 	StandbyTaskMissingEventsResendDelay  dynamicconfig.DurationPropertyFnWithTaskTypeFilter
 	StandbyTaskMissingEventsDiscardDelay dynamicconfig.DurationPropertyFnWithTaskTypeFilter
 
-	QueuePendingTaskCriticalCount    dynamicconfig.IntPropertyFn
-	QueueReaderStuckCriticalAttempts dynamicconfig.IntPropertyFn
-	QueueCriticalSlicesCount         dynamicconfig.IntPropertyFn
-	QueuePendingTaskMaxCount         dynamicconfig.IntPropertyFn
-	QueueMaxPredicateSize            dynamicconfig.IntPropertyFn
+	QueuePendingTaskCriticalCount     dynamicconfig.IntPropertyFn
+	QueueReaderStuckCriticalAttempts  dynamicconfig.IntPropertyFn
+	QueueCriticalSlicesCount          dynamicconfig.IntPropertyFn
+	QueuePendingTaskMaxCount          dynamicconfig.IntPropertyFn
+	QueueMaxPredicateSize             dynamicconfig.IntPropertyFn
+	QueueMoveGroupTaskCountBase       dynamicconfig.IntPropertyFn
+	QueueMoveGroupTaskCountMultiplier dynamicconfig.FloatPropertyFn
 
 	TaskDLQEnabled                 dynamicconfig.BoolPropertyFn
 	TaskDLQUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
@@ -464,11 +466,13 @@ func NewConfig(
 		StandbyTaskMissingEventsResendDelay:  dynamicconfig.StandbyTaskMissingEventsResendDelay.Get(dc),
 		StandbyTaskMissingEventsDiscardDelay: dynamicconfig.StandbyTaskMissingEventsDiscardDelay.Get(dc),
 
-		QueuePendingTaskCriticalCount:    dynamicconfig.QueuePendingTaskCriticalCount.Get(dc),
-		QueueReaderStuckCriticalAttempts: dynamicconfig.QueueReaderStuckCriticalAttempts.Get(dc),
-		QueueCriticalSlicesCount:         dynamicconfig.QueueCriticalSlicesCount.Get(dc),
-		QueuePendingTaskMaxCount:         dynamicconfig.QueuePendingTaskMaxCount.Get(dc),
-		QueueMaxPredicateSize:            dynamicconfig.QueueMaxPredicateSize.Get(dc),
+		QueuePendingTaskCriticalCount:     dynamicconfig.QueuePendingTaskCriticalCount.Get(dc),
+		QueueReaderStuckCriticalAttempts:  dynamicconfig.QueueReaderStuckCriticalAttempts.Get(dc),
+		QueueCriticalSlicesCount:          dynamicconfig.QueueCriticalSlicesCount.Get(dc),
+		QueuePendingTaskMaxCount:          dynamicconfig.QueuePendingTaskMaxCount.Get(dc),
+		QueueMaxPredicateSize:             dynamicconfig.QueueMaxPredicateSize.Get(dc),
+		QueueMoveGroupTaskCountBase:       dynamicconfig.QueueMoveGroupTaskCountBase.Get(dc),
+		QueueMoveGroupTaskCountMultiplier: dynamicconfig.QueueMoveGroupTaskCountMultiplier.Get(dc),
 
 		TaskDLQEnabled:                 dynamicconfig.HistoryTaskDLQEnabled.Get(dc),
 		TaskDLQUnexpectedErrorAttempts: dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts.Get(dc),
