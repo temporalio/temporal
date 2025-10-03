@@ -14,16 +14,17 @@ type Config struct {
 	EnableReplicationStream dynamicconfig.BoolPropertyFn
 	HistoryReplicationDLQV2 dynamicconfig.BoolPropertyFn
 
-	RPS                                  dynamicconfig.IntPropertyFn
-	OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
-	MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
-	PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
-	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
-	PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
+	RPS                                         dynamicconfig.IntPropertyFn
+	OperatorRPSRatio                            dynamicconfig.FloatPropertyFn
+	MaxIDLengthLimit                            dynamicconfig.IntPropertyFn
+	PersistenceMaxQPS                           dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS                     dynamicconfig.IntPropertyFn
+	PersistenceNamespaceMaxQPS                  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceGlobalNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistencePerShardNamespaceMaxQPS          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceDynamicRateLimitingParams        dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
+	EnableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
+	PersistenceQPSBurstRatio                    dynamicconfig.FloatPropertyFn
 
 	VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn

@@ -346,7 +346,8 @@ type (
 		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
 
-		Tasks map[tasks.Category][]tasks.Task
+		Tasks                 map[tasks.Category][]tasks.Task
+		BestEffortDeleteTasks map[tasks.Category][]tasks.Key
 
 		// TODO deprecate Condition in favor of DBRecordVersion
 		Condition       int64

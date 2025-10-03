@@ -25,12 +25,13 @@ import (
 type (
 	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and Serializer
 	executionManagerImpl struct {
-		serializer            serialization.Serializer
-		eventBlobCache        XDCCache
-		persistence           ExecutionStore
-		logger                log.Logger
-		pagingTokenSerializer *jsonHistoryTokenSerializer
-		transactionSizeLimit  dynamicconfig.IntPropertyFn
+		serializer                                  serialization.Serializer
+		eventBlobCache                              XDCCache
+		persistence                                 ExecutionStore
+		logger                                      log.Logger
+		pagingTokenSerializer                       *jsonHistoryTokenSerializer
+		transactionSizeLimit                        dynamicconfig.IntPropertyFn
+		enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -43,6 +44,7 @@ func NewExecutionManager(
 	eventBlobCache XDCCache,
 	logger log.Logger,
 	transactionSizeLimit dynamicconfig.IntPropertyFn,
+	enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn,
 ) ExecutionManager {
 	return &executionManagerImpl{
 		serializer:            serializer,
@@ -51,6 +53,7 @@ func NewExecutionManager(
 		logger:                logger,
 		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
 		transactionSizeLimit:  transactionSizeLimit,
+		enableBestEffortDeleteTasksOnWorkflowUpdate: enableBestEffortDeleteTasksOnWorkflowUpdate,
 	}
 }
 
@@ -198,6 +201,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	err = m.persistence.UpdateWorkflowExecution(ctx, newRequest)
 	switch err.(type) {
 	case nil:
+		m.deleteHistoryTasks(ctx, request.ShardID, updateMutation.BestEffortDeleteTasks, updateMutation.ExecutionInfo.WorkflowId)
 		m.addXDCCacheKV(updateWorkflowXDCKVs)
 		m.addXDCCacheKV(newWorkflowXDCKVs)
 		return &UpdateWorkflowExecutionResponse{
@@ -223,6 +227,38 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		return nil, err
 	default:
 		return nil, err
+	}
+}
+
+// deleteHistoryTasks iterates over provided task keys and completes them when the dynamic config
+// history.enableDeleteTasksOnWorkflowUpdate is enabled. Completion is best-effort and failures are logged.
+func (m *executionManagerImpl) deleteHistoryTasks(
+	ctx context.Context,
+	shardID int32,
+	toDelete map[tasks.Category][]tasks.Key,
+	workflowID string,
+) {
+	if !m.enableBestEffortDeleteTasksOnWorkflowUpdate() || len(toDelete) == 0 {
+		return
+	}
+	for category, keys := range toDelete {
+		for _, key := range keys {
+			if err := m.persistence.CompleteHistoryTask(ctx, &CompleteHistoryTaskRequest{
+				ShardID:      shardID,
+				TaskCategory: category,
+				TaskKey:      key,
+				BestEffort:   true,
+			}); err != nil {
+				m.logger.Warn("Failed to delete history task after workflow update",
+					tag.ShardID(shardID),
+					tag.WorkflowID(workflowID),
+					tag.TaskCategoryID(category.ID()),
+					tag.Timestamp(key.FireTime),
+					tag.TaskID(key.TaskID),
+					tag.Error(err),
+				)
+			}
+		}
 	}
 }
 
