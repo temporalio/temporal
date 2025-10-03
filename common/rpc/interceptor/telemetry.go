@@ -354,18 +354,29 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 	}
 }
 
+// CreateUnaryMetricsHandlerLogTags creates metrics handler and log tags for unary RPC calls
+func CreateUnaryMetricsHandlerLogTags(
+	baseMetricsHandler metrics.Handler,
+	req any,
+	fullMethod string,
+	methodName string,
+	nsName namespace.Name,
+) (metrics.Handler, []tag.Tag) {
+	overridedMethodName := telemetryUnaryOverrideOperationTag(fullMethod, methodName, req)
+
+	if nsName == "" {
+		return baseMetricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceUnknownTag()),
+			[]tag.Tag{tag.Operation(overridedMethodName)}
+	}
+	return baseMetricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceTag(nsName.String())),
+		[]tag.Tag{tag.Operation(overridedMethodName), tag.WorkflowNamespace(nsName.String())}
+}
+
 func (ti *TelemetryInterceptor) unaryMetricsHandlerLogTags(req any,
 	fullMethod string,
 	methodName string,
 	nsName namespace.Name) (metrics.Handler, []tag.Tag) {
-	overridedMethodName := telemetryUnaryOverrideOperationTag(fullMethod, methodName, req)
-
-	if nsName == "" {
-		return ti.metricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceUnknownTag()),
-			[]tag.Tag{tag.Operation(overridedMethodName)}
-	}
-	return ti.metricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceTag(nsName.String())),
-		[]tag.Tag{tag.Operation(overridedMethodName), tag.WorkflowNamespace(nsName.String())}
+	return CreateUnaryMetricsHandlerLogTags(ti.metricsHandler, req, fullMethod, methodName, nsName)
 }
 
 func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(

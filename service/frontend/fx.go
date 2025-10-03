@@ -352,6 +352,7 @@ func NamespaceHandoverInterceptorProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 ) *interceptor.NamespaceHandoverInterceptor {
 	return interceptor.NewNamespaceHandoverInterceptor(
 		dc,
@@ -359,6 +360,7 @@ func NamespaceHandoverInterceptorProvider(
 		metricsHandler,
 		logger,
 		timeSource,
+		requestErrorHandler,
 	)
 }
 
