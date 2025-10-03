@@ -83,14 +83,14 @@ func TelemetryInterceptorProvider(
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
-	errorHandler *interceptor.RequestErrorHandler,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
 		serviceConfig.LogAllReqErrors,
-		errorHandler,
+		requestErrorHandler,
 	)
 }
 

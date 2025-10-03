@@ -26,12 +26,12 @@ type (
 	metricsContextKey struct{}
 
 	TelemetryInterceptor struct {
-		namespaceRegistry namespace.Registry
-		metricsHandler    metrics.Handler
-		logger            log.Logger
-		workflowTags      *logtags.WorkflowTags
-		logAllReqErrors   dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		errorHandler      *RequestErrorHandler
+		namespaceRegistry    namespace.Registry
+		metricsHandler       metrics.Handler
+		logger               log.Logger
+		workflowTags         *logtags.WorkflowTags
+		logAllReqErrors      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		requestErrorHandler  *RequestErrorHandler
 	}
 )
 
@@ -97,15 +97,15 @@ func NewTelemetryInterceptor(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	logAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	errorHandler *RequestErrorHandler,
+	requestErrorHandler *RequestErrorHandler,
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
-		namespaceRegistry: namespaceRegistry,
-		metricsHandler:    metricsHandler,
-		logger:            logger,
-		workflowTags:      logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
-		logAllReqErrors:   logAllReqErrors,
-		errorHandler:      errorHandler,
+		namespaceRegistry:   namespaceRegistry,
+		metricsHandler:      metricsHandler,
+		logger:              logger,
+		workflowTags:        logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
+		logAllReqErrors:     logAllReqErrors,
+		requestErrorHandler: requestErrorHandler,
 	}
 }
 
@@ -182,7 +182,7 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	}
 
 	if err != nil {
-		ti.errorHandler.HandleError(req, info.FullMethod, metricsHandler, logTags, err, nsName)
+		ti.requestErrorHandler.HandleError(req, info.FullMethod, metricsHandler, logTags, err, nsName)
 	} else {
 		// emit action metrics only after successful calls
 		ti.emitActionMetric(methodName, info.FullMethod, req, metricsHandler, resp)
@@ -220,7 +220,7 @@ func (ti *TelemetryInterceptor) StreamIntercept(
 
 	err := handler(service, serverStream)
 	if err != nil {
-		ti.errorHandler.HandleError(nil, info.FullMethod, metricsHandler, logTags, err, "")
+		ti.requestErrorHandler.HandleError(nil, info.FullMethod, metricsHandler, logTags, err, "")
 		return err
 	}
 	return nil

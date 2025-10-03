@@ -377,14 +377,14 @@ func TelemetryInterceptorProvider(
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	serviceConfig *Config,
-	errorHandler *interceptor.RequestErrorHandler,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
 		serviceConfig.LogAllReqErrors,
-		errorHandler,
+		requestErrorHandler,
 	)
 }
 
@@ -786,7 +786,7 @@ func RegisterNexusHTTPHandler(
 	endpointRegistry nexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
-	errorHandler *interceptor.RequestErrorHandler,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceRateLimiterInterceptor interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
@@ -806,7 +806,7 @@ func RegisterNexusHTTPHandler(
 		endpointRegistry,
 		authInterceptor,
 		telemetryInterceptor,
-		errorHandler,
+		requestErrorHandler,
 		redirectionInterceptor,
 		namespaceValidatorInterceptor,
 		namespaceRateLimiterInterceptor,
