@@ -226,7 +226,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 			RunId:      runId,
 		},
 		chasm.ArchetypeAny,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
