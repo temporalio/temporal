@@ -250,8 +250,8 @@ func Invoke(
 				if len(history.Events) == 0 {
 					dataLossErr := softassert.UnexpectedDataLoss(
 						shardContext.GetLogger(),
-						"GetHistory returned empty history",
-						errors.New("no events in workflow history"),
+						"no events in workflow history",
+						nil,
 						tag.WorkflowNamespaceID(namespaceID.String()),
 						tag.WorkflowNamespace(request.GetRequest().GetNamespace()),
 						tag.WorkflowID(execution.GetWorkflowId()),
