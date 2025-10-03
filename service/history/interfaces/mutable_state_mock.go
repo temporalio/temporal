@@ -3246,6 +3246,30 @@ func (mr *MockMutableStateMockRecorder) SetUpdateCondition(arg0, arg1 any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUpdateCondition", reflect.TypeOf((*MockMutableState)(nil).SetUpdateCondition), arg0, arg1)
 }
 
+// SetWorkflowTaskScheduleToStartTimeoutTaskKey mocks base method.
+func (m *MockMutableState) SetWorkflowTaskScheduleToStartTimeoutTaskKey(key *tasks.Key) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetWorkflowTaskScheduleToStartTimeoutTaskKey", key)
+}
+
+// SetWorkflowTaskScheduleToStartTimeoutTaskKey indicates an expected call of SetWorkflowTaskScheduleToStartTimeoutTaskKey.
+func (mr *MockMutableStateMockRecorder) SetWorkflowTaskScheduleToStartTimeoutTaskKey(key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowTaskScheduleToStartTimeoutTaskKey", reflect.TypeOf((*MockMutableState)(nil).SetWorkflowTaskScheduleToStartTimeoutTaskKey), key)
+}
+
+// SetWorkflowTaskStartToCloseTimeoutTaskKey mocks base method.
+func (m *MockMutableState) SetWorkflowTaskStartToCloseTimeoutTaskKey(key *tasks.Key) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetWorkflowTaskStartToCloseTimeoutTaskKey", key)
+}
+
+// SetWorkflowTaskStartToCloseTimeoutTaskKey indicates an expected call of SetWorkflowTaskStartToCloseTimeoutTaskKey.
+func (mr *MockMutableStateMockRecorder) SetWorkflowTaskStartToCloseTimeoutTaskKey(key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowTaskStartToCloseTimeoutTaskKey", reflect.TypeOf((*MockMutableState)(nil).SetWorkflowTaskStartToCloseTimeoutTaskKey), key)
+}
+
 // ShouldResetActivityTimerTaskMask mocks base method.
 func (m *MockMutableState) ShouldResetActivityTimerTaskMask(current, incoming *persistence.ActivityInfo) bool {
 	m.ctrl.T.Helper()

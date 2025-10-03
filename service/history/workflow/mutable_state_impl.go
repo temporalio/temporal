@@ -220,6 +220,11 @@ type (
 
 		speculativeWorkflowTaskTimeoutTask *tasks.WorkflowTaskTimeoutTask
 
+		// In-memory storage for workflow task timeout task keys. These are set when timeout tasks are
+		// generated and used to delete them when the workflow task completes. Not persisted to storage.
+		wftScheduleToStartTimeoutTaskKey *tasks.Key
+		wftStartToCloseTimeoutTaskKey    *tasks.Key
+
 		// Do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
 		// a transaction is in progress, this value will be
@@ -6011,6 +6016,14 @@ func (ms *MutableStateImpl) RemoveSpeculativeWorkflowTaskTimeoutTask() {
 		ms.speculativeWorkflowTaskTimeoutTask.Cancel()
 		ms.speculativeWorkflowTaskTimeoutTask = nil
 	}
+}
+
+func (ms *MutableStateImpl) SetWorkflowTaskScheduleToStartTimeoutTaskKey(key *tasks.Key) {
+	ms.wftScheduleToStartTimeoutTaskKey = key
+}
+
+func (ms *MutableStateImpl) SetWorkflowTaskStartToCloseTimeoutTaskKey(key *tasks.Key) {
+	ms.wftStartToCloseTimeoutTaskKey = key
 }
 
 func (ms *MutableStateImpl) GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {

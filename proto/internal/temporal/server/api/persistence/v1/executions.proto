@@ -100,13 +100,6 @@ message WorkflowExecutionInfo {
     // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     int64 workflow_task_build_id_redirect_counter = 89;
 
-    // Timeout task IDs and timestamps for the current workflow task. Used for deleting these tasks
-    // when the workflow task completes, as an optimization for avoiding unnecessary timer tasks.
-    int64 wft_schedule_start_timeout_task_id = 107;
-    google.protobuf.Timestamp wft_schedule_start_timeout_time = 108;
-    int64 wft_start_close_timeout_task_id = 109;
-    google.protobuf.Timestamp wft_start_close_timeout_time = 110;
-
     bool cancel_requested = 29;
     string cancel_request_id = 32;
     string sticky_task_queue = 33;
