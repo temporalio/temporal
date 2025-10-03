@@ -115,6 +115,7 @@ func recordErrorMetrics(metricsHandler metrics.Handler, err error, isExpectedErr
 	metrics.ServiceFailures.With(metricsHandler).Record(1)
 }
 
+//nolint:revive // explicit cases in switch for documentation purposes
 func isExpectedErrorByStatusCode(statusCode codes.Code) bool {
 	switch statusCode {
 	case codes.Canceled,
