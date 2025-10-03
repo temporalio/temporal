@@ -3,6 +3,7 @@ package replication
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -21,6 +22,7 @@ import (
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
 )
@@ -133,8 +135,9 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	// case 1: VersionedTransition is up-to-date on current mutable state
 	if err == nil {
 		if ms.GetNextEventId() < e.taskAttr.NextEventId {
-			return serviceerror.NewDataLossf("Workflow event missed. NamespaceId: %v, workflowId: %v, runId: %v, expected last eventId: %v, versionedTransition: %v",
-				e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NextEventId-1, e.ReplicationTask().VersionedTransition)
+			return softassert.UnexpectedDataLoss(e.Logger, "Workflow event missed",
+				fmt.Errorf("NamespaceId: %v, workflowId: %v, runId: %v, expected last eventId: %v, versionedTransition: %v",
+					e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NextEventId-1, e.ReplicationTask().VersionedTransition))
 		}
 		return e.verifyNewRunExist(ctx)
 	}
@@ -202,8 +205,9 @@ func (e *ExecutableVerifyVersionedTransitionTask) verifyNewRunExist(ctx context.
 	case nil:
 		return nil
 	case *serviceerror.NotFound:
-		return serviceerror.NewDataLossf("workflow new run not found. NamespaceId: %v, workflowId: %v, runId: %v, newRunId: %v",
-			e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NewRunId)
+		return softassert.UnexpectedDataLoss(e.Logger, "workflow new run not found",
+			fmt.Errorf("NamespaceId: %v, workflowId: %v, runId: %v, newRunId: %v",
+				e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NewRunId))
 	default:
 		return err
 	}
