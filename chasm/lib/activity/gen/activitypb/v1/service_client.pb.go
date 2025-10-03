@@ -27,14 +27,14 @@ type ActivityServiceLayeredClient struct {
 }
 
 // NewActivityServiceLayeredClient initializes a new ActivityServiceLayeredClient.
-func NewNewActivityServiceLayeredClient(
+func NewActivityServiceLayeredClient(
 	dc *dynamicconfig.Collection,
 	rpcFactory common.RPCFactory,
 	monitor membership.Monitor,
 	config *config.Persistence,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-) (*ActivityServiceLayeredClient, error) {
+) (ActivityServiceClient, error) {
 	resolver, err := monitor.GetResolver(primitives.HistoryService)
 	if err != nil {
 		return nil, err

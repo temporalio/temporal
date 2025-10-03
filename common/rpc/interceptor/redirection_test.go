@@ -190,6 +190,15 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"UpdateTaskQueueConfig":                 {},
 		"FetchWorkerConfig":                     {},
 		"UpdateWorkerConfig":                    {},
+
+		"StartActivityExecution":         {},
+		"CountActivityExecutions":        {},
+		"ListActivityExecutions":         {},
+		"DescribeActivityExecution":      {},
+		"GetActivityResult":              {},
+		"RequestCancelActivityExecution": {},
+		"TerminateActivityExecution":     {},
+		"DeleteActivityExecution":        {},
 	}, apis)
 }
 

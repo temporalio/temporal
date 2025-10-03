@@ -6,6 +6,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -109,6 +110,7 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 	fx.Invoke(EndpointRegistryLifetimeHooks),
 	nexusfrontend.Module,
+	activity.FrontendModule,
 )
 
 func NewServiceProvider(
@@ -731,6 +733,7 @@ func HandlerProvider(
 	membershipMonitor membership.Monitor,
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
+	activityHandler activity.FrontendHandler,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -758,6 +761,7 @@ func HandlerProvider(
 		healthInterceptor,
 		scheduleSpecBuilder,
 		httpEnabled(cfg, serviceName),
+		activityHandler,
 	)
 	return wfHandler
 }
