@@ -938,8 +938,8 @@ func (m *workflowTaskStateMachine) deleteWorkflowTask() {
 	m.recordTimeoutTasksForDeletion(currentWorkflowTask)
 
 	// Clear in-memory timeout tasks
-	m.ms.wftScheduleToStartTimeoutTask = nil
-	m.ms.wftStartToCloseTimeoutTask = nil
+	m.ms.SetWorkflowTaskScheduleToStartTimeoutTask(nil)
+	m.ms.SetWorkflowTaskStartToCloseTimeoutTask(nil)
 
 	resetWorkflowTaskInfo := &historyi.WorkflowTaskInfo{
 		Version:             common.EmptyVersion,
