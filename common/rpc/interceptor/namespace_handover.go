@@ -88,6 +88,9 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 				methodName,
 				namespaceName,
 			)
+			// count the request as this will not be counted
+			metrics.ServiceRequests.With(metricsHandler).Record(1)
+
 			i.requestErrorHandler.HandleError(
 				req,
 				info.FullMethod,
