@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -2132,6 +2133,7 @@ func (s *WorkflowHandlerSuite) TestCountWorkflowExecutions() {
 }
 
 func (s *WorkflowHandlerSuite) TestVerifyHistoryIsComplete() {
+	logger := log.NewTestLogger()
 	events := make([]*historyspb.StrippedHistoryEvent, 50)
 	for i := 0; i < len(events); i++ {
 		events[i] = &historyspb.StrippedHistoryEvent{EventId: int64(i + 1)}
@@ -2176,6 +2178,7 @@ func (s *WorkflowHandlerSuite) TestVerifyHistoryIsComplete() {
 
 	for i, tc := range testCases {
 		err := api.VerifyHistoryIsComplete(
+			logger,
 			tc.events[0],
 			tc.events[len(tc.events)-1],
 			len(tc.events),

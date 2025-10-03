@@ -6,11 +6,11 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/softassert"
 )
 
 // ReadFullPageEvents reads a full page of history events from ExecutionManager. Due to storage format of V2 History
@@ -142,9 +142,9 @@ func ValidateBatch(
 ) error {
 	var firstEvent, lastEvent *historyspb.StrippedHistoryEvent
 	var eventCount int
-	dataLossTags := func(cause string) []tag.Tag {
+	dataLossTags := func(cause error) []tag.Tag {
 		return []tag.Tag{
-			tag.Cause(cause),
+			tag.Cause(cause.Error()),
 			tag.WorkflowBranchToken(branchToken),
 			tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 			tag.FirstEventVersion(firstEvent.GetVersion()),
@@ -160,14 +160,12 @@ func ValidateBatch(
 
 	if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
 		// in a single batch, version should be the same, and ID should be contiguous
-		logger.Error(dataLossMsg, dataLossTags(errWrongVersion)...)
-		return serviceerror.NewDataLoss(errWrongVersion)
+		return softassert.UnexpectedDataLoss(logger, dataLossMsg, errWrongVersion, dataLossTags(errWrongVersion)...)
 	}
 	// If it is the first batch in the response, we cannot check the first event id here. That information is in the historyPagingToken.
 	// TODO: PPV refactor to move this check to ExecutionManager so that we can include that check as well.
 	if lastEventID != 0 && firstEvent.GetEventId() != lastEventID+1 {
-		logger.Error(dataLossMsg, dataLossTags(errNonContiguousEventID)...)
-		return serviceerror.NewDataLoss(errNonContiguousEventID)
+		return softassert.UnexpectedDataLoss(logger, dataLossMsg, errNonContiguousEventID, dataLossTags(errNonContiguousEventID)...)
 	}
 	return nil
 }
