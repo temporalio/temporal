@@ -197,7 +197,7 @@ func (f *factoryImpl) NewExecutionManager() (persistence.ExecutionManager, error
 		return nil, err
 	}
 
-	result := persistence.NewExecutionManager(store, f.serializer, f.eventBlobCache, f.logger, f.config.TransactionSizeLimit)
+	result := persistence.NewExecutionManager(store, f.serializer, serialization.NewTaskSerializer(f.serializer), f.eventBlobCache, f.logger, f.config.TransactionSizeLimit)
 	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
 		result = persistence.NewExecutionPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.shardRateLimiter, f.logger)
 	}
@@ -229,7 +229,7 @@ func (f *factoryImpl) NewHistoryTaskQueueManager() (persistence.HistoryTaskQueue
 	if err != nil {
 		return nil, err
 	}
-	return persistence.NewHistoryTaskQueueManager(q, serialization.NewSerializer()), nil
+	return persistence.NewHistoryTaskQueueManager(q, f.serializer), nil
 }
 
 func (f *factoryImpl) NewNexusEndpointManager() (persistence.NexusEndpointManager, error) {
