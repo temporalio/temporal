@@ -28,7 +28,7 @@ type (
 		*require.Assertions
 
 		workflowKey    definition.WorkflowKey
-		taskSerializer *TaskSerializer
+		taskSerializer TaskSerializer
 	}
 )
 
@@ -52,7 +52,7 @@ func (s *taskSerializerSuite) SetupTest() {
 		"random workflow ID",
 		"random run ID",
 	)
-	s.taskSerializer = NewTaskSerializer()
+	s.taskSerializer = NewTaskSerializer(NewSerializer())
 }
 
 func (s *taskSerializerSuite) TearDownTest() {

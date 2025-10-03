@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
@@ -213,6 +214,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				mockNamespaceRegistry,
 				"active-cluster",
 				membership.NewHostInfoFromAddress("localhost"),
+				serialization.NewSerializer(),
 			)
 			var wg sync.WaitGroup
 			for _, sc := range c.ExpectedScanners {
@@ -289,6 +291,7 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 		mockNamespaceRegistry,
 		"active-cluster",
 		membership.NewHostInfoFromAddress("localhost"),
+		serialization.NewSerializer(),
 	)
 	mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 	worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()

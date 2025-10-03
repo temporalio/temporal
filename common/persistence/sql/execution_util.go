@@ -19,7 +19,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-func applyWorkflowMutationTx(
+func (m *sqlExecutionStore) applyWorkflowMutationTx(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
@@ -58,7 +58,7 @@ func applyWorkflowMutationTx(
 		}
 	}
 
-	if err := updateExecution(ctx,
+	if err := m.updateExecution(ctx,
 		tx,
 		namespaceID,
 		workflowID,
@@ -189,13 +189,12 @@ func applyWorkflowMutationTx(
 	return nil
 }
 
-func applyWorkflowSnapshotTxAsReset(
+func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsReset(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
-
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
 	workflowID := workflowSnapshot.WorkflowID
 	namespaceID := workflowSnapshot.NamespaceID
@@ -227,7 +226,7 @@ func applyWorkflowSnapshotTxAsReset(
 		}
 	}
 
-	if err := updateExecution(ctx,
+	if err := m.updateExecution(ctx,
 		tx,
 		namespaceID,
 		workflowID,
@@ -1057,7 +1056,7 @@ func updateCurrentExecution(
 	return nil
 }
 
-func buildExecutionRow(
+func (m *sqlExecutionStore) buildExecutionRow(
 	namespaceID string,
 	workflowID string,
 	executionInfo *commonpb.DataBlob,
@@ -1069,7 +1068,7 @@ func buildExecutionRow(
 ) (row *sqlplugin.ExecutionsRow, err error) {
 	// TODO: double encoding execution state? executionState could've been passed to the function as
 	// *commonpb.DataBlob like executionInfo
-	stateBlob, err := serialization.WorkflowExecutionStateToBlob(executionState)
+	stateBlob, err := m.serializer.WorkflowExecutionStateToBlob(executionState)
 	if err != nil {
 		return nil, err
 	}
@@ -1112,7 +1111,7 @@ func (m *sqlExecutionStore) createExecution(
 	shardID int32,
 ) error {
 
-	row, err := buildExecutionRow(
+	row, err := m.buildExecutionRow(
 		namespaceID,
 		workflowID,
 		executionInfo,
@@ -1147,7 +1146,7 @@ func (m *sqlExecutionStore) createExecution(
 	return nil
 }
 
-func updateExecution(
+func (m *sqlExecutionStore) updateExecution(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	namespaceID string,
@@ -1159,7 +1158,7 @@ func updateExecution(
 	dbRecordVersion int64,
 	shardID int32,
 ) error {
-	row, err := buildExecutionRow(
+	row, err := m.buildExecutionRow(
 		namespaceID,
 		workflowID,
 		executionInfo,
@@ -1191,7 +1190,7 @@ func workflowExecutionStateFromCurrentExecutionsRow(
 	row *sqlplugin.CurrentExecutionsRow,
 ) (*persistencespb.WorkflowExecutionState, error) {
 	if len(row.Data) > 0 && row.DataEncoding != "" {
-		return serialization.WorkflowExecutionStateFromBlob(p.NewDataBlob(row.Data, row.DataEncoding))
+		return serialization.DefaultDecoder.WorkflowExecutionStateFromBlob(p.NewDataBlob(row.Data, row.DataEncoding))
 	}
 
 	// Old records don't have the serialized WorkflowExecutionState stored in DB.
