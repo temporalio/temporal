@@ -539,7 +539,6 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 
 	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
 	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
-	// s.True(scopes[0].Range.InclusiveMin.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
 
 	// set to a smaller value so that delete will be triggered
 	base.exclusiveDeletionHighWatermark = tasks.MinimumKey
@@ -553,16 +552,18 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(sliceRange)).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(namespaceID).AnyTimes()
-			slice.(*SliceImpl).executableTracker.add(base.executableFactory.NewExecutable(mockTask, readerID))
+			slice.(*SliceImpl).add(base.executableFactory.NewExecutable(mockTask, readerID))
 		}
 	}
+
+	scopes := NewRandomScopes(4)
 
 	// construct state for reader 0
 	// 3 slices:
 	//   slice 1: 20 tasks for namespace1, 50 tasks for namespace2
 	//   slice 2: 50 tasks for namespace2, 100 tasks for namespace3
 	//   slice 3: 100 tasks for namespace3
-	reader0Scopes := NewRandomScopes(3)
+	reader0Scopes := scopes[:3]
 	reader0Slices := make([]Slice, 0, len(reader0Scopes))
 	for _, scope := range reader0Scopes {
 		slice := NewSlice(base.paginationFnProvider, base.executableFactory, base.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit)
@@ -579,10 +580,13 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 	// construct state for reader 1
 	// 1 slice:
 	//  slice 1: 100 tasks for namespace3
-	reader1Scopes := NewRandomScopes(1)
+	reader1Scopes := scopes[3:4]
 	reader1Slices := make([]Slice, 0, len(reader1Scopes))
 	for _, scope := range reader1Scopes {
-		reader1Slices = append(reader1Slices, NewSlice(base.paginationFnProvider, base.executableFactory, base.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit))
+		slice := NewSlice(base.paginationFnProvider, base.executableFactory, base.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit)
+		// manually set iterators to nil as we will be adding tasks directly to the slice
+		slice.iterators = nil
+		reader1Slices = append(reader1Slices, slice)
 	}
 	addExecutableToSlice(DefaultReaderId+1, reader1Slices[0], "namespace3", 100)
 
@@ -600,20 +604,20 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *persistence.UpdateShardRequest) error {
 				readerScopes := FromPersistenceQueueState(request.ShardInfo.QueueStates[int32(tasks.CategoryIDTimer)]).readerScopes
-				s.Len(readerScopes, 3, "should have 3 readers")
+				s.Len(readerScopes, 3)
 
 				reader0Scopes := readerScopes[DefaultReaderId]
-				s.Len(readerScopes[DefaultReaderId], 1, "reader 0 should have 1 slice")
+				s.Len(readerScopes[DefaultReaderId], 1)
 				reader0Scopes[0].Predicate.Equals(tasks.NewNamespacePredicate([]string{"namespace1"}))
 
 				reader1Scopes := readerScopes[DefaultReaderId+1]
-				// s.Len(reader1Scopes, 2, "reader 1 should have 2 slices")
+				s.Len(reader1Scopes, 2)
 				for _, scope := range reader1Scopes {
 					scope.Predicate.Equals(tasks.NewNamespacePredicate([]string{"namespace2"}))
 				}
 
 				reader2Scopes := readerScopes[DefaultReaderId+2]
-				// s.Len(reader2Scopes, 3, "reader 2 should have 3 slices")
+				s.Len(reader2Scopes, 3)
 				for _, scope := range reader2Scopes {
 					scope.Predicate.Equals(tasks.NewNamespacePredicate([]string{"namespace3"}))
 				}
