@@ -240,7 +240,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			RunId:      rid,
 		},
 		chasm.ArchetypeAny,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err
@@ -360,7 +360,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 			RunId:      executionState.RunId,
 		},
 		chasm.ArchetypeAny,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err
