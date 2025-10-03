@@ -48,8 +48,9 @@ var (
 
 func NewHistoryTaskQueueManager(queue QueueV2, serializer serialization.Serializer) *HistoryTaskQueueManagerImpl {
 	return &HistoryTaskQueueManagerImpl{
-		queue:      queue,
-		serializer: serializer,
+		queue:          queue,
+		serializer:     serializer,
+		taskSerializer: serialization.NewTaskSerializer(serializer),
 	}
 }
 
@@ -60,7 +61,7 @@ func (m *HistoryTaskQueueManagerImpl) EnqueueTask(
 	if request.Task == nil {
 		return nil, ErrEnqueueTaskRequestTaskIsNil
 	}
-	blob, err := m.serializer.SerializeTask(request.Task)
+	blob, err := m.taskSerializer.SerializeTask(request.Task)
 	if err != nil {
 		return nil, fmt.Errorf("%v: %w", ErrMsgSerializeTaskToEnqueue, err)
 	}
@@ -156,7 +157,7 @@ func (m *HistoryTaskQueueManagerImpl) ReadTasks(ctx context.Context, request *Re
 			return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, ErrHistoryTaskBlobIsNil)
 		}
 
-		task, err := m.serializer.DeserializeTask(request.QueueKey.Category, blob)
+		task, err := m.taskSerializer.DeserializeTask(request.QueueKey.Category, blob)
 		if err != nil {
 			return nil, fmt.Errorf("%v: %w", ErrMsgDeserializeHistoryTask, err)
 		}
