@@ -26,12 +26,12 @@ type (
 	metricsContextKey struct{}
 
 	TelemetryInterceptor struct {
-		namespaceRegistry    namespace.Registry
-		metricsHandler       metrics.Handler
-		logger               log.Logger
-		workflowTags         *logtags.WorkflowTags
-		logAllReqErrors      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		requestErrorHandler  ErrorHandler
+		namespaceRegistry   namespace.Registry
+		metricsHandler      metrics.Handler
+		logger              log.Logger
+		workflowTags        *logtags.WorkflowTags
+		logAllReqErrors     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		requestErrorHandler ErrorHandler
 	}
 )
 
@@ -389,7 +389,6 @@ func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
 		metrics.NamespaceUnknownTag(),
 	), []tag.Tag{tag.Operation(overridedMethodName)}
 }
-
 
 func GetMetricsHandlerFromContext(
 	ctx context.Context,
