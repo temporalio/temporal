@@ -1,10 +1,16 @@
 package queues
 
+import (
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+)
+
 type actionMoveGroup struct {
 	maxReaderCount               int
 	grouper                      Grouper
 	moveGroupTaskCountBase       int
 	moveGroupTaskCountMultiplier float64
+	logger                       log.Logger
 }
 
 func newMoveGroupAction(
@@ -12,12 +18,14 @@ func newMoveGroupAction(
 	grouper Grouper,
 	moveGroupTaskCountBase int,
 	moveGroupTaskCountMultiplier float64,
+	logger log.Logger,
 ) *actionMoveGroup {
 	return &actionMoveGroup{
 		maxReaderCount:               maxReaderCount,
 		grouper:                      grouper,
 		moveGroupTaskCountBase:       moveGroupTaskCountBase,
 		moveGroupTaskCountMultiplier: moveGroupTaskCountMultiplier,
+		logger:                       logger,
 	}
 }
 
@@ -28,8 +36,8 @@ func (a *actionMoveGroup) Name() string {
 func (a *actionMoveGroup) Run(readerGroup *ReaderGroup) bool {
 
 	// Move task groups from reader x to x+1 if the # of pending tasks for a group is higher than
-	// a threashold. The threshold is calculated as:
-	//   moveGroupTaskCountBase * (moveGroupTaskCountMutiplier ^ x) = base * (3 ^ x)
+	// a threshold. The threshold is calculated as:
+	//   moveGroupTaskCountBase * (moveGroupTaskCountMultiplier ^ x)
 	//
 	// If after moving a group to reader x+1, the # of pending tasks for that group becomes higher than
 	// the threshold for reader x+1, it will be moved to reader x+2 in the next iteration.
@@ -37,6 +45,7 @@ func (a *actionMoveGroup) Run(readerGroup *ReaderGroup) bool {
 	// TODO: instead of moving task groups down by just one reader, directly move it to the reader level
 	// based on the total number of pending tasks across all readers.
 
+	moved := false
 	moveGroupMinTaskCount := a.moveGroupTaskCountBase
 	for readerID := DefaultReaderId; readerID+1 < int64(a.maxReaderCount); readerID++ {
 		if readerID != DefaultReaderId {
@@ -59,6 +68,11 @@ func (a *actionMoveGroup) Run(readerGroup *ReaderGroup) bool {
 		for key, pendingTaskCount := range pendingTaskPerGroup {
 			if pendingTaskCount >= moveGroupMinTaskCount {
 				groupsToMove = append(groupsToMove, key)
+				a.logger.Info("Too many pending tasks, moving group to next reader",
+					tag.QueueReaderID(readerID),
+					tag.Counter(pendingTaskCount),
+					tag.Value(key),
+				)
 			}
 		}
 
@@ -85,7 +99,8 @@ func (a *actionMoveGroup) Run(readerGroup *ReaderGroup) bool {
 
 		nextReader := readerGroup.GetOrCreateReader(readerID + 1)
 		nextReader.MergeSlices(slicesToMove...)
+		moved = true
 	}
 
-	return true
+	return moved
 }

@@ -298,14 +298,14 @@ func (p *queueBase) checkpoint() {
 		// Run an action to proactively move task group with high pending task to non-default reader
 		// so that upon shard reload, those groups won't block other tasks in the default reader from
 		// being loaded.
-		checkpointAction = newMoveGroupAction(maxReaderCount, p.grouper, taskCountBase, p.options.MoveGroupTaskCountMultiplier())
+		checkpointAction = newMoveGroupAction(maxReaderCount, p.grouper, taskCountBase, p.options.MoveGroupTaskCountMultiplier(), p.logger)
 	} else {
 		// Run slicePredicateAction to move slices with non-universal predicate to non-default reader
 		// so that upon shard reload, task loading for those slices won't block other slices in the default reader.
 		checkpointAction = newSlicePredicateAction(p.monitor, maxReaderCount)
 	}
 
-	runAction(checkpointAction, p.readerGroup, p.metricsHandler, p.logger)
+	runAction(checkpointAction, p.readerGroup, p.metricsHandler)
 
 	readerScopes := make(map[int64][]Scope)
 	newExclusiveDeletionHighWatermark := p.nonReadableScope.Range.InclusiveMin
