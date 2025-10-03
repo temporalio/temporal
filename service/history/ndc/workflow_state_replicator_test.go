@@ -54,6 +54,7 @@ type (
 		mockRemoteAdminClient *adminservicemock.MockAdminServiceClient
 		mockExecutionManager  *persistence.MockExecutionManager
 		logger                log.Logger
+		serializer            serialization.Serializer
 
 		workflowID string
 		runID      string
@@ -100,11 +101,12 @@ func (s *workflowReplicatorSuite) SetupTest() {
 	s.workflowID = "some random workflow ID"
 	s.runID = uuid.New()
 	s.now = time.Now().UTC()
+	s.serializer = serialization.NewSerializer()
 	s.workflowStateReplicator = NewWorkflowStateReplicator(
 		s.mockShard,
 		s.mockWorkflowCache,
 		eventReapplier,
-		serialization.NewSerializer(),
+		s.serializer,
 		s.logger,
 	)
 }
@@ -122,7 +124,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		BranchId:  uuid.New(),
 		Ancestors: nil,
 	}
-	historyBranch, err := serialization.HistoryBranchToBlob(branchInfo)
+	historyBranch, err := s.serializer.HistoryBranchToBlob(branchInfo)
 	s.NoError(err)
 	completionEventBatchId := int64(5)
 	nextEventID := int64(7)
@@ -229,7 +231,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 			},
 		},
 	}
-	historyBranch, err := serialization.HistoryBranchToBlob(branchInfo)
+	historyBranch, err := s.serializer.HistoryBranchToBlob(branchInfo)
 	s.NoError(err)
 	completionEventBatchId := int64(5)
 	nextEventID := int64(7)
@@ -341,11 +343,10 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 			},
 		},
 	}
-	serializer := serialization.NewSerializer()
 	var historyBlobs []*commonpb.DataBlob
 	var nodeIds []int64
 	for _, history := range expectedHistory {
-		blob, err := serializer.SerializeEvents(history.GetEvents())
+		blob, err := s.serializer.SerializeEvents(history.GetEvents())
 		s.NoError(err)
 		historyBlobs = append(historyBlobs, blob)
 		nodeIds = append(nodeIds, history.GetEvents()[0].GetEventId())
@@ -414,7 +415,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend()
 		BranchId:  uuid.New(),
 		Ancestors: nil,
 	}
-	historyBranch, err := serialization.HistoryBranchToBlob(branchInfo)
+	historyBranch, err := s.serializer.HistoryBranchToBlob(branchInfo)
 	s.NoError(err)
 	completionEventBatchId := int64(5)
 	nextEventID := int64(7)
@@ -494,7 +495,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_SyncHSM(
 		BranchId:  uuid.New(),
 		Ancestors: nil,
 	}
-	historyBranch, err := serialization.HistoryBranchToBlob(branchInfo)
+	historyBranch, err := s.serializer.HistoryBranchToBlob(branchInfo)
 	s.NoError(err)
 	completionEventBatchId := int64(5)
 	nextEventID := int64(7)
@@ -596,7 +597,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		s.mockShard,
 		s.mockWorkflowCache,
 		nil,
-		serialization.NewSerializer(),
+		s.serializer,
 		s.logger,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
@@ -687,7 +688,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 		s.mockShard,
 		s.mockWorkflowCache,
 		nil,
-		serialization.NewSerializer(),
+		s.serializer,
 		s.logger,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
@@ -772,7 +773,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		s.mockShard,
 		s.mockWorkflowCache,
 		nil,
-		serialization.NewSerializer(),
+		s.serializer,
 		s.logger,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
@@ -866,7 +867,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 		s.mockShard,
 		s.mockWorkflowCache,
 		nil,
-		serialization.NewSerializer(),
+		s.serializer,
 		s.logger,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
@@ -945,7 +946,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 		s.mockShard,
 		s.mockWorkflowCache,
 		nil,
-		serialization.NewSerializer(),
+		s.serializer,
 		s.logger,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
@@ -1084,7 +1085,6 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 			},
 		},
 	}
-	serializer := serialization.NewSerializer()
 	gapEvents := []*historypb.HistoryEvent{
 		{EventId: 21, Version: 2}, {EventId: 22, Version: 2},
 		{EventId: 23, Version: 2}, {EventId: 24, Version: 2},
@@ -1096,11 +1096,11 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		{EventId: 27, Version: 2}, {EventId: 28, Version: 2},
 		{EventId: 29, Version: 2}, {EventId: 30, Version: 2},
 	}
-	blobs, err := serializer.SerializeEvents(requestedEvents)
+	blobs, err := s.serializer.SerializeEvents(requestedEvents)
 	s.NoError(err)
-	gapBlobs, err := serializer.SerializeEvents(gapEvents)
+	gapBlobs, err := s.serializer.SerializeEvents(gapEvents)
 	s.NoError(err)
-	tailBlobs, err := serializer.SerializeEvents(tailEvents)
+	tailBlobs, err := s.serializer.SerializeEvents(tailEvents)
 	s.NoError(err)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
@@ -1239,7 +1239,6 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 			},
 		},
 	}
-	serializer := serialization.NewSerializer()
 	gapEvents := []*historypb.HistoryEvent{
 		{EventId: 1, Version: 1}, {EventId: 2, Version: 1}, {EventId: 3, Version: 1},
 	}
@@ -1249,11 +1248,11 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	tailEvents := []*historypb.HistoryEvent{
 		{EventId: 5, Version: 2}, {EventId: 6, Version: 2},
 	}
-	blobs, err := serializer.SerializeEvents(requestedEvents)
+	blobs, err := s.serializer.SerializeEvents(requestedEvents)
 	s.NoError(err)
-	gapBlobs, err := serializer.SerializeEvents(gapEvents)
+	gapBlobs, err := s.serializer.SerializeEvents(gapEvents)
 	s.NoError(err)
-	tailBlobs, err := serializer.SerializeEvents(tailEvents)
+	tailBlobs, err := s.serializer.SerializeEvents(tailEvents)
 	s.NoError(err)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
@@ -1405,7 +1404,6 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 			},
 		},
 	}
-	serializer := serialization.NewSerializer()
 	gapEvents := []*historypb.HistoryEvent{
 		{EventId: 21, Version: 2}, {EventId: 22, Version: 2},
 		{EventId: 23, Version: 2}, {EventId: 24, Version: 2},
@@ -1417,11 +1415,11 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		{EventId: 28, Version: 2},
 		{EventId: 29, Version: 2}, {EventId: 30, Version: 2},
 	}
-	blobs, err := serializer.SerializeEvents(requestedEvents)
+	blobs, err := s.serializer.SerializeEvents(requestedEvents)
 	s.NoError(err)
-	gapBlobs, err := serializer.SerializeEvents(gapEvents)
+	gapBlobs, err := s.serializer.SerializeEvents(gapEvents)
 	s.NoError(err)
-	tailBlobs, err := serializer.SerializeEvents(tailEvents)
+	tailBlobs, err := s.serializer.SerializeEvents(tailEvents)
 	s.NoError(err)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{

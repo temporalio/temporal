@@ -12,13 +12,14 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 )
 
 type sqlExecutionStore struct {
 	SqlStore
-	p.HistoryBranchUtilImpl
+	p.HistoryBranchUtil
 }
 
 var _ p.ExecutionStore = (*sqlExecutionStore)(nil)
@@ -27,10 +28,11 @@ var _ p.ExecutionStore = (*sqlExecutionStore)(nil)
 func NewSQLExecutionStore(
 	db sqlplugin.DB,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) (p.ExecutionStore, error) {
-
 	return &sqlExecutionStore{
-		SqlStore: NewSqlStore(db, logger),
+		SqlStore:          NewSqlStore(db, logger),
+		HistoryBranchUtil: p.NewHistoryBranchUtil(serializer),
 	}, nil
 }
 
@@ -423,7 +425,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 		return serviceerror.NewUnavailablef("UpdateWorkflowExecution: unknown mode: %v", request.Mode)
 	}
 
-	if err := applyWorkflowMutationTx(ctx, tx, shardID, &updateWorkflow); err != nil {
+	if err := m.applyWorkflowMutationTx(ctx, tx, shardID, &updateWorkflow); err != nil {
 		return err
 	}
 
@@ -534,7 +536,7 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 		return serviceerror.NewUnavailablef("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode)
 	}
 
-	if err := applyWorkflowSnapshotTxAsReset(ctx,
+	if err := m.applyWorkflowSnapshotTxAsReset(ctx,
 		tx,
 		shardID,
 		&resetWorkflow,
@@ -543,7 +545,7 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 	}
 
 	if currentWorkflow != nil {
-		if err := applyWorkflowMutationTx(ctx,
+		if err := m.applyWorkflowMutationTx(ctx,
 			tx,
 			shardID,
 			currentWorkflow,
@@ -713,7 +715,7 @@ func (m *sqlExecutionStore) setWorkflowExecutionTx(
 	shardID := request.ShardID
 	setSnapshot := request.SetWorkflowSnapshot
 
-	return applyWorkflowSnapshotTxAsReset(ctx,
+	return m.applyWorkflowSnapshotTxAsReset(ctx,
 		tx,
 		shardID,
 		&setSnapshot,
@@ -725,6 +727,10 @@ func (m *sqlExecutionStore) ListConcreteExecutions(
 	_ *p.ListConcreteExecutionsRequest,
 ) (*p.InternalListConcreteExecutionsResponse, error) {
 	return nil, serviceerror.NewUnimplemented("ListConcreteExecutions is not implemented")
+}
+
+func (m *sqlExecutionStore) GetHistoryBranchUtil() p.HistoryBranchUtil {
+	return m.HistoryBranchUtil
 }
 
 func getStartTimeFromState(state *persistencespb.WorkflowExecutionState) *time.Time {
