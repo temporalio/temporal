@@ -46,11 +46,15 @@ var (
 	ErrInvalidQueueName             = errors.New("invalid queue name, expected 4 fields")
 )
 
-func NewHistoryTaskQueueManager(queue QueueV2, serializer serialization.Serializer) *HistoryTaskQueueManagerImpl {
+func NewHistoryTaskQueueManager(
+	queue QueueV2,
+	serializer serialization.Serializer,
+	taskSerializer serialization.TaskSerializer,
+) *HistoryTaskQueueManagerImpl {
 	return &HistoryTaskQueueManagerImpl{
 		queue:          queue,
 		serializer:     serializer,
-		taskSerializer: serialization.NewTaskSerializer(serializer),
+		taskSerializer: taskSerializer,
 	}
 }
 
