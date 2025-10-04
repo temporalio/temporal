@@ -91,6 +91,9 @@ var Module = fx.Options(
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
 	)),
 	fx.Provide(serialization.NewSerializer),
+	fx.Provide(func(s serialization.Serializer) serialization.TaskSerializer {
+		return serialization.NewTaskSerializer(s)
+	}),
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
 	fx.Provide(FrontendClientProvider),

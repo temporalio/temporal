@@ -67,13 +67,14 @@ func NewSourceTaskConverter(
 	historyEngine historyi.Engine,
 	namespaceCache namespace.Registry,
 	serializer serialization.Serializer,
+	replicationTaskSerializer serialization.ReplicationTaskSerializer,
 	config *configs.Config,
 ) *SourceTaskConverterImpl {
 	return &SourceTaskConverterImpl{
 		historyEngine:             historyEngine,
 		namespaceCache:            namespaceCache,
 		serializer:                serializer,
-		replicationTaskSerializer: serialization.NewTaskSerializer(serializer),
+		replicationTaskSerializer: replicationTaskSerializer,
 		config:                    config,
 	}
 }
