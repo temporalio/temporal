@@ -57,7 +57,7 @@ type (
 		DynamicRateLimitingParams                   DynamicRateLimitingParams
 		EnableDataLossMetrics                       EnableDataLossMetrics
 		EnableBestEffortDeleteTasksOnWorkflowUpdate EnableBestEffortDeleteTasksOnWorkflowUpdate
-		Serializer                         serialization.Serializer
+		Serializer                                  serialization.Serializer
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
