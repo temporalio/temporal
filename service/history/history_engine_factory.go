@@ -36,6 +36,7 @@ type (
 		WorkflowCache                   wcache.Cache
 		ReplicationProgressCache        replication.ProgressCache
 		EventSerializer                 serialization.Serializer
+		TaskSerializer                  serialization.TaskSerializer
 		QueueFactories                  []QueueFactory `group:"queueFactory"`
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
@@ -72,6 +73,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.WorkflowCache,
 		f.ReplicationProgressCache,
 		f.EventSerializer,
+		f.TaskSerializer,
 		f.QueueFactories,
 		f.ReplicationTaskFetcherFactory,
 		f.ReplicationTaskExecutorProvider,
