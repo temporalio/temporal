@@ -28,7 +28,7 @@ type (
 	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and Serializer
 	executionManagerImpl struct {
 		serializer                                  serialization.Serializer
-		taskSerializer        serialization.TaskSerializer
+		taskSerializer                              serialization.TaskSerializer
 		eventBlobCache                              XDCCache
 		persistence                                 ExecutionStore
 		logger                                      log.Logger
