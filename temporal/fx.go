@@ -118,7 +118,6 @@ type (
 		TLSConfigProvider     encryption.TLSConfigProvider
 		EsClient              esclient.Client
 		MetricsHandler        metrics.Handler
-		Serializer            serialization.Serializer
 	}
 )
 
@@ -136,6 +135,7 @@ var (
 			InternalFrontendServiceProvider,
 			WorkerServiceProvider,
 			ApplyClusterMetadataConfigProvider,
+			serialization.NewSerializer,
 		),
 		dynamicconfig.Module,
 		pprof.Module,
@@ -293,7 +293,6 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		TLSConfigProvider:     tlsConfigProvider,
 		EsClient:              esClient,
 		MetricsHandler:        metricHandler,
-		Serializer:            serialization.NewSerializer(),
 	}, nil
 }
 
