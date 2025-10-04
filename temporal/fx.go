@@ -123,6 +123,7 @@ type (
 		TLSConfigProvider     encryption.TLSConfigProvider
 		EsClient              esclient.Client
 		MetricsHandler        metrics.Handler
+		Serializer            serialization.Serializer
 	}
 )
 
@@ -303,6 +304,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		TLSConfigProvider:     tlsConfigProvider,
 		EsClient:              esClient,
 		MetricsHandler:        metricHandler,
+		Serializer:            serialization.NewSerializer(),
 	}, nil
 }
 
@@ -590,12 +592,12 @@ func ApplyClusterMetadataConfigProvider(
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	metricsHandler metrics.Handler,
+	serializer serialization.Serializer,
 ) (*cluster.Config, config.Persistence, error) {
 	ctx := context.TODO()
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
 	metricsHandler = metricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
 	clusterName := persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName)
-	serializer := serialization.NewSerializer()
 	dataStoreFactory := persistenceClient.DataStoreFactoryProvider(
 		clusterName,
 		persistenceServiceResolver,
