@@ -24,11 +24,11 @@ type SqlStore struct {
 	serializer serialization.Serializer
 }
 
-func NewSqlStore(db sqlplugin.DB, logger log.Logger) SqlStore {
+func NewSqlStore(db sqlplugin.DB, logger log.Logger, serializer serialization.Serializer) SqlStore {
 	return SqlStore{
 		DB:         db,
 		logger:     logger,
-		serializer: serialization.NewSerializer(),
+		serializer: serializer,
 	}
 }
 

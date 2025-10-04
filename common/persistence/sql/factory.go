@@ -74,7 +74,7 @@ func (f *Factory) NewTaskStore() (p.TaskStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newTaskPersistence(conn, f.cfg.TaskScanPartitions, f.logger, false)
+	return newTaskPersistence(conn, f.cfg.TaskScanPartitions, f.logger, false, f.serializer)
 }
 
 // NewFairTaskStore returns a new task store
@@ -83,7 +83,7 @@ func (f *Factory) NewFairTaskStore() (p.TaskStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newTaskPersistence(conn, f.cfg.TaskScanPartitions, f.logger, true)
+	return newTaskPersistence(conn, f.cfg.TaskScanPartitions, f.logger, true, f.serializer)
 }
 
 // NewShardStore returns a new shard store
@@ -92,7 +92,7 @@ func (f *Factory) NewShardStore() (p.ShardStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newShardPersistence(conn, f.clusterName, f.logger)
+	return newShardPersistence(conn, f.clusterName, f.logger, f.serializer)
 }
 
 // NewMetadataStore returns a new metadata store
@@ -101,7 +101,7 @@ func (f *Factory) NewMetadataStore() (p.MetadataStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newMetadataPersistenceV2(conn, f.clusterName, f.logger)
+	return newMetadataPersistenceV2(conn, f.clusterName, f.logger, f.serializer)
 }
 
 // NewClusterMetadataStore returns a new ClusterMetadata store
@@ -110,7 +110,7 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newClusterMetadataPersistence(conn, f.logger)
+	return newClusterMetadataPersistence(conn, f.logger, f.serializer)
 }
 
 // NewExecutionStore returns a new ExecutionStore
@@ -129,7 +129,7 @@ func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
 		return nil, err
 	}
 
-	return newQueue(conn, f.logger, queueType)
+	return newQueue(conn, f.logger, queueType, f.serializer)
 }
 
 // NewQueueV2 returns a new data-access object for queues and messages.
@@ -138,7 +138,7 @@ func (f *Factory) NewQueueV2() (p.QueueV2, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewQueueV2(conn, f.logger), nil
+	return NewQueueV2(conn, f.logger, f.serializer), nil
 }
 
 // NewNexusEndpointStore returns a new NexusEndpointStore
@@ -147,7 +147,7 @@ func (f *Factory) NewNexusEndpointStore() (p.NexusEndpointStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewSqlNexusEndpointStore(conn, f.logger)
+	return NewSqlNexusEndpointStore(conn, f.logger, f.serializer)
 }
 
 // Close closes the factory
