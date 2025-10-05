@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.tests.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/tests/gen/testspb;testspb";
+
+message TestRequest {
+    string request_id = 1;
+}
+
+message TestResponse {
+    string request_id = 1;
+    bool has_engine_ctx = 2;
+}

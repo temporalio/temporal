@@ -100,7 +100,9 @@ func (p *Plugin) Run(plugin *protogen.Plugin) error {
 		w.println(")")
 
 		for _, svc := range file.Services {
-			p.genClient(w, svc)
+			if err := p.genClient(w, svc); err != nil {
+				return err
+			}
 		}
 
 		if _, err := io.WriteString(generatedFile, w.builder.String()); err != nil {
@@ -119,8 +121,17 @@ func genAssignShard(m *protogen.Method) (string, error) {
 	if opts == nil {
 		return "", fmt.Errorf("no routing directive specified on %s", m.Desc.FullName())
 	}
+	if opts.Random && (opts.NamespaceId != "" || opts.ExecutionId != "") {
+		return "", fmt.Errorf("random directive cannot be combined with namespace_id or execution_id on %s", m.Desc.FullName())
+	}
+	if opts.Random {
+		return "shardID := int32(rand.Intn(int(c.numShards)) + 1)", nil
+	}
 	if opts.ExecutionId == "" {
 		return "", fmt.Errorf("execution_id directive empty on %s", m.Desc.FullName())
+	}
+	if opts.Random {
+		return "", fmt.Errorf("random directive cannot be combined with namespace_id or execution_id on %s", m.Desc.FullName())
 	}
 
 	namespaceIDField := opts.NamespaceId
@@ -167,7 +178,7 @@ func routingOptions(m *protogen.Method) (*routingspb.RoutingOptions, error) {
 	return opts, nil
 }
 
-func (p *Plugin) genClient(w *writer, svc *protogen.Service) {
+func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 	structName := fmt.Sprintf("%sLayeredClient", svc.GoName)
 	w.println("// %s is a client for %s.", structName, svc.GoName)
 	w.println("type %s struct {", structName)
@@ -261,8 +272,7 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) {
 		w.println("}()")
 		assignShard, err := genAssignShard(method)
 		if err != nil {
-			// skip methods that don't have routing directives
-			continue
+			return err
 		}
 		w.println("%s", assignShard)
 		w.println("op := func(ctx context.Context, client %sClient) error {", svc.GoName)
@@ -296,6 +306,7 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) {
 		w.unindent()
 		w.println("}")
 	}
+	return nil
 }
 
 func main() {

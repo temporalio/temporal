@@ -2,6 +2,7 @@ package history
 
 import (
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
@@ -57,6 +58,7 @@ var Module = fx.Options(
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(HealthCheckInterceptorProvider),
+	fx.Provide(chasm.ChasmRequestInterceptorProvider),
 	fx.Provide(HistoryAdditionalInterceptorsProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
@@ -124,8 +126,6 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		replicationServerRateLimiter:     args.ReplicationServerRateLimiter,
 	}
 
-	// prevent us from trying to serve requests before shard controller is started and ready
-	handler.startWG.Add(1)
 	return handler
 }
 
@@ -193,9 +193,9 @@ func HealthCheckInterceptorProvider(
 }
 
 func HistoryAdditionalInterceptorsProvider(
-	healthCheckInterceptor *interceptor.HealthCheckInterceptor,
+	healthCheckInterceptor *interceptor.HealthCheckInterceptor, chasmRequestInterceptor *chasm.ChasmRequestInterceptor,
 ) []grpc.UnaryServerInterceptor {
-	return []grpc.UnaryServerInterceptor{healthCheckInterceptor.UnaryIntercept}
+	return []grpc.UnaryServerInterceptor{healthCheckInterceptor.UnaryIntercept, chasmRequestInterceptor.Intercept}
 }
 
 func RateLimitInterceptorProvider(

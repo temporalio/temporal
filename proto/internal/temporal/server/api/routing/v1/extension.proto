@@ -9,9 +9,10 @@ import "google/protobuf/descriptor.proto";
 extend google.protobuf.MethodOptions { optional RoutingOptions routing = 7234; }
 
 message RoutingOptions {
+    // Requests will be routed to a random shard.
+    bool random = 1;
     // Requests may specify how to obtain the namespace ID. Defaults to the "namespace_id" field.
-    string namespace_id = 1;
-    // Request will be routed by resolving the namespace ID and execution ID to a
-    // given shard.
-    string execution_id = 2;
+    string namespace_id = 2;
+    // Request will be routed by resolving the namespace ID and execution ID to a given shard.
+    string execution_id = 3;
 }
