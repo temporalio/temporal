@@ -159,56 +159,6 @@ type (
 		Paths []string
 	}
 
-	// BatchParams is the parameters for batch operation workflow
-	BatchParams struct {
-		// Target namespace to execute batch operation
-		Namespace string
-		// To get the target workflows for processing
-		Query string
-		// Target workflows for processing
-		Executions []*commonpb.WorkflowExecution
-		// Reason for the operation
-		Reason string
-		// Supporting: signal,cancel,terminate,delete,reset
-		BatchType string
-
-		// Below are all optional
-		// TerminateParams is params only for BatchTypeTerminate
-		TerminateParams TerminateParams
-		// CancelParams is params only for BatchTypeCancel
-		CancelParams CancelParams
-		// SignalParams is params only for BatchTypeSignal
-		SignalParams SignalParams
-		// DeleteParams is params only for BatchTypeDelete
-		DeleteParams DeleteParams
-		// ResetParams is params only for BatchTypeReset
-		ResetParams ResetParams
-		// UpdateOptionsParams is params only for BatchTypeUpdateOptions
-		UpdateOptionsParams UpdateOptionsParams
-		// UnpauseActivitiesParams is params only for BatchTypeUnpauseActivities
-		UnpauseActivitiesParams UnpauseActivitiesParams
-		// UpdateActivitiesOptionsParams is params only for BatchTypeUpdateActivitiesOptions
-		UpdateActivitiesOptionsParams UpdateActivitiesOptionsParams
-		// ResetActivitiesParams is params only for BatchTypeResetActivities
-		ResetActivitiesParams ResetActivitiesParams
-
-		// RPS sets the requests-per-second limit for the batch.
-		// The default (and max) is defined by `worker.BatcherRPS` in the dynamic config.
-		RPS float64
-		// Number of goroutines running in parallel to process
-		// This is moving to dynamic config.
-		// TODO: Remove it from BatchParams after 1.19+
-		Concurrency int
-		// Number of attempts for each workflow to process in case of retryable error before giving up
-		AttemptsOnRetryableError int
-		// timeout for activity heartbeat
-		ActivityHeartBeatTimeout time.Duration
-		// errors that will not retry which consumes AttemptsOnRetryableError. Default to empty
-		NonRetryableErrors []string
-		// internal conversion for NonRetryableErrors
-		_nonRetryableErrors map[string]struct{}
-	}
-
 	// HeartBeatDetails is the struct for heartbeat details
 	HeartBeatDetails struct {
 		PageToken   []byte
@@ -251,30 +201,6 @@ var (
 		RetryPolicy:            &batchActivityRetryPolicy,
 	}
 )
-
-// BatchWorkflow is the workflow that runs a batch job of resetting workflows.
-func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDetails, error) {
-	batchParams = setDefaultParams(batchParams)
-	err := validateParams(batchParams)
-	if err != nil {
-		return HeartBeatDetails{}, err
-	}
-
-	batchActivityOptions.HeartbeatTimeout = batchParams.ActivityHeartBeatTimeout
-	opt := workflow.WithActivityOptions(ctx, batchActivityOptions)
-	var result HeartBeatDetails
-	var ac *activities
-	err = workflow.ExecuteActivity(opt, ac.BatchActivity, batchParams).Get(ctx, &result)
-	if err != nil {
-		return HeartBeatDetails{}, err
-	}
-
-	err = attachBatchOperationStats(ctx, result)
-	if err != nil {
-		return HeartBeatDetails{}, err
-	}
-	return result, err
-}
 
 // BatchWorkflowProtobuf is the workflow that runs a batch job of resetting workflows.
 func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
@@ -319,54 +245,6 @@ func attachBatchOperationStats(ctx workflow.Context, result HeartBeatDetails) er
 		},
 	}
 	return workflow.UpsertMemo(ctx, memo)
-}
-
-func validateParams(params BatchParams) error {
-	if params.BatchType == "" ||
-		params.Reason == "" ||
-		params.Namespace == "" ||
-		(params.Query == "" && len(params.Executions) == 0) {
-		return errors.New("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
-	}
-
-	if len(params.Query) > 0 && len(params.Executions) > 0 {
-		return errors.New("batch query and executions are mutually exclusive")
-	}
-
-	switch params.BatchType {
-	case BatchTypeSignal:
-		if params.SignalParams.SignalName == "" {
-			return errors.New("must provide signal name")
-		}
-		return nil
-	case BatchTypeUpdateOptions:
-		if params.UpdateOptionsParams.WorkflowExecutionOptions == nil {
-			return errors.New("must provide UpdateOptions")
-		}
-		if params.UpdateOptionsParams.UpdateMask == nil {
-			return errors.New("must provide UpdateMask")
-		}
-		return worker_versioning.ValidateVersioningOverride(params.UpdateOptionsParams.WorkflowExecutionOptions.VersioningOverride)
-	case BatchTypeCancel, BatchTypeTerminate, BatchTypeDelete, BatchTypeReset:
-		return nil
-	case BatchTypeUnpauseActivities:
-		if params.UnpauseActivitiesParams.ActivityType == "" && !params.UnpauseActivitiesParams.MatchAll {
-			return fmt.Errorf("must provide ActivityType or MatchAll")
-		}
-		return nil
-	case BatchTypeResetActivities:
-		if params.ResetActivitiesParams.ActivityType == "" && !params.ResetActivitiesParams.MatchAll {
-			return errors.New("must provide ActivityType or MatchAll")
-		}
-		return nil
-	case BatchTypeUpdateActivitiesOptions:
-		if params.UpdateActivitiesOptionsParams.ActivityType == "" && !params.UpdateActivitiesOptionsParams.MatchAll {
-			return errors.New("must provide ActivityType or MatchAll")
-		}
-		return nil
-	default:
-		return fmt.Errorf("not supported batch type: %v", params.BatchType)
-	}
 }
 
 // nolint:revive,cognitive-complexity
@@ -493,22 +371,6 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 		return fmt.Errorf("not supported batch type: %v", params.GetOperation())
 	}
 	return nil
-}
-
-func setDefaultParams(params BatchParams) BatchParams {
-	if params.AttemptsOnRetryableError <= 1 {
-		params.AttemptsOnRetryableError = defaultAttemptsOnRetryableError
-	}
-	if params.ActivityHeartBeatTimeout <= 0 {
-		params.ActivityHeartBeatTimeout = defaultActivityHeartBeatTimeout
-	}
-	if len(params.NonRetryableErrors) > 0 {
-		params._nonRetryableErrors = make(map[string]struct{}, len(params.NonRetryableErrors))
-		for _, estr := range params.NonRetryableErrors {
-			params._nonRetryableErrors[estr] = struct{}{}
-		}
-	}
-	return params
 }
 
 func setDefaultParamsProtobuf(params *batchspb.BatchOperationInput) *batchspb.BatchOperationInput {
