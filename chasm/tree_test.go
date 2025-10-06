@@ -775,6 +775,13 @@ func (s *nodeSuite) TestNodeSnapshot() {
 }
 
 func (s *nodeSuite) TestApplyMutation() {
+	mustEncode := func(m proto.Message) *commonpb.DataBlob {
+		taskBlob, err := serialization.ProtoEncode(m)
+		s.NoError(err)
+		return taskBlob
+	}
+
+	now := s.timeSource.Now()
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
@@ -783,6 +790,31 @@ func (s *nodeSuite) TestApplyMutation() {
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
 						Type: "TestLibrary.test_component",
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								// This task is not updated, so it's deserialized version will
+								// NOT be cleared below as part of the updateNode process.
+								Type:                      "TestLibrary.test_pure_task",
+								ScheduledTime:             timestamppb.New(now.Add(time.Second)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+								Data: mustEncode(&commonpb.Payload{
+									Data: []byte("root-task-data-1"),
+								}),
+							},
+							{
+								// Task will be deleted, so deserialized version of this task should also be deleted from cache.
+								Type:                      "TestLibrary.test_pure_task",
+								ScheduledTime:             timestamppb.New(now.Add(time.Second)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 2,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+								Data: mustEncode(&commonpb.Payload{
+									Data: []byte("root-task-data-2"),
+								}),
+							},
+						},
 					},
 				},
 			},
@@ -797,6 +829,24 @@ func (s *nodeSuite) TestApplyMutation() {
 			Metadata: &persistencespb.ChasmNodeMetadata{
 				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 3},
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						Type: "TestLibrary.test_sub_component_11",
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								// Node is deleted, so deserialized version of this task should be deleted from cache.
+								Type:                      "TestLibrary.test_pure_task",
+								ScheduledTime:             timestamppb.New(now.Add(time.Minute)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 3,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+								Data: mustEncode(&commonpb.Payload{
+									Data: []byte("SubComponent11-task-data"),
+								}),
+							},
+						},
+					},
+				},
 			},
 		},
 		"SubComponent1/SubComponent11/SubComponent11Data": {
@@ -811,16 +861,19 @@ func (s *nodeSuite) TestApplyMutation() {
 	s.Len(root.currentSA, 1)
 	s.Len(root.currentMemo, 1)
 
+	// Manually deserialize some tasks to populate the taskValueCache
+	_, err = root.deserializeComponentTask(root.serializedNode.Metadata.GetComponentAttributes().PureTasks[0])
+	s.NoError(err)
+	_, err = root.deserializeComponentTask(root.serializedNode.Metadata.GetComponentAttributes().PureTasks[1])
+	s.NoError(err)
+	_, err = root.deserializeComponentTask(root.children["SubComponent1"].children["SubComponent11"].serializedNode.Metadata.GetComponentAttributes().PureTasks[0])
+	s.NoError(err)
+	s.Len(root.taskValueCache, 3)
+
 	// This decoded value should be reset after applying the mutation
 	root.children["SubComponent1"].value = "some-random-decoded-value"
 
 	// Prepare mutation: update root and "SubComponent1" node, delete "SubComponent1/SubComponent11", and add "newchild".
-
-	now := timestamppb.Now()
-	updatedRootData, err := serialization.ProtoEncode(&protoMessageType{
-		StartTime: now,
-	})
-	s.NoError(err)
 
 	updatedRoot := &persistencespb.ChasmNode{
 		Metadata: &persistencespb.ChasmNodeMetadata{
@@ -829,10 +882,25 @@ func (s *nodeSuite) TestApplyMutation() {
 			Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 				ComponentAttributes: &persistencespb.ChasmComponentAttributes{
 					Type: "TestLibrary.test_component",
+					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						{
+							Type:                      "TestLibrary.test_pure_task",
+							ScheduledTime:             timestamppb.New(now.Add(time.Second)),
+							VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+							VersionedTransitionOffset: 1,
+							PhysicalTaskStatus:        physicalTaskStatusNone,
+							Data: mustEncode(&commonpb.Payload{
+								Data: []byte("root-task-data-1"),
+							}),
+						},
+					},
 				},
 			},
 		},
-		Data: updatedRootData,
+		Data: mustEncode(
+			&protoMessageType{
+				StartTime: timestamppb.New(now),
+			}),
 	}
 	updatedSC1 := &persistencespb.ChasmNode{
 		Metadata: &persistencespb.ChasmNodeMetadata{
@@ -865,8 +933,8 @@ func (s *nodeSuite) TestApplyMutation() {
 	s.NotNil(root.value)
 	s.Len(root.currentSA, 1)
 	s.Len(root.currentMemo, 1)
-	s.True(root.currentSA[testComponentStartTimeSAKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
-	s.True(root.currentMemo[testComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
+	s.True(root.currentSA[testComponentStartTimeSAKey].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
+	s.True(root.currentMemo[testComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
 
 	// Validate the "child" node got updated.
 	nodeSC1, ok := root.children["SubComponent1"]
@@ -896,6 +964,8 @@ func (s *nodeSuite) TestApplyMutation() {
 		},
 	}
 	s.Equal(expectedMutation, root.mutation)
+
+	s.Len(root.taskValueCache, 1)
 }
 
 func (s *nodeSuite) TestApplySnapshot() {

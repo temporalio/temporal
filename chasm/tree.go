@@ -954,17 +954,9 @@ func (n *Node) deleteChildren(
 ) error {
 	for childName, childNode := range n.children {
 		if _, childToKeep := childrenToKeep[childName]; !childToKeep {
-			if err := childNode.deleteChildren(nil); err != nil {
+			if err := childNode.delete(); err != nil {
 				return err
 			}
-			encodedPath, err := childNode.getEncodedPath()
-			if err != nil {
-				return err
-			}
-			n.mutation.DeletedNodes[encodedPath] = struct{}{}
-			// If a parent is about to be removed, it must not have any children.
-			softassert.That(n.logger, len(childNode.children) == 0, "childNode.children must be empty when childNode is removed")
-			delete(n.children, childName)
 		}
 	}
 	return nil
@@ -2072,12 +2064,12 @@ func (n *Node) applyUpdates(
 			localComponentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
 			updatedComponentAttr := updatedNode.GetMetadata().GetComponentAttributes()
 			if localComponentAttr != nil && updatedComponentAttr != nil {
-				carryOverTaskStatus(
+				n.carryOverTaskStatus(
 					localComponentAttr.SideEffectTasks,
 					updatedComponentAttr.SideEffectTasks,
 					compareSideEffectTasks,
 				)
-				carryOverTaskStatus(
+				n.carryOverTaskStatus(
 					localComponentAttr.PureTasks,
 					updatedComponentAttr.PureTasks,
 					comparePureTasks,
@@ -2188,6 +2180,9 @@ func (n *Node) delete() error {
 		}
 	}
 
+	// If a parent is about to be removed, it must not have any children.
+	softassert.That(n.logger, len(n.children) == 0, "children must be empty when node is removed")
+
 	if n.parent != nil {
 		delete(n.parent.children, n.nodeName)
 	}
@@ -2198,7 +2193,24 @@ func (n *Node) delete() error {
 	}
 
 	n.mutation.DeletedNodes[encodedPath] = struct{}{}
+
+	n.cleanupCachedTasks()
+
 	return nil
+}
+
+func (n *Node) cleanupCachedTasks() {
+	if !n.isComponent() {
+		return
+	}
+
+	componentAttr := n.serializedNode.GetMetadata().GetComponentAttributes()
+	for _, task := range componentAttr.GetPureTasks() {
+		delete(n.taskValueCache, task.Data)
+	}
+	for _, task := range componentAttr.GetSideEffectTasks() {
+		delete(n.taskValueCache, task.Data)
+	}
 }
 
 // IsDirty returns true if any node in the tree has been modified,
@@ -2425,7 +2437,7 @@ func comparePureTasks(a, b *persistencespb.ChasmComponentAttributes_Task) int {
 	return compareSideEffectTasks(a, b)
 }
 
-func carryOverTaskStatus(
+func (n *Node) carryOverTaskStatus(
 	sourceTasks, targetTasks []*persistencespb.ChasmComponentAttributes_Task,
 	compareFn func(a, b *persistencespb.ChasmComponentAttributes_Task) int,
 ) {
@@ -2438,12 +2450,18 @@ func carryOverTaskStatus(
 		case 0:
 			// Task match, carry over status.
 			targetTask.PhysicalTaskStatus = sourceTask.PhysicalTaskStatus
+			// Use existing task data to avoid taskValueCache miss, since the cache uses
+			// *DataBlob as the key.
+			// Otherwise we have to clear cache for all tasks in the node, and re-deserialize
+			// tasks later.
+			targetTask.Data = sourceTask.Data
 			sourceIdx++
 			targetIdx++
 		case -1:
 			// Source task has a smaller key, meaning the task has been deleted.
 			// Move on to the next source task.
 			sourceIdx++
+			delete(n.taskValueCache, sourceTask.Data)
 		case 1:
 			// Source task has a larger key, meaning there's a new task inserted.
 			// Sanitize incoming task status.
@@ -2455,6 +2473,9 @@ func carryOverTaskStatus(
 	// Sanitize incoming task status for remaining tasks.
 	for ; targetIdx < len(targetTasks); targetIdx++ {
 		targetTasks[targetIdx].PhysicalTaskStatus = physicalTaskStatusNone
+	}
+	for ; sourceIdx < len(sourceTasks); sourceIdx++ {
+		delete(n.taskValueCache, sourceTasks[sourceIdx].Data)
 	}
 }
 
