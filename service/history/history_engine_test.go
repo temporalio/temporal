@@ -97,6 +97,7 @@ type (
 		mockClusterMetadata      *cluster.MockMetadata
 		mockEventsReapplier      *ndc.MockEventsReapplier
 		mockWorkflowResetter     *ndc.MockWorkflowResetter
+		mockErrorHandler         *interceptor.MockErrorHandler
 
 		workflowCache     wcache.Cache
 		historyEngine     *historyEngineImpl
@@ -131,6 +132,7 @@ func (s *engineSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockEventsReapplier = ndc.NewMockEventsReapplier(s.controller)
 	s.mockWorkflowResetter = ndc.NewMockWorkflowResetter(s.controller)
+	s.mockErrorHandler = interceptor.NewMockErrorHandler(s.controller)
 	s.mockTxProcessor = queues.NewMockQueue(s.controller)
 	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
 	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
@@ -5316,7 +5318,8 @@ func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(),
 		s.mockShard.GetMetricsHandler(),
 		s.mockShard.Resource.Logger,
-		s.config.LogAllReqErrors)
+		s.config.LogAllReqErrors,
+		s.mockErrorHandler)
 	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
 		response, err := s.historyEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: tests.NamespaceID.String(),
@@ -5353,7 +5356,8 @@ func (s *engineSuite) TestEagerWorkflowStart_FromCron_SkipsEager() {
 	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(),
 		s.mockShard.GetMetricsHandler(),
 		s.mockShard.Resource.Logger,
-		s.config.LogAllReqErrors)
+		s.config.LogAllReqErrors,
+		s.mockErrorHandler)
 	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
 		firstWorkflowTaskBackoff := time.Second
 		response, err := s.historyEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
