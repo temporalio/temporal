@@ -32,7 +32,7 @@ type (
 		nsCacheRefreshInterval dynamicconfig.DurationPropertyFn
 		metricsHandler         metrics.Handler
 		logger                 log.Logger
-		requestErrorHandler    *RequestErrorHandler
+		requestErrorHandler    ErrorHandler
 	}
 )
 
@@ -42,7 +42,7 @@ func NewNamespaceHandoverInterceptor(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	timeSource clock.TimeSource,
-	requestErrorHandler *RequestErrorHandler,
+	requestErrorHandler ErrorHandler,
 ) *NamespaceHandoverInterceptor {
 
 	return &NamespaceHandoverInterceptor{

@@ -252,6 +252,7 @@ func GrpcServerOptionsProvider(
 		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
+		// Telemtry interceptor must be after redirection to ensure metrics are recorded in the correct cluster
 		telemetryInterceptor.UnaryIntercept,
 		healthInterceptor.Intercept,
 		namespaceValidatorInterceptor.StateValidationIntercept,
