@@ -106,6 +106,11 @@ func (c *Persistence) IsSQLVisibilityStore() bool {
 		(c.SecondaryVisibilityConfigExist() && c.DataStores[c.SecondaryVisibilityStore].SQL != nil)
 }
 
+func (c *Persistence) IsCustomVisibilityStore() bool {
+	return c.GetVisibilityStoreConfig().CustomDataStoreConfig != nil ||
+		c.GetSecondaryVisibilityStoreConfig().CustomDataStoreConfig != nil
+}
+
 func (c *Persistence) GetVisibilityStoreConfig() DataStore {
 	return c.DataStores[c.VisibilityStore]
 }
@@ -136,6 +141,8 @@ func (ds *DataStore) GetIndexName() string {
 		return ds.Cassandra.Keyspace
 	case ds.Elasticsearch != nil:
 		return ds.Elasticsearch.GetVisibilityIndex()
+	case ds.CustomDataStoreConfig != nil:
+		return ds.CustomDataStoreConfig.IndexName
 	default:
 		return ""
 	}
