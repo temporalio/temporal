@@ -68,10 +68,10 @@ func TestExecutionPersistenceClient_DataLossMetrics_EmittedOnDataLossError(t *te
 
 	// Verify tags are properly set (caller comes from context headers, which defaults to _unknown_)
 	tags := recording.Tags
-	assert.Equal(t, "_unknown_", tags[metrics.NamespaceTag("").Key()])
+	assert.Equal(t, "_unknown_", tags[metrics.NamespaceTag("").Key])
 	assert.Equal(t, "test-workflow-id", tags["workflow_id"])
 	assert.Equal(t, "test-run-id", tags["run_id"])
-	assert.Equal(t, metrics.PersistenceGetWorkflowExecutionScope, tags[metrics.OperationTag("").Key()])
+	assert.Equal(t, metrics.PersistenceGetWorkflowExecutionScope, tags[metrics.OperationTag("").Key])
 	assert.Equal(t, "test data loss error", tags["error"])
 }
 
@@ -227,7 +227,7 @@ func TestExecutionPersistenceClient_DataLossMetrics_WithWrappedDataLossError(t *
 
 	// Verify tags include workflow details (caller comes from context headers, which defaults to _unknown_)
 	tags := recording.Tags
-	assert.Equal(t, "_unknown_", tags[metrics.NamespaceTag("").Key()])
+	assert.Equal(t, "_unknown_", tags[metrics.NamespaceTag("").Key])
 	assert.Equal(t, "test-workflow-id", tags["workflow_id"])
 	assert.Equal(t, "", tags["run_id"]) // No run ID in GetCurrentExecutionRequest
 }
@@ -285,5 +285,5 @@ func TestExecutionPersistenceClient_DataLossMetrics_WithEmptyWorkflowDetails(t *
 	tags := recording.Tags
 	assert.Equal(t, "", tags["workflow_id"])
 	assert.Equal(t, "", tags["run_id"])
-	assert.Equal(t, metrics.PersistenceListConcreteExecutionsScope, tags[metrics.OperationTag("").Key()])
+	assert.Equal(t, metrics.PersistenceListConcreteExecutionsScope, tags[metrics.OperationTag("").Key])
 }
