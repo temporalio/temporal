@@ -1147,7 +1147,7 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		BuildIdRedirectCounter:     m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter,
 		ScheduleToStartTimeoutTask: m.ms.GetWorkflowTaskScheduleToStartTimeoutTask(),
 		StartToCloseTimeoutTask:    m.ms.GetWorkflowTaskStartToCloseTimeoutTask(),
-		Stamp:                  m.ms.executionInfo.WorkflowTaskStamp,
+		Stamp:                      m.ms.executionInfo.WorkflowTaskStamp,
 	}
 
 	return wft
