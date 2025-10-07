@@ -8061,6 +8061,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			RequestID:           incoming.WorkflowTaskRequestId,
 			WorkflowTaskTimeout: incoming.WorkflowTaskTimeout.AsDuration(),
 			Attempt:             incoming.WorkflowTaskAttempt,
+			Stamp:               incoming.WorkflowTaskStamp,
 			StartedTime:         incoming.WorkflowTaskStartedTime.AsTime(),
 			ScheduledTime:       incoming.WorkflowTaskScheduledTime.AsTime(),
 
