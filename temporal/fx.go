@@ -612,7 +612,7 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	defer clusterMetadataManager.Close()
 
-	visCSAOverwrite := map[enumspb.IndexedValueType]int{}
+	visCSAOverride := map[enumspb.IndexedValueType]int{}
 	for tpName, value := range svc.Visibility.PersistenceCustomSearchAttributes {
 		saType, ok := enumspb.IndexedValueType_shorthandValue[tpName]
 		if !ok {
@@ -628,7 +628,7 @@ func ApplyClusterMetadataConfigProvider(
 					tpName,
 				)
 		}
-		visCSAOverwrite[enumspb.IndexedValueType(saType)] = value
+		visCSAOverride[enumspb.IndexedValueType(saType)] = value
 	}
 
 	visDataStores := []config.DataStore{
@@ -638,7 +638,7 @@ func ApplyClusterMetadataConfigProvider(
 	indexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
 	for _, ds := range visDataStores {
 		if ds.SQL != nil || ds.CustomDataStoreConfig != nil {
-			indexSearchAttributes[ds.GetIndexName()] = searchattribute.GetDBIndexSearchAttributes(visCSAOverwrite)
+			indexSearchAttributes[ds.GetIndexName()] = searchattribute.GetDBIndexSearchAttributes(visCSAOverride)
 		}
 	}
 

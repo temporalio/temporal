@@ -1,8 +1,6 @@
 package searchattribute
 
 import (
-	"fmt"
-	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -45,7 +43,7 @@ func TestGetDbIndexSearchAttributesDefault(t *testing.T) {
 }
 
 func TestGetDbIndexSearchAttributes(t *testing.T) {
-	overwrite := map[enumspb.IndexedValueType]int{
+	override := map[enumspb.IndexedValueType]int{
 		// Bool: no overwrite, it should use default value
 		enumspb.INDEXED_VALUE_TYPE_DATETIME:     1,
 		enumspb.INDEXED_VALUE_TYPE_DOUBLE:       2,
@@ -74,7 +72,7 @@ func TestGetDbIndexSearchAttributes(t *testing.T) {
 		"KeywordList04": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		"KeywordList05": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
-	got := GetDBIndexSearchAttributes(overwrite)
+	got := GetDBIndexSearchAttributes(override)
 	require.Equal(t, want, got.CustomSearchAttributes)
 }
 
@@ -90,18 +88,19 @@ func TestValidateSqlDbSystemNameToColNameMap(t *testing.T) {
 }
 
 func TestIsCustomSearchAttributeFieldName(t *testing.T) {
-	allTypes := make([]enumspb.IndexedValueType, 0, len(enumspb.IndexedValueType_name))
-	for t := range enumspb.IndexedValueType_name {
-		allTypes = append(allTypes, enumspb.IndexedValueType(t))
-	}
-	for range 100 {
-		tp := allTypes[rand.Intn(len(allTypes))]
-		idx := rand.Intn(1000)
-		fieldName := fmt.Sprintf("%s%02d", tp.String(), idx)
-		if tp == enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED || idx >= 100 {
-			require.False(t, IsPreallocatedCSAFieldName(fieldName, tp))
-		} else {
-			require.True(t, IsPreallocatedCSAFieldName(fieldName, tp))
-		}
-	}
+	require.False(t, IsPreallocatedCSAFieldName("Keyword00", enumspb.INDEXED_VALUE_TYPE_KEYWORD))
+	require.False(t, IsPreallocatedCSAFieldName("Int00", enumspb.INDEXED_VALUE_TYPE_INT))
+	require.False(t, IsPreallocatedCSAFieldName("Int100", enumspb.INDEXED_VALUE_TYPE_INT))
+	require.False(t, IsPreallocatedCSAFieldName("Int00", enumspb.INDEXED_VALUE_TYPE_KEYWORD))
+	require.False(t, IsPreallocatedCSAFieldName("Unspecified01", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED))
+
+	require.True(t, IsPreallocatedCSAFieldName("Int01", enumspb.INDEXED_VALUE_TYPE_INT))
+	require.True(t, IsPreallocatedCSAFieldName("Int02", enumspb.INDEXED_VALUE_TYPE_INT))
+	require.True(t, IsPreallocatedCSAFieldName("Int10", enumspb.INDEXED_VALUE_TYPE_INT))
+	require.True(t, IsPreallocatedCSAFieldName("Keyword05", enumspb.INDEXED_VALUE_TYPE_KEYWORD))
+	require.True(t, IsPreallocatedCSAFieldName("Bool45", enumspb.INDEXED_VALUE_TYPE_BOOL))
+	require.True(t, IsPreallocatedCSAFieldName("Double45", enumspb.INDEXED_VALUE_TYPE_DOUBLE))
+	require.True(t, IsPreallocatedCSAFieldName("Datetime45", enumspb.INDEXED_VALUE_TYPE_DATETIME))
+	require.True(t, IsPreallocatedCSAFieldName("Text45", enumspb.INDEXED_VALUE_TYPE_TEXT))
+	require.True(t, IsPreallocatedCSAFieldName("KeywordList45", enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST))
 }

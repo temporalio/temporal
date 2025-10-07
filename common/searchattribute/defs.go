@@ -200,7 +200,7 @@ var (
 	dbCustomSearchAttributeFieldNameRE = func() map[enumspb.IndexedValueType]*regexp.Regexp {
 		res := map[enumspb.IndexedValueType]*regexp.Regexp{}
 		for t := range defaultNumDBCustomSearchAttributes {
-			res[t] = regexp.MustCompile(fmt.Sprintf(`^%s\d\d$`, t.String()))
+			res[t] = regexp.MustCompile(fmt.Sprintf(`^%s(0[1-9]|[1-9][0-9])$`, t.String()))
 		}
 		return res
 	}()
@@ -247,12 +247,12 @@ func GetSqlDbColName(name string) string {
 }
 
 func GetDBIndexSearchAttributes(
-	overwrite map[enumspb.IndexedValueType]int,
+	override map[enumspb.IndexedValueType]int,
 ) *persistencespb.IndexSearchAttributes {
 	csa := map[string]enumspb.IndexedValueType{}
 	for saType, defaultNumAttrs := range defaultNumDBCustomSearchAttributes {
 		numAttrs := defaultNumAttrs
-		if value, ok := overwrite[saType]; ok {
+		if value, ok := override[saType]; ok {
 			numAttrs = value
 		}
 		for i := range numAttrs {
