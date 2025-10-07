@@ -104,9 +104,9 @@ func (b *BackfillerTaskExecutor) Execute(
 	// If we're complete, we can delete this Backfiller component and return without
 	// any more tasks.
 	if result.Complete {
-		logger.Debug("backfill complete, deleting Backfiller",
+		logger.Debug("backfill complete, closing Backfiller",
 			tag.NewStringTag("backfill-id", backfiller.GetBackfillId()))
-		delete(scheduler.Backfillers, backfiller.GetBackfillId())
+		backfiller.Closed = true
 		return nil
 	}
 

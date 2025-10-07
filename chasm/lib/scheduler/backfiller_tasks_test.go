@@ -39,7 +39,7 @@ type backfillTestCase struct {
 	InitialTriggerRequest     *schedulepb.TriggerImmediatelyRequest
 	InitialBackfillRequest    *schedulepb.BackfillRequest
 	ExpectedBufferedStarts    int
-	ExpectedComplete          bool // asserts the Backfiller is deleted
+	ExpectedClosed            bool // asserts the Backfiller is closed
 	ExpectedLastProcessedTime time.Time
 	ExpectedAttempt           int
 
@@ -47,7 +47,7 @@ type backfillTestCase struct {
 	ValidateBackfiller func(backfiller *scheduler.Backfiller)
 }
 
-// An immediately-triggered run should result in the machine being deleted after
+// An immediately-triggered run should result in the machine being closed after
 // completion.
 func (s *backfillerTasksSuite) TestBackfillTask_TriggerImmediate() {
 	request := &schedulepb.TriggerImmediatelyRequest{
@@ -56,7 +56,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_TriggerImmediate() {
 	s.runTestCase(&backfillTestCase{
 		InitialTriggerRequest:  request,
 		ExpectedBufferedStarts: 1,
-		ExpectedComplete:       true,
+		ExpectedClosed:         true,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
 			start := invoker.GetBufferedStarts()[0]
 			s.Equal(request.OverlapPolicy, start.OverlapPolicy)
@@ -80,14 +80,14 @@ func (s *backfillerTasksSuite) TestBackfillTask_TriggerImmediateFullBuffer() {
 	s.runTestCase(&backfillTestCase{
 		InitialTriggerRequest:     &schedulepb.TriggerImmediatelyRequest{},
 		ExpectedBufferedStarts:    1000,
-		ExpectedComplete:          false,
+		ExpectedClosed:            false,
 		ExpectedLastProcessedTime: now,
 		ExpectedAttempt:           1,
 	})
 }
 
 // A backfill request completes entirely should result in the machine being
-// deleted after completion.
+// closed after completion.
 func (s *backfillerTasksSuite) TestBackfillTask_CompleteFill() {
 	startTime := s.timeSource.Now()
 	endTime := startTime.Add(5 * defaultInterval)
@@ -99,7 +99,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_CompleteFill() {
 	s.runTestCase(&backfillTestCase{
 		InitialBackfillRequest: request,
 		ExpectedBufferedStarts: 5,
-		ExpectedComplete:       true,
+		ExpectedClosed:         true,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
 			for _, start := range invoker.GetBufferedStarts() {
 				s.Equal(request.OverlapPolicy, start.OverlapPolicy)
@@ -125,7 +125,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_InclusiveStartEnd() {
 	s.runTestCase(&backfillTestCase{
 		InitialBackfillRequest: request,
 		ExpectedBufferedStarts: 1,
-		ExpectedComplete:       true,
+		ExpectedClosed:         true,
 	})
 
 	// Clear the Invoker's buffered starts.
@@ -143,7 +143,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_InclusiveStartEnd() {
 	s.runTestCase(&backfillTestCase{
 		InitialBackfillRequest: request,
 		ExpectedBufferedStarts: 0,
-		ExpectedComplete:       true,
+		ExpectedClosed:         true,
 	})
 }
 
@@ -167,7 +167,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_BufferCompletelyFull() {
 	s.runTestCase(&backfillTestCase{
 		InitialBackfillRequest:    request,
 		ExpectedBufferedStarts:    1000,
-		ExpectedComplete:          false,
+		ExpectedClosed:            false,
 		ExpectedAttempt:           1,
 		ExpectedLastProcessedTime: startTime,
 	})
@@ -197,7 +197,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_PartialFill() {
 	s.runTestCase(&backfillTestCase{
 		InitialBackfillRequest:    request,
 		ExpectedBufferedStarts:    500,
-		ExpectedComplete:          false,
+		ExpectedClosed:            false,
 		ExpectedAttempt:           1,
 		ExpectedLastProcessedTime: startTime.Add(5 * defaultInterval).Truncate(defaultInterval),
 		ValidateBackfiller: func(b *scheduler.Backfiller) {
@@ -206,7 +206,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_PartialFill() {
 	})
 
 	// Clear the Invoker's buffer. The remainder of the starts should buffer, and the
-	// backfiller should be deleted.
+	// backfiller should be closed.
 	invoker.BufferedStarts = nil
 	err = s.executor.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
 	s.NoError(err)
@@ -214,10 +214,10 @@ func (s *backfillerTasksSuite) TestBackfillTask_PartialFill() {
 	s.NoError(err)
 	s.Equal(5, len(invoker.GetBufferedStarts()))
 
-	// Verify the backfiller is deleted
+	// Verify the backfiller is completed
 	res, err := s.scheduler.Backfillers[backfiller.BackfillId].Get(ctx)
 	s.NoError(err)
-	s.Nil(res)
+	s.Equal(chasm.LifecycleStateCompleted, res.LifecycleState(ctx))
 }
 
 func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
@@ -250,11 +250,11 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 	s.NoError(err)
 
 	// Validate completion or partial progress.
-	if c.ExpectedComplete {
-		// Backfiller should no longer be present in the backfiller map.
+	if c.ExpectedClosed {
+		// Backfiller should be marked as complete.
 		res, err := sched.Backfillers[backfiller.BackfillId].Get(ctx)
 		s.NoError(err)
-		s.Nil(res)
+		s.Equal(chasm.LifecycleStateCompleted, res.LifecycleState(ctx))
 	} else {
 		// TODO - check that a pure task to continue driving backfill exists here. Because
 		// a pure task in the tree already has the physically-created status, closing the
