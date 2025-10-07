@@ -67,6 +67,7 @@ type HandlerOptions struct {
 	CallbackTokenGenerator               *commonnexus.CallbackTokenGenerator
 	HistoryClient                        resource.HistoryClient
 	TelemetryInterceptor                 *interceptor.TelemetryInterceptor
+	RequestErrorHandler                  *interceptor.RequestErrorHandler
 	NamespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
 	NamespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	NamespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
@@ -528,7 +529,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 
 	c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
 		if retErr != nil {
-			c.TelemetryInterceptor.HandleError(
+			c.RequestErrorHandler.HandleError(
 				request,
 				"",
 				c.metricsHandlerForInterceptors,

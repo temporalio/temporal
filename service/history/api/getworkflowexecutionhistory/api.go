@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -247,14 +248,15 @@ func Invoke(
 				}
 				// GetHistory func will not return empty history. Log workflow details if that is not the case
 				if len(history.Events) == 0 {
-					shardContext.GetLogger().Error(
-						"GetHistory returned empty history",
+					dataLossErr := softassert.UnexpectedDataLoss(
+						shardContext.GetLogger(),
+						"no events in workflow history",
+						nil,
 						tag.WorkflowNamespaceID(namespaceID.String()),
 						tag.WorkflowNamespace(request.GetRequest().GetNamespace()),
 						tag.WorkflowID(execution.GetWorkflowId()),
 						tag.WorkflowRunID(execution.GetRunId()),
 					)
-					dataLossErr := serviceerror.NewDataLoss("no events in workflow history")
 					// Emit dataloss metric
 					if shardContext.GetConfig().EnableDataLossMetrics() {
 						persistence.EmitDataLossMetric(

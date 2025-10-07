@@ -75,6 +75,7 @@ type operationContext struct {
 	clientVersionChecker          headers.VersionChecker
 	auth                          *authorization.Interceptor
 	telemetryInterceptor          *interceptor.TelemetryInterceptor
+	requestErrorHandler           *interceptor.RequestErrorHandler
 	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
@@ -199,7 +200,7 @@ func (c *operationContext) interceptRequest(
 	c.cleanupFunctions = append(c.cleanupFunctions, func(respHeaders map[string]string, retErr error) {
 		if retErr != nil {
 			if source, ok := respHeaders[commonnexus.FailureSourceHeaderName]; ok && source != commonnexus.FailureSourceWorker {
-				c.telemetryInterceptor.HandleError(
+				c.requestErrorHandler.HandleError(
 					request,
 					"",
 					c.metricsHandlerForInterceptors,
@@ -312,6 +313,7 @@ type nexusHandler struct {
 	matchingClient                matchingservice.MatchingServiceClient
 	auth                          *authorization.Interceptor
 	telemetryInterceptor          *interceptor.TelemetryInterceptor
+	requestErrorHandler           *interceptor.RequestErrorHandler
 	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	forwardingClients             *cluster.FrontendHTTPClientCache
@@ -336,6 +338,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 		clientVersionChecker:          headers.NewDefaultVersionChecker(),
 		auth:                          h.auth,
 		telemetryInterceptor:          h.telemetryInterceptor,
+		requestErrorHandler:           h.requestErrorHandler,
 		redirectionInterceptor:        h.redirectionInterceptor,
 		forwardingEnabledForNamespace: h.forwardingEnabledForNamespace,
 		headersBlacklist:              h.headersBlacklist,
