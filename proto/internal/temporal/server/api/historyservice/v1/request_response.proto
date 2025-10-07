@@ -357,6 +357,7 @@ message IsWorkflowTaskValidRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     temporal.server.api.clock.v1.VectorClock clock = 3;
     int64 scheduled_event_id = 4;
+    int32 stamp = 5;
 }
 
 message IsWorkflowTaskValidResponse {
