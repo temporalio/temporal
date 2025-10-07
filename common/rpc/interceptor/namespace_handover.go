@@ -74,12 +74,13 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 
 	if namespaceName != namespace.EmptyName && i.enabledForNS(namespaceName.String()) {
 		var waitTime *time.Duration
+		var err error
 		defer func() {
 			if waitTime != nil {
 				metrics.HandoverWaitLatency.With(i.metricsHandler).Record(*waitTime)
 			}
 		}()
-		waitTime, err := i.waitNamespaceHandoverUpdate(ctx, namespaceName, methodName)
+		waitTime, err = i.waitNamespaceHandoverUpdate(ctx, namespaceName, methodName)
 		if err != nil {
 			metricsHandler, logTags := CreateUnaryMetricsHandlerLogTags(
 				i.metricsHandler,

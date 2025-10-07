@@ -59,7 +59,13 @@ func standbyTransferTaskPostActionTaskDiscarded(
 		return nil
 	}
 
-	logger.Warn("Discarding standby transfer task due to task being pending for too long.", tag.Task(taskInfo))
+	logger.Warn("Discarding standby transfer task due to task being pending for too long.",
+		tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
+		tag.WorkflowID(taskInfo.GetWorkflowID()),
+		tag.WorkflowRunID(taskInfo.GetRunID()),
+		tag.TaskType(taskInfo.GetType()),
+		tag.TaskID(taskInfo.GetTaskID()),
+		tag.TaskCategoryID(taskInfo.GetCategory().ID()))
 	return consts.ErrTaskDiscarded
 }
 
@@ -74,7 +80,13 @@ func standbyTimerTaskPostActionTaskDiscarded(
 		return nil
 	}
 
-	logger.Warn("Discarding standby timer task due to task being pending for too long.", tag.Task(taskInfo))
+	logger.Warn("Discarding standby timer task due to task being pending for too long.",
+		tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
+		tag.WorkflowID(taskInfo.GetWorkflowID()),
+		tag.WorkflowRunID(taskInfo.GetRunID()),
+		tag.TaskType(taskInfo.GetType()),
+		tag.TaskID(taskInfo.GetTaskID()),
+		tag.TaskCategoryID(taskInfo.GetCategory().ID()))
 	return consts.ErrTaskDiscarded
 }
 
