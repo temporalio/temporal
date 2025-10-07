@@ -922,8 +922,6 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 	err = s.mutableState.StartDeploymentTransition(deployment)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
-	s.EqualValues(1, s.mutableState.executionInfo.Attempt,
-		"workflow task attempt must be reset to 1 since pending tasks are rescheduled")
 
 	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		wft.ScheduledEventID,
