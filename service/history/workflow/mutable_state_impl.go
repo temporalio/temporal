@@ -4968,7 +4968,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 
 func (ms *MutableStateImpl) updateVersioningOverride(
 	override *workflowpb.VersioningOverride,
-) (requestReschedulePendingWorkflowTask bool, err error) {
+) (bool, error) {
+	var requestReschedulePendingWorkflowTask bool
+
 	if override != nil {
 		if ms.GetExecutionInfo().GetVersioningInfo() == nil {
 			ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
@@ -5074,13 +5076,12 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 		// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
 		// search attribute based on the execution_info.deployment and/or override deployment if one exists.
 		limit := ms.config.SearchAttributesSizeOfValueLimit(ms.namespaceEntry.Name().String())
-		if err = ms.updateBuildIdsAndDeploymentSearchAttributes(nil, limit); err != nil {
-			return
+		if err := ms.updateBuildIdsAndDeploymentSearchAttributes(nil, limit); err != nil {
+			return requestReschedulePendingWorkflowTask, err
 		}
 	}
 
-	err = ms.reschedulePendingActivities()
-	return
+	return requestReschedulePendingWorkflowTask, ms.reschedulePendingActivities()
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
