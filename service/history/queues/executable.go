@@ -75,7 +75,6 @@ type (
 
 var (
 	ErrTerminalTaskFailure = errors.New("original task failed and this task is now to send the original to the DLQ")
-	ErrSchedulerThrottle   = errors.New("task was throttled by scheduler rate limiter")
 
 	// reschedulePolicy is the policy for determine reschedule backoff duration
 	// across multiple submissions to scheduler
@@ -206,19 +205,19 @@ func NewExecutable(
 		opt(&params)
 	}
 	executable := &executableImpl{
-		Task:                       task,
-		state:                      ctasks.TaskStatePending,
-		attempt:                    1,
-		executor:                   executor,
-		scheduler:                  scheduler,
-		rescheduler:                rescheduler,
-		priorityAssigner:           priorityAssigner,
-		timeSource:                 timeSource,
-		namespaceRegistry:          namespaceRegistry,
-		clusterMetadata:            clusterMetadata,
-		readerID:                   readerID,
-		loadTime:                   util.MaxTime(timeSource.Now(), task.GetKey().FireTime),
-		throttleAdjustedFireTime:   task.GetVisibilityTime(),
+		Task:                     task,
+		state:                    ctasks.TaskStatePending,
+		attempt:                  1,
+		executor:                 executor,
+		scheduler:                scheduler,
+		rescheduler:              rescheduler,
+		priorityAssigner:         priorityAssigner,
+		timeSource:               timeSource,
+		namespaceRegistry:        namespaceRegistry,
+		clusterMetadata:          clusterMetadata,
+		readerID:                 readerID,
+		loadTime:                 util.MaxTime(timeSource.Now(), task.GetKey().FireTime),
+		throttleAdjustedFireTime: task.GetVisibilityTime(),
 		logger: log.NewLazyLogger(
 			logger,
 			func() []tag.Tag {
@@ -514,6 +513,12 @@ func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 // Returns nil if the task should be completed, and an error if the task should be retried.
 func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if err == nil {
+		return nil
+	}
+
+	// Handle scheduler throttle - update throttle time and return nil
+	if errors.Is(err, ctasks.ErrSchedulerThrottle) {
+		e.SetThrottledTime(e.timeSource.Now())
 		return nil
 	}
 

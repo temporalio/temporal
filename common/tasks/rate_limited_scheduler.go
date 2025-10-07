@@ -98,7 +98,7 @@ func (s *RateLimitedScheduler[T]) wait(task T) {
 	}
 
 	metrics.TaskSchedulerThrottled.With(s.metricsHandler).Record(1, s.metricTagsFn(task)...)
-	task.SetThrottledTime(s.timeSource.Now())
+	_ = task.HandleErr(ErrSchedulerThrottle)
 
 	if s.options.EnableShadowMode {
 		// in shadow mode, only emit metrics, but don't actually throttle
@@ -117,7 +117,7 @@ func (s *RateLimitedScheduler[T]) allow(task T) bool {
 	}
 
 	metrics.TaskSchedulerThrottled.With(s.metricsHandler).Record(1, s.metricTagsFn(task)...)
-	task.SetThrottledTime(s.timeSource.Now())
+	_ = task.HandleErr(ErrSchedulerThrottle)
 
 	// in shadow mode, only emit metrics, but don't actually throttle
 	return s.options.EnableShadowMode
