@@ -25,4 +25,5 @@ message ClusterMetadata {
 
 message IndexSearchAttributes{
     map<string,temporal.api.enums.v1.IndexedValueType> custom_search_attributes = 1;
+    map<string,temporal.api.enums.v1.IndexedValueType> archetype_search_attributes = 2;
 }
