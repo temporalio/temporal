@@ -67,6 +67,8 @@ var testQueueOptions = &Options{
 	CheckpointInterval:                  dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond),
 	CheckpointIntervalJitterCoefficient: dynamicconfig.GetFloatPropertyFn(0.15),
 	MaxReaderCount:                      dynamicconfig.GetIntPropertyFn(5),
+	MoveGroupTaskCountBase:              dynamicconfig.GetIntPropertyFn(0),
+	MoveGroupTaskCountMultiplier:        dynamicconfig.GetFloatPropertyFn(3.0),
 }
 
 func TestQueueBaseSuite(t *testing.T) {
@@ -450,7 +452,7 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 	s.True(exclusiveReaderHighWatermark.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
 }
 
-func (s *queueBaseSuite) TestCheckPoint_MoveSlices() {
+func (s *queueBaseSuite) TestCheckPoint_SlicePredicateAction() {
 	exclusiveReaderHighWatermark := tasks.MaximumKey
 	scopes := NewRandomScopes(3)
 	scopes[0].Predicate = tasks.NewNamespacePredicate([]string{uuid.New()})
@@ -509,6 +511,123 @@ func (s *queueBaseSuite) TestCheckPoint_MoveSlices() {
 	base.checkpoint()
 
 	s.True(scopes[0].Range.InclusiveMin.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
+}
+
+func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
+	// With this configuration:
+	// - task groups with more than 50 pending tasks on reader 0 will be moved to reader 1
+	// - task groups with more than 150 pending tasks on reader 1 will be moved to reader 2
+	s.options.MaxReaderCount = dynamicconfig.GetIntPropertyFn(3)
+	s.options.MoveGroupTaskCountBase = dynamicconfig.GetIntPropertyFn(50)
+
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 10,
+			QueueStates: map[int32]*persistencespb.QueueState{
+				int32(tasks.CategoryIDTimer): ToPersistenceQueueState(&queueState{
+					readerScopes:                 map[int64][]Scope{},
+					exclusiveReaderHighWatermark: tasks.MaximumKey,
+				}),
+			},
+		},
+		s.config,
+	)
+	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+
+	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
+	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
+
+	// set to a smaller value so that delete will be triggered
+	base.exclusiveDeletionHighWatermark = tasks.MinimumKey
+
+	// manually set pending task count to trigger slice predicate action
+	base.monitor.SetSlicePendingTaskCount(&SliceImpl{}, 2*moveSliceDefaultReaderMinPendingTaskCount)
+
+	addExecutableToSlice := func(readerID int64, slice Slice, namespaceID string, count int) {
+		sliceRange := slice.Scope().Range
+		for i := 0; i < count; i++ {
+			mockTask := tasks.NewMockTask(s.controller)
+			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(sliceRange)).AnyTimes()
+			mockTask.EXPECT().GetNamespaceID().Return(namespaceID).AnyTimes()
+			slice.(*SliceImpl).add(base.executableFactory.NewExecutable(mockTask, readerID))
+		}
+	}
+
+	scopes := NewRandomScopes(4)
+
+	// construct state for reader 0
+	// 3 slices:
+	//   slice 1: 20 tasks for namespace1, 50 tasks for namespace2
+	//   slice 2: 50 tasks for namespace2, 100 tasks for namespace3
+	//   slice 3: 100 tasks for namespace3
+	reader0Scopes := scopes[:3]
+	reader0Slices := make([]Slice, 0, len(reader0Scopes))
+	for _, scope := range reader0Scopes {
+		slice := NewSlice(base.paginationFnProvider, base.executableFactory, base.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit)
+		// manually set iterators to nil as we will be adding tasks directly to the slice
+		slice.iterators = nil
+		reader0Slices = append(reader0Slices, slice)
+	}
+	addExecutableToSlice(DefaultReaderId, reader0Slices[0], "namespace1", 20)
+	addExecutableToSlice(DefaultReaderId, reader0Slices[0], "namespace2", 50)
+	addExecutableToSlice(DefaultReaderId, reader0Slices[1], "namespace2", 50)
+	addExecutableToSlice(DefaultReaderId, reader0Slices[1], "namespace3", 100)
+	addExecutableToSlice(DefaultReaderId, reader0Slices[2], "namespace3", 100)
+
+	// construct state for reader 1
+	// 1 slice:
+	//  slice 1: 100 tasks for namespace3
+	reader1Scopes := scopes[3:4]
+	reader1Slices := make([]Slice, 0, len(reader1Scopes))
+	for _, scope := range reader1Scopes {
+		slice := NewSlice(base.paginationFnProvider, base.executableFactory, base.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit)
+		// manually set iterators to nil as we will be adding tasks directly to the slice
+		slice.iterators = nil
+		reader1Slices = append(reader1Slices, slice)
+	}
+	addExecutableToSlice(DefaultReaderId+1, reader1Slices[0], "namespace3", 100)
+
+	// add slices to readers
+	base.readerGroup.NewReader(DefaultReaderId, reader0Slices...)
+	base.readerGroup.NewReader(DefaultReaderId+1, reader1Slices...)
+
+	// Given the configuration and pending tasks above, what should happen after move group action is executed is:
+	// - namespace1 should remain on reader0, with 20 tasks
+	// - namespace2 should be moved to reader1, with 100 tasks
+	// - namespace3 should be moved to reader2, with 300 tasks
+
+	gomock.InOrder(
+		mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).Return(nil).Times(1),
+		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, request *persistence.UpdateShardRequest) error {
+				readerScopes := FromPersistenceQueueState(request.ShardInfo.QueueStates[int32(tasks.CategoryIDTimer)]).readerScopes
+				s.Len(readerScopes, 3)
+
+				reader0Scopes := readerScopes[DefaultReaderId]
+				s.Len(readerScopes[DefaultReaderId], 1)
+				reader0Scopes[0].Predicate.Equals(tasks.NewNamespacePredicate([]string{"namespace1"}))
+
+				reader1Scopes := readerScopes[DefaultReaderId+1]
+				s.Len(reader1Scopes, 2)
+				for _, scope := range reader1Scopes {
+					scope.Predicate.Equals(tasks.NewNamespacePredicate([]string{"namespace2"}))
+				}
+
+				reader2Scopes := readerScopes[DefaultReaderId+2]
+				s.Len(reader2Scopes, 3)
+				for _, scope := range reader2Scopes {
+					scope.Predicate.Equals(tasks.NewNamespacePredicate([]string{"namespace3"}))
+				}
+
+				return nil
+			},
+		).Times(1),
+	)
+
+	base.checkpoint()
 }
 
 func (s *queueBaseSuite) QueueStateEqual(

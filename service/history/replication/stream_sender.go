@@ -36,9 +36,6 @@ import (
 
 const (
 	TaskMaxSkipCount = 1000
-
-	// SyncTaskIntervalMultiplier is based on ReplicationStreamSyncStatusDuration. Default duration is 1s.
-	SyncTaskIntervalMultiplier = 10
 )
 
 type (
@@ -133,7 +130,14 @@ func (s *StreamSenderImpl) Start() {
 	}
 
 	go WrapEventLoop(s.server.Context(), s.recvEventLoop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
-	go livenessMonitor(s.recvSignalChan, s.config.ReplicationStreamSyncStatusDuration()*SyncTaskIntervalMultiplier, s.shutdownChan, s.Stop, s.logger)
+	go livenessMonitor(
+		s.recvSignalChan,
+		s.config.ReplicationStreamSyncStatusDuration,
+		s.config.ReplicationStreamSenderLivenessMultiplier,
+		s.shutdownChan,
+		s.Stop,
+		s.logger,
+	)
 	s.logger.Info("StreamSender started.")
 }
 
@@ -611,11 +615,11 @@ Loop:
 			return nil
 		}
 
-		retryPolicy := backoff.NewExponentialRetryPolicy(1 * time.Second).
-			WithBackoffCoefficient(1.2).
-			WithMaximumInterval(3 * time.Second).
-			WithMaximumAttempts(80).
-			WithExpirationInterval(3 * time.Minute)
+		retryPolicy := backoff.NewExponentialRetryPolicy(s.config.ReplicationStreamSenderErrorRetryWait()).
+			WithBackoffCoefficient(s.config.ReplicationStreamSenderErrorRetryBackoffCoefficient()).
+			WithMaximumInterval(s.config.ReplicationStreamSenderErrorRetryMaxInterval()).
+			WithMaximumAttempts(s.config.ReplicationStreamSenderErrorRetryMaxAttempts()).
+			WithExpirationInterval(s.config.ReplicationStreamSenderErrorRetryExpiration())
 
 		err = backoff.ThrottleRetry(operation, retryPolicy, isRetryableError)
 		metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(

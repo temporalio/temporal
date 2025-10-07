@@ -17,6 +17,7 @@ import (
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -578,6 +579,7 @@ func ApplyClusterMetadataConfigProvider(
 	persistenceServiceResolver resolver.ServiceResolver,
 	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
+	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	metricsHandler metrics.Handler,
 ) (*cluster.Config, config.Persistence, error) {
 	ctx := context.TODO()
@@ -610,12 +612,34 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	defer clusterMetadataManager.Close()
 
-	initialIndexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
-	if ds := svc.Persistence.GetVisibilityStoreConfig(); ds.SQL != nil {
-		initialIndexSearchAttributes[ds.GetIndexName()] = searchattribute.GetSqlDbIndexSearchAttributes()
+	visCSAOverride := map[enumspb.IndexedValueType]int{}
+	for tpName, value := range svc.Visibility.PersistenceCustomSearchAttributes {
+		saType, ok := enumspb.IndexedValueType_shorthandValue[tpName]
+		if !ok {
+			return svc.ClusterMetadata,
+				svc.Persistence,
+				fmt.Errorf("invalid search attribute type: %s", tpName)
+		}
+		if value < 0 || value > 99 {
+			return svc.ClusterMetadata,
+				svc.Persistence,
+				fmt.Errorf(
+					"invalid number of custom search attributes for type %s (must be between 0 and 99)",
+					tpName,
+				)
+		}
+		visCSAOverride[enumspb.IndexedValueType(saType)] = value
 	}
-	if ds := svc.Persistence.GetSecondaryVisibilityStoreConfig(); ds.SQL != nil {
-		initialIndexSearchAttributes[ds.GetIndexName()] = searchattribute.GetSqlDbIndexSearchAttributes()
+
+	visDataStores := []config.DataStore{
+		svc.Persistence.GetVisibilityStoreConfig(),
+		svc.Persistence.GetSecondaryVisibilityStoreConfig(),
+	}
+	indexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
+	for _, ds := range visDataStores {
+		if ds.SQL != nil || ds.CustomDataStoreConfig != nil {
+			indexSearchAttributes[ds.GetIndexName()] = searchattribute.GetDBIndexSearchAttributes(visCSAOverride)
+		}
 	}
 
 	clusterMetadata := svc.ClusterMetadata
@@ -642,7 +666,7 @@ func ApplyClusterMetadataConfigProvider(
 			ctx,
 			clusterMetadataManager,
 			svc,
-			initialIndexSearchAttributes,
+			indexSearchAttributes,
 			resp,
 		); updateErr != nil {
 			return svc.ClusterMetadata, svc.Persistence, updateErr
@@ -659,7 +683,7 @@ func ApplyClusterMetadataConfigProvider(
 			ctx,
 			clusterMetadataManager,
 			svc,
-			initialIndexSearchAttributes,
+			indexSearchAttributes,
 			logger,
 		); initErr != nil {
 			return svc.ClusterMetadata, svc.Persistence, initErr
@@ -755,18 +779,8 @@ func updateCurrentClusterMetadataRecord(
 		updateDBRecord = true
 	}
 
-	if len(initialIndexSearchAttributes) > 0 {
-		if currentClusterDBRecord.IndexSearchAttributes == nil {
-			currentClusterDBRecord.IndexSearchAttributes = initialIndexSearchAttributes
-			updateDBRecord = true
-		} else {
-			for indexName, initialValue := range initialIndexSearchAttributes {
-				if _, ok := currentClusterDBRecord.IndexSearchAttributes[indexName]; !ok {
-					currentClusterDBRecord.IndexSearchAttributes[indexName] = initialValue
-					updateDBRecord = true
-				}
-			}
-		}
+	if updateIndexSearchAttributes(initialIndexSearchAttributes, currentClusterDBRecord) {
+		updateDBRecord = true
 	}
 
 	if !updateDBRecord {
@@ -816,6 +830,39 @@ func overwriteCurrentClusterMetadataWithDBRecord(
 			tag.Value(currentClusterDBRecord.FailoverVersionIncrement))
 		svc.ClusterMetadata.FailoverVersionIncrement = currentClusterDBRecord.FailoverVersionIncrement
 	}
+}
+
+// updateIndexSearchAttributes updates the IndexSearchAttributes if needed.
+// Returns true if any change was made.
+func updateIndexSearchAttributes(
+	initialIndexSearchAttributes map[string]*persistencespb.IndexSearchAttributes,
+	currentClusterDBRecord *persistence.GetClusterMetadataResponse,
+) bool {
+	// initialIndexSearchAttributes is non-empty for SQL and custom visibility stores.
+	if len(initialIndexSearchAttributes) == 0 {
+		return false
+	}
+	if currentClusterDBRecord.IndexSearchAttributes == nil {
+		currentClusterDBRecord.IndexSearchAttributes = initialIndexSearchAttributes
+		return true
+	}
+	updateDBRecord := false
+	for indexName, initialValue := range initialIndexSearchAttributes {
+		isa := currentClusterDBRecord.IndexSearchAttributes[indexName]
+		if isa == nil {
+			currentClusterDBRecord.IndexSearchAttributes[indexName] = initialValue
+			updateDBRecord = true
+			continue
+		}
+
+		for k, v := range initialValue.CustomSearchAttributes {
+			if _, ok := isa.CustomSearchAttributes[k]; !ok {
+				isa.CustomSearchAttributes[k] = v
+				updateDBRecord = true
+			}
+		}
+	}
+	return updateDBRecord
 }
 
 func PersistenceFactoryProvider() persistenceClient.FactoryProviderFn {

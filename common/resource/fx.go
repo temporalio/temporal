@@ -153,7 +153,7 @@ func SearchAttributeMapperProviderProvider(
 		saMapper,
 		namespaceRegistry,
 		searchAttributeProvider,
-		persistenceConfig.IsSQLVisibilityStore(),
+		persistenceConfig.IsSQLVisibilityStore() || persistenceConfig.IsCustomVisibilityStore(),
 	)
 }
 

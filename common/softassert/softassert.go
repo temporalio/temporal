@@ -25,7 +25,6 @@ import (
 //
 // Example:
 // softassert.That(logger, object.state == "ready", "object is not ready")
-
 func That(logger log.Logger, condition bool, staticMessage string, tags ...tag.Tag) bool {
 	if !condition {
 		// By using the same prefix for all assertions, they can be reliably found in logs.

@@ -150,38 +150,18 @@ func (s *fieldSuite) newTestTree(
 	)
 }
 
-// setupBasicTree creates a minimal tree structure with root node and context.
-func (s *fieldSuite) setupBasicTree() (*Node, MutableContext, error) {
-	serializedNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{},
-				},
-			},
-		},
-	}
-
-	rootNode, err := s.newTestTree(serializedNodes)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	ctx := NewMutableContext(context.Background(), rootNode)
-	return rootNode, ctx, nil
-}
-
 // setupComponentWithTree creates a basic component structure and attaches it to the tree.
 func (s *fieldSuite) setupComponentWithTree(rootComponent *TestComponent) (*Node, MutableContext, error) {
-	rootNode, ctx, err := s.setupBasicTree()
-	if err != nil {
-		return nil, nil, err
-	}
+	rootNode := NewEmptyTree(
+		s.registry,
+		s.timeSource,
+		s.nodeBackend,
+		s.nodePathEncoder,
+		s.logger,
+	)
+	rootNode.SetRootComponent(rootComponent)
 
-	rootNode.value = rootComponent
-	rootNode.valueState = valueStateNeedSerialize
-	return rootNode, ctx, nil
+	return rootNode, NewMutableContext(context.Background(), rootNode), nil
 }
 
 func (s *fieldSuite) TestDeferredPointerResolution() {
@@ -290,12 +270,22 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	s.NoError(err)
 	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
 
+	// For a new transaction, get the components from the tree again,
+	// otherwise those nodes will not be marked as dirty.
+
+	ctx2 := NewMutableContext(context.Background(), rootNode)
+	rootComponentInterface, err := rootNode.Component(ctx2, ComponentRef{})
+	s.NoError(err)
+
+	rootComponent = rootComponentInterface.(*TestComponent)
+	sc1, err = rootComponent.SubComponent1.Get(ctx2)
+	s.NoError(err)
+
 	// Now, add a new component and deferred pointer for it.
 	newComponent := &TestSubComponent2{
 		SubComponent2Data: &protoMessageType{CreateRequestId: "new-component"},
 	}
 
-	ctx2 := NewMutableContext(context.Background(), rootNode)
 	sc1.SubComponent2Pointer = ComponentPointerTo(ctx2, newComponent)
 
 	// Now add the component to the tree so it can be resolved during CloseTransaction.
@@ -327,6 +317,9 @@ func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
 	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
+
+	s.logger.(*testlogger.TestLogger).
+		Expect(testlogger.Error, "failed to resolve deferred pointer during transaction close")
 
 	orphanComponent := &TestSubComponent11{
 		SubComponent11Data: &protoMessageType{

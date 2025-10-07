@@ -5,8 +5,6 @@ package chasm
 import (
 	"context"
 	"time"
-
-	"google.golang.org/protobuf/proto"
 )
 
 type Context interface {
@@ -43,6 +41,9 @@ type MutableContext interface {
 }
 
 type ContextImpl struct {
+	// The context here is not really used today.
+	// But it will be when we support partial loading later,
+	// and the framework potentially needs to go to persistence to load some fields.
 	ctx context.Context
 
 	// Not embedding the Node here to avoid exposing AddTask() method on Node,
@@ -66,14 +67,6 @@ func NewContext(
 
 func (c *ContextImpl) Ref(component Component) ([]byte, error) {
 	return c.root.Ref(component)
-}
-
-func (c *ContextImpl) componentNodePath(component Component) ([]string, error) {
-	return c.root.componentNodePath(component)
-}
-
-func (c *ContextImpl) dataNodePath(data proto.Message) ([]string, error) {
-	return c.root.dataNodePath(data)
 }
 
 func (c *ContextImpl) Now(component Component) time.Time {

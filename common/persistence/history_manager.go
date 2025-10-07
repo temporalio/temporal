@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/pborman/uuid"
@@ -22,9 +23,12 @@ const (
 	// TrimHistoryBranch will only dump metadata, relatively cheap
 	trimHistoryBranchPageSize = 1000
 	dataLossMsg               = "Potential data loss"
-	errNonContiguousEventID   = "corrupted history event batch, eventID is not contiguous"
-	errWrongVersion           = "corrupted history event batch, wrong version and IDs"
-	errEmptyEvents            = "corrupted history event batch, empty events"
+)
+
+var (
+	errNonContiguousEventID = errors.New("corrupted history event batch, eventID is not contiguous")
+	errWrongVersion         = errors.New("corrupted history event batch, wrong version and IDs")
+	errEmptyEvents          = errors.New("corrupted history event batch, empty events")
 )
 
 var _ ExecutionManager = (*executionManagerImpl)(nil)
@@ -631,7 +635,7 @@ func (m *executionManagerImpl) readRawHistoryBranch(
 		}
 
 		if token.CurrentRangeIndex == notStartedIndex {
-			return nil, nil, serviceerror.NewDataLoss("branchRange is corrupted")
+			return nil, nil, softassert.UnexpectedDataLoss(m.logger, "branchRange is corrupted", nil)
 		}
 	}
 
@@ -690,7 +694,7 @@ func (m *executionManagerImpl) readRawHistoryBranchReverse(
 		}
 
 		if token.CurrentRangeIndex == notStartedIndex {
-			return nil, nil, serviceerror.NewDataLoss("branchRange is corrupted")
+			return nil, nil, softassert.UnexpectedDataLoss(m.logger, "branchRange is corrupted", nil)
 		}
 	}
 
@@ -793,7 +797,7 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		for index, node := range nodes {
 			dataBlobs[index] = node.Events
 			if node.Events == nil {
-				return nil, nil, nil, nil, 0, serviceerror.NewDataLoss("no events in history node")
+				return nil, nil, nil, nil, 0, softassert.UnexpectedDataLoss(m.logger, "no events in history node", nil)
 			}
 			dataSize += len(node.Events.Data)
 			transactionIDs = append(transactionIDs, node.TransactionID)
@@ -912,9 +916,9 @@ func (m *executionManagerImpl) readHistoryBranch(
 	var firstEvent, lastEvent *historypb.HistoryEvent
 	var eventCount int
 
-	dataLossTags := func(cause string) []tag.Tag {
+	dataLossTags := func(cause error) []tag.Tag {
 		return []tag.Tag{
-			tag.Cause(cause),
+			tag.Cause(cause.Error()),
 			tag.ShardID(request.ShardID),
 			tag.WorkflowBranchToken(request.BranchToken),
 			tag.WorkflowFirstEventID(firstEvent.GetEventId()),
@@ -932,8 +936,7 @@ func (m *executionManagerImpl) readHistoryBranch(
 			return nil, nil, nil, nil, dataSize, err
 		}
 		if len(events) == 0 {
-			softassert.Fail(m.logger, dataLossMsg, dataLossTags(errEmptyEvents)...)
-			return nil, nil, nil, nil, dataSize, serviceerror.NewDataLoss(errEmptyEvents)
+			return nil, nil, nil, nil, dataSize, softassert.UnexpectedDataLoss(m.logger, dataLossMsg, errEmptyEvents, dataLossTags(errEmptyEvents)...)
 		}
 
 		firstEvent = events[0]
@@ -942,12 +945,10 @@ func (m *executionManagerImpl) readHistoryBranch(
 
 		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
 			// in a single batch, version should be the same, and ID should be contiguous
-			softassert.Fail(m.logger, dataLossMsg, dataLossTags(errWrongVersion)...)
-			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errWrongVersion)
+			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, softassert.UnexpectedDataLoss(m.logger, dataLossMsg, errWrongVersion, dataLossTags(errWrongVersion)...)
 		}
 		if firstEvent.GetEventId() != token.LastEventID+1 {
-			softassert.Fail(m.logger, dataLossMsg, dataLossTags(errNonContiguousEventID)...)
-			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errNonContiguousEventID)
+			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, softassert.UnexpectedDataLoss(m.logger, dataLossMsg, errNonContiguousEventID, dataLossTags(errNonContiguousEventID)...)
 		}
 
 		if byBatch {
@@ -980,9 +981,9 @@ func (m *executionManagerImpl) readHistoryBranchReverse(
 	var firstEvent, lastEvent *historypb.HistoryEvent
 	var eventCount int
 
-	datalossTags := func(cause string) []tag.Tag {
+	datalossTags := func(cause error) []tag.Tag {
 		return []tag.Tag{
-			tag.Cause(cause),
+			tag.Cause(cause.Error()),
 			tag.WorkflowBranchToken(request.BranchToken),
 			tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 			tag.FirstEventVersion(firstEvent.GetVersion()),
@@ -999,8 +1000,7 @@ func (m *executionManagerImpl) readHistoryBranchReverse(
 			return nil, nil, nil, dataSize, err
 		}
 		if len(events) == 0 {
-			softassert.Fail(m.logger, dataLossMsg, datalossTags(errEmptyEvents)...)
-			return nil, nil, nil, dataSize, serviceerror.NewDataLoss(errEmptyEvents)
+			return nil, nil, nil, dataSize, softassert.UnexpectedDataLoss(m.logger, dataLossMsg, errEmptyEvents, datalossTags(errEmptyEvents)...)
 		}
 
 		firstEvent = events[0]
@@ -1009,12 +1009,10 @@ func (m *executionManagerImpl) readHistoryBranchReverse(
 
 		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
 			// in a single batch, version should be the same, and ID should be contiguous
-			softassert.Fail(m.logger, dataLossMsg, datalossTags(errWrongVersion)...)
-			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errWrongVersion)
+			return historyEvents, transactionIDs, nil, dataSize, softassert.UnexpectedDataLoss(m.logger, dataLossMsg, errWrongVersion, datalossTags(errWrongVersion)...)
 		}
 		if (token.LastEventID != common.EmptyEventID) && (lastEvent.GetEventId() != token.LastEventID-1) {
-			softassert.Fail(m.logger, dataLossMsg, datalossTags(errNonContiguousEventID)...)
-			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errNonContiguousEventID)
+			return historyEvents, transactionIDs, nil, dataSize, softassert.UnexpectedDataLoss(m.logger, dataLossMsg, errNonContiguousEventID, datalossTags(errNonContiguousEventID)...)
 		}
 
 		events = m.reverseSlice(events)
@@ -1060,9 +1058,9 @@ func (m *executionManagerImpl) filterHistoryNodes(
 
 		switch {
 		case node.NodeID < lastNodeID:
-			return nil, serviceerror.NewDataLoss("corrupted data, nodeID cannot decrease")
+			return nil, softassert.UnexpectedDataLoss(m.logger, "corrupted data, nodeID cannot decrease", nil)
 		case node.NodeID == lastNodeID:
-			return nil, serviceerror.NewDataLoss("corrupted data, same nodeID must have smaller txnID")
+			return nil, softassert.UnexpectedDataLoss(m.logger, "corrupted data, same nodeID must have smaller txnID", nil)
 		default: // row.NodeID > lastNodeID:
 			// NOTE: when row.nodeID > lastNodeID, we expect the one with largest txnID comes first
 			lastTransactionID = node.TransactionID
@@ -1093,7 +1091,7 @@ func (m *executionManagerImpl) filterHistoryNodesReverse(
 
 		switch {
 		case node.NodeID > lastNodeID:
-			return nil, serviceerror.NewDataLoss("corrupted data, nodeID cannot decrease")
+			return nil, softassert.UnexpectedDataLoss(m.logger, "corrupted data, nodeID cannot decrease", nil)
 		default:
 			lastTransactionID = node.PrevTransactionID
 			lastNodeID = node.NodeID
