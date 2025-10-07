@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"errors"
 	"time"
 
 	"go.temporal.io/server/common/clock"
@@ -30,6 +31,11 @@ type (
 		logger         log.Logger
 		metricsHandler metrics.Handler
 	}
+)
+
+var (
+	// ErrSchedulerThrottle is returned by rate limited scheduler when a task is throttled
+	ErrSchedulerThrottle = errors.New("task was throttled by scheduler rate limiter")
 )
 
 func NewRateLimitedScheduler[T Task](

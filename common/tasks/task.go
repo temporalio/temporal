@@ -2,15 +2,8 @@ package tasks
 
 import (
 	"context"
-	"errors"
-	"time"
 
 	"go.temporal.io/server/common/backoff"
-)
-
-var (
-	// ErrSchedulerThrottle is returned by rate limited scheduler when a task is throttled
-	ErrSchedulerThrottle = errors.New("task was throttled by scheduler rate limiter")
 )
 
 //go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination task_mock.go
@@ -44,7 +37,5 @@ type (
 		Reschedule()
 		// State returns the current task state
 		State() State
-		// SetThrottledTime updates the throttle-adjusted time when the task is throttled
-		SetThrottledTime(time.Time)
 	}
 )

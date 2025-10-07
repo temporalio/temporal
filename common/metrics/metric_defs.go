@@ -787,7 +787,7 @@ var (
 	)
 	TaskQueueLatencyNoThrottle = NewTimerDef(
 		"task_latency_queue_no_throttle",
-		WithDescription("End-to-end latency for processing and completing a history task, excluding delays from APS, RPS, persistence, and scheduler rate limiting."),
+		WithDescription("End-to-end latency for processing and completing a history task, excluding delays from namespace level rate limiting."),
 	)
 	TaskAttempt = NewDimensionlessHistogramDef(
 		"task_attempt",

@@ -148,7 +148,7 @@ type (
 		readerID                   int64
 		loadTime                   time.Time
 		scheduledTime              time.Time
-		throttleAdjustedFireTime   time.Time
+		throttledTime              time.Time
 		scheduleLatency            time.Duration
 		attemptNoUserLatency       time.Duration
 		inMemoryNoUserLatency      time.Duration
@@ -205,19 +205,19 @@ func NewExecutable(
 		opt(&params)
 	}
 	executable := &executableImpl{
-		Task:                     task,
-		state:                    ctasks.TaskStatePending,
-		attempt:                  1,
-		executor:                 executor,
-		scheduler:                scheduler,
-		rescheduler:              rescheduler,
-		priorityAssigner:         priorityAssigner,
-		timeSource:               timeSource,
-		namespaceRegistry:        namespaceRegistry,
-		clusterMetadata:          clusterMetadata,
-		readerID:                 readerID,
-		loadTime:                 util.MaxTime(timeSource.Now(), task.GetKey().FireTime),
-		throttleAdjustedFireTime: task.GetVisibilityTime(),
+		Task:              task,
+		state:             ctasks.TaskStatePending,
+		attempt:           1,
+		executor:          executor,
+		scheduler:         scheduler,
+		rescheduler:       rescheduler,
+		priorityAssigner:  priorityAssigner,
+		timeSource:        timeSource,
+		namespaceRegistry: namespaceRegistry,
+		clusterMetadata:   clusterMetadata,
+		readerID:          readerID,
+		loadTime:          util.MaxTime(timeSource.Now(), task.GetKey().FireTime),
+		throttledTime:     task.GetVisibilityTime(),
 		logger: log.NewLazyLogger(
 			logger,
 			func() []tag.Tag {
@@ -446,15 +446,13 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 		case enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:
 			err = consts.ErrResourceExhaustedAPSLimit
 			e.resourceExhaustedCount++
-			e.SetThrottledTime(e.timeSource.Now())
 		default:
 			e.resourceExhaustedCount++
-			e.SetThrottledTime(e.timeSource.Now())
 		}
 
 		// Also set throttled time for namespace-scoped resource exhausted errors
 		if resourceExhaustedErr.Scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE {
-			e.SetThrottledTime(e.timeSource.Now())
+			e.setThrottledTime(e.timeSource.Now())
 		}
 
 		metrics.TaskThrottledCounter.With(e.metricsHandler).Record(
@@ -516,9 +514,9 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
-	// Handle scheduler throttle - update throttle time and return nil
+	// Handle scheduler throttle - update throttle time and return
 	if errors.Is(err, ctasks.ErrSchedulerThrottle) {
-		e.SetThrottledTime(e.timeSource.Now())
+		e.setThrottledTime(e.timeSource.Now())
 		return nil
 	}
 
@@ -666,7 +664,7 @@ func (e *executableImpl) Ack() {
 	metrics.TaskQueueLatency.With(priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))).
 		Record(time.Since(e.GetVisibilityTime()))
 	metrics.TaskQueueLatencyNoThrottle.With(priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))).
-		Record(time.Since(e.throttleAdjustedFireTime))
+		Record(time.Since(e.throttledTime))
 }
 
 func (e *executableImpl) Nack(err error) {
@@ -741,8 +739,8 @@ func (e *executableImpl) SetScheduledTime(t time.Time) {
 	e.scheduledTime = t
 }
 
-func (e *executableImpl) SetThrottledTime(t time.Time) {
-	e.throttleAdjustedFireTime = t
+func (e *executableImpl) setThrottledTime(t time.Time) {
+	e.throttledTime = t
 }
 
 // GetDestination returns the embedded task's destination if it exists. Defaults to an empty string.
