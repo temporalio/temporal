@@ -4,13 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/temporalio/sqlparser"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
+
+var maxDatetime = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 
 type (
 	castExpr struct {
@@ -30,8 +32,6 @@ type (
 		JSONDoc1 sqlparser.Expr
 		JSONDoc2 sqlparser.Expr
 	}
-
-	mysqlQueryConverter struct{}
 )
 
 var (
@@ -42,8 +42,6 @@ var (
 var _ sqlparser.Expr = (*castExpr)(nil)
 var _ sqlparser.Expr = (*memberOfExpr)(nil)
 var _ sqlparser.Expr = (*jsonOverlapsExpr)(nil)
-
-var _ pluginQueryConverterLegacy = (*mysqlQueryConverter)(nil)
 
 func (node *castExpr) Format(buf *sqlparser.TrackedBuffer) {
 	buf.Myprintf("cast(%v as %v)", node.Value, node.Type)
@@ -57,73 +55,52 @@ func (node *jsonOverlapsExpr) Format(buf *sqlparser.TrackedBuffer) {
 	buf.Myprintf("json_overlaps(%v, %v)", node.JSONDoc1, node.JSONDoc2)
 }
 
-func newMySQLQueryConverter(
-	namespaceName namespace.Name,
-	namespaceID namespace.ID,
-	saTypeMap searchattribute.NameTypeMap,
-	saMapper searchattribute.Mapper,
-	queryString string,
-) *QueryConverterLegacy {
-	return newQueryConverterInternal(
-		&mysqlQueryConverter{},
-		namespaceName,
-		namespaceID,
-		saTypeMap,
-		saMapper,
-		queryString,
-	)
-}
+type queryConverter struct{}
 
-func (c *mysqlQueryConverter) getDatetimeFormat() string {
+var _ sqlplugin.VisibilityQueryConverter = (*queryConverter)(nil)
+
+func (c *queryConverter) GetDatetimeFormat() string {
 	return "2006-01-02 15:04:05.999999"
 }
 
-func (c *mysqlQueryConverter) getCoalesceCloseTimeExpr() sqlparser.Expr {
-	return newFuncExpr(
-		coalesceFuncName,
-		closeTimeSaColName,
+func (c *queryConverter) GetCoalesceCloseTimeExpr() sqlparser.Expr {
+	return query.NewFuncExpr(
+		"coalesce",
+		query.CloseTimeSAColumn,
 		&castExpr{
-			Value: newUnsafeSQLString(maxDatetimeValue.Format(c.getDatetimeFormat())),
+			Value: query.NewUnsafeSQLString(maxDatetime.Format(c.GetDatetimeFormat())),
 			Type:  convertTypeDatetime,
 		},
 	)
 }
 
-func (c *mysqlQueryConverter) convertKeywordListComparisonExpr(
-	expr *sqlparser.ComparisonExpr,
+func (c *queryConverter) ConvertKeywordListComparisonExpr(
+	operator string,
+	col *query.SAColumn,
+	value sqlparser.Expr,
 ) (sqlparser.Expr, error) {
-	if !isSupportedKeywordListOperator(expr.Operator) {
-		return nil, query.NewConverterError(
-			"%s: operator '%s' not supported for KeywordList type search attribute in `%s`",
-			query.InvalidExpressionErrMessage,
-			expr.Operator,
-			formatComparisonExprStringForError(*expr),
-		)
-	}
-
 	var negate bool
 	var newExpr sqlparser.Expr
-	switch expr.Operator {
+	switch operator {
 	case sqlparser.EqualStr, sqlparser.NotEqualStr:
 		newExpr = &memberOfExpr{
-			Value:   expr.Right,
-			JSONArr: expr.Left,
+			Value:   value,
+			JSONArr: col,
 		}
-		negate = expr.Operator == sqlparser.NotEqualStr
+		negate = operator == sqlparser.NotEqualStr
 	case sqlparser.InStr, sqlparser.NotInStr:
 		var err error
-		newExpr, err = c.convertToJsonOverlapsExpr(expr)
+		newExpr, err = c.buildJSONOverlapsExpr(col, value)
 		if err != nil {
 			return nil, err
 		}
-		negate = expr.Operator == sqlparser.NotInStr
+		negate = operator == sqlparser.NotInStr
 	default:
 		// this should never happen since isSupportedKeywordListOperator should already fail
 		return nil, query.NewConverterError(
-			"%s: operator '%s' not supported for KeywordList type search attribute in `%s`",
+			"%s: operator '%s' not supported for KeywordList type",
 			query.InvalidExpressionErrMessage,
-			expr.Operator,
-			formatComparisonExprStringForError(*expr),
+			operator,
 		)
 	}
 
@@ -133,88 +110,46 @@ func (c *mysqlQueryConverter) convertKeywordListComparisonExpr(
 	return newExpr, nil
 }
 
-func (c *mysqlQueryConverter) convertToJsonOverlapsExpr(
-	expr *sqlparser.ComparisonExpr,
-) (*jsonOverlapsExpr, error) {
-	valTuple, isValTuple := expr.Right.(sqlparser.ValTuple)
-	if !isValTuple {
-		return nil, query.NewConverterError(
-			"%s: unexpected value type (expected tuple of strings, got %s)",
-			query.InvalidExpressionErrMessage,
-			sqlparser.String(expr.Right),
-		)
-	}
-	values, err := getUnsafeStringTupleValues(valTuple)
-	if err != nil {
-		return nil, err
-	}
-	jsonValue, err := json.Marshal(values)
-	if err != nil {
-		return nil, err
-	}
-	return &jsonOverlapsExpr{
-		JSONDoc1: expr.Left,
-		JSONDoc2: &castExpr{
-			Value: newUnsafeSQLString(string(jsonValue)),
-			Type:  convertTypeJSON,
-		},
-	}, nil
-}
-
-func (c *mysqlQueryConverter) convertTextComparisonExpr(
-	expr *sqlparser.ComparisonExpr,
+func (c *queryConverter) ConvertTextComparisonExpr(
+	operator string,
+	col *query.SAColumn,
+	value sqlparser.Expr,
 ) (sqlparser.Expr, error) {
-	if !isSupportedTextOperator(expr.Operator) {
-		return nil, query.NewConverterError(
-			"%s: operator '%s' not supported for Text type search attribute in `%s`",
-			query.InvalidExpressionErrMessage,
-			expr.Operator,
-			formatComparisonExprStringForError(*expr),
-		)
-	}
 	// build the following expression:
-	// `match ({expr.Left}) against ({expr.Right} in natural language mode)`
+	// `match ({col}) against ({value} in natural language mode)`
 	var newExpr sqlparser.Expr = &sqlparser.MatchExpr{
-		Columns: []sqlparser.SelectExpr{&sqlparser.AliasedExpr{Expr: expr.Left}},
-		Expr:    expr.Right,
+		Columns: []sqlparser.SelectExpr{&sqlparser.AliasedExpr{Expr: col}},
+		Expr:    value,
 		Option:  sqlparser.NaturalLanguageModeStr,
 	}
-	if expr.Operator == sqlparser.NotEqualStr {
+	if operator == sqlparser.NotEqualStr {
 		newExpr = &sqlparser.NotExpr{Expr: newExpr}
 	}
 	return newExpr, nil
 }
 
-func (c *mysqlQueryConverter) buildSelectStmt(
-	namespaceID namespace.ID,
-	queryString string,
+func (c *queryConverter) BuildSelectStmt(
+	queryParams *query.QueryParams[sqlparser.Expr],
 	pageSize int,
-	token *pageTokenLegacy,
+	token *sqlplugin.VisibilityPageToken,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
 
-	whereClauses = append(
-		whereClauses,
-		fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
-	)
-	queryArgs = append(queryArgs, namespaceID.String())
-
-	if len(queryString) > 0 {
-		whereClauses = append(whereClauses, queryString)
-	}
+	queryString := sqlparser.String(queryParams.QueryExpr)
+	whereClauses = append(whereClauses, queryString)
 
 	if token != nil {
 		whereClauses = append(
 			whereClauses,
 			fmt.Sprintf(
 				"((%s = ? AND %s = ? AND %s > ?) OR (%s = ? AND %s < ?) OR %s < ?)",
-				sqlparser.String(c.getCoalesceCloseTimeExpr()),
+				sqlparser.String(c.GetCoalesceCloseTimeExpr()),
 				searchattribute.GetSqlDbColName(searchattribute.StartTime),
 				searchattribute.GetSqlDbColName(searchattribute.RunID),
-				sqlparser.String(c.getCoalesceCloseTimeExpr()),
+				sqlparser.String(c.GetCoalesceCloseTimeExpr()),
 				searchattribute.GetSqlDbColName(searchattribute.StartTime),
-				sqlparser.String(c.getCoalesceCloseTimeExpr()),
+				sqlparser.String(c.GetCoalesceCloseTimeExpr()),
 			),
 		)
 		queryArgs = append(
@@ -228,9 +163,12 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 		)
 	}
 
-	queryArgs = append(queryArgs, pageSize)
+	dbFields := make([]string, len(sqlplugin.DbFields))
+	for i, field := range sqlplugin.DbFields {
+		dbFields[i] = "ev." + field
+	}
 
-	return fmt.Sprintf(
+	stmt := fmt.Sprintf(
 		`SELECT %s
 		FROM executions_visibility ev
 		LEFT JOIN custom_search_attributes
@@ -238,36 +176,29 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 		WHERE %s
 		ORDER BY %s DESC, %s DESC, %s
 		LIMIT ?`,
-		strings.Join(addPrefix("ev.", sqlplugin.DbFields), ", "),
+		strings.Join(dbFields, ", "),
 		searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
 		strings.Join(whereClauses, " AND "),
-		sqlparser.String(c.getCoalesceCloseTimeExpr()),
+		sqlparser.String(c.GetCoalesceCloseTimeExpr()),
 		searchattribute.GetSqlDbColName(searchattribute.StartTime),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
-	), queryArgs
+	)
+	queryArgs = append(queryArgs, pageSize)
+
+	return stmt, queryArgs
 }
 
-func (c *mysqlQueryConverter) buildCountStmt(
-	namespaceID namespace.ID,
-	queryString string,
-	groupBy []string,
+func (c *queryConverter) BuildCountStmt(
+	queryParams *query.QueryParams[sqlparser.Expr],
 ) (string, []any) {
-	var whereClauses []string
-	var queryArgs []any
-
-	whereClauses = append(
-		whereClauses,
-		fmt.Sprintf("(%s = ?)", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
-	)
-	queryArgs = append(queryArgs, namespaceID.String())
-
-	if len(queryString) > 0 {
-		whereClauses = append(whereClauses, queryString)
+	groupBy := make([]string, 0, len(queryParams.GroupBy)+1)
+	for _, field := range queryParams.GroupBy {
+		groupBy = append(groupBy, searchattribute.GetSqlDbColName(field.FieldName))
 	}
 
 	groupByClause := ""
-	if len(groupBy) > 0 {
+	if len(queryParams.GroupBy) > 0 {
 		groupByClause = fmt.Sprintf("GROUP BY %s", strings.Join(groupBy, ", "))
 	}
 
@@ -281,7 +212,36 @@ func (c *mysqlQueryConverter) buildCountStmt(
 		strings.Join(append(groupBy, "COUNT(*)"), ", "),
 		searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
-		strings.Join(whereClauses, " AND "),
+		sqlparser.String(queryParams.QueryExpr),
 		groupByClause,
-	), queryArgs
+	), nil
+}
+
+func (c *queryConverter) buildJSONOverlapsExpr(
+	col *query.SAColumn,
+	value sqlparser.Expr,
+) (*jsonOverlapsExpr, error) {
+	valTuple, isValTuple := value.(sqlparser.ValTuple)
+	if !isValTuple {
+		return nil, query.NewConverterError(
+			"%s: unexpected value type (expected tuple of strings, got %s)",
+			query.InvalidExpressionErrMessage,
+			sqlparser.String(value),
+		)
+	}
+	values, err := query.GetUnsafeStringTupleValues(valTuple)
+	if err != nil {
+		return nil, err
+	}
+	jsonValue, err := json.Marshal(values)
+	if err != nil {
+		return nil, err
+	}
+	return &jsonOverlapsExpr{
+		JSONDoc1: col,
+		JSONDoc2: &castExpr{
+			Value: query.NewUnsafeSQLString(string(jsonValue)),
+			Type:  convertTypeJSON,
+		},
+	}, nil
 }

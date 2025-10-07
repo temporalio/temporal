@@ -46,6 +46,7 @@ func NewManager(
 	secondaryVisibilityWritingMode dynamicconfig.StringPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -64,6 +65,7 @@ func NewManager(
 		slowQueryThreshold,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
+		visibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
 	)
@@ -89,6 +91,7 @@ func NewManager(
 		slowQueryThreshold,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
+		visibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
 	)
@@ -171,6 +174,7 @@ func newVisibilityManagerFromDataStoreConfig(
 	slowQueryThreshold dynamicconfig.DurationPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -185,6 +189,7 @@ func newVisibilityManagerFromDataStoreConfig(
 		namespaceRegistry,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
+		visibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
 	)
@@ -218,6 +223,7 @@ func newVisibilityStoreFromDataStoreConfig(
 	namespaceRegistry namespace.Registry,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -232,6 +238,7 @@ func newVisibilityStoreFromDataStoreConfig(
 			persistenceResolver,
 			searchAttributesProvider,
 			searchAttributesMapperProvider,
+			visibilityEnableUnifiedQueryConverter,
 			logger,
 			metricsHandler,
 		)
