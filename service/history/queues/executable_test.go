@@ -1111,3 +1111,152 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 func (s *executableSuite) accessInternalState(executable queues.Executable) {
 	_ = fmt.Sprintf("%v", executable)
 }
+
+func (s *executableSuite) TestTaskQueueLatencyNoThrottle_NoThrottling() {
+	// Test that TaskQueueLatencyNoThrottle equals TaskQueueLatency when there's no throttling
+	now := time.Now()
+	visibilityTime := now.Add(-5 * time.Second)
+	s.timeSource.Update(visibilityTime)
+
+	executable := s.newTestExecutable()
+
+	s.timeSource.Update(now)
+	executable.SetScheduledTime(now)
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        nil,
+	})
+
+	err := executable.Execute()
+	s.NoError(err)
+
+	capture := s.metricsHandler.StartCapture()
+	executable.Ack()
+	snapshot := capture.Snapshot()
+
+	// Check TaskQueueLatency
+	queueLatencyRecordings := snapshot[metrics.TaskQueueLatency.Name()]
+	s.Len(queueLatencyRecordings, 1)
+	queueLatency, ok := queueLatencyRecordings[0].Value.(time.Duration)
+	s.True(ok)
+	s.InDelta(5*time.Second, queueLatency, float64(200*time.Millisecond))
+
+	// Check TaskQueueLatencyNoThrottle - should be same as TaskQueueLatency when no throttling
+	noThrottleRecordings := snapshot[metrics.TaskQueueLatencyNoThrottle.Name()]
+	s.Len(noThrottleRecordings, 1)
+	noThrottleLatency, ok := noThrottleRecordings[0].Value.(time.Duration)
+	s.True(ok)
+	s.InDelta(5*time.Second, noThrottleLatency, float64(200*time.Millisecond))
+}
+
+func (s *executableSuite) TestTaskQueueLatencyNoThrottle_WithAPSThrottling() {
+	// Test that TaskQueueLatencyNoThrottle is less than TaskQueueLatency when there's throttling
+	now := time.Now()
+	visibilityTime := now.Add(-5 * time.Second)
+	s.timeSource.Update(visibilityTime)
+
+	executable := s.newTestExecutable()
+
+	s.timeSource.Update(now)
+	executable.SetScheduledTime(now)
+
+	// First attempt: APS throttling error
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "aps limit"),
+	})
+
+	err := executable.Execute()
+	s.Error(err)
+	err = executable.HandleErr(err)
+	s.Error(err)
+
+	// Simulate throttling delay of 2 seconds
+	now = now.Add(2 * time.Second)
+	s.timeSource.Update(now)
+
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true)
+	executable.Nack(err)
+
+	// Second attempt: success
+	now = now.Add(100 * time.Millisecond)
+	s.timeSource.Update(now)
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        nil,
+	})
+
+	err = executable.Execute()
+	s.NoError(err)
+
+	capture := s.metricsHandler.StartCapture()
+	executable.Ack()
+	snapshot := capture.Snapshot()
+
+	// Check both metrics are emitted
+	queueLatencyRecordings := snapshot[metrics.TaskQueueLatency.Name()]
+	s.Len(queueLatencyRecordings, 1)
+	queueLatency, ok := queueLatencyRecordings[0].Value.(time.Duration)
+	s.True(ok)
+
+	noThrottleRecordings := snapshot[metrics.TaskQueueLatencyNoThrottle.Name()]
+	s.Len(noThrottleRecordings, 1)
+	noThrottleLatency, ok := noThrottleRecordings[0].Value.(time.Duration)
+	s.True(ok)
+
+	// TaskQueueLatencyNoThrottle should be less than TaskQueueLatency due to throttling
+	s.Less(noThrottleLatency, queueLatency)
+	// And significantly less (at least 1 second less due to our simulated delay)
+	s.Greater(queueLatency-noThrottleLatency, 1*time.Second)
+}
+
+func (s *executableSuite) TestTaskQueueLatencyNoThrottle_WithNamespaceScopeThrottling() {
+	// Test that namespace-scoped throttling metric is recorded
+	executable := s.newTestExecutable()
+
+	// First attempt: namespace-scoped RPS limit
+	namespaceScopedErr := &serviceerror.ResourceExhausted{
+		Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
+		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+	}
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        namespaceScopedErr,
+	})
+
+	err := executable.Execute()
+	s.Error(err)
+	err = executable.HandleErr(err)
+	s.Error(err)
+
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true)
+	executable.Nack(err)
+
+	// Second attempt: success
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        nil,
+	})
+
+	err = executable.Execute()
+	s.NoError(err)
+
+	capture := s.metricsHandler.StartCapture()
+	executable.Ack()
+	snapshot := capture.Snapshot()
+
+	// Verify both metrics are emitted
+	queueLatencyRecordings := snapshot[metrics.TaskQueueLatency.Name()]
+	s.Len(queueLatencyRecordings, 1)
+
+	noThrottleRecordings := snapshot[metrics.TaskQueueLatencyNoThrottle.Name()]
+	s.Len(noThrottleRecordings, 1)
+}

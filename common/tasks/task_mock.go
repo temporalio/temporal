@@ -12,6 +12,7 @@ package tasks
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	backoff "go.temporal.io/server/common/backoff"
 	gomock "go.uber.org/mock/gomock"
@@ -203,6 +204,18 @@ func (m *MockTask) RetryPolicy() backoff.RetryPolicy {
 func (mr *MockTaskMockRecorder) RetryPolicy() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryPolicy", reflect.TypeOf((*MockTask)(nil).RetryPolicy))
+}
+
+// SetThrottledTime mocks base method.
+func (m *MockTask) SetThrottledTime(arg0 time.Time) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetThrottledTime", arg0)
+}
+
+// SetThrottledTime indicates an expected call of SetThrottledTime.
+func (mr *MockTaskMockRecorder) SetThrottledTime(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetThrottledTime", reflect.TypeOf((*MockTask)(nil).SetThrottledTime), arg0)
 }
 
 // State mocks base method.

@@ -785,6 +785,10 @@ var (
 		"task_latency_queue",
 		WithDescription("End-to-end latency for processing and completing a history task, from task generation to completion."),
 	)
+	TaskQueueLatencyNoThrottle = NewTimerDef(
+		"task_latency_queue_no_throttle",
+		WithDescription("End-to-end latency for processing and completing a history task, excluding delays from APS, RPS, persistence, and scheduler rate limiting."),
+	)
 	TaskAttempt = NewDimensionlessHistogramDef(
 		"task_attempt",
 		WithDescription("The number of attempts took to complete a history task."),

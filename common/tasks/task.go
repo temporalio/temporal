@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"time"
 
 	"go.temporal.io/server/common/backoff"
 )
@@ -37,5 +38,7 @@ type (
 		Reschedule()
 		// State returns the current task state
 		State() State
+		// SetThrottledTime updates the throttle-adjusted time when the task is throttled
+		SetThrottledTime(time.Time)
 	}
 )

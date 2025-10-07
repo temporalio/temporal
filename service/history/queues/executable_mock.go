@@ -353,6 +353,18 @@ func (mr *MockExecutableMockRecorder) SetTaskID(id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTaskID", reflect.TypeOf((*MockExecutable)(nil).SetTaskID), id)
 }
 
+// SetThrottledTime mocks base method.
+func (m *MockExecutable) SetThrottledTime(arg0 time.Time) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetThrottledTime", arg0)
+}
+
+// SetThrottledTime indicates an expected call of SetThrottledTime.
+func (mr *MockExecutableMockRecorder) SetThrottledTime(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetThrottledTime", reflect.TypeOf((*MockExecutable)(nil).SetThrottledTime), arg0)
+}
+
 // SetVisibilityTime mocks base method.
 func (m *MockExecutable) SetVisibilityTime(timestamp time.Time) {
 	m.ctrl.T.Helper()
