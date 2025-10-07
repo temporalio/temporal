@@ -66,7 +66,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 		} else if errors.As(err, new(*serviceerror.PermissionDenied)) {
 			return workflow.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
-				Message: fmt.Sprintf("caller namespace %q unauthorized for %q", ns.ID(), attrs.Endpoint),
+				Message: fmt.Sprintf("caller namespace %q unauthorized for %q", ns.Name(), attrs.Endpoint),
 			}
 		} else {
 			return err
