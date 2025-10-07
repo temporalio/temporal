@@ -524,9 +524,12 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	}
 	defer func() {
 		var verificationErr *verificationErr
-		if retError == consts.ErrTaskRetry || errors.As(retError, &verificationErr) {
+		switch {
+		case retError == consts.ErrTaskRetry,
+			errors.Is(retError, consts.ErrStaleReference),
+			errors.As(retError, &verificationErr):
 			release(nil)
-		} else {
+		default:
 			release(retError)
 		}
 	}()
