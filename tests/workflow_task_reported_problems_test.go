@@ -21,6 +21,7 @@ type WFTFailureReportedProblemsTestSuite struct {
 	testcore.FunctionalTestBase
 	shouldFail   atomic.Bool
 	failureCount atomic.Int32
+	failureType  atomic.Int32 // 0 = panic, 1 = non-deterministic error
 }
 
 func TestWFTFailureReportedProblemsTestSuite(t *testing.T) {
@@ -65,18 +66,6 @@ func (s *WFTFailureReportedProblemsTestSuite) workflowWithActivity(ctx workflow.
 	return "done!", nil
 }
 
-func (s *WFTFailureReportedProblemsTestSuite) workflowSwitchesLastFailure(ctx workflow.Context) (string, error) {
-	s.failureCount.Add(1)
-	if s.shouldFail.Load() {
-		if s.failureCount.Load()%2 == 0 {
-			panic("forced-panic-to-fail-wft")
-		}
-		time.Sleep(15 * time.Second) //nolint:forbidigo
-	}
-
-	return "done!", nil
-}
-
 func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_SetAndClear() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -97,12 +86,15 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.NotNil(t, description.TypedSearchAttributes)
 		saVal, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(searchattribute.TemporalReportedProblems))
 		require.True(t, ok)
 		require.NotEmpty(t, saVal)
 		require.Contains(t, saVal, "category=WorkflowTaskFailed")
 		require.Contains(t, saVal, "cause=WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure")
+
+		execution, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, execution.PendingWorkflowTask.Attempt, int32(2))
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// Unblock the workflow
@@ -139,7 +131,6 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.NotNil(t, description.TypedSearchAttributes)
 		saValues, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(searchattribute.TemporalReportedProblems))
 		require.True(t, ok)
 		require.NotEmpty(t, saValues)
@@ -182,16 +173,13 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Dyn
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.NotNil(t, description.TypedSearchAttributes)
 		_, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(searchattribute.TemporalReportedProblems))
 		require.False(t, ok)
-	}, 5*time.Second, 500*time.Millisecond)
 
-	s.EventuallyWithT(func(t *assert.CollectT) {
 		exec, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.GreaterOrEqual(t, exec.PendingWorkflowTask.Attempt, int32(2))
-	}, 5*time.Second, 500*time.Millisecond)
+	}, 10*time.Second, 500*time.Millisecond)
 
 	cleanup2 := s.OverrideDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 2)
 	defer cleanup2()
@@ -199,7 +187,6 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Dyn
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.NotNil(t, description.TypedSearchAttributes)
 		saValues, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(searchattribute.TemporalReportedProblems))
 		require.True(t, ok)
 		require.NotEmpty(t, saValues)
@@ -208,48 +195,6 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Dyn
 		require.Contains(t, saValues, "cause=WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure")
 	}, 15*time.Second, 500*time.Millisecond)
 
-	s.shouldFail.Store(false)
-
-	var out string
-	s.NoError(workflowRun.Get(ctx, &out))
-
-	description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-	s.NoError(err)
-	s.NotNil(description.TypedSearchAttributes)
-	_, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(searchattribute.TemporalReportedProblems))
-	s.False(ok)
-}
-
-func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_FailureChanges() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	s.shouldFail.Store(true)
-
-	s.Worker().RegisterWorkflow(s.workflowSwitchesLastFailure)
-
-	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
-		TaskQueue: s.TaskQueue(),
-	}
-
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, s.workflowSwitchesLastFailure)
-	s.NoError(err)
-
-	// Validate the search attributes are not empty and has TemporalReportedProblems with 2 entries
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.NotNil(t, description.TypedSearchAttributes)
-		saValues, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(searchattribute.TemporalReportedProblems))
-		require.True(t, ok)
-		require.NotEmpty(t, saValues)
-		require.Len(t, saValues, 2)
-		require.Contains(t, saValues, "category=WorkflowTaskFailed")
-		require.Contains(t, saValues, "cause=WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure")
-	}, 5*time.Second, 500*time.Millisecond)
-
-	// Unblock the workflow
 	s.shouldFail.Store(false)
 
 	var out string

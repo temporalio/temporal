@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
@@ -5907,13 +5908,23 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
 
-	existingPayload := exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems]
-	if searchattribute.AreKeywordListPayloadsEqual(existingPayload, reportedProblemsPayload) {
+	decodedA, err := searchattribute.DecodeValue(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	if err != nil {
+		return err
+	}
+
+	existingProblems, ok := decodedA.([]string)
+	if !ok && decodedA != nil {
+		softassert.Fail(ms.logger, "TemporalReportedProblems payload decoded to unexpected type for logging")
+		return fmt.Errorf("TemporalReportedProblems payload decoded to unexpected type for logging")
+	}
+
+	if slices.Equal(existingProblems, reportedProblems) {
 		return nil
 	}
 
 	// Log the search attribute change
-	ms.logReportedProblemsChange(existingPayload, reportedProblemsPayload)
+	ms.logReportedProblemsChange(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], reportedProblemsPayload)
 
 	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: reportedProblemsPayload})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
@@ -5977,21 +5988,23 @@ func (ms *MutableStateImpl) decodeReportedProblems(p *commonpb.Payload) []string
 
 	decoded, err := searchattribute.DecodeValue(p, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	if err != nil {
-		ms.logger.Warn("Failed to decode TemporalReportedProblems payload for logging",
+		ms.logger.Error("Failed to decode TemporalReportedProblems payload for logging",
 			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
 			tag.WorkflowID(ms.executionInfo.WorkflowId),
 			tag.WorkflowRunID(ms.executionState.RunId),
 			tag.Error(err))
-		return []string{"<decode-error>"}
+		softassert.Fail(ms.logger, "Failed to decode TemporalReportedProblems payload for logging")
+		return []string{}
 	}
 
 	problems, ok := decoded.([]string)
 	if !ok {
-		ms.logger.Warn("TemporalReportedProblems payload decoded to unexpected type for logging",
+		ms.logger.Error("TemporalReportedProblems payload decoded to unexpected type for logging",
 			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
 			tag.WorkflowID(ms.executionInfo.WorkflowId),
 			tag.WorkflowRunID(ms.executionState.RunId))
-		return []string{"<type-error>"}
+		softassert.Fail(ms.logger, "TemporalReportedProblems payload decoded to unexpected type for logging")
+		return []string{}
 	}
 
 	return problems

@@ -877,10 +877,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 			timeoutType,
 		)
 
-		if m.ms.executionInfo.LastWorkflowTaskFailure == nil {
-			m.ms.executionInfo.LastWorkflowTaskFailure = &persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType{
-				LastWorkflowTaskTimedOutType: timeoutType,
-			}
+		m.ms.executionInfo.LastWorkflowTaskFailure = &persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType{
+			LastWorkflowTaskTimedOutType: timeoutType,
 		}
 
 	}
