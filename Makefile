@@ -526,13 +526,13 @@ install-schema-postgresql12: temporal-sql-tool
 
 install-schema-es: temporal-elasticsearch-tool
 	@printf $(COLOR) "Install Elasticsearch schema..."
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 setup-schema
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 setup-schema
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev
 
 install-schema-es-secondary: temporal-elasticsearch-tool
 	@printf $(COLOR) "Install Elasticsearch schema..."
-	./temporal-elasticsearch-tool -e http://127.0.0.1:8200 setup-schema
-	./temporal-elasticsearch-tool -e http://127.0.0.1:8200 create-index --index temporal_visibility_v1_secondary
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:8200 setup-schema
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:8200 create-index --index temporal_visibility_v1_secondary
 
 install-schema-xdc: temporal-cassandra-tool temporal-elasticsearch-tool
 	@printf $(COLOR)  "Install Cassandra schema (active)..."
@@ -554,15 +554,15 @@ install-schema-xdc: temporal-cassandra-tool temporal-elasticsearch-tool
 	./temporal-cassandra-tool -k temporal_cluster_c update-schema -d ./schema/cassandra/temporal/versioned
 
 	@printf $(COLOR) "Install Elasticsearch schemas..."
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 setup-schema
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 setup-schema
 # Delete indices if they exist (drop-index fails silently if index doesn't exist)
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_a --fail
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_b --fail
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_c --fail
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_a --fail
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_b --fail
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_c --fail
 # Create indices
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_a
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_b
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_c
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_a
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_b
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_c
 
 ##### Run server #####
 DOCKER_COMPOSE_FILES     := -f ./develop/docker-compose/docker-compose.yml -f ./develop/docker-compose/docker-compose.$(GOOS).yml

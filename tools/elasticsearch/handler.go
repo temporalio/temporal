@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -94,14 +94,14 @@ func ping(cli *cli.Context, logger log.Logger) error {
 func parseElasticConfig(cli *cli.Context) (*esclient.Config, error) {
 	cfg := new(esclient.Config)
 
-	u, err := url.Parse(cli.String(CLIOptESURL))
+	u, err := url.Parse(cli.GlobalString(commonschema.CLIOptEndpoint))
 	if err != nil {
-		return nil, fmt.Errorf("invalid elasticsearch URL %q: %w", cli.String(CLIOptESURL), err)
+		return nil, fmt.Errorf("invalid elasticsearch URL %q: %w", cli.GlobalString(commonschema.CLIOptEndpoint), err)
 	}
 
 	cfg.URL = *u
-	cfg.Username = cli.String(CLIOptESUsername)
-	cfg.Password = cli.String(CLIOptESPassword)
+	cfg.Username = cli.GlobalString(commonschema.CLIOptUser)
+	cfg.Password = cli.GlobalString(commonschema.CLIOptPassword)
 	cfg.Version = "v7" // Fixed schema version 7
 	cfg.Indices = map[string]string{}
 
@@ -109,14 +109,14 @@ func parseElasticConfig(cli *cli.Context) (*esclient.Config, error) {
 		cfg.Indices[esclient.VisibilityAppName] = cli.String(CLIOptVisibilityIndex)
 	}
 
-	if cli.String(CLIOptAWSCredentials) != "" {
-		cfg.AWSRequestSigning.CredentialProvider = cli.String(CLIOptAWSCredentials)
+	if cli.GlobalString(CLIOptAWSCredentials) != "" {
+		cfg.AWSRequestSigning.CredentialProvider = cli.GlobalString(CLIOptAWSCredentials)
 		cfg.AWSRequestSigning.Enabled = true
 
 		if cfg.AWSRequestSigning.CredentialProvider == "static" {
 			cfg.AWSRequestSigning.Static.AccessKeyID = cfg.Username
 			cfg.AWSRequestSigning.Static.SecretAccessKey = cfg.Password
-			cfg.AWSRequestSigning.Static.Token = cli.String(CLIOptAWSToken)
+			cfg.AWSRequestSigning.Static.Token = cli.GlobalString(CLIOptAWSToken)
 		}
 	}
 
