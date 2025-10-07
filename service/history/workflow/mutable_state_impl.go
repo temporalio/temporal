@@ -8431,14 +8431,14 @@ func (ms *MutableStateImpl) reschedulePendingWorkflowTask(invalidatePendingTasks
 		return nil
 	}
 
-	// If requested, increase the stamp ("version") to invalidate the pending non-speculative WFT.
-	// We don't invalidate speculative WFTs because they are very latency sensitive.
 	if invalidatePendingTasks {
+		// Increase the stamp ("version") to invalidate the pending non-speculative WFT.
+		// We don't invalidate speculative WFTs because they are very latency sensitive.
 		ms.executionInfo.WorkflowTaskStamp += 1
-	}
 
-	// Reset the attempt; forcing a non-transient workflow task to be scheduled.
-	ms.executionInfo.Attempt = 1
+		// Reset the attempt; forcing a non-transient workflow task to be scheduled.
+		ms.executionInfo.Attempt = 1
+	}
 
 	return ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(pendingTask.ScheduledEventID)
 }
