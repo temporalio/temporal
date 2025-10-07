@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -2111,4 +2112,249 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceNotFound() {
 		NewName:      newName,
 	})
 	m.ErrorAs(err, new(*serviceerror.NamespaceNotFound))
+}
+
+// TestRenameNamespaceCassandra tests Cassandra-specific RenameNamespace behavior
+// This test verifies the two-step non-atomic rename operation in Cassandra
+func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceCassandra() {
+	// This test is for Cassandra
+	switch m.DefaultTestCluster.(type) {
+	case *sql.TestCluster:
+		m.T().Skip()
+	default:
+	}
+
+	id := uuid.New()
+	name := "cassandra-rename-test-name"
+	newName := "cassandra-rename-test-new-name"
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "cassandra-rename-test-description"
+	owner := "cassandra-rename-test-owner"
+	data := map[string]string{"k1": "v1"}
+	retention := int32(10)
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "test://history/uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "test://visibility/uri"
+
+	clusterActive := "some random active cluster name"
+	clusterStandby := "some random standby cluster name"
+	configVersion := int64(10)
+	failoverVersion := int64(59)
+	isGlobalNamespace := true
+	clusters := []string{clusterActive, clusterStandby}
+
+	// Create namespace
+	resp1, err1 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id,
+			Name:        name,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention),
+			HistoryArchivalState:    historyArchivalState,
+			HistoryArchivalUri:      historyArchivalURI,
+			VisibilityArchivalState: visibilityArchivalState,
+			VisibilityArchivalUri:   visibilityArchivalURI,
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          clusters,
+		},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.NoError(err1)
+	m.EqualValues(id, resp1.ID)
+
+	// Verify namespace exists with original name
+	resp2, err2 := m.GetNamespace(id, "")
+	m.NoError(err2)
+	m.Equal(name, resp2.Namespace.Info.Name)
+
+	// Test 1: Rename to a new name
+	err3 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
+		PreviousName: name,
+		NewName:      newName,
+	})
+	m.NoError(err3)
+
+	// Verify namespace can be retrieved by new name
+	resp4, err4 := m.GetNamespace("", newName)
+	m.NoError(err4)
+	m.NotNil(resp4)
+	m.EqualValues(id, resp4.Namespace.Info.Id)
+	m.Equal(newName, resp4.Namespace.Info.Name)
+	m.Equal(description, resp4.Namespace.Info.Description)
+	m.Equal(owner, resp4.Namespace.Info.Owner)
+	m.Equal(data, resp4.Namespace.Info.Data)
+
+	// Verify namespace can be retrieved by ID and has new name
+	resp5, err5 := m.GetNamespace(id, "")
+	m.NoError(err5)
+	m.Equal(newName, resp5.Namespace.Info.Name)
+
+	// Verify old name no longer exists (may need eventual consistency check for Cassandra)
+	m.Eventually(
+		func() bool {
+			_, err := m.GetNamespace("", name)
+			return errors.As(err, new(*serviceerror.NamespaceNotFound))
+		},
+		10*time.Second,
+		100*time.Millisecond,
+	)
+
+	// Fetch metadata version before renaming
+	metadataBeforeRename, err9 := m.MetadataManager.GetMetadata(m.ctx)
+	m.NoError(err9)
+
+	// Test 2: Rename to the same name
+	// In Cassandra, this will fail because it tries to INSERT a row that already exists
+	// with IF NOT EXISTS, which is expected behavior for Cassandra's two-step process
+	err6 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
+		PreviousName: newName,
+		NewName:      newName,
+	})
+	m.ErrorAs(err6, new(*serviceerror.Unavailable), "Renaming to the same name fails in Cassandra due to IF NOT EXISTS")
+
+	// Test 3: Verify namespace still exists with same name (unchanged)
+	resp7, err7 := m.GetNamespace(id, "")
+	m.NoError(err7)
+	m.Equal(newName, resp7.Namespace.Info.Name)
+
+	// Test 4: Verify namespace can still be fetched by ID
+	resp8, err8 := m.GetNamespace(id, "")
+	m.NoError(err8)
+	m.Equal(newName, resp8.Namespace.Info.Name)
+
+	// Test 5: Verify metadata version was not incremented
+	metadataAfterRename, err10 := m.MetadataManager.GetMetadata(m.ctx)
+	m.NoError(err10)
+	m.Equal(metadataBeforeRename.NotificationVersion, metadataAfterRename.NotificationVersion, "Notification version should not have been incremented")
+}
+
+// TestRenameNamespaceSQL tests SQL RenameNamespace behavior
+// This test verifies the atomic transaction-based rename operation in SQL databases
+func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceSQL() {
+	// This test is for SQL databases
+	switch m.DefaultTestCluster.(type) {
+	case *sql.TestCluster:
+	default:
+		m.T().Skip()
+	}
+
+	id := uuid.New()
+	name := "sql-rename-test-name"
+	newName := "sql-rename-test-new-name"
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "sql-rename-test-description"
+	owner := "sql-rename-test-owner"
+	data := map[string]string{"k1": "v1"}
+	retention := int32(10)
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "test://history/uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "test://visibility/uri"
+
+	clusterActive := "some random active cluster name"
+	clusterStandby := "some random standby cluster name"
+	configVersion := int64(10)
+	failoverVersion := int64(59)
+	isGlobalNamespace := true
+	clusters := []string{clusterActive, clusterStandby}
+
+	// Create namespace
+	resp1, err1 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id,
+			Name:        name,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention),
+			HistoryArchivalState:    historyArchivalState,
+			HistoryArchivalUri:      historyArchivalURI,
+			VisibilityArchivalState: visibilityArchivalState,
+			VisibilityArchivalUri:   visibilityArchivalURI,
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          clusters,
+		},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.NoError(err1)
+	m.EqualValues(id, resp1.ID)
+
+	// Verify namespace exists with original name
+	resp2, err2 := m.GetNamespace(id, "")
+	m.NoError(err2)
+	m.Equal(name, resp2.Namespace.Info.Name)
+
+	// Test 1: Rename to a new name
+	err3 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
+		PreviousName: name,
+		NewName:      newName,
+	})
+	m.NoError(err3)
+
+	// Verify namespace can be retrieved by new name
+	resp4, err4 := m.GetNamespace("", newName)
+	m.NoError(err4)
+	m.NotNil(resp4)
+	m.EqualValues(id, resp4.Namespace.Info.Id)
+	m.Equal(newName, resp4.Namespace.Info.Name)
+	m.Equal(description, resp4.Namespace.Info.Description)
+	m.Equal(owner, resp4.Namespace.Info.Owner)
+	m.Equal(data, resp4.Namespace.Info.Data)
+
+	// Verify namespace can be retrieved by ID and has new name
+	resp5, err5 := m.GetNamespace(id, "")
+	m.NoError(err5)
+	m.Equal(newName, resp5.Namespace.Info.Name)
+
+	// Verify old name no longer exists
+	_, err6 := m.GetNamespace("", name)
+	m.ErrorAs(err6, new(*serviceerror.NamespaceNotFound), "Old name should not exist after rename")
+
+	// Fetch metadata version before renaming
+	metadataBeforeRename, err9 := m.MetadataManager.GetMetadata(m.ctx)
+	m.NoError(err9)
+
+	// Test 2: Rename to the same name (idempotent operation)
+	err7 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
+		PreviousName: newName,
+		NewName:      newName,
+	})
+	m.NoError(err7, "Renaming to the same name should succeed")
+
+	// Verify namespace still exists with same name and data is unchanged
+	resp8, err8 := m.GetNamespace(id, "")
+	m.NoError(err8)
+	m.Equal(newName, resp8.Namespace.Info.Name)
+	m.Equal(description, resp8.Namespace.Info.Description)
+	m.Equal(owner, resp8.Namespace.Info.Owner)
+	m.Equal(data, resp8.Namespace.Info.Data)
+
+	// Test 3: Verify atomicity - query by both ID and name should be consistent
+	resp9, err9 := m.GetNamespace("", newName)
+	m.NoError(err9)
+	m.Equal(resp9.Namespace.Info.Id, resp8.Namespace.Info.Id)
+	m.Equal(resp9.Namespace.Info.Name, resp8.Namespace.Info.Name)
+	m.Equal(resp9.Namespace.Info.Description, resp8.Namespace.Info.Description)
+
+	// Test 4: Verify metadata version was incremented
+	metadataAfterRename, err11 := m.MetadataManager.GetMetadata(m.ctx)
+	m.NoError(err11)
+	m.Greater(metadataAfterRename.NotificationVersion, metadataBeforeRename.NotificationVersion, "Notification version should have been incremented")
 }
