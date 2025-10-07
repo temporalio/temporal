@@ -450,9 +450,9 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 			e.resourceExhaustedCount++
 		}
 
-		// Also set throttled time for namespace-scoped resource exhausted errors
+		// Set throttled time for namespace-scoped resource exhausted errors.
 		if resourceExhaustedErr.Scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE {
-			e.setThrottledTime(e.timeSource.Now())
+			e.throttledTime = e.timeSource.Now()
 		}
 
 		metrics.TaskThrottledCounter.With(e.metricsHandler).Record(
@@ -514,9 +514,9 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
-	// Handle scheduler throttle - update throttle time and return
+	// Handle throttling from scheduler - update throttle time and return
 	if errors.Is(err, ctasks.ErrSchedulerThrottle) {
-		e.setThrottledTime(e.timeSource.Now())
+		e.throttledTime = e.timeSource.Now()
 		return nil
 	}
 
@@ -737,10 +737,6 @@ func (e *executableImpl) GetScheduledTime() time.Time {
 
 func (e *executableImpl) SetScheduledTime(t time.Time) {
 	e.scheduledTime = t
-}
-
-func (e *executableImpl) setThrottledTime(t time.Time) {
-	e.throttledTime = t
 }
 
 // GetDestination returns the embedded task's destination if it exists. Defaults to an empty string.
