@@ -59,7 +59,9 @@ var defaultConfig = &nexusoperations.Config{
 func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 	endpointReg := nexustest.FakeEndpointRegistry{
 		OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistencespb.NexusEndpointEntry, error) {
-			if endpointName != "endpoint" {
+			if endpointName == "endpoint caller namespace unauthorized" {
+				return nil, serviceerror.NewPermissionDenied("caller namespace unauthorized", "")
+			} else if endpointName != "endpoint" {
 				return nil, serviceerror.NewNotFound("endpoint not found")
 			}
 			// Only the ID is taken here.
@@ -166,6 +168,24 @@ func TestHandleScheduleCommand(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, 1, len(tcx.history.Events))
+	})
+
+	t.Run("caller namespace unauthorized", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "endpoint caller namespace unauthorized",
+					Service:   "service",
+					Operation: "op",
+				},
+			},
+		})
+		var failWFTErr workflow.FailWorkflowTaskError
+		require.ErrorAs(t, err, &failWFTErr)
+		require.False(t, failWFTErr.TerminateWorkflow)
+		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
+		require.Equal(t, 0, len(tcx.history.Events))
 	})
 
 	t.Run("exceeds max service length", func(t *testing.T) {
