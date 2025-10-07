@@ -73,29 +73,14 @@ const (
 	unknownRun  = "unknown"
 )
 
-// Tag is an interface to define metrics tags
-type Tag interface {
-	Key() string
-	Value() string
+// Tag is a struct to define metrics tags
+type Tag struct {
+	Key   string
+	Value string
 }
 
-type (
-	tagImpl struct {
-		key   string
-		value string
-	}
-)
-
-func (v *tagImpl) Key() string {
-	return v.key
-}
-
-func (v *tagImpl) Value() string {
-	return v.value
-}
-
-func (v *tagImpl) String() string {
-	return fmt.Sprintf("tag{key: %q, value: %q}", v.key, v.value)
+func (v Tag) String() string {
+	return fmt.Sprintf("tag{key: %q, value: %q}", v.Key, v.Value)
 }
 
 // NamespaceTag returns a new namespace tag. For timers, this also ensures that we
@@ -105,10 +90,7 @@ func NamespaceTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{
-		key:   namespace,
-		value: value,
-	}
+	return Tag{Key: namespace, Value: value}
 }
 
 // NamespaceIDTag returns a new namespace ID tag.
@@ -116,13 +98,10 @@ func NamespaceIDTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{
-		key:   namespaceID,
-		value: value,
-	}
+	return Tag{Key: namespaceID, Value: value}
 }
 
-var namespaceUnknownTag = &tagImpl{key: namespace, value: unknownValue}
+var namespaceUnknownTag = Tag{Key: namespace, Value: unknownValue}
 
 // NamespaceUnknownTag returns a new namespace:unknown tag-value
 func NamespaceUnknownTag() Tag {
@@ -134,13 +113,10 @@ func NamespaceStateTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{
-		key:   namespaceState,
-		value: value,
-	}
+	return Tag{Key: namespaceState, Value: value}
 }
 
-var taskQueueUnknownTag = &tagImpl{key: taskQueue, value: unknownValue}
+var taskQueueUnknownTag = Tag{Key: taskQueue, Value: unknownValue}
 
 // TaskQueueUnknownTag returns a new taskqueue:unknown tag-value
 func TaskQueueUnknownTag() Tag {
@@ -149,7 +125,7 @@ func TaskQueueUnknownTag() Tag {
 
 // InstanceTag returns a new instance tag
 func InstanceTag(value string) Tag {
-	return &tagImpl{key: instance, value: value}
+	return Tag{Key: instance, Value: value}
 }
 
 // SourceClusterTag returns a new source cluster tag.
@@ -157,7 +133,7 @@ func SourceClusterTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: sourceCluster, value: value}
+	return Tag{Key: sourceCluster, Value: value}
 }
 
 // TargetClusterTag returns a new target cluster tag.
@@ -165,17 +141,17 @@ func TargetClusterTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: targetCluster, value: value}
+	return Tag{Key: targetCluster, Value: value}
 }
 
 // FromClusterIDTag returns a new from cluster tag.
 func FromClusterIDTag(value int32) Tag {
-	return &tagImpl{key: fromCluster, value: strconv.FormatInt(int64(value), 10)}
+	return Tag{Key: fromCluster, Value: strconv.FormatInt(int64(value), 10)}
 }
 
 // ToClusterIDTag returns a new to cluster tag.
 func ToClusterIDTag(value int32) Tag {
-	return &tagImpl{key: toCluster, value: strconv.FormatInt(int64(value), 10)}
+	return Tag{Key: toCluster, Value: strconv.FormatInt(int64(value), 10)}
 }
 
 // UnsafeTaskQueueTag returns a new task queue tag.
@@ -190,11 +166,11 @@ func UnsafeTaskQueueTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: taskQueue, value: value}
+	return Tag{Key: taskQueue, Value: value}
 }
 
 func TaskQueueTypeTag(tqType enumspb.TaskQueueType) Tag {
-	return &tagImpl{key: TaskTypeTagName, value: tqType.String()}
+	return Tag{Key: TaskTypeTagName, Value: tqType.String()}
 }
 
 // Consider passing the value of "metrics.breakdownByBuildID" dynamic config to this function.
@@ -204,7 +180,7 @@ func WorkerBuildIdTag(buildId string, buildIdBreakdown bool) Tag {
 	} else if !buildIdBreakdown {
 		buildId = "__versioned__"
 	}
-	return &tagImpl{key: workerBuildId, value: buildId}
+	return Tag{Key: workerBuildId, Value: buildId}
 }
 
 // WorkflowTypeTag returns a new workflow type tag.
@@ -212,7 +188,7 @@ func WorkflowTypeTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: workflowType, value: value}
+	return Tag{Key: workflowType, Value: value}
 }
 
 // ActivityTypeTag returns a new activity type tag.
@@ -220,7 +196,7 @@ func ActivityTypeTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: activityType, value: value}
+	return Tag{Key: activityType, Value: value}
 }
 
 // CommandTypeTag returns a new command type tag.
@@ -228,7 +204,7 @@ func CommandTypeTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: commandType, value: value}
+	return Tag{Key: commandType, Value: value}
 }
 
 // Returns a new service role tag.
@@ -236,7 +212,7 @@ func ServiceRoleTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: ServiceRoleTagName, value: value}
+	return Tag{Key: ServiceRoleTagName, Value: value}
 }
 
 // Returns a new failure type tag
@@ -244,7 +220,7 @@ func FailureTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: FailureTagName, value: value}
+	return Tag{Key: FailureTagName, Value: value}
 }
 
 func FirstAttemptTag(attempt int32) Tag {
@@ -252,140 +228,140 @@ func FirstAttemptTag(attempt int32) Tag {
 	if attempt == 1 {
 		value = trueValue
 	}
-	return &tagImpl{key: isFirstAttempt, value: value}
+	return Tag{Key: isFirstAttempt, Value: value}
 }
 
 func FailureSourceTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: FailureSourceTagName, value: value}
+	return Tag{Key: FailureSourceTagName, Value: value}
 }
 
 func TaskCategoryTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: TaskCategoryTagName, value: value}
+	return Tag{Key: TaskCategoryTagName, Value: value}
 }
 
 func TaskTypeTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: TaskTypeTagName, value: value}
+	return Tag{Key: TaskTypeTagName, Value: value}
 }
 
 func PartitionTag(partition string) Tag {
-	return &tagImpl{key: PartitionTagName, value: partition}
+	return Tag{Key: PartitionTagName, Value: partition}
 }
 
 func TaskPriorityTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: TaskPriorityTagName, value: value}
+	return Tag{Key: TaskPriorityTagName, Value: value}
 }
 
 func QueueReaderIDTag(readerID int64) Tag {
-	return &tagImpl{key: QueueReaderIDTagName, value: strconv.Itoa(int(readerID))}
+	return Tag{Key: QueueReaderIDTagName, Value: strconv.Itoa(int(readerID))}
 }
 
 func QueueActionTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: QueueActionTagName, value: value}
+	return Tag{Key: QueueActionTagName, Value: value}
 }
 
 func QueueTypeTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: QueueTypeTagName, value: value}
+	return Tag{Key: QueueTypeTagName, Value: value}
 }
 
 func VisibilityPluginNameTag(value string) Tag {
 	if value == "" {
 		value = unknownValue
 	}
-	return &tagImpl{key: visibilityPluginNameTagName, value: value}
+	return Tag{Key: visibilityPluginNameTagName, Value: value}
 }
 
 func VisibilityIndexNameTag(value string) Tag {
 	if value == "" {
 		value = unknownValue
 	}
-	return &tagImpl{key: visibilityIndexNameTagName, value: value}
+	return Tag{Key: visibilityIndexNameTagName, Value: value}
 }
 
 // VersionedTag represents whether a loaded task queue manager represents a specific version set or build ID or not.
 func VersionedTag(versioned string) Tag {
-	return &tagImpl{key: versionedTagName, value: versioned}
+	return Tag{Key: versionedTagName, Value: versioned}
 }
 
 func ServiceErrorTypeTag(err error) Tag {
-	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(util.ErrorType(err), errorPrefix)}
+	return Tag{Key: ErrorTypeTagName, Value: strings.TrimPrefix(util.ErrorType(err), errorPrefix)}
 }
 
 func OutcomeTag(outcome string) Tag {
-	return &tagImpl{key: outcomeTagName, value: outcome}
+	return Tag{Key: outcomeTagName, Value: outcome}
 }
 
 func NexusMethodTag(value string) Tag {
-	return &tagImpl{key: nexusMethodTagName, value: value}
+	return Tag{Key: nexusMethodTagName, Value: value}
 }
 
 func NexusEndpointTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: nexusEndpointTagName, value: value}
+	return Tag{Key: nexusEndpointTagName, Value: value}
 }
 
 func NexusServiceTag(value string) Tag {
-	return &tagImpl{key: nexusServiceTagName, value: value}
+	return Tag{Key: nexusServiceTagName, Value: value}
 }
 
 func NexusOperationTag(value string) Tag {
-	return &tagImpl{key: nexusOperationTagName, value: value}
+	return Tag{Key: nexusOperationTagName, Value: value}
 }
 
 // HttpStatusTag returns a new httpStatusTag.
 func HttpStatusTag(value int) Tag {
-	return &tagImpl{key: httpStatusTagName, value: strconv.Itoa(value)}
+	return Tag{Key: httpStatusTagName, Value: strconv.Itoa(value)}
 }
 
 func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
-	return &tagImpl{key: resourceExhaustedTag, value: cause.String()}
+	return Tag{Key: resourceExhaustedTag, Value: cause.String()}
 }
 
 func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
-	return &tagImpl{key: resourceExhaustedScopeTag, value: scope.String()}
+	return Tag{Key: resourceExhaustedScopeTag, Value: scope.String()}
 }
 
 func ServiceNameTag(value primitives.ServiceName) Tag {
-	return &tagImpl{key: serviceName, value: string(value)}
+	return Tag{Key: serviceName, Value: string(value)}
 }
 
 func ActionType(value string) Tag {
-	return &tagImpl{key: actionType, value: value}
+	return Tag{Key: actionType, Value: value}
 }
 
 func OperationTag(value string) Tag {
-	return &tagImpl{key: OperationTagName, value: value}
+	return Tag{Key: OperationTagName, Value: value}
 }
 
 func StringTag(key string, value string) Tag {
-	return &tagImpl{key: key, value: value}
+	return Tag{Key: key, Value: value}
 }
 
 func CacheTypeTag(value string) Tag {
-	return &tagImpl{key: CacheTypeTagName, value: value}
+	return Tag{Key: CacheTypeTagName, Value: value}
 }
 
 func PriorityTag(value locks.Priority) Tag {
-	return &tagImpl{key: PriorityTagName, value: strconv.Itoa(int(value))}
+	return Tag{Key: PriorityTagName, Value: strconv.Itoa(int(value))}
 }
 
 // ReasonString is just a string but the special type is defined here to remind callers of ReasonTag to limit the
@@ -395,49 +371,46 @@ type ReasonString string
 // ReasonTag is a generic tag can be used anywhere a reason is needed.
 // Make sure that the value is of limited cardinality.
 func ReasonTag(value ReasonString) Tag {
-	return &tagImpl{key: reason, value: string(value)}
+	return Tag{Key: reason, Value: string(value)}
 }
 
 // ReplicationTaskTypeTag returns a new replication task type tag.
 func ReplicationTaskTypeTag(value enumsspb.ReplicationTaskType) Tag {
-	return &tagImpl{key: replicationTaskType, value: value.String()}
+	return Tag{Key: replicationTaskType, Value: value.String()}
 }
 
 // ReplicationTaskPriorityTag returns a replication task priority tag.
 func ReplicationTaskPriorityTag(value enumsspb.TaskPriority) Tag {
-	return &tagImpl{key: replicationTaskPriority, value: value.String()}
+	return Tag{Key: replicationTaskPriority, Value: value.String()}
 }
 
 // DestinationTag is a tag for metrics emitted by outbound task executors for the task's destination.
 func DestinationTag(value string) Tag {
-	return &tagImpl{
-		key:   destination,
-		value: value,
-	}
+	return Tag{Key: destination, Value: value}
 }
 
 func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {
-	return &tagImpl{versioningBehavior, behavior.String()}
+	return Tag{Key: versioningBehavior, Value: behavior.String()}
 }
 
 func WorkflowStatusTag(status string) Tag {
-	return &tagImpl{key: workflowStatus, value: status}
+	return Tag{Key: workflowStatus, Value: status}
 }
 
 func QueryTypeTag(queryType string) Tag {
 	if queryType == queryTypeStackTrace || queryType == queryTypeOpenSessions || queryType == queryTypeWorkflowMetadata {
-		return &tagImpl{key: queryTypeTag, value: queryType}
+		return Tag{Key: queryTypeTag, Value: queryType}
 	}
 	// group all user defined queries into a single tag value
-	return &tagImpl{key: queryTypeTag, value: queryTypeUserDefined}
+	return Tag{Key: queryTypeTag, Value: queryTypeUserDefined}
 }
 
 func VersioningBehaviorBeforeOverrideTag(behavior enumspb.VersioningBehavior) Tag {
-	return &tagImpl{key: behaviorBefore, value: behavior.String()}
+	return Tag{Key: behaviorBefore, Value: behavior.String()}
 }
 
 func VersioningBehaviorAfterOverrideTag(behavior enumspb.VersioningBehavior) Tag {
-	return &tagImpl{key: behaviorAfter, value: behavior.String()}
+	return Tag{Key: behaviorAfter, Value: behavior.String()}
 }
 
 // RunInitiatorTag creates a tag indicating how a workflow run was initiated.
@@ -446,43 +419,43 @@ func VersioningBehaviorAfterOverrideTag(behavior enumspb.VersioningBehavior) Tag
 // it returns a tag indicating an existing run.
 func RunInitiatorTag(prevRunID string, attributes *historypb.WorkflowExecutionStartedEventAttributes) Tag {
 	if attributes == nil {
-		return &tagImpl{key: runInitiator, value: existingRun}
+		return Tag{Key: runInitiator, Value: existingRun}
 	} else if attributes.GetParentWorkflowExecution() != nil {
-		return &tagImpl{key: runInitiator, value: childRun}
+		return Tag{Key: runInitiator, Value: childRun}
 	}
 
 	switch attributes.GetInitiator() {
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED:
-		return &tagImpl{key: runInitiator, value: newRun}
+		return Tag{Key: runInitiator, Value: newRun}
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
-		return &tagImpl{key: runInitiator, value: canRun}
+		return Tag{Key: runInitiator, Value: canRun}
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY:
-		return &tagImpl{key: runInitiator, value: retryRun}
+		return Tag{Key: runInitiator, Value: retryRun}
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE:
-		return &tagImpl{key: runInitiator, value: cronRun}
+		return Tag{Key: runInitiator, Value: cronRun}
 	default:
-		return &tagImpl{key: runInitiator, value: unknownRun}
+		return Tag{Key: runInitiator, Value: unknownRun}
 	}
 }
 
 func FromUnversionedTag(version string) Tag {
 	if version == "_unversioned_" {
-		return &tagImpl{key: fromUnversioned, value: trueValue}
+		return Tag{Key: fromUnversioned, Value: trueValue}
 	}
-	return &tagImpl{key: fromUnversioned, value: falseValue}
+	return Tag{Key: fromUnversioned, Value: falseValue}
 }
 
 func ToUnversionedTag(version string) Tag {
 	if version == "_unversioned_" {
-		return &tagImpl{key: toUnversioned, value: trueValue}
+		return Tag{Key: toUnversioned, Value: trueValue}
 	}
-	return &tagImpl{key: toUnversioned, value: falseValue}
+	return Tag{Key: toUnversioned, Value: falseValue}
 }
 
-var TaskExpireStageReadTag Tag = &tagImpl{key: taskExpireStage, value: "read"}
-var TaskExpireStageMemoryTag Tag = &tagImpl{key: taskExpireStage, value: "memory"}
-var TaskInvalidTag Tag = &tagImpl{key: taskExpireStage, value: "invalid"}
+var TaskExpireStageReadTag = Tag{Key: taskExpireStage, Value: "read"}
+var TaskExpireStageMemoryTag = Tag{Key: taskExpireStage, Value: "memory"}
+var TaskInvalidTag = Tag{Key: taskExpireStage, Value: "invalid"}
 
 func PersistenceDBKindTag(kind string) Tag {
-	return &tagImpl{key: PersistenceDBKindTagName, value: kind}
+	return Tag{Key: PersistenceDBKindTagName, Value: kind}
 }
