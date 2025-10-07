@@ -5931,7 +5931,7 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 	existingProblems, ok := decodedA.([]string)
 	if !ok && decodedA != nil {
 		softassert.Fail(ms.logger, "TemporalReportedProblems payload decoded to unexpected type for logging")
-		return fmt.Errorf("TemporalReportedProblems payload decoded to unexpected type for logging")
+		return errors.New("TemporalReportedProblems payload decoded to unexpected type for logging")
 	}
 
 	if slices.Equal(existingProblems, reportedProblems) {
