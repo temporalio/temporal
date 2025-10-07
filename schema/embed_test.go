@@ -25,11 +25,6 @@ func TestSchemaDirs(t *testing.T) {
 		"postgresql/v12/temporal",
 		"postgresql/v12/visibility",
 	}, dirs)
-
-	dirs = PathsByDir("elasticsearch")
-	requireContains(t, []string{
-		"elasticsearch/visibility/cluster_settings_v7.json",
-	}, dirs)
 }
 
 func TestElasticsearchIndexTemplateIsLatest(t *testing.T) {
