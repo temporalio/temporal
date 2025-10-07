@@ -55,27 +55,7 @@ type (
 	}
 )
 
-const (
-	// Default escape char is set explicitly to '!' for two reasons:
-	// 1. SQLite doesn't have a default escape char;
-	// 2. MySQL requires to escape the backslack char unlike SQLite and PostgreSQL.
-	// Thus, in order to avoid having specific code for each DB, it's better to
-	// set the escape char to a simpler char that doesn't require escaping.
-	defaultLikeEscapeChar = '!'
-)
-
 var (
-	// strings.Replacer takes a sequence of old to new replacements
-	escapeCharMap = []string{
-		"'", "''",
-		"\"", "\\\"",
-		"\b", "\\b",
-		"\n", "\\n",
-		"\r", "\\r",
-		"\t", "\\t",
-		"\\", "\\\\",
-	}
-
 	supportedComparisonOperators = []string{
 		sqlparser.EqualStr,
 		sqlparser.NotEqualStr,
@@ -107,8 +87,6 @@ var (
 		enumspb.INDEXED_VALUE_TYPE_INT,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
-
-	defaultLikeEscapeExpr = newUnsafeSQLString(string(defaultLikeEscapeChar))
 )
 
 func newQueryConverterInternal(
@@ -671,18 +649,6 @@ func (c *QueryConverterLegacy) convertIsExpr(exprRef *sqlparser.Expr) error {
 		)
 	}
 	return nil
-}
-
-func escapeLikeValueForPrefixSearch(in string, escape byte) string {
-	sb := strings.Builder{}
-	for _, c := range in {
-		if c == '%' || c == '_' || c == rune(escape) {
-			sb.WriteByte(escape)
-		}
-		sb.WriteRune(c)
-	}
-	sb.WriteByte('%')
-	return sb.String()
 }
 
 func isSupportedOperator(supportedOperators []string, operator string) bool {

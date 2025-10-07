@@ -3,23 +3,15 @@ package postgresql
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/temporalio/sqlparser"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
 
-type (
-	pgCastExpr struct {
-		sqlparser.Expr
-		Value sqlparser.Expr
-		Type  *sqlparser.ConvertType
-	}
-
-	pgQueryConverter struct{}
-)
+var maxDatetime = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 
 const (
 	jsonBuildArrayFuncName = "jsonb_build_array"
@@ -31,197 +23,129 @@ var (
 	convertTypeTSQuery = &sqlparser.ConvertType{Type: "tsquery"}
 )
 
+type pgCastExpr struct {
+	sqlparser.Expr
+	Value sqlparser.Expr
+	Type  *sqlparser.ConvertType
+}
+
 var _ sqlparser.Expr = (*pgCastExpr)(nil)
-var _ pluginQueryConverterLegacy = (*pgQueryConverter)(nil)
 
 func (node *pgCastExpr) Format(buf *sqlparser.TrackedBuffer) {
 	buf.Myprintf("%v::%v", node.Value, node.Type)
 }
 
-func newPostgreSQLQueryConverter(
-	namespaceName namespace.Name,
-	namespaceID namespace.ID,
-	saTypeMap searchattribute.NameTypeMap,
-	saMapper searchattribute.Mapper,
-	queryString string,
-) *QueryConverterLegacy {
-	return newQueryConverterInternal(
-		&pgQueryConverter{},
-		namespaceName,
-		namespaceID,
-		saTypeMap,
-		saMapper,
-		queryString,
-	)
-}
+type queryConverter struct{}
 
-func (c *pgQueryConverter) getDatetimeFormat() string {
+var _ sqlplugin.VisibilityQueryConverter = (*queryConverter)(nil)
+
+func (c *queryConverter) GetDatetimeFormat() string {
 	return "2006-01-02 15:04:05.999999"
 }
 
-func (c *pgQueryConverter) getCoalesceCloseTimeExpr() sqlparser.Expr {
-	return newFuncExpr(
-		coalesceFuncName,
-		closeTimeSaColName,
-		newUnsafeSQLString(maxDatetimeValue.Format(c.getDatetimeFormat())),
+func (c *queryConverter) GetCoalesceCloseTimeExpr() sqlparser.Expr {
+	return query.NewFuncExpr(
+		"coalesce",
+		query.CloseTimeSAColumn,
+		query.NewUnsafeSQLString(maxDatetime.Format(c.GetDatetimeFormat())),
 	)
 }
 
-func (c *pgQueryConverter) convertKeywordListComparisonExpr(
-	expr *sqlparser.ComparisonExpr,
+func (c *queryConverter) ConvertKeywordListComparisonExpr(
+	operator string,
+	col *query.SAColumn,
+	value sqlparser.Expr,
 ) (sqlparser.Expr, error) {
-	if !isSupportedKeywordListOperator(expr.Operator) {
-		return nil, query.NewConverterError(
-			"%s: operator '%s' not supported for KeywordList type search attribute in `%s`",
-			query.InvalidExpressionErrMessage,
-			expr.Operator,
-			formatComparisonExprStringForError(*expr),
-		)
-	}
-
-	switch expr.Operator {
+	switch operator {
 	case sqlparser.EqualStr, sqlparser.NotEqualStr:
-		newExpr := c.newJsonContainsExpr(expr.Left, expr.Right)
-		if expr.Operator == sqlparser.NotEqualStr {
+		newExpr := newJSONContainsExpr(col, value)
+		if operator == sqlparser.NotEqualStr {
 			newExpr = &sqlparser.NotExpr{Expr: newExpr}
 		}
 		return newExpr, nil
 	case sqlparser.InStr, sqlparser.NotInStr:
-		valTupleExpr, isValTuple := expr.Right.(sqlparser.ValTuple)
+		valTupleExpr, isValTuple := value.(sqlparser.ValTuple)
 		if !isValTuple {
 			return nil, query.NewConverterError(
 				"%s: unexpected value type (expected tuple of strings, got %s)",
 				query.InvalidExpressionErrMessage,
-				sqlparser.String(expr.Right),
+				sqlparser.String(value),
 			)
 		}
 		var newExpr sqlparser.Expr = &sqlparser.ParenExpr{
-			Expr: c.convertInExpr(expr.Left, valTupleExpr),
+			Expr: c.convertInExpr(col, valTupleExpr),
 		}
-		if expr.Operator == sqlparser.NotInStr {
+		if operator == sqlparser.NotInStr {
 			newExpr = &sqlparser.NotExpr{Expr: newExpr}
 		}
 		return newExpr, nil
 	default:
 		// this should never happen since isSupportedKeywordListOperator should already fail
 		return nil, query.NewConverterError(
-			"%s: operator '%s' not supported for KeywordList type search attribute in `%s`",
+			"%s: operator '%s' not supported for KeywordList type",
 			query.InvalidExpressionErrMessage,
-			expr.Operator,
-			formatComparisonExprStringForError(*expr),
+			operator,
 		)
 	}
 }
 
-func (c *pgQueryConverter) convertInExpr(
-	leftExpr sqlparser.Expr,
-	values sqlparser.ValTuple,
-) sqlparser.Expr {
-	exprs := make([]sqlparser.Expr, len(values))
-	for i, value := range values {
-		exprs[i] = c.newJsonContainsExpr(leftExpr, value)
-	}
-	for len(exprs) > 1 {
-		k := 0
-		for i := 0; i < len(exprs); i += 2 {
-			if i+1 < len(exprs) {
-				exprs[k] = &sqlparser.OrExpr{
-					Left:  exprs[i],
-					Right: exprs[i+1],
-				}
-			} else {
-				exprs[k] = exprs[i]
-			}
-			k++
-		}
-		exprs = exprs[:k]
-	}
-	return exprs[0]
-}
-
-func (c *pgQueryConverter) convertTextComparisonExpr(
-	expr *sqlparser.ComparisonExpr,
+func (c *queryConverter) ConvertTextComparisonExpr(
+	operator string,
+	col *query.SAColumn,
+	value sqlparser.Expr,
 ) (sqlparser.Expr, error) {
-	if !isSupportedTextOperator(expr.Operator) {
-		return nil, query.NewConverterError(
-			"%s: operator '%s' not supported for Text type search attribute in `%s`",
-			query.InvalidExpressionErrMessage,
-			expr.Operator,
-			formatComparisonExprStringForError(*expr),
-		)
-	}
-	valueExpr, ok := expr.Right.(*unsafeSQLString)
+	valueExpr, ok := value.(*query.UnsafeSQLString)
 	if !ok {
 		return nil, query.NewConverterError(
 			"%s: unexpected value type (expected string, got %s)",
 			query.InvalidExpressionErrMessage,
-			sqlparser.String(expr.Right),
+			sqlparser.String(value),
 		)
 	}
-	tokens := tokenizeTextQueryString(valueExpr.Val)
+	tokens := query.TokenizeTextQueryString(valueExpr.Val)
 	if len(tokens) == 0 {
 		return nil, query.NewConverterError(
-			"%s: unexpected value for Text type search attribute (no tokens found in %s)",
+			"%s: unexpected value for Text type search attribute (no tokens found)",
 			query.InvalidExpressionErrMessage,
-			sqlparser.String(expr.Right),
 		)
 	}
 	valueExpr.Val = strings.Join(tokens, " | ")
 	var newExpr sqlparser.Expr = &sqlparser.ComparisonExpr{
 		Operator: ftsMatchOp,
-		Left:     expr.Left,
+		Left:     col,
 		Right: &pgCastExpr{
-			Value: expr.Right,
+			Value: value,
 			Type:  convertTypeTSQuery,
 		},
 	}
-	if expr.Operator == sqlparser.NotEqualStr {
+	if operator == sqlparser.NotEqualStr {
 		newExpr = &sqlparser.NotExpr{Expr: newExpr}
 	}
 	return newExpr, nil
 }
 
-func (c *pgQueryConverter) newJsonContainsExpr(
-	jsonExpr sqlparser.Expr,
-	valueExpr sqlparser.Expr,
-) sqlparser.Expr {
-	return &sqlparser.ComparisonExpr{
-		Operator: jsonContainsOp,
-		Left:     jsonExpr,
-		Right:    newFuncExpr(jsonBuildArrayFuncName, valueExpr),
-	}
-}
-
-func (c *pgQueryConverter) buildSelectStmt(
-	namespaceID namespace.ID,
-	queryString string,
+func (c *queryConverter) BuildSelectStmt(
+	queryParams *query.QueryParams[sqlparser.Expr],
 	pageSize int,
-	token *pageTokenLegacy,
+	token *sqlplugin.VisibilityPageToken,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
 
-	whereClauses = append(
-		whereClauses,
-		fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
-	)
-	queryArgs = append(queryArgs, namespaceID.String())
-
-	if len(queryString) > 0 {
-		whereClauses = append(whereClauses, queryString)
-	}
+	queryString := sqlparser.String(queryParams.QueryExpr)
+	whereClauses = append(whereClauses, queryString)
 
 	if token != nil {
 		whereClauses = append(
 			whereClauses,
 			fmt.Sprintf(
 				"((%s = ? AND %s = ? AND %s > ?) OR (%s = ? AND %s < ?) OR %s < ?)",
-				sqlparser.String(c.getCoalesceCloseTimeExpr()),
+				sqlparser.String(c.GetCoalesceCloseTimeExpr()),
 				searchattribute.GetSqlDbColName(searchattribute.StartTime),
 				searchattribute.GetSqlDbColName(searchattribute.RunID),
-				sqlparser.String(c.getCoalesceCloseTimeExpr()),
+				sqlparser.String(c.GetCoalesceCloseTimeExpr()),
 				searchattribute.GetSqlDbColName(searchattribute.StartTime),
-				sqlparser.String(c.getCoalesceCloseTimeExpr()),
+				sqlparser.String(c.GetCoalesceCloseTimeExpr()),
 			),
 		)
 		queryArgs = append(
@@ -235,9 +159,7 @@ func (c *pgQueryConverter) buildSelectStmt(
 		)
 	}
 
-	queryArgs = append(queryArgs, pageSize)
-
-	return fmt.Sprintf(
+	stmt := fmt.Sprintf(
 		`SELECT %s
 		FROM executions_visibility
 		WHERE %s
@@ -245,39 +167,68 @@ func (c *pgQueryConverter) buildSelectStmt(
 		LIMIT ?`,
 		strings.Join(sqlplugin.DbFields, ", "),
 		strings.Join(whereClauses, " AND "),
-		sqlparser.String(c.getCoalesceCloseTimeExpr()),
+		sqlparser.String(c.GetCoalesceCloseTimeExpr()),
 		searchattribute.GetSqlDbColName(searchattribute.StartTime),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
-	), queryArgs
+	)
+	queryArgs = append(queryArgs, pageSize)
+
+	return stmt, queryArgs
 }
 
-func (c *pgQueryConverter) buildCountStmt(
-	namespaceID namespace.ID,
-	queryString string,
-	groupBy []string,
+func (c *queryConverter) BuildCountStmt(
+	queryParams *query.QueryParams[sqlparser.Expr],
 ) (string, []any) {
-	var whereClauses []string
-	var queryArgs []any
-
-	whereClauses = append(
-		whereClauses,
-		fmt.Sprintf("(%s = ?)", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
-	)
-	queryArgs = append(queryArgs, namespaceID.String())
-
-	if len(queryString) > 0 {
-		whereClauses = append(whereClauses, queryString)
+	groupBy := make([]string, 0, len(queryParams.GroupBy)+1)
+	for _, field := range queryParams.GroupBy {
+		groupBy = append(groupBy, searchattribute.GetSqlDbColName(field.FieldName))
 	}
 
 	groupByClause := ""
-	if len(groupBy) > 0 {
+	if len(queryParams.GroupBy) > 0 {
 		groupByClause = fmt.Sprintf("GROUP BY %s", strings.Join(groupBy, ", "))
 	}
 
 	return fmt.Sprintf(
 		"SELECT %s FROM executions_visibility WHERE %s %s",
 		strings.Join(append(groupBy, "COUNT(*)"), ", "),
-		strings.Join(whereClauses, " AND "),
+		sqlparser.String(queryParams.QueryExpr),
 		groupByClause,
-	), queryArgs
+	), nil
+}
+
+func (c *queryConverter) convertInExpr(
+	leftExpr sqlparser.Expr,
+	values sqlparser.ValTuple,
+) sqlparser.Expr {
+	exprs := make([]sqlparser.Expr, len(values))
+	for i, value := range values {
+		exprs[i] = newJSONContainsExpr(leftExpr, value)
+	}
+	return query.ReduceExprs(
+		func(left, right sqlparser.Expr) sqlparser.Expr {
+			if left == nil {
+				return right
+			}
+			if right == nil {
+				return left
+			}
+			return &sqlparser.OrExpr{
+				Left:  left,
+				Right: right,
+			}
+		},
+		exprs...,
+	)
+}
+
+func newJSONContainsExpr(
+	jsonExpr sqlparser.Expr,
+	valueExpr sqlparser.Expr,
+) sqlparser.Expr {
+	return &sqlparser.ComparisonExpr{
+		Operator: jsonContainsOp,
+		Left:     jsonExpr,
+		Right:    query.NewFuncExpr(jsonBuildArrayFuncName, valueExpr),
+	}
 }
