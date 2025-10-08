@@ -36,9 +36,13 @@ func ResolveSearchAttributeAlias(
 
 	if searchattribute.IsMappable(name) {
 		// First check if the visibility mapper can handle this field (e.g., custom search attributes)
-		if result, found := tryVisibilityMapper(name, ns, mapper, saTypeMap); found {
-			return result.fieldName, result.fieldType, result.err
+		if result, err := tryVisibilityMapper(name, ns, mapper, saTypeMap); err == nil && result.fieldName != "" {
+			return result.fieldName, result.fieldType, err
+		} else if err != nil {
+			// If there was an error from the mapper, return it
+			return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, err
 		}
+		// If err == nil but result.fieldName == "", the mapper did not handle the field, allow fallback
 
 		// Handle ScheduleID → WorkflowID transformation, but only if ScheduleID is not defined as a custom search attribute
 		// This fallback only applies when the visibility mapper doesn't handle the field
@@ -56,7 +60,7 @@ func ResolveSearchAttributeAlias(
 	}
 
 	if result, found := tryDirectAndPrefixedLookup(name, saTypeMap); found {
-		return result.fieldName, result.fieldType, result.err
+		return result.fieldName, result.fieldType, nil
 	}
 
 	return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, NewConverterError("invalid search attribute: %s", name)
@@ -65,12 +69,11 @@ func ResolveSearchAttributeAlias(
 type resolveResult struct {
 	fieldName string
 	fieldType enumspb.IndexedValueType
-	err       error
 }
 
-func tryVisibilityMapper(name string, ns namespace.Name, mapper searchattribute.Mapper, saTypeMap searchattribute.NameTypeMap) (resolveResult, bool) {
+func tryVisibilityMapper(name string, ns namespace.Name, mapper searchattribute.Mapper, saTypeMap searchattribute.NameTypeMap) (resolveResult, error) {
 	if mapper == nil {
-		return resolveResult{}, false
+		return resolveResult{}, nil
 	}
 
 	fieldName, err := mapper.GetFieldName(name, ns.String())
@@ -84,15 +87,15 @@ func tryVisibilityMapper(name string, ns namespace.Name, mapper searchattribute.
 				strings.Contains(errMsg, "invalid field") || // From GetAlias() when field name doesn't exist in mapper
 				strings.Contains(errMsg, "no mapping defined") { // From test mappers and some implementations when field is unknown
 				// Mapper doesn't handle this field, allow fallback to direct/prefixed lookup
-				return resolveResult{}, false
+				return resolveResult{}, nil
 			}
 			// Other InvalidArgument errors suggest mapper tried to handle the field but failed
 			// due to validation issues, malformed data, etc. These should be propagated.
-			return resolveResult{err: err}, true
+			return resolveResult{}, err
 		}
 
 		// For other error types (not Internal or InvalidArgument), allow fallback.
-		return resolveResult{}, false
+		return resolveResult{}, nil
 	}
 
 	// Mapper successfully resolved the field name, now check if it exists in the type map
@@ -100,9 +103,9 @@ func tryVisibilityMapper(name string, ns namespace.Name, mapper searchattribute.
 	if err != nil {
 		// If the mapped field doesn't exist in type map, allow fallback to direct/prefixed lookup.
 		// This can happen when the mapper returns a field name that's not registered in the namespace.
-		return resolveResult{}, false
+		return resolveResult{}, nil
 	}
-	return resolveResult{fieldName: fieldName, fieldType: fieldType}, true
+	return resolveResult{fieldName: fieldName, fieldType: fieldType}, nil
 }
 
 func tryDirectAndPrefixedLookup(name string, saTypeMap searchattribute.NameTypeMap) (resolveResult, bool) {
