@@ -1,6 +1,7 @@
 package frontend
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,20 +41,20 @@ func TestValidateFairnessWeightUpdate(t *testing.T) {
 		assert.ErrorContains(t, err, "too many fairness weight overrides in request: got 2, maximum 1")
 	})
 
-	t.Run("reject empty key in `set`", func(t *testing.T) {
+	t.Run("reject too long key in `set`", func(t *testing.T) {
 		set := map[string]float32{
-			"   ": 1.0,
+			strings.Repeat("abcdefg", 10): 1.0,
 		}
 		unset := []string{}
 		err := validateFairnessWeightUpdate(set, unset, 10)
-		assert.ErrorContains(t, err, "fairness weight override key must not be empty")
+		assert.ErrorContains(t, err, "fairness key length exceeds limit")
 	})
 
-	t.Run("reject empty key in `unset`", func(t *testing.T) {
+	t.Run("reject too long key in `unset`", func(t *testing.T) {
 		set := map[string]float32{"a": 1.0}
-		unset := []string{"   "}
+		unset := []string{strings.Repeat("abcdefg", 10)}
 		err := validateFairnessWeightUpdate(set, unset, 10)
-		assert.ErrorContains(t, err, "fairness weight override key must not be empty")
+		assert.ErrorContains(t, err, "fairness key length exceeds limit")
 	})
 
 	t.Run("reject negative weight", func(t *testing.T) {
