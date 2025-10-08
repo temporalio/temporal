@@ -13,6 +13,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/tw"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/codec"
@@ -245,11 +246,17 @@ func printTable(items []interface{}, writer io.Writer) error {
 		}
 	}
 
-	table := tablewriter.NewWriter(writer)
-	table.SetBorder(false)
-	table.SetColumnSeparator("|")
-	table.SetHeader(fields)
-	table.SetHeaderLine(false)
+	table := tablewriter.NewWriter(writer).Options(
+		tablewriter.WithSymbols(
+			tw.NewSymbolCustom("custom").
+				WithColumn("|").
+				WithCenter("").
+				WithRow(""),
+		),
+		tablewriter.WithRendition(tw.Rendition{Borders: tw.BorderNone, Settings: tw.Settings{Lines: tw.Lines{ShowHeaderLine: tw.Off}}}),
+	)
+	defer table.Close()
+	table.Header(fields)
 	for i := 0; i < len(items); i++ {
 		item := reflect.ValueOf(items[i])
 		for item.Type().Kind() == reflect.Ptr {
@@ -263,7 +270,6 @@ func printTable(items []interface{}, writer io.Writer) error {
 		table.Append(columns)
 	}
 	table.Render()
-	table.ClearRows()
 
 	return nil
 }
