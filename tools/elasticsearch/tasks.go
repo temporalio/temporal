@@ -87,7 +87,7 @@ func (task *SetupTask) setupTemplate() error {
 	return nil
 }
 
-// setupIndex handles index creation
+// setupIndex handles index creation. It checks if the index exists and skips creation if it does.
 func (task *SetupTask) setupIndex() error {
 	config := task.config
 	if len(config.VisibilityIndex) == 0 {
@@ -95,7 +95,17 @@ func (task *SetupTask) setupIndex() error {
 		return nil
 	}
 
-	success, err := task.esClient.CreateIndex(context.TODO(), config.VisibilityIndex, nil)
+	ctx := context.TODO()
+	indexExists, err := task.esClient.IndexExists(ctx, config.VisibilityIndex)
+	if err != nil {
+		return task.handleOperationFailure("failed to check if index exists", err)
+	}
+	if indexExists {
+		task.logger.Info("Index already exists, skipping creation", tag.NewStringTag("indexName", config.VisibilityIndex))
+		return nil
+	}
+
+	success, err := task.esClient.CreateIndex(ctx, config.VisibilityIndex, nil)
 	if err != nil {
 		return task.handleOperationFailure("index creation failed", err)
 	} else if !success {
