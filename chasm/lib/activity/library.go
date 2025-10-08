@@ -22,3 +22,9 @@ func (l *library) Name() string {
 func (l *library) RegisterServices(server *grpc.Server) {
 	server.RegisterService(&activitypb.ActivityService_ServiceDesc, l.handler)
 }
+
+func (l *library) Components() []*chasm.RegistrableComponent {
+	return []*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*Activity]("activity"),
+	}
+}

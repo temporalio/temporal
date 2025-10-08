@@ -3,6 +3,7 @@ package activitypb
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	"go.temporal.io/server/client/history"
@@ -98,6 +99,49 @@ func (c *ActivityServiceLayeredClient) StartActivityExecution(
 ) (*StartActivityExecutionResponse, error) {
 	call := func(ctx context.Context) (*StartActivityExecutionResponse, error) {
 		return c.callStartActivityExecutionNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *ActivityServiceLayeredClient) callDescribeActivityExecutionNoRetry(
+	ctx context.Context,
+	request *DescribeActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*DescribeActivityExecutionResponse, error) {
+	var response *DescribeActivityExecutionResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("ActivityService.DescribeActivityExecution"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := int32(rand.Intn(int(c.numShards)) + 1)
+	op := func(ctx context.Context, client ActivityServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.DescribeActivityExecution(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *ActivityServiceLayeredClient) DescribeActivityExecution(
+	ctx context.Context,
+	request *DescribeActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*DescribeActivityExecutionResponse, error) {
+	call := func(ctx context.Context) (*DescribeActivityExecutionResponse, error) {
+		return c.callDescribeActivityExecutionNoRetry(ctx, request, opts...)
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }

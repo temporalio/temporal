@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -25,12 +27,20 @@ func TestStandaloneActivityTestSuite(t *testing.T) {
 
 func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 	t := s.T()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 
-	_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+	s.OverrideDynamicConfig(
+		dynamicconfig.EnableChasm,
+		true,
+	)
+
+	activityId := testcore.RandomizeStr(t.Name())
+
+	r, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 		Namespace:  s.Namespace().String(),
-		ActivityId: testcore.RandomizeStr(t.Name()),
+		Identity:   s.GetNamespaceID(s.Namespace().String()),
+		ActivityId: activityId,
 		Options: &activitypb.ActivityOptions{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: s.TaskQueue(),
@@ -39,4 +49,15 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 		},
 	})
 	require.NoError(t, err)
+
+	resp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &activitypb.ActivityExecution{
+			ActivityId: activityId,
+			RunId:      fmt.Sprintf("%s|%s", r.RunId, s.GetNamespaceID(s.Namespace().String())),
+		},
+	})
+	require.NoError(t, err)
+
+	fmt.Println(resp)
 }
