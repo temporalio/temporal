@@ -225,11 +225,16 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			name:     "handler_timeout",
 			outcome:  "handler_timeout",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-service"), testcore.RandomizeStr("task-queue")),
-			timeout:  1 * time.Second,
+			timeout:  2 * time.Second,
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				timeoutStr, set := res.Request.Header[nexus.HeaderRequestTimeout]
 				s.True(set)
 				timeout, err := time.ParseDuration(timeoutStr)
+
+				var dispatchTimeoutBuffer = nexusoperations.MinDispatchTaskTimeout.Get(dynamicconfig.NewNoopCollection())("test")
+				expectedMaxTimeout := 2*time.Second - dispatchTimeoutBuffer
+				s.LessOrEqual(timeout, expectedMaxTimeout, "timeout should be buffered")
+
 				s.NoError(err)
 				time.Sleep(timeout) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return nil, nil
@@ -711,7 +716,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 		{
 			outcome:  "handler_timeout",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-service"), testcore.RandomizeStr("task-queue")),
-			timeout:  1 * time.Second,
+			timeout:  2 * time.Second,
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				timeoutStr, set := res.Request.Header[nexus.HeaderRequestTimeout]
 				s.True(set)
@@ -990,6 +995,10 @@ func (s *NexusApiTestSuite) versionedNexusTaskPoller(ctx context.Context, taskQu
 	if err != nil {
 		panic(err)
 	}
+	// Got an empty response, just return.
+	if res.TaskToken == nil {
+		return
+	}
 	if res.Request.GetStartOperation().GetService() != "test-service" && res.Request.GetCancelOperation().GetService() != "test-service" {
 		panic("expected service to be test-service")
 	}
@@ -1002,7 +1011,8 @@ func (s *NexusApiTestSuite) versionedNexusTaskPoller(ctx context.Context, taskQu
 			Error:     handlerError,
 		})
 		// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
-		if err != nil && ctx.Err() == nil {
+		// NotFound is possible if the task got timed out/canceled while we were processing it.
+		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
 			panic(err)
 		}
 	} else if response != nil {
@@ -1013,7 +1023,8 @@ func (s *NexusApiTestSuite) versionedNexusTaskPoller(ctx context.Context, taskQu
 			Response:  response,
 		})
 		// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
-		if err != nil && ctx.Err() == nil {
+		// NotFound is possible if the task got timed out/canceled while we were processing it.
+		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
 			panic(err)
 		}
 	}

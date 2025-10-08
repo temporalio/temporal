@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -48,11 +49,6 @@ const (
 )
 
 var (
-	TaskRetryPolicy = backoff.NewExponentialRetryPolicy(1 * time.Second).
-			WithBackoffCoefficient(1.2).
-			WithMaximumInterval(5 * time.Second).
-			WithMaximumAttempts(80).
-			WithExpirationInterval(10 * time.Minute)
 	ErrResendAttemptExceeded = serviceerror.NewInternal("resend history attempts exceeded")
 )
 
@@ -261,7 +257,11 @@ func (e *ExecutableTaskImpl) IsRetryableError(err error) bool {
 }
 
 func (e *ExecutableTaskImpl) RetryPolicy() backoff.RetryPolicy {
-	return TaskRetryPolicy
+	return backoff.NewExponentialRetryPolicy(e.Config.ReplicationExecutableTaskErrorRetryWait()).
+		WithBackoffCoefficient(e.Config.ReplicationExecutableTaskErrorRetryBackoffCoefficient()).
+		WithMaximumInterval(e.Config.ReplicationExecutableTaskErrorRetryMaxInterval()).
+		WithMaximumAttempts(e.Config.ReplicationExecutableTaskErrorRetryMaxAttempts()).
+		WithExpirationInterval(e.Config.ReplicationExecutableTaskErrorRetryExpiration())
 }
 
 func (e *ExecutableTaskImpl) State() ctasks.State {
@@ -413,14 +413,14 @@ func (e *ExecutableTaskImpl) Resend(
 		//  d. return error to resend new workflow before the branching point
 
 		if resendErr.Equal(retryErr) {
-			e.Logger.Error("error resend history on the same workflow run",
+			return false, softassert.UnexpectedDataLoss(e.Logger,
+				"failed to get requested data while resending history", nil,
 				tag.WorkflowNamespaceID(retryErr.NamespaceId),
 				tag.WorkflowID(retryErr.WorkflowId),
 				tag.WorkflowRunID(retryErr.RunId),
 				tag.NewStringTag("first-resend-error", retryErr.Error()),
 				tag.NewStringTag("second-resend-error", resendErr.Error()),
 			)
-			return false, serviceerror.NewDataLoss("failed to get requested data while resending history")
 		}
 		// handle 2nd resend error, then 1st resend error
 		_, err := e.Resend(ctx, remoteCluster, resendErr, remainingAttempt)

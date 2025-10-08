@@ -213,7 +213,17 @@ type (
 
 		InsertTasks map[tasks.Category][]tasks.Task
 
+		// BestEffortDeleteTasks holds keys of history tasks to be deleted after a successful
+		// persistence update. This deletion is done on best effort basis. Persistence layer can ignore it without
+		// any errors.
+		BestEffortDeleteTasks map[tasks.Category][]tasks.Key
+
 		speculativeWorkflowTaskTimeoutTask *tasks.WorkflowTaskTimeoutTask
+
+		// In-memory storage for workflow task timeout tasks. These are set when timeout tasks are
+		// generated and used to delete them when the workflow task completes. Not persisted to storage.
+		wftScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
+		wftStartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
 
 		// Do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
@@ -299,6 +309,7 @@ func NewMutableState(
 		namespaceEntry:               namespaceEntry,
 		appliedEvents:                make(map[string]struct{}),
 		InsertTasks:                  make(map[tasks.Category][]tasks.Task),
+		BestEffortDeleteTasks:        make(map[tasks.Category][]tasks.Key),
 		transitionHistoryEnabled:     shard.GetConfig().EnableTransitionHistory(),
 		visibilityUpdated:            false,
 		executionStateUpdated:        false,
@@ -1822,6 +1833,13 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}
 	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
+
+	if payloadSize := request.Details.Size(); payloadSize > 0 {
+		ms.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
+			int64(payloadSize),
+			metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope),
+			metrics.NamespaceTag(ms.namespaceEntry.Name().String()))
+	}
 }
 
 // UpdateActivityInfo applies the necessary activity information
@@ -1845,6 +1863,7 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	ai.ScheduledTime = incomingActivityInfo.GetScheduledTime()
 	// we don't need to update FirstScheduledTime
 	ai.StartedEventId = incomingActivityInfo.GetStartedEventId()
+	ai.StartVersion = incomingActivityInfo.GetStartVersion()
 	ai.LastHeartbeatUpdateTime = incomingActivityInfo.GetLastHeartbeatTime()
 	if ai.StartedEventId == common.EmptyEventID {
 		ai.StartedTime = nil
@@ -3415,7 +3434,7 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 		return nil, nil, ms.createCallerError(opTag, "ActivityID: "+command.GetActivityId())
 	}
 
-	event := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
+	event := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command, ms.namespaceEntry.Name())
 	ai, err := ms.ApplyActivityTaskScheduledEvent(workflowTaskCompletedEventID, event)
 	// TODO merge active & passive task generation
 	if !bypassTaskGeneration {
@@ -3446,6 +3465,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		ScheduledTime:           event.GetEventTime(),
 		FirstScheduledTime:      event.GetEventTime(),
 		StartedEventId:          common.EmptyEventID,
+		StartVersion:            common.EmptyVersion,
 		StartedTime:             nil,
 		ActivityId:              attributes.ActivityId,
 		ScheduleToStartTimeout:  attributes.GetScheduleToStartTimeout(),
@@ -3610,6 +3630,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		// instead update mutable state and will record started event when activity task is closed
 		activityInfo.Version = ms.GetCurrentVersion()
 		activityInfo.StartedEventId = common.TransientEventID
+		activityInfo.StartVersion = ms.GetCurrentVersion()
 		activityInfo.RequestId = requestID
 		activityInfo.StartedTime = timestamppb.New(ms.timeSource.Now())
 		activityInfo.StartedIdentity = identity
@@ -3639,6 +3660,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskStartedEvent(
 
 	ai.Version = event.GetVersion()
 	ai.StartedEventId = event.GetEventId()
+	ai.StartVersion = event.GetVersion()
 	ai.RequestId = attributes.GetRequestId()
 	ai.StartedTime = event.GetEventTime()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
@@ -3697,6 +3719,7 @@ func (ms *MutableStateImpl) AddActivityTaskCompletedEvent(
 		startedEventID,
 		request.Identity,
 		request.Result,
+		ms.namespaceEntry.Name(),
 	)
 	if err := ms.ApplyActivityTaskCompletedEvent(event); err != nil {
 		return nil, err
@@ -3746,6 +3769,7 @@ func (ms *MutableStateImpl) AddActivityTaskFailedEvent(
 		failure,
 		retryState,
 		identity,
+		ms.namespaceEntry.Name(),
 	)
 	if err := ms.ApplyActivityTaskFailedEvent(event); err != nil {
 		return nil, err
@@ -5704,6 +5728,7 @@ func (ms *MutableStateImpl) RetryActivity(
 		// need to update activity
 		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
 			activityInfo.StartedEventId = common.EmptyEventID
+			activityInfo.StartVersion = common.EmptyVersion
 			activityInfo.StartedTime = nil
 			activityInfo.RequestId = ""
 			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
@@ -5998,6 +6023,22 @@ func (ms *MutableStateImpl) RemoveSpeculativeWorkflowTaskTimeoutTask() {
 	}
 }
 
+func (ms *MutableStateImpl) SetWorkflowTaskScheduleToStartTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) {
+	ms.wftScheduleToStartTimeoutTask = task
+}
+
+func (ms *MutableStateImpl) SetWorkflowTaskStartToCloseTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) {
+	ms.wftStartToCloseTimeoutTask = task
+}
+
+func (ms *MutableStateImpl) GetWorkflowTaskScheduleToStartTimeoutTask() *tasks.WorkflowTaskTimeoutTask {
+	return ms.wftScheduleToStartTimeoutTask
+}
+
+func (ms *MutableStateImpl) GetWorkflowTaskStartToCloseTimeoutTask() *tasks.WorkflowTaskTimeoutTask {
+	return ms.wftStartToCloseTimeoutTask
+}
+
 func (ms *MutableStateImpl) GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {
 	return ms.executionState.State, ms.executionState.Status
 }
@@ -6123,7 +6164,8 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		NewBufferedEvents:         result.bufferEvents,
 		ClearBufferedEvents:       result.clearBuffer,
 
-		Tasks: ms.InsertTasks,
+		Tasks:                 ms.InsertTasks,
+		BestEffortDeleteTasks: ms.BestEffortDeleteTasks,
 
 		Condition:       ms.nextEventIDInDB,
 		DBRecordVersion: ms.dbRecordVersion,
@@ -6886,6 +6928,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	)
 
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
+	ms.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)
 
 	// Clear outputs for the next transaction.
 	ms.stateMachineNode.ClearTransactionState()

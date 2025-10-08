@@ -116,7 +116,7 @@ func NewNamespaceConfig(
 	global bool,
 	customSearchAttributes map[string]enumspb.IndexedValueType,
 ) (*NamespaceConfig, error) {
-	dbCustomSearchAttributes := searchattribute.GetSqlDbIndexSearchAttributes().CustomSearchAttributes
+	dbCustomSearchAttributes := searchattribute.GetDBIndexSearchAttributes(nil).CustomSearchAttributes
 	fieldToAliasMap := map[string]string{}
 	for saName, saType := range customSearchAttributes {
 		var targetFieldName string

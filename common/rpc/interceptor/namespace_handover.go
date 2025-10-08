@@ -32,6 +32,7 @@ type (
 		nsCacheRefreshInterval dynamicconfig.DurationPropertyFn
 		metricsHandler         metrics.Handler
 		logger                 log.Logger
+		requestErrorHandler    ErrorHandler
 	}
 )
 
@@ -41,6 +42,7 @@ func NewNamespaceHandoverInterceptor(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	timeSource clock.TimeSource,
+	requestErrorHandler ErrorHandler,
 ) *NamespaceHandoverInterceptor {
 
 	return &NamespaceHandoverInterceptor{
@@ -50,6 +52,7 @@ func NewNamespaceHandoverInterceptor(
 		metricsHandler:         metricsHandler,
 		logger:                 logger,
 		timeSource:             timeSource,
+		requestErrorHandler:    requestErrorHandler,
 	}
 }
 
@@ -78,6 +81,24 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 		}()
 		waitTime, err := i.waitNamespaceHandoverUpdate(ctx, namespaceName, methodName)
 		if err != nil {
+			metricsHandler, logTags := CreateUnaryMetricsHandlerLogTags(
+				i.metricsHandler,
+				req,
+				info.FullMethod,
+				methodName,
+				namespaceName,
+			)
+			// count the request as this will not be counted
+			metrics.ServiceRequests.With(metricsHandler).Record(1)
+
+			i.requestErrorHandler.HandleError(
+				req,
+				info.FullMethod,
+				metricsHandler,
+				logTags,
+				err,
+				namespaceName,
+			)
 			return nil, err
 		}
 	}

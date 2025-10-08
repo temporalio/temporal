@@ -326,6 +326,18 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 	default:
 		return nil, err
 	}
+
+	// if new run is not started by current cluster, it means the new run transaction is not happened at current cluster
+	// so when sending replication task, we should not include new run info
+	startVersion, err := mutableState.GetStartVersion()
+	if err != nil {
+		return nil, err
+	}
+	clusterMetadata := s.shardContext.GetClusterMetadata()
+	if !clusterMetadata.IsVersionFromSameCluster(startVersion, clusterMetadata.GetClusterID()) {
+		return nil, nil
+	}
+
 	versionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().VersionHistories)
 	if err != nil {
 		return nil, err

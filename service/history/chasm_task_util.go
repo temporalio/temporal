@@ -29,15 +29,9 @@ func validateChasmSideEffectTask(
 		return nil, errNoChasmTree
 	}
 
-	taskAttributes := chasm.TaskAttributes{
-		ScheduledTime: task.GetVisibilityTime(),
-		Destination:   task.Destination,
-	}
-
-	taskInstance, err := tree.ValidateSideEffectTask(ctx, taskAttributes, task.Info)
-	if err == nil && taskInstance != nil {
-		// If a taskInstance is returned, the task is still valid, and we should keep
-		// it around.
+	isValid, err := tree.ValidateSideEffectTask(ctx, task)
+	if err == nil && isValid {
+		// If the task is still valid, keep it around by returning a non-nil value.
 		return &struct{}{}, nil
 	}
 
@@ -81,18 +75,12 @@ func executeChasmSideEffectTask(
 		return nil
 	}
 
-	taskAttributes := chasm.TaskAttributes{
-		ScheduledTime: task.GetVisibilityTime(),
-		Destination:   task.Destination,
-	}
-
 	engineCtx := chasm.NewEngineContext(ctx, engine)
 	return tree.ExecuteSideEffectTask(
 		engineCtx,
 		registry,
 		entityKey,
-		taskAttributes,
-		task.Info,
+		task,
 		validate,
 	)
 }

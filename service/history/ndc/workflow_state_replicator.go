@@ -116,7 +116,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 			WorkflowId: wid,
 			RunId:      rid,
 		},
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err
@@ -240,7 +240,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			RunId:      rid,
 		},
 		chasm.ArchetypeAny,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err
@@ -360,7 +360,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 			RunId:      executionState.RunId,
 		},
 		chasm.ArchetypeAny,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err
@@ -1360,7 +1360,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 				WorkflowId: workflowID,
 				RunId:      originalRunID,
 			},
-			locks.PriorityLow,
+			locks.PriorityHigh,
 		)
 		if err != nil {
 			return err

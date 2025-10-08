@@ -45,6 +45,7 @@ func Invoke(
 	var taskQueue string
 	var workflowTypeName string
 	var closed bool
+	var versioningBehavior enumspb.VersioningBehavior
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
@@ -78,10 +79,7 @@ func Invoke(
 				return nil, consts.ErrStaleState
 			}
 
-			if !activityRunning ||
-				ai.StartedEventId == common.EmptyEventID ||
-				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) ||
-				(token.GetVersion() != common.EmptyVersion && token.Version != ai.Version) {
+			if !activityRunning || api.IsActivityTaskNotFoundForToken(token, ai, nil) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
@@ -119,6 +117,7 @@ func Invoke(
 			attemptStartedTime = ai.StartedTime.AsTime()
 			firstScheduledTime = ai.FirstScheduledTime.AsTime()
 			taskQueue = ai.TaskQueue
+			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return postActions, nil
 		},
 		nil,
@@ -133,15 +132,14 @@ func Invoke(
 			Closed:             closed,
 		}
 
-		workflow.RecordActivityCompletionMetrics(
-			shard,
+		workflow.RecordActivityCompletionMetrics(shard,
 			namespace,
 			taskQueue,
 			completionMetrics,
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
 			metrics.WorkflowTypeTag(workflowTypeName),
 			metrics.ActivityTypeTag(token.ActivityType),
-		)
+			metrics.VersioningBehaviorTag(versioningBehavior))
 	}
 	return &historyservice.RespondActivityTaskFailedResponse{}, err
 }

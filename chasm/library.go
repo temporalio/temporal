@@ -2,12 +2,14 @@
 
 package chasm
 
+import "google.golang.org/grpc"
+
 type (
 	Library interface {
 		Name() string
 		Components() []*RegistrableComponent
 		Tasks() []*RegistrableTask
-		// Service()
+		RegisterServices(server *grpc.Server)
 
 		mustEmbedUnimplementedLibrary()
 	}
@@ -25,6 +27,10 @@ func (UnimplementedLibrary) Components() []*RegistrableComponent {
 
 func (UnimplementedLibrary) Tasks() []*RegistrableTask {
 	return nil
+}
+
+// RegisterServices Registers the gRPC calls to the handlers of the library.
+func (UnimplementedLibrary) RegisterServices(_ *grpc.Server) {
 }
 
 func (UnimplementedLibrary) mustEmbedUnimplementedLibrary() {}

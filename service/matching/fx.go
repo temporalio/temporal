@@ -36,6 +36,7 @@ var Module = fx.Options(
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(RetryableInterceptorProvider),
+	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(VisibilityManagerProvider),
@@ -67,17 +68,29 @@ func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
 	)
 }
 
+func ErrorHandlerProvider(
+	logger log.Logger,
+	serviceConfig *Config,
+) *interceptor.RequestErrorHandler {
+	return interceptor.NewRequestErrorHandler(
+		logger,
+		serviceConfig.LogAllReqErrors,
+	)
+}
+
 func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
 		serviceConfig.LogAllReqErrors,
+		requestErrorHandler,
 	)
 }
 

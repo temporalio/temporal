@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.tests.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/tests/gen/testspb;testspb";
+
+import "chasm/lib/tests/proto/v1/request_response.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
+service TestService {
+    rpc Test(TestRequest) returns (TestResponse) {
+        option (temporal.server.api.routing.v1.routing).random = true;
+    }
+}

@@ -853,6 +853,7 @@ var (
 	ActivityCancel                                       = NewCounterDef("activity_cancel")
 	ActivityTaskTimeout                                  = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
 	ActivityTimeout                                      = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
+	ActivityPayloadSize                                  = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
 	AckLevelUpdateCounter                                = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                          = NewCounterDef("ack_level_update_failed")
 	CommandCounter                                       = NewCounterDef("command")
@@ -1109,6 +1110,21 @@ var (
 		"task_retry_transient",
 		WithDescription("Count of tasks that hit a transient error during match or forward and are retried immediately"),
 	)
+
+	// ----------------------------------------------------------------------------------------------------------------
+	// Matching service: Metrics to track the health of worker registry.
+	WorkerRegistryEvictionBlockedByAgeMetric = NewGaugeDef(
+		"worker_registry_eviction_blocked_by_age",
+		WithDescription(
+			"Set if entries could not be evicted due to minEvictAge policy in a given eviction iteration. "+
+				"Reset once a subsequent eviction succeeds.",
+		),
+	)
+	WorkerRegistryCapacityUtilizationMetric = NewGaugeDef(
+		"worker_registry_capacity_utilization",
+		WithDescription("Tracks the ratio of total entries to maxItems."),
+	)
+	// ----------------------------------------------------------------------------------------------------------------
 
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")

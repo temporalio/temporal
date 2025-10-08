@@ -36,9 +36,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// user-agent header contains Nexus SDK client info in the form <sdk-name>/v<sdk-version>
-const headerUserAgent = "user-agent"
-const clientNameVersionDelim = "/v"
+const (
+	// user-agent header contains Nexus SDK client info in the form <sdk-name>/v<sdk-version>
+	headerUserAgent        = "user-agent"
+	clientNameVersionDelim = "/v"
+)
 
 // Generic Nexus context that is not bound to a specific operation.
 // Includes fields extracted from an incoming Nexus request before being handled by the Nexus HTTP handler.
@@ -73,6 +75,7 @@ type operationContext struct {
 	clientVersionChecker          headers.VersionChecker
 	auth                          *authorization.Interceptor
 	telemetryInterceptor          *interceptor.TelemetryInterceptor
+	requestErrorHandler           *interceptor.RequestErrorHandler
 	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
@@ -197,7 +200,7 @@ func (c *operationContext) interceptRequest(
 	c.cleanupFunctions = append(c.cleanupFunctions, func(respHeaders map[string]string, retErr error) {
 		if retErr != nil {
 			if source, ok := respHeaders[commonnexus.FailureSourceHeaderName]; ok && source != commonnexus.FailureSourceWorker {
-				c.telemetryInterceptor.HandleError(
+				c.requestErrorHandler.HandleError(
 					request,
 					"",
 					c.metricsHandlerForInterceptors,
@@ -310,6 +313,7 @@ type nexusHandler struct {
 	matchingClient                matchingservice.MatchingServiceClient
 	auth                          *authorization.Interceptor
 	telemetryInterceptor          *interceptor.TelemetryInterceptor
+	requestErrorHandler           *interceptor.RequestErrorHandler
 	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	forwardingClients             *cluster.FrontendHTTPClientCache
@@ -334,6 +338,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 		clientVersionChecker:          headers.NewDefaultVersionChecker(),
 		auth:                          h.auth,
 		telemetryInterceptor:          h.telemetryInterceptor,
+		requestErrorHandler:           h.requestErrorHandler,
 		redirectionInterceptor:        h.redirectionInterceptor,
 		forwardingEnabledForNamespace: h.forwardingEnabledForNamespace,
 		headersBlacklist:              h.headersBlacklist,
@@ -432,13 +437,6 @@ func (h *nexusHandler) StartOperation(
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
-		if common.IsContextDeadlineExceededErr(err) {
-			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
-
-			oc.setFailureSource(commonnexus.FailureSourceWorker)
-
-			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
-		}
 		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
@@ -450,6 +448,13 @@ func (h *nexusHandler) StartOperation(
 
 		err := h.convertOutcomeToNexusHandlerError(t)
 		return nil, err
+
+	case *matchingservice.DispatchNexusTaskResponse_RequestTimeout:
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
+
+		oc.setFailureSource(commonnexus.FailureSourceWorker)
+
+		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 
 	case *matchingservice.DispatchNexusTaskResponse_Response:
 		switch t := t.Response.GetStartOperation().GetVariant().(type) {
@@ -594,13 +599,6 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
-		if common.IsContextDeadlineExceededErr(err) {
-			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
-
-			oc.setFailureSource(commonnexus.FailureSourceWorker)
-
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
-		}
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
@@ -612,6 +610,14 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 
 		err := h.convertOutcomeToNexusHandlerError(t)
 		return err
+
+	case *matchingservice.DispatchNexusTaskResponse_RequestTimeout:
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
+
+		oc.setFailureSource(commonnexus.FailureSourceWorker)
+
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
+
 	case *matchingservice.DispatchNexusTaskResponse_Response:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("success"))
 		return nil

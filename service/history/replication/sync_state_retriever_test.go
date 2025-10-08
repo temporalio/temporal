@@ -15,6 +15,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -622,6 +623,12 @@ func (s *syncWorkflowStateSuite) TestGetNewRunInfo() {
 		NewExecutionRunId: s.newRunId,
 	}
 	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+	// New logic queries start version and checks cluster affinity
+	mu.EXPECT().GetStartVersion().Return(int64(1), nil)
+	cm := cluster.NewMockMetadata(s.controller)
+	cm.EXPECT().GetClusterID().Return(int64(1))
+	cm.EXPECT().IsVersionFromSameCluster(int64(1), int64(1)).Return(true)
+	s.mockShard.SetClusterMetadata(cm)
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.mockShard, namespace.ID(s.namespaceID), &commonpb.WorkflowExecution{
 		WorkflowId: s.execution.WorkflowId,
 		RunId:      s.newRunId,
@@ -642,6 +649,53 @@ func (s *syncWorkflowStateSuite) TestGetNewRunInfo() {
 	newRunInfo, err := s.syncStateRetriever.getNewRunInfo(context.Background(), namespace.ID(s.namespaceID), s.execution, s.newRunId)
 	s.NoError(err)
 	s.NotNil(newRunInfo)
+}
+
+func (s *syncWorkflowStateSuite) TestGetNewRunInfo_NewRunFromDifferentCluster_ReturnNil() {
+	mu := historyi.NewMockMutableState(s.controller)
+	versionHistories := &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{
+			{
+				BranchToken: []byte("branchToken1"),
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 1, Version: 7},
+					{EventId: 2, Version: 13},
+				},
+			},
+		},
+	}
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
+		TransitionHistory: []*persistencespb.VersionedTransition{
+			{NamespaceFailoverVersion: 7, TransitionCount: 12},
+			{NamespaceFailoverVersion: 13, TransitionCount: 15},
+		},
+		SubStateMachineTombstoneBatches: []*persistencespb.StateMachineTombstoneBatch{
+			{
+				VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
+			},
+		},
+		VersionHistories:  versionHistories,
+		NewExecutionRunId: s.newRunId,
+	}
+	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+	// New logic queries start version and checks cluster affinity
+	mu.EXPECT().GetStartVersion().Return(int64(7), nil)
+	cm := cluster.NewMockMetadata(s.controller)
+	cm.EXPECT().GetClusterID().Return(int64(1))
+	cm.EXPECT().IsVersionFromSameCluster(int64(7), int64(1)).Return(false)
+	s.mockShard.SetClusterMetadata(cm)
+
+	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.mockShard, namespace.ID(s.namespaceID), &commonpb.WorkflowExecution{
+		WorkflowId: s.execution.WorkflowId,
+		RunId:      s.newRunId,
+	}, locks.PriorityLow).Return(s.newRunWorkflowContext, s.releaseFunc, nil)
+	s.newRunWorkflowContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).
+		Return(mu, nil).Times(1)
+
+	newRunInfo, err := s.syncStateRetriever.getNewRunInfo(context.Background(), namespace.ID(s.namespaceID), s.execution, s.newRunId)
+	s.NoError(err)
+	s.Nil(newRunInfo)
 }
 
 func (s *syncWorkflowStateSuite) TestGetNewRunInfo_NotFound() {
