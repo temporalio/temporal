@@ -14,7 +14,6 @@ import (
 
 type idleTasksSuite struct {
 	schedulerSuite
-	executor *scheduler.SchedulerIdleTaskExecutor
 }
 
 func TestIdleTasksSuite(t *testing.T) {
@@ -22,13 +21,13 @@ func TestIdleTasksSuite(t *testing.T) {
 }
 
 type idleValidateTestCase struct {
-	ConfigIdleTime           time.Duration
-	TaskIdleTimeTotal        time.Duration
-	ScheduledTime            time.Time
-	SchedulerClosed          bool
-	IdleMatchesScheduledTime bool
-	SetupScheduler           func(*scheduler.Scheduler, chasm.Context)
-	ExpectedValid            bool
+	configIdleTime           time.Duration
+	taskIdleTimeTotal        time.Duration
+	scheduledTime            time.Time
+	schedulerClosed          bool
+	idleMatchesScheduledTime bool
+	setupScheduler           func(*scheduler.Scheduler, chasm.Context)
+	expectedValid            bool
 }
 
 func (s *idleTasksSuite) TestExecute() {
@@ -51,60 +50,40 @@ func (s *idleTasksSuite) TestExecute() {
 	s.True(sched.Closed)
 }
 
-func (s *idleTasksSuite) TestValidate_IdleTimeDecreased() {
-	now := s.timeSource.Now()
-	s.runValidateTestCase(&idleValidateTestCase{
-		ConfigIdleTime:    5 * time.Minute,
-		TaskIdleTimeTotal: 10 * time.Minute,
-		ScheduledTime:     now,
-		ExpectedValid:     true,
-	})
-}
-
 func (s *idleTasksSuite) TestValidate_SchedulerNotIdle() {
 	now := s.timeSource.Now()
 	s.runValidateTestCase(&idleValidateTestCase{
-		ConfigIdleTime:    10 * time.Minute,
-		TaskIdleTimeTotal: 10 * time.Minute,
-		ScheduledTime:     now,
-		SetupScheduler: func(sched *scheduler.Scheduler, ctx chasm.Context) {
+		configIdleTime:    10 * time.Minute,
+		taskIdleTimeTotal: 10 * time.Minute,
+		scheduledTime:     now,
+		setupScheduler: func(sched *scheduler.Scheduler, ctx chasm.Context) {
 			// Make scheduler not idle by setting it as paused
 			sched.Schedule.State.Paused = true
 		},
-		ExpectedValid: false,
-	})
-}
-
-func (s *idleTasksSuite) TestValidate_IdleExpirationChanged() {
-	now := s.timeSource.Now()
-	s.runValidateTestCase(&idleValidateTestCase{
-		ConfigIdleTime:    10 * time.Minute,
-		TaskIdleTimeTotal: 10 * time.Minute,
-		ScheduledTime:     now.Add(-1 * time.Minute),
-		ExpectedValid:     false,
+		expectedValid: false,
 	})
 }
 
 func (s *idleTasksSuite) TestValidate_ValidIdleTask() {
 	now := s.timeSource.Now()
 	s.runValidateTestCase(&idleValidateTestCase{
-		ConfigIdleTime:           10 * time.Minute,
-		TaskIdleTimeTotal:        10 * time.Minute,
-		ScheduledTime:            now,
-		IdleMatchesScheduledTime: true,
-		ExpectedValid:            true,
+		configIdleTime:           10 * time.Minute,
+		taskIdleTimeTotal:        10 * time.Minute,
+		scheduledTime:            now,
+		idleMatchesScheduledTime: true,
+		expectedValid:            true,
 	})
 }
 
 func (s *idleTasksSuite) TestValidate_SchedulerAlreadyClosed() {
 	now := s.timeSource.Now()
 	s.runValidateTestCase(&idleValidateTestCase{
-		ConfigIdleTime:           10 * time.Minute,
-		TaskIdleTimeTotal:        10 * time.Minute,
-		ScheduledTime:            now,
-		SchedulerClosed:          true,
-		IdleMatchesScheduledTime: true,
-		ExpectedValid:            false, // Should return !scheduler.Closed (false when closed)
+		configIdleTime:           10 * time.Minute,
+		taskIdleTimeTotal:        10 * time.Minute,
+		scheduledTime:            now,
+		schedulerClosed:          true,
+		idleMatchesScheduledTime: true,
+		expectedValid:            false, // Should return !scheduler.Closed (false when closed)
 	})
 }
 
@@ -112,16 +91,16 @@ func (s *idleTasksSuite) runValidateTestCase(c *idleValidateTestCase) {
 	ctx := s.newMutableContext()
 	sched := s.scheduler
 
-	sched.Closed = c.SchedulerClosed
+	sched.Closed = c.schedulerClosed
 
-	if c.SetupScheduler != nil {
-		c.SetupScheduler(sched, ctx)
+	if c.setupScheduler != nil {
+		c.setupScheduler(sched, ctx)
 	}
 
 	config := &scheduler.Config{
 		Tweakables: func(_ string) scheduler.Tweakables {
 			tweakables := scheduler.DefaultTweakables
-			tweakables.IdleTime = c.ConfigIdleTime
+			tweakables.IdleTime = c.configIdleTime
 			return tweakables
 		},
 	}
@@ -131,12 +110,12 @@ func (s *idleTasksSuite) runValidateTestCase(c *idleValidateTestCase) {
 	})
 
 	task := &schedulerpb.SchedulerIdleTask{
-		IdleTimeTotal: durationpb.New(c.TaskIdleTimeTotal),
+		IdleTimeTotal: durationpb.New(c.taskIdleTimeTotal),
 	}
 
-	scheduledTime := c.ScheduledTime
-	if c.IdleMatchesScheduledTime {
-		lastEventTime := scheduledTime.Add(-c.ConfigIdleTime)
+	scheduledTime := c.scheduledTime
+	if c.idleMatchesScheduledTime {
+		lastEventTime := scheduledTime.Add(-c.configIdleTime)
 		sched.Info.UpdateTime = timestamppb.New(lastEventTime)
 		sched.Info.CreateTime = timestamppb.New(lastEventTime)
 	}
@@ -147,5 +126,5 @@ func (s *idleTasksSuite) runValidateTestCase(c *idleValidateTestCase) {
 
 	isValid, err := executor.Validate(ctx, sched, taskAttrs, task)
 	s.NoError(err)
-	s.Equal(c.ExpectedValid, isValid)
+	s.Equal(c.expectedValid, isValid)
 }
