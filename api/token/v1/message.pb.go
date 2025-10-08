@@ -560,18 +560,20 @@ func (x *HistoryEventRef) GetEventBatchId() int64 {
 // A completion token for a Nexus operation started from a workflow.
 type NexusOperationCompletion struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Namespace UUID.
+	// Namespace UUID. (Deprecated)
 	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// Workflow ID.
+	// Workflow ID. (Deprecated)
 	WorkflowId string `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	// Run ID at the time this token was generated.
+	// Run ID at the time this token was generated. (Deprecated)
 	RunId string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	// Reference including the path to the backing Operation state machine and a version + transition count for
-	// staleness checks.
+	// staleness checks. (Deprecated)
 	Ref *v11.StateMachineRef `protobuf:"bytes,4,opt,name=ref,proto3" json:"ref,omitempty"`
 	// Request ID embedded in the NexusOperationScheduledEvent.
 	// Allows completing a started operation after a workflow has been reset.
-	RequestId     string `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	RequestId string `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// Reference to the CHASM component to be informed of the completion.
+	ComponentRef  *v11.ChasmComponentRef `protobuf:"bytes,6,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -641,60 +643,11 @@ func (x *NexusOperationCompletion) GetRequestId() string {
 	return ""
 }
 
-// A completion token for a Nexus operation started from a CHASM component.
-type NexusOperationChasmCompletion struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Reference to the CHASM component to be informed of the completion.
-	Ref *v11.ChasmComponentRef `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
-	// Request ID embedded in the NexusOperationScheduledEvent.
-	// Allows completing a started operation after a workflow has been reset.
-	RequestId     string `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *NexusOperationChasmCompletion) Reset() {
-	*x = NexusOperationChasmCompletion{}
-	mi := &file_temporal_server_api_token_v1_message_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *NexusOperationChasmCompletion) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*NexusOperationChasmCompletion) ProtoMessage() {}
-
-func (x *NexusOperationChasmCompletion) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_token_v1_message_proto_msgTypes[7]
+func (x *NexusOperationCompletion) GetComponentRef() *v11.ChasmComponentRef {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use NexusOperationChasmCompletion.ProtoReflect.Descriptor instead.
-func (*NexusOperationChasmCompletion) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_token_v1_message_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *NexusOperationChasmCompletion) GetRef() *v11.ChasmComponentRef {
-	if x != nil {
-		return x.Ref
+		return x.ComponentRef
 	}
 	return nil
-}
-
-func (x *NexusOperationChasmCompletion) GetRequestId() string {
-	if x != nil {
-		return x.RequestId
-	}
-	return ""
 }
 
 var File_temporal_server_api_token_v1_message_proto protoreflect.FileDescriptor
@@ -756,7 +709,7 @@ const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	"\atask_id\x18\x03 \x01(\tR\x06taskId\"R\n" +
 	"\x0fHistoryEventRef\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\x03R\aeventId\x12$\n" +
-	"\x0eevent_batch_id\x18\x02 \x01(\x03R\feventBatchId\"\xdb\x01\n" +
+	"\x0eevent_batch_id\x18\x02 \x01(\x03R\feventBatchId\"\xb7\x02\n" +
 	"\x18NexusOperationCompletion\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -764,11 +717,8 @@ const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	"\x06run_id\x18\x03 \x01(\tR\x05runId\x12E\n" +
 	"\x03ref\x18\x04 \x01(\v23.temporal.server.api.persistence.v1.StateMachineRefR\x03ref\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x05 \x01(\tR\trequestId\"\x87\x01\n" +
-	"\x1dNexusOperationChasmCompletion\x12G\n" +
-	"\x03ref\x18\x01 \x01(\v25.temporal.server.api.persistence.v1.ChasmComponentRefR\x03ref\x12\x1d\n" +
-	"\n" +
-	"request_id\x18\x02 \x01(\tR\trequestIdB*Z(go.temporal.io/server/api/token/v1;tokenb\x06proto3"
+	"request_id\x18\x05 \x01(\tR\trequestId\x12Z\n" +
+	"\rcomponent_ref\x18\x06 \x01(\v25.temporal.server.api.persistence.v1.ChasmComponentRefR\fcomponentRefB*Z(go.temporal.io/server/api/token/v1;tokenb\x06proto3"
 
 var (
 	file_temporal_server_api_token_v1_message_proto_rawDescOnce sync.Once
@@ -782,34 +732,33 @@ func file_temporal_server_api_token_v1_message_proto_rawDescGZIP() []byte {
 	return file_temporal_server_api_token_v1_message_proto_rawDescData
 }
 
-var file_temporal_server_api_token_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_temporal_server_api_token_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_temporal_server_api_token_v1_message_proto_goTypes = []any{
-	(*HistoryContinuation)(nil),           // 0: temporal.server.api.token.v1.HistoryContinuation
-	(*RawHistoryContinuation)(nil),        // 1: temporal.server.api.token.v1.RawHistoryContinuation
-	(*Task)(nil),                          // 2: temporal.server.api.token.v1.Task
-	(*QueryTask)(nil),                     // 3: temporal.server.api.token.v1.QueryTask
-	(*NexusTask)(nil),                     // 4: temporal.server.api.token.v1.NexusTask
-	(*HistoryEventRef)(nil),               // 5: temporal.server.api.token.v1.HistoryEventRef
-	(*NexusOperationCompletion)(nil),      // 6: temporal.server.api.token.v1.NexusOperationCompletion
-	(*NexusOperationChasmCompletion)(nil), // 7: temporal.server.api.token.v1.NexusOperationChasmCompletion
-	(*v1.TransientWorkflowTaskInfo)(nil),  // 8: temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	(*v1.VersionHistoryItem)(nil),         // 9: temporal.server.api.history.v1.VersionHistoryItem
-	(*v11.VersionedTransition)(nil),       // 10: temporal.server.api.persistence.v1.VersionedTransition
-	(*v1.VersionHistories)(nil),           // 11: temporal.server.api.history.v1.VersionHistories
-	(*v12.VectorClock)(nil),               // 12: temporal.server.api.clock.v1.VectorClock
-	(*timestamppb.Timestamp)(nil),         // 13: google.protobuf.Timestamp
-	(*v11.StateMachineRef)(nil),           // 14: temporal.server.api.persistence.v1.StateMachineRef
-	(*v11.ChasmComponentRef)(nil),         // 15: temporal.server.api.persistence.v1.ChasmComponentRef
+	(*HistoryContinuation)(nil),          // 0: temporal.server.api.token.v1.HistoryContinuation
+	(*RawHistoryContinuation)(nil),       // 1: temporal.server.api.token.v1.RawHistoryContinuation
+	(*Task)(nil),                         // 2: temporal.server.api.token.v1.Task
+	(*QueryTask)(nil),                    // 3: temporal.server.api.token.v1.QueryTask
+	(*NexusTask)(nil),                    // 4: temporal.server.api.token.v1.NexusTask
+	(*HistoryEventRef)(nil),              // 5: temporal.server.api.token.v1.HistoryEventRef
+	(*NexusOperationCompletion)(nil),     // 6: temporal.server.api.token.v1.NexusOperationCompletion
+	(*v1.TransientWorkflowTaskInfo)(nil), // 7: temporal.server.api.history.v1.TransientWorkflowTaskInfo
+	(*v1.VersionHistoryItem)(nil),        // 8: temporal.server.api.history.v1.VersionHistoryItem
+	(*v11.VersionedTransition)(nil),      // 9: temporal.server.api.persistence.v1.VersionedTransition
+	(*v1.VersionHistories)(nil),          // 10: temporal.server.api.history.v1.VersionHistories
+	(*v12.VectorClock)(nil),              // 11: temporal.server.api.clock.v1.VectorClock
+	(*timestamppb.Timestamp)(nil),        // 12: google.protobuf.Timestamp
+	(*v11.StateMachineRef)(nil),          // 13: temporal.server.api.persistence.v1.StateMachineRef
+	(*v11.ChasmComponentRef)(nil),        // 14: temporal.server.api.persistence.v1.ChasmComponentRef
 }
 var file_temporal_server_api_token_v1_message_proto_depIdxs = []int32{
-	8,  // 0: temporal.server.api.token.v1.HistoryContinuation.transient_workflow_task:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	9,  // 1: temporal.server.api.token.v1.HistoryContinuation.version_history_item:type_name -> temporal.server.api.history.v1.VersionHistoryItem
-	10, // 2: temporal.server.api.token.v1.HistoryContinuation.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	11, // 3: temporal.server.api.token.v1.RawHistoryContinuation.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
-	12, // 4: temporal.server.api.token.v1.Task.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	13, // 5: temporal.server.api.token.v1.Task.started_time:type_name -> google.protobuf.Timestamp
-	14, // 6: temporal.server.api.token.v1.NexusOperationCompletion.ref:type_name -> temporal.server.api.persistence.v1.StateMachineRef
-	15, // 7: temporal.server.api.token.v1.NexusOperationChasmCompletion.ref:type_name -> temporal.server.api.persistence.v1.ChasmComponentRef
+	7,  // 0: temporal.server.api.token.v1.HistoryContinuation.transient_workflow_task:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
+	8,  // 1: temporal.server.api.token.v1.HistoryContinuation.version_history_item:type_name -> temporal.server.api.history.v1.VersionHistoryItem
+	9,  // 2: temporal.server.api.token.v1.HistoryContinuation.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	10, // 3: temporal.server.api.token.v1.RawHistoryContinuation.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
+	11, // 4: temporal.server.api.token.v1.Task.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	12, // 5: temporal.server.api.token.v1.Task.started_time:type_name -> google.protobuf.Timestamp
+	13, // 6: temporal.server.api.token.v1.NexusOperationCompletion.ref:type_name -> temporal.server.api.persistence.v1.StateMachineRef
+	14, // 7: temporal.server.api.token.v1.NexusOperationCompletion.component_ref:type_name -> temporal.server.api.persistence.v1.ChasmComponentRef
 	8,  // [8:8] is the sub-list for method output_type
 	8,  // [8:8] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name
@@ -828,7 +777,7 @@ func file_temporal_server_api_token_v1_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_token_v1_message_proto_rawDesc), len(file_temporal_server_api_token_v1_message_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

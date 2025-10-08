@@ -2367,24 +2367,23 @@ func (h *Handler) CompleteNexusOperationChasm(
 	request *historyservice.CompleteNexusOperationChasmRequest,
 ) (_ *historyservice.CompleteNexusOperationChasmResponse, retErr error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retErr)
-	h.startWG.Wait()
 
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
 
 	ref := chasm.ProtoRefToComponentRef(request.Completion.Ref)
-	info := &persistencespb.ChasmNexusCompletionInfo{
+	info := &persistencespb.ChasmNexusCompletion{
 		CloseTime: request.CloseTime,
 		RequestId: request.Completion.RequestId,
 	}
 	switch variant := request.Outcome.(type) {
 	case *historyservice.CompleteNexusOperationChasmRequest_Failure:
-		info.Outcome = &persistencespb.ChasmNexusCompletionInfo_Failure{
+		info.Outcome = &persistencespb.ChasmNexusCompletion_Failure{
 			Failure: variant.Failure,
 		}
 	case *historyservice.CompleteNexusOperationChasmRequest_Success:
-		info.Outcome = &persistencespb.ChasmNexusCompletionInfo_Success{
+		info.Outcome = &persistencespb.ChasmNexusCompletion_Success{
 			Success: variant.Success,
 		}
 	default:

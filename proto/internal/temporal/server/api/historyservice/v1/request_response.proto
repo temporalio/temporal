@@ -1144,13 +1144,13 @@ message ListTasksResponse {
 
 message CompleteNexusOperationChasmRequest {
     option (routing) = {
-        namespace_id: "completion.ref.namespace_id"
+        namespace_id: "completion.component_ref.namespace_id"
         // TODO - fix after merge
-        // execution_id: "completion.ref.business_id"
-        workflow_id: "completion.ref.business_id"
+        // execution_id: "completion.component_ref.business_id"
+        workflow_id: "completion.component_ref.business_id"
     };
     // Completion token - holds information for locating an entity and the corresponding component.
-    temporal.server.api.token.v1.NexusOperationChasmCompletion completion = 1;
+    temporal.server.api.token.v1.NexusOperationCompletion completion = 1;
     oneof outcome {
         // Result of a successful operation, only set if state == successful.
         temporal.api.common.v1.Payload success = 2;

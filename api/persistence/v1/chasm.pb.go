@@ -570,13 +570,13 @@ func (x *ChasmComponentRef) GetComponentInitialVersionedTransition() *VersionedT
 }
 
 // ChasmNexusCompletion includes details about a completed Nexus operation.
-type ChasmNexusCompletionInfo struct {
+type ChasmNexusCompletion struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Outcome:
 	//
-	//	*ChasmNexusCompletionInfo_Success
-	//	*ChasmNexusCompletionInfo_Failure
-	Outcome isChasmNexusCompletionInfo_Outcome `protobuf_oneof:"outcome"`
+	//	*ChasmNexusCompletion_Success
+	//	*ChasmNexusCompletion_Failure
+	Outcome isChasmNexusCompletion_Outcome `protobuf_oneof:"outcome"`
 	// Time when the operation was closed.
 	CloseTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
 	// Request ID embedded in the NexusOperationScheduledEvent.
@@ -586,20 +586,20 @@ type ChasmNexusCompletionInfo struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ChasmNexusCompletionInfo) Reset() {
-	*x = ChasmNexusCompletionInfo{}
+func (x *ChasmNexusCompletion) Reset() {
+	*x = ChasmNexusCompletion{}
 	mi := &file_temporal_server_api_persistence_v1_chasm_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ChasmNexusCompletionInfo) String() string {
+func (x *ChasmNexusCompletion) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ChasmNexusCompletionInfo) ProtoMessage() {}
+func (*ChasmNexusCompletion) ProtoMessage() {}
 
-func (x *ChasmNexusCompletionInfo) ProtoReflect() protoreflect.Message {
+func (x *ChasmNexusCompletion) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_chasm_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -611,67 +611,67 @@ func (x *ChasmNexusCompletionInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmNexusCompletionInfo.ProtoReflect.Descriptor instead.
-func (*ChasmNexusCompletionInfo) Descriptor() ([]byte, []int) {
+// Deprecated: Use ChasmNexusCompletion.ProtoReflect.Descriptor instead.
+func (*ChasmNexusCompletion) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *ChasmNexusCompletionInfo) GetOutcome() isChasmNexusCompletionInfo_Outcome {
+func (x *ChasmNexusCompletion) GetOutcome() isChasmNexusCompletion_Outcome {
 	if x != nil {
 		return x.Outcome
 	}
 	return nil
 }
 
-func (x *ChasmNexusCompletionInfo) GetSuccess() *v1.Payload {
+func (x *ChasmNexusCompletion) GetSuccess() *v1.Payload {
 	if x != nil {
-		if x, ok := x.Outcome.(*ChasmNexusCompletionInfo_Success); ok {
+		if x, ok := x.Outcome.(*ChasmNexusCompletion_Success); ok {
 			return x.Success
 		}
 	}
 	return nil
 }
 
-func (x *ChasmNexusCompletionInfo) GetFailure() *v11.Failure {
+func (x *ChasmNexusCompletion) GetFailure() *v11.Failure {
 	if x != nil {
-		if x, ok := x.Outcome.(*ChasmNexusCompletionInfo_Failure); ok {
+		if x, ok := x.Outcome.(*ChasmNexusCompletion_Failure); ok {
 			return x.Failure
 		}
 	}
 	return nil
 }
 
-func (x *ChasmNexusCompletionInfo) GetCloseTime() *timestamppb.Timestamp {
+func (x *ChasmNexusCompletion) GetCloseTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CloseTime
 	}
 	return nil
 }
 
-func (x *ChasmNexusCompletionInfo) GetRequestId() string {
+func (x *ChasmNexusCompletion) GetRequestId() string {
 	if x != nil {
 		return x.RequestId
 	}
 	return ""
 }
 
-type isChasmNexusCompletionInfo_Outcome interface {
-	isChasmNexusCompletionInfo_Outcome()
+type isChasmNexusCompletion_Outcome interface {
+	isChasmNexusCompletion_Outcome()
 }
 
-type ChasmNexusCompletionInfo_Success struct {
+type ChasmNexusCompletion_Success struct {
 	// Result of a successful operation, only set if state == successful.
 	Success *v1.Payload `protobuf:"bytes,1,opt,name=success,proto3,oneof"`
 }
 
-type ChasmNexusCompletionInfo_Failure struct {
+type ChasmNexusCompletion_Failure struct {
 	// Operation failure, only set if state != successful.
 	Failure *v11.Failure `protobuf:"bytes,2,opt,name=failure,proto3,oneof"`
 }
 
-func (*ChasmNexusCompletionInfo_Success) isChasmNexusCompletionInfo_Outcome() {}
+func (*ChasmNexusCompletion_Success) isChasmNexusCompletion_Outcome() {}
 
-func (*ChasmNexusCompletionInfo_Failure) isChasmNexusCompletionInfo_Outcome() {}
+func (*ChasmNexusCompletion_Failure) isChasmNexusCompletion_Outcome() {}
 
 type ChasmComponentAttributes_Task struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -821,8 +821,8 @@ const file_temporal_server_api_persistence_v1_chasm_proto_rawDesc = "" +
 	"\tarchetype\x18\x04 \x01(\tR\tarchetype\x12w\n" +
 	"\x1bentity_versioned_transition\x18\x05 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x19entityVersionedTransition\x12%\n" +
 	"\x0ecomponent_path\x18\x06 \x03(\tR\rcomponentPath\x12\x8c\x01\n" +
-	"&component_initial_versioned_transition\x18\a \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR#componentInitialVersionedTransition\"\xfa\x01\n" +
-	"\x18ChasmNexusCompletionInfo\x12;\n" +
+	"&component_initial_versioned_transition\x18\a \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR#componentInitialVersionedTransition\"\xf6\x01\n" +
+	"\x14ChasmNexusCompletion\x12;\n" +
 	"\asuccess\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadH\x00R\asuccess\x12<\n" +
 	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureH\x00R\afailure\x129\n" +
 	"\n" +
@@ -853,7 +853,7 @@ var file_temporal_server_api_persistence_v1_chasm_proto_goTypes = []any{
 	(*ChasmPointerAttributes)(nil),        // 5: temporal.server.api.persistence.v1.ChasmPointerAttributes
 	(*ChasmTaskInfo)(nil),                 // 6: temporal.server.api.persistence.v1.ChasmTaskInfo
 	(*ChasmComponentRef)(nil),             // 7: temporal.server.api.persistence.v1.ChasmComponentRef
-	(*ChasmNexusCompletionInfo)(nil),      // 8: temporal.server.api.persistence.v1.ChasmNexusCompletionInfo
+	(*ChasmNexusCompletion)(nil),          // 8: temporal.server.api.persistence.v1.ChasmNexusCompletion
 	(*ChasmComponentAttributes_Task)(nil), // 9: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task
 	(*v1.DataBlob)(nil),                   // 10: temporal.api.common.v1.DataBlob
 	(*VersionedTransition)(nil),           // 11: temporal.server.api.persistence.v1.VersionedTransition
@@ -877,9 +877,9 @@ var file_temporal_server_api_persistence_v1_chasm_proto_depIdxs = []int32{
 	10, // 12: temporal.server.api.persistence.v1.ChasmTaskInfo.data:type_name -> temporal.api.common.v1.DataBlob
 	11, // 13: temporal.server.api.persistence.v1.ChasmComponentRef.entity_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
 	11, // 14: temporal.server.api.persistence.v1.ChasmComponentRef.component_initial_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	12, // 15: temporal.server.api.persistence.v1.ChasmNexusCompletionInfo.success:type_name -> temporal.api.common.v1.Payload
-	13, // 16: temporal.server.api.persistence.v1.ChasmNexusCompletionInfo.failure:type_name -> temporal.api.failure.v1.Failure
-	14, // 17: temporal.server.api.persistence.v1.ChasmNexusCompletionInfo.close_time:type_name -> google.protobuf.Timestamp
+	12, // 15: temporal.server.api.persistence.v1.ChasmNexusCompletion.success:type_name -> temporal.api.common.v1.Payload
+	13, // 16: temporal.server.api.persistence.v1.ChasmNexusCompletion.failure:type_name -> temporal.api.failure.v1.Failure
+	14, // 17: temporal.server.api.persistence.v1.ChasmNexusCompletion.close_time:type_name -> google.protobuf.Timestamp
 	14, // 18: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.scheduled_time:type_name -> google.protobuf.Timestamp
 	10, // 19: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.data:type_name -> temporal.api.common.v1.DataBlob
 	11, // 20: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
@@ -903,8 +903,8 @@ func file_temporal_server_api_persistence_v1_chasm_proto_init() {
 		(*ChasmNodeMetadata_PointerAttributes)(nil),
 	}
 	file_temporal_server_api_persistence_v1_chasm_proto_msgTypes[8].OneofWrappers = []any{
-		(*ChasmNexusCompletionInfo_Success)(nil),
-		(*ChasmNexusCompletionInfo_Failure)(nil),
+		(*ChasmNexusCompletion_Success)(nil),
+		(*ChasmNexusCompletion_Failure)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

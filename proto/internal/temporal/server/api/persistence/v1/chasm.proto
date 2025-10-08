@@ -103,7 +103,7 @@ message ChasmComponentRef {
 }
 
 // ChasmNexusCompletion includes details about a completed Nexus operation.
-message ChasmNexusCompletionInfo {
+message ChasmNexusCompletion {
     oneof outcome {
         // Result of a successful operation, only set if state == successful.
         temporal.api.common.v1.Payload success = 1;

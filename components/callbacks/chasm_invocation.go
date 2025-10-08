@@ -82,9 +82,9 @@ func (c chasmInvocation) getHistoryRequest(
 ) (*historyservice.CompleteNexusOperationChasmRequest, error) {
 	var req *historyservice.CompleteNexusOperationChasmRequest
 
-	token := &tokenspb.NexusOperationChasmCompletion{
-		Ref:       ref,
-		RequestId: c.requestID,
+	token := &tokenspb.NexusOperationCompletion{
+		ComponentRef: ref,
+		RequestId:    c.requestID,
 	}
 
 	switch op := c.completion.(type) {

@@ -75,7 +75,7 @@ func (c *clientImpl) CompleteNexusOperationChasm(
 	request *historyservice.CompleteNexusOperationChasmRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.CompleteNexusOperationChasmResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.GetCompletion().GetRef().GetNamespaceId(), request.GetCompletion().GetRef().GetBusinessId())
+	shardID := c.shardIDFromWorkflowID(request.GetCompletion().GetComponentRef().GetNamespaceId(), request.GetCompletion().GetComponentRef().GetBusinessId())
 	var response *historyservice.CompleteNexusOperationChasmResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
