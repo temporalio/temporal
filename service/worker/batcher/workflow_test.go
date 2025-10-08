@@ -37,14 +37,14 @@ func (s *batcherSuite) TearDownTest() {
 	s.env.AssertExpectations(s.T())
 }
 
-func (s *batcherSuite) TestBatchWorkflow_MissingParams_Protobuf() {
+func (s *batcherSuite) TestBatchWorkflow_MissingParams() {
 	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{})
 	err := s.env.GetWorkflowError()
 	s.Require().Error(err)
 	s.Contains(err.Error(), "must provide required parameters")
 }
 
-func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
+func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query() {
 	var ac *activities
 	s.env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).Return(HeartBeatDetails{
 		SuccessCount: 42,
@@ -76,8 +76,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 	s.Require().NoError(err)
 }
 
-
-func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
+func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions() {
 	var ac *activities
 	s.env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).Return(HeartBeatDetails{
 		SuccessCount: 42,

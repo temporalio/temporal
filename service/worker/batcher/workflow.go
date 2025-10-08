@@ -9,7 +9,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -63,102 +62,6 @@ var (
 )
 
 type (
-	// TerminateParams is the parameters for terminating workflow
-	TerminateParams struct {
-	}
-
-	// CancelParams is the parameters for canceling workflow
-	CancelParams struct {
-	}
-
-	// SignalParams is the parameters for signaling workflow
-	SignalParams struct {
-		SignalName string
-		Input      *commonpb.Payloads
-	}
-
-	// DeleteParams is the parameters for deleting workflow
-	DeleteParams struct {
-	}
-
-	// ResetParams is the parameters for reseting workflow
-	ResetParams struct {
-		// This is a serialized commonpb.ResetOptions. We can't include it with the
-		// correct type because workflow/activity arguments are going to be serialized with the
-		// json dataconverter, which doesn't support the "oneof" field in ResetOptions.
-		ResetOptions []byte
-		resetOptions *commonpb.ResetOptions // deserialized version
-
-		// This is a slice of serialized workflowpb.PostResetOperation.
-		// For the same reason as ResetOptions, we manually serialize/deserialize it.
-		PostResetOperations [][]byte
-		postResetOperations []*workflowpb.PostResetOperation
-		// Deprecated fields:
-		ResetType        enumspb.ResetType
-		ResetReapplyType enumspb.ResetReapplyType
-	}
-
-	// UpdateOptionsParams is the parameters for updating workflow execution options
-	UpdateOptionsParams struct {
-		WorkflowExecutionOptions *workflowpb.WorkflowExecutionOptions
-		UpdateMask               *FieldMask
-	}
-
-	UnpauseActivitiesParams struct {
-		Identity       string
-		ActivityType   string
-		MatchAll       bool
-		ResetAttempts  bool
-		ResetHeartbeat bool
-		Jitter         time.Duration
-	}
-
-	UpdateActivitiesOptionsParams struct {
-		Identity        string
-		ActivityType    string
-		MatchAll        bool
-		ActivityOptions *ActivityOptions
-		UpdateMask      *FieldMask
-		RestoreOriginal bool
-	}
-
-	ActivityOptions struct {
-		TaskQueue              *TaskQueue
-		ScheduleToCloseTime    time.Duration
-		ScheduleToStartTimeout time.Duration
-		StartToCloseTimeout    time.Duration
-		HeartbeatTimeout       time.Duration
-		RetryPolicy            *RetryPolicy
-	}
-
-	TaskQueue struct {
-		Name string
-		Kind int32
-	}
-
-	RetryPolicy struct {
-		InitialInterval        time.Duration
-		BackoffCoefficient     float64
-		MaximumInterval        time.Duration
-		MaximumAttempts        int32
-		NonRetryableErrorTypes []string
-	}
-
-	ResetActivitiesParams struct {
-		Identity               string
-		ActivityType           string
-		MatchAll               bool
-		ResetAttempts          bool
-		ResetHeartbeat         bool
-		KeepPaused             bool
-		Jitter                 time.Duration
-		RestoreOriginalOptions bool
-	}
-
-	FieldMask struct {
-		Paths []string
-	}
-
 	// HeartBeatDetails is the struct for heartbeat details
 	HeartBeatDetails struct {
 		PageToken   []byte
