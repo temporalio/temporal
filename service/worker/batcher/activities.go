@@ -258,9 +258,9 @@ func (a *activities) checkNamespaceID(namespaceID string) error {
 	return nil
 }
 
-// BatchActivityWithProtobuf is an activity for processing batch operations using protobuf as the input type.
+// BatchActivity is an activity for processing batch operations using protobuf as the input type.
 // nolint:revive,cognitive-complexity
-func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
+func (a *activities) BatchActivity(ctx context.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
 	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceIDTag(batchParams.NamespaceId))
@@ -323,7 +323,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		metricsHandler metrics.Handler,
 		logger log.Logger,
 	) {
-		startTaskProcessorProtobuf(ctx, batchParams, batchParams.Request.Namespace, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
+		startTaskProcessor(ctx, batchParams, batchParams.Request.Namespace, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
 	}
 
 	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, sdkClient, metricsHandler, logger, hbd)
@@ -361,7 +361,7 @@ func (a *activities) getOperationConcurrency(concurrency int) int {
 }
 
 // nolint:revive,cognitive-complexity
-func startTaskProcessorProtobuf(
+func startTaskProcessor(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
 	namespace string,

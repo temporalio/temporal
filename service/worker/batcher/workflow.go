@@ -105,13 +105,13 @@ var (
 	}
 )
 
-// BatchWorkflowProtobuf is the workflow that runs a batch job of resetting workflows.
-func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
+// BatchWorkflow is the workflow that runs a batch job of resetting workflows.
+func BatchWorkflow(ctx workflow.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
 	if batchParams == nil {
 		return HeartBeatDetails{}, errors.New("batchParams is nil")
 	}
 
-	batchParams = setDefaultParamsProtobuf(batchParams)
+	batchParams = setDefaultParams(batchParams)
 	err := ValidateBatchOperation(batchParams.Request)
 	if err != nil {
 		return HeartBeatDetails{}, err
@@ -121,7 +121,7 @@ func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOper
 	opt := workflow.WithActivityOptions(ctx, batchActivityOptions)
 	var result HeartBeatDetails
 	var ac *activities
-	err = workflow.ExecuteActivity(opt, ac.BatchActivityWithProtobuf, batchParams).Get(ctx, &result)
+	err = workflow.ExecuteActivity(opt, ac.BatchActivity, batchParams).Get(ctx, &result)
 	if err != nil {
 		return HeartBeatDetails{}, err
 	}
@@ -276,7 +276,7 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 	return nil
 }
 
-func setDefaultParamsProtobuf(params *batchspb.BatchOperationInput) *batchspb.BatchOperationInput {
+func setDefaultParams(params *batchspb.BatchOperationInput) *batchspb.BatchOperationInput {
 	if params.GetAttemptsOnRetryableError() <= 1 {
 		params.AttemptsOnRetryableError = defaultAttemptsOnRetryableError
 	}
