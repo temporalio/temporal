@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
@@ -37,13 +38,44 @@ func newFieldNameAggInterceptor(
 	}
 }
 
+type saAggInterceptor struct {
+	names map[string]struct{}
+}
+
+var _ query.SearchAttributeInterceptor = (*saAggInterceptor)(nil)
+
+func newSaAggInterceptor() *saAggInterceptor {
+	return &saAggInterceptor{
+		names: make(map[string]struct{}),
+	}
+}
+
+func (i *saAggInterceptor) Intercept(col *query.SAColumn) error {
+	i.names[col.Alias] = struct{}{}
+	return nil
+}
+
 func ValidateVisibilityQuery(
 	namespaceName namespace.Name,
+	namespaceID namespace.ID,
 	saNameType searchattribute.NameTypeMap,
 	saMapperProvider searchattribute.MapperProvider,
+	enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 	queryString string,
 ) error {
-	fields, err := getQueryFields(namespaceName, saNameType, saMapperProvider, queryString)
+	var fields []string
+	var err error
+	if enableUnifiedQueryConverter() {
+		fields, err = getQueryFields(
+			namespaceName,
+			namespaceID,
+			saNameType,
+			saMapperProvider,
+			queryString,
+		)
+	} else {
+		fields, err = getQueryFieldsLegacy(namespaceName, saNameType, saMapperProvider, queryString)
+	}
 	if err != nil {
 		return err
 	}
@@ -58,6 +90,35 @@ func ValidateVisibilityQuery(
 }
 
 func getQueryFields(
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	saNameType searchattribute.NameTypeMap,
+	saMapperProvider searchattribute.MapperProvider,
+	queryString string,
+) ([]string, error) {
+	saMapper, err := saMapperProvider.GetMapper(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+	saInterceptor := newSaAggInterceptor()
+	queryConverter := query.NewNilQueryConverter(
+		namespaceName,
+		namespaceID,
+		saNameType,
+		saMapper,
+	).WithSearchAttributeInterceptor(saInterceptor)
+	_, err = queryConverter.Convert(queryString)
+	if err != nil {
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
+		return nil, err
+	}
+	return expmaps.Keys(saInterceptor.names), nil
+}
+
+func getQueryFieldsLegacy(
 	namespaceName namespace.Name,
 	saNameType searchattribute.NameTypeMap,
 	saMapperProvider searchattribute.MapperProvider,
