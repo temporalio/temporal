@@ -255,9 +255,8 @@ func printTable(items []interface{}, writer io.Writer) error {
 		),
 		tablewriter.WithRendition(tw.Rendition{Borders: tw.BorderNone, Settings: tw.Settings{Lines: tw.Lines{ShowHeaderLine: tw.Off}}}),
 	)
-	defer table.Close()
 	table.Header(fields)
-	for i := 0; i < len(items); i++ {
+	for i := range items {
 		item := reflect.ValueOf(items[i])
 		for item.Type().Kind() == reflect.Ptr {
 			item = item.Elem()
@@ -270,8 +269,7 @@ func printTable(items []interface{}, writer io.Writer) error {
 		table.Append(columns)
 	}
 	table.Render()
-
-	return nil
+	return table.Close()
 }
 
 func showNextPage(wr io.Writer) bool {
