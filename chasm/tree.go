@@ -654,7 +654,7 @@ func (n *Node) serialize() error {
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
 		return n.serializePointerNode()
 	default:
-		return serviceerror.NewInternal("unknown node type")
+		return softassert.UnexpectedInternalErr(n.logger, "unknown node type", nil)
 	}
 }
 
