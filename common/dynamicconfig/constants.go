@@ -861,11 +861,6 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
 	)
-	FrontendMaxFairnessWeightOverrideConfigLimit = NewGlobalIntSetting(
-		"frontend.maxFairnessWeightOverrideConfigLimit",
-		1000,
-		`Maximum number of fairness key overrides that can be set in a single request`,
-	)
 	// [cleanup-wv-pre-release]
 	EnableDeployments = NewNamespaceBoolSetting(
 		"system.enableDeployments",

@@ -319,9 +319,7 @@ func NewConfig(
 		DeleteNamespacePagesPerExecution:                    dynamicconfig.DeleteNamespacePagesPerExecution.Get(dc),
 		DeleteNamespaceConcurrentDeleteExecutionsActivities: dynamicconfig.DeleteNamespaceConcurrentDeleteExecutionsActivities.Get(dc),
 		DeleteNamespaceNamespaceDeleteDelay:                 dynamicconfig.DeleteNamespaceNamespaceDeleteDelay.Get(dc),
-
-		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.FrontendMaxFairnessWeightOverrideConfigLimit.Get(dc),
-
+		
 		EnableSchedules: dynamicconfig.FrontendEnableSchedules.Get(dc),
 
 		// [cleanup-wv-pre-release]
