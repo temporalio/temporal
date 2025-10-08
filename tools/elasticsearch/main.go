@@ -3,25 +3,19 @@ package elasticsearch
 import (
 	"os"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/tools/common/schema"
+	commonschema "go.temporal.io/server/tools/common/schema"
 )
 
 const (
-	CLIOptESURL           = "endpoint"
-	CLIOptESUsername      = "user"
-	CLIOptESPassword      = "password"
 	CLIOptVisibilityIndex = "index"
 	CLIOptAWSCredentials  = "aws-credentials"
 	CLIOptAWSToken        = "aws-session-token"
 	CLIOptFailSilently    = "fail"
 
-	CLIFlagESURL           = CLIOptESURL + ", e"
-	CLIFlagESUsername      = CLIOptESUsername + ", u"
-	CLIFlagESPassword      = CLIOptESPassword + ", p"
-	CLIFlagAWSToken        = CLIOptAWSToken
 	CLIFlagVisibilityIndex = CLIOptVisibilityIndex + ", i"
+	CLIFlagAWSToken        = CLIOptAWSToken
 	CLIFlagAWSCredentials  = CLIOptAWSCredentials + ", aws"
 	CLIFlagFailSilently    = CLIOptFailSilently
 )
@@ -36,7 +30,7 @@ var osExit = os.Exit
 
 // root handler for all cli commands
 func cliHandler(c *cli.Context, handler func(c *cli.Context, logger log.Logger) error, logger log.Logger) {
-	quiet := c.Bool(schema.CLIOptQuiet)
+	quiet := c.GlobalBool(commonschema.CLIOptQuiet)
 	err := handler(c, logger)
 	if err != nil && !quiet {
 		osExit(1)
@@ -54,48 +48,48 @@ func BuildCLIOptions() *cli.App {
 	logger := log.NewCLILogger()
 
 	app.Flags = []cli.Flag{
-		&cli.StringFlag{
-			Name:    CLIFlagESURL,
-			Value:   "http://127.0.0.1:9200",
-			Usage:   "hostname or ip address of elasticsearch server",
-			EnvVars: []string{"ES_SERVER"},
+		cli.StringFlag{
+			Name:   commonschema.CLIFlagEndpoint,
+			Value:  "http://127.0.0.1:9200",
+			Usage:  "hostname or ip address of elasticsearch server",
+			EnvVar: "ES_SERVER",
 		},
-		&cli.StringFlag{
-			Name:    CLIFlagESUsername,
-			Value:   "",
-			Usage:   "username for elasticsearch or aws_access_key_id if using static aws credentials",
-			EnvVars: []string{"ES_USER"},
+		cli.StringFlag{
+			Name:   commonschema.CLIFlagUser,
+			Value:  "",
+			Usage:  "username for elasticsearch or aws_access_key_id if using static aws credentials",
+			EnvVar: "ES_USER",
 		},
-		&cli.StringFlag{
-			Name:    CLIFlagESPassword,
-			Value:   "",
-			Usage:   "password for elasticsearch or aws_secret_access_key if using static aws credentials",
-			EnvVars: []string{"ES_PWD"},
+		cli.StringFlag{
+			Name:   commonschema.CLIFlagPassword,
+			Value:  "",
+			Usage:  "password for elasticsearch or aws_secret_access_key if using static aws credentials",
+			EnvVar: "ES_PWD",
 		},
-		&cli.StringFlag{
-			Name:    CLIFlagAWSCredentials,
-			Value:   "",
-			Usage:   "AWS credentials provider (supported ['static', 'environment', 'aws-sdk-default'])",
-			EnvVars: []string{"AWS_CREDENTIALS"},
+		cli.StringFlag{
+			Name:   CLIFlagAWSCredentials,
+			Value:  "",
+			Usage:  "AWS credentials provider (supported ['static', 'environment', 'aws-sdk-default'])",
+			EnvVar: "AWS_CREDENTIALS",
 		},
-		&cli.StringFlag{
-			Name:    CLIFlagAWSToken,
-			Value:   "",
-			Usage:   "AWS sessiontoken for use with 'static' AWS credentials provider",
-			EnvVars: []string{"AWS_SESSION_TOKEN"},
+		cli.StringFlag{
+			Name:   CLIFlagAWSToken,
+			Value:  "",
+			Usage:  "AWS sessiontoken for use with 'static' AWS credentials provider",
+			EnvVar: "AWS_SESSION_TOKEN",
 		},
-		&cli.BoolFlag{
-			Name:  schema.CLIOptQuiet,
+		cli.BoolFlag{
+			Name:  commonschema.CLIOptQuiet,
 			Usage: "don't log errors to stderr",
 		},
 	}
 
-	app.Commands = []*cli.Command{
+	app.Commands = []cli.Command{
 		{
 			Name:  "setup-schema",
 			Usage: "setup elasticsearch cluster settings and index template",
 			Flags: []cli.Flag{
-				&cli.BoolFlag{
+				cli.BoolFlag{
 					Name:  CLIFlagFailSilently,
 					Usage: "fail silently on HTTP errors",
 				},
@@ -109,12 +103,12 @@ func BuildCLIOptions() *cli.App {
 			Name:  "update-schema",
 			Usage: "update elasticsearch index template, and index mappings if --index is specified",
 			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    CLIFlagVisibilityIndex,
-					Usage:   "name of the visibility index to update mappings for (optional)",
-					EnvVars: []string{"ES_VISIBILITY_INDEX"},
+				cli.StringFlag{
+					Name:   CLIFlagVisibilityIndex,
+					Usage:  "name of the visibility index to update mappings for (optional)",
+					EnvVar: "ES_VISIBILITY_INDEX",
 				},
-				&cli.BoolFlag{
+				cli.BoolFlag{
 					Name:  CLIFlagFailSilently,
 					Usage: "fail silently on HTTP errors",
 				},
@@ -128,13 +122,13 @@ func BuildCLIOptions() *cli.App {
 			Name:  "create-index",
 			Usage: "create elasticsearch visibility index",
 			Flags: []cli.Flag{
-				&cli.StringFlag{
+				cli.StringFlag{
 					Name:     CLIFlagVisibilityIndex,
 					Usage:    "name of the visibility index to create",
 					Required: true,
-					EnvVars:  []string{"ES_VISIBILITY_INDEX"},
+					EnvVar:   "ES_VISIBILITY_INDEX",
 				},
-				&cli.BoolFlag{
+				cli.BoolFlag{
 					Name:  CLIFlagFailSilently,
 					Usage: "fail silently on HTTP errors",
 				},
@@ -148,13 +142,13 @@ func BuildCLIOptions() *cli.App {
 			Name:  "drop-index",
 			Usage: "delete elasticsearch visibility index",
 			Flags: []cli.Flag{
-				&cli.StringFlag{
+				cli.StringFlag{
 					Name:     CLIFlagVisibilityIndex,
 					Usage:    "name of the visibility index to delete",
 					Required: true,
-					EnvVars:  []string{"ES_VISIBILITY_INDEX"},
+					EnvVar:   "ES_VISIBILITY_INDEX",
 				},
-				&cli.BoolFlag{
+				cli.BoolFlag{
 					Name:  CLIFlagFailSilently,
 					Usage: "fail silently on HTTP errors",
 				},

@@ -14,16 +14,17 @@ type Config struct {
 	EnableReplicationStream dynamicconfig.BoolPropertyFn
 	HistoryReplicationDLQV2 dynamicconfig.BoolPropertyFn
 
-	RPS                                  dynamicconfig.IntPropertyFn
-	OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
-	MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
-	PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
-	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
-	PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
+	RPS                                         dynamicconfig.IntPropertyFn
+	OperatorRPSRatio                            dynamicconfig.FloatPropertyFn
+	MaxIDLengthLimit                            dynamicconfig.IntPropertyFn
+	PersistenceMaxQPS                           dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS                     dynamicconfig.IntPropertyFn
+	PersistenceNamespaceMaxQPS                  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceGlobalNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistencePerShardNamespaceMaxQPS          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceDynamicRateLimitingParams        dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
+	EnableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
+	PersistenceQPSBurstRatio                    dynamicconfig.FloatPropertyFn
 
 	VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
@@ -91,11 +92,13 @@ type Config struct {
 	StandbyTaskMissingEventsResendDelay  dynamicconfig.DurationPropertyFnWithTaskTypeFilter
 	StandbyTaskMissingEventsDiscardDelay dynamicconfig.DurationPropertyFnWithTaskTypeFilter
 
-	QueuePendingTaskCriticalCount    dynamicconfig.IntPropertyFn
-	QueueReaderStuckCriticalAttempts dynamicconfig.IntPropertyFn
-	QueueCriticalSlicesCount         dynamicconfig.IntPropertyFn
-	QueuePendingTaskMaxCount         dynamicconfig.IntPropertyFn
-	QueueMaxPredicateSize            dynamicconfig.IntPropertyFn
+	QueuePendingTaskCriticalCount     dynamicconfig.IntPropertyFn
+	QueueReaderStuckCriticalAttempts  dynamicconfig.IntPropertyFn
+	QueueCriticalSlicesCount          dynamicconfig.IntPropertyFn
+	QueuePendingTaskMaxCount          dynamicconfig.IntPropertyFn
+	QueueMaxPredicateSize             dynamicconfig.IntPropertyFn
+	QueueMoveGroupTaskCountBase       dynamicconfig.IntPropertyFn
+	QueueMoveGroupTaskCountMultiplier dynamicconfig.FloatPropertyFn
 
 	TaskDLQEnabled                 dynamicconfig.BoolPropertyFn
 	TaskDLQUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
@@ -291,6 +294,8 @@ type Config struct {
 	ReplicationProgressCacheTTL                         dynamicconfig.DurationPropertyFn
 	ReplicationStreamSendEmptyTaskDuration              dynamicconfig.DurationPropertyFn
 	ReplicationEnableRateLimit                          dynamicconfig.BoolPropertyFn
+	ReplicationStreamReceiverLivenessMultiplier         dynamicconfig.IntPropertyFn
+	ReplicationStreamSenderLivenessMultiplier           dynamicconfig.IntPropertyFn
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -462,11 +467,13 @@ func NewConfig(
 		StandbyTaskMissingEventsResendDelay:  dynamicconfig.StandbyTaskMissingEventsResendDelay.Get(dc),
 		StandbyTaskMissingEventsDiscardDelay: dynamicconfig.StandbyTaskMissingEventsDiscardDelay.Get(dc),
 
-		QueuePendingTaskCriticalCount:    dynamicconfig.QueuePendingTaskCriticalCount.Get(dc),
-		QueueReaderStuckCriticalAttempts: dynamicconfig.QueueReaderStuckCriticalAttempts.Get(dc),
-		QueueCriticalSlicesCount:         dynamicconfig.QueueCriticalSlicesCount.Get(dc),
-		QueuePendingTaskMaxCount:         dynamicconfig.QueuePendingTaskMaxCount.Get(dc),
-		QueueMaxPredicateSize:            dynamicconfig.QueueMaxPredicateSize.Get(dc),
+		QueuePendingTaskCriticalCount:     dynamicconfig.QueuePendingTaskCriticalCount.Get(dc),
+		QueueReaderStuckCriticalAttempts:  dynamicconfig.QueueReaderStuckCriticalAttempts.Get(dc),
+		QueueCriticalSlicesCount:          dynamicconfig.QueueCriticalSlicesCount.Get(dc),
+		QueuePendingTaskMaxCount:          dynamicconfig.QueuePendingTaskMaxCount.Get(dc),
+		QueueMaxPredicateSize:             dynamicconfig.QueueMaxPredicateSize.Get(dc),
+		QueueMoveGroupTaskCountBase:       dynamicconfig.QueueMoveGroupTaskCountBase.Get(dc),
+		QueueMoveGroupTaskCountMultiplier: dynamicconfig.QueueMoveGroupTaskCountMultiplier.Get(dc),
 
 		TaskDLQEnabled:                 dynamicconfig.HistoryTaskDLQEnabled.Get(dc),
 		TaskDLQUnexpectedErrorAttempts: dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts.Get(dc),
@@ -556,6 +563,8 @@ func NewConfig(
 		ReplicationProgressCacheTTL:                         dynamicconfig.ReplicationProgressCacheTTL.Get(dc),
 		ReplicationEnableRateLimit:                          dynamicconfig.ReplicationEnableRateLimit.Get(dc),
 		ReplicationStreamSendEmptyTaskDuration:              dynamicconfig.ReplicationStreamSendEmptyTaskDuration.Get(dc),
+		ReplicationStreamReceiverLivenessMultiplier:         dynamicconfig.ReplicationStreamReceiverLivenessMultiplier.Get(dc),
+		ReplicationStreamSenderLivenessMultiplier:           dynamicconfig.ReplicationStreamSenderLivenessMultiplier.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),

@@ -364,12 +364,32 @@ func (s *predicatesSuite) TestAndPredicates() {
 			predicateB: NewTypePredicate([]enumsspb.TaskType{
 				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
 			}),
-			expectedResult: predicates.And[Task](
+			expectedResult: predicates.And(
 				NewNamespacePredicate([]string{"namespace1"}),
 				NewTypePredicate([]enumsspb.TaskType{
 					enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
 				}),
 			),
+		},
+		{
+			predicateA:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),
+			predicateB:     predicates.Not(NewNamespacePredicate([]string{"namespace2", "namespace3"})),
+			expectedResult: NewNamespacePredicate([]string{"namespace1"}),
+		},
+		{
+			predicateA:     predicates.Not(NewNamespacePredicate([]string{"namespace2", "namespace3"})),
+			predicateB:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),
+			expectedResult: NewNamespacePredicate([]string{"namespace1"}),
+		},
+		{
+			predicateA:     predicates.Not(NewNamespacePredicate([]string{"namespace1", "namespace2"})),
+			predicateB:     predicates.Not(NewNamespacePredicate([]string{"namespace2", "namespace3"})),
+			expectedResult: predicates.Not(NewNamespacePredicate([]string{"namespace1", "namespace2", "namespace3"})),
+		},
+		{
+			predicateA:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),
+			predicateB:     predicates.Not(NewNamespacePredicate([]string{"namespace1", "namespace2", "namespace3"})),
+			expectedResult: predicates.Empty[Task](),
 		},
 	}
 
@@ -431,12 +451,27 @@ func (s *predicatesSuite) TestOrPredicates() {
 			predicateB: NewTypePredicate([]enumsspb.TaskType{
 				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
 			}),
-			expectedResult: predicates.Or[Task](
+			expectedResult: predicates.Or(
 				NewNamespacePredicate([]string{"namespace1"}),
 				NewTypePredicate([]enumsspb.TaskType{
 					enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
 				}),
 			),
+		},
+		{
+			predicateA:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),
+			predicateB:     predicates.Not(NewNamespacePredicate([]string{"namespace2", "namespace3"})),
+			expectedResult: predicates.Not(NewNamespacePredicate([]string{"namespace3"})),
+		},
+		{
+			predicateA:     predicates.Not(NewNamespacePredicate([]string{"namespace2", "namespace3"})),
+			predicateB:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),
+			expectedResult: predicates.Not(NewNamespacePredicate([]string{"namespace3"})),
+		},
+		{
+			predicateA:     predicates.Not(NewNamespacePredicate([]string{"namespace1", "namespace2"})),
+			predicateB:     predicates.Not(NewNamespacePredicate([]string{"namespace2", "namespace3"})),
+			expectedResult: predicates.Not(NewNamespacePredicate([]string{"namespace2"})),
 		},
 	}
 

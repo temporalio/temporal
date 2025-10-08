@@ -33,28 +33,30 @@ type (
 
 	DynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 
-	EnableDataLossMetrics dynamicconfig.BoolPropertyFn
+	EnableDataLossMetrics                       dynamicconfig.BoolPropertyFn
+	EnableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
 
 	ClusterName string
 
 	NewFactoryParams struct {
 		fx.In
 
-		DataStoreFactory                   persistence.DataStoreFactory
-		EventBlobCache                     persistence.XDCCache
-		Cfg                                *config.Persistence
-		PersistenceMaxQPS                  PersistenceMaxQps
-		PersistenceNamespaceMaxQPS         PersistenceNamespaceMaxQps
-		PersistencePerShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS
-		OperatorRPSRatio                   OperatorRPSRatio
-		PersistenceBurstRatio              PersistenceBurstRatio
-		ClusterName                        ClusterName
-		ServiceName                        primitives.ServiceName
-		MetricsHandler                     metrics.Handler
-		Logger                             log.Logger
-		HealthSignals                      persistence.HealthSignalAggregator
-		DynamicRateLimitingParams          DynamicRateLimitingParams
-		EnableDataLossMetrics              EnableDataLossMetrics
+		DataStoreFactory                            persistence.DataStoreFactory
+		EventBlobCache                              persistence.XDCCache
+		Cfg                                         *config.Persistence
+		PersistenceMaxQPS                           PersistenceMaxQps
+		PersistenceNamespaceMaxQPS                  PersistenceNamespaceMaxQps
+		PersistencePerShardNamespaceMaxQPS          PersistencePerShardNamespaceMaxQPS
+		OperatorRPSRatio                            OperatorRPSRatio
+		PersistenceBurstRatio                       PersistenceBurstRatio
+		ClusterName                                 ClusterName
+		ServiceName                                 primitives.ServiceName
+		MetricsHandler                              metrics.Handler
+		Logger                                      log.Logger
+		HealthSignals                               persistence.HealthSignalAggregator
+		DynamicRateLimitingParams                   DynamicRateLimitingParams
+		EnableDataLossMetrics                       EnableDataLossMetrics
+		EnableBestEffortDeleteTasksOnWorkflowUpdate EnableBestEffortDeleteTasksOnWorkflowUpdate
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -78,6 +80,7 @@ var Module = fx.Options(
 	fx.Provide(persistence.NewDLQMetricsEmitter),
 	fx.Provide(EventBlobCacheProvider),
 	fx.Provide(EnableDataLossMetricsProvider),
+	fx.Provide(EnableBestEffortDeleteTasksOnWorkflowUpdateProvider),
 )
 
 func ClusterNameProvider(config *cluster.Config) ClusterName {
@@ -99,6 +102,12 @@ func EnableDataLossMetricsProvider(
 	dc *dynamicconfig.Collection,
 ) EnableDataLossMetrics {
 	return EnableDataLossMetrics(dynamicconfig.EnableDataLossMetrics.Get(dc))
+}
+
+func EnableBestEffortDeleteTasksOnWorkflowUpdateProvider(
+	dc *dynamicconfig.Collection,
+) EnableBestEffortDeleteTasksOnWorkflowUpdate {
+	return EnableBestEffortDeleteTasksOnWorkflowUpdate(dynamicconfig.EnableBestEffortDeleteTasksOnWorkflowUpdate.Get(dc))
 }
 
 func FactoryProvider(
@@ -145,6 +154,7 @@ func FactoryProvider(
 		params.Logger,
 		params.HealthSignals,
 		params.EnableDataLossMetrics,
+		params.EnableBestEffortDeleteTasksOnWorkflowUpdate,
 	)
 }
 

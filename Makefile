@@ -270,6 +270,9 @@ $(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER): | $(STAMPDIR) $(LOCALBIN)
 	@touch $@
 $(PROTOC_GEN_GO_HELPERS): $(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER)
 
+$(LOCALBIN)/protoc-gen-go-chasm: $(LOCALBIN) cmd/tools/protoc-gen-go-chasm/main.go go.mod go.sum
+	@go build -o $@ ./cmd/tools/protoc-gen-go-chasm
+
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary (ideally with version)
 # $2 - package url which can be installed
@@ -300,7 +303,7 @@ $(CHASM_BINPB): $(API_BINPB) $(INTERNAL_BINPB) $(CHASM_PROTO_FILES)
 	@printf $(COLOR) "Generate CHASM proto image..."
 	@protoc --descriptor_set_in=$(API_BINPB):$(INTERNAL_BINPB) -I=. $(CHASM_PROTO_FILES) -o $@
 
-protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB)
+protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB) $(LOCALBIN)/protoc-gen-go-chasm
 	@go run ./cmd/tools/protogen \
 		-root=$(ROOT) \
 		-proto-out=$(PROTO_OUT) \
@@ -309,6 +312,7 @@ protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRP
 		-protogen-bin=$(PROTOGEN) \
 		-goimports-bin=$(GOIMPORTS) \
 		-mockgen-bin=$(MOCKGEN) \
+		-protoc-gen-go-chasm-bin=$(LOCALBIN)/protoc-gen-go-chasm \
 		-protoc-gen-go-bin=$(PROTOC_GEN_GO) \
 		-protoc-gen-go-grpc-bin=$(PROTOC_GEN_GO_GRPC) \
 		-protoc-gen-go-helpers-bin=$(PROTOC_GEN_GO_HELPERS) \
@@ -526,13 +530,13 @@ install-schema-postgresql12: temporal-sql-tool
 
 install-schema-es: temporal-elasticsearch-tool
 	@printf $(COLOR) "Install Elasticsearch schema..."
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 setup-schema
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 setup-schema
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev
 
 install-schema-es-secondary: temporal-elasticsearch-tool
 	@printf $(COLOR) "Install Elasticsearch schema..."
-	./temporal-elasticsearch-tool -e http://127.0.0.1:8200 setup-schema
-	./temporal-elasticsearch-tool -e http://127.0.0.1:8200 create-index --index temporal_visibility_v1_secondary
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:8200 setup-schema
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:8200 create-index --index temporal_visibility_v1_secondary
 
 install-schema-xdc: temporal-cassandra-tool temporal-elasticsearch-tool
 	@printf $(COLOR)  "Install Cassandra schema (active)..."
@@ -554,15 +558,15 @@ install-schema-xdc: temporal-cassandra-tool temporal-elasticsearch-tool
 	./temporal-cassandra-tool -k temporal_cluster_c update-schema -d ./schema/cassandra/temporal/versioned
 
 	@printf $(COLOR) "Install Elasticsearch schemas..."
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 setup-schema
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 setup-schema
 # Delete indices if they exist (drop-index fails silently if index doesn't exist)
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_a --fail
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_b --fail
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_c --fail
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_a --fail
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_b --fail
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_c --fail
 # Create indices
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_a
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_b
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_c
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_a
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_b
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_c
 
 ##### Run server #####
 DOCKER_COMPOSE_FILES     := -f ./develop/docker-compose/docker-compose.yml -f ./develop/docker-compose/docker-compose.$(GOOS).yml

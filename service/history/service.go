@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -33,6 +34,7 @@ type (
 		metricsHandler    metrics.Handler
 		healthServer      *health.Server
 		readinessCancel   context.CancelFunc
+		chasmRegistry     *chasm.Registry
 	}
 )
 
@@ -46,6 +48,7 @@ func NewService(
 	membershipMonitor membership.Monitor,
 	metricsHandler metrics.Handler,
 	healthServer *health.Server,
+	chasmRegistry *chasm.Registry,
 ) *Service {
 	return &Service{
 		server:            server,
@@ -57,6 +60,7 @@ func NewService(
 		membershipMonitor: membershipMonitor,
 		metricsHandler:    metricsHandler,
 		healthServer:      healthServer,
+		chasmRegistry:     chasmRegistry,
 	}
 }
 
@@ -70,6 +74,7 @@ func (s *Service) Start() {
 
 	historyservice.RegisterHistoryServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
+	s.chasmRegistry.RegisterServices(s.server)
 
 	// start as NOT_SERVING, update to SERVING after initial shards acquired
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)

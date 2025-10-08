@@ -137,7 +137,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		scheduler,
 		rescheduler,
 		factory,
-		testQueueOptions,
+		&testQueueOptions,
 		NewReaderPriorityRateLimiter(
 			func() float64 { return 10 },
 			1,

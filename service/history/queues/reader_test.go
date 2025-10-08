@@ -154,7 +154,10 @@ func (s *readerSuite) TestSplitSlices() {
 
 	splitter = func(s Slice) ([]Slice, bool) {
 		left, right := s.SplitByRange(NewRandomKeyInRange(s.Scope().Range))
-		return []Slice{left, right}, true
+
+		// empty slices should be ignored
+		left, empty := left.SplitByRange(left.Scope().Range.ExclusiveMax)
+		return []Slice{left, empty, right}, true
 	}
 	reader.SplitSlices(splitter)
 	s.Len(reader.Scopes(), 6)
@@ -165,7 +168,11 @@ func (s *readerSuite) TestMergeSlices() {
 	scopes := NewRandomScopes(rand.Intn(10))
 	reader := s.newTestReader(scopes, nil, NoopReaderCompletionFn)
 
-	incomingScopes := NewRandomScopes(rand.Intn(10))
+	incomingScopes := NewRandomScopes(10)
+	// manually set some scopes to be empty and verify they are ignored during merge
+	incomingScopes[2].Predicate = predicates.Empty[tasks.Task]()
+	incomingScopes[7].Predicate = predicates.Empty[tasks.Task]()
+
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
 		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}, noPredicateSizeLimit))
@@ -175,6 +182,7 @@ func (s *readerSuite) TestMergeSlices() {
 
 	mergedScopes := reader.Scopes()
 	for idx, scope := range mergedScopes[:len(mergedScopes)-1] {
+		s.False(scope.IsEmpty())
 		nextScope := mergedScopes[idx+1]
 		if scope.Range.ExclusiveMax.CompareTo(nextScope.Range.InclusiveMin) > 0 {
 			panic(fmt.Sprintf(
@@ -193,6 +201,7 @@ func (s *readerSuite) TestAppendSlices() {
 	reader := s.newTestReader(currentScopes, nil, NoopReaderCompletionFn)
 
 	incomingScopes := scopes[totalScopes/2:]
+	incomingScopes[2].Predicate = predicates.Empty[tasks.Task]()
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
 		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}, noPredicateSizeLimit))
@@ -200,10 +209,11 @@ func (s *readerSuite) TestAppendSlices() {
 
 	reader.AppendSlices(incomingSlices...)
 
-	appendedScopes := reader.Scopes()
-	s.Len(appendedScopes, totalScopes)
-	for idx, scope := range appendedScopes[:len(appendedScopes)-1] {
-		nextScope := appendedScopes[idx+1]
+	scopesAfterAppend := reader.Scopes()
+	s.Len(scopesAfterAppend, totalScopes-1) // one empty scope should be ignored
+	for idx, scope := range scopesAfterAppend[:len(scopesAfterAppend)-1] {
+		s.False(scope.IsEmpty())
+		nextScope := scopesAfterAppend[idx+1]
 		if scope.Range.ExclusiveMax.CompareTo(nextScope.Range.InclusiveMin) > 0 {
 			panic(fmt.Sprintf(
 				"Found overlapping scope in appended slices, left: %v, right: %v",

@@ -318,6 +318,9 @@ func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
 	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
 
+	s.logger.(*testlogger.TestLogger).
+		Expect(testlogger.Error, "failed to resolve deferred pointer during transaction close")
+
 	orphanComponent := &TestSubComponent11{
 		SubComponent11Data: &protoMessageType{
 			CreateRequestId: "orphan-component",
