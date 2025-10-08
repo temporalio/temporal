@@ -912,6 +912,8 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 		workflowID,
 		runID,
 	)
+	s.EqualValues(0, s.mutableState.executionInfo.WorkflowTaskStamp)
+	s.mutableState.executionInfo.Attempt = 5 // pretend we are in the middle workflow task retries
 
 	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
@@ -1206,7 +1208,6 @@ func (s *mutableStateSuite) TestOverride_RedirectFails() {
 }
 
 func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
-	s.T().Skip("TODO (Shahab)")
 	tq := &taskqueuepb.TaskQueue{Name: "tq"}
 	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
@@ -4527,6 +4528,7 @@ func (s *mutableStateSuite) verifyExecutionInfo(current, target, origin *persist
 	s.Equal(target.StickyTaskQueue, current.StickyTaskQueue, "StickyTaskQueue mismatch")
 	s.True(proto.Equal(target.StickyScheduleToStartTimeout, current.StickyScheduleToStartTimeout), "StickyScheduleToStartTimeout mismatch")
 	s.Equal(target.Attempt, current.Attempt, "Attempt mismatch")
+	s.Equal(target.WorkflowTaskStamp, current.WorkflowTaskStamp, "WorkflowTaskStamp mismatch")
 	s.True(proto.Equal(target.RetryInitialInterval, current.RetryInitialInterval), "RetryInitialInterval mismatch")
 	s.True(proto.Equal(target.RetryMaximumInterval, current.RetryMaximumInterval), "RetryMaximumInterval mismatch")
 	s.Equal(target.RetryMaximumAttempts, current.RetryMaximumAttempts, "RetryMaximumAttempts mismatch")
@@ -5273,8 +5275,6 @@ func (s *mutableStateSuite) TestHasRequestID() {
 }
 
 func (s *mutableStateSuite) TestHasRequestID_StateConsistency() {
-	s.SetupTest()
-
 	// Test that HasRequestID is consistent with AttachRequestID
 	requestID := "consistency-test-request-id"
 
@@ -5291,8 +5291,6 @@ func (s *mutableStateSuite) TestHasRequestID_StateConsistency() {
 }
 
 func (s *mutableStateSuite) TestHasRequestID_EmptyExecutionState() {
-	s.SetupTest()
-
 	// Ensure execution state has no request IDs initially
 	if s.mutableState.executionState.RequestIds == nil {
 		s.mutableState.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo)

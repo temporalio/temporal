@@ -54,6 +54,11 @@ type WorkflowTaskInfo struct {
 	// and used to delete them when the workflow task completes.
 	ScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
 	StartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
+
+	// Stamp represents the "version" of the workflow's internal state.
+	// It increases monotonically when the workflow's options are modified.
+	// It is used to check if a workflow task is still relevant to the corresponding workflow state machine.
+	Stamp int32
 }
 
 type WorkflowTaskCompletionLimits struct {

@@ -123,6 +123,10 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 	executionInfo := b.mutableState.GetExecutionInfo()
 	executionInfo.LastFirstEventId = firstEvent.GetEventId()
 
+	// Preserve the WorkflowTaskStamp during rebuild to ensure workflow task validation works correctly.
+	// The stamp is used to invalidate stale workflow tasks and must be maintained across rebuilds.
+	// Note: The stamp is already persisted in the execution info and should not be reset here.
+
 	// NOTE: stateRebuilder is also being used in the active side
 	if err := b.mutableState.UpdateCurrentVersion(lastEvent.GetVersion(), true); err != nil {
 		return nil, err
@@ -195,6 +199,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:
 			attributes := event.GetWorkflowTaskScheduledEventAttributes()
 			// use event.GetEventTime() as WorkflowTaskOriginalScheduledTimestamp, because the heartbeat is not happening here.
+			// The WorkflowTaskStamp will be preserved from the mutable state's execution info during task generation.
 			workflowTask, err := b.mutableState.ApplyWorkflowTaskScheduledEvent(
 				event.GetVersion(),
 				event.GetEventId(),
