@@ -9,8 +9,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -35,10 +39,28 @@ func (s *WorkflowAliasSearchAttributeTestSuite) workflowFunc(ctx workflow.Contex
 	return "done!", nil
 }
 
+// func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
+// 	ctx context.Context,
+// 	prefix string,
+// 	tv *testvars.TestVars,
+// ) (*workflowservice.StartWorkflowExecutionResponse, error) {
+// 	request := &workflowservice.StartWorkflowExecutionRequest{
+// 		RequestId:          tv.Any().String(),
+// 		Namespace:          s.Namespace().String(),
+// 		WorkflowId:         tv.WorkflowID() + "_" + prefix,
+// 		WorkflowType:       tv.WorkflowType(),
+// 		TaskQueue:          tv.TaskQueue(),
+// 		Identity:           tv.WorkerIdentity(),
+// 		VersioningOverride: tv.VersioningOverridePinned(true),
+// 	}
+// 	return s.FrontendClient().StartWorkflowExecution(ctx, request)
+// }
+
 func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 	ctx context.Context,
 	prefix string,
 	tv *testvars.TestVars,
+	sa *commonpb.SearchAttributes,
 ) (*workflowservice.StartWorkflowExecutionResponse, error) {
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          tv.Any().String(),
@@ -48,6 +70,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 		TaskQueue:          tv.TaskQueue(),
 		Identity:           tv.WorkerIdentity(),
 		VersioningOverride: tv.VersioningOverridePinned(true),
+		SearchAttributes:   sa,
 	}
 	return s.FrontendClient().StartWorkflowExecution(ctx, request)
 }
@@ -58,9 +81,9 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 
 	tv := testvars.New(s.T())
 
-	_, err := s.createWorkflow(ctx, "wf_id_1", tv)
+	_, err := s.createWorkflow(ctx, "wf_id_1", tv, nil)
 	require.NoError(s.T(), err)
-	_, err = s.createWorkflow(ctx, "wf_id_2", tv)
+	_, err = s.createWorkflow(ctx, "wf_id_2", tv, nil)
 	require.NoError(s.T(), err)
 
 	searchAttributePairs := []struct {
@@ -109,4 +132,59 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 			100*time.Millisecond,
 		)
 	}
+}
+
+func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute_CustomSearchAttributeOverride() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	tv := testvars.New(s.T())
+
+	_, err := s.SdkClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+		Namespace: s.Namespace().String(),
+		SearchAttributes: map[string]enumspb.IndexedValueType{
+			"WorkflowVersioningBehavior": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	})
+	require.NoError(s.T(), err)
+
+	sa := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"WorkflowVersioningBehavior": payload.EncodeString("user-defined"),
+		},
+	}
+
+	_, err = s.createWorkflow(ctx, "wf_id_1", tv, sa)
+	require.NoError(s.T(), err)
+	_, err = s.createWorkflow(ctx, "wf_id_2", tv, sa)
+	require.NoError(s.T(), err)
+
+	s.EventuallyWithT(
+		func(t *assert.CollectT) {
+			resp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+			})
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			require.Equal(t, len(resp.GetExecutions()), 2)
+
+			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				Query:     fmt.Sprintf("%s = 'Pinned'", searchattribute.TemporalWorkflowVersioningBehavior),
+			})
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			require.Equal(t, len(queriedResp.GetExecutions()), 2)
+
+			queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				Query:     "WorkflowVersioningBehavior = 'user-defined'",
+			})
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			require.Equal(t, len(queriedResp.GetExecutions()), 2)
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
 }
