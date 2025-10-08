@@ -113,8 +113,8 @@ func (w *fairTaskWriter) allocTaskIDs(reqs []*writeTaskRequest) error {
 }
 
 func (w *fairTaskWriter) pickPasses(tasks []*writeTaskRequest, bases []fairLevel) {
-	// TODO(fairness): get this from config
-	var overrides fairnessWeightOverrides
+	// Fetch latest fairness weight overrides from the partition's rate limit manager via pqMgr
+	overrides := w.backlogMgr.pqMgr.GetFairnessWeightOverrides()
 
 	for i, task := range tasks {
 		pri := task.taskInfo.Priority
