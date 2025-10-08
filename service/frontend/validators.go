@@ -1,12 +1,11 @@
 package frontend
 
 import (
-	"strings"
-
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	priorities "go.temporal.io/server/common/priorities"
 )
 
 func validateExecution(w *commonpb.WorkflowExecution) error {
@@ -56,9 +55,12 @@ func validateFairnessWeightUpdate(
 	}
 
 	for k, w := range set {
-		if strings.TrimSpace(k) == "" {
+		if k == "" {
 			return serviceerror.NewInvalidArgument(
 				"fairness weight override key must not be empty")
+		}
+		if err := priorities.ValidateFairnessKey(k); err != nil {
+			return err
 		}
 		if w <= 0 {
 			return serviceerror.NewInvalidArgumentf(
@@ -68,9 +70,12 @@ func validateFairnessWeightUpdate(
 	}
 
 	for _, k := range unset {
-		if strings.TrimSpace(k) == "" {
+		if k == "" {
 			return serviceerror.NewInvalidArgument(
 				"fairness weight override key must not be empty")
+		}
+		if err := priorities.ValidateFairnessKey(k); err != nil {
+			return err
 		}
 	}
 
