@@ -2,8 +2,8 @@ name: Flaky Tests Report
 
 on:
   schedule:
-    # Run on Tuesdays and Fridays at noon Eastern time (5 PM UTC)
-    - cron: '0 17 * * 2,5'
+    # Run on Wednesdays at noon Eastern time (5 PM UTC)
+    - cron: '0 17 * * 3'
   workflow_dispatch:
     inputs:
       days:
