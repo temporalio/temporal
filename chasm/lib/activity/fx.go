@@ -10,6 +10,7 @@ var HistoryModule = fx.Module(
 	"activity-history",
 	fx.Provide(
 		newHandler,
+		newActivityStartTaskExecutor,
 		newLibrary,
 	),
 	fx.Invoke(func(l *library, registry *chasm.Registry) {

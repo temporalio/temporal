@@ -39,7 +39,7 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 
 	r, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 		Namespace:  s.Namespace().String(),
-		Identity:   s.GetNamespaceID(s.Namespace().String()),
+		Identity:   "test-identity",
 		ActivityId: activityId,
 		Options: &activitypb.ActivityOptions{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -60,4 +60,6 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 	require.NoError(t, err)
 
 	fmt.Println(resp)
+
+	//time.Sleep(10 * time.Second)
 }

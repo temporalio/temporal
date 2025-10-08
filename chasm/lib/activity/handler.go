@@ -37,6 +37,9 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		},
 		func(mutableContext chasm.MutableContext, _ any) (*Activity, any, error) {
 			newActivity := NewActivity(frontendRequest.GetNamespace(), req.NamespaceId, frontendRequest.ActivityId, activityInfo)
+
+			mutableContext.AddTask(newActivity, chasm.TaskAttributes{}, &activitypb.ActivityStartExecuteTask{})
+
 			return newActivity, nil, nil
 		},
 		nil)
@@ -48,18 +51,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	fmt.Println(o)
 	fmt.Println(entityKey)
 
-	//r, err := h.DescribeActivityExecution(ctx, &activitypb.DescribeActivityExecutionRequest{
-	//	NamespaceId: req.GetNamespaceId(),
-	//	FrontendRequest: &workflowservice.DescribeActivityExecutionRequest{
-	//		Namespace: frontendRequest.GetNamespace(),
-	//		Execution: &activity.ActivityExecution{
-	//			ActivityId: entityKey.BusinessID,
-	//			RunId:      entityKey.EntityID,
-	//		},
-	//	},
-	//})
-	//
-	//fmt.Println(r)
+	// Add task to matching
 
 	return &activitypb.StartActivityExecutionResponse{
 		FrontendResponse: &workflowservice.StartActivityExecutionResponse{
