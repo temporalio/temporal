@@ -92,7 +92,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 		predicate string
 	}{
 		{sa1: searchattribute.BuildIds, sa2: "TemporalBuildIds", predicate: "IS NOT NULL"},
-		{sa1: searchattribute.TemporalWorkflowVersioningBehavior, sa2: "WorkflowVersioningBehavior", predicate: "IS NOT NULL"},
+		{sa1: searchattribute.TemporalWorkflowVersioningBehavior, sa2: "WorkflowVersioningBehavior", predicate: "= 'Pinned'"},
 		{sa1: searchattribute.TemporalWorkerDeploymentVersion, sa2: "WorkerDeploymentVersion", predicate: "IS NOT NULL"},
 		{sa1: searchattribute.TemporalWorkerDeployment, sa2: "WorkerDeployment", predicate: "IS NOT NULL"},
 		{sa1: searchattribute.ScheduleID, sa2: searchattribute.WorkflowID, predicate: "IS NOT NULL"},
