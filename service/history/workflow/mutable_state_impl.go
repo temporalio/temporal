@@ -5939,7 +5939,7 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 	}
 
 	// Log the search attribute change
-	ms.logReportedProblemsChange(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], reportedProblemsPayload)
+	ms.logReportedProblemsChange(existingProblems, reportedProblems)
 
 	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: reportedProblemsPayload})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
@@ -5956,7 +5956,7 @@ func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
 	}
 
 	// Log the removal of the search attribute
-	ms.logReportedProblemsChange(temporalReportedProblems, nil)
+	ms.logReportedProblemsChange(ms.decodeReportedProblems(temporalReportedProblems), nil)
 
 	ms.executionInfo.LastWorkflowTaskFailure = nil
 
@@ -5966,32 +5966,29 @@ func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
 }
 
 // logReportedProblemsChange logs changes to the TemporalReportedProblems search attribute
-func (ms *MutableStateImpl) logReportedProblemsChange(oldPayload, newPayload *commonpb.Payload) {
-	oldProblems := ms.decodeReportedProblems(oldPayload)
-	newProblems := ms.decodeReportedProblems(newPayload)
-
+func (ms *MutableStateImpl) logReportedProblemsChange(oldPayload, newPayload []string) {
 	if oldPayload == nil && newPayload != nil {
 		// Adding search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute added",
 			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
 			tag.WorkflowID(ms.executionInfo.WorkflowId),
 			tag.WorkflowRunID(ms.executionState.RunId),
-			tag.NewStringsTag("reported-problems", newProblems))
+			tag.NewStringsTag("reported-problems", newPayload))
 	} else if oldPayload != nil && newPayload == nil {
 		// Removing search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute removed",
 			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
 			tag.WorkflowID(ms.executionInfo.WorkflowId),
 			tag.WorkflowRunID(ms.executionState.RunId),
-			tag.NewStringsTag("previous-reported-problems", oldProblems))
+			tag.NewStringsTag("previous-reported-problems", oldPayload))
 	} else if oldPayload != nil && newPayload != nil {
 		// Updating search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute updated",
 			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
 			tag.WorkflowID(ms.executionInfo.WorkflowId),
 			tag.WorkflowRunID(ms.executionState.RunId),
-			tag.NewStringsTag("previous-reported-problems", oldProblems),
-			tag.NewStringsTag("reported-problems", newProblems))
+			tag.NewStringsTag("previous-reported-problems", oldPayload),
+			tag.NewStringsTag("reported-problems", newPayload))
 	}
 }
 
