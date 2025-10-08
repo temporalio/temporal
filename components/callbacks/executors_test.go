@@ -486,12 +486,12 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				).DoAndReturn(func(ctx context.Context, req *historyservice.CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
 					// Verify completion token
 					require.NotNil(t, req.Completion)
-					require.Equal(t, "namespace-id", req.Completion.Ref.NamespaceId)
-					require.Equal(t, "business-id", req.Completion.Ref.BusinessId)
-					require.Equal(t, "entity-id", req.Completion.Ref.EntityId)
+					require.NotNil(t, req.Completion.ComponentRef)
+					require.Equal(t, "namespace-id", req.Completion.ComponentRef.NamespaceId)
+					require.Equal(t, "business-id", req.Completion.ComponentRef.BusinessId)
+					require.Equal(t, "entity-id", req.Completion.ComponentRef.EntityId)
 					require.Equal(t, "request-id", req.Completion.RequestId)
-					require.NotNil(t, req.Completion.Ref)
-					require.Equal(t, "test-archetype", req.Completion.Ref.Archetype)
+					require.Equal(t, "test-archetype", req.Completion.ComponentRef.Archetype)
 
 					// Verify successful operation data
 					require.NotNil(t, req.GetSuccess())

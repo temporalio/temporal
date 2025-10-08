@@ -82,7 +82,7 @@ func (c chasmInvocation) getHistoryRequest(
 ) (*historyservice.CompleteNexusOperationChasmRequest, error) {
 	var req *historyservice.CompleteNexusOperationChasmRequest
 
-	token := &tokenspb.NexusOperationCompletion{
+	completion := &tokenspb.NexusOperationCompletion{
 		ComponentRef: ref,
 		RequestId:    c.requestID,
 	}
@@ -107,7 +107,7 @@ func (c chasmInvocation) getHistoryRequest(
 				Success: &payload,
 			},
 			CloseTime:  timestamppb.New(op.CloseTime),
-			Completion: token,
+			Completion: completion,
 		}
 	case *nexus.OperationCompletionUnsuccessful:
 		apiFailure, err := commonnexus.NexusFailureToAPIFailure(op.Failure, true)
@@ -116,14 +116,14 @@ func (c chasmInvocation) getHistoryRequest(
 		}
 
 		req = &historyservice.CompleteNexusOperationChasmRequest{
-			Completion: token,
+			Completion: completion,
 			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Failure{
 				Failure: apiFailure,
 			},
 			CloseTime: timestamppb.New(op.CloseTime),
 		}
 	default:
-		return nil, fmt.Errorf("unexpected nexus.OperationCompletion: %v", token)
+		return nil, fmt.Errorf("unexpected nexus.OperationCompletion: %v", completion)
 	}
 
 	return req, nil

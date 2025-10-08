@@ -2372,7 +2372,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 		return nil, errShuttingDown
 	}
 
-	ref := chasm.ProtoRefToComponentRef(request.Completion.Ref)
+	ref := chasm.ProtoRefToComponentRef(request.Completion.ComponentRef)
 	info := &persistencespb.ChasmNexusCompletion{
 		CloseTime: request.CloseTime,
 		RequestId: request.Completion.RequestId,
