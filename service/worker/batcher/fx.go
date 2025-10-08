@@ -15,7 +15,7 @@ import (
 
 const (
 	// BatchWFTypeName is the workflow type
-	BatchWFTypeName         = "temporal-sys-batch-workflow"
+	BatchWFTypeName = "temporal-sys-batch-workflow"
 	// TODO seankane (2025-10-08): remove this in the next release
 	BatchWFTypeProtobufName = "temporal-sys-batch-workflow-protobuf"
 	NamespaceDivision       = "TemporalBatcher"
