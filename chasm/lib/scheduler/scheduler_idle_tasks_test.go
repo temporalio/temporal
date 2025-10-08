@@ -21,11 +21,6 @@ func TestIdleTasksSuite(t *testing.T) {
 	suite.Run(t, &idleTasksSuite{})
 }
 
-func (s *idleTasksSuite) SetupTest() {
-	s.SetupSuite()
-	// Note: executor will be created per test case with custom config
-}
-
 type idleValidateTestCase struct {
 	ConfigIdleTime           time.Duration
 	TaskIdleTimeTotal        time.Duration
