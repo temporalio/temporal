@@ -382,10 +382,12 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 	s.True(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
 	s.True(resp.NamespaceInfo.Capabilities.SyncUpdate)
 	s.True(resp.NamespaceInfo.Capabilities.AsyncUpdate)
+	s.False(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 
 	s.config.EnableEagerWorkflowStart = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.EnableUpdateWorkflowExecution = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.EnableUpdateWorkflowExecutionAsyncAccepted = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	s.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute = dc.GetIntPropertyFnFilteredByNamespace(5)
 
 	// Second call: dynamic configs enabled.
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
@@ -395,6 +397,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 	s.False(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
 	s.False(resp.NamespaceInfo.Capabilities.SyncUpdate)
 	s.False(resp.NamespaceInfo.Capabilities.AsyncUpdate)
+	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 }
 
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithOneCluster() {
