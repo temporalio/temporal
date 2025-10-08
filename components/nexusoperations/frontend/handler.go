@@ -439,7 +439,7 @@ func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, e
 		} else {
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("success"))
 		}
-	} else if c.outcomeTag != nil {
+	} else if c.outcomeTag.Key != "" {
 		c.metricsHandler = c.metricsHandler.WithTags(c.outcomeTag)
 	} else {
 		var he *nexus.HandlerError
