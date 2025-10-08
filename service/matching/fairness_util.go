@@ -1,6 +1,10 @@
 package matching
 
-import commonpb "go.temporal.io/api/common/v1"
+import (
+	"maps"
+
+	commonpb "go.temporal.io/api/common/v1"
+)
 
 const (
 	// minWeight * strideFactor must be >= 1
@@ -26,23 +30,18 @@ func getEffectiveWeight(overrides fairnessWeightOverrides, pri *commonpb.Priorit
 }
 
 func mergeFairnessWeightOverrides(
-	existing map[string]float32,
-	set map[string]float32,
+	existing fairnessWeightOverrides,
+	set fairnessWeightOverrides,
 	unset []string,
 	maxFairnessKeyWeightOverrides int,
-) (map[string]float32, error) {
-	res := make(map[string]float32, len(existing))
-	for k, v := range existing {
-		res[k] = v
-	}
+) (fairnessWeightOverrides, error) {
+	res := maps.Clone(existing)
 
 	for _, k := range unset {
 		delete(res, k)
 	}
 
-	for k, w := range set {
-		res[k] = w
-	}
+	maps.Copy(res, set)
 
 	if len(res) > maxFairnessKeyWeightOverrides {
 		return nil, errFairnessOverridesUpdateRejected
