@@ -853,6 +853,7 @@ var (
 	ActivityCancel                                       = NewCounterDef("activity_cancel")
 	ActivityTaskTimeout                                  = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
 	ActivityTimeout                                      = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
+	ActivityPayloadSize                                  = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
 	AckLevelUpdateCounter                                = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                          = NewCounterDef("ack_level_update_failed")
 	CommandCounter                                       = NewCounterDef("command")
@@ -1027,6 +1028,11 @@ var (
 		"dlq_message_count",
 		WithDescription("The number of messages currently in DLQ."),
 	)
+	DataLossCounter = NewCounterDef(
+		"data_loss_errors",
+		WithDescription("Total number of data loss errors encountered. This is a high cardinality metrics that has namespace, workflowID and runID tags."+
+			"It is only emitted when system.enableDataLossMetrics is enabled. Only enable this if metrics system can handle it's cardinality"),
+	)
 	ReadNamespaceErrors                     = NewCounterDef("read_namespace_errors")
 	RateLimitedTaskRunnableWaitTime         = NewTimerDef("rate_limited_task_runnable_wait_time")
 	CircuitBreakerExecutableBlocked         = NewCounterDef("circuit_breaker_executable_blocked")
@@ -1104,6 +1110,21 @@ var (
 		"task_retry_transient",
 		WithDescription("Count of tasks that hit a transient error during match or forward and are retried immediately"),
 	)
+
+	// ----------------------------------------------------------------------------------------------------------------
+	// Matching service: Metrics to track the health of worker registry.
+	WorkerRegistryEvictionBlockedByAgeMetric = NewGaugeDef(
+		"worker_registry_eviction_blocked_by_age",
+		WithDescription(
+			"Set if entries could not be evicted due to minEvictAge policy in a given eviction iteration. "+
+				"Reset once a subsequent eviction succeeds.",
+		),
+	)
+	WorkerRegistryCapacityUtilizationMetric = NewGaugeDef(
+		"worker_registry_capacity_utilization",
+		WithDescription("Tracks the ratio of total entries to maxItems."),
+	)
+	// ----------------------------------------------------------------------------------------------------------------
 
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
@@ -1243,6 +1264,10 @@ var (
 	ScheduleActionDropped = NewCounterDef(
 		"schedule_action_dropped",
 		WithDescription("The number of schedule actions that failed to start"),
+	)
+	SchedulePayloadSize = NewCounterDef(
+		"schedule_payload_size",
+		WithDescription("The size in bytes of a customer payload (including action results and update signals)"),
 	)
 
 	// Worker Versioning

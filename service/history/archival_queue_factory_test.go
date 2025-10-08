@@ -26,8 +26,8 @@ func TestArchivalQueueFactory(t *testing.T) {
 	metricsHandler.EXPECT().WithTags(gomock.Any()).DoAndReturn(
 		func(tags ...metrics.Tag) metrics.Handler {
 			require.Len(t, tags, 1)
-			assert.Equal(t, metrics.OperationTagName, tags[0].Key())
-			assert.Equal(t, "ArchivalQueueProcessor", tags[0].Value())
+			assert.Equal(t, metrics.OperationTagName, tags[0].Key)
+			assert.Equal(t, "ArchivalQueueProcessor", tags[0].Value)
 			return metricsHandler
 		},
 	).Times(1)

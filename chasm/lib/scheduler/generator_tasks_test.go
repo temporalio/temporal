@@ -82,8 +82,5 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 	// Ensure we scheduled an immediate physical pure task on the tree.
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
-	s.Equal(1, len(s.addedTasks))
-	task, ok := s.addedTasks[0].(*tasks.ChasmTaskPure)
-	s.True(ok)
-	s.Equal(chasm.TaskScheduledTimeImmediate, task.GetVisibilityTime())
+	s.True(s.hasTask(&tasks.ChasmTaskPure{}, chasm.TaskScheduledTimeImmediate))
 }

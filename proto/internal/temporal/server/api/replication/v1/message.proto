@@ -158,6 +158,7 @@ message SyncActivityTaskAttributes {
     google.protobuf.Duration retry_maximum_interval = 23;
     int32 retry_maximum_attempts = 24;
     double retry_backoff_coefficient = 25;
+    int64 start_version = 26;
 }
 
 message HistoryTaskAttributes {

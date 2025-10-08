@@ -8,6 +8,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 var _ ChasmTree = (*chasm.Node)(nil)
@@ -26,22 +27,20 @@ type ChasmTree interface {
 	Archetype() chasm.Archetype
 	EachPureTask(
 		deadline time.Time,
-		callback func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) error,
+		callback func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) (bool, error),
 	) error
 	ExecuteSideEffectTask(
 		ctx context.Context,
 		registry *chasm.Registry,
 		entityKey chasm.EntityKey,
-		taskAttributes chasm.TaskAttributes,
-		taskInfo *persistencespb.ChasmTaskInfo,
+		task *tasks.ChasmTask,
 		validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
 	) error
 	ValidateSideEffectTask(
 		ctx context.Context,
-		taskAttributes chasm.TaskAttributes,
-		taskInfo *persistencespb.ChasmTaskInfo,
-	) (any, error)
+		task *tasks.ChasmTask,
+	) (bool, error)
 	IsStale(chasm.ComponentRef) error
 	Component(chasm.Context, chasm.ComponentRef) (chasm.Component, error)
-	ComponentByPath(chasm.Context, string) (chasm.Component, error)
+	ComponentByPath(chasm.Context, []string) (chasm.Component, error)
 }

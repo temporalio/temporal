@@ -48,16 +48,16 @@ func (a *actionQueuePendingTask) Name() string {
 	return "queue-pending-task"
 }
 
-func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) {
+func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) bool {
 	// first check if the alert is still valid
 	if a.monitor.GetTotalPendingTaskCount() <= a.attributes.CiriticalPendingTaskCount {
-		return
+		return false
 	}
 
 	// then try to shrink existing slices, which may reduce pending task count
 	readers := readerGroup.Readers()
-	if a.tryShrinkSlice(readers) {
-		return
+	if a.shrinkSliceLowTaskCount(readers) {
+		return false
 	}
 
 	// have to unload pending tasks to reduce pending task count
@@ -67,9 +67,10 @@ func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) {
 		int(float64(a.attributes.CiriticalPendingTaskCount) * targetLoadFactor),
 	)
 	a.splitAndClearSlice(readers, readerGroup)
+	return true
 }
 
-func (a *actionQueuePendingTask) tryShrinkSlice(
+func (a *actionQueuePendingTask) shrinkSliceLowTaskCount(
 	readers map[int64]Reader,
 ) bool {
 	for _, reader := range readers {

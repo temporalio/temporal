@@ -219,12 +219,30 @@ func replicationStreamLowPrioritySchedulerProvider(
 			taskType,
 			taskSchedulerToken,
 			nsName.String(),
-			headers.SystemPreemptableCallerInfo.CallerType,
+			headers.CallerTypePreemptable,
 			0,
 			"")
 	}
-	taskMetricsTagsFn := func(e TrackableExecutableTask) []metrics.Tag {
-		return nil
+	taskMetricsTagsFn := func(t TrackableExecutableTask) []metrics.Tag {
+		replicationTask := t.ReplicationTask()
+		var taskType string
+		namespaceTag := metrics.NamespaceUnknownTag()
+		if replicationTask != nil {
+			taskType = replicationTask.TaskType.String()
+			rawTaskInfo := replicationTask.GetRawTaskInfo()
+			if rawTaskInfo != nil {
+				nsName, err := nsRegistry.GetNamespaceName(namespace.ID(replicationTask.GetRawTaskInfo().NamespaceId))
+				if err != nil {
+					namespaceTag = metrics.NamespaceTag(nsName.String())
+				}
+			}
+		}
+		return []metrics.Tag{
+			namespaceTag,
+			metrics.TaskTypeTag(taskType),
+			metrics.OperationTag(taskType), // for backward compatibility
+			metrics.TaskPriorityTag(ctasks.PriorityPreemptable.String()),
+		}
 	}
 	// This creates a per cluster channel.
 	// They share the same weight so it just does a round-robin on all clusters' tasks.

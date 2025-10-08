@@ -14,8 +14,8 @@ import (
 )
 
 type junitReport struct {
-	path string
 	junit.Testsuites
+	path          string
 	reportingErrs []error
 }
 
@@ -69,9 +69,61 @@ func (j *junitReport) write() error {
 	return nil
 }
 
+// appendAlertsSuite adds a synthetic JUnit suite summarizing high-priority alerts
+// (data races, panics, fatals) so that CI surfaces them prominently.
+func (j *junitReport) appendAlertsSuite(alerts []alert) {
+	// Deduplicate by kind+details to avoid noisy repeats across retries.
+	alerts = dedupeAlerts(alerts)
+	if len(alerts) == 0 {
+		return
+	}
+	var cases []junit.Testcase
+	for _, a := range alerts {
+		name := fmt.Sprintf("%s: %s", a.Kind, a.Summary)
+		if p := primaryTestName(a.Tests); p != "" {
+			name = fmt.Sprintf("%s — in %s", name, p)
+		}
+		// Include only test names for context, not the full log details to avoid XML malformation
+		var details string
+		if len(a.Tests) > 0 {
+			details = fmt.Sprintf("Detected in tests:\n\t%s", strings.Join(a.Tests, "\n\t"))
+		}
+		r := &junit.Result{Message: string(a.Kind), Data: details}
+		cases = append(cases, junit.Testcase{
+			Name:    name,
+			Failure: r,
+		})
+	}
+	suite := junit.Testsuite{
+		Name:      "ALERTS",
+		Failures:  len(cases),
+		Tests:     len(cases),
+		Testcases: cases,
+	}
+	j.Suites = append(j.Suites, suite)
+	j.Failures += suite.Failures
+	j.Tests += suite.Tests
+}
+
+// dedupeAlerts removes duplicate alerts (e.g., repeated across retries) based
+// on kind and details while preserving the first-seen order.
+func dedupeAlerts(alerts []alert) []alert {
+	seen := make(map[string]struct{}, len(alerts))
+	var out []alert
+	for _, a := range alerts {
+		key := string(a.Kind) + "\n" + a.Details
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, a)
+	}
+	return out
+}
+
 func (j *junitReport) collectTestCases() map[string]struct{} {
 	cases := make(map[string]struct{})
-	for _, suite := range j.Testsuites.Suites {
+	for _, suite := range j.Suites {
 		for _, tc := range suite.Testcases {
 			cases[tc.Name] = struct{}{}
 		}
@@ -81,7 +133,7 @@ func (j *junitReport) collectTestCases() map[string]struct{} {
 
 func (j *junitReport) collectTestCaseFailures() []string {
 	var failures []string
-	for _, suite := range j.Testsuites.Suites {
+	for _, suite := range j.Suites {
 		if suite.Failures == 0 {
 			continue
 		}

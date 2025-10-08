@@ -287,7 +287,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
 			RunId:      runId,
 		},
 		chasm.ArchetypeAny,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	).Return(wfCtx, func(err error) {}, err)
 }
 

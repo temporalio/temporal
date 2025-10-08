@@ -602,6 +602,8 @@ message ActivityInfo {
 
     // set to true if reset heartbeat flag was set with an activity reset
     bool reset_heartbeats = 48;
+
+    int64 start_version = 50;
 }
 
 // timer_map column

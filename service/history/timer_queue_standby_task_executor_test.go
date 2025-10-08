@@ -2014,12 +2014,11 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 
 	// Mock the CHASM tree.
 	chasmTree := historyi.NewMockChasmTree(s.controller)
-	expectValidate := func(taskValue any, err error) {
+	expectValidate := func(isValid bool, err error) {
 		chasmTree.EXPECT().ValidateSideEffectTask(
 			gomock.Any(),
 			gomock.Any(),
-			gomock.Any(),
-		).Times(1).Return(taskValue, err)
+		).Times(1).Return(isValid, err)
 	}
 
 	// Mock mutable state.
@@ -2070,20 +2069,20 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 	).(*timerQueueStandbyTaskExecutor)
 
 	// Validation succeeds, task should retry.
-	expectValidate(struct{}{}, nil)
+	expectValidate(true, nil)
 	resp := timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
 	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	// Validation succeeds but task is invalid.
-	expectValidate(nil, nil)
+	expectValidate(false, nil)
 	resp = timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
 	s.NoError(resp.ExecutionErr)
 
 	// Validation fails, processing should fail.
 	expectedErr := errors.New("validation error")
-	expectValidate(nil, expectedErr)
+	expectValidate(false, expectedErr)
 	resp = timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
 	s.ErrorIs(expectedErr, resp.ExecutionErr)

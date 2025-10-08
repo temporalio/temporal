@@ -80,7 +80,7 @@ func TestDLQWriter_ErrGetNamespaceName(t *testing.T) {
 	assert.Len(t, recordings[0].Tags, 2)
 	assert.Equal(t, "transfer", recordings[0].Tags[metrics.TaskCategoryTagName])
 	namespaceStateTag := metrics.NamespaceStateTag(metrics.ActiveNamespaceStateTagValue)
-	assert.Equal(t, metrics.ActiveNamespaceStateTagValue, recordings[0].Tags[namespaceStateTag.Key()])
+	assert.Equal(t, metrics.ActiveNamespaceStateTagValue, recordings[0].Tags[namespaceStateTag.Key])
 }
 
 func TestDLQWriter_Ok(t *testing.T) {
@@ -126,5 +126,5 @@ func TestDLQWriter_Ok(t *testing.T) {
 	assert.Len(t, recordings[0].Tags, 2)
 	assert.Equal(t, "transfer", recordings[0].Tags[metrics.TaskCategoryTagName])
 	namespaceStateTag := metrics.NamespaceStateTag("active")
-	assert.Equal(t, "active", recordings[0].Tags[namespaceStateTag.Key()])
+	assert.Equal(t, "active", recordings[0].Tags[namespaceStateTag.Key])
 }

@@ -105,7 +105,7 @@ func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2
 		t.Parallel()
 		testHistoryTaskQueueManagerErrDeserializeHistoryTask(t, queue, historyTaskQueueManager)
 	})
-	t.Run("DeleteTasks", func(t *testing.T) {
+	t.Run("BestEffortDeleteTasks", func(t *testing.T) {
 		t.Parallel()
 		testHistoryTaskQueueManagerDeleteTasks(t, historyTaskQueueManager)
 	})

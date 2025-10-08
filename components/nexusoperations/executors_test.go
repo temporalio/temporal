@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -39,6 +40,13 @@ var endpointEntry = &persistencespb.NexusEndpointEntry{
 	Endpoint: &persistencespb.NexusEndpoint{
 		Spec: &persistencespb.NexusEndpointSpec{
 			Name: "endpoint",
+			Target: &persistencespb.NexusEndpointTarget{
+				Variant: &persistencespb.NexusEndpointTarget_External_{
+					External: &persistencespb.NexusEndpointTarget_External{
+						Url: "http://" + uuid.NewString(),
+					},
+				},
+			},
 		},
 	},
 }
@@ -317,7 +325,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 		{
-			name:                  "ScheduleToCloseTimeout less than MinOperationTimeout",
+			name:                  "ScheduleToCloseTimeout less than MinRequestTimeout",
 			requestTimeout:        time.Hour,
 			schedToCloseTimeout:   time.Microsecond,
 			destinationDown:       false,
@@ -493,9 +501,10 @@ func TestProcessInvocationTask(t *testing.T) {
 					Enabled:                 dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					MaxOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
-					MinOperationTimeout:     dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+					MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
 					CallbackURLTemplate:     dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
+					UseSystemCallbackURL:    dynamicconfig.GetBoolPropertyFn(true),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
@@ -625,6 +634,7 @@ func TestProcessCancelationTask(t *testing.T) {
 		requestTimeout        time.Duration
 		schedToCloseTimeout   time.Duration
 		destinationDown       bool
+		header                map[string]string
 	}{
 		{
 			name:            "failure",
@@ -650,6 +660,23 @@ func TestProcessCancelationTask(t *testing.T) {
 			requestTimeout:  time.Hour,
 			destinationDown: false,
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+				return nil
+			},
+			expectedMetricOutcome: "successful",
+			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
+				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, c.State())
+				require.Nil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
+			},
+		},
+		{
+			name:            "success with headers",
+			requestTimeout:  time.Hour,
+			destinationDown: false,
+			header:          map[string]string{"key": "value"},
+			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+				if options.Header["key"] != "value" {
+					return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, `"key" header is not equal to "value"`)
+				}
 				return nil
 			},
 			expectedMetricOutcome: "successful",
@@ -724,8 +751,12 @@ func TestProcessCancelationTask(t *testing.T) {
 			nexustest.NewNexusServer(t, listenAddr, h)
 
 			reg := newRegistry(t)
-			backend := &hsmtest.NodeBackend{}
-			node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), tc.schedToCloseTimeout))
+			event := mustNewScheduledEvent(time.Now(), tc.schedToCloseTimeout)
+			if tc.header != nil {
+				event.GetNexusOperationScheduledEventAttributes().NexusHeader = tc.header
+			}
+			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
+			node := newOperationNode(t, backend, backend.Events[0])
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
 			_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
@@ -787,7 +818,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				Config: &nexusoperations.Config{
 					Enabled:                             dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
-					MinOperationTimeout:                 dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+					MinRequestTimeout:                   dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					RecordCancelRequestCompletionEvents: dynamicconfig.GetBoolPropertyFn(true),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)

@@ -3,9 +3,11 @@ package migration
 import (
 	"context"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -35,6 +37,7 @@ type (
 		Logger                    log.Logger
 		MetricsHandler            metrics.Handler
 		DynamicCollection         *dynamicconfig.Collection
+		WorkflowVerifier          WorkflowVerifier
 	}
 
 	fxResult struct {
@@ -49,6 +52,7 @@ type (
 
 var Module = fx.Options(
 	fx.Provide(NewResult),
+	fx.Provide(workflowVerifierProvider),
 )
 
 func NewResult(params initParams) fxResult {
@@ -86,6 +90,22 @@ func (wc *replicationWorkerComponent) DedicatedActivityWorkerOptions() *workerco
 	}
 }
 
+func workflowVerifierProvider() WorkflowVerifier {
+	return func(
+		ctx context.Context,
+		request *verifyReplicationTasksRequest,
+		remoteAdminClient adminservice.AdminServiceClient,
+		localAdminClient adminservice.AdminServiceClient,
+		ns *namespace.Namespace,
+		we *commonpb.WorkflowExecution,
+		mu *adminservice.DescribeMutableStateResponse,
+	) (verifyResult, error) {
+		return verifyResult{
+			status: verified,
+		}, nil
+	}
+}
+
 func (wc *replicationWorkerComponent) activities() *activities {
 	return &activities{
 		historyShardCount:                wc.PersistenceConfig.NumHistoryShards,
@@ -101,5 +121,7 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		metricsHandler:                   wc.MetricsHandler,
 		forceReplicationMetricsHandler:   wc.MetricsHandler.WithTags(metrics.WorkflowTypeTag(forceReplicationWorkflowName)),
 		generateMigrationTaskViaFrontend: dynamicconfig.WorkerGenerateMigrationTaskViaFrontend.Get(wc.DynamicCollection),
+		enableHistoryRateLimiter:         dynamicconfig.WorkerEnableHistoryRateLimiter.Get(wc.DynamicCollection),
+		workflowVerifier:                 wc.WorkflowVerifier,
 	}
 }

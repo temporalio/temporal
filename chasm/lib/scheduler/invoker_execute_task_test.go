@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
-	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -339,9 +338,6 @@ func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 	// component, within the same transition.
 	s.ExpectReadComponent(invoker)
 	s.ExpectUpdateComponent(invoker)
-
-	// Clear old tasks and run the execute task.
-	s.addedTasks = make([]tasks.Task, 0)
 
 	// Create engine context for side effect task execution
 	engineCtx := s.newEngineContext()

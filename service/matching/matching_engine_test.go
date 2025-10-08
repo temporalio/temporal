@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/emirpasic/gods/maps/treemap"
@@ -23,6 +24,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -62,6 +64,7 @@ import (
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/consts"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -3545,6 +3548,102 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueueWithRateLimiterError() {
 		},
 	}, metrics.NoopMetricsHandler)
 	s.ErrorIs(err, rateLimiterErr)
+}
+
+func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
+	const ctxTimeout = 2 * time.Second
+	var defaultTimeoutBuffer = nexusoperations.MinDispatchTaskTimeout.Get(dynamicconfig.NewNoopCollection())("my-nsid")
+
+	type testCase struct {
+		name      string
+		sleepTime time.Duration
+		assertion func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error)
+	}
+
+	testCases := []testCase{
+		{
+			name:      "deadline_exceeded_immediately",
+			sleepTime: ctxTimeout - defaultTimeoutBuffer,
+			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
+				require.Error(t, err)
+				require.Nil(t, response)
+			},
+		},
+		{
+			name:      "deadline_exceeded_awaiting_local_dispatch",
+			sleepTime: ctxTimeout - defaultTimeoutBuffer - time.Nanosecond,
+			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, response.GetRequestTimeout())
+			},
+		},
+		{
+			name:      "deadline_not_exceeded_on_forwarding",
+			sleepTime: ctxTimeout - defaultTimeoutBuffer - time.Nanosecond,
+			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, response.GetResponse())
+			},
+		},
+	}
+
+	testFn := func(t *testing.T, tc testCase) {
+		synctest.Test(t, func(t *testing.T) {
+			nexusRequest := &matchingservice.DispatchNexusTaskRequest{
+				NamespaceId: "my-nsid",
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: "my-tq",
+					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+				},
+				Request: &nexuspb.Request{
+					Header: map[string]string{
+						"request-timeout": "2s",
+					},
+				},
+			}
+
+			mockPartitionManager := NewMocktaskQueuePartitionManager(s.controller)
+			mockPartitionManager.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
+			mockPartitionManager.EXPECT().Stop(gomock.Any()).AnyTimes()
+
+			//nolint:forbidigo // We're safe to use the sleep here since we're using synctest to control the timing
+			mockPartitionManager.EXPECT().DispatchNexusTask(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(ctx context.Context, taskId string, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
+					time.Sleep(tc.sleepTime)
+					synctest.Wait()
+
+					if err := ctx.Err(); err != nil {
+						return nil, err
+					}
+
+					if tc.name == "deadline_exceeded_awaiting_local_dispatch" {
+						return nil, nil
+					}
+
+					return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
+						Response: &nexuspb.Response{},
+					}}, nil
+				},
+			).Times(1)
+
+			partition := newRootPartition("my-nsid", "my-tq", enumspb.TASK_QUEUE_TYPE_NEXUS)
+			s.matchingEngine.partitions[partition.Key()] = mockPartitionManager
+			s.matchingEngine.nexusResults = collection.NewSyncMap[string, chan *nexusResult]()
+
+			ctx, cancel := context.WithTimeout(context.Background(), ctxTimeout)
+			defer cancel()
+
+			resp, err := s.matchingEngine.DispatchNexusTask(ctx, nexusRequest)
+
+			tc.assertion(t, resp, err)
+		})
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			testFn(t, tc)
+		})
+	}
 }
 
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {

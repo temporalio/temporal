@@ -400,15 +400,6 @@ func (s *VisibilityStore) prepareSearchAttributesForDb(
 			delete(searchAttributes, name)
 			continue
 		}
-		tp, err := saTypeMap.GetType(name)
-		if err != nil {
-			return nil, err
-		}
-		if tp == enumspb.INDEXED_VALUE_TYPE_DATETIME {
-			if dt, ok := value.(time.Time); ok {
-				searchAttributes[name] = dt.Format(time.RFC3339Nano)
-			}
-		}
 	}
 	return &searchAttributes, nil
 }

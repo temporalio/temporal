@@ -421,7 +421,12 @@ func (s *Starter) resolveDuplicateWorkflowID(
 
 	switch {
 	case errors.Is(err, api.ErrUseCurrentExecution):
-		return s.handleUseExistingWorkflowOnConflictOptions(ctx, workflowKey, currentWorkflowConditionFailed)
+		return s.handleUseExistingWorkflowOnConflictOptions(
+			ctx,
+			workflowKey,
+			currentWorkflowConditionFailed,
+			currentWorkflowStartTime,
+		)
 	case err != nil:
 		return nil, StartErr, err
 	case currentExecutionUpdateAction == nil:
@@ -620,6 +625,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
+	currentWorkflowStartTime time.Time,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
 	// Default response link is for the started event. If there is OnConflictOptions set, and it's
 	// attaching the request ID, then the response link will be a request ID reference.
@@ -680,10 +686,13 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 		// execution. So it's possible the workflow completed after the first call of
 		// api.ResolveDuplicateWorkflowID and before being able to update the existing workflow.
 		err := api.ResolveWorkflowIDReusePolicy(
+			s.shardContext,
 			workflowKey,
+			s.namespace,
 			currentWorkflowConditionFailed.Status,
 			currentWorkflowConditionFailed.RequestIDs,
 			s.request.StartRequest.GetWorkflowIdReusePolicy(),
+			currentWorkflowStartTime,
 		)
 		if err != nil {
 			return nil, StartErr, err

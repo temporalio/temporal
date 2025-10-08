@@ -253,6 +253,8 @@ func (s *scheduler) run() error {
 		s.State.LastProcessedTime = timestamppb.New(s.now())
 		s.State.ConflictToken = InitialConflictToken
 		s.Info.CreateTime = s.State.LastProcessedTime
+
+		s.recordActionPayloadMetrics()
 	}
 
 	// A schedule may be created with an initial Patch, e.g. start one immediately. Put that in
@@ -852,13 +854,21 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 		s.incSeqNo()
 	}
 
-	// handle last completion/failure
+	// handle last completion/failure and record resulting payload sizes
 	if res.GetResult() != nil {
 		s.State.LastCompletionResult = res.GetResult()
 		s.State.ContinuedFailure = nil
+
+		if resultPayload, err := res.GetResult().Marshal(); err == nil {
+			s.metrics.Counter(metrics.SchedulePayloadSize.Name()).Inc(int64(len(resultPayload)))
+		}
 	} else if res.GetFailure() != nil {
 		// leave LastCompletionResult from previous run
 		s.State.ContinuedFailure = res.GetFailure()
+
+		if failurePayload, err := res.GetFailure().Marshal(); err == nil {
+			s.metrics.Counter(metrics.SchedulePayloadSize.Name()).Inc(int64(len(failurePayload)))
+		}
 	}
 
 	// Update desired time of next start if it's buffered. This is used for metrics only.
@@ -867,6 +877,31 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 	}
 
 	s.logger.Debug("started workflow finished", "workflow", id, "status", res.Status, "pause-after-failure", pauseOnFailure, "long", long)
+}
+
+// recordPayloadMetrics should be called after the customer's action is updated
+// (or when the schedule is created) to record the size of their payloads.
+//
+// Payloads for workflow completions and failures are recorded as part of the
+// same metric.
+func (s *scheduler) recordActionPayloadMetrics() {
+	startWf := s.Schedule.Action.GetStartWorkflow()
+	if startWf == nil {
+		return
+	}
+
+	inputPayload, err := startWf.Input.Marshal()
+	if err != nil {
+		return
+	}
+
+	memoPayload, err := startWf.Memo.Marshal()
+	if err != nil {
+		return
+	}
+
+	payloadSize := int64(len(memoPayload) + len(inputPayload))
+	s.metrics.Counter(metrics.SchedulePayloadSize.Name()).Inc(payloadSize)
 }
 
 func (s *scheduler) processUpdate(req *schedulespb.FullUpdateRequest) {
@@ -887,6 +922,9 @@ func (s *scheduler) processUpdate(req *schedulespb.FullUpdateRequest) {
 	s.compileSpec()
 
 	s.updateCustomSearchAttributes(req.SearchAttributes)
+
+	// Record customer start workflow memo payload size on each update.
+	s.recordActionPayloadMetrics()
 
 	if s.hasMinVersion(UpdateFromPrevious) && !s.hasMinVersion(UseLastAction) {
 		// We need to start re-processing from the last event, so that we catch actions whose

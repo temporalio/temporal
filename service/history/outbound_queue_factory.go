@@ -274,6 +274,8 @@ func (f *outboundQueueFactory) CreateQueue(
 			CheckpointInterval:                  f.Config.OutboundProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.OutboundProcessorUpdateAckIntervalJitterCoefficient,
 			MaxReaderCount:                      f.Config.OutboundQueueMaxReaderCount,
+			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
+			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
 		},
 		f.hostReaderRateLimiter,
 		queues.GrouperStateMachineNamespaceIDAndDestination{},

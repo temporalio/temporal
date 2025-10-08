@@ -134,12 +134,19 @@ func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager
 func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.versionedQueuesLock.Lock()
 	defer pm.versionedQueuesLock.Unlock()
-	pm.rateLimitManager.Stop()
+
+	// First, stop all queues to wrap up ongoing operations.
 	for _, vq := range pm.versionedQueues {
 		vq.Stop(unloadCause)
 	}
 	pm.defaultQueue.Stop(unloadCause)
+
+	// Then, stop user data manager to wrap up any reads/writes.
 	pm.userDataManager.Stop()
+
+	// Finally, stop rate limit manager (used by queues and using user data manager).
+	pm.rateLimitManager.Stop()
+
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, -1)
 }
 

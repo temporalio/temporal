@@ -264,7 +264,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		NextPageToken: []byte{},
 		Size:          1,
 	}, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
 	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
 	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
@@ -689,7 +688,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 		NextPageToken: []byte{},
 		Size:          1,
 	}, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
 	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
 	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
@@ -1943,6 +1941,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
 	we := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
@@ -2005,6 +2005,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateRequests() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
 	namespaceID := tests.NamespaceID
 	workflowID := "wId"
 	runID := tests.RunID
@@ -2060,8 +2062,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 			},
 		},
 		RunID:            runID,
-		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		State:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		LastWriteVersion: common.EmptyVersion,
 		StartTime:        nil,
 	}
@@ -2078,6 +2080,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlreadyStarted() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
 	namespaceID := tests.NamespaceID
 	workflowID := "wId"
 	runID := tests.RunID
