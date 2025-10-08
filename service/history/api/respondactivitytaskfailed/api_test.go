@@ -110,6 +110,7 @@ func (s *workflowSuite) Test_NormalFlowShouldRescheduleActivity_UpdatesWorkflowE
 
 	s.expectTransientFailureMetricsRecorded(uc, s.shardContext)
 	s.workflowContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
+	s.currentMutableState.EXPECT().GetEffectiveVersioningBehavior().Return(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
 	_, err := Invoke(ctx, request, s.shardContext, s.workflowConsistencyChecker)
 	s.NoError(err)
@@ -245,6 +246,7 @@ func (s *workflowSuite) Test_LastHeartBeatDetailsExist_UpdatesMutableState() {
 		Identity:  request.FailedRequest.GetIdentity(),
 		Namespace: request.FailedRequest.GetNamespace(),
 	})
+	s.currentMutableState.EXPECT().GetEffectiveVersioningBehavior().Return(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
 	s.expectTransientFailureMetricsRecorded(uc, s.shardContext)
 
@@ -304,6 +306,7 @@ func (s *workflowSuite) Test_NoMoreRetriesAndMutableStateHasNoPendingTasks_WillR
 		request.FailedRequest.WorkerVersion,
 	).Return(nil, nil)
 	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.currentMutableState.EXPECT().GetEffectiveVersioningBehavior().Return(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 	s.workflowContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 
 	_, err := Invoke(ctx, request, s.shardContext, s.workflowConsistencyChecker)
@@ -443,6 +446,7 @@ func (s *workflowSuite) expectTransientFailureMetricsRecorded(uc UsecaseConfig, 
 		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
 		metrics.WorkflowTypeTag(uc.wfType.Name),
 		metrics.ActivityTypeTag(uc.activityType),
+		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
 		metrics.NamespaceTag(uc.namespaceName.String()),
 		metrics.UnsafeTaskQueueTag(uc.taskQueueId),
 	}
@@ -467,6 +471,7 @@ func (s *workflowSuite) expectTerminalFailureMetricsRecorded(uc UsecaseConfig, s
 		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
 		metrics.WorkflowTypeTag(uc.wfType.Name),
 		metrics.ActivityTypeTag(uc.activityType),
+		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
 		metrics.NamespaceTag(uc.namespaceName.String()),
 		metrics.UnsafeTaskQueueTag(uc.taskQueueId),
 	}

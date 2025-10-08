@@ -146,6 +146,7 @@ var (
 		"DescribeWorkerDeployment":              {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"SetWorkerDeploymentCurrentVersion":     {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"SetWorkerDeploymentRampingVersion":     {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"SetWorkerDeploymentManager":            {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"DeleteWorkerDeployment":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"DeleteWorkerDeploymentVersion":         {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"UpdateWorkerDeploymentVersionMetadata": {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},

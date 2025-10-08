@@ -7,12 +7,24 @@ This document describes the project's testing setup, utilities and best practice
 ### Build tags
 - `test_dep` (required): This Go build tag is required for running functional tests.
 - `TEMPORAL_DEBUG`: Extends functional test timeouts to allow sufficient time for debugging sessions.
+- `disable_grpc_modules`: Disables gRPC modules for faster compilation during unit tests.
 
 ### Environment variables
 - `CGO_ENABLED`: Set to `0` to disable CGO, which can significantly speed up compilation time.
 - `TEMPORAL_TEST_LOG_FORMAT`: Controls the output format for test logs. Available options: `json` or `console`
 - `TEMPORAL_TEST_LOG_LEVEL`:  Sets the verbosity level for test logging. Available levels: `debug`, `info`, `warn`, `error`, `fatal`
 - `TEMPORAL_TEST_OTEL_OUTPUT`: Enables OpenTelemetry (OTEL) trace output for failed tests to the provided file path.
+
+### Debugging via IDE
+
+#### GoLand
+
+For general instructions, see [GoLand Debugging](https://www.jetbrains.com/help/go/debugging-code.html).
+To pass in the required build tags, add them to the "Go tool arguments" field in the Run/Debug configuration:
+
+```
+-tags disable_grpc_modules,test_dep
+```
 
 ## Test helpers
 

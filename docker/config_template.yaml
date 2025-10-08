@@ -270,6 +270,7 @@ global:
 
 {{- $temporalGrpcPort := default .Env.FRONTEND_GRPC_PORT "7233" }}
 {{- $temporalHTTPPort := default .Env.FRONTEND_HTTP_PORT "7243" }}
+{{- $temporalInternalHTTPPort := default .Env.INTERNAL_FRONTEND_HTTP_PORT "7246" }}
 services:
     frontend:
         rpc:
@@ -284,6 +285,7 @@ services:
             grpcPort: {{ default .Env.INTERNAL_FRONTEND_GRPC_PORT "7236" }}
             membershipPort: {{ default .Env.INTERNAL_FRONTEND_MEMBERSHIP_PORT "6936" }}
             bindOnIP: "{{ default .Env.BIND_ON_IP "127.0.0.1" }}"
+            httpPort: {{ $temporalInternalHTTPPort }}
     {{- end }}
 
     matching:

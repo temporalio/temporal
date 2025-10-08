@@ -1,4 +1,10 @@
-CREATE EXTENSION IF NOT EXISTS btree_gin;
+DO LANGUAGE 'plpgsql' $$
+    BEGIN
+        IF ( NOT EXISTS (select extname from pg_extension where extname = 'btree_gin') ) THEN
+            CREATE EXTENSION btree_gin;
+        END IF;
+    END
+$$;
 
 -- convert_ts converts a timestamp in RFC3339 to UTC timestamp without time zone.
 CREATE FUNCTION convert_ts(s VARCHAR) RETURNS TIMESTAMP AS $$

@@ -159,19 +159,6 @@ func (v *VisibilityManagerDual) ListWorkflowExecutions(
 	)
 }
 
-func (v *VisibilityManagerDual) ScanWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequestV2,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	return dualReadWrapper(
-		ctx,
-		v,
-		request,
-		request.Namespace,
-		manager.VisibilityManager.ScanWorkflowExecutions,
-	)
-}
-
 func (v *VisibilityManagerDual) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,

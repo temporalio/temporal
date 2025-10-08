@@ -138,6 +138,7 @@ message WorkerDeploymentLocalState {
     string last_modifier_identity = 5;
     // Number of task queues which will be synced in a single batch.
     int32 sync_batch_size = 6;
+    string manager_identity = 7;
 }
 
 message WorkerDeploymentVersionSummary {
@@ -255,6 +256,13 @@ message StartWorkerDeploymentRequest {
     string request_id = 2;
 }
 
+// used as Worker Deployment workflow activity input:
+message StartWorkerDeploymentVersionRequest {
+    string deployment_name = 1;
+    string build_id = 2;
+    string request_id = 3;
+}
+
 // used as Worker Deployment Version workflow activity input:
 message SyncDeploymentVersionUserDataRequest {
     WorkerDeploymentVersion version = 1;
@@ -308,6 +316,7 @@ message SetCurrentVersionArgs {
     string version = 2;
     bool ignore_missing_task_queues = 3;
     bytes conflict_token = 4;
+    bool allow_no_pollers = 5;
 }
 
 // used as Worker Deployment update response:
@@ -363,6 +372,22 @@ message SetRampingVersionArgs {
     float percentage = 3;
     bool ignore_missing_task_queues = 4;
     bytes conflict_token = 5;
+    bool allow_no_pollers = 6;
+}
+
+// used as Worker Deployment workflow update input:
+message SetManagerIdentityArgs {
+  // identity is the client's identity, as usual
+  string identity = 1;
+  // manager_identity is the new manager_identity.
+  string manager_identity = 2;
+  bytes conflict_token = 5;
+}
+
+// used as Worker Deployment update response:
+message SetManagerIdentityResponse {
+  string previous_manager_identity = 1;
+  bytes conflict_token = 2;
 }
 
 // used as Worker Deployment activity input:
@@ -397,7 +422,7 @@ message WorkerDeploymentWorkflowMemo {
     temporal.api.deployment.v1.RoutingConfig routing_config = 3;
     temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary latest_version_summary = 4;
     temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary current_version_summary = 5;
-    temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary ramping_version_summary = 6; 
+    temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary ramping_version_summary = 6;
 }
 
 // Subset of fields of WorkerDeploymentInfo returned in ListWorkerDeploymentsResponse

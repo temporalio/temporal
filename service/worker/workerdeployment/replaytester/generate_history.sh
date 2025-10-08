@@ -19,7 +19,7 @@ version="1.0"
 # Expected workflow counts - users can override these if their changes are expected to generate more workflows which will be true when a breaking change to 
 # these workflows is introduced.
 # These values are used by the replay tester to validate that your workflow changes haven't accidentally created additional executions.
-EXPECTED_DEPLOYMENT_WORKFLOWS=${EXPECTED_DEPLOYMENT_WORKFLOWS:-12}
+EXPECTED_DEPLOYMENT_WORKFLOWS=${EXPECTED_DEPLOYMENT_WORKFLOWS:-13}
 EXPECTED_VERSION_WORKFLOWS=${EXPECTED_VERSION_WORKFLOWS:-14}
 
 echo "📋 Expected workflow counts:"
@@ -33,7 +33,13 @@ temporal operator namespace create default
 
 # Run the worker which shall start the deployment entity workflows....
 echo "Running the Go program..."
-go run "$(dirname "$0")/worker/worker.go"
+
+if ! go run "$(dirname "$0")/worker/worker.go"; then
+  echo "Go program exited with an error. Exiting bash script." >&2
+  exit 1
+fi
+
+echo "Go program completed successfully."
 
 echo "Waiting 5 seconds for all workflows to show up in visibility..."
 sleep 5

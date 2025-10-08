@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"fmt"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -55,4 +56,14 @@ func (r *WorkflowBackoffTimerTask) GetCategory() Category {
 
 func (r *WorkflowBackoffTimerTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER
+}
+
+func (r *WorkflowBackoffTimerTask) String() string {
+	return fmt.Sprintf("WorkflowBackoffTimerTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, Version: %v, WorkflowBackoffType: %v}",
+		r.WorkflowKey.String(),
+		r.VisibilityTimestamp,
+		r.TaskID,
+		r.Version,
+		r.WorkflowBackoffType,
+	)
 }

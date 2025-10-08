@@ -13,6 +13,7 @@
 *.out
 *.test
 *.xml
+!tools/testrunner/testdata/*.xml
 *.swp
 /*.iml
 *.cov
@@ -40,3 +41,6 @@
 .spr.yml
 
 /proto.tmp
+
+**/.venv/
+**/.ruff_cache/

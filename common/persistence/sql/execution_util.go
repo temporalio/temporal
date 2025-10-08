@@ -1127,7 +1127,7 @@ func (m *sqlExecutionStore) createExecution(
 	}
 	result, err := tx.InsertIntoExecutions(ctx, row)
 	if err != nil {
-		if m.Db.IsDupEntryError(err) {
+		if m.DB.IsDupEntryError(err) {
 			return &p.WorkflowConditionFailedError{
 				Msg:             fmt.Sprintf("Workflow execution already running. WorkflowId: %v", workflowID),
 				NextEventID:     0,

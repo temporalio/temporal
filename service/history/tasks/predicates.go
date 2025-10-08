@@ -233,9 +233,20 @@ func (t *OutboundTaskPredicate) Size() int {
 }
 
 func AndPredicates(a Predicate, b Predicate) Predicate {
+	if notA, ok := a.(*predicates.NotImpl[Task]); ok {
+		if notB, ok := b.(*predicates.NotImpl[Task]); ok {
+			// !A && !B = !(A||B)
+			return predicates.Not(OrPredicates(notA.Predicate, notB.Predicate))
+		}
+		a, b = b, a
+	}
+
+	// At this point, a is not Not predicate, b might be.
+
 	switch a := a.(type) {
 	case *NamespacePredicate:
-		if b, ok := b.(*NamespacePredicate); ok {
+		switch b := b.(type) {
+		case *NamespacePredicate:
 			intersection := intersect(a.NamespaceIDs, b.NamespaceIDs)
 			if len(intersection) == 0 {
 				return predicates.Empty[Task]()
@@ -243,9 +254,20 @@ func AndPredicates(a Predicate, b Predicate) Predicate {
 			return &NamespacePredicate{
 				NamespaceIDs: intersection,
 			}
+		case *predicates.NotImpl[Task]:
+			if exclude, ok := b.Predicate.(*NamespacePredicate); ok {
+				difference := difference(a.NamespaceIDs, exclude.NamespaceIDs)
+				if len(difference) == 0 {
+					return predicates.Empty[Task]()
+				}
+				return &NamespacePredicate{
+					NamespaceIDs: difference,
+				}
+			}
 		}
 	case *TypePredicate:
-		if b, ok := b.(*TypePredicate); ok {
+		switch b := b.(type) {
+		case *TypePredicate:
 			intersection := intersect(a.Types, b.Types)
 			if len(intersection) == 0 {
 				return predicates.Empty[Task]()
@@ -253,9 +275,20 @@ func AndPredicates(a Predicate, b Predicate) Predicate {
 			return &TypePredicate{
 				Types: intersection,
 			}
+		case *predicates.NotImpl[Task]:
+			if exclude, ok := b.Predicate.(*TypePredicate); ok {
+				difference := difference(a.Types, exclude.Types)
+				if len(difference) == 0 {
+					return predicates.Empty[Task]()
+				}
+				return &TypePredicate{
+					Types: difference,
+				}
+			}
 		}
 	case *DestinationPredicate:
-		if b, ok := b.(*DestinationPredicate); ok {
+		switch b := b.(type) {
+		case *DestinationPredicate:
 			intersection := intersect(a.Destinations, b.Destinations)
 			if len(intersection) == 0 {
 				return predicates.Empty[Task]()
@@ -263,9 +296,20 @@ func AndPredicates(a Predicate, b Predicate) Predicate {
 			return &DestinationPredicate{
 				Destinations: intersection,
 			}
+		case *predicates.NotImpl[Task]:
+			if exclude, ok := b.Predicate.(*DestinationPredicate); ok {
+				difference := difference(a.Destinations, exclude.Destinations)
+				if len(difference) == 0 {
+					return predicates.Empty[Task]()
+				}
+				return &DestinationPredicate{
+					Destinations: difference,
+				}
+			}
 		}
 	case *OutboundTaskGroupPredicate:
-		if b, ok := b.(*OutboundTaskGroupPredicate); ok {
+		switch b := b.(type) {
+		case *OutboundTaskGroupPredicate:
 			intersection := intersect(a.Groups, b.Groups)
 			if len(intersection) == 0 {
 				return predicates.Empty[Task]()
@@ -273,15 +317,36 @@ func AndPredicates(a Predicate, b Predicate) Predicate {
 			return &OutboundTaskGroupPredicate{
 				Groups: intersection,
 			}
+		case *predicates.NotImpl[Task]:
+			if exclude, ok := b.Predicate.(*OutboundTaskGroupPredicate); ok {
+				difference := difference(a.Groups, exclude.Groups)
+				if len(difference) == 0 {
+					return predicates.Empty[Task]()
+				}
+				return &OutboundTaskGroupPredicate{
+					Groups: difference,
+				}
+			}
 		}
 	case *OutboundTaskPredicate:
-		if b, ok := b.(*OutboundTaskPredicate); ok {
+		switch b := b.(type) {
+		case *OutboundTaskPredicate:
 			intersection := intersect(a.Groups, b.Groups)
 			if len(intersection) == 0 {
 				return predicates.Empty[Task]()
 			}
 			return &OutboundTaskPredicate{
 				Groups: intersection,
+			}
+		case *predicates.NotImpl[Task]:
+			if exclude, ok := b.Predicate.(*OutboundTaskPredicate); ok {
+				difference := difference(a.Groups, exclude.Groups)
+				if len(difference) == 0 {
+					return predicates.Empty[Task]()
+				}
+				return &OutboundTaskPredicate{
+					Groups: difference,
+				}
 			}
 		}
 	}
@@ -290,6 +355,27 @@ func AndPredicates(a Predicate, b Predicate) Predicate {
 }
 
 func OrPredicates(a Predicate, b Predicate) Predicate {
+	if notA, ok := a.(*predicates.NotImpl[Task]); ok {
+		if notB, ok := b.(*predicates.NotImpl[Task]); ok {
+			// !A || !B = !(A&&B)
+			return predicates.Not(AndPredicates(notA.Predicate, notB.Predicate))
+		}
+		a, b = b, a
+	}
+
+	// At this point, a is not Not predicate, b might be.
+
+	if b, ok := b.(*predicates.NotImpl[Task]); ok {
+		// A || !B = !(!A && B) = !(B && !A)
+		// As an example, if A is {n1, n2}, !B is !{n2, n3}
+		// A || !B = {n1, n2} || !{n2, n3} = !({n2, n3} && !{n1, n2}) = !{n3}
+		return predicates.Not(
+			AndPredicates(b.Predicate, predicates.Not(a)),
+		)
+	}
+
+	// At this point, neither a nor b is Not predicate.
+
 	switch a := a.(type) {
 	case *NamespacePredicate:
 		if b, ok := b.(*NamespacePredicate); ok {
@@ -356,4 +442,14 @@ func union[K comparable](this, that map[K]struct{}) map[K]struct{} {
 	maps.Copy(union, this)
 	maps.Copy(union, that)
 	return union
+}
+
+func difference[K comparable](this, that map[K]struct{}) map[K]struct{} {
+	difference := make(map[K]struct{}, len(this))
+	for key := range this {
+		if _, ok := that[key]; !ok {
+			difference[key] = struct{}{}
+		}
+	}
+	return difference
 }

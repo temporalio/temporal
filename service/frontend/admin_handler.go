@@ -380,7 +380,6 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 		return serviceerror.NewUnavailablef(errUnableToGetNamespaceInfoMessage, nsName, err)
 	}
 
-	dbCustomSearchAttributes := searchattribute.GetSqlDbIndexSearchAttributes().CustomSearchAttributes
 	cmCustomSearchAttributes := currentSearchAttributes.Custom()
 	upsertFieldToAliasMap := make(map[string]string)
 	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
@@ -395,12 +394,8 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 		// find the first available field for the given type
 		targetFieldName := ""
 		cntUsed := 0
-		for fieldName, fieldType := range dbCustomSearchAttributes {
-			if fieldType != saType {
-				continue
-			}
-			// make sure the pre-allocated custom search attributes are created in cluster metadata
-			if _, ok := cmCustomSearchAttributes[fieldName]; !ok {
+		for fieldName, fieldType := range cmCustomSearchAttributes {
+			if fieldType != saType || !searchattribute.IsPreallocatedCSAFieldName(fieldName, fieldType) {
 				continue
 			}
 			if _, ok := fieldToAliasMap[fieldName]; ok {
@@ -2094,8 +2089,9 @@ func (adh *AdminHandler) ListQueues(
 	queues := make([]*adminservice.ListQueuesResponse_QueueInfo, len(resp.Queues))
 	for i, queue := range resp.Queues {
 		queues[i] = &adminservice.ListQueuesResponse_QueueInfo{
-			QueueName:    queue.QueueName,
-			MessageCount: queue.MessageCount,
+			QueueName:     queue.QueueName,
+			MessageCount:  queue.MessageCount,
+			LastMessageId: queue.LastMessageId,
 		}
 	}
 	return &adminservice.ListQueuesResponse{

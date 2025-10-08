@@ -346,7 +346,8 @@ type (
 		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
 
-		Tasks map[tasks.Category][]tasks.Task
+		Tasks                 map[tasks.Category][]tasks.Task
+		BestEffortDeleteTasks map[tasks.Category][]tasks.Key
 
 		// TODO deprecate Condition in favor of DBRecordVersion
 		Condition       int64
@@ -416,6 +417,9 @@ type (
 		ShardID      int32
 		TaskCategory tasks.Category
 		TaskKey      tasks.Key
+
+		// BestEffort indicates that this request is a suggestion. System may choose to ignore it without error.
+		BestEffort bool
 	}
 
 	// RangeCompleteHistoryTasksRequest deletes a range of history tasks

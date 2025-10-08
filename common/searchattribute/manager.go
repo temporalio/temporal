@@ -3,6 +3,7 @@ package searchattribute
 import (
 	"context"
 	"maps"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,16 +14,21 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 )
 
 const (
+	cacheRefreshTimeout               = 5 * time.Second
 	cacheRefreshInterval              = 60 * time.Second
 	cacheRefreshIfUnavailableInterval = 20 * time.Second
+	cacheRefreshColdInterval          = 1 * time.Second
 )
 
 type (
 	managerImpl struct {
+		logger                 log.Logger
 		timeSource             clock.TimeSource
 		clusterMetadataManager persistence.ClusterMetadataManager
 		forceRefresh           dynamicconfig.BoolPropertyFn
@@ -44,9 +50,9 @@ var _ Manager = (*managerImpl)(nil)
 func NewManager(
 	timeSource clock.TimeSource,
 	clusterMetadataManager persistence.ClusterMetadataManager,
+	logger log.Logger,
 	forceRefresh dynamicconfig.BoolPropertyFn,
 ) *managerImpl {
-
 	var saCache atomic.Value
 	saCache.Store(cache{
 		searchAttributes: map[string]NameTypeMap{},
@@ -55,6 +61,7 @@ func NewManager(
 	})
 
 	return &managerImpl{
+		logger:                 logger,
 		timeSource:             timeSource,
 		cache:                  saCache,
 		clusterMetadataManager: clusterMetadataManager,
@@ -68,44 +75,15 @@ func (m *managerImpl) GetSearchAttributes(
 	indexName string,
 	forceRefreshCache bool,
 ) (NameTypeMap, error) {
-
 	now := m.timeSource.Now()
-	saCache := m.cache.Load().(cache)
-
-	if m.needRefreshCache(saCache, forceRefreshCache, now) {
-		m.cacheUpdateMutex.Lock()
-		saCache = m.cache.Load().(cache)
-		if m.needRefreshCache(saCache, forceRefreshCache, now) {
-			var err error
-			saCache, err = m.refreshCache(saCache, now)
-			if err != nil {
-				m.cacheUpdateMutex.Unlock()
-				return NameTypeMap{}, err
-			}
-		}
-		m.cacheUpdateMutex.Unlock()
-	}
-
 	result := NameTypeMap{}
-	indexSearchAttributes, ok := saCache.searchAttributes[indexName]
-	if ok {
-		result.customSearchAttributes = maps.Clone(indexSearchAttributes.customSearchAttributes)
+	saCache, err := m.refreshCache(forceRefreshCache, now)
+	if err != nil {
+		m.logger.Error("failed to refresh search attributes cache", tag.Error(err))
+		return result, err
 	}
-
-	// TODO (rodrigozhou): remove following block for v1.21.
-	// Try to look for the empty string indexName for backward compatibility: up to v1.19,
-	// empty string was used when Elasticsearch was not configured.
-	// If there's a value, merging with current index name value. This is to avoid handling
-	// all code references to GetSearchAttributes.
-	if indexName != "" {
-		indexSearchAttributes, ok = saCache.searchAttributes[""]
-		if ok {
-			if result.customSearchAttributes == nil {
-				result.customSearchAttributes = maps.Clone(indexSearchAttributes.customSearchAttributes)
-			} else {
-				maps.Copy(result.customSearchAttributes, indexSearchAttributes.customSearchAttributes)
-			}
-		}
+	if indexSearchAttributes, ok := saCache.searchAttributes[indexName]; ok {
+		result.customSearchAttributes = maps.Clone(indexSearchAttributes.customSearchAttributes)
 	}
 	return result, nil
 }
@@ -114,12 +92,33 @@ func (m *managerImpl) needRefreshCache(saCache cache, forceRefreshCache bool, no
 	return forceRefreshCache || saCache.expireOn.Before(now) || m.forceRefresh()
 }
 
-func (m *managerImpl) refreshCache(saCache cache, now time.Time) (cache, error) {
-	// TODO: specify a timeout for the context
-	ctx := headers.SetCallerInfo(
-		context.TODO(),
-		headers.SystemBackgroundHighCallerInfo,
-	)
+func (m *managerImpl) refreshCache(forceRefreshCache bool, now time.Time) (cache, error) {
+	//nolint:revive // cache value is always of type `cache`
+	saCache := m.cache.Load().(cache)
+	if !m.needRefreshCache(saCache, forceRefreshCache, now) {
+		return saCache, nil
+	}
+
+	m.cacheUpdateMutex.Lock()
+	defer m.cacheUpdateMutex.Unlock()
+	//nolint:revive // cache value is always of type `cache`
+	saCache = m.cache.Load().(cache)
+	if !m.needRefreshCache(saCache, forceRefreshCache, now) {
+		return saCache, nil
+	}
+
+	return m.refreshCacheLocked(saCache, now)
+}
+
+func (m *managerImpl) refreshCacheLocked(saCache cache, now time.Time) (cache, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), cacheRefreshTimeout)
+	defer cancel()
+	if saCache.dbVersion == 0 {
+		// if cache is cold, use the highest priority caller
+		ctx = headers.SetCallerInfo(ctx, headers.SystemOperatorCallerInfo)
+	} else {
+		ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
+	}
 
 	clusterMetadata, err := m.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {
@@ -128,14 +127,21 @@ func (m *managerImpl) refreshCache(saCache cache, now time.Time) (cache, error) 
 			// NotFound means cluster metadata was never persisted and custom search attributes are not defined.
 			// Ignore the error.
 			saCache.expireOn = now.Add(cacheRefreshInterval)
+			err = nil
 		case *serviceerror.Unavailable:
-			// If persistence is Unavailable, ignore the error and use existing cache for cacheRefreshIfUnavailableInterval.
-			saCache.expireOn = now.Add(cacheRefreshIfUnavailableInterval)
-		default:
-			return saCache, err
+			if saCache.dbVersion == 0 {
+				// If the cache is still cold, and persistence is Unavailable, retry more aggressively
+				// within cacheRefreshColdInterval.
+				saCache.expireOn = now.Add(time.Duration(rand.Int63n(int64(cacheRefreshColdInterval))))
+			} else {
+				// If persistence is Unavailable, but cache was loaded at least once, then ignore the error
+				// and use existing cache for cacheRefreshIfUnavailableInterval.
+				saCache.expireOn = now.Add(cacheRefreshIfUnavailableInterval)
+				err = nil
+			}
 		}
 		m.cache.Store(saCache)
-		return saCache, nil
+		return saCache, err
 	}
 
 	// clusterMetadata.Version <= saCache.dbVersion means DB is not changed.

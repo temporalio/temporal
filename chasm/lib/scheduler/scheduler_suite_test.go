@@ -121,6 +121,20 @@ func (s *schedulerSuite) hasTask(task any, visibilityTime time.Time) bool {
 	return false
 }
 
+// hasTask returns true if the given task type was added at the end of the
+// transaction with the given visibilityTime.
+func (s *schedulerSuite) hasTask(task any, visibilityTime time.Time) bool {
+	taskType := reflect.TypeOf(task)
+	for _, task := range s.addedTasks {
+		if reflect.TypeOf(task) == taskType &&
+			task.GetVisibilityTime().Equal(visibilityTime) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (s *schedulerSuite) newMutableContext() chasm.MutableContext {
 	return chasm.NewMutableContext(context.Background(), s.node)
 }

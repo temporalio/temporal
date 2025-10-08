@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -12,6 +14,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -20,6 +23,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
@@ -27,6 +31,7 @@ import (
 func GetRawHistory(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
+	namespaceName namespace.Name,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	firstEventID int64,
@@ -35,8 +40,23 @@ func GetRawHistory(
 	token []byte,
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
-) ([]*commonpb.DataBlob, []byte, error) {
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), shardContext.GetConfig().NumberOfShards)
+) (_ []*commonpb.DataBlob, _ []byte, retError error) {
+	defer func() {
+		var dataLossErr *serviceerror.DataLoss
+		if errors.As(retError, &dataLossErr) {
+			if shardContext.GetConfig().EnableDataLossMetrics() {
+				persistence.EmitDataLossMetric(
+					shardContext.GetMetricsHandler(),
+					namespaceName.String(),
+					execution.GetWorkflowId(),
+					execution.GetRunId(),
+					"GetRawHistory",
+					retError,
+				)
+			}
+		}
+	}()
+
 	logger := shardContext.GetLogger()
 	rawHistory, size, nextToken, err := persistence.ReadFullPageRawEvents(
 		ctx, shardContext.GetExecutionManager(),
@@ -46,7 +66,7 @@ func GetRawHistory(
 			MaxEventID:    nextEventID,
 			PageSize:      int(pageSize),
 			NextPageToken: token,
-			ShardID:       shardID,
+			ShardID:       shardContext.GetShardID(),
 		},
 	)
 
@@ -74,6 +94,7 @@ func GetRawHistory(
 		lastEvent = allEvents[len(allEvents)-1]
 	}
 	if err = VerifyHistoryIsComplete(
+		logger,
 		firstEvent,
 		lastEvent,
 		len(allEvents),
@@ -120,6 +141,7 @@ func GetRawHistory(
 func GetHistory(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
+	namespaceName namespace.Name,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	firstEventID int64,
@@ -129,7 +151,32 @@ func GetHistory(
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
 	persistenceVisibilityMgr manager.VisibilityManager,
-) (*historypb.History, []byte, error) {
+) (history *historypb.History, token []byte, retError error) {
+	defer func() {
+		var dataLossErr *serviceerror.DataLoss
+		var serializationErr *serialization.DeserializationError
+		var deserializationErr *serialization.SerializationError
+		if errors.As(retError, &dataLossErr) || errors.As(retError, &serializationErr) || errors.As(retError, &deserializationErr) {
+			// log event
+			shardContext.GetLogger().Error("encountered data loss event in GetHistory",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowNamespace(namespaceName.String()),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.Error(retError),
+			)
+			if shardContext.GetConfig().EnableDataLossMetrics() {
+				persistence.EmitDataLossMetric(
+					shardContext.GetMetricsHandler(),
+					namespaceName.String(),
+					execution.GetWorkflowId(),
+					execution.GetRunId(),
+					"api_get_history",
+					retError,
+				)
+			}
+		}
+	}()
 
 	var size int
 	isFirstPage := len(nextPageToken) == 0
@@ -144,19 +191,7 @@ func GetHistory(
 		NextPageToken: nextPageToken,
 		ShardID:       shardID,
 	})
-	switch err.(type) {
-	case nil:
-		// noop
-	case *serviceerror.DataLoss, *serialization.DeserializationError, *serialization.SerializationError:
-		// log event
-		shardContext.GetLogger().Error("encountered data corruption event",
-			tag.WorkflowNamespaceID(namespaceID.String()),
-			tag.WorkflowID(execution.GetWorkflowId()),
-			tag.WorkflowRunID(execution.GetRunId()),
-			tag.Error(err),
-		)
-		return nil, nil, err
-	default:
+	if err != nil {
 		return nil, nil, err
 	}
 
@@ -175,6 +210,7 @@ func GetHistory(
 		}
 	}
 	if err := VerifyHistoryIsComplete(
+		shardContext.GetLogger(),
 		firstEvent,
 		lastEvent,
 		len(historyEvents),
@@ -203,15 +239,11 @@ func GetHistory(
 		historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
 	}
 
-	ns, err := shardContext.GetNamespaceRegistry().GetNamespaceName(namespaceID)
-	if err != nil {
-		return nil, nil, err
-	}
 	if err := ProcessOutgoingSearchAttributes(
 		shardContext.GetSearchAttributesProvider(),
 		shardContext.GetSearchAttributesMapperProvider(),
 		historyEvents,
-		ns,
+		namespaceName,
 		persistenceVisibilityMgr); err != nil {
 		return nil, nil, err
 	}
@@ -233,10 +265,39 @@ func GetHistoryReverse(
 	nextPageToken []byte,
 	branchToken []byte,
 	persistenceVisibilityMgr manager.VisibilityManager,
-) (*historypb.History, []byte, int64, error) {
+) (history *historypb.History, token []byte, lastFirstTransactionID int64, retError error) {
+	ns, err := shardContext.GetNamespaceRegistry().GetNamespaceName(namespaceID)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+
+	defer func() {
+		var dataLossErr *serviceerror.DataLoss
+		var serializationErr *serialization.DeserializationError
+		var deserializationErr *serialization.SerializationError
+		if errors.As(retError, &dataLossErr) || errors.As(retError, &serializationErr) || errors.As(retError, &deserializationErr) {
+			shardContext.GetLogger().Error("encountered data loss event in GetHistoryReverse",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowNamespace(ns.String()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.Error(retError),
+			)
+			if shardContext.GetConfig().EnableDataLossMetrics() {
+				persistence.EmitDataLossMetric(
+					shardContext.GetMetricsHandler(),
+					ns.String(),
+					execution.GetWorkflowId(),
+					execution.GetRunId(),
+					"api_get_history_reverse",
+					retError,
+				)
+			}
+		}
+	}()
+
 	var size int
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), shardContext.GetConfig().NumberOfShards)
-	var err error
 	var historyEvents []*historypb.HistoryEvent
 
 	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEventsReverse(ctx, shardContext.GetExecutionManager(), &persistence.ReadHistoryBranchReverseRequest{
@@ -248,25 +309,14 @@ func GetHistoryReverse(
 		ShardID:                shardID,
 	})
 
-	logger := shardContext.GetLogger()
-	switch err.(type) {
-	case nil:
-		// noop
-	case *serviceerror.DataLoss:
-		// log event
-		logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
-		return nil, nil, 0, err
-	default:
-		return nil, nil, 0, err
-	}
-
-	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryReverseScope))
-	metrics.HistorySize.With(metricsHandler).Record(int64(size))
-
-	ns, err := shardContext.GetNamespaceRegistry().GetNamespaceName(namespaceID)
 	if err != nil {
 		return nil, nil, 0, err
 	}
+
+	logger := shardContext.GetLogger()
+	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryReverseScope))
+	metrics.HistorySize.With(metricsHandler).Record(int64(size))
+
 	if err := ProcessOutgoingSearchAttributes(
 		shardContext.GetSearchAttributesProvider(),
 		shardContext.GetSearchAttributesMapperProvider(),
@@ -347,6 +397,7 @@ func validateTransientWorkflowTaskEvents(
 }
 
 func VerifyHistoryIsComplete(
+	logger log.Logger,
 	firstEvent *historyspb.StrippedHistoryEvent,
 	lastEvent *historyspb.StrippedHistoryEvent,
 	eventCount int,
@@ -364,13 +415,15 @@ func VerifyHistoryIsComplete(
 			// there are no more events to consume - bail out if this is the case here
 			return nil
 		}
-		return serviceerror.NewDataLoss("History contains zero events.")
+		return softassert.UnexpectedDataLoss(logger, "History contains zero events", nil)
 	}
 
 	if !isFirstPage { // at least one page of history has been read previously
 		if firstEvent.GetEventId() <= expectedFirstEventID {
 			// not first page and no events have been read in the previous pages - not possible
-			return serviceerror.NewDataLossf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEvent.GetEventId())
+			return softassert.UnexpectedDataLoss(logger,
+				"Invalid history: expected first eventID to be greater than last seen",
+				fmt.Errorf("expected > %v but got %v", expectedFirstEventID, firstEvent.GetEventId()))
 		}
 		expectedFirstEventID = firstEvent.GetEventId()
 	}
@@ -389,15 +442,17 @@ func VerifyHistoryIsComplete(
 		return nil
 	}
 
-	return serviceerror.NewDataLossf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
-		expectedFirstEventID,
-		expectedLastEventID,
-		firstEvent.GetEventId(),
-		lastEvent.GetEventId(),
-		eventCount,
-		isFirstPage,
-		isLastPage,
-		pageSize)
+	return softassert.UnexpectedDataLoss(logger,
+		"Incomplete history",
+		fmt.Errorf("expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
+			expectedFirstEventID,
+			expectedLastEventID,
+			firstEvent.GetEventId(),
+			lastEvent.GetEventId(),
+			eventCount,
+			isFirstPage,
+			isLastPage,
+			pageSize))
 }
 
 // ProcessInternalRawHistory processes history in the field response.History.

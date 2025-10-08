@@ -34,6 +34,7 @@ func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {
 		nil,
 		primitives.HistoryService,
 		nil, // No logger
+		nil, // No metrics handler
 		nil,
 		membership.GRPCResolverURLForTesting(monitor, primitives.FrontendService),
 		membership.GRPCResolverURLForTesting(monitor, primitives.FrontendService),
@@ -64,6 +65,7 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort(t *testing.T) {
 		nil, // unused
 		primitives.HistoryService,
 		nil, // No logger
+		nil, // No metrics handler
 		nil,
 		membership.GRPCResolverURLForTesting(nil, primitives.FrontendService),
 		addr.String(),
@@ -95,6 +97,7 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort_AndTLS(t *testing.T) {
 		nil, // unused
 		primitives.HistoryService,
 		nil, // No logger
+		nil, // No metrics handler
 		nil,
 		membership.GRPCResolverURLForTesting(nil, primitives.FrontendService),
 		addr.String(),

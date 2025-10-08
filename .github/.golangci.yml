@@ -16,6 +16,7 @@ linters:
     - forbidigo
     - exhaustive
     - godox
+    - iotamixing
   settings:
     staticcheck:
       checks:
@@ -127,6 +128,9 @@ linters:
         - name: function-result-limit
           arguments:
             - 5
+        - name: struct-tag
+          arguments:
+            - "validate,persistence_custom_search_attributes"
         - name: unhandled-error
           arguments:
             - "fmt.*"

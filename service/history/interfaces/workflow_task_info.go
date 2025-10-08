@@ -5,6 +5,7 @@ import (
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 // TODO: This should be part of persistence layer
@@ -48,6 +49,11 @@ type WorkflowTaskInfo struct {
 	// - when persisting transient/speculative WFT, the right Build ID is used in the WFT started event
 	// Deprecated.
 	BuildId string
+
+	// Persisted timeout tasks for this workflow task. These are set when the timeout tasks are generated
+	// and used to delete them when the workflow task completes.
+	ScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
+	StartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
 }
 
 type WorkflowTaskCompletionLimits struct {

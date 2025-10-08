@@ -52,7 +52,7 @@ func (m *sqlMetadataManagerV2) CreateNamespace(
 			IsGlobal:            request.IsGlobal,
 			NotificationVersion: metadata.NotificationVersion,
 		}); err != nil {
-			if m.Db.IsDupEntryError(err) {
+			if m.DB.IsDupEntryError(err) {
 				return serviceerror.NewNamespaceAlreadyExistsf("name: %v", request.Name)
 			}
 			return err
@@ -89,7 +89,7 @@ func (m *sqlMetadataManagerV2) GetNamespace(
 		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name are empty.")
 	}
 
-	rows, err := m.Db.SelectFromNamespace(ctx, filter)
+	rows, err := m.DB.SelectFromNamespace(ctx, filter)
 	if err != nil {
 		switch err {
 		case sql.ErrNoRows:
@@ -211,7 +211,7 @@ func (m *sqlMetadataManagerV2) DeleteNamespaceByName(
 func (m *sqlMetadataManagerV2) GetMetadata(
 	ctx context.Context,
 ) (*persistence.GetMetadataResponse, error) {
-	row, err := m.Db.SelectFromNamespaceMetadata(ctx)
+	row, err := m.DB.SelectFromNamespaceMetadata(ctx)
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef("GetMetadata operation failed. Error: %v", err)
 	}
@@ -227,7 +227,7 @@ func (m *sqlMetadataManagerV2) ListNamespaces(
 		token := primitives.UUID(request.NextPageToken)
 		pageToken = &token
 	}
-	rows, err := m.Db.SelectFromNamespace(ctx, sqlplugin.NamespaceFilter{
+	rows, err := m.DB.SelectFromNamespace(ctx, sqlplugin.NamespaceFilter{
 		GreaterThanID: pageToken,
 		PageSize:      &request.PageSize,
 	})

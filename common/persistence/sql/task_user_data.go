@@ -20,7 +20,7 @@ func (uds *userDataStore) GetTaskQueueUserData(ctx context.Context, request *per
 	if err != nil {
 		return nil, serviceerror.NewInternalf("failed to parse namespace ID as UUID: %v", err)
 	}
-	response, err := uds.Db.GetTaskQueueUserData(ctx, &sqlplugin.GetTaskQueueUserDataRequest{
+	response, err := uds.DB.GetTaskQueueUserData(ctx, &sqlplugin.GetTaskQueueUserDataRequest{
 		NamespaceID:   namespaceID,
 		TaskQueueName: request.TaskQueue,
 	})
@@ -52,7 +52,7 @@ func (uds *userDataStore) UpdateTaskQueueUserData(ctx context.Context, request *
 				Version:       update.Version,
 			})
 			// note these are in a transaction: if one fails the others will be rolled back
-			if uds.Db.IsDupEntryError(err) {
+			if uds.DB.IsDupEntryError(err) {
 				err = &persistence.ConditionFailedError{Msg: err.Error()}
 			}
 			if persistence.IsConflictErr(err) && update.Conflicting != nil {
@@ -108,7 +108,7 @@ func (uds *userDataStore) ListTaskQueueUserDataEntries(ctx context.Context, requ
 		lastQueueName = token.LastTaskQueueName
 	}
 
-	rows, err := uds.Db.ListTaskQueueUserDataEntries(ctx, &sqlplugin.ListTaskQueueUserDataEntriesRequest{
+	rows, err := uds.DB.ListTaskQueueUserDataEntries(ctx, &sqlplugin.ListTaskQueueUserDataEntriesRequest{
 		NamespaceID:       namespaceID,
 		LastTaskQueueName: lastQueueName,
 		Limit:             request.PageSize,
@@ -143,7 +143,7 @@ func (uds *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p
 	if err != nil {
 		return nil, serviceerror.NewInternal(err.Error())
 	}
-	return uds.Db.GetTaskQueuesByBuildId(ctx, &sqlplugin.GetTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
+	return uds.DB.GetTaskQueuesByBuildId(ctx, &sqlplugin.GetTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
 }
 
 func (uds *userDataStore) CountTaskQueuesByBuildId(ctx context.Context, request *persistence.CountTaskQueuesByBuildIdRequest) (int, error) {
@@ -151,11 +151,11 @@ func (uds *userDataStore) CountTaskQueuesByBuildId(ctx context.Context, request 
 	if err != nil {
 		return 0, serviceerror.NewInternal(err.Error())
 	}
-	return uds.Db.CountTaskQueuesByBuildId(ctx, &sqlplugin.CountTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
+	return uds.DB.CountTaskQueuesByBuildId(ctx, &sqlplugin.CountTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
 }
 
 func (uds *userDataStore) txExecute(ctx context.Context, operation string, f func(tx sqlplugin.Tx) error) error {
-	tx, err := uds.Db.BeginTx(ctx)
+	tx, err := uds.DB.BeginTx(ctx)
 	if err != nil {
 		return serviceerror.NewUnavailablef("%s failed. Failed to start transaction. Error: %v", operation, err)
 	}

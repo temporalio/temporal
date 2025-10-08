@@ -212,6 +212,8 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		metrics.NoopMetricsHandler,
 		s.Logger,
 		s.PersistenceHealthSignals,
+		func() bool { return false },
+		func() bool { return false },
 	)
 
 	s.TaskMgr, err = factory.NewTaskManager()
@@ -226,7 +228,12 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.fatalOnError("NewClusterMetadataManager", err)
 
 	s.ClusterMetadata = cluster.NewMetadataFromConfig(clusterMetadataConfig, s.ClusterMetadataManager, dynamicconfig.NewNoopCollection(), s.Logger)
-	s.SearchAttributesManager = searchattribute.NewManager(clock.NewRealTimeSource(), s.ClusterMetadataManager, dynamicconfig.GetBoolPropertyFn(true))
+	s.SearchAttributesManager = searchattribute.NewManager(
+		clock.NewRealTimeSource(),
+		s.ClusterMetadataManager,
+		s.Logger,
+		dynamicconfig.GetBoolPropertyFn(true),
+	)
 
 	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)

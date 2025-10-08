@@ -27,6 +27,10 @@ var (
 )
 
 var (
+	SystemOperatorCallerInfo = CallerInfo{
+		CallerName: CallerNameSystem,
+		CallerType: CallerTypeOperator,
+	}
 	SystemBackgroundHighCallerInfo = CallerInfo{
 		CallerName: CallerNameSystem,
 		CallerType: CallerTypeBackgroundHigh,

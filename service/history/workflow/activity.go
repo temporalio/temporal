@@ -79,6 +79,7 @@ func UpdateActivityInfoForRetries(
 	ai.Version = version
 	ai.ScheduledTime = nextScheduledTime
 	ai.StartedEventId = common.EmptyEventID
+	ai.StartVersion = common.EmptyVersion
 	ai.RequestId = ""
 	ai.StartedTime = nil
 	ai.TimerTaskStatus = TimerTaskStatusNone

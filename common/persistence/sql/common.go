@@ -18,28 +18,28 @@ import (
 
 // TODO: Rename all SQL Managers to Stores
 type SqlStore struct {
-	Db     sqlplugin.DB
+	DB     sqlplugin.DB
 	logger log.Logger
 }
 
 func NewSqlStore(db sqlplugin.DB, logger log.Logger) SqlStore {
 	return SqlStore{
-		Db:     db,
+		DB:     db,
 		logger: logger,
 	}
 }
 
 func (m *SqlStore) GetName() string {
-	return m.Db.PluginName()
+	return m.DB.PluginName()
 }
 
 func (m *SqlStore) GetDbName() string {
-	return m.Db.DbName()
+	return m.DB.DbName()
 }
 
 func (m *SqlStore) Close() {
-	if m.Db != nil {
-		err := m.Db.Close()
+	if m.DB != nil {
+		err := m.DB.Close()
 		if err != nil {
 			m.logger.Error("Error closing SQL database", tag.Error(err))
 		}
@@ -47,7 +47,7 @@ func (m *SqlStore) Close() {
 }
 
 func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sqlplugin.Tx) error) error {
-	tx, err := m.Db.BeginTx(ctx)
+	tx, err := m.DB.BeginTx(ctx)
 	if err != nil {
 		return serviceerror.NewUnavailablef("%s failed. Failed to start transaction. Error: %v", operation, err)
 	}

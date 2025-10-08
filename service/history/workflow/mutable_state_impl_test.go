@@ -475,6 +475,156 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_UnexpectedSticky() {
 	s.Equal(int64(0), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
 }
 
+func (s *mutableStateSuite) TestPopulateDeleteTasks_WithWorkflowTaskTimeouts() {
+	// Test that workflow task timeout task references are added to BestEffortDeleteTasks when present.
+	version := int64(1)
+	workflowID := "wf-timeout-delete"
+	runID := uuid.New()
+	s.mutableState = TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		workflowID,
+		runID,
+	)
+
+	// Create mock timeout tasks that meet the criteria
+	now := time.Now().UTC()
+	mockScheduleToStartTask := &tasks.WorkflowTaskTimeoutTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.mutableState.GetExecutionInfo().NamespaceId,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: now.Add(10 * time.Second), // < 120s
+		TaskID:              123,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		InMemory:            false, // Persisted task
+	}
+
+	mockStartToCloseTask := &tasks.WorkflowTaskTimeoutTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.mutableState.GetExecutionInfo().NamespaceId,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: now.Add(30 * time.Second), // < 120s
+		TaskID:              456,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		InMemory:            false, // Persisted task
+	}
+
+	// Schedule and start a workflow task
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+
+	sticky := &taskqueuepb.TaskQueue{Name: "sticky-tq", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		sticky,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+
+	// Set timeout tasks directly in mutable state (simulating what task_generator does)
+	s.mutableState.SetWorkflowTaskScheduleToStartTimeoutTask(mockScheduleToStartTask)
+	s.mutableState.SetWorkflowTaskStartToCloseTimeoutTask(mockStartToCloseTask)
+	// Call UpdateWorkflowTask to persist the workflow task info to ExecutionInfo
+	s.mutableState.workflowTaskManager.UpdateWorkflowTask(wft)
+
+	// Complete the workflow task
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+
+	// Verify that BestEffortDeleteTasks contains the timeout task keys
+	del := s.mutableState.BestEffortDeleteTasks
+	s.Contains(del, tasks.CategoryTimer)
+	s.Equal(2, len(del[tasks.CategoryTimer]), "Should have both ScheduleToStart and StartToClose timeout tasks")
+	s.Contains(del[tasks.CategoryTimer], mockScheduleToStartTask.GetKey())
+	s.Contains(del[tasks.CategoryTimer], mockStartToCloseTask.GetKey())
+}
+
+func (s *mutableStateSuite) TestPopulateDeleteTasks_LongTimeout_NotIncluded() {
+	// Test that timeout tasks with very long timeouts (> 120s) are NOT added to BestEffortDeleteTasks.
+	version := int64(1)
+	workflowID := "wf-long-timeout"
+	runID := uuid.New()
+	s.mutableState = TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		workflowID,
+		runID,
+	)
+
+	// Schedule a workflow task - this sets the scheduled time
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+
+	sticky := &taskqueuepb.TaskQueue{Name: "sticky-tq", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		sticky,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+
+	// Get the actual scheduled time from wft (this is what will be used in the calculation)
+	scheduledTime := wft.ScheduledTime
+	if scheduledTime.IsZero() {
+		// If scheduled time is not set in wft, use current time
+		scheduledTime = time.Now().UTC()
+	}
+
+	// Create a timeout task with timeout > 120s relative to the actual scheduled time
+	mockLongTimeoutTask := &tasks.WorkflowTaskTimeoutTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.mutableState.GetExecutionInfo().NamespaceId,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: scheduledTime.Add(200 * time.Second), // > 120s from scheduled time
+		TaskID:              123,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		InMemory:            false, // Persisted task
+	}
+
+	// Set the long timeout task directly in mutable state
+	s.mutableState.SetWorkflowTaskScheduleToStartTimeoutTask(mockLongTimeoutTask)
+	// Clear the StartToClose task so it doesn't interfere with the test
+	s.mutableState.SetWorkflowTaskStartToCloseTimeoutTask(nil)
+
+	// Complete the workflow task
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+
+	// Verify that BestEffortDeleteTasks does NOT contain the long timeout task
+	del := s.mutableState.BestEffortDeleteTasks
+	if timerTasks, exists := del[tasks.CategoryTimer]; exists {
+		s.Equal(0, len(timerTasks), "Tasks with timeout > 120s should not be added to BestEffortDeleteTasks")
+	}
+}
+
 // creates a mutable state with first WFT completed on Build ID "b1"
 func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *taskqueuepb.TaskQueue) {
 	version := int64(12)

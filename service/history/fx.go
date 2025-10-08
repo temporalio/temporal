@@ -2,6 +2,7 @@ package history
 
 import (
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
@@ -53,10 +54,12 @@ var Module = fx.Options(
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(RetryableInterceptorProvider),
+	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(HealthCheckInterceptorProvider),
+	fx.Provide(chasm.ChasmRequestInterceptorProvider),
 	fx.Provide(HistoryAdditionalInterceptorsProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
@@ -124,8 +127,6 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		replicationServerRateLimiter:     args.ReplicationServerRateLimiter,
 	}
 
-	// prevent us from trying to serve requests before shard controller is started and ready
-	handler.startWG.Add(1)
 	return handler
 }
 
@@ -158,17 +159,29 @@ func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
 	)
 }
 
+func ErrorHandlerProvider(
+	logger log.Logger,
+	serviceConfig *configs.Config,
+) *interceptor.RequestErrorHandler {
+	return interceptor.NewRequestErrorHandler(
+		logger,
+		serviceConfig.LogAllReqErrors,
+	)
+}
+
 func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
 	serviceConfig *configs.Config,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
 		serviceConfig.LogAllReqErrors,
+		requestErrorHandler,
 	)
 }
 
@@ -193,9 +206,9 @@ func HealthCheckInterceptorProvider(
 }
 
 func HistoryAdditionalInterceptorsProvider(
-	healthCheckInterceptor *interceptor.HealthCheckInterceptor,
+	healthCheckInterceptor *interceptor.HealthCheckInterceptor, chasmRequestInterceptor *chasm.ChasmRequestInterceptor,
 ) []grpc.UnaryServerInterceptor {
-	return []grpc.UnaryServerInterceptor{healthCheckInterceptor.UnaryIntercept}
+	return []grpc.UnaryServerInterceptor{healthCheckInterceptor.UnaryIntercept, chasmRequestInterceptor.Intercept}
 }
 
 func RateLimitInterceptorProvider(
