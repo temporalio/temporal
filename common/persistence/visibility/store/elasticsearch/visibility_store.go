@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/olivere/elastic/v7"
+	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -46,11 +47,18 @@ type (
 		processorAckTimeout            dynamicconfig.DurationPropertyFn
 		disableOrderByClause           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		enableManualPagination         dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		enableUnifiedQueryConverter    dynamicconfig.BoolPropertyFn
 		metricsHandler                 metrics.Handler
 	}
 
 	visibilityPageToken struct {
 		SearchAfter []interface{}
+	}
+
+	esQueryParams struct {
+		Query   elastic.Query
+		Sorter  []elastic.Sorter
+		GroupBy []string
 	}
 
 	fieldSort struct {
@@ -105,6 +113,7 @@ func NewVisibilityStore(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	disableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	enableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (*VisibilityStore, error) {
@@ -139,6 +148,7 @@ func NewVisibilityStore(
 		processorAckTimeout:            processorAckTimeout,
 		disableOrderByClause:           disableOrderByClause,
 		enableManualPagination:         enableManualPagination,
+		enableUnifiedQueryConverter:    enableUnifiedQueryConverter,
 		metricsHandler:                 metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),
 	}, nil
 }
@@ -363,9 +373,19 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	queryParams, err := s.convertQueryLegacy(request.Namespace, request.NamespaceID, request.Query)
-	if err != nil {
-		return nil, err
+	var queryParams *esQueryParams
+	var err error
+	if s.enableUnifiedQueryConverter() {
+		queryParams, err = s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		queryParamsLegacy, err := s.convertQueryLegacy(request.Namespace, request.NamespaceID, request.Query)
+		if err != nil {
+			return nil, err
+		}
+		queryParams = (*esQueryParams)(queryParamsLegacy)
 	}
 
 	if len(queryParams.GroupBy) > 0 {
@@ -383,7 +403,7 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 
 func (s *VisibilityStore) countGroupByWorkflowExecutions(
 	ctx context.Context,
-	queryParams *query.QueryParamsLegacy,
+	queryParams *esQueryParams,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
 	groupByFields := queryParams.GroupBy
 
@@ -461,13 +481,23 @@ func (s *VisibilityStore) BuildSearchParametersV2(
 	request *manager.ListWorkflowExecutionsRequestV2,
 	getFieldSorter func([]elastic.Sorter) ([]elastic.Sorter, error),
 ) (*client.SearchParameters, error) {
-	queryParams, err := s.convertQueryLegacy(
-		request.Namespace,
-		request.NamespaceID,
-		request.Query,
-	)
-	if err != nil {
-		return nil, err
+	var queryParams *esQueryParams
+	var err error
+	if s.enableUnifiedQueryConverter() {
+		queryParams, err = s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		queryParamsLegacy, err := s.convertQueryLegacy(
+			request.Namespace,
+			request.NamespaceID,
+			request.Query,
+		)
+		if err != nil {
+			return nil, err
+		}
+		queryParams = (*esQueryParams)(queryParamsLegacy)
 	}
 
 	searchParams := &client.SearchParameters{
@@ -560,6 +590,66 @@ func (s *VisibilityStore) processPageToken(
 	boolQuery.Should(shouldQueries...)
 	boolQuery.MinimumNumberShouldMatch(1)
 	return nil
+}
+
+func (s *VisibilityStore) convertQuery(
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	queryString string,
+) (res *esQueryParams, err error) {
+	defer func() {
+		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
+		// only mapper errors).
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			err = converterErr.ToInvalidArgument()
+		}
+	}()
+
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	if err != nil {
+		return nil, serviceerror.NewUnavailablef("unable to read search attribute types: %v", err)
+	}
+
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	c := query.NewQueryConverter(&queryConverter{}, namespaceName, namespaceID, saTypeMap, saMapper)
+	queryParams, err := c.Convert(queryString)
+	if err != nil {
+		return nil, err
+	}
+
+	orderBy := make([]elastic.Sorter, 0, len(queryParams.OrderBy))
+	for _, orderByExpr := range queryParams.OrderBy {
+		// query converter is supposed to parse the expression and convert to SAColumn
+		colName, ok := orderByExpr.Expr.(*query.SAColumn)
+		if !ok {
+			return nil, query.NewConverterError(
+				"%s: unexpected field in 'ORDER BY' clause: %s",
+				query.NotSupportedErrMessage,
+				sqlparser.String(orderByExpr),
+			)
+		}
+		fieldSort := elastic.NewFieldSort(colName.FieldName)
+		if orderByExpr.Direction == sqlparser.DescScr {
+			fieldSort = fieldSort.Desc()
+		}
+		orderBy = append(orderBy, fieldSort)
+	}
+
+	groupBy := make([]string, 0, len(queryParams.GroupBy))
+	for _, field := range queryParams.GroupBy {
+		groupBy = append(groupBy, field.FieldName)
+	}
+
+	return &esQueryParams{
+		Query:   queryParams.QueryExpr,
+		Sorter:  orderBy,
+		GroupBy: groupBy,
+	}, nil
 }
 
 func (s *VisibilityStore) convertQueryLegacy(

@@ -250,6 +250,7 @@ func newVisibilityStoreFromDataStoreConfig(
 			searchAttributesMapperProvider,
 			visibilityDisableOrderByClause,
 			visibilityEnableManualPagination,
+			visibilityEnableUnifiedQueryConverter,
 			metricsHandler,
 			logger,
 		)
