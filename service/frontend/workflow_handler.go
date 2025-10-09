@@ -6113,3 +6113,37 @@ func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflow
 func (wh *WorkflowHandler) TriggerWorkflowRule(context.Context, *workflowservice.TriggerWorkflowRuleRequest) (*workflowservice.TriggerWorkflowRuleResponse, error) {
 	return nil, serviceerror.NewUnimplemented("method TriggerWorkflowRule not supported")
 }
+
+// TODO(dan): added these stubs for now since I wasn't sure what the correct resolution was
+
+// PauseActivityExecution pauses a standalone activity execution
+func (wh *WorkflowHandler) PauseActivityExecution(
+	ctx context.Context,
+	request *workflowservice.PauseActivityExecutionRequest,
+) (*workflowservice.PauseActivityExecutionResponse, error) {
+	return nil, serviceerror.NewUnimplemented("temporary stub during Standalone Activity prototyping")
+}
+
+// UnpauseActivityExecution unpauses a standalone activity execution
+func (wh *WorkflowHandler) UnpauseActivityExecution(
+	ctx context.Context,
+	request *workflowservice.UnpauseActivityExecutionRequest,
+) (*workflowservice.UnpauseActivityExecutionResponse, error) {
+	return nil, serviceerror.NewUnimplemented("temporary stub during Standalone Activity prototyping")
+}
+
+// ResetActivityExecution resets a standalone activity execution
+func (wh *WorkflowHandler) ResetActivityExecution(
+	ctx context.Context,
+	request *workflowservice.ResetActivityExecutionRequest,
+) (*workflowservice.ResetActivityExecutionResponse, error) {
+	return nil, serviceerror.NewUnimplemented("temporary stub during Standalone Activity prototyping")
+}
+
+// UpdateActivityExecutionOptions updates options for a standalone activity execution
+func (wh *WorkflowHandler) UpdateActivityExecutionOptions(
+	ctx context.Context,
+	request *workflowservice.UpdateActivityExecutionOptionsRequest,
+) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+	return nil, serviceerror.NewUnimplemented("temporary stub during Standalone Activity prototyping")
+}
