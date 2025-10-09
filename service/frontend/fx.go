@@ -96,6 +96,7 @@ var Module = fx.Options(
 	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
+	fx.Provide(CallbackValidatorProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
@@ -716,6 +717,11 @@ func OperatorHandlerProvider(
 	return NewOperatorHandlerImpl(args)
 }
 
+func CallbackValidatorProvider() CallbackValidator {
+	// By default, no custom validation is performed.
+	return nil
+}
+
 func HandlerProvider(
 	cfg *config.Config,
 	serviceName primitives.ServiceName,
@@ -747,6 +753,7 @@ func HandlerProvider(
 	membershipMonitor membership.Monitor,
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
+	callbackValidator CallbackValidator,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -774,6 +781,7 @@ func HandlerProvider(
 		healthInterceptor,
 		scheduleSpecBuilder,
 		httpEnabled(cfg, serviceName),
+		callbackValidator,
 	)
 	return wfHandler
 }

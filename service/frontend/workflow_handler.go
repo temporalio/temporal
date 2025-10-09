@@ -108,6 +108,17 @@ const (
 )
 
 type (
+	// CallbackValidator is an interface for validating callbacks.
+	// It may be optionally provided to the WorkflowHandler.
+	//
+	// NOTE: Experimental API, subject to change or removal without notice.
+	CallbackValidator interface {
+		// ValidateCallback validates the callback for the given namespace.
+		// It is called after the default validation logic is run, which means that this can only make validation stricter
+		// than the default behavior.
+		ValidateCallback(ns namespace.Name, callback *commonpb.Callback) error
+	}
+
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
 		workflowservice.UnimplementedWorkflowServiceServer
@@ -142,6 +153,7 @@ type (
 		scheduleSpecBuilder             *scheduler.SpecBuilder
 		outstandingPollers              collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
 		httpEnabled                     bool
+		callbackValidator               CallbackValidator
 	}
 )
 
@@ -172,6 +184,7 @@ func NewWorkflowHandler(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	httpEnabled bool,
+	callbackValidator CallbackValidator,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		status:          common.DaemonStatusInitialized,
@@ -225,6 +238,7 @@ func NewWorkflowHandler(
 		scheduleSpecBuilder: scheduleSpecBuilder,
 		outstandingPollers:  collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
 		httpEnabled:         httpEnabled,
+		callbackValidator:   callbackValidator,
 	}
 
 	return handler
@@ -5229,9 +5243,12 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 					),
 				)
 			}
-		case *commonpb.Callback_Internal_:
-			// TODO(Tianyu): For now, there is nothing to validate given that this is an internal field.
-			continue
+			if wh.callbackValidator == nil {
+				return nil
+			}
+			if err := wh.callbackValidator.ValidateCallback(ns, callback); err != nil {
+				return err
+			}
 		default:
 			return status.Error(codes.Unimplemented, fmt.Sprintf("unknown callback variant: %T", cb))
 		}
