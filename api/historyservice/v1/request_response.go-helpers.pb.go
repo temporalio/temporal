@@ -4889,6 +4889,80 @@ func (this *ListTasksResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type CompleteNexusOperationChasmRequest to the protobuf v3 wire format
+func (val *CompleteNexusOperationChasmRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CompleteNexusOperationChasmRequest from the protobuf v3 wire format
+func (val *CompleteNexusOperationChasmRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CompleteNexusOperationChasmRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CompleteNexusOperationChasmRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CompleteNexusOperationChasmRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CompleteNexusOperationChasmRequest
+	switch t := that.(type) {
+	case *CompleteNexusOperationChasmRequest:
+		that1 = t
+	case CompleteNexusOperationChasmRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type CompleteNexusOperationChasmResponse to the protobuf v3 wire format
+func (val *CompleteNexusOperationChasmResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CompleteNexusOperationChasmResponse from the protobuf v3 wire format
+func (val *CompleteNexusOperationChasmResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CompleteNexusOperationChasmResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CompleteNexusOperationChasmResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CompleteNexusOperationChasmResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CompleteNexusOperationChasmResponse
+	switch t := that.(type) {
+	case *CompleteNexusOperationChasmResponse:
+		that1 = t
+	case CompleteNexusOperationChasmResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type CompleteNexusOperationRequest to the protobuf v3 wire format
 func (val *CompleteNexusOperationRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

@@ -70,6 +70,26 @@ func (c *clientImpl) CompleteNexusOperation(
 	return response, nil
 }
 
+func (c *clientImpl) CompleteNexusOperationChasm(
+	ctx context.Context,
+	request *historyservice.CompleteNexusOperationChasmRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetCompletion().GetComponentRef().GetNamespaceId(), request.GetCompletion().GetComponentRef().GetBusinessId())
+	var response *historyservice.CompleteNexusOperationChasmResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.CompleteNexusOperationChasm(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) DeleteDLQTasks(
 	ctx context.Context,
 	request *historyservice.DeleteDLQTasksRequest,

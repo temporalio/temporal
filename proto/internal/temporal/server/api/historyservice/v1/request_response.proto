@@ -20,18 +20,18 @@ import "temporal/api/failure/v1/message.proto";
 import "temporal/api/nexus/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
-import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/enums/v1/cluster.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
-import "temporal/server/api/workflow/v1/message.proto";
+import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/namespace/v1/message.proto";
-import "temporal/server/api/replication/v1/message.proto";
 import "temporal/server/api/persistence/v1/executions.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
+import "temporal/server/api/replication/v1/message.proto";
 import "temporal/server/api/taskqueue/v1/message.proto";
 import "temporal/server/api/token/v1/message.proto";
+import "temporal/server/api/workflow/v1/message.proto";
 
 import "temporal/api/workflowservice/v1/request_response.proto";
 import "temporal/server/api/adminservice/v1/request_response.proto";
@@ -1141,6 +1141,27 @@ message ListTasksRequest {
 message ListTasksResponse {
     temporal.server.api.adminservice.v1.ListHistoryTasksResponse response = 1;
 }
+
+message CompleteNexusOperationChasmRequest {
+    option (routing) = {
+        namespace_id: "completion.component_ref.namespace_id"
+        // TODO - fix after merge
+        // business_id: "completion.component_ref.business_id"
+        workflow_id: "completion.component_ref.business_id"
+    };
+    // Completion token - holds information for locating an entity and the corresponding component.
+    temporal.server.api.token.v1.NexusOperationCompletion completion = 1;
+    oneof outcome {
+        // Result of a successful operation, only set if state == successful.
+        temporal.api.common.v1.Payload success = 2;
+        // Operation failure, only set if state != successful.
+        temporal.api.failure.v1.Failure failure = 3;
+    }
+    // Time when the operation was closed.
+    google.protobuf.Timestamp close_time = 4;
+}
+
+message CompleteNexusOperationChasmResponse {}
 
 message CompleteNexusOperationRequest {
     option (routing) = {

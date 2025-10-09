@@ -337,7 +337,14 @@ service HistoryService {
 
     // Complete an async Nexus Operation using a completion token. The completion state could be successful, failed, or
     // canceled.
+    //
+    // Deprecated. Will be renamed to CompleteNexusOperationHsm in a future release.
     rpc CompleteNexusOperation (CompleteNexusOperationRequest) returns (CompleteNexusOperationResponse) {
+    }
+
+    // Complete an async Nexus Operation using a CHASM reference. The completion
+    // state could be successful, failed, or canceled.
+    rpc CompleteNexusOperationChasm (CompleteNexusOperationChasmRequest) returns (CompleteNexusOperationChasmResponse) {
     }
 
     rpc InvokeStateMachineMethod (InvokeStateMachineMethodRequest) returns (InvokeStateMachineMethodResponse) {

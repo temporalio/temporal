@@ -40,23 +40,24 @@ var (
 	}
 
 	historyAPIExcluded = map[string]struct{}{
-		"CloseShard":                {},
-		"GetShard":                  {},
-		"GetDLQMessages":            {},
-		"GetDLQReplicationMessages": {},
-		"GetReplicationMessages":    {},
-		"MergeDLQMessages":          {},
-		"PurgeDLQMessages":          {},
-		"RemoveTask":                {},
-		"SyncShardStatus":           {},
-		"GetReplicationStatus":      {},
-		"GetDLQTasks":               {},
-		"DeleteDLQTasks":            {},
-		"AddTasks":                  {},
-		"ListQueues":                {},
-		"ListTasks":                 {},
-		"CompleteNexusOperation":    {}, // NamespaceId is in the completion token for this request.
-		"DeepHealthCheck":           {},
+		"CloseShard":                  {},
+		"GetShard":                    {},
+		"GetDLQMessages":              {},
+		"GetDLQReplicationMessages":   {},
+		"GetReplicationMessages":      {},
+		"MergeDLQMessages":            {},
+		"PurgeDLQMessages":            {},
+		"RemoveTask":                  {},
+		"SyncShardStatus":             {},
+		"GetReplicationStatus":        {},
+		"GetDLQTasks":                 {},
+		"DeleteDLQTasks":              {},
+		"AddTasks":                    {},
+		"ListQueues":                  {},
+		"ListTasks":                   {},
+		"CompleteNexusOperation":      {}, // NamespaceId is in the completion token for this request.
+		"CompleteNexusOperationChasm": {}, // NamespaceId is in the completion token for this request.
+		"DeepHealthCheck":             {},
 	}
 )
 
