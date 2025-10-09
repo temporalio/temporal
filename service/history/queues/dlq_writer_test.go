@@ -208,7 +208,7 @@ func TestDLQWriter_ConcurrentWrites(t *testing.T) {
 	wg.Wait()
 
 	// Verify all writes succeeded
-	//require.Len(t, queueWriter.EnqueueTaskRequests, numConcurrentWrites)
+	require.Len(t, queueWriter.EnqueueTaskRequests, numConcurrentWrites)
 
 	// The key assertion: with the lock in place, we should never have more than 1 concurrent access
 	assert.Equal(t, int32(1), maxConcurrentAccess.Load(),
@@ -279,7 +279,7 @@ func TestDLQWriter_ConcurrentWritesDifferentQueues(t *testing.T) {
 	wg.Wait()
 
 	// Verify all writes succeeded
-	//require.Len(t, queueWriter.EnqueueTaskRequests, numConcurrentWrites)
+	require.Len(t, queueWriter.EnqueueTaskRequests, numConcurrentWrites)
 
 	// Since these are different queues, they should be able to execute concurrently
 	// We expect to see more than 1 concurrent access
