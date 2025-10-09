@@ -1,10 +1,14 @@
 package migration
 
 import (
+	"bufio"
+	//"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	//"path/filepath"
 	"testing"
 	"time"
 
@@ -17,6 +21,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
@@ -26,6 +31,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	//"go.uber.org/zap"
+
+	//"go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 )
 
@@ -613,4 +621,41 @@ func (i *heartbeatRecordingInterceptor) RecordHeartbeat(ctx context.Context, det
 	}
 
 	i.ActivityOutboundInterceptorBase.Next.RecordHeartbeat(ctx, details...)
+}
+
+func TestReplays(t *testing.T) {
+	replayer := worker.NewWorkflowReplayer()
+	replayer.RegisterWorkflowWithOptions(
+		ForceReplicationWorkflow,
+		workflow.RegisterOptions{Name: forceReplicationWorkflowName},
+	)
+
+	logger := log.NewSdkLogger(log.NewTestLogger())
+	filename := "/Users/zigehuang/replay2.json"
+	//for _, filename := range files {
+	logger.Info("Replaying", "file", filename)
+
+	f, err := os.Open(filename)
+	require.NoError(t, err)
+	defer f.Close()
+
+	r := bufio.NewReader(f)
+	history, err := client.HistoryFromJSON(r, client.HistoryJSONOptions{})
+	require.NoError(t, err)
+
+	for i, e := range history.Events {
+		logger.Info("History event",
+			"index", i,
+			"eventID", e.GetEventId(),
+			"type", e.GetEventType().String(),
+		)
+	}
+
+	err = replayer.ReplayWorkflowHistory(logger, history)
+	if err != nil {
+		logger.Error("Replay failed", "file", filename, "error", err)
+		t.Fatalf("Replay failed for %s: %+v", filename, err)
+	} else {
+		logger.Info("Replay succeeded", "file", filename)
+	}
 }
