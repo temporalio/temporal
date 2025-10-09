@@ -149,7 +149,7 @@ func TestDLQWriter_ConcurrentWrites(t *testing.T) {
 	metricsHandler := metricstest.NewCaptureHandler()
 	writer := queues.NewDLQWriter(queueWriter, metricsHandler, logger, namespaceRegistry)
 
-	const numConcurrentWrites = 10
+	const numConcurrentWrites = 50
 	var wg sync.WaitGroup
 	var concurrentAccessCount atomic.Int32
 	var maxConcurrentAccess atomic.Int32
@@ -228,7 +228,7 @@ func TestDLQWriter_ConcurrentWritesDifferentQueues(t *testing.T) {
 	metricsHandler := metricstest.NewCaptureHandler()
 	writer := queues.NewDLQWriter(queueWriter, metricsHandler, logger, namespaceRegistry)
 
-	const numConcurrentWrites = 5
+	const numConcurrentWrites = 50
 	var wg sync.WaitGroup
 	var concurrentAccessCount atomic.Int32
 	var maxConcurrentAccess atomic.Int32
