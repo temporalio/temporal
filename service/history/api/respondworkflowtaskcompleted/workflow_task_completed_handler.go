@@ -485,19 +485,29 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	newVersioningUsed := handler.mutableState.GetExecutionInfo().GetAssignedBuildId() != ""
 	versioningUsed := oldVersioningUsed || newVersioningUsed
 
-	// Enable eager activity start if dynamic config enables it and either 1. workflow doesn't use versioning,
-	// or 2. workflow uses versioning and activity intends to use a compatible version (since a
-	// worker is obviously compatible with itself and we are okay dispatching an eager task knowing that there may be a
-	// newer "default" compatible version).
-	// Note that if `UseWorkflowBuildId` is false, it implies that the activity should run on the "default" version
-	// for the task queue.
-	eagerStartActivity := attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) &&
-		(!versioningUsed || attr.UseWorkflowBuildId)
+	isActivityTypePaused := handler.mutableState.IsActivityTypePaused(attr.ActivityType.GetName())
+	// Allow eager activity start only if all of the following are true:
+	// 1. Eager execution is requested
+	// 2. dynamic config enables it
+	// 3. either
+	//   a. workflow doesn't use versioning
+	//   b. workflow uses versioning and activity intends to use a compatible version
+	//     (since a worker is obviously compatible with itself and we are okay dispatching an eager task knowing that there may be a newer "default" compatible version).
+	//     Note that if `UseWorkflowBuildId` is false, it implies that the activity should run on the "default" version for the task queue
+	// 4. activity is not paused
+
+	eagerStartActivity := attr.RequestEagerExecution &&
+		handler.config.EnableActivityEagerExecution(namespace) &&
+		(!versioningUsed || attr.UseWorkflowBuildId) &&
+		!isActivityTypePaused
+
+	// bypass task generation if activity is eager started or if it is paused
+	bypassTaskGeneration := eagerStartActivity || isActivityTypePaused
 
 	event, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
 		handler.workflowTaskCompletedID,
 		attr,
-		eagerStartActivity,
+		bypassTaskGeneration,
 	)
 	if err != nil {
 		return nil, nil, handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, err)
