@@ -104,6 +104,9 @@ var (
 // NewCollection creates a new collection. For subscriptions to work, you must call Start/Stop.
 // Get will work without Start/Stop.
 func NewCollection(client Client, logger log.Logger) *Collection {
+	// Do this at the first convenient place we have a logger:
+	logSharedStructureWarnings(logger)
+
 	return &Collection{
 		client:        client,
 		logger:        logger,
