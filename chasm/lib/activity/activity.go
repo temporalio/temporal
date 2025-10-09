@@ -51,7 +51,7 @@ func GetActivity(ctx context.Context, req *activitypb.DescribeActivityExecutionR
 			chasm.EntityKey{
 				NamespaceID: req.NamespaceId,
 				BusinessID:  req.GetFrontendRequest().GetActivityId(),
-				EntityID:    req.GetFrontendRequest().GetRunId(), // TODO this is hacked
+				EntityID:    req.GetFrontendRequest().GetRunId(),
 			},
 		),
 		func(
@@ -65,7 +65,6 @@ func GetActivity(ctx context.Context, req *activitypb.DescribeActivityExecutionR
 		},
 		nil,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -75,11 +74,3 @@ func GetActivity(ctx context.Context, req *activitypb.DescribeActivityExecutionR
 	}, nil
 
 }
-
-//
-//func (a *Activity) describe(
-//	_ chasm.Context,
-//	_ DescribePayloadStoreRequest,
-//) (*testspb.TestPayloadStore, error) {
-//	return common.CloneProto(s.State), nil
-//}
