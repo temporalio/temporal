@@ -37,14 +37,19 @@ var queryParameters = map[string]struct{}{
 }
 
 type plugin struct {
-	connPool *connPool
+	queryConverter sqlplugin.VisibilityQueryConverter
+	connPool       *connPool
 }
 
-var sqlitePlugin = &plugin{}
-
 func init() {
-	sqlitePlugin.connPool = newConnPool()
-	sql.RegisterPlugin(PluginName, sqlitePlugin)
+	sql.RegisterPlugin(PluginName, &plugin{
+		queryConverter: &queryConverter{},
+		connPool:       newConnPool(),
+	})
+}
+
+func (p *plugin) GetVisibilityQueryConverter() sqlplugin.VisibilityQueryConverter {
+	return p.queryConverter
 }
 
 // CreateDB initialize the db object
