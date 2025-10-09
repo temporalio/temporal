@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
+	"go.temporal.io/server/common/experiments"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -3071,6 +3073,10 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	}
 
 	wh.logger.Debug("Received CreateSchedule", tag.ScheduleID(request.ScheduleId))
+
+	if interceptor.IsExperimentEnabled(ctx, experiments.ChasmScheduler) {
+		wh.logger.Debug("chasm scheduler enabled for request", tag.ScheduleID(request.ScheduleId))
+	}
 
 	if request.GetRequestId() == "" {
 		return nil, errRequestIDNotSet

@@ -563,6 +563,11 @@ is currently processing a task.
 	)
 
 	// keys for frontend
+	FrontendEnabledExperiments = NewNamespaceTypedSetting(
+		"frontend.enabledExperiments",
+		[]string{},
+		`FrontendEnabledExperiments is a list of experiment names that can be enabled via the x-temporal-experimental header for a specific namespace.`,
+	)
 	FrontendHTTPAllowedHosts = NewGlobalTypedSettingWithConverter(
 		"frontend.httpAllowedHosts",
 		ConvertWildcardStringListToRegexp,
