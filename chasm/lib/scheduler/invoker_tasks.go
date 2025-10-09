@@ -119,6 +119,8 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 
 	var invoker *Invoker
 	var scheduler *Scheduler
+	var lastCompletionState *schedulerpb.LastCompletionState
+	var callback *commonpb.Callback
 
 	// Read and deep copy returned components, since we'll continue to access them
 	// outside of this function (outside of the MS lock).
@@ -140,6 +142,19 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 				compiledSpec:       s.compiledSpec,
 			}
 
+			lcs, err := s.LastCompletionState.Get(ctx)
+			if err != nil {
+				return struct{}{}, err
+			}
+			lastCompletionState = common.CloneProto(lcs)
+
+			// Set up the completion callback to handle workflow results.
+			cb, err := chasm.GetNexusCallback(ctx, s)
+			if err != nil {
+				return struct{}{}, err
+			}
+			callback = common.CloneProto(cb)
+
 			return struct{}{}, nil
 		},
 		nil,
@@ -159,7 +174,7 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 	ictx := e.newInvokerTaskExecutorContext(ctx, scheduler)
 	result = result.Append(e.terminateWorkflows(ictx, logger, scheduler, invoker.GetTerminateWorkflows()))
 	result = result.Append(e.cancelWorkflows(ictx, logger, scheduler, invoker.GetCancelWorkflows()))
-	sres, startResults := e.startWorkflows(ictx, logger, scheduler, invoker.getEligibleBufferedStarts())
+	sres, startResults := e.startWorkflows(ictx, logger, scheduler, invoker.getEligibleBufferedStarts(), lastCompletionState, callback)
 	result = result.Append(sres)
 
 	// Record action results on the Invoker (internal state), as well as the
@@ -277,6 +292,8 @@ func (e *InvokerExecuteTaskExecutor) startWorkflows(
 	logger log.Logger,
 	scheduler *Scheduler,
 	starts []*schedulespb.BufferedStart,
+	lastCompletionState *schedulerpb.LastCompletionState,
+	callback *commonpb.Callback,
 ) (result executeResult, startResults []*schedulepb.ScheduleActionResult) {
 	metricsWithTag := e.MetricsHandler.WithTags(
 		metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
@@ -292,10 +309,17 @@ func (e *InvokerExecuteTaskExecutor) startWorkflows(
 			break
 		}
 
+		// Check if this start is already in RecentActions. If so, we crashed
+		// after starting a workflow, but before recording the result.
+		if scheduler.isActionCompleted(start.WorkflowId) {
+			logger.Warn("skipping already-completed workflow", tag.WorkflowID(start.WorkflowId))
+			continue
+		}
+
 		// Run all starts concurrently.
 		newCtx := ctx.Clone()
 		wg.Go(func() {
-			startResult, err := e.startWorkflow(newCtx, scheduler, start)
+			startResult, err := e.startWorkflow(newCtx, scheduler, start, lastCompletionState, callback)
 
 			resultMutex.Lock()
 			defer resultMutex.Unlock()
@@ -488,10 +512,10 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 	ctx context.Context,
 	scheduler *Scheduler,
 	start *schedulespb.BufferedStart,
+	lastCompletionState *schedulerpb.LastCompletionState,
+	callback *commonpb.Callback,
 ) (*schedulepb.ScheduleActionResult, error) {
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
-	nominalTimeSec := start.NominalTime.AsTime().Truncate(time.Second)
-	workflowID := fmt.Sprintf("%s-%s", requestSpec.WorkflowId, nominalTimeSec.Format(time.RFC3339))
 
 	if start.Attempt >= InvokerMaxStartAttempts {
 		return nil, errRetryLimitExceeded
@@ -513,38 +537,55 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
-	// TODO - set last completion result/continued failure (watcher)
 	// TODO - set search attributes
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                scheduler.Namespace,
-		WorkflowId:               workflowID,
-		WorkflowType:             requestSpec.WorkflowType,
-		TaskQueue:                requestSpec.TaskQueue,
+		CompletionCallbacks:      []*commonpb.Callback{callback},
+		Header:                   requestSpec.Header,
+		Identity:                 scheduler.identity(),
 		Input:                    requestSpec.Input,
+		Memo:                     requestSpec.Memo,
+		Namespace:                scheduler.Namespace,
+		RequestId:                start.RequestId,
+		RetryPolicy:              requestSpec.RetryPolicy,
+		SearchAttributes:         nil,
+		TaskQueue:                requestSpec.TaskQueue,
+		UserMetadata:             requestSpec.UserMetadata,
 		WorkflowExecutionTimeout: requestSpec.WorkflowExecutionTimeout,
+		WorkflowId:               start.WorkflowId,
+		WorkflowIdReusePolicy:    reusePolicy,
 		WorkflowRunTimeout:       requestSpec.WorkflowRunTimeout,
 		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
-		Identity:                 scheduler.identity(),
-		RequestId:                start.RequestId,
-		WorkflowIdReusePolicy:    reusePolicy,
-		RetryPolicy:              requestSpec.RetryPolicy,
-		Memo:                     requestSpec.Memo,
-		SearchAttributes:         nil,
-		Header:                   requestSpec.Header,
-		LastCompletionResult:     nil,
-		ContinuedFailure:         nil,
-		UserMetadata:             requestSpec.UserMetadata,
+		WorkflowType:             requestSpec.WorkflowType,
 	}
+
+	// Set last completion result payload.
+	switch outcome := lastCompletionState.Outcome.(type) {
+	case *schedulerpb.LastCompletionState_Failure:
+		request.ContinuedFailure = outcome.Failure
+	case *schedulerpb.LastCompletionState_Success:
+		request.LastCompletionResult = &commonpb.Payloads{
+			Payloads: []*commonpb.Payload{outcome.Success},
+		}
+	}
+
 	result, err := e.FrontendClient.StartWorkflowExecution(ctx, request)
 	if err != nil {
 		return nil, err
 	}
+	actualStartTime := time.Now()
+
+	// Record time taken from action eligible to workflow started.
+	if !start.Manual {
+		e.MetricsHandler.
+			Timer(metrics.ScheduleActionDelay.Name()).
+			Record(actualStartTime.Sub(start.DesiredTime.AsTime()))
+	}
 
 	return &schedulepb.ScheduleActionResult{
 		ScheduleTime: start.ActualTime,
-		ActualTime:   timestamppb.New(time.Now()),
+		ActualTime:   timestamppb.New(actualStartTime),
 		StartWorkflowResult: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
+			WorkflowId: start.WorkflowId,
 			RunId:      result.RunId,
 		},
 		StartWorkflowStatus: result.Status, // usually should be RUNNING

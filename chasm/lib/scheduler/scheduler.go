@@ -2,10 +2,15 @@ package scheduler
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/util"
@@ -24,6 +29,10 @@ type Scheduler struct {
 	// Persisted internal state, consisting of state relevant to all components in
 	// the scheduler tree.
 	*schedulerpb.SchedulerState
+
+	// Last success/failure payloads, stored on this separate data node
+	// to minimize write traffic.
+	LastCompletionState chasm.Field[*schedulerpb.LastCompletionState]
 
 	Generator   chasm.Field[*Generator]
 	Invoker     chasm.Field[*Invoker]
@@ -61,8 +70,9 @@ func NewScheduler(
 			ScheduleId:    scheduleID,
 			ConflictToken: scheduler.InitialConflictToken,
 		},
-		cacheConflictToken: scheduler.InitialConflictToken,
-		Backfillers:        make(chasm.Map[string, *Backfiller]),
+		cacheConflictToken:  scheduler.InitialConflictToken,
+		Backfillers:         make(chasm.Map[string, *Backfiller]),
+		LastCompletionState: chasm.NewDataField(ctx, &schedulerpb.LastCompletionState{}),
 	}
 
 	invoker := NewInvoker(ctx, sched)
@@ -168,6 +178,12 @@ func (s *Scheduler) getCompiledSpec(specBuilder *scheduler.SpecBuilder) (*schedu
 	}
 
 	return s.compiledSpec, nil
+}
+
+// GetWorkflowID returns the Workflow ID given as part of the request spec.
+// During start generation, nominal time is suffixed to this ID.
+func (s *Scheduler) GetWorkflowID() string {
+	return s.Schedule.Action.GetStartWorkflow().WorkflowId
 }
 
 func (s *Scheduler) jitterSeed() string {
@@ -289,4 +305,144 @@ func (s *Scheduler) recordActionResult(result *schedulerActionResult) {
 			s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, start.StartWorkflowResult)
 		}
 	}
+}
+
+var _ chasm.NexusCompletionHandler = &Scheduler{}
+
+func executionStatusFromFailure(failure *failurepb.Failure) enumspb.WorkflowExecutionStatus {
+	switch failure.FailureInfo.(type) {
+	case *failurepb.Failure_CanceledFailureInfo:
+		return enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED
+	case *failurepb.Failure_TimeoutFailureInfo:
+		return enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
+	default:
+		return enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+	}
+}
+
+// HandleNexusCompletion allows Scheduler to record workflow completions from
+// worfklows started by the same scheduler tree's Invoker.
+func (s *Scheduler) HandleNexusCompletion(
+	ctx chasm.MutableContext,
+	info *persistencespb.ChasmNexusCompletion,
+) error {
+	invoker, err := s.Invoker.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	workflowID := invoker.GetWorkflowID(info.RequestId)
+	if workflowID == "" {
+		// If the request ID was removed, the request must have already been processed;
+		// fast-succeed.
+		return nil
+	}
+
+	// Handle last completed/failed status and payloads.
+	//
+	// TODO - also record payload sizes once we have metrics wired into CHASM context.
+	var wfStatus enumspb.WorkflowExecutionStatus
+	switch outcome := info.Outcome.(type) {
+	case *persistencespb.ChasmNexusCompletion_Failure:
+		wfStatus = executionStatusFromFailure(outcome.Failure)
+		s.LastCompletionState = chasm.NewDataField(ctx, &schedulerpb.LastCompletionState{
+			Outcome: &schedulerpb.LastCompletionState_Failure{
+				Failure: outcome.Failure,
+			},
+		})
+	case *persistencespb.ChasmNexusCompletion_Success:
+		wfStatus = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		s.LastCompletionState = chasm.NewDataField(ctx, &schedulerpb.LastCompletionState{
+			Outcome: &schedulerpb.LastCompletionState_Success{
+				Success: outcome.Success,
+			},
+		})
+	default:
+		wfStatus = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+	}
+
+	// Handle pause-on-failure.
+	if wfStatus != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED &&
+		s.Schedule.Policies.PauseOnFailure && !s.Schedule.State.Paused {
+		s.Schedule.State.Paused = true
+		s.Schedule.State.Notes = fmt.Sprintf(
+			"paused, workflow %s: %s",
+			strings.ToLower(wfStatus.String()),
+			workflowID,
+		)
+	}
+
+	// Record the completed action in the Invoker to queue off any
+	// sequentially-buffered starts. This also updates BufferedStarts.
+	scheduleTime := invoker.recordCompletedAction(ctx, info.CloseTime.AsTime(), info.RequestId)
+
+	// Record the completed action into Scheduler's metadata. This updates
+	// RecentActions and RunningWorkflows.
+	s.recordCompletedAction(ctx, scheduleTime, workflowID, wfStatus)
+
+	return nil
+}
+
+// recordCompletedAction ensures that the given action is recorded in
+// RecentActions and cleaned up from other state.
+func (s *Scheduler) recordCompletedAction(
+	ctx chasm.MutableContext,
+	scheduleTime time.Time,
+	workflowID string,
+	workflowStatus enumspb.WorkflowExecutionStatus,
+) {
+	// Clear out closed workflows from RunningWorkflows.
+	s.Info.RunningWorkflows = slices.DeleteFunc(s.Info.RunningWorkflows, func(wf *commonpb.WorkflowExecution) bool {
+		// We don't evaluate RunId here, since the action may have retried.
+		return wf.WorkflowId == workflowID
+	})
+
+	// Update the RecentActions entry's status.
+	found := false
+	for _, action := range s.Info.RecentActions {
+		if action.StartWorkflowResult.WorkflowId == workflowID {
+			action.StartWorkflowStatus = workflowStatus
+			found = true
+			break
+		}
+	}
+
+	// If we didn't find an entry in RecentActions, add one.
+	if !found {
+		if scheduleTime.IsZero() {
+			// We're completing a workflow that wasn't in BufferedStarts, RunningWorkflows,
+			// or RecentActions, but *did* have a request ID entry. That shouldn't be possible.
+			//
+			// TODO - softassert here when we have a logger wired into CHASM. Skip recording
+			// the action for now.
+			return
+		}
+
+		actionResult := &schedulepb.ScheduleActionResult{
+			ScheduleTime: timestamppb.New(scheduleTime),
+			ActualTime:   timestamppb.New(scheduleTime), // best guess, as we're recording complete before start was recorded
+			StartWorkflowResult: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+			},
+		}
+
+		s.Info.RecentActions = util.SliceTail(
+			append(s.Info.RecentActions, actionResult), recentActionCount)
+	}
+}
+
+// isActionCompleted returns true for when the given action has already been
+// recorded as complete in the Scheduler's state. Side effect tasks should use
+// this function to determine if a started action was marked as completed before
+// the action was even marked as started.
+func (s *Scheduler) isActionCompleted(workflowID string) bool {
+	for _, action := range s.Info.RecentActions {
+		if action.StartWorkflowResult.WorkflowId == workflowID {
+			return true
+		}
+	}
+
+	// A workflow could have completed and subsequently truncated from RecentActions,
+	// but we don't care about that case.
+	return false
 }
