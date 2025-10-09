@@ -441,26 +441,8 @@ func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, er
 		)
 	}
 	saAlias := strings.ReplaceAll(sqlparser.String(expr), "`", "")
-	saFieldName := saAlias
-	if searchattribute.IsMappable(saAlias) {
-		var err error
-		saFieldName, err = c.saMapper.GetFieldName(saAlias, c.namespaceName.String())
-		if err != nil {
-			if saAlias != searchattribute.ScheduleID {
-				return nil, query.NewConverterError(
-					"%s: column name '%s' is not a valid search attribute",
-					query.InvalidExpressionErrMessage,
-					saAlias,
-				)
-			}
-			// ScheduleId is a fake SA -- convert to WorkflowId
-			saFieldName = searchattribute.WorkflowID
-		}
-	}
-
-	saType, err := c.saTypeMap.GetType(saFieldName)
+	saFieldName, saType, err := query.ResolveSearchAttributeAlias(saAlias, c.namespaceName, c.saMapper, c.saTypeMap)
 	if err != nil {
-		// This should never happen since it came from mapping.
 		return nil, query.NewConverterError(
 			"%s: column name '%s' is not a valid search attribute",
 			query.InvalidExpressionErrMessage,

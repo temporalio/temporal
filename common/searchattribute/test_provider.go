@@ -1,6 +1,7 @@
 package searchattribute
 
 import (
+	"fmt"
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -91,7 +92,9 @@ func (t *TestMapper) GetAlias(fieldName string, namespace string) (string, error
 		return "", serviceerror.NewInvalidArgument("unmapped field")
 	}
 	if namespace == "error-namespace" {
-		return "", serviceerror.NewInternal("mapper error")
+		return "", serviceerror.NewInvalidArgument(
+			fmt.Sprintf("Namespace %s has no mapping defined for field name %s", namespace, fieldName),
+		)
 	}
 	if namespace == "test-namespace" || namespace == t.Namespace {
 		if fieldName == "pass-through" {
@@ -110,7 +113,9 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 		return "", serviceerror.NewInvalidArgument("unmapped alias")
 	}
 	if namespace == "error-namespace" {
-		return "", serviceerror.NewInternal("mapper error")
+		return "", serviceerror.NewInvalidArgument(
+			fmt.Sprintf("Namespace %s has no mapping defined for search attribute %s", namespace, alias),
+		)
 	} else if namespace == "test-namespace" || namespace == t.Namespace {
 		if alias == "pass-through" {
 			return alias, nil
