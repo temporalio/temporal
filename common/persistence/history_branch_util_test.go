@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -35,7 +36,7 @@ func (s *historyBranchUtilSuite) TearDownTest() {
 }
 
 func (s *historyBranchUtilSuite) TestHistoryBranchUtil() {
-	var historyBranchUtil HistoryBranchUtil = &HistoryBranchUtilImpl{}
+	var historyBranchUtil HistoryBranchUtil = NewHistoryBranchUtil(serialization.NewSerializer())
 
 	treeID0 := primitives.NewUUID().String()
 	branchID0 := primitives.NewUUID().String()

@@ -226,7 +226,7 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 func (e *ExecutableBackfillHistoryEventsTask) getDeserializedEvents() (_ [][]*historypb.HistoryEvent, _ []*historypb.HistoryEvent, retError error) {
 	eventBatches := [][]*historypb.HistoryEvent{}
 	for _, eventsBlob := range e.taskAttr.EventBatches {
-		events, err := e.EventSerializer.DeserializeEvents(eventsBlob)
+		events, err := e.Serializer.DeserializeEvents(eventsBlob)
 		if err != nil {
 			e.Logger.Error("unable to deserialize history events",
 				tag.WorkflowNamespaceID(e.NamespaceID),
@@ -240,7 +240,7 @@ func (e *ExecutableBackfillHistoryEventsTask) getDeserializedEvents() (_ [][]*hi
 		eventBatches = append(eventBatches, events)
 	}
 
-	newRunEvents, err := e.EventSerializer.DeserializeEvents(e.taskAttr.NewRunInfo.EventBatch)
+	newRunEvents, err := e.Serializer.DeserializeEvents(e.taskAttr.NewRunInfo.EventBatch)
 	if err != nil {
 		e.Logger.Error("unable to deserialize new run history events",
 			tag.WorkflowNamespaceID(e.NamespaceID),

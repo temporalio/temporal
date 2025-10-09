@@ -579,6 +579,7 @@ func VisibilityManagerProvider(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 	namespaceRegistry namespace.Registry,
+	serializer serialization.Serializer,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -599,6 +600,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityEnableManualPagination,
 		metricsHandler,
 		logger,
+		serializer,
 	)
 }
 

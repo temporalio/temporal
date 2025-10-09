@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protomock"
@@ -102,8 +103,10 @@ func (s *ScavengerTestSuite) createTestScavenger(
 		enableRetentionVerification,
 		s.metricHandler,
 		s.logger,
+		serialization.NewSerializer(),
 	)
 	s.scavenger.isInTest = true
+	s.historyBranchUtil = *persistence.NewHistoryBranchUtil(serialization.NewSerializer())
 }
 
 func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
