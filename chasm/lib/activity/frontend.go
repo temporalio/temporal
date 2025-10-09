@@ -2,7 +2,6 @@ package activity
 
 import (
 	"context"
-	"strings"
 
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -47,11 +46,13 @@ func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workf
 }
 
 func (h *frontendHandler) DescribeActivityExecution(ctx context.Context, req *workflowservice.DescribeActivityExecutionRequest) (*workflowservice.DescribeActivityExecutionResponse, error) {
-	parts := strings.Split(req.RunId, "|") // TODO unhack
-	req.RunId = parts[0]
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
 
 	resp, err := h.client.DescribeActivityExecution(ctx, &activitypb.DescribeActivityExecutionRequest{
-		NamespaceId:     parts[1],
+		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})
 	return resp.GetFrontendResponse(), err

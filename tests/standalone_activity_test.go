@@ -53,7 +53,7 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 	resp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityId,
-		RunId:      fmt.Sprintf("%s|%s", r.RunId, s.GetNamespaceID(s.Namespace().String())),
+		RunId:      r.RunId,
 	})
 	require.NoError(t, err)
 
