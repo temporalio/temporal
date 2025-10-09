@@ -3,16 +3,17 @@ package callbacks
 import (
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/queues"
@@ -27,47 +28,50 @@ type chasmInvocation struct {
 	requestID  string
 }
 
-var ErrUnimplementedHandler = serviceerror.NewUnimplemented("component does not implement NexusCompletionHandler")
-
 func (c chasmInvocation) WrapError(result invocationResult, err error) error {
 	if failure, ok := result.(invocationResultFail); ok {
 		return queues.NewUnprocessableTaskError(failure.err.Error())
 	}
 
-	if retry, ok := result.(invocationResultRetry); ok {
-		return queues.NewDestinationDownError(retry.err.Error(), err)
-	}
+	return result.error()
+}
 
-	return err
+// logInternalError emits a log statement for internalMsg, tagged with both
+// internalErr and a reference-id. An opaque error containing the reference-id is
+// returned. Intended to be used to hide internal errors from end users.
+func logInternalError(logger log.Logger, internalMsg string, internalErr error) error {
+	referenceID := uuid.NewString()
+	logger.Error(internalMsg, tag.Error(internalErr), tag.NewStringTag("reference-id", referenceID))
+	return fmt.Errorf("internal error, reference-id: %v", referenceID)
 }
 
 func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
 	// Get back the base64-encoded ComponentRef from the header.
 	encodedRef, ok := c.nexus.GetHeader()[commonnexus.CallbackTokenHeader]
 	if !ok {
-		return invocationResultFail{errors.New("callback missing token")}
+		return invocationResultFail{logInternalError(e.Logger, "callback missing token", nil)}
 	}
 
 	decodedRef, err := base64.RawURLEncoding.DecodeString(encodedRef)
 	if err != nil {
-		return invocationResultFail{fmt.Errorf("failed to decode CHASM ComponentRef: %v", err)}
+		return invocationResultFail{logInternalError(e.Logger, "failed to decode CHASM ComponentRef", err)}
 	}
 
 	ref := &persistencespb.ChasmComponentRef{}
 	err = proto.Unmarshal(decodedRef, ref)
 	if err != nil {
-		return invocationResultFail{fmt.Errorf("failed to unmarshal CHASM ComponentRef: %v", err)}
+		return invocationResultFail{logInternalError(e.Logger, "failed to unmarshal CHASM ComponentRef: %v", err)}
 	}
 
 	request, err := c.getHistoryRequest(ref)
 	if err != nil {
-		return invocationResultFail{fmt.Errorf("failed to build history request: %v", err)}
+		return invocationResultFail{logInternalError(e.Logger, "failed to build history request: %v", err)}
 	}
 
 	// RPC to History for cross-shard completion delivery.
 	_, err = e.HistoryClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
-		msg := fmt.Errorf("failed to complete Nexus operation: %v", err)
+		msg := logInternalError(e.Logger, "failed to complete Nexus operation: %v", err)
 		if isRetryableRpcResponse(err) {
 			return invocationResultRetry{msg}
 		}

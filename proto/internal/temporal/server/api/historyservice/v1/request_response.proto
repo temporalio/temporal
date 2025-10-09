@@ -1146,7 +1146,7 @@ message CompleteNexusOperationChasmRequest {
     option (routing) = {
         namespace_id: "completion.component_ref.namespace_id"
         // TODO - fix after merge
-        // execution_id: "completion.component_ref.business_id"
+        // business_id: "completion.component_ref.business_id"
         workflow_id: "completion.component_ref.business_id"
     };
     // Completion token - holds information for locating an entity and the corresponding component.
