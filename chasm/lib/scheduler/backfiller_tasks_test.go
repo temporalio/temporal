@@ -26,7 +26,7 @@ func TestBackfillerTasksSuite(t *testing.T) {
 }
 
 func (s *backfillerTasksSuite) SetupTest() {
-	s.SetupSuite()
+	s.schedulerSuite.SetupTest()
 	s.executor = scheduler.NewBackfillerTaskExecutor(scheduler.BackfillerTaskExecutorOptions{
 		Config:         defaultConfig(),
 		MetricsHandler: metrics.NoopMetricsHandler,

@@ -4,9 +4,15 @@ package temporal.server.chasm.lib.scheduler.proto.v1;
 
 option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpb";
 
+import "google/protobuf/duration.proto";
+
 // Fires when the scheduler's idle period has lapsed, and the scheduler should
 // be closed.
-message SchedulerIdleTask {}
+message SchedulerIdleTask {
+  // Idle time total is set at time of task creation, so that if the dynamic config key
+  // controlling idle time changes, task validation will be aware.
+  google.protobuf.Duration idle_time_total = 1;
+}
 
 // Buffers actions based on the schedule's specification.
 message GeneratorTask {}
