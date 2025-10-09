@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -3074,10 +3073,6 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 
 	wh.logger.Debug("Received CreateSchedule", tag.ScheduleID(request.ScheduleId))
 
-	if interceptor.IsExperimentEnabled(ctx, experiments.ChasmScheduler) {
-		wh.logger.Debug("chasm scheduler enabled for request", tag.ScheduleID(request.ScheduleId))
-	}
-
 	if request.GetRequestId() == "" {
 		return nil, errRequestIDNotSet
 	}
@@ -3090,6 +3085,12 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
+	}
+
+	// Check if CHASM scheduler experiment is enabled
+	if experiments.IsExperimentEnabled(ctx, experiments.ChasmScheduler) &&
+		wh.config.IsExperimentEnabled(experiments.ChasmScheduler, namespaceName.String()) {
+		wh.logger.Debug("CHASM scheduler enabled for request", tag.ScheduleID(request.ScheduleId))
 	}
 
 	if request.Schedule == nil {

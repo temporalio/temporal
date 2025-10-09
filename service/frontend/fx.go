@@ -85,7 +85,6 @@ var Module = fx.Options(
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
 	fx.Provide(CallerInfoInterceptorProvider),
-	fx.Provide(ExperimentalFeaturesInterceptorProvider),
 	fx.Provide(SlowRequestLoggerInterceptorProvider),
 	fx.Provide(MaskInternalErrorDetailsInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
@@ -208,7 +207,6 @@ func GrpcServerOptionsProvider(
 	metricsStatsHandler metrics.ServerStatsHandler,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
-	experimentalFeaturesInterceptor *interceptor.ExperimentalFeaturesInterceptor,
 	authInterceptor *authorization.Interceptor,
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
 	slowRequestLoggerInterceptor *interceptor.SlowRequestLoggerInterceptor,
@@ -263,7 +261,6 @@ func GrpcServerOptionsProvider(
 		rateLimitInterceptor.Intercept,
 		sdkVersionInterceptor.Intercept,
 		callerInfoInterceptor.Intercept,
-		experimentalFeaturesInterceptor.Intercept,
 		slowRequestLoggerInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
@@ -926,14 +923,4 @@ func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry nexus.EndpointRegis
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
-}
-
-func ExperimentalFeaturesInterceptorProvider(
-	dc *dynamicconfig.Collection,
-	namespaceRegistry namespace.Registry,
-) *interceptor.ExperimentalFeaturesInterceptor {
-	return interceptor.NewExperimentalFeaturesInterceptor(
-		dynamicconfig.FrontendEnabledExperiments.Get(dc),
-		namespaceRegistry,
-	)
 }

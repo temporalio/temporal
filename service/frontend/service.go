@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -213,7 +214,19 @@ type Config struct {
 	ListWorkersEnabled      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkerCommandsEnabled   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	HTTPAllowedHosts dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	HTTPAllowedHosts    dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	EnabledExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+}
+
+// IsExperimentEnabled checks if an experiment is enabled for a given namespace
+func (c *Config) IsExperimentEnabled(experiment string, namespace string) bool {
+	enabledExperiments := c.EnabledExperiments(namespace)
+	for _, enabled := range enabledExperiments {
+		if strings.EqualFold(enabled, experiment) {
+			return true
+		}
+	}
+	return false
 }
 
 // NewConfig returns new service config with default values
@@ -351,7 +364,8 @@ func NewConfig(
 		ListWorkersEnabled:             dynamicconfig.ListWorkersEnabled.Get(dc),
 		WorkerCommandsEnabled:          dynamicconfig.WorkerCommandsEnabled.Get(dc),
 
-		HTTPAllowedHosts: dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
+		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
+		EnabledExperiments: dynamicconfig.FrontendEnabledExperiments.Get(dc),
 	}
 }
 
