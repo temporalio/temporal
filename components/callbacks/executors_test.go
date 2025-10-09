@@ -70,7 +70,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 	cases := []struct {
 		name                  string
 		caller                callbacks.HTTPCaller
-		destinationDown       bool
+		retryable             bool
 		expectedMetricOutcome string
 		assertOutcome         func(*testing.T, callbacks.Callback)
 	}{
@@ -79,7 +79,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
 			},
-			destinationDown:       false,
+			retryable:             false,
 			expectedMetricOutcome: "status:200",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_SUCCEEDED, cb.State())
@@ -90,7 +90,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return nil, errors.New("fake failure")
 			},
-			destinationDown:       true,
+			retryable:             true,
 			expectedMetricOutcome: "unknown-error",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
@@ -101,7 +101,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
 			},
-			destinationDown:       true,
+			retryable:             true,
 			expectedMetricOutcome: "status:500",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
@@ -112,7 +112,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 400, Body: http.NoBody}, nil
 			},
-			destinationDown:       false,
+			retryable:             false,
 			expectedMetricOutcome: "status:400",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
@@ -203,9 +203,8 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 				callbacks.NewInvocationTask("http://localhost"),
 			)
 
-			if tc.destinationDown {
-				var destinationDownErr *queues.DestinationDownError
-				require.ErrorAs(t, err, &destinationDownErr)
+			if tc.retryable {
+				require.NotErrorAs(t, err, &queues.UnprocessableTaskError{})
 			} else {
 				require.NoError(t, err)
 			}
@@ -469,12 +468,12 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 	}
 
 	cases := []struct {
-		name               string
-		setupHistoryClient func(*testing.T, *gomock.Controller) *historyservicemock.MockHistoryServiceClient
-		completion         nexus.OperationCompletion
-		headerValue        string
-		expectedError      error
-		assertOutcome      func(*testing.T, callbacks.Callback)
+		name                 string
+		setupHistoryClient   func(*testing.T, *gomock.Controller) *historyservicemock.MockHistoryServiceClient
+		completion           nexus.OperationCompletion
+		headerValue          string
+		expectsInternalError bool
+		assertOutcome        func(*testing.T, callbacks.Callback)
 	}{
 		{
 			name: "success-with-successful-operation",
@@ -569,8 +568,8 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.NoError(t, err)
 				return comp
 			}(),
-			headerValue:   encodedRef,
-			expectedError: errors.New("destination down: failed to complete Nexus operation: rpc error: code = Unavailable desc = service unavailable"),
+			headerValue:          encodedRef,
+			expectsInternalError: true,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
 			},
@@ -593,8 +592,8 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.NoError(t, err)
 				return comp
 			}(),
-			headerValue:   encodedRef,
-			expectedError: errors.New("unprocessable task: failed to complete Nexus operation: rpc error: code = InvalidArgument desc = invalid request"),
+			headerValue:          encodedRef,
+			expectsInternalError: true,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},
@@ -613,8 +612,8 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.NoError(t, err)
 				return comp
 			}(),
-			headerValue:   "invalid-base64!!!",
-			expectedError: errors.New("unprocessable task: failed to decode CHASM ComponentRef: illegal base64 data at input byte 14"),
+			headerValue:          "invalid-base64!!!",
+			expectsInternalError: true,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},
@@ -633,8 +632,8 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.NoError(t, err)
 				return comp
 			}(),
-			headerValue:   base64.RawURLEncoding.EncodeToString([]byte("not-valid-protobuf")),
-			expectedError: errors.New("unprocessable task: failed to unmarshal CHASM ComponentRef: proto:"), //nolint:revive
+			headerValue:          base64.RawURLEncoding.EncodeToString([]byte("not-valid-protobuf")),
+			expectsInternalError: true,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},
@@ -725,9 +724,9 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				callbacks.InvocationTask{},
 			)
 
-			if tc.expectedError != nil {
+			if tc.expectsInternalError {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectedError.Error())
+				require.Contains(t, err.Error(), "internal error, reference-id:")
 			} else {
 				require.NoError(t, err)
 			}
