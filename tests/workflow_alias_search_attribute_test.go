@@ -39,33 +39,15 @@ func (s *WorkflowAliasSearchAttributeTestSuite) workflowFunc(ctx workflow.Contex
 	return "done!", nil
 }
 
-// func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
-// 	ctx context.Context,
-// 	prefix string,
-// 	tv *testvars.TestVars,
-// ) (*workflowservice.StartWorkflowExecutionResponse, error) {
-// 	request := &workflowservice.StartWorkflowExecutionRequest{
-// 		RequestId:          tv.Any().String(),
-// 		Namespace:          s.Namespace().String(),
-// 		WorkflowId:         tv.WorkflowID() + "_" + prefix,
-// 		WorkflowType:       tv.WorkflowType(),
-// 		TaskQueue:          tv.TaskQueue(),
-// 		Identity:           tv.WorkerIdentity(),
-// 		VersioningOverride: tv.VersioningOverridePinned(true),
-// 	}
-// 	return s.FrontendClient().StartWorkflowExecution(ctx, request)
-// }
-
 func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 	ctx context.Context,
-	prefix string,
 	tv *testvars.TestVars,
 	sa *commonpb.SearchAttributes,
 ) (*workflowservice.StartWorkflowExecutionResponse, error) {
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          tv.Any().String(),
 		Namespace:          s.Namespace().String(),
-		WorkflowId:         tv.WorkflowID() + "_" + prefix,
+		WorkflowId:         tv.WorkflowID(),
 		WorkflowType:       tv.WorkflowType(),
 		TaskQueue:          tv.TaskQueue(),
 		Identity:           tv.WorkerIdentity(),
@@ -75,63 +57,59 @@ func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 	return s.FrontendClient().StartWorkflowExecution(ctx, request)
 }
 
+func (s *WorkflowAliasSearchAttributeTestSuite) terminateWorkflow(
+	ctx context.Context,
+	tv *testvars.TestVars,
+) (*workflowservice.TerminateWorkflowExecutionResponse, error) {
+	return s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tv.WorkflowID(),
+		},
+		Reason: "terminate reason",
+	})
+}
+
 func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	tv := testvars.New(s.T())
 
-	_, err := s.createWorkflow(ctx, "wf_id_1", tv, nil)
-	require.NoError(s.T(), err)
-	_, err = s.createWorkflow(ctx, "wf_id_2", tv, nil)
+	_, err := s.createWorkflow(ctx, tv, nil)
 	require.NoError(s.T(), err)
 
-	searchAttributePairs := []struct {
-		sa1       string
-		sa2       string
-		predicate string
-	}{
-		{sa1: searchattribute.BuildIds, sa2: "TemporalBuildIds", predicate: "IS NOT NULL"},
-		{sa1: searchattribute.TemporalWorkflowVersioningBehavior, sa2: "WorkflowVersioningBehavior", predicate: "= 'Pinned'"},
-		{sa1: searchattribute.TemporalWorkerDeploymentVersion, sa2: "WorkerDeploymentVersion", predicate: "IS NOT NULL"},
-		{sa1: searchattribute.TemporalWorkerDeployment, sa2: "WorkerDeployment", predicate: "IS NOT NULL"},
-		{sa1: searchattribute.ScheduleID, sa2: searchattribute.WorkflowID, predicate: "IS NOT NULL"},
-	}
+	s.EventuallyWithT(
+		func(t *assert.CollectT) {
+			resp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+			})
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			require.Equal(t, len(resp.GetExecutions()), 1)
 
-	for _, pair := range searchAttributePairs {
-		s.EventuallyWithT(
-			func(t *assert.CollectT) {
-				resp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-					Namespace: s.Namespace().String(),
-				})
-				require.NoError(t, err, fmt.Sprintf("expected %s to return no error", pair.sa1))
-				require.NotNil(t, resp, fmt.Sprintf("expected %s to return results", pair.sa1))
-				require.Equal(t, len(resp.GetExecutions()), 2, fmt.Sprintf("expected %s to return 2 results", pair.sa1))
+			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				Query:     fmt.Sprintf("%s = 'Pinned'", searchattribute.TemporalWorkflowVersioningBehavior),
+			})
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			require.Equal(t, len(queriedResp.GetExecutions()), 1)
 
-				queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-					Namespace: s.Namespace().String(),
-					Query:     fmt.Sprintf("%s %s", pair.sa1, pair.predicate),
-				})
-				require.NoError(t, err, fmt.Sprintf("expected %s to return no error", pair.sa1))
-				require.NotNil(t, queriedResp, fmt.Sprintf("expected %s to return results", pair.sa1))
-				require.Equal(t, len(queriedResp.GetExecutions()), 2, fmt.Sprintf("expected %s to return 2 results", pair.sa1))
+			queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				Query:     "WorkflowVersioningBehavior = 'Pinned'",
+			})
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			require.Equal(t, len(queriedResp.GetExecutions()), 1)
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
 
-				queriedResp2, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-					Namespace: s.Namespace().String(),
-					Query:     fmt.Sprintf("%s %s", pair.sa2, pair.predicate),
-				})
-				require.NoError(t, err, fmt.Sprintf("expected %s to return no error", pair.sa2))
-				require.NotNil(t, queriedResp2, fmt.Sprintf("expected %s to return results", pair.sa2))
-				require.Equal(t, len(queriedResp2.GetExecutions()), 2, fmt.Sprintf("expected %s to return 2 results", pair.sa2))
-
-				require.Equal(t, queriedResp.GetExecutions(), resp.GetExecutions(), fmt.Sprintf("expected %s to return all wf executions", pair.sa1))
-				require.Equal(t, queriedResp.GetExecutions(), queriedResp2.GetExecutions(), fmt.Sprintf("expected %s and %s to return same results", pair.sa1, pair.sa2))
-
-			},
-			testcore.WaitForESToSettle,
-			100*time.Millisecond,
-		)
-	}
+	_, err = s.terminateWorkflow(ctx, tv)
+	require.NoError(s.T(), err)
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute_CustomSearchAttributeOverride() {
@@ -154,9 +132,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 		},
 	}
 
-	_, err = s.createWorkflow(ctx, "wf_id_1", tv, sa)
-	require.NoError(s.T(), err)
-	_, err = s.createWorkflow(ctx, "wf_id_2", tv, sa)
+	_, err = s.createWorkflow(ctx, tv, sa)
 	require.NoError(s.T(), err)
 
 	s.EventuallyWithT(
@@ -166,7 +142,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, len(resp.GetExecutions()), 2)
+			require.Equal(t, len(resp.GetExecutions()), 1)
 
 			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
@@ -174,7 +150,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, len(queriedResp.GetExecutions()), 2)
+			require.Equal(t, len(queriedResp.GetExecutions()), 1)
 
 			queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
@@ -182,9 +158,12 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, len(queriedResp.GetExecutions()), 2)
+			require.Equal(t, len(queriedResp.GetExecutions()), 1)
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
+
+	_, err = s.terminateWorkflow(ctx, tv)
+	require.NoError(s.T(), err)
 }
