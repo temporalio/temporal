@@ -356,8 +356,6 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 
 	pendingActivityInfos := mutableState.GetPendingActivityInfos()
 
-	refreshActivityTimerTask := false
-
 	for _, activityInfo := range pendingActivityInfos {
 
 		// Skip task generation if this activity has not been updated since minVersionedTransition.
@@ -379,8 +377,6 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 			}
 		}
 
-		refreshActivityTimerTask = true
-
 		if activityInfo.StartedEventId != common.EmptyEventID {
 			continue
 		}
@@ -394,10 +390,6 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 		); err != nil {
 			return err
 		}
-	}
-
-	if !refreshActivityTimerTask {
-		return nil
 	}
 
 	_, err := NewTimerSequence(mutableState).CreateNextActivityTimer()
@@ -414,8 +406,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 		return nil
 	}
 
-	refreshUserTimerTask := false
-
 	pendingTimerInfos := mutableState.GetPendingTimerInfos()
 	for _, timerInfo := range pendingTimerInfos {
 
@@ -427,8 +417,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 			continue
 		}
 
-		refreshUserTimerTask = true
-
 		// need to update user timer task mask for which task is generated
 		if err := mutableState.UpdateUserTimerTaskStatus(
 			timerInfo.TimerId,
@@ -436,10 +424,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 		); err != nil {
 			return err
 		}
-	}
-
-	if !refreshUserTimerTask {
-		return nil
 	}
 
 	_, err := NewTimerSequence(mutableState).CreateNextUserTimer()
