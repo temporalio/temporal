@@ -845,6 +845,8 @@ func (d *namespaceHandler) createResponse(
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
 ) (*namespacepb.NamespaceInfo, *namespacepb.NamespaceConfig, *replicationpb.NamespaceReplicationConfig, []*replicationpb.FailoverStatus) {
 
+	numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute := d.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(info.Name)
+
 	infoResult := &namespacepb.NamespaceInfo{
 		Name:        info.Name,
 		State:       info.State,
@@ -854,9 +856,10 @@ func (d *namespaceHandler) createResponse(
 		Id:          info.Id,
 
 		Capabilities: &namespacepb.NamespaceInfo_Capabilities{
-			EagerWorkflowStart: d.config.EnableEagerWorkflowStart(info.Name),
-			SyncUpdate:         d.config.EnableUpdateWorkflowExecution(info.Name),
-			AsyncUpdate:        d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
+			EagerWorkflowStart:              d.config.EnableEagerWorkflowStart(info.Name),
+			SyncUpdate:                      d.config.EnableUpdateWorkflowExecution(info.Name),
+			AsyncUpdate:                     d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
+			ReportedProblemsSearchAttribute: numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0,
 		},
 		SupportsSchedules: d.config.EnableSchedules(info.Name),
 	}
