@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/temporalio/tctl-kit/pkg/color"
+	"github.com/fatih/color"
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -243,24 +243,24 @@ func AdminDescribeWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	}
 
 	if resp != nil {
-		fmt.Fprintln(c.App.Writer, color.Green(c, "Cache mutable state:"))
+		fmt.Fprintln(c.App.Writer, color.GreenString("Cache mutable state:"))
 		if resp.GetCacheMutableState() != nil {
 			prettyPrintJSONObject(c, resp.GetCacheMutableState())
 		}
-		fmt.Fprintln(c.App.Writer, color.Green(c, "Database mutable state:"))
+		fmt.Fprintln(c.App.Writer, color.GreenString("Database mutable state:"))
 		prettyPrintJSONObject(c, resp.GetDatabaseMutableState())
 
-		fmt.Fprintln(c.App.Writer, color.Green(c, "Current branch token:"))
+		fmt.Fprintln(c.App.Writer, color.GreenString("Current branch token:"))
 		versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
 		// if VersionHistories is set, then all branch infos are stored in VersionHistories
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 		if err != nil {
-			fmt.Fprintln(c.App.Writer, color.Red(c, "Unable to get current version history:"), err)
+			fmt.Fprintln(c.App.Writer, color.RedString("Unable to get current version history:"), err)
 		} else {
 			currentBranchToken := persistencespb.HistoryBranch{}
 			err := currentBranchToken.Unmarshal(currentVersionHistory.BranchToken)
 			if err != nil {
-				fmt.Fprintln(c.App.Writer, color.Red(c, "Unable to unmarshal current branch token:"), err)
+				fmt.Fprintln(c.App.Writer, color.RedString("Unable to unmarshal current branch token:"), err)
 			} else {
 				prettyPrintJSONObject(c, &currentBranchToken)
 			}

@@ -1192,6 +1192,7 @@ func (m updateShardRequestMatcher) String() string {
 func (s *controllerSuite) readMetricsCounter(name string, nonSystemTags ...metrics.Tag) float64 {
 	expectedSystemTags := []metrics.Tag{
 		metrics.StringTag("otel_scope_name", "temporal"),
+		metrics.StringTag("otel_scope_schema_url", ""),
 		metrics.StringTag("otel_scope_version", ""),
 	}
 	snapshot, err := s.metricsTestHandler.Snapshot()
