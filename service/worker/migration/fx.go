@@ -93,15 +93,15 @@ func (wc *replicationWorkerComponent) DedicatedActivityWorkerOptions() *workerco
 func workflowVerifierProvider() WorkflowVerifier {
 	return func(
 		ctx context.Context,
-		request *verifyReplicationTasksRequest,
+		request *VerifyReplicationTasksRequest,
 		remoteAdminClient adminservice.AdminServiceClient,
 		localAdminClient adminservice.AdminServiceClient,
 		ns *namespace.Namespace,
 		we *commonpb.WorkflowExecution,
 		mu *adminservice.DescribeMutableStateResponse,
-	) (verifyResult, error) {
-		return verifyResult{
-			status: verified,
+	) (VerifyResult, error) {
+		return VerifyResult{
+			Status: verified,
 		}, nil
 	}
 }
