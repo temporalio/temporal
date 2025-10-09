@@ -254,6 +254,18 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueKey", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).QueueKey))
 }
 
+// SetupDraining mocks base method.
+func (m *MockphysicalTaskQueueManager) SetupDraining() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetupDraining")
+}
+
+// SetupDraining indicates an expected call of SetupDraining.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) SetupDraining() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetupDraining", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).SetupDraining))
+}
+
 // SpoolTask mocks base method.
 func (m *MockphysicalTaskQueueManager) SpoolTask(taskInfo *persistence.TaskInfo) error {
 	m.ctrl.T.Helper()

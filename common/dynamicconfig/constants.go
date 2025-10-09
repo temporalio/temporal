@@ -1324,6 +1324,11 @@ second per poller by one physical queue manager`,
 		false,
 		`Enable fairness for task dispatching. Implies matching.useNewMatcher.`,
 	)
+	MatchingEnableMigration = NewTaskQueueBoolSetting(
+		"matching.enableMigration",
+		false,
+		`Allows migration between v1 and v2 (fairness) task backlogs.`,
+	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(
 		"matching.priorityLevels",
 		5,
