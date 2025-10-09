@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"golang.org/x/sync/errgroup"
 )
 
 type (
@@ -150,7 +151,7 @@ func TestDLQWriter_ConcurrentWrites(t *testing.T) {
 	writer := queues.NewDLQWriter(queueWriter, metricsHandler, logger, namespaceRegistry)
 
 	const numConcurrentWrites = 50
-	var wg sync.WaitGroup
+	var g errgroup.Group
 	var concurrentAccessCount atomic.Int32
 	var maxConcurrentAccess atomic.Int32
 
@@ -179,20 +180,19 @@ func TestDLQWriter_ConcurrentWrites(t *testing.T) {
 			}
 		}
 
-		// Simulate some work that could cause race conditions
-		time.Sleep(10 * time.Millisecond)
+		// Simulate some work that could cause race conditions.
+		time.Sleep(10 * time.Millisecond) //nolint:forbidigo
 
 		// Decrement counter
 		concurrentAccessCount.Add(-1)
 
-		return &persistence.EnqueueTaskResponse{Metadata: persistence.MessageMetadata{ID: int64(len(queueWriter.EnqueueTaskRequests) - 1)}}, nil
+		return &persistence.EnqueueTaskResponse{Metadata: persistence.MessageMetadata{ID: 0}}, nil
 	}
 
 	// Launch concurrent writes to the same DLQ
 	for i := 0; i < numConcurrentWrites; i++ {
-		wg.Add(1)
-		go func(task *tasks.WorkflowTask) {
-			defer wg.Done()
+		task := testTasks[i]
+		g.Go(func() error {
 			err := writer.WriteTaskToDLQ(
 				context.Background(),
 				"source-cluster",
@@ -202,10 +202,11 @@ func TestDLQWriter_ConcurrentWrites(t *testing.T) {
 				true,
 			)
 			require.NoError(t, err)
-		}(testTasks[i])
+			return nil
+		})
 	}
 
-	wg.Wait()
+	require.NoError(t, g.Wait())
 
 	// Verify all writes succeeded
 	require.Len(t, queueWriter.EnqueueTaskRequests, numConcurrentWrites)
@@ -229,7 +230,8 @@ func TestDLQWriter_ConcurrentWritesDifferentQueues(t *testing.T) {
 	writer := queues.NewDLQWriter(queueWriter, metricsHandler, logger, namespaceRegistry)
 
 	const numConcurrentWrites = 50
-	var wg sync.WaitGroup
+	const numQueues = 5
+	var g errgroup.Group
 	var concurrentAccessCount atomic.Int32
 	var maxConcurrentAccess atomic.Int32
 
@@ -238,23 +240,23 @@ func TestDLQWriter_ConcurrentWritesDifferentQueues(t *testing.T) {
 		current := concurrentAccessCount.Add(1)
 
 		for {
-			max := maxConcurrentAccess.Load()
-			if current <= max || maxConcurrentAccess.CompareAndSwap(max, current) {
+			maxValue := maxConcurrentAccess.Load()
+			if current <= maxValue || maxConcurrentAccess.CompareAndSwap(maxValue, current) {
 				break
 			}
 		}
 
-		time.Sleep(10 * time.Millisecond)
+		// Simulate some work that could cause race conditions.
+		time.Sleep(10 * time.Millisecond) //nolint:forbidigo
 		concurrentAccessCount.Add(-1)
 
-		return &persistence.EnqueueTaskResponse{Metadata: persistence.MessageMetadata{ID: int64(len(queueWriter.EnqueueTaskRequests) - 1)}}, nil
+		return &persistence.EnqueueTaskResponse{Metadata: persistence.MessageMetadata{ID: 0}}, nil
 	}
 
 	// Launch concurrent writes to DIFFERENT target clusters (different DLQs)
 	for i := 0; i < numConcurrentWrites; i++ {
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
+		index := i
+		g.Go(func() error {
 			task := &tasks.WorkflowTask{
 				WorkflowKey: definition.WorkflowKey{
 					NamespaceID: string(tests.NamespaceID),
@@ -263,7 +265,7 @@ func TestDLQWriter_ConcurrentWritesDifferentQueues(t *testing.T) {
 				},
 			}
 			// Use different target clusters to create different queue keys
-			targetCluster := "target-cluster-" + string(rune('A'+index))
+			targetCluster := "target-cluster-" + string(rune('A'+index%numQueues))
 			err := writer.WriteTaskToDLQ(
 				context.Background(),
 				"source-cluster",
@@ -273,17 +275,19 @@ func TestDLQWriter_ConcurrentWritesDifferentQueues(t *testing.T) {
 				true,
 			)
 			require.NoError(t, err)
-		}(i)
+			return nil
+		})
 	}
 
-	wg.Wait()
+	require.NoError(t, g.Wait())
 
 	// Verify all writes succeeded
 	require.Len(t, queueWriter.EnqueueTaskRequests, numConcurrentWrites)
 
 	// Since these are different queues, they should be able to execute concurrently
-	// We expect to see more than 1 concurrent access
+	// We expect to see more than 1 concurrent access, but less than or equal to numQueues.
 	assert.Greater(t, maxConcurrentAccess.Load(), int32(1),
-		"Expected concurrent access to different queues (> 1), but got %d. "+
-			"This indicates locks may be too coarse-grained.", maxConcurrentAccess.Load())
+		"Expected concurrent access to different queues (> 1), but got %d.", maxConcurrentAccess.Load())
+	assert.LessOrEqual(t, maxConcurrentAccess.Load(), int32(numQueues),
+		"Expected less than %d concurrent accesses, but got %d.", numQueues, maxConcurrentAccess.Load())
 }

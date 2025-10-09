@@ -131,10 +131,12 @@ func (q *DLQWriter) WriteTaskToDLQ(
 // This provides process-level locking to serialize concurrent writes to the same queue.
 func (q *DLQWriter) getQueueMutex(queueKey persistence.QueueKey) *sync.Mutex {
 	if mu, ok := q.enqueueMutex.Load(queueKey); ok {
-		return mu.(*sync.Mutex)
+		mutex, _ := mu.(*sync.Mutex)
+		return mutex
 	}
 
 	newMutex := &sync.Mutex{}
 	actual, _ := q.enqueueMutex.LoadOrStore(queueKey, newMutex)
-	return actual.(*sync.Mutex)
+	mutex, _ := actual.(*sync.Mutex)
+	return mutex
 }
