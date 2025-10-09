@@ -76,7 +76,11 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 }
 
 func (h *handler) DescribeActivityExecution(ctx context.Context, req *activitypb.DescribeActivityExecutionRequest) (*activitypb.DescribeActivityExecutionResponse, error) {
-	act, err := GetActivity(ctx, req)
+	act, err := GetActivity(ctx, chasm.EntityKey{
+		NamespaceID: req.NamespaceId,
+		BusinessID:  req.GetFrontendRequest().GetActivityId(),
+		EntityID:    req.GetFrontendRequest().GetRunId(),
+	})
 	if err != nil {
 		return nil, err
 	}

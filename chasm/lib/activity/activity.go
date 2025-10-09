@@ -44,16 +44,10 @@ func NewActivity(namespace, namespaceID, activityId string,
 	}
 }
 
-func GetActivity(ctx context.Context, req *activitypb.DescribeActivityExecutionRequest) (*Activity, error) {
+func GetActivity(ctx context.Context, key chasm.EntityKey) (*Activity, error) {
 	state, err := chasm.ReadComponent(
 		ctx,
-		chasm.NewComponentRef[*Activity](
-			chasm.EntityKey{
-				NamespaceID: req.NamespaceId,
-				BusinessID:  req.GetFrontendRequest().GetActivityId(),
-				EntityID:    req.GetFrontendRequest().GetRunId(),
-			},
-		),
+		chasm.NewComponentRef[*Activity](key),
 		func(
 			a *Activity,
 			ctx chasm.Context,
