@@ -5,6 +5,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/quotas"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/archival"
@@ -66,6 +67,10 @@ func NewArchivalQueueFactory(
 
 // newHostScheduler creates a new task scheduler for tasks on the archival queue.
 func newHostScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
+	rateLimiter := queues.SchedulerRateLimiter(quotas.NoopRequestRateLimiter)
+	if params.Config.TaskSchedulerEnableRateLimiter() {
+		rateLimiter = params.SchedulerRateLimiter
+	}
 	return queues.NewScheduler(
 		params.ClusterMetadata.GetCurrentClusterName(),
 		queues.SchedulerOptions{
@@ -76,6 +81,7 @@ func newHostScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
 		},
 		params.NamespaceRegistry,
 		params.Logger,
+		rateLimiter,
 	)
 }
 
@@ -126,21 +132,6 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationArchivalQueueProcessorScope))
 
 	var shardScheduler = f.HostScheduler
-	if f.Config.TaskSchedulerEnableRateLimiter() {
-		shardScheduler = queues.NewRateLimitedScheduler(
-			f.HostScheduler,
-			queues.RateLimitedSchedulerOptions{
-				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
-				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
-			},
-			f.ClusterMetadata.GetCurrentClusterName(),
-			f.NamespaceRegistry,
-			f.SchedulerRateLimiter,
-			f.TimeSource,
-			logger,
-			metricsHandler,
-		)
-	}
 
 	rescheduler := queues.NewRescheduler(
 		shardScheduler,
