@@ -50,8 +50,8 @@ func GetActivity(ctx context.Context, req *activitypb.DescribeActivityExecutionR
 		chasm.NewComponentRef[*Activity](
 			chasm.EntityKey{
 				NamespaceID: req.NamespaceId,
-				BusinessID:  req.GetFrontendRequest().GetExecution().GetActivityId(),
-				EntityID:    req.GetFrontendRequest().GetExecution().GetRunId(), // TODO this is hacked
+				BusinessID:  req.GetFrontendRequest().GetActivityId(),
+				EntityID:    req.GetFrontendRequest().GetRunId(), // TODO this is hacked
 			},
 		),
 		func(

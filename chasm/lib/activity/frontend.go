@@ -47,8 +47,8 @@ func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workf
 }
 
 func (h *frontendHandler) DescribeActivityExecution(ctx context.Context, req *workflowservice.DescribeActivityExecutionRequest) (*workflowservice.DescribeActivityExecutionResponse, error) {
-	parts := strings.Split(req.Execution.RunId, "|") // TODO unhack
-	req.Execution.RunId = parts[0]
+	parts := strings.Split(req.RunId, "|") // TODO unhack
+	req.RunId = parts[0]
 
 	resp, err := h.client.DescribeActivityExecution(ctx, &activitypb.DescribeActivityExecutionRequest{
 		NamespaceId:     parts[1],
