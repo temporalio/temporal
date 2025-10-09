@@ -34,6 +34,8 @@ linters:
           msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
         - pattern: panic
           msg: "Please avoid using panic in application code"
+        - p: 'require\.Assertions'
+          msg: "use require functions directly instead of require.Assertions"
     importas:
       # Enforce the aliases below.
       no-unaliased: true
