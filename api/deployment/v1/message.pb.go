@@ -92,15 +92,11 @@ type DeploymentVersionData struct {
 	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
 	RoutingUpdateTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=routing_update_time,json=routingUpdateTime,proto3" json:"routing_update_time,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
+	//     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
 	// Nil if not current.
 	CurrentSinceTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=current_since_time,json=currentSinceTime,proto3" json:"current_since_time,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
+	//     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
 	// Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
 	RampingSinceTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=ramping_since_time,json=rampingSinceTime,proto3" json:"ramping_since_time,omitempty"`
 	// Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
@@ -192,15 +188,11 @@ type VersionLocalState struct {
 	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
 	RoutingUpdateTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=routing_update_time,json=routingUpdateTime,proto3" json:"routing_update_time,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
+	//     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
 	// Nil if not current.
 	CurrentSinceTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=current_since_time,json=currentSinceTime,proto3" json:"current_since_time,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
+	//     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
 	// Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
 	RampingSinceTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=ramping_since_time,json=rampingSinceTime,proto3" json:"ramping_since_time,omitempty"`
 	// Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
@@ -213,16 +205,16 @@ type VersionLocalState struct {
 	// Helps user determine when it is safe to decommission the workers of this
 	// Version. Not present when version is current or ramping.
 	// Current limitations:
-	//   - Not supported for Unversioned mode.
-	//   - Periodically refreshed, may have delays up to few minutes (consult the
-	//     last_checked_time value).
-	//   - Refreshed only when version is not current or ramping AND the status is not
-	//     "drained" yet.
-	//   - Once the status is changed to "drained", it is not changed until the Version
-	//     becomes Current or Ramping again, at which time the drainage info is cleared.
-	//     This means if the Version is "drained" but new workflows are sent to it via
-	//     Pinned Versioning Override, the status does not account for those Pinned-override
-	//     executions and remains "drained".
+	// - Not supported for Unversioned mode.
+	// - Periodically refreshed, may have delays up to few minutes (consult the
+	//   last_checked_time value).
+	// - Refreshed only when version is not current or ramping AND the status is not
+	//   "drained" yet.
+	// - Once the status is changed to "drained", it is not changed until the Version
+	//   becomes Current or Ramping again, at which time the drainage info is cleared.
+	//   This means if the Version is "drained" but new workflows are sent to it via
+	//   Pinned Versioning Override, the status does not account for those Pinned-override
+	//   executions and remains "drained".
 	DrainageInfo *v11.VersionDrainageInfo `protobuf:"bytes,7,opt,name=drainage_info,json=drainageInfo,proto3" json:"drainage_info,omitempty"`
 	// Arbitrary user-provided metadata attached to this version.
 	Metadata                  *v11.VersionMetadata `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
@@ -639,15 +631,11 @@ type WorkerDeploymentVersionSummary struct {
 	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
 	RoutingUpdateTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=routing_update_time,json=routingUpdateTime,proto3" json:"routing_update_time,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
+	//     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
 	// Nil if not current.
 	CurrentSinceTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=current_since_time,json=currentSinceTime,proto3" json:"current_since_time,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
+	//     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
 	// Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
 	RampingSinceTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=ramping_since_time,json=rampingSinceTime,proto3" json:"ramping_since_time,omitempty"`
 	// Timestamp when this version first became current or ramping.
@@ -995,15 +983,11 @@ type SyncVersionStateUpdateArgs struct {
 	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
 	RoutingUpdateTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=routing_update_time,json=routingUpdateTime,proto3" json:"routing_update_time,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
+	//     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
 	// Nil if not current.
 	CurrentSinceTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=current_since_time,json=currentSinceTime,proto3" json:"current_since_time,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
+	//     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
 	// Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
 	RampingSinceTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=ramping_since_time,json=rampingSinceTime,proto3" json:"ramping_since_time,omitempty"`
 	// Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
