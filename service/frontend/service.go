@@ -214,7 +214,7 @@ type Config struct {
 	ListWorkersEnabled      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkerCommandsEnabled   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	HTTPAllowedHosts    dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	HTTPAllowedHosts   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	EnabledExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 }
 
@@ -222,7 +222,7 @@ type Config struct {
 func (c *Config) IsExperimentEnabled(experiment string, namespace string) bool {
 	enabledExperiments := c.EnabledExperiments(namespace)
 	for _, enabled := range enabledExperiments {
-		if strings.EqualFold(enabled, experiment) {
+		if enabled == experiment {
 			return true
 		}
 	}
