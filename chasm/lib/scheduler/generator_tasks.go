@@ -94,9 +94,10 @@ func (g *GeneratorTaskExecutor) Execute(
 	// Write the new high water mark and future action times.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
 	if err := g.updateFutureActionTimes(ctx, generator, scheduler); err != nil {
-		logger.Error("failed to update future action times", tag.Error(err))
+		msg := "failed to update future action times"
+		logger.Error(msg, tag.Error(err))
 		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("failed to update future action times"),
+			serviceerror.NewInternal(msg),
 			err)
 	}
 
