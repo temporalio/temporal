@@ -6,6 +6,8 @@ import (
 
 	"go.temporal.io/api/activity/v1"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
@@ -67,4 +69,32 @@ func GetActivity(ctx context.Context, key chasm.EntityKey) (*Activity, error) {
 		ActivityState: state,
 	}, nil
 
+}
+
+// TODO(dan): Perhaps we should collect here all the heuristics we use to classify different types
+// of objects as being chasm (i.e. standalone) activities.
+func IsChasmActivityTaskToken(token *tokenspb.Task) bool {
+	return token.WorkflowId == ""
+}
+
+// This is a handler for a workflowservice method (as opposed to a method in the service owned by
+// this chasm component).
+// TODO(dan): What is the right place for this?
+func HandleRespondActivityTaskCompleted(
+	ctx context.Context,
+	req *historyservice.RespondActivityTaskCompletedRequest,
+	key chasm.EntityKey,
+) (*historyservice.RespondActivityTaskCompletedResponse, error) {
+	chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*Activity](key),
+		func(a *Activity, ctx chasm.MutableContext, _ any) (struct{}, error) {
+			a.ActivityExecutionInfo.Status = enums.ACTIVITY_EXECUTION_STATUS_COMPLETED
+			a.Outcome = &activitypb.ActivityState_Result{
+				Result: req.CompleteRequest.Result,
+			}
+			return struct{}{}, nil
+		}, nil)
+
+	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
 }

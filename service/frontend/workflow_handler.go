@@ -1453,13 +1453,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	workflowID := request.GetWorkflowId()
-	runID := request.GetRunId() // runID is optional so can be empty
+	workflowID := request.GetWorkflowId() // chasm activities do not have workflowID
+	runID := request.GetRunId()           // runID is optional so can be empty
 	activityID := request.GetActivityId()
 
-	if workflowID == "" {
-		return nil, errWorkflowIDNotSet
-	}
 	if activityID == "" {
 		return nil, errActivityIDNotSet
 	}
