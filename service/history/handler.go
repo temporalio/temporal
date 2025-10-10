@@ -2391,6 +2391,13 @@ func (h *Handler) convertError(err error) error {
 
 func validateTaskToken(taskToken *tokenspb.Task) error {
 	if taskToken.GetWorkflowId() == "" {
+		// TODO(dan): The frontend handler for RespondActivityTaskCompleted constructs a task token
+		// to send to history, but that task token will have no workflow ID for a CHASM activity. I
+		// assume that ScheduledEventId should always be present for a genuine workflow activity, so
+		// doing this for now:
+		if taskToken.GetScheduledEventId() == common.EmptyEventID {
+			return nil
+		}
 		return errWorkflowIDNotSet
 	}
 	return nil

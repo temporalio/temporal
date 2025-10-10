@@ -12,6 +12,8 @@ import (
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/activity/v1"
+	v11 "go.temporal.io/api/common/v1"
+	v12 "go.temporal.io/api/failure/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -29,8 +31,13 @@ type ActivityState struct {
 	NamespaceId           string                    `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	ActivityId            string                    `protobuf:"bytes,3,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
 	ActivityExecutionInfo *v1.ActivityExecutionInfo `protobuf:"bytes,4,opt,name=activity_execution_info,json=activityExecutionInfo,proto3" json:"activity_execution_info,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Types that are valid to be assigned to Outcome:
+	//
+	//	*ActivityState_Result
+	//	*ActivityState_Failure
+	Outcome       isActivityState_Outcome `protobuf_oneof:"outcome"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ActivityState) Reset() {
@@ -91,17 +98,63 @@ func (x *ActivityState) GetActivityExecutionInfo() *v1.ActivityExecutionInfo {
 	return nil
 }
 
+func (x *ActivityState) GetOutcome() isActivityState_Outcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return nil
+}
+
+func (x *ActivityState) GetResult() *v11.Payloads {
+	if x != nil {
+		if x, ok := x.Outcome.(*ActivityState_Result); ok {
+			return x.Result
+		}
+	}
+	return nil
+}
+
+func (x *ActivityState) GetFailure() *v12.Failure {
+	if x != nil {
+		if x, ok := x.Outcome.(*ActivityState_Failure); ok {
+			return x.Failure
+		}
+	}
+	return nil
+}
+
+type isActivityState_Outcome interface {
+	isActivityState_Outcome()
+}
+
+type ActivityState_Result struct {
+	// The result if the activity completed successfully.
+	Result *v11.Payloads `protobuf:"bytes,5,opt,name=result,proto3,oneof"`
+}
+
+type ActivityState_Failure struct {
+	// The failure if the activity completed unsuccessfully.
+	Failure *v12.Failure `protobuf:"bytes,6,opt,name=failure,proto3,oneof"`
+}
+
+func (*ActivityState_Result) isActivityState_Outcome() {}
+
+func (*ActivityState_Failure) isActivityState_Outcome() {}
+
 var File_temporal_server_chasm_lib_activity_proto_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"9temporal/server/chasm/lib/activity/proto/v1/message.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a&temporal/api/activity/v1/message.proto\"\xda\x01\n" +
+	"9temporal/server/chasm/lib/activity/proto/v1/message.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a&temporal/api/activity/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\"\xdf\x02\n" +
 	"\rActivityState\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12!\n" +
 	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vactivity_id\x18\x03 \x01(\tR\n" +
 	"activityId\x12g\n" +
-	"\x17activity_execution_info\x18\x04 \x01(\v2/.temporal.api.activity.v1.ActivityExecutionInfoR\x15activityExecutionInfoBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
+	"\x17activity_execution_info\x18\x04 \x01(\v2/.temporal.api.activity.v1.ActivityExecutionInfoR\x15activityExecutionInfo\x12:\n" +
+	"\x06result\x18\x05 \x01(\v2 .temporal.api.common.v1.PayloadsH\x00R\x06result\x12<\n" +
+	"\afailure\x18\x06 \x01(\v2 .temporal.api.failure.v1.FailureH\x00R\afailureB\t\n" +
+	"\aoutcomeBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_activity_proto_v1_message_proto_rawDescOnce sync.Once
@@ -119,20 +172,28 @@ var file_temporal_server_chasm_lib_activity_proto_v1_message_proto_msgTypes = ma
 var file_temporal_server_chasm_lib_activity_proto_v1_message_proto_goTypes = []any{
 	(*ActivityState)(nil),            // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityState
 	(*v1.ActivityExecutionInfo)(nil), // 1: temporal.api.activity.v1.ActivityExecutionInfo
+	(*v11.Payloads)(nil),             // 2: temporal.api.common.v1.Payloads
+	(*v12.Failure)(nil),              // 3: temporal.api.failure.v1.Failure
 }
 var file_temporal_server_chasm_lib_activity_proto_v1_message_proto_depIdxs = []int32{
 	1, // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityState.activity_execution_info:type_name -> temporal.api.activity.v1.ActivityExecutionInfo
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	2, // 1: temporal.server.chasm.lib.activity.proto.v1.ActivityState.result:type_name -> temporal.api.common.v1.Payloads
+	3, // 2: temporal.server.chasm.lib.activity.proto.v1.ActivityState.failure:type_name -> temporal.api.failure.v1.Failure
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_activity_proto_v1_message_proto_init() }
 func file_temporal_server_chasm_lib_activity_proto_v1_message_proto_init() {
 	if File_temporal_server_chasm_lib_activity_proto_v1_message_proto != nil {
 		return
+	}
+	file_temporal_server_chasm_lib_activity_proto_v1_message_proto_msgTypes[0].OneofWrappers = []any{
+		(*ActivityState_Result)(nil),
+		(*ActivityState_Failure)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

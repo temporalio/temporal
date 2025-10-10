@@ -6,6 +6,8 @@ import (
 
 	"go.temporal.io/api/activity/v1"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
@@ -46,16 +48,10 @@ func NewActivity(namespace, namespaceID, activityId string,
 	}
 }
 
-func GetActivity(ctx context.Context, req *activitypb.DescribeActivityExecutionRequest) (*Activity, error) {
+func GetActivity(ctx context.Context, key chasm.EntityKey) (*Activity, error) {
 	state, err := chasm.ReadComponent(
 		ctx,
-		chasm.NewComponentRef[*Activity](
-			chasm.EntityKey{
-				NamespaceID: req.NamespaceId,
-				BusinessID:  req.GetFrontendRequest().GetActivityId(),
-				EntityID:    req.GetFrontendRequest().GetRunId(),
-			},
-		),
+		chasm.NewComponentRef[*Activity](key),
 		func(
 			a *Activity,
 			ctx chasm.Context,
@@ -93,4 +89,41 @@ func UpdateActivityStarted(ctx context.Context, activityRef chasm.ComponentRef) 
 	}
 
 	return nil
+}
+
+// TODO(dan): Perhaps we should collect here all the heuristics we use to classify different types
+// of objects as being chasm (i.e. standalone) activities.
+func IsChasmActivityTaskToken(token *tokenspb.Task) bool {
+	return token.WorkflowId == ""
+}
+
+// This is a handler for a workflowservice method (as opposed to a method in the service owned by
+// this chasm component).
+// TODO(dan): What is the right place for this?
+func HandleRespondActivityTaskCompleted(
+	ctx context.Context,
+	// TODO(dan): I've wired chasm.Engine through to the history handler in this commit because I
+	// wasn't sure of the best way to get hold of it. If we try to call chasm.UpdateComponent
+	// directly, there's a panic in engineFromContext.
+	engine chasm.Engine,
+	req *historyservice.RespondActivityTaskCompletedRequest,
+	key chasm.EntityKey,
+) (*historyservice.RespondActivityTaskCompletedResponse, error) {
+	_, err := engine.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*Activity](key),
+		func(mutableCtx chasm.MutableContext, component chasm.Component) error {
+			a := component.(*Activity)
+			a.ActivityExecutionInfo.Status = enums.ACTIVITY_EXECUTION_STATUS_COMPLETED
+			a.Outcome = &activitypb.ActivityState_Result{
+				Result: req.CompleteRequest.Result,
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
 }

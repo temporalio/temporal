@@ -145,3 +145,46 @@ func (c *ActivityServiceLayeredClient) DescribeActivityExecution(
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }
+func (c *ActivityServiceLayeredClient) callGetActivityExecutionResultNoRetry(
+	ctx context.Context,
+	request *GetActivityExecutionResultRequest,
+	opts ...grpc.CallOption,
+) (*GetActivityExecutionResultResponse, error) {
+	var response *GetActivityExecutionResultResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("ActivityService.GetActivityExecutionResult"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := int32(rand.Intn(int(c.numShards)) + 1)
+	op := func(ctx context.Context, client ActivityServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.GetActivityExecutionResult(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *ActivityServiceLayeredClient) GetActivityExecutionResult(
+	ctx context.Context,
+	request *GetActivityExecutionResultRequest,
+	opts ...grpc.CallOption,
+) (*GetActivityExecutionResultResponse, error) {
+	call := func(ctx context.Context) (*GetActivityExecutionResultResponse, error) {
+		return c.callGetActivityExecutionResultNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}

@@ -20,8 +20,9 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	ActivityService_StartActivityExecution_FullMethodName    = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/StartActivityExecution"
-	ActivityService_DescribeActivityExecution_FullMethodName = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/DescribeActivityExecution"
+	ActivityService_StartActivityExecution_FullMethodName     = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/StartActivityExecution"
+	ActivityService_DescribeActivityExecution_FullMethodName  = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/DescribeActivityExecution"
+	ActivityService_GetActivityExecutionResult_FullMethodName = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/GetActivityExecutionResult"
 )
 
 // ActivityServiceClient is the client API for ActivityService service.
@@ -30,6 +31,7 @@ const (
 type ActivityServiceClient interface {
 	StartActivityExecution(ctx context.Context, in *StartActivityExecutionRequest, opts ...grpc.CallOption) (*StartActivityExecutionResponse, error)
 	DescribeActivityExecution(ctx context.Context, in *DescribeActivityExecutionRequest, opts ...grpc.CallOption) (*DescribeActivityExecutionResponse, error)
+	GetActivityExecutionResult(ctx context.Context, in *GetActivityExecutionResultRequest, opts ...grpc.CallOption) (*GetActivityExecutionResultResponse, error)
 }
 
 type activityServiceClient struct {
@@ -58,12 +60,22 @@ func (c *activityServiceClient) DescribeActivityExecution(ctx context.Context, i
 	return out, nil
 }
 
+func (c *activityServiceClient) GetActivityExecutionResult(ctx context.Context, in *GetActivityExecutionResultRequest, opts ...grpc.CallOption) (*GetActivityExecutionResultResponse, error) {
+	out := new(GetActivityExecutionResultResponse)
+	err := c.cc.Invoke(ctx, ActivityService_GetActivityExecutionResult_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ActivityServiceServer is the server API for ActivityService service.
 // All implementations must embed UnimplementedActivityServiceServer
 // for forward compatibility
 type ActivityServiceServer interface {
 	StartActivityExecution(context.Context, *StartActivityExecutionRequest) (*StartActivityExecutionResponse, error)
 	DescribeActivityExecution(context.Context, *DescribeActivityExecutionRequest) (*DescribeActivityExecutionResponse, error)
+	GetActivityExecutionResult(context.Context, *GetActivityExecutionResultRequest) (*GetActivityExecutionResultResponse, error)
 	mustEmbedUnimplementedActivityServiceServer()
 }
 
@@ -76,6 +88,9 @@ func (UnimplementedActivityServiceServer) StartActivityExecution(context.Context
 }
 func (UnimplementedActivityServiceServer) DescribeActivityExecution(context.Context, *DescribeActivityExecutionRequest) (*DescribeActivityExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeActivityExecution not implemented")
+}
+func (UnimplementedActivityServiceServer) GetActivityExecutionResult(context.Context, *GetActivityExecutionResultRequest) (*GetActivityExecutionResultResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetActivityExecutionResult not implemented")
 }
 func (UnimplementedActivityServiceServer) mustEmbedUnimplementedActivityServiceServer() {}
 
@@ -126,6 +141,24 @@ func _ActivityService_DescribeActivityExecution_Handler(srv interface{}, ctx con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ActivityService_GetActivityExecutionResult_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetActivityExecutionResultRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ActivityServiceServer).GetActivityExecutionResult(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ActivityService_GetActivityExecutionResult_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ActivityServiceServer).GetActivityExecutionResult(ctx, req.(*GetActivityExecutionResultRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ActivityService_ServiceDesc is the grpc.ServiceDesc for ActivityService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -140,6 +173,10 @@ var ActivityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DescribeActivityExecution",
 			Handler:    _ActivityService_DescribeActivityExecution_Handler,
+		},
+		{
+			MethodName: "GetActivityExecutionResult",
+			Handler:    _ActivityService_GetActivityExecutionResult_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

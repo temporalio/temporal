@@ -152,3 +152,77 @@ func (this *DescribeActivityExecutionResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type GetActivityExecutionResultRequest to the protobuf v3 wire format
+func (val *GetActivityExecutionResultRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GetActivityExecutionResultRequest from the protobuf v3 wire format
+func (val *GetActivityExecutionResultRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GetActivityExecutionResultRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GetActivityExecutionResultRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GetActivityExecutionResultRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GetActivityExecutionResultRequest
+	switch t := that.(type) {
+	case *GetActivityExecutionResultRequest:
+		that1 = t
+	case GetActivityExecutionResultRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type GetActivityExecutionResultResponse to the protobuf v3 wire format
+func (val *GetActivityExecutionResultResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GetActivityExecutionResultResponse from the protobuf v3 wire format
+func (val *GetActivityExecutionResultResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GetActivityExecutionResultResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GetActivityExecutionResultResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GetActivityExecutionResultResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GetActivityExecutionResultResponse
+	switch t := that.(type) {
+	case *GetActivityExecutionResultResponse:
+		that1 = t
+	case GetActivityExecutionResultResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

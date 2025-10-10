@@ -3,6 +3,7 @@ package activity
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"go.temporal.io/api/activity/v1"
 	"go.temporal.io/api/enums/v1"
@@ -76,7 +77,11 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 }
 
 func (h *handler) DescribeActivityExecution(ctx context.Context, req *activitypb.DescribeActivityExecutionRequest) (*activitypb.DescribeActivityExecutionResponse, error) {
-	act, err := GetActivity(ctx, req)
+	act, err := GetActivity(ctx, chasm.EntityKey{
+		NamespaceID: req.NamespaceId,
+		BusinessID:  req.GetFrontendRequest().GetActivityId(),
+		EntityID:    req.GetFrontendRequest().GetRunId(),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -84,5 +89,39 @@ func (h *handler) DescribeActivityExecution(ctx context.Context, req *activitypb
 		FrontendResponse: &workflowservice.DescribeActivityExecutionResponse{
 			Info: act.ActivityExecutionInfo,
 		},
+	}, nil
+}
+
+func (h *handler) GetActivityExecutionResult(ctx context.Context, req *activitypb.GetActivityExecutionResultRequest) (*activitypb.GetActivityExecutionResultResponse, error) {
+	act, err := GetActivity(ctx, chasm.EntityKey{
+		NamespaceID: req.NamespaceId,
+		BusinessID:  req.GetFrontendRequest().GetActivityId(),
+		EntityID:    req.GetFrontendRequest().GetRunId(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if req.GetFrontendRequest().GetWait() {
+		fmt.Fprintln(os.Stderr, "TODO: GetActivityExecutionResult long-polling is not implemented")
+	}
+
+	response := &workflowservice.GetActivityExecutionResultResponse{
+		RunId: act.ActivityExecutionInfo.GetRunId(),
+	}
+
+	switch outcome := act.GetOutcome().(type) {
+	case *activitypb.ActivityState_Result:
+		response.Outcome = &workflowservice.GetActivityExecutionResultResponse_Result{
+			Result: outcome.Result,
+		}
+	case *activitypb.ActivityState_Failure:
+		response.Outcome = &workflowservice.GetActivityExecutionResultResponse_Failure{
+			Failure: outcome.Failure,
+		}
+	}
+
+	return &activitypb.GetActivityExecutionResultResponse{
+		FrontendResponse: response,
 	}, nil
 }

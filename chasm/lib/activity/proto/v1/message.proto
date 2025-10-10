@@ -4,19 +4,20 @@ package temporal.server.chasm.lib.activity.proto.v1;
 
 option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
 
-//import "temporal/api/common/v1/message.proto";
 import "temporal/api/activity/v1/message.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/failure/v1/message.proto";
 
-//message ActivityInfo {
-//  temporal.api.common.v1.ActivityType activity_type = 1;
-//  temporal.api.activity.v1.ActivityOptions activity_options = 2;
-//  // TODO Add more fields as needed
-//
-//}
 
 message ActivityState {
   string namespace = 1;
   string namespace_id = 2;
   string activity_id = 3;
   temporal.api.activity.v1.ActivityExecutionInfo activity_execution_info = 4;
+  oneof outcome {
+    // The result if the activity completed successfully.
+    temporal.api.common.v1.Payloads result = 5;
+    // The failure if the activity completed unsuccessfully.
+    temporal.api.failure.v1.Failure failure = 6;
+  }
 }
