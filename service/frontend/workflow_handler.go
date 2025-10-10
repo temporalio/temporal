@@ -3086,6 +3086,12 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
+	// Check if CHASM scheduler experiment is enabled
+	if headers.IsExperimentEnabled(ctx, scheduler.ChasmSchedulerExperiment) &&
+		wh.config.IsExperimentEnabled(scheduler.ChasmSchedulerExperiment, namespaceName.String()) {
+		wh.logger.Debug("CHASM scheduler enabled for request", tag.ScheduleID(request.ScheduleId))
+	}
+
 	if request.Schedule == nil {
 		request.Schedule = &schedulepb.Schedule{}
 	}
