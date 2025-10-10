@@ -120,8 +120,6 @@ var emptyTasks = []tasks.Task{}
 
 type (
 	// activityTimeoutTasks holds references to all timeout tasks for a single activity.
-	// These are stored in-memory and not persisted. When mutable state is reloaded,
-	// timeout tasks are regenerated based on ActivityInfo.
 	activityTimeoutTasks struct {
 		ScheduleToStartTimeoutTask *tasks.ActivityTimeoutTask
 		ScheduleToCloseTimeoutTask *tasks.ActivityTimeoutTask
@@ -236,9 +234,8 @@ type (
 		wftScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
 		wftStartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
 
-		// In-memory storage for activity timeout tasks. These are set when timeout tasks are
-		// generated and used to delete them when the activity completes/fails. Not persisted to storage.
-		// Map key is the activity's scheduled event ID.
+		// In-memory storage for activity timeout tasks. These are set when timeout tasks are generated and used to
+		// delete them when the activity completes/fails. Map key is the activity's scheduled event ID.
 		activityTimeoutTasks map[int64]*activityTimeoutTasks
 
 		// Do not rely on this, this is only updated on
@@ -1961,7 +1958,6 @@ func (ms *MutableStateImpl) DeleteActivity(
 			// log data inconsistency instead of returning an error
 			ms.logDataInconsistency()
 		}
-		// Record activity timeout tasks for deletion after successful persistence update
 		ms.recordActivityTimeoutTasksForDeletion(scheduledEventID, activityInfo)
 	} else {
 		ms.logError(
@@ -6185,7 +6181,6 @@ func (ms *MutableStateImpl) GetWorkflowTaskStartToCloseTimeoutTask() *tasks.Work
 }
 
 // StoreActivityTimeoutTask stores an activity timeout task reference in memory.
-// This allows the task to be deleted later when the activity progresses through its lifecycle.
 func (ms *MutableStateImpl) StoreActivityTimeoutTask(
 	task *tasks.ActivityTimeoutTask,
 ) {
@@ -6204,10 +6199,12 @@ func (ms *MutableStateImpl) StoreActivityTimeoutTask(
 		timeoutTasks.StartToCloseTimeoutTask = task
 	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 		timeoutTasks.HeartbeatTimeoutTask = task
+	default:
+		// No-op for unhandled timeout types
 	}
 }
 
-// deleteActivityTimeoutTask deletes a specific activity timeout task if it exists.
+// deleteActivityTimeoutTask marks a specific activity timeout task to be deleted.
 // This is used to delete timeout tasks at specific lifecycle points (e.g., when activity starts, when heartbeat is received).
 // The task will be regenerated with updated deadline on the next transaction close if still needed.
 func (ms *MutableStateImpl) deleteActivityTimeoutTask(
@@ -6248,11 +6245,8 @@ func (ms *MutableStateImpl) deleteActivityTimeoutTask(
 	)
 }
 
-// recordActivityTimeoutTasksForDeletion records activity timeout tasks for deletion after successful persistence update.
-// This is called when an activity completes or fails. It deletes ALL remaining timeout tasks for the activity.
-// Normally, ScheduleToStart should already be deleted when the activity started, and Heartbeat should be deleted
-// when heartbeat is received, but we delete them here as well in case they still exist (e.g., activity completed
-// without starting, or completed without sending heartbeat).
+// recordActivityTimeoutTasksForDeletion records activity timeout tasks for deletion. This is called when an activity
+// completes or fails. It deletes all remaining timeout tasks for the activity.
 func (ms *MutableStateImpl) recordActivityTimeoutTasksForDeletion(
 	scheduledEventID int64,
 	activityInfo *persistencespb.ActivityInfo,
@@ -6295,7 +6289,6 @@ func (ms *MutableStateImpl) recordActivityTimeoutTasksForDeletion(
 		)
 	}
 
-	// Clean up the activity timeout tasks from memory
 	delete(ms.activityTimeoutTasks, scheduledEventID)
 }
 
