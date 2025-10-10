@@ -893,25 +893,20 @@ func (s *ActivityTestSuite) TestActivityHeartbeatTimeout_MultipleTimers() {
 	// cleaned up when heartbeat timeouts are refreshed/cancelled during activity execution.
 	s.OverrideDynamicConfig(dynamicconfig.EnableBestEffortDeleteTasksOnWorkflowUpdate, true)
 
-	id := "functional-heartbeat-multiple-timers-test"
-	wt := "functional-heartbeat-multiple-timers-test-type"
-	tl := "functional-heartbeat-multiple-timers-test-taskqueue"
-	identity := "worker1"
-	activityName := "activity_heartbeat_timer"
+	tv := testvars.New(s.T())
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	activityName := "activity_heartbeat_timer"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
 		Namespace:           s.Namespace().String(),
-		WorkflowId:          id,
-		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            identity,
+		Identity:            tv.WorkerIdentity(),
 	}
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
@@ -923,7 +918,7 @@ func (s *ActivityTestSuite) TestActivityHeartbeatTimeout_MultipleTimers() {
 	activityCount := int32(1)
 	activityCounter := int32(0)
 
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		s.Logger.Info("Calling WorkflowTask Handler", tag.Counter(int(activityCounter)), tag.Number(int64(activityCount)))
 
 		if activityCounter < activityCount {
@@ -931,36 +926,40 @@ func (s *ActivityTestSuite) TestActivityHeartbeatTimeout_MultipleTimers() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             convert.Int32ToString(activityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
-					ScheduleToStartTimeout: durationpb.New(1 * time.Second),
-					StartToCloseTimeout:    durationpb.New(15 * time.Second),
-					HeartbeatTimeout:       durationpb.New(1 * time.Second), // 1 second heartbeat timeout
-					RetryPolicy: &commonpb.RetryPolicy{
-						MaximumAttempts: 1, // Disable retry to test heartbeat timeout directly
-					},
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId:             convert.Int32ToString(activityCounter),
+						ActivityType:           &commonpb.ActivityType{Name: activityName},
+						TaskQueue:              tv.TaskQueue(),
+						Input:                  payloads.EncodeBytes(buf.Bytes()),
+						ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(1 * time.Second),
+						StartToCloseTimeout:    durationpb.New(15 * time.Second),
+						HeartbeatTimeout:       durationpb.New(1 * time.Second), // 1 second heartbeat timeout
+						RetryPolicy: &commonpb.RetryPolicy{
+							MaximumAttempts: 1, // Disable retry to test heartbeat timeout directly
+						},
+					}},
 				}},
-			}}, nil
+			}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
-			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-				Result: payloads.EncodeString("Done"),
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Done"),
+				}},
 			}},
-		}}, nil
+		}, nil
 	}
 
 	activityExecutedCount := 0
-	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
 		s.Equal(activityName, task.ActivityType.GetName())
 
 		// Send heartbeats for first 2 seconds (this should cancel/refresh first heartbeat timeout timer)
@@ -984,25 +983,16 @@ func (s *ActivityTestSuite) TestActivityHeartbeatTimeout_MultipleTimers() {
 
 		activityExecutedCount++
 		// Activity should have timed out by now, return success (but it won't be processed)
-		return payloads.EncodeInt(heartbeatCount), false, nil
+		return &workflowservice.RespondActivityTaskCompletedRequest{
+			Result: payloads.EncodeInt(heartbeatCount),
+		}, nil
 	}
 
-	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
-		TaskQueue:           taskQueue,
-		Identity:            identity,
-		WorkflowTaskHandler: wtHandler,
-		ActivityTaskHandler: atHandler,
-		Logger:              s.Logger,
-		T:                   s.T(),
-	}
-
-	_, err := poller.PollAndProcessWorkflowTask()
-	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
+	_, err := s.TaskPoller().PollAndHandleWorkflowTask(tv, wtHandler)
+	s.NoError(err)
 
 	// Activity should timeout due to heartbeat timeout
-	err = poller.PollAndProcessActivityTask(false)
+	_, err = s.TaskPoller().PollAndHandleActivityTask(tv, atHandler)
 	// Not s.ErrorIs() because error goes through RPC.
 	s.IsType(consts.ErrActivityTaskNotFound, err)
 	s.Equal(consts.ErrActivityTaskNotFound.Error(), err.Error())
@@ -1010,13 +1000,13 @@ func (s *ActivityTestSuite) TestActivityHeartbeatTimeout_MultipleTimers() {
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 
 	s.False(workflowComplete)
-	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
+	_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv, wtHandler)
 	s.NoError(err)
 	s.True(workflowComplete)
 
 	// Verify workflow history shows heartbeat timeout
 	events := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
-		WorkflowId: id,
+		WorkflowId: tv.WorkflowID(),
 		RunId:      we.GetRunId(),
 	})
 
