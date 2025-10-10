@@ -214,14 +214,14 @@ type Config struct {
 	WorkerCommandsEnabled   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HTTPAllowedHosts   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
-	EnabledExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	AllowedExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 }
 
 // IsExperimentEnabled checks if an experiment is enabled for a given namespace
 func (c *Config) IsExperimentEnabled(experiment string, namespace string) bool {
-	enabledExperiments := c.EnabledExperiments(namespace)
-	for _, enabled := range enabledExperiments {
-		if enabled == experiment {
+	allowedExperiments := c.AllowedExperiments(namespace)
+	for _, allowed := range allowedExperiments {
+		if allowed == experiment {
 			return true
 		}
 	}
@@ -364,7 +364,7 @@ func NewConfig(
 		WorkerCommandsEnabled:          dynamicconfig.WorkerCommandsEnabled.Get(dc),
 
 		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
-		EnabledExperiments: dynamicconfig.FrontendEnabledExperiments.Get(dc),
+		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),
 	}
 }
 
