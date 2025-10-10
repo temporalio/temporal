@@ -119,6 +119,16 @@ var (
 var emptyTasks = []tasks.Task{}
 
 type (
+	// activityTimeoutTasks holds references to all timeout tasks for a single activity.
+	// These are stored in-memory and not persisted. When mutable state is reloaded,
+	// timeout tasks are regenerated based on ActivityInfo.
+	activityTimeoutTasks struct {
+		ScheduleToStartTimeoutTask *tasks.ActivityTimeoutTask
+		ScheduleToCloseTimeoutTask *tasks.ActivityTimeoutTask
+		StartToCloseTimeoutTask    *tasks.ActivityTimeoutTask
+		HeartbeatTimeoutTask       *tasks.ActivityTimeoutTask
+	}
+
 	MutableStateImpl struct {
 		pendingActivityTimerHeartbeats map[int64]time.Time                    // Scheduled Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
 		pendingActivityInfoIDs         map[int64]*persistencespb.ActivityInfo // Scheduled Event ID -> Activity Info.
@@ -226,6 +236,11 @@ type (
 		wftScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
 		wftStartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
 
+		// In-memory storage for activity timeout tasks. These are set when timeout tasks are
+		// generated and used to delete them when the activity completes/fails. Not persisted to storage.
+		// Map key is the activity's scheduled event ID.
+		activityTimeoutTasks map[int64]*activityTimeoutTasks
+
 		// Do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
 		// a transaction is in progress, this value will be
@@ -275,6 +290,7 @@ func NewMutableState(
 		pendingActivityIDToEventID:     make(map[string]int64),
 		deleteActivityInfos:            make(map[int64]struct{}),
 		syncActivityTasks:              make(map[int64]struct{}),
+		activityTimeoutTasks:           make(map[int64]*activityTimeoutTasks),
 
 		pendingTimerInfoIDs:     make(map[string]*persistencespb.TimerInfo),
 		pendingTimerEventIDToID: make(map[int64]string),
@@ -1836,6 +1852,9 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 			metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope),
 			metrics.NamespaceTag(ms.namespaceEntry.Name().String()))
 	}
+
+	// Delete Heartbeat timeout task since heartbeat has been received
+	ms.deleteActivityTimeoutTask(ai.ScheduledEventId, enumspb.TIMEOUT_TYPE_HEARTBEAT, ai)
 }
 
 // UpdateActivityInfo applies the necessary activity information
@@ -1942,6 +1961,8 @@ func (ms *MutableStateImpl) DeleteActivity(
 			// log data inconsistency instead of returning an error
 			ms.logDataInconsistency()
 		}
+		// Record activity timeout tasks for deletion after successful persistence update
+		ms.recordActivityTimeoutTasksForDeletion(scheduledEventID, activityInfo)
 	} else {
 		ms.logError(
 			fmt.Sprintf("unable to find activity event id: %v in mutable state", scheduledEventID),
@@ -3612,6 +3633,8 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		if err := ms.ApplyActivityTaskStartedEvent(event); err != nil {
 			return nil, err
 		}
+		// Delete ScheduleToStart timeout task since activity has now started
+		ms.deleteActivityTimeoutTask(scheduledEventID, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, ai)
 		return event, nil
 	}
 
@@ -3635,6 +3658,8 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		return nil, err
 	}
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
+	// Delete ScheduleToStart timeout task since activity has now started
+	ms.deleteActivityTimeoutTask(scheduledEventID, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, ai)
 	return nil, nil
 }
 
@@ -6157,6 +6182,121 @@ func (ms *MutableStateImpl) GetWorkflowTaskScheduleToStartTimeoutTask() *tasks.W
 
 func (ms *MutableStateImpl) GetWorkflowTaskStartToCloseTimeoutTask() *tasks.WorkflowTaskTimeoutTask {
 	return ms.wftStartToCloseTimeoutTask
+}
+
+// StoreActivityTimeoutTask stores an activity timeout task reference in memory.
+// This allows the task to be deleted later when the activity progresses through its lifecycle.
+func (ms *MutableStateImpl) StoreActivityTimeoutTask(
+	task *tasks.ActivityTimeoutTask,
+) {
+	timeoutTasks, exists := ms.activityTimeoutTasks[task.EventID]
+	if !exists {
+		timeoutTasks = &activityTimeoutTasks{}
+		ms.activityTimeoutTasks[task.EventID] = timeoutTasks
+	}
+
+	switch task.TimeoutType {
+	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
+		timeoutTasks.ScheduleToStartTimeoutTask = task
+	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
+		timeoutTasks.ScheduleToCloseTimeoutTask = task
+	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
+		timeoutTasks.StartToCloseTimeoutTask = task
+	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
+		timeoutTasks.HeartbeatTimeoutTask = task
+	}
+}
+
+// deleteActivityTimeoutTask deletes a specific activity timeout task if it exists.
+// This is used to delete timeout tasks at specific lifecycle points (e.g., when activity starts, when heartbeat is received).
+// The task will be regenerated with updated deadline on the next transaction close if still needed.
+func (ms *MutableStateImpl) deleteActivityTimeoutTask(
+	scheduledEventID int64,
+	timeoutType enumspb.TimeoutType,
+	activityInfo *persistencespb.ActivityInfo,
+) {
+	if activityInfo == nil {
+		return
+	}
+
+	timeoutTasks, exists := ms.activityTimeoutTasks[scheduledEventID]
+	if !exists {
+		return
+	}
+
+	var task *tasks.ActivityTimeoutTask
+
+	switch timeoutType {
+	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
+		task = timeoutTasks.ScheduleToStartTimeoutTask
+		timeoutTasks.ScheduleToStartTimeoutTask = nil
+	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
+		task = timeoutTasks.HeartbeatTimeoutTask
+		timeoutTasks.HeartbeatTimeoutTask = nil
+	default:
+		return
+	}
+
+	if task == nil {
+		return
+	}
+
+	key := task.GetKey()
+	ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
+		ms.BestEffortDeleteTasks[tasks.CategoryTimer],
+		key,
+	)
+}
+
+// recordActivityTimeoutTasksForDeletion records activity timeout tasks for deletion after successful persistence update.
+// This is called when an activity completes or fails. It deletes ALL remaining timeout tasks for the activity.
+// Normally, ScheduleToStart should already be deleted when the activity started, and Heartbeat should be deleted
+// when heartbeat is received, but we delete them here as well in case they still exist (e.g., activity completed
+// without starting, or completed without sending heartbeat).
+func (ms *MutableStateImpl) recordActivityTimeoutTasksForDeletion(
+	scheduledEventID int64,
+	activityInfo *persistencespb.ActivityInfo,
+) {
+	if activityInfo == nil {
+		return
+	}
+
+	timeoutTasks, exists := ms.activityTimeoutTasks[scheduledEventID]
+	if !exists {
+		return
+	}
+
+	// Delete all timeout tasks for this activity
+	if task := timeoutTasks.ScheduleToStartTimeoutTask; task != nil {
+		ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
+			ms.BestEffortDeleteTasks[tasks.CategoryTimer],
+			task.GetKey(),
+		)
+	}
+
+	if task := timeoutTasks.ScheduleToCloseTimeoutTask; task != nil {
+		ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
+			ms.BestEffortDeleteTasks[tasks.CategoryTimer],
+			task.GetKey(),
+		)
+	}
+
+	if task := timeoutTasks.StartToCloseTimeoutTask; task != nil {
+		ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
+			ms.BestEffortDeleteTasks[tasks.CategoryTimer],
+			task.GetKey(),
+		)
+	}
+
+	if task := timeoutTasks.HeartbeatTimeoutTask; task != nil {
+		ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
+			ms.BestEffortDeleteTasks[tasks.CategoryTimer],
+			task.GetKey(),
+		)
+	}
+
+	// Clean up the activity timeout tasks from memory
+	delete(ms.activityTimeoutTasks, scheduledEventID)
 }
 
 func (ms *MutableStateImpl) GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {
