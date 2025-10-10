@@ -566,7 +566,7 @@ is currently processing a task.
 	FrontendEnabledExperiments = NewNamespaceTypedSetting(
 		"frontend.enabledExperiments",
 		[]string{},
-		`FrontendEnabledExperiments is a list of experiment names that can be enabled via the x-temporal-experimental header for a specific namespace.`,
+		`FrontendEnabledExperiments is a list of experiment names that can be enabled via the temporal-experimental header for a specific namespace.`,
 	)
 	FrontendHTTPAllowedHosts = NewGlobalTypedSettingWithConverter(
 		"frontend.httpAllowedHosts",
