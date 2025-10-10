@@ -44,13 +44,9 @@ func NewMatchingTaskQueueSuite(
 	}
 }
 
-
-
 func (s *matchingTaskQueueSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *matchingTaskQueueSuite) TearDownTest() {
 

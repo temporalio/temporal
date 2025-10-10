@@ -29,8 +29,6 @@ func TestMultiStageRateLimiterSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *multiStageRateLimiterSuite) TearDownSuite() {
 
 }

@@ -24,8 +24,6 @@ func TestMultiReservationSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *multiReservationSuite) TearDownSuite() {
 
 }

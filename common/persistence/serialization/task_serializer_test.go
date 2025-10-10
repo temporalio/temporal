@@ -35,8 +35,6 @@ func TestTaskSerializerSuite(t *testing.T) {
 	suite.Run(t, new(taskSerializerSuite))
 }
 
-
-
 func (s *taskSerializerSuite) TearDownSuite() {
 
 }

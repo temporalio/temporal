@@ -37,13 +37,9 @@ func NewHistoryExecutionChildWorkflowSuite(
 	}
 }
 
-
-
 func (s *historyExecutionChildWorkflowSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *historyExecutionChildWorkflowSuite) TearDownTest() {
 

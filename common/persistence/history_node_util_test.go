@@ -22,13 +22,9 @@ func TestHistoryNodeMetadataSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *historyNodeMetadataSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *historyNodeMetadataSuite) TearDownTest() {
 

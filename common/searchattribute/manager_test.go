@@ -36,8 +36,6 @@ func TestSearchAttributesManagerSuite(t *testing.T) {
 	suite.Run(t, &searchAttributesManagerSuite{})
 }
 
-
-
 func (s *searchAttributesManagerSuite) TearDownSuite() {
 
 }

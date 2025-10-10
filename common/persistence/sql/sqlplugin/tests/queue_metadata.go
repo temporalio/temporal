@@ -37,13 +37,9 @@ func NewQueueMetadataSuite(
 	}
 }
 
-
-
 func (s *queueMetadataSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *queueMetadataSuite) TearDownTest() {
 

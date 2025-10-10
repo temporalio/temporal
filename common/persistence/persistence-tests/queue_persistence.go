@@ -27,7 +27,6 @@ type (
 
 // SetupSuite implementation
 
-
 // SetupTest implementation
 func (s *QueuePersistenceSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil

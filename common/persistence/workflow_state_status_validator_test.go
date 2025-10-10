@@ -20,13 +20,9 @@ func TestWorkflowStateStatusSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *workflowStateStatusSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *workflowStateStatusSuite) TearDownTest() {
 

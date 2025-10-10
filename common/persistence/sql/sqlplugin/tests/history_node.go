@@ -40,13 +40,9 @@ func NewHistoryNodeSuite(
 	}
 }
 
-
-
 func (s *historyNodeSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *historyNodeSuite) TearDownTest() {
 

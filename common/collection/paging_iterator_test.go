@@ -18,13 +18,9 @@ func TestPagingIteratorSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *pagingIteratorSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *pagingIteratorSuite) TearDownTest() {
 

@@ -24,8 +24,6 @@ func (s *methodFaultGeneratorSuite) SetupSuite() {}
 
 func (s *methodFaultGeneratorSuite) TearDownSuite() {}
 
-
-
 func (s *methodFaultGeneratorSuite) TearDownTest() {}
 
 func (s *methodFaultGeneratorSuite) Test_Generate() {

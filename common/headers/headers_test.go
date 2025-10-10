@@ -19,8 +19,6 @@ func TestHeadersSuite(t *testing.T) {
 	suite.Run(t, &HeadersSuite{})
 }
 
-
-
 func (s *HeadersSuite) TestPropagate_CreateNewOutgoingContext() {
 	ctx := context.Background()
 	ctx = metadata.NewIncomingContext(ctx, metadata.New(map[string]string{

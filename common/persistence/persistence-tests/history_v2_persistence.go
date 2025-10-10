@@ -52,7 +52,6 @@ func isConditionFail(err error) bool {
 
 // SetupSuite implementation
 
-
 // TearDownSuite implementation
 func (s *HistoryV2PersistenceSuite) TearDownSuite() {
 	s.TearDownWorkflowStore()

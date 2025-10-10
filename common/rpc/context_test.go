@@ -20,8 +20,6 @@ func TestContextSuite(t *testing.T) {
 	suite.Run(t, &contextSuite{})
 }
 
-
-
 func (s *contextSuite) TestCopyContextValues_ValueCopied() {
 	key := struct{}{}
 	value := "value"

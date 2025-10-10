@@ -23,8 +23,6 @@ func TestConditionVariableSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *conditionVariableSuite) TearDownSuite() {
 }
 

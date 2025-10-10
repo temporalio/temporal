@@ -38,13 +38,9 @@ func NewHistoryExecutionTimerSuite(
 	}
 }
 
-
-
 func (s *historyExecutionTimerSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *historyExecutionTimerSuite) TearDownTest() {
 

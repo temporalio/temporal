@@ -12,7 +12,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-
 func TestUtilSuite(t *testing.T) {
 	suite.Run(t, new(utilSuite))
 }

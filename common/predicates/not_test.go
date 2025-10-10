@@ -18,8 +18,6 @@ func TestNotSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *notSuite) TestNot_Test() {
 	p1 := newTestPredicate(1, 2, 3)
 	p := Not[int](p1)

@@ -45,8 +45,6 @@ func TestPriorityMutexSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *priorityMutexSuite) TearDownSuite() {
 
 }

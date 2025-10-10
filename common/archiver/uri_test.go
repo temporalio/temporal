@@ -17,8 +17,6 @@ func TestURISuite(t *testing.T) {
 	suite.Run(t, new(URISuite))
 }
 
-
-
 func (s *URISuite) TestURI() {
 	testCases := []struct {
 		URIString string

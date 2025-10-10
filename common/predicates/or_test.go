@@ -18,8 +18,6 @@ func TestOrSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *orSuite) TestOr_Normal() {
 	p1 := newTestPredicate(1, 2, 6)
 	p2 := Or[int](

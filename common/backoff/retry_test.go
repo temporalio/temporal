@@ -22,8 +22,6 @@ func TestRetrySuite(t *testing.T) {
 	suite.Run(t, new(RetrySuite))
 }
 
-
-
 func (s *RetrySuite) TestRetrySuccess() {
 	i := 0
 	op := func() error {

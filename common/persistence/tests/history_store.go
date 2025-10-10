@@ -71,8 +71,6 @@ func NewHistoryEventsSuite(
 	}
 }
 
-
-
 func (s *HistoryEventsSuite) TearDownSuite() {
 
 }

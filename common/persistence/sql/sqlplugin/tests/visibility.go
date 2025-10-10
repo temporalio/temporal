@@ -54,13 +54,9 @@ func NewVisibilitySuite(
 	}
 }
 
-
-
 func (s *visibilitySuite) TearDownSuite() {
 
 }
-
-
 
 func (s *visibilitySuite) TearDownTest() {
 

@@ -64,8 +64,6 @@ func TestRetryPolicySuite(t *testing.T) {
 	suite.Run(t, new(RetryPolicySuite))
 }
 
-
-
 func (s *RetryPolicySuite) TestExponentialBackoff() {
 	policy := createPolicy(time.Second).
 		WithMaximumInterval(10 * time.Second)

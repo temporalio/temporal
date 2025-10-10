@@ -17,8 +17,6 @@ func TestServiceErrorWithDPanicSuite(t *testing.T) {
 	suite.Run(t, new(serviceErrorWithDPanicSuite))
 }
 
-
-
 func (s *serviceErrorWithDPanicSuite) TestNewDPanicInProd() {
 	cfg := log.Config{
 		Level: "info",

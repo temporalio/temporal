@@ -20,13 +20,9 @@ func TestValidateOperationWorkflowModeStateSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *validateOperationWorkflowModeStateSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *validateOperationWorkflowModeStateSuite) TearDownTest() {
 

@@ -22,12 +22,8 @@ func TestStreamErrorSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *streamErrorSuite) TearDownSuite() {
 }
-
-
 
 func (s *streamErrorSuite) TearDownTest() {
 }

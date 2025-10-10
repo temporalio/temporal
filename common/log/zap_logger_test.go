@@ -25,8 +25,6 @@ func TestLogSuite(t *testing.T) {
 	suite.Run(t, new(LogSuite))
 }
 
-
-
 func (s *LogSuite) TestParseLogLevel() {
 	require.Equal(s.T(), zap.DebugLevel, ParseZapLevel("debug"))
 	require.Equal(s.T(), zap.InfoLevel, ParseZapLevel("info"))

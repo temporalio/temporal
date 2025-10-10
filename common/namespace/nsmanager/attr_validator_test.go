@@ -26,8 +26,6 @@ func TestAttrValidatorSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *attrValidatorSuite) TearDownSuite() {
 }
 

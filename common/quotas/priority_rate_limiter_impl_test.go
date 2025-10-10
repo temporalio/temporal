@@ -31,8 +31,6 @@ func TestPriorityStageRateLimiterSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *priorityStageRateLimiterSuite) TearDownSuite() {
 
 }

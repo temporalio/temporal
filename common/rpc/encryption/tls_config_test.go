@@ -19,8 +19,6 @@ func TestTLSConfigSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *tlsConfigTest) TestIsEnabled() {
 
 	emptyCfg := config.GroupTLS{}

@@ -36,13 +36,9 @@ func NewHistoryVisibilityTaskSuite(
 	}
 }
 
-
-
 func (s *historyHistoryVisibilityTaskSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *historyHistoryVisibilityTaskSuite) TearDownTest() {
 

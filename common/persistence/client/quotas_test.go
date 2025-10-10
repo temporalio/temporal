@@ -25,12 +25,8 @@ func TestQuotasSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *quotasSuite) TearDownSuite() {
 }
-
-
 
 func (s *quotasSuite) TearDownTest() {
 }

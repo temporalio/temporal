@@ -32,8 +32,6 @@ func TestCassandraErrorsSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *cassandraErrorsSuite) TearDownSuite() {
 
 }

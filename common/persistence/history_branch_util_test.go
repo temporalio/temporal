@@ -20,12 +20,8 @@ func TestHistoryBranchUtilSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *historyBranchUtilSuite) TearDownSuite() {
 }
-
-
 
 func (s *historyBranchUtilSuite) TearDownTest() {
 }

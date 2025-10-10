@@ -23,8 +23,6 @@ func TestRpoSuite(t *testing.T) {
 	suite.Run(t, new(RpoSuite))
 }
 
-
-
 func (s *RpoSuite) TestMonitor() {
 	serviceName := primitives.HistoryService
 	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", nil, true)

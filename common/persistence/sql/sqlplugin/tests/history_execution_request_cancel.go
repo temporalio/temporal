@@ -37,13 +37,9 @@ func NewHistoryExecutionRequestCancelSuite(
 	}
 }
 
-
-
 func (s *historyExecutionRequestCancelSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *historyExecutionRequestCancelSuite) TearDownTest() {
 

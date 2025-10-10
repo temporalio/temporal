@@ -36,13 +36,9 @@ func NewHistoryShardSuite(
 	}
 }
 
-
-
 func (s *historyShardSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *historyShardSuite) TearDownTest() {
 

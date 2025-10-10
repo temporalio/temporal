@@ -21,8 +21,6 @@ func TestRemoteTimerGateSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *remoteGateSuite) TearDownSuite() {
 
 }

@@ -32,13 +32,9 @@ func newConnectionSuite(
 	}
 }
 
-
-
 func (s *connectionSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *connectionSuite) TearDownTest() {
 

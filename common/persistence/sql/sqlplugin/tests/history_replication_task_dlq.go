@@ -38,13 +38,9 @@ func NewHistoryReplicationDLQTaskSuite(
 	}
 }
 
-
-
 func (s *historyHistoryReplicationDLQTaskSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *historyHistoryReplicationDLQTaskSuite) TearDownTest() {
 

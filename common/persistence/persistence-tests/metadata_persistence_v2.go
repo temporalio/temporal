@@ -41,7 +41,6 @@ type (
 
 // SetupSuite implementation
 
-
 // SetupTest implementation
 func (m *MetadataPersistenceSuiteV2) SetupTest() {
 	m.ProtoAssertions = protorequire.New(m.T())

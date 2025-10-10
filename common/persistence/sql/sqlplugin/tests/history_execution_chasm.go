@@ -29,8 +29,6 @@ func NewHistoryExecutionChasmSuite(
 	}
 }
 
-
-
 type testCase struct {
 	InsertRows    []sqlplugin.ChasmNodeMapsRow
 	ReplaceRows   []sqlplugin.ChasmNodeMapsRow // executed after InsertRows to test update functionality

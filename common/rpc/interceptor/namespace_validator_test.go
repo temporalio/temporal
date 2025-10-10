@@ -37,8 +37,6 @@ func TestNamespaceValidatorSuite(t *testing.T) {
 	suite.Run(t, &namespaceValidatorSuite{})
 }
 
-
-
 func (s *namespaceValidatorSuite) TearDownSuite() {
 }
 

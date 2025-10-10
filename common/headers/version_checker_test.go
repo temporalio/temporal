@@ -20,8 +20,6 @@ func TestVersionCheckerSuite(t *testing.T) {
 	suite.Run(t, new(VersionCheckerSuite))
 }
 
-
-
 func (s *VersionCheckerSuite) TestClientSupported() {
 	serverVersion := "22.8.78"
 	myFeature := "my-new-feature-flag"

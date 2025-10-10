@@ -37,13 +37,9 @@ func NewQueueMessageSuite(
 	}
 }
 
-
-
 func (s *queueMessageSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *queueMessageSuite) TearDownTest() {
 

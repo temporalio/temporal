@@ -54,8 +54,6 @@ func NewTaskQueueSuite(
 	}
 }
 
-
-
 func (s *TaskQueueSuite) TearDownSuite() {
 }
 

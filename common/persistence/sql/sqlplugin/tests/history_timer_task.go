@@ -38,13 +38,9 @@ func NewHistoryTimerTaskSuite(
 	}
 }
 
-
-
 func (s *historyHistoryTimerTaskSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *historyHistoryTimerTaskSuite) TearDownTest() {
 

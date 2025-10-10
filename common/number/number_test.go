@@ -23,8 +23,6 @@ func (s *numberSuite) SetupSuite() {}
 
 func (s *numberSuite) TearDownSuite() {}
 
-
-
 func (s *numberSuite) TearDownTest() {
 
 }

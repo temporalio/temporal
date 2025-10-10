@@ -39,13 +39,9 @@ func NewNamespaceSuite(
 	}
 }
 
-
-
 func (s *namespaceSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *namespaceSuite) TearDownTest() {
 

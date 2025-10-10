@@ -37,13 +37,9 @@ func NewHistoryExecutionSignalSuite(
 	}
 }
 
-
-
 func (s *historyExecutionSignalSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *historyExecutionSignalSuite) TearDownTest() {
 

@@ -37,13 +37,9 @@ func NewHistoryTreeSuite(
 	}
 }
 
-
-
 func (s *historyTreeSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *historyTreeSuite) TearDownTest() {
 

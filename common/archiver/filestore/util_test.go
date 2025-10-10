@@ -30,8 +30,6 @@ func TestUtilSuite(t *testing.T) {
 	suite.Run(t, new(UtilSuite))
 }
 
-
-
 func (s *UtilSuite) TestFileExists() {
 	dir := testutils.MkdirTemp(s.T(), "", "TestFileExists")
 	s.assertDirectoryExists(dir)

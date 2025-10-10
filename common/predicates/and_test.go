@@ -18,8 +18,6 @@ func TestAndSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *andSuite) TestAnd_Normal() {
 	p1 := newTestPredicate(1, 2, 6)
 	p2 := And[int](

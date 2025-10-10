@@ -37,13 +37,9 @@ func NewMatchingTaskSuite(
 	}
 }
 
-
-
 func (s *matchingTaskSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *matchingTaskSuite) TearDownTest() {
 

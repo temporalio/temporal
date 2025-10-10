@@ -19,8 +19,6 @@ func TestCallerInfoSuite(t *testing.T) {
 	suite.Run(t, &callerInfoSuite{})
 }
 
-
-
 func (s *callerInfoSuite) TestSetCallerName() {
 	ctx := context.Background()
 	info := GetCallerInfo(ctx)

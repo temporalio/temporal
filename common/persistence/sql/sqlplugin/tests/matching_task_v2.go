@@ -28,12 +28,8 @@ func NewMatchingTaskV2Suite(
 	}
 }
 
-
-
 func (s *matchingTaskV2Suite) TearDownSuite() {
 }
-
-
 
 func (s *matchingTaskV2Suite) TearDownTest() {
 }

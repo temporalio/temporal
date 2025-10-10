@@ -44,8 +44,6 @@ func TestRedirectionInterceptorSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *redirectionInterceptorSuite) TearDownSuite() {
 }
 

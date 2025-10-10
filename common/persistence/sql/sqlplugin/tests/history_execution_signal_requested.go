@@ -33,13 +33,9 @@ func NewHistoryExecutionSignalRequestSuite(
 	}
 }
 
-
-
 func (s *historyExecutionSignalRequestSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *historyExecutionSignalRequestSuite) TearDownTest() {
 

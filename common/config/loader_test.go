@@ -30,8 +30,6 @@ func TestLoaderSuite(t *testing.T) {
 	suite.Run(t, new(LoaderSuite))
 }
 
-
-
 func (s *LoaderSuite) TestBaseYaml() {
 	dir := testutils.MkdirTemp(s.T(), "", "loader.testBaseYaml")
 

@@ -19,10 +19,6 @@ func TestStringifySuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
-
-
 func (s *StringifySuite) TearDownTest() {
 }
 

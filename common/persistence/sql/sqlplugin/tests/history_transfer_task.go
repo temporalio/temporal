@@ -36,13 +36,9 @@ func NewHistoryTransferTaskSuite(
 	}
 }
 
-
-
 func (s *historyHistoryTransferTaskSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *historyHistoryTransferTaskSuite) TearDownTest() {
 

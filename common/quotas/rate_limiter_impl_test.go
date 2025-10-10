@@ -18,13 +18,9 @@ func TestRateLimiterSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *rateLimiterSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *rateLimiterSuite) TearDownTest() {
 

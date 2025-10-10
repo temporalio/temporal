@@ -24,8 +24,6 @@ func TestConcurrentTxMapSuite(t *testing.T) {
 	suite.Run(t, new(ConcurrentTxMapSuite))
 }
 
-
-
 func (s *ConcurrentTxMapSuite) TestLen() {
 	testMap := NewShardedConcurrentTxMap(1, UUIDHashCode)
 

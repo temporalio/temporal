@@ -46,8 +46,6 @@ func TestNoopDCRedirectionPolicySuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *noopDCRedirectionPolicySuite) TearDownSuite() {
 
 }
@@ -86,8 +84,6 @@ func TestSelectedAPIsForwardingRedirectionPolicySuite(t *testing.T) {
 	s := new(selectedAPIsForwardingRedirectionPolicySuite)
 	suite.Run(t, s)
 }
-
-
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TearDownSuite() {
 

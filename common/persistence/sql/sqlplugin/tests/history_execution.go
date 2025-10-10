@@ -41,13 +41,9 @@ func NewHistoryExecutionSuite(
 	}
 }
 
-
-
 func (s *historyExecutionSuite) TearDownSuite() {
 
 }
-
-
 
 func (s *historyExecutionSuite) TearDownTest() {
 

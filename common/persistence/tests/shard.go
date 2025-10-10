@@ -47,8 +47,6 @@ func NewShardSuite(
 	}
 }
 
-
-
 func (s *ShardSuite) TearDownSuite() {
 }
 

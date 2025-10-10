@@ -45,8 +45,6 @@ func TestPrioritySemaphoreSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *prioritySemaphoreSuite) TestTryAcquire() {
 	semaphore := NewPrioritySemaphore(2)
 	require.True(s.T(), semaphore.TryAcquire(1))

@@ -31,8 +31,6 @@ func TestDLQMessageHandlerSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *dlqMessageHandlerSuite) TearDownSuite() {
 
 }

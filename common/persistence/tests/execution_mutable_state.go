@@ -78,8 +78,6 @@ func NewExecutionMutableStateSuite(
 	}
 }
 
-
-
 func (s *ExecutionMutableStateSuite) TearDownSuite() {
 }
 

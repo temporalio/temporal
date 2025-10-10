@@ -36,8 +36,6 @@ func TestMetadataSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-
-
 func (s *metadataSuite) TearDownSuite() {
 
 }
