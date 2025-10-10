@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
@@ -28,7 +29,7 @@ func TestStandaloneActivityTestSuite(t *testing.T) {
 
 func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 	t := s.T()
-	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	s.OverrideDynamicConfig(
@@ -37,6 +38,7 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 	)
 
 	activityId := testcore.RandomizeStr(t.Name())
+	taskQueue := uuid.New().String()
 
 	r, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 		Namespace:  s.Namespace().String(),
@@ -44,7 +46,8 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 		ActivityId: activityId,
 		Options: &activitypb.ActivityOptions{
 			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: s.TaskQueue(),
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 		},
@@ -63,27 +66,11 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 	pollResponse, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: "my-task-queue",
+			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 	})
 
 	require.NoError(t, err)
-	require.NotNil(t, pollResponse)
-
-	//s.EventuallyWithT(func(t *assert.CollectT) {
-	//	r, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-	//		Namespace: s.Namespace().String(),
-	//		TaskQueue: &taskqueuepb.TaskQueue{
-	//			Name: "my-task-queue",
-	//			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	//		},
-	//	})
-	//
-	//	require.NoError(t, err)
-	//	require.NotNil(t, r)
-	//
-	//	fmt.Println("Polled activity task:", r)
-	//
-	//}, 30*time.Second, 1000*time.Millisecond)
+	require.NotEmpty(t, pollResponse.GetActivityId())
 }

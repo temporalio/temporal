@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	enumspb "go.temporal.io/api/enums/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -49,22 +47,19 @@ func (e *ActivityStartTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ActivityStartExecuteTask,
 ) error {
+	activity, err := GetActivity(ctx, activityRef.EntityKey)
+	if err != nil {
+		return err
+	}
+
 	protoRef, err := chasm.ComponentRefToProtoRef(activityRef, nil)
 	if err != nil {
 		return err
 	}
 
 	request := &matchingservice.AddActivityTaskRequest{
-		NamespaceId: activityRef.NamespaceID,
-		//Execution: &commonpb.WorkflowExecution{
-		//	WorkflowId: activityRef.BusinessID,
-		//	RunId:      activityRef.EntityID,
-		//},
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: "my-task-queue",
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		//ScheduledEventId:       11,
+		NamespaceId:            activityRef.NamespaceID,
+		TaskQueue:              activity.ActivityExecutionInfo.ActivityOptions.TaskQueue,
 		ScheduleToStartTimeout: durationpb.New(0),
 		Clock:                  vclock.NewVectorClock(1, 1, 1),
 		ComponentRef:           protoRef,
