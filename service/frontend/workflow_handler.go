@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
-	"go.temporal.io/server/common/experiments"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -3088,8 +3087,8 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	}
 
 	// Check if CHASM scheduler experiment is enabled
-	if experiments.IsExperimentEnabled(ctx, experiments.ChasmScheduler) &&
-		wh.config.IsExperimentEnabled(experiments.ChasmScheduler, namespaceName.String()) {
+	if headers.IsExperimentEnabled(ctx, scheduler.ChasmSchedulerExperiment) &&
+		wh.config.IsExperimentEnabled(scheduler.ChasmSchedulerExperiment, namespaceName.String()) {
 		wh.logger.Debug("CHASM scheduler enabled for request", tag.ScheduleID(request.ScheduleId))
 	}
 

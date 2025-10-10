@@ -2,6 +2,7 @@ package headers
 
 import (
 	"context"
+	"strings"
 
 	"google.golang.org/grpc/metadata"
 )
@@ -91,4 +92,27 @@ func (h GRPCHeaderGetter) Get(key string) string {
 		return values[0]
 	}
 	return ""
+}
+
+// IsExperimentEnabled checks if a specific experiment is present in the x-temporal-experimental header.
+// Returns true if the experiment is explicitly listed or if "*" (wildcard) is present.
+func IsExperimentEnabled(ctx context.Context, experiment string) bool {
+	experimentalValues := metadata.ValueFromIncomingContext(ctx, ExperimentalHeaderName)
+
+	for _, headerValue := range experimentalValues {
+		if headerValue == "" {
+			continue
+		}
+		// Split by comma in case multiple experiments are sent
+		requestedExperiments := strings.Split(headerValue, ",")
+		for _, requested := range requestedExperiments {
+			requested = strings.TrimSpace(requested)
+			// Check for wildcard or exact match
+			if requested == "*" || strings.EqualFold(requested, experiment) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
