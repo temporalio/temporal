@@ -30,7 +30,6 @@ type (
 	// MetadataPersistenceSuiteV2 is test of the V2 version of metadata persistence
 	MetadataPersistenceSuiteV2 struct {
 		*TestBase
-		// override suite.Suite.Assertions with require.Assertions; this means that require.NotNil(s.T(), nil) will stop the test,
 		// not merely log an error
 		protorequire.ProtoAssertions
 

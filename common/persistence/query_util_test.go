@@ -13,7 +13,6 @@ import (
 type (
 	queryUtilSuite struct {
 		suite.Suite
-		// override suite.Suite.Assertions with require.Assertions; this means that require.NotNil(s.T(), nil) will stop the test,
 		// not merely log an error
 		logger log.Logger
 	}

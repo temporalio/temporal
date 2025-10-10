@@ -19,7 +19,6 @@ type (
 	// ClusterMetadataManagerSuite runs tests that cover the ClusterMetadata read/write scenarios
 	ClusterMetadataManagerSuite struct {
 		*TestBase
-		// override suite.Suite.Assertions with require.Assertions; this means that require.NotNil(s.T(), nil) will stop the test,
 		// not merely log an error
 
 		ctx    context.Context
