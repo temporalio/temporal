@@ -20,7 +20,7 @@ const (
 	CallerTypeHeaderName = "caller-type"
 	CallOriginHeaderName = "call-initiation"
 
-	ExperimentalHeaderName = "x-temporal-experimental"
+	ExperimentalHeaderName = "temporal-experimental"
 )
 
 var (
