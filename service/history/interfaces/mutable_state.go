@@ -298,6 +298,8 @@ type (
 		GetWorkflowTaskScheduleToStartTimeoutTask() *tasks.WorkflowTaskTimeoutTask
 		GetWorkflowTaskStartToCloseTimeoutTask() *tasks.WorkflowTaskTimeoutTask
 
+		StoreActivityTimeoutTask(task *tasks.ActivityTimeoutTask)
+
 		IsDirty() bool
 		IsTransitionHistoryEnabled() bool
 		// StartTransaction sets up the mutable state for transacting.

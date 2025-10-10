@@ -360,6 +360,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_BeforeWorkfl
 		EventID:             activityInfo.ScheduledEventId,
 		Attempt:             activityInfo.Attempt,
 	})
+	s.mockMutableState.EXPECT().StoreActivityTimeoutTask(gomock.Any())
 
 	modified, err := s.timerSequence.CreateNextActivityTimer()
 	s.NoError(err)
@@ -402,6 +403,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_NoWorkflowEx
 		EventID:             activityInfo.ScheduledEventId,
 		Attempt:             activityInfo.Attempt,
 	})
+	s.mockMutableState.EXPECT().StoreActivityTimeoutTask(gomock.Any())
 
 	modified, err := s.timerSequence.CreateNextActivityTimer()
 	s.NoError(err)
@@ -475,6 +477,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_BeforeWo
 		EventID:             activityInfo.ScheduledEventId,
 		Attempt:             activityInfo.Attempt,
 	})
+	s.mockMutableState.EXPECT().StoreActivityTimeoutTask(gomock.Any())
 
 	modified, err := s.timerSequence.CreateNextActivityTimer()
 	s.NoError(err)
@@ -519,6 +522,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_NoWorkfl
 		EventID:             activityInfo.ScheduledEventId,
 		Attempt:             activityInfo.Attempt,
 	})
+	s.mockMutableState.EXPECT().StoreActivityTimeoutTask(gomock.Any())
 
 	modified, err := s.timerSequence.CreateNextActivityTimer()
 	s.NoError(err)

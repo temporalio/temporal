@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -879,6 +880,161 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
+}
+
+func (s *ActivityTestSuite) TestActivityHeartbeatTimeout_MultipleTimers() {
+	// This test verifies that:
+	// 1. Activity sends heartbeats initially, refreshing/cancelling the first heartbeat timeout timer
+	// 2. Activity stops sending heartbeats
+	// 3. Second heartbeat timeout timer fires correctly and fails the activity
+	// 4. Last heartbeat details are preserved in the timeout error
+
+	// Enable best-effort deletion of tasks on workflow update to test that timer tasks are properly
+	// cleaned up when heartbeat timeouts are refreshed/cancelled during activity execution.
+	s.OverrideDynamicConfig(dynamicconfig.EnableBestEffortDeleteTasksOnWorkflowUpdate, true)
+
+	tv := testvars.New(s.T())
+
+	activityName := "activity_heartbeat_timer"
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		Input:               nil,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+		Identity:            tv.WorkerIdentity(),
+	}
+
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err0)
+
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	workflowComplete := false
+	activityCount := int32(1)
+	activityCounter := int32(0)
+
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		s.Logger.Info("Calling WorkflowTask Handler", tag.Counter(int(activityCounter)), tag.Number(int64(activityCount)))
+
+		if activityCounter < activityCount {
+			activityCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId:             convert.Int32ToString(activityCounter),
+						ActivityType:           &commonpb.ActivityType{Name: activityName},
+						TaskQueue:              tv.TaskQueue(),
+						Input:                  payloads.EncodeBytes(buf.Bytes()),
+						ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(1 * time.Second),
+						StartToCloseTimeout:    durationpb.New(15 * time.Second),
+						HeartbeatTimeout:       durationpb.New(1 * time.Second), // 1 second heartbeat timeout
+						RetryPolicy: &commonpb.RetryPolicy{
+							MaximumAttempts: 1, // Disable retry to test heartbeat timeout directly
+						},
+					}},
+				}},
+			}, nil
+		}
+
+		workflowComplete = true
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Done"),
+				}},
+			}},
+		}, nil
+	}
+
+	activityExecutedCount := 0
+	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
+		s.Equal(activityName, task.ActivityType.GetName())
+
+		// Send heartbeats for first 2 seconds (this should cancel/refresh first heartbeat timeout timer)
+		heartbeatCount := 0
+		for i := 0; i < 4; i++ {
+			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
+			_, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
+				Namespace: s.Namespace().String(),
+				TaskToken: task.TaskToken,
+				Details:   payloads.EncodeInt(i),
+			})
+			s.NoError(err)
+			heartbeatCount = i
+			time.Sleep(500 * time.Millisecond) //nolint:forbidigo
+		}
+
+		// Stop sending heartbeats, but keep activity running
+		// Second heartbeat timeout timer should fire after ~1 second from last heartbeat
+		s.Logger.Info("Stopped sending heartbeats, waiting for timeout", tag.WorkflowActivityID(task.ActivityId))
+		time.Sleep(3 * time.Second) //nolint:forbidigo
+
+		activityExecutedCount++
+		// Activity should have timed out by now, return success (but it won't be processed)
+		return &workflowservice.RespondActivityTaskCompletedRequest{
+			Result: payloads.EncodeInt(heartbeatCount),
+		}, nil
+	}
+
+	_, err := s.TaskPoller().PollAndHandleWorkflowTask(tv, wtHandler)
+	s.NoError(err)
+
+	// Activity should timeout due to heartbeat timeout
+	_, err = s.TaskPoller().PollAndHandleActivityTask(tv, atHandler)
+	// Not s.ErrorIs() because error goes through RPC.
+	s.IsType(consts.ErrActivityTaskNotFound, err)
+	s.Equal(consts.ErrActivityTaskNotFound.Error(), err.Error())
+
+	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
+
+	s.False(workflowComplete)
+	_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv, wtHandler)
+	s.NoError(err)
+	s.True(workflowComplete)
+
+	// Verify workflow history shows heartbeat timeout
+	events := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: tv.WorkflowID(),
+		RunId:      we.GetRunId(),
+	})
+
+	// Find the ActivityTaskTimedOut event and verify it has the right timeout type and last heartbeat details
+	var timedOutEvent *historypb.HistoryEvent
+	for _, event := range events {
+		if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT {
+			timedOutEvent = event
+			break
+		}
+	}
+	s.NotNil(timedOutEvent, "ActivityTaskTimedOut event not found")
+
+	// Get the failure information from the event
+	failure := timedOutEvent.GetActivityTaskTimedOutEventAttributes().GetFailure()
+	s.NotNil(failure, "Failure should not be nil")
+
+	// Extract TimeoutFailureInfo from the failure
+	timeoutInfo := failure.GetTimeoutFailureInfo()
+	s.NotNil(timeoutInfo, "TimeoutFailureInfo should not be nil")
+	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, timeoutInfo.GetTimeoutType())
+
+	// Verify last heartbeat details are preserved (should be the last heartbeat value: 3)
+	lastHeartbeatDetails := timeoutInfo.GetLastHeartbeatDetails()
+	s.NotNil(lastHeartbeatDetails)
+	var lastHeartbeatValue int
+	s.NoError(payloads.Decode(lastHeartbeatDetails, &lastHeartbeatValue))
+	s.Equal(3, lastHeartbeatValue, "Last heartbeat details should be preserved")
 }
 
 func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {

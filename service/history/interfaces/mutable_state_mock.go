@@ -3341,6 +3341,18 @@ func (mr *MockMutableStateMockRecorder) StartTransaction(entry any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTransaction", reflect.TypeOf((*MockMutableState)(nil).StartTransaction), entry)
 }
 
+// StoreActivityTimeoutTask mocks base method.
+func (m *MockMutableState) StoreActivityTimeoutTask(task *tasks.ActivityTimeoutTask) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "StoreActivityTimeoutTask", task)
+}
+
+// StoreActivityTimeoutTask indicates an expected call of StoreActivityTimeoutTask.
+func (mr *MockMutableStateMockRecorder) StoreActivityTimeoutTask(task any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StoreActivityTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).StoreActivityTimeoutTask), task)
+}
+
 // TaskQueueScheduleToStartTimeout mocks base method.
 func (m *MockMutableState) TaskQueueScheduleToStartTimeout(name string) (*taskqueue.TaskQueue, *durationpb.Duration) {
 	m.ctrl.T.Helper()
