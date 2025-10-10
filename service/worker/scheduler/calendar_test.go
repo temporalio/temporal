@@ -111,7 +111,7 @@ func (s *calendarSuite) TestParseCronString() {
 		DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6}},
 	}, scs)
 	s.Nil(iv)
-	s.Equal("", tz)
+	s.Empty(tz)
 
 	_, _, _, err = parseCronString("0 1 2 3 4 1999")
 	s.ErrorContains(err, "Year is not in range")
@@ -141,7 +141,7 @@ func (s *calendarSuite) TestParseCronString() {
 		DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6}},
 	}, scs)
 	s.Nil(iv)
-	s.Equal("", tz)
+	s.Empty(tz)
 
 	scs, iv, tz, err = parseCronString("@every 5d")
 	s.NoError(err)
@@ -149,7 +149,7 @@ func (s *calendarSuite) TestParseCronString() {
 	s.Equal(&schedulepb.IntervalSpec{
 		Interval: durationpb.New(5 * 24 * time.Hour),
 	}, iv)
-	s.Equal("", tz)
+	s.Empty(tz)
 
 	scs, iv, tz, err = parseCronString("@every 5h/45m")
 	s.NoError(err)
@@ -158,7 +158,7 @@ func (s *calendarSuite) TestParseCronString() {
 		Interval: durationpb.New(5 * time.Hour),
 		Phase:    durationpb.New(45 * time.Minute),
 	}, iv)
-	s.Equal("", tz)
+	s.Empty(tz)
 }
 
 func (s *calendarSuite) TestCalendarNextBasic() {
@@ -276,9 +276,9 @@ func (s *calendarSuite) TestMakeMatcher() {
 		}
 		for _, e := range expected {
 			if e >= 0 {
-				s.True(m(e), e)
+				s.True(m(e), "%+v", e)
 			} else {
-				s.False(m(-e), -e)
+				s.False(m(-e), "%+v", -e)
 			}
 		}
 	}
@@ -297,7 +297,7 @@ func (s *calendarSuite) TestMakeRange() {
 		s.T().Helper()
 		ranges, err := makeRange(str, "Test", "", minVal, maxVal, parseMode)
 		s.NoError(err)
-		s.EqualValues(expected, ranges)
+		s.Equal(expected, ranges)
 	}
 	checkErr := func(str string, minVal, maxVal int, parseMode parseMode, expectedErr string) {
 		s.T().Helper()

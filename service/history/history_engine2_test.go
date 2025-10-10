@@ -330,7 +330,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	expectedResponse.NextPageToken = nil
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &request)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(response)
 	s.True(response.StartedTime.AsTime().After(expectedResponse.ScheduledTime.AsTime()))
 	expectedResponse.StartedTime = response.StartedTime
@@ -440,7 +440,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 	expectedResponse.NextPageToken = nil
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &request)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(response)
 	s.True(response.StartedTime.AsTime().After(expectedResponse.ScheduledTime.AsTime()))
 	expectedResponse.StartedTime = response.StartedTime
@@ -472,7 +472,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfNoExecution() {
 		},
 	})
 	s.Nil(response)
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -549,7 +549,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfGetExecutionFailed() {
 		},
 	})
 	s.Nil(response)
-	s.NotNil(err)
+	s.Error(err)
 	s.EqualError(err, "FAILED")
 }
 
@@ -581,7 +581,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyStarted() {
 		},
 	})
 	s.Nil(response)
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerrors.TaskAlreadyStarted{}, err)
 	s.logger.Error("RecordWorkflowTaskStarted failed with", tag.Error(err))
 }
@@ -617,7 +617,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyCompleted() {
 		},
 	})
 	s.Nil(response)
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.logger.Error("RecordWorkflowTaskStarted failed with", tag.Error(err))
 }
@@ -652,7 +652,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 		},
 	})
 
-	s.NotNil(err)
+	s.Error(err)
 	s.Nil(response)
 	s.Equal(&persistence.ConditionFailedError{}, err)
 }
@@ -739,10 +739,10 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 		},
 	})
 
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(response)
 	s.Equal("wType", response.WorkflowType.Name)
-	s.True(response.PreviousStartedEventId == 0)
+	s.Equal(response.PreviousStartedEventId, 0)
 	s.Equal(int64(3), response.StartedEventId)
 	expectedQueryMap := map[string]*querypb.WorkflowQuery{
 		id1: {},
@@ -841,10 +841,10 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessWithInternalRawHistor
 		},
 	})
 
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(response)
 	s.Equal("wType", response.WorkflowType.Name)
-	s.True(response.PreviousStartedEventId == 0)
+	s.Equal(response.PreviousStartedEventId, 0)
 	s.Equal(int64(3), response.StartedEventId)
 	expectedQueryMap := map[string]*querypb.WorkflowQuery{
 		id1: {},
@@ -885,7 +885,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 		s.logger.Error("Unexpected Error", tag.Error(err))
 	}
 	s.Nil(response)
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -938,7 +938,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 			Identity: identity,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(response)
 	s.Equal(scheduledEvent, response.ScheduledEvent)
 }
@@ -970,7 +970,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_Running() {
 			Identity: "identity",
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	ms2 := s.getMutableState(namespaceID, workflowExecution)
 	s.Equal(int64(4), ms2.GetNextEventID())
@@ -1003,7 +1003,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_Finished() {
 			Identity: "identity",
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecution_NotFound() {
@@ -1025,7 +1025,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_NotFound() {
 			Identity: "identity",
 		},
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -1197,7 +1197,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	ms2 := s.getMutableState(namespaceID, we)
 	s.Equal(int64(6), ms2.GetNextEventID())
 	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
@@ -1272,7 +1272,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 			Identity:  identity,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_ExceedsLimit() {
@@ -1392,7 +1392,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 			RequestId:                requestID,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(resp.RunId)
 }
 
@@ -1433,7 +1433,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 				"CustomKeywordField": payload.EncodeString("test"),
 			}}},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(resp.RunId)
 }
 
@@ -1896,7 +1896,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(runID, resp.GetRunId())
 }
 
@@ -1936,7 +1936,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.CreateWorkflowExecutionResponse, nil)
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(resp.GetRunId())
 }
 
@@ -1999,7 +1999,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.CreateWorkflowExecutionResponse, nil)
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(resp.GetRunId())
 	s.NotEqual(runID, resp.GetRunId())
 }
@@ -2148,7 +2148,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
 	s.Nil(resp)
-	s.NotNil(err)
+	s.Error(err)
 }
 
 func (s *engine2Suite) TestRecordChildExecutionCompleted() {

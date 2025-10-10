@@ -114,7 +114,7 @@ func TestGetQueryFields(t *testing.T) {
 				)
 				if tc.expectedErrMsg == "" {
 					s.NoError(err)
-					s.Equal(len(tc.expectedFields), len(fields))
+					s.Len(fields, len(tc.expectedFields))
 					for _, f := range fields {
 						s.Contains(tc.expectedFields, f)
 					}

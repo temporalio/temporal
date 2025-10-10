@@ -310,11 +310,11 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Other() {
 	s.Equal(err, s.task.HandleErr(err))
 
 	err = serviceerror.NewNotFound("")
-	s.Equal(nil, s.task.HandleErr(err))
+	s.NoError(s.task.HandleErr(err))
 
 	err = consts.ErrDuplicate
 	s.executableTask.EXPECT().MarkTaskDuplicated().Times(1)
-	s.Equal(nil, s.task.HandleErr(err))
+	s.NoError(s.task.HandleErr(err))
 
 	err = serviceerror.NewUnavailable("")
 	s.Equal(err, s.task.HandleErr(err))
@@ -464,7 +464,7 @@ func (s *executableHistoryTaskSuite) TestNewExecutableHistoryTask() {
 	if s.processToolBox.Config.ReplicationMultipleBatches() {
 		s.Equal(s.eventsBlobs, s.task.eventsBlobs)
 	} else {
-		s.Equal(len(s.task.eventsBlobs), 1)
+		s.Equal(1, len(s.task.eventsBlobs))
 		s.Equal(s.eventsBlob, s.task.eventsBlobs[0])
 	}
 }
@@ -536,7 +536,7 @@ func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHis
 	s.Equal(incomingVersionHistoryItems, resultHistoryTask.versionHistoryItems)
 	expectedBatchedEvents := append(currentEvent, incomingEvent...)
 
-	s.Equal(len(resultHistoryTask.eventsDesResponse.events), len(expectedBatchedEvents))
+	s.Equal(len(expectedBatchedEvents), len(resultHistoryTask.eventsDesResponse.events))
 	for i := range expectedBatchedEvents {
 		protorequire.ProtoSliceEqual(s.T(), expectedBatchedEvents[i], resultHistoryTask.eventsDesResponse.events[i])
 	}

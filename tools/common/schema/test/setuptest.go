@@ -57,8 +57,8 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 	}...)
 	tb.NoError(app.Run(command))
 	tables, err := db.ListTables()
-	tb.Nil(err)
-	tb.Equal(0, len(tables))
+	tb.NoError(err)
+	tb.Empty(tables)
 
 	tmpDir := testutils.MkdirTemp(tb.T(), "", "setupSchemaTestDir")
 	sqlFile := testutils.CreateTemp(tb.T(), tmpDir, "setupSchema.cliOptionsTest")
@@ -75,8 +75,8 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 	}...)
 	tb.NoError(app.Run(command))
 	tables, err = db.ListTables()
-	tb.Nil(err)
-	tb.Equal(0, len(tables))
+	tb.NoError(err)
+	tb.Empty(tables)
 
 	for i := 0; i < 4; i++ {
 
@@ -108,22 +108,22 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 
 		expectedTables := getExpectedTables(versioningEnabled, expectedTables)
 		tables, err = db.ListTables()
-		tb.Nil(err)
-		tb.Equal(len(expectedTables), len(tables))
+		tb.NoError(err)
+		tb.Len(tables, len(expectedTables))
 
 		for _, t := range tables {
 			_, ok := expectedTables[t]
 			tb.True(ok)
 			delete(expectedTables, t)
 		}
-		tb.Equal(0, len(expectedTables))
+		tb.Empty(expectedTables)
 
 		gotVer, err := db.ReadSchemaVersion()
 		if versioningEnabled {
-			tb.Nil(err)
+			tb.NoError(err)
 			tb.Equal(ver, gotVer)
 		} else {
-			tb.NotNil(err)
+			tb.Error(err)
 		}
 	}
 }

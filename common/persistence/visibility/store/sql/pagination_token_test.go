@@ -17,9 +17,9 @@ func TestSerializePageToken(t *testing.T) {
 	}
 	data, err := serializePageToken(&token)
 	s.NoError(err)
-	s.Equal(
-		[]byte(`{"CloseTime":"2023-03-21T14:20:32Z","StartTime":"2023-03-21T14:10:32Z","RunID":"test-run-id"}`),
-		data,
+	s.JSONEq(
+		`{"CloseTime":"2023-03-21T14:20:32Z","StartTime":"2023-03-21T14:10:32Z","RunID":"test-run-id"}`,
+		string(data),
 	)
 }
 

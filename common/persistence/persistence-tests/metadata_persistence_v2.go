@@ -150,31 +150,31 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameI
 	)
 	m.NoError(err0)
 	m.NotNil(resp0)
-	m.EqualValues(id, resp0.ID)
+	m.Equal(id, resp0.ID)
 
 	// for namespace which do not have replication config set, will default to
 	// use current cluster as active, with current cluster as all clusters
 	resp1, err1 := m.GetNamespace(id, "")
 	m.NoError(err1)
 	m.NotNil(resp1)
-	m.EqualValues(id, resp1.Namespace.Info.Id)
+	m.Equal(id, resp1.Namespace.Info.Id)
 	m.Equal(name, resp1.Namespace.Info.Name)
 	m.Equal(state, resp1.Namespace.Info.State)
 	m.Equal(description, resp1.Namespace.Info.Description)
 	m.Equal(owner, resp1.Namespace.Info.Owner)
 	m.Equal(data, resp1.Namespace.Info.Data)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, resp1.Namespace.Config.Retention.AsDuration())
+	m.Equal(time.Duration(retention)*time.Hour*24, resp1.Namespace.Config.Retention.AsDuration())
 	m.Equal(historyArchivalState, resp1.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
 	m.Equal(visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(badBinaries, resp1.Namespace.Config.BadBinaries)
 	m.Equal(cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(1, len(resp1.Namespace.ReplicationConfig.Clusters))
+	m.Len(resp1.Namespace.ReplicationConfig.Clusters, 1)
 	m.Equal(isGlobalNamespace, resp1.IsGlobalNamespace)
 	m.Equal(configVersion, resp1.Namespace.ConfigVersion)
 	m.Equal(failoverVersion, resp1.Namespace.FailoverVersion)
-	m.True(resp1.Namespace.ReplicationConfig.Clusters[0] == cluster.TestCurrentClusterName)
+	m.Equal(resp1.Namespace.ReplicationConfig.Clusters[0], cluster.TestCurrentClusterName)
 	m.Equal(p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
 	m.truncatePartialNamespace()
 }
@@ -229,31 +229,31 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDiffe
 	)
 	m.NoError(err0)
 	m.NotNil(resp0)
-	m.EqualValues(id, resp0.ID)
+	m.Equal(id, resp0.ID)
 
 	// for namespace which do not have replication config set, will default to
 	// use current cluster as active, with current cluster as all clusters
 	resp1, err1 := m.GetNamespace(id, "")
 	m.NoError(err1)
 	m.NotNil(resp1)
-	m.EqualValues(id, resp1.Namespace.Info.Id)
+	m.Equal(id, resp1.Namespace.Info.Id)
 	m.Equal(name, resp1.Namespace.Info.Name)
 	m.Equal(state, resp1.Namespace.Info.State)
 	m.Equal(description, resp1.Namespace.Info.Description)
 	m.Equal(owner, resp1.Namespace.Info.Owner)
 	m.Equal(data, resp1.Namespace.Info.Data)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, resp1.Namespace.Config.Retention.AsDuration())
+	m.Equal(time.Duration(retention)*time.Hour*24, resp1.Namespace.Config.Retention.AsDuration())
 	m.Equal(historyArchivalState, resp1.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
 	m.Equal(visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(badBinaries, resp1.Namespace.Config.BadBinaries)
 	m.Equal(cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(1, len(resp1.Namespace.ReplicationConfig.Clusters))
+	m.Len(resp1.Namespace.ReplicationConfig.Clusters, 1)
 	m.Equal(isGlobalNamespace, resp1.IsGlobalNamespace)
 	m.Equal(configVersion, resp1.Namespace.ConfigVersion)
 	m.Equal(failoverVersion, resp1.Namespace.FailoverVersion)
-	m.True(resp1.Namespace.ReplicationConfig.Clusters[0] == cluster.TestCurrentClusterName)
+	m.Equal(resp1.Namespace.ReplicationConfig.Clusters[0], cluster.TestCurrentClusterName)
 	m.Equal(p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
 	m.truncatePartialNamespace()
 }
@@ -353,31 +353,31 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 	)
 	m.NoError(err0)
 	m.NotNil(resp0)
-	m.EqualValues(id, resp0.ID)
+	m.Equal(id, resp0.ID)
 
 	// for namespace which do not have replication config set, will default to
 	// use current cluster as active, with current cluster as all clusters
 	resp1, err1 := m.GetNamespace(id, "")
 	m.NoError(err1)
 	m.NotNil(resp1)
-	m.EqualValues(id, resp1.Namespace.Info.Id)
+	m.Equal(id, resp1.Namespace.Info.Id)
 	m.Equal(name, resp1.Namespace.Info.Name)
 	m.Equal(state, resp1.Namespace.Info.State)
 	m.Equal(description, resp1.Namespace.Info.Description)
 	m.Equal(owner, resp1.Namespace.Info.Owner)
 	m.Equal(data, resp1.Namespace.Info.Data)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, resp1.Namespace.Config.Retention.AsDuration())
+	m.Equal(time.Duration(retention)*time.Hour*24, resp1.Namespace.Config.Retention.AsDuration())
 	m.Equal(historyArchivalState, resp1.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
 	m.Equal(visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(badBinaries, resp1.Namespace.Config.BadBinaries)
 	m.Equal(cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(1, len(resp1.Namespace.ReplicationConfig.Clusters))
+	m.Len(resp1.Namespace.ReplicationConfig.Clusters, 1)
 	m.Equal(isGlobalNamespace, resp1.IsGlobalNamespace)
 	m.Equal(configVersion, resp1.Namespace.ConfigVersion)
 	m.Equal(failoverVersion, resp1.Namespace.FailoverVersion)
-	m.True(resp1.Namespace.ReplicationConfig.Clusters[0] == cluster.TestCurrentClusterName)
+	m.Equal(resp1.Namespace.ReplicationConfig.Clusters[0], cluster.TestCurrentClusterName)
 	m.Equal(p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
 
 	resp2, err2 := m.CreateNamespace(
@@ -468,25 +468,25 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	)
 	m.NoError(err1)
 	m.NotNil(resp1)
-	m.EqualValues(id, resp1.ID)
+	m.Equal(id, resp1.ID)
 
 	resp2, err2 := m.GetNamespace(id, "")
 	m.NoError(err2)
 	m.NotNil(resp2)
-	m.EqualValues(id, resp2.Namespace.Info.Id)
+	m.Equal(id, resp2.Namespace.Info.Id)
 	m.Equal(name, resp2.Namespace.Info.Name)
 	m.Equal(state, resp2.Namespace.Info.State)
 	m.Equal(description, resp2.Namespace.Info.Description)
 	m.Equal(owner, resp2.Namespace.Info.Owner)
 	m.Equal(data, resp2.Namespace.Info.Data)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, resp2.Namespace.Config.Retention.AsDuration())
+	m.Equal(time.Duration(retention)*time.Hour*24, resp2.Namespace.Config.Retention.AsDuration())
 	m.Equal(historyArchivalState, resp2.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp2.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp2.Namespace.Config.VisibilityArchivalState)
 	m.Equal(visibilityArchivalURI, resp2.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(testBinaries, resp2.Namespace.Config.BadBinaries)
 	m.Equal(clusterActive, resp2.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(len(clusters), len(resp2.Namespace.ReplicationConfig.Clusters))
+	m.Len(resp2.Namespace.ReplicationConfig.Clusters, len(clusters))
 	for index := range clusters {
 		m.Equal(clusters[index], resp2.Namespace.ReplicationConfig.Clusters[index])
 	}
@@ -498,19 +498,19 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	resp3, err3 := m.GetNamespace("", name)
 	m.NoError(err3)
 	m.NotNil(resp3)
-	m.EqualValues(id, resp3.Namespace.Info.Id)
+	m.Equal(id, resp3.Namespace.Info.Id)
 	m.Equal(name, resp3.Namespace.Info.Name)
 	m.Equal(state, resp3.Namespace.Info.State)
 	m.Equal(description, resp3.Namespace.Info.Description)
 	m.Equal(owner, resp3.Namespace.Info.Owner)
 	m.Equal(data, resp3.Namespace.Info.Data)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, resp3.Namespace.Config.Retention.AsDuration())
+	m.Equal(time.Duration(retention)*time.Hour*24, resp3.Namespace.Config.Retention.AsDuration())
 	m.Equal(historyArchivalState, resp3.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp3.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp3.Namespace.Config.VisibilityArchivalState)
 	m.Equal(visibilityArchivalURI, resp3.Namespace.Config.VisibilityArchivalUri)
 	m.Equal(clusterActive, resp3.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(len(clusters), len(resp3.Namespace.ReplicationConfig.Clusters))
+	m.Len(resp3.Namespace.ReplicationConfig.Clusters, len(clusters))
 	for index := range clusters {
 		m.Equal(clusters[index], resp3.Namespace.ReplicationConfig.Clusters[index])
 	}
@@ -607,14 +607,14 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 	m.Equal(state, resp.Namespace.Info.State)
 	m.Equal(description, resp.Namespace.Info.Description)
 	m.Equal(owner, resp.Namespace.Info.Owner)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, resp.Namespace.Config.Retention.AsDuration())
+	m.Equal(time.Duration(retention)*time.Hour*24, resp.Namespace.Config.Retention.AsDuration())
 	m.Equal(historyArchivalState, resp.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp.Namespace.Config.VisibilityArchivalState)
 	m.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(testBinaries, resp.Namespace.Config.BadBinaries)
 	m.Equal(clusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(len(clusters), len(resp.Namespace.ReplicationConfig.Clusters))
+	m.Len(resp.Namespace.ReplicationConfig.Clusters, len(clusters))
 	for index := range clusters {
 		m.Equal(clusters[index], resp.Namespace.ReplicationConfig.Clusters[index])
 	}
@@ -624,10 +624,10 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 
 	// check namespace data
 	ss := strings.Split(resp.Namespace.Info.Data["k0"], "-")
-	m.Equal(2, len(ss))
+	m.Len(ss, 2)
 	vi, err := strconv.Atoi(ss[1])
 	m.NoError(err)
-	m.Equal(true, vi > 0 && vi <= concurrency)
+	m.True(vi > 0 && vi <= concurrency)
 }
 
 // TestConcurrentUpdateNamespace test
@@ -678,7 +678,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 		failoverVersion,
 	)
 	m.NoError(err1)
-	m.EqualValues(id, resp1.ID)
+	m.Equal(id, resp1.ID)
 
 	resp2, err2 := m.GetNamespace(id, "")
 	m.NoError(err2)
@@ -743,21 +743,21 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 	resp3, err3 := m.GetNamespace("", name)
 	m.NoError(err3)
 	m.NotNil(resp3)
-	m.EqualValues(id, resp3.Namespace.Info.Id)
+	m.Equal(id, resp3.Namespace.Info.Id)
 	m.Equal(name, resp3.Namespace.Info.Name)
 	m.Equal(state, resp3.Namespace.Info.State)
 	m.Equal(isGlobalNamespace, resp3.IsGlobalNamespace)
 	m.Equal(description, resp3.Namespace.Info.Description)
 	m.Equal(owner, resp3.Namespace.Info.Owner)
 
-	m.EqualValues(time.Duration(retention)*time.Hour*24, resp3.Namespace.Config.Retention.AsDuration())
+	m.Equal(time.Duration(retention)*time.Hour*24, resp3.Namespace.Config.Retention.AsDuration())
 	m.Equal(historyArchivalState, resp3.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp3.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp3.Namespace.Config.VisibilityArchivalState)
 	m.Equal(visibilityArchivalURI, resp3.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(testBinaries, resp3.Namespace.Config.BadBinaries)
 	m.Equal(clusterActive, resp3.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(len(clusters), len(resp3.Namespace.ReplicationConfig.Clusters))
+	m.Len(resp3.Namespace.ReplicationConfig.Clusters, len(clusters))
 	for index := range clusters {
 		m.Equal(clusters[index], resp3.Namespace.ReplicationConfig.Clusters[index])
 	}
@@ -767,10 +767,10 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 
 	// check namespace data
 	ss := strings.Split(resp3.Namespace.Info.Data["k0"], "-")
-	m.Equal(2, len(ss))
+	m.Len(ss, 2)
 	vi, err := strconv.Atoi(ss[1])
 	m.NoError(err)
-	m.Equal(true, vi > 0 && vi <= concurrency)
+	m.True(vi > 0 && vi <= concurrency)
 }
 
 // TestUpdateNamespace test
@@ -820,7 +820,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 		failoverVersion,
 	)
 	m.NoError(err1)
-	m.EqualValues(id, resp1.ID)
+	m.Equal(id, resp1.ID)
 
 	resp2, err2 := m.GetNamespace(id, "")
 	m.NoError(err2)
@@ -889,7 +889,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	resp4, err4 := m.GetNamespace("", name)
 	m.NoError(err4)
 	m.NotNil(resp4)
-	m.EqualValues(id, resp4.Namespace.Info.Id)
+	m.Equal(id, resp4.Namespace.Info.Id)
 	m.Equal(name, resp4.Namespace.Info.Name)
 	m.Equal(isGlobalNamespace, resp4.IsGlobalNamespace)
 	m.Equal(updatedState, resp4.Namespace.Info.State)
@@ -903,7 +903,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updatedVisibilityArchivalURI, resp4.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(testBinaries, resp4.Namespace.Config.BadBinaries)
 	m.Equal(updateClusterActive, resp4.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(len(updateClusters), len(resp4.Namespace.ReplicationConfig.Clusters))
+	m.Len(resp4.Namespace.ReplicationConfig.Clusters, len(updateClusters))
 	for index := range clusters {
 		m.Equal(updateClusters[index], resp4.Namespace.ReplicationConfig.Clusters[index])
 	}
@@ -916,7 +916,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	resp5, err5 := m.GetNamespace(id, "")
 	m.NoError(err5)
 	m.NotNil(resp5)
-	m.EqualValues(id, resp5.Namespace.Info.Id)
+	m.Equal(id, resp5.Namespace.Info.Id)
 	m.Equal(name, resp5.Namespace.Info.Name)
 	m.Equal(isGlobalNamespace, resp5.IsGlobalNamespace)
 	m.Equal(updatedState, resp5.Namespace.Info.State)
@@ -929,7 +929,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updatedVisibilityArchivalState, resp5.Namespace.Config.VisibilityArchivalState)
 	m.Equal(updatedVisibilityArchivalURI, resp5.Namespace.Config.VisibilityArchivalUri)
 	m.Equal(updateClusterActive, resp5.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(len(updateClusters), len(resp5.Namespace.ReplicationConfig.Clusters))
+	m.Len(resp5.Namespace.ReplicationConfig.Clusters, len(updateClusters))
 	for index := range clusters {
 		m.Equal(updateClusters[index], resp5.Namespace.ReplicationConfig.Clusters[index])
 	}
@@ -973,7 +973,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	resp6, err6 := m.GetNamespace(id, "")
 	m.NoError(err6)
 	m.NotNil(resp6)
-	m.EqualValues(id, resp6.Namespace.Info.Id)
+	m.Equal(id, resp6.Namespace.Info.Id)
 	m.Equal(name, resp6.Namespace.Info.Name)
 	m.Equal(isGlobalNamespace, resp6.IsGlobalNamespace)
 	m.Equal(updatedState, resp6.Namespace.Info.State)
@@ -987,7 +987,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updatedVisibilityArchivalURI, resp6.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(testBinaries, resp6.Namespace.Config.BadBinaries)
 	m.Equal(updateClusterActive, resp6.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(len(updateClusters), len(resp6.Namespace.ReplicationConfig.Clusters))
+	m.Len(resp6.Namespace.ReplicationConfig.Clusters, len(updateClusters))
 	for index := range clusters {
 		m.Equal(updateClusters[index], resp4.Namespace.ReplicationConfig.Clusters[index])
 	}
@@ -1045,7 +1045,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespace() {
 		failoverVersion,
 	)
 	m.NoError(err1)
-	m.EqualValues(id, resp1.ID)
+	m.Equal(id, resp1.ID)
 
 	_, err2 := m.GetNamespace(id, "")
 	m.NoError(err2)
@@ -1059,14 +1059,14 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespace() {
 	resp4, err4 := m.GetNamespace("", newName)
 	m.NoError(err4)
 	m.NotNil(resp4)
-	m.EqualValues(id, resp4.Namespace.Info.Id)
+	m.Equal(id, resp4.Namespace.Info.Id)
 	m.Equal(newName, resp4.Namespace.Info.Name)
 	m.Equal(isGlobalNamespace, resp4.IsGlobalNamespace)
 
 	resp5, err5 := m.GetNamespace(id, "")
 	m.NoError(err5)
 	m.NotNil(resp5)
-	m.EqualValues(id, resp5.Namespace.Info.Id)
+	m.Equal(id, resp5.Namespace.Info.Id)
 	m.Equal(newName, resp5.Namespace.Info.Name)
 	m.Equal(isGlobalNamespace, resp5.IsGlobalNamespace)
 
@@ -1079,7 +1079,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespace() {
 	resp6, err6 := m.GetNamespace(id, "")
 	m.NoError(err6)
 	m.NotNil(resp6)
-	m.EqualValues(id, resp6.Namespace.Info.Id)
+	m.Equal(id, resp6.Namespace.Info.Id)
 	m.Equal(newNewName, resp6.Namespace.Info.Name)
 	m.Equal(isGlobalNamespace, resp6.IsGlobalNamespace)
 }
@@ -1130,7 +1130,7 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 		failoverVersion,
 	)
 	m.NoError(err1)
-	m.EqualValues(id, resp1.ID)
+	m.Equal(id, resp1.ID)
 
 	resp2, err2 := m.GetNamespace("", name)
 	m.NoError(err2)
@@ -1184,7 +1184,7 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 		failoverVersion,
 	)
 	m.NoError(err6)
-	m.EqualValues(id, resp6.ID)
+	m.Equal(id, resp6.ID)
 
 	err7 := m.DeleteNamespace(id, "")
 	m.NoError(err7)
@@ -1322,8 +1322,8 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 	}
 
 	// There should be 2 non-empty pages.
-	m.Equal(pageCount, 2)
-	m.Equal(len(inputNamespaces), len(outputNamespaces))
+	m.Equal(2, pageCount)
+	m.Len(outputNamespaces, len(inputNamespaces))
 	for _, namespace := range inputNamespaces {
 		m.DeepEqual(namespace, outputNamespaces[namespace.Namespace.Info.Id])
 	}
@@ -1409,7 +1409,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 	m.Equal(1, pageCount)
 	m.Len(listNamespacesPageSize2, 2)
 	for _, namespace := range listNamespacesPageSize2 {
-		m.NotEqual(namespace.Namespace.Info.State, enumspb.NAMESPACE_STATE_DELETED)
+		m.NotEqual(enumspb.NAMESPACE_STATE_DELETED, namespace.Namespace.Info.State)
 	}
 
 	pageCount = 0
@@ -1432,7 +1432,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 	m.Equal(2, pageCount)
 	m.Len(listNamespacesPageSize1, 2)
 	for _, namespace := range listNamespacesPageSize1 {
-		m.NotEqual(namespace.Namespace.Info.State, enumspb.NAMESPACE_STATE_DELETED)
+		m.NotEqual(enumspb.NAMESPACE_STATE_DELETED, namespace.Namespace.Info.State)
 	}
 }
 
@@ -1550,7 +1550,7 @@ func (m *MetadataPersistenceSuiteV2) TestCASFailureUpdateNamespace() {
 		failoverVersion,
 	)
 	m.NoError(err1)
-	m.EqualValues(id, resp1.ID)
+	m.Equal(id, resp1.ID)
 
 	resp2, err2 := m.GetNamespace(id, "")
 	m.NoError(err2)
@@ -1646,7 +1646,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceWithNameConflict() {
 		failoverVersion,
 	)
 	m.NoError(err1)
-	m.EqualValues(id1, resp1.ID)
+	m.Equal(id1, resp1.ID)
 
 	// Create second namespace
 	resp2, err2 := m.CreateNamespace(
@@ -1674,7 +1674,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceWithNameConflict() {
 		failoverVersion,
 	)
 	m.NoError(err2)
-	m.EqualValues(id2, resp2.ID)
+	m.Equal(id2, resp2.ID)
 
 	// Try to rename namespace1 to the same name as namespace2 (should fail)
 	err3 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
@@ -2170,7 +2170,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceCassandra() {
 		failoverVersion,
 	)
 	m.NoError(err1)
-	m.EqualValues(id, resp1.ID)
+	m.Equal(id, resp1.ID)
 
 	// Verify namespace exists with original name
 	resp2, err2 := m.GetNamespace(id, "")
@@ -2188,7 +2188,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceCassandra() {
 	resp4, err4 := m.GetNamespace("", newName)
 	m.NoError(err4)
 	m.NotNil(resp4)
-	m.EqualValues(id, resp4.Namespace.Info.Id)
+	m.Equal(id, resp4.Namespace.Info.Id)
 	m.Equal(newName, resp4.Namespace.Info.Name)
 	m.Equal(description, resp4.Namespace.Info.Description)
 	m.Equal(owner, resp4.Namespace.Info.Owner)
@@ -2294,7 +2294,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceSQL() {
 		failoverVersion,
 	)
 	m.NoError(err1)
-	m.EqualValues(id, resp1.ID)
+	m.Equal(id, resp1.ID)
 
 	// Verify namespace exists with original name
 	resp2, err2 := m.GetNamespace(id, "")
@@ -2312,7 +2312,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceSQL() {
 	resp4, err4 := m.GetNamespace("", newName)
 	m.NoError(err4)
 	m.NotNil(resp4)
-	m.EqualValues(id, resp4.Namespace.Info.Id)
+	m.Equal(id, resp4.Namespace.Info.Id)
 	m.Equal(newName, resp4.Namespace.Info.Name)
 	m.Equal(description, resp4.Namespace.Info.Description)
 	m.Equal(owner, resp4.Namespace.Info.Owner)

@@ -851,7 +851,7 @@ func TestDeleteRedirectRuleBasic(t *testing.T) {
 	data, err = deleteRedirectRule("1", data, clock1)
 	assert.NoError(t, err)
 	deleted := getDeletedRedirectRuleBySrc("1", data)
-	assert.Equal(t, 1, len(deleted))
+	assert.Len(t, deleted, 1)
 	assert.Equal(t, clock1.GetWallClock(), deleted[0].GetDeleteTimestamp().GetWallClock())
 	assert.Equal(t, "1", deleted[0].GetRule().GetSourceBuildId())
 	assert.Equal(t, "2", deleted[0].GetRule().GetTargetBuildId())
@@ -860,7 +860,7 @@ func TestDeleteRedirectRuleBasic(t *testing.T) {
 	data, err = deleteRedirectRule("2", data, clock2)
 	assert.NoError(t, err)
 	deleted = getDeletedRedirectRuleBySrc("2", data)
-	assert.Equal(t, 1, len(deleted))
+	assert.Len(t, deleted, 1)
 	assert.Equal(t, clock2.GetWallClock(), deleted[0].GetDeleteTimestamp().GetWallClock())
 	assert.Equal(t, "2", deleted[0].GetRule().GetSourceBuildId())
 	assert.Equal(t, "3", deleted[0].GetRule().GetTargetBuildId())
@@ -913,7 +913,7 @@ func TestGetWorkerVersioningRules(t *testing.T) {
 
 	// check assignment rules
 	assignmentRules := resp.GetResponse().GetAssignmentRules()
-	assert.Equal(t, 3, len(assignmentRules))
+	assert.Len(t, assignmentRules, 3)
 	protoassert.ProtoEqual(t, &taskqueuepb.TimestampedBuildIdAssignmentRule{
 		Rule:       mkAssignmentRuleWithoutRamp("1"),
 		CreateTime: hlc.ProtoTimestamp(clock1),
@@ -929,7 +929,7 @@ func TestGetWorkerVersioningRules(t *testing.T) {
 
 	// check redirect rules, no ordering guarantee
 	redirectRules := resp.GetResponse().GetCompatibleRedirectRules()
-	assert.Equal(t, 3, len(redirectRules))
+	assert.Len(t, redirectRules, 3)
 	contains := func(expected *taskqueuepb.TimestampedCompatibleBuildIdRedirectRule) bool {
 		for _, r := range redirectRules {
 			if proto.Equal(expected, r) {
@@ -1197,8 +1197,8 @@ func TestFindTerminalBuildId(t *testing.T) {
 		mkRedirectRulePersistence(mkRedirectRule("1", "2"), createTs, nil),
 		mkRedirectRulePersistence(mkRedirectRule("2", "1"), createTs, nil),
 	}
-	assert.Equal(t, "", findTerminalBuildId("1", redirectRules))
-	assert.Equal(t, "", findTerminalBuildId("2", redirectRules))
+	assert.Empty(t, findTerminalBuildId("1", redirectRules))
+	assert.Empty(t, findTerminalBuildId("2", redirectRules))
 }
 
 func TestGetUpstreamBuildIds_NoCycle(t *testing.T) {

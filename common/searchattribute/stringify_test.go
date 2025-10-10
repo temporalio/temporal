@@ -66,7 +66,7 @@ func (s *StringifySuite) Test_Stringify() {
 	// Even w/o typeMap error is returned but string values are set with  raw JSON from GetData().
 	saStr, err = Stringify(sa, nil)
 	s.Error(err)
-	s.True(errors.Is(err, ErrInvalidType))
+	s.ErrorIs(err, ErrInvalidType)
 	s.Len(saStr, 3)
 	s.Equal(`"val1"`, saStr["key1"])
 	s.Equal("2", saStr["key2"])
@@ -111,7 +111,7 @@ func (s *StringifySuite) Test_Stringify_Array() {
 	// Even w/o typeMap error is returned but string values are set with  raw JSON from GetData().
 	saStr, err = Stringify(sa, nil)
 	s.Error(err)
-	s.True(errors.Is(err, ErrInvalidType))
+	s.ErrorIs(err, ErrInvalidType)
 	s.Len(saStr, 3)
 	s.Equal(`["val1","val2"]`, saStr["key1"])
 	s.Equal("[2,3,4]", saStr["key2"])
@@ -401,7 +401,7 @@ func (s *StringifySuite) Test_parseJsonArray() {
 	}
 	for _, testCase := range testCases2 {
 		res, err := parseJsonArray(testCase.input, testCase.indexedValueType)
-		s.NotNil(err)
+		s.Error(err)
 		s.Nil(res)
 	}
 }

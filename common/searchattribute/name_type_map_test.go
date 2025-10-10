@@ -60,10 +60,10 @@ func Test_GetType(t *testing.T) {
 
 	ivt, err = NameTypeMap{}.GetType("key1")
 	assert.Error(err)
-	assert.True(errors.Is(err, ErrInvalidName))
+	assert.ErrorIs(err, ErrInvalidName)
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
 	ivt, err = typeMap.GetType("key4")
 	assert.Error(err)
-	assert.True(errors.Is(err, ErrInvalidName))
+	assert.ErrorIs(err, ErrInvalidName)
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
 }

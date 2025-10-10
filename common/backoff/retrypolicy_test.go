@@ -82,8 +82,8 @@ func (s *RetryPolicySuite) TestExponentialBackoff() {
 	for _, expected := range expectedResult {
 		min, max := getNextBackoffRange(expected)
 		next := r.NextBackOff(nil)
-		s.True(next >= min, "NextBackoff too low")
-		s.True(next < max, "NextBackoff too high")
+		s.GreaterOrEqual(next, min, "NextBackoff too low")
+		s.Less(next, max, "NextBackoff too high")
 	}
 }
 
@@ -116,8 +116,8 @@ func (s *RetryPolicySuite) TestMaximumInterval() {
 	for _, expected := range expectedResult {
 		min, max := getNextBackoffRange(expected)
 		next := r.NextBackOff(nil)
-		s.True(next >= min, "NextBackoff too low")
-		s.True(next < max, "NextBackoff too high")
+		s.GreaterOrEqual(next, min, "NextBackoff too low")
+		s.Less(next, max, "NextBackoff too high")
 	}
 }
 
@@ -129,8 +129,8 @@ func (s *RetryPolicySuite) TestBackoffCoefficient() {
 	min, max := getNextBackoffRange(2 * time.Second)
 	for i := 0; i < 10; i++ {
 		next := r.NextBackOff(nil)
-		s.True(next >= min, "NextBackoff too low")
-		s.True(next < max, "NextBackoff too high")
+		s.GreaterOrEqual(next, min, "NextBackoff too low")
+		s.Less(next, max, "NextBackoff too high")
 	}
 }
 
@@ -152,15 +152,15 @@ func (s *RetryPolicySuite) TestExpirationOverflow() {
 	r, ts := createRetrier(policy)
 	next := r.NextBackOff(nil)
 	min, max := getNextBackoffRange(2 * time.Second)
-	s.True(next >= min, "NextBackoff too low")
-	s.True(next < max, "NextBackoff too high")
+	s.GreaterOrEqual(next, min, "NextBackoff too low")
+	s.Less(next, max, "NextBackoff too high")
 
 	ts.Advance(2 * time.Second)
 
 	next = r.NextBackOff(nil)
 	min, max = getNextBackoffRange(3 * time.Second)
-	s.True(next >= min, "NextBackoff too low")
-	s.True(next < max, "NextBackoff too high")
+	s.GreaterOrEqual(next, min, "NextBackoff too low")
+	s.Less(next, max, "NextBackoff too high")
 }
 
 func (s *RetryPolicySuite) TestDefaultPublishRetryPolicy() {
@@ -192,8 +192,8 @@ func (s *RetryPolicySuite) TestDefaultPublishRetryPolicy() {
 			s.Equal(done, next, "backoff not done yet!!!")
 		} else {
 			min, max := getNextBackoffRange(expected)
-			s.True(next >= min, "NextBackoff too low: actual: %v, min: %v", next, min)
-			s.True(next < max, "NextBackoff too high: actual: %v, max: %v", next, max)
+			s.GreaterOrEqual(next, min, "NextBackoff too low: actual: %v, min: %v", next, min)
+			s.Less(next, max, "NextBackoff too high: actual: %v, max: %v", next, max)
 			ts.Advance(expected)
 		}
 	}
@@ -262,8 +262,8 @@ func (s *RetryPolicySuite) TestErrorDependentPolicy() {
 	retrier, _ = createRetrier(policy)
 
 	delay = retrier.NextBackOff(fmt.Errorf("other error"))
-	s.True(delay >= 1*time.Second)
-	s.True(delay < 1500*time.Millisecond)
+	s.GreaterOrEqual(delay, 1*time.Second)
+	s.Less(delay, 1500*time.Millisecond)
 }
 
 func (s *RetryPolicySuite) TestConstantDelayPolicy() {
@@ -290,8 +290,8 @@ func (s *RetryPolicySuite) TestConstantDelayPolicy() {
 	retrier, _ = createRetrier(policy)
 
 	delay = retrier.NextBackOff(nil)
-	s.True(delay >= 2*time.Second)
-	s.True(delay < 2200*time.Millisecond)
+	s.GreaterOrEqual(delay, 2*time.Second)
+	s.Less(delay, 2200*time.Millisecond)
 }
 
 // Validate jitter computation
@@ -300,8 +300,8 @@ func (s *RetryPolicySuite) TestAddJitter() {
 		delay := 1 * time.Second
 		jitter := 0.5
 		jitteredDelay := addJitter(delay, jitter)
-		s.True(jitteredDelay >= 1*time.Second)
-		s.True(jitteredDelay < 1500*time.Millisecond)
+		s.GreaterOrEqual(jitteredDelay, 1*time.Second)
+		s.Less(jitteredDelay, 1500*time.Millisecond)
 	}
 }
 

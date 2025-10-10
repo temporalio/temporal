@@ -186,7 +186,7 @@ func TestPollOutcome(t *testing.T) {
 			}
 			resp, err := pollupdate.Invoke(context.Background(), req, shardContext, wfcc)
 			require.NoError(t, err)
-			require.True(t, len(resp.GetResponse().UpdateRef.GetWorkflowExecution().RunId) > 0)
+			require.Positive(t, len(resp.GetResponse().UpdateRef.GetWorkflowExecution().RunId))
 			require.Nil(t, resp.GetResponse().Outcome)
 			require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.Response.GetStage())
 		}

@@ -52,9 +52,9 @@ func (s *LogSuite) TestNewLogger() {
 	log := BuildZapLogger(cfg)
 	s.NotNil(log)
 	_, err := os.Stat(dir + "/test.log")
-	s.Nil(err)
+	s.NoError(err)
 	log.DPanic("Development default is false; should not panic here!")
-	s.Panics(nil, func() {
+	s.Panics(nil, "%+v", func() {
 		log.Panic("Must Panic")
 	})
 
@@ -66,11 +66,11 @@ func (s *LogSuite) TestNewLogger() {
 	log = BuildZapLogger(cfg)
 	s.NotNil(log)
 	_, err = os.Stat(dir + "/test.log")
-	s.Nil(err)
-	s.Panics(nil, func() {
+	s.NoError(err)
+	s.Panics(nil, "%+v", func() {
 		log.DPanic("Must panic!")
 	})
-	s.Panics(nil, func() {
+	s.Panics(nil, "%+v", func() {
 		log.Panic("Must panic!")
 	})
 
@@ -100,12 +100,12 @@ func TestDefaultLogger(t *testing.T) {
 	withLogger.Info("Log message with tag")
 
 	// put Stdout back to normal state
-	require.Nil(t, w.Close())
+	require.NoError(t, w.Close())
 	os.Stdout = old // restoring the real stdout
 	out := <-outC
 	sps := strings.Split(preCaller, ":")
 	par, err := strconv.Atoi(sps[1])
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	assert.Regexp(t, `{"level":"info","msg":"test info","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":".*zap_logger_test.go:`+lineNum+`"}`+"\n", out)
 
@@ -134,12 +134,12 @@ func TestThrottleLogger(t *testing.T) {
 	With(With(logger, tag.Error(fmt.Errorf("test error"))), tag.ComponentShardContext).Info("test info", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
-	require.Nil(t, w.Close())
+	require.NoError(t, w.Close())
 	os.Stdout = old // restoring the real stdout
 	out := <-outC
 	sps := strings.Split(preCaller, ":")
 	par, err := strconv.Atoi(sps[1])
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
 	assert.Regexp(t, `{"level":"info","msg":"test info","error":"test error","component":"shard-context","wf-action":"add-workflow-started-event","logging-call-at":".*zap_logger_test.go:`+lineNum+`"}`+"\n", out)
@@ -163,12 +163,12 @@ func TestEmptyMsg(t *testing.T) {
 	logger.With(tag.Error(fmt.Errorf("test error"))).Info("", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
-	require.Nil(t, w.Close())
+	require.NoError(t, w.Close())
 	os.Stdout = old // restoring the real stdout
 	out := <-outC
 	sps := strings.Split(preCaller, ":")
 	par, err := strconv.Atoi(sps[1])
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
 	assert.Regexp(t, `{"level":"info","msg":"`+defaultMsgForEmpty+`","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":".*zap_logger_test.go:`+lineNum+`"}`+"\n", out)

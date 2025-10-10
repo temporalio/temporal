@@ -174,17 +174,17 @@ func (s *registrySuite) TestListNamespace() {
 	defer s.registry.Stop()
 
 	entryByName1, err := s.registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.Info.Name))
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(entry1, entryByName1)
 	entryByID1, err := s.registry.GetNamespaceByID(namespace.ID(namespaceRecord1.Namespace.Info.Id))
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(entry1, entryByID1)
 
 	entryByName2, err := s.registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.Info.Name))
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(entry2, entryByName2)
 	entryByID2, err := s.registry.GetNamespaceByID(namespace.ID(namespaceRecord2.Namespace.Info.Id))
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(entry2, entryByID2)
 }
 

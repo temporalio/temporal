@@ -36,7 +36,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 
 	// No entries initially
 	list := m.filterWorkers("ns1", alwaysTrue)
-	assert.Len(t, list, 0, "expected empty list before updates")
+	assert.Empty(t, list, "expected empty list before updates")
 
 	// Add some heartbeats
 	hb1 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "workerA", Status: enumspb.WORKER_STATUS_RUNNING}
@@ -54,7 +54,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 
 	// Check capacity utilization metric
 	utilizationMetrics := snapshot["worker_registry_capacity_utilization"]
-	assert.Equal(t, len(utilizationMetrics), 1, "should have capacity utilization metric")
+	assert.Equal(t, 1, len(utilizationMetrics), "should have capacity utilization metric")
 	lastUtilization := utilizationMetrics[0]
 	assert.Equal(t, float64(2)/float64(10), lastUtilization.Value, "should record correct capacity utilization")
 }
@@ -105,7 +105,7 @@ func TestEvictByTTL(t *testing.T) {
 	m.evictByTTL()
 
 	list := m.filterWorkers("ns", alwaysTrue)
-	assert.Len(t, list, 0, "entry should be evicted by TTL")
+	assert.Empty(t, list, "entry should be evicted by TTL")
 	assert.Equal(t, int64(0), m.total.Load(), "total counter should be decremented")
 }
 

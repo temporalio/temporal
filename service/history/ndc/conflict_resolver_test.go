@@ -174,7 +174,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_NoRebuild_No
 	)
 	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
 	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory1)
-	s.Nil(err)
+	s.NoError(err)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
 	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.GetOrRebuildCurrentMutableState(context.Background(), 0, version0)
@@ -230,7 +230,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_Rebuild() {
 
 	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
 	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory1)
-	s.Nil(err)
+	s.NoError(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition, dbVersion).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
@@ -327,7 +327,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildMutableState_Rebuild() {
 
 	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
 	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory1)
-	s.Nil(err)
+	s.NoError(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition, dbVersion).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{

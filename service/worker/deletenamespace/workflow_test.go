@@ -252,7 +252,7 @@ func Test_DeleteProtectedNamespace(t *testing.T) {
 	require.Error(t, err)
 	var appErr *temporal.ApplicationError
 	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, appErr.Message(), "namespace namespace is protected from deletion")
+	require.Equal(t, "namespace namespace is protected from deletion", appErr.Message())
 }
 
 func Test_DeleteNamespaceUsedByNexus(t *testing.T) {
@@ -279,5 +279,5 @@ func Test_DeleteNamespaceUsedByNexus(t *testing.T) {
 	require.Error(t, err)
 	var appErr *temporal.ApplicationError
 	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, appErr.Message(), "cannot delete a namespace that is a target of a Nexus endpoint")
+	require.Equal(t, "cannot delete a namespace that is a target of a Nexus endpoint", appErr.Message())
 }

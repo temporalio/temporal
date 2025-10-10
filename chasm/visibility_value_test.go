@@ -78,7 +78,7 @@ func TestVisibilityValue(t *testing.T) {
 		var out bool
 		err := payload.Decode(p, &out)
 		require.NoError(t, err)
-		require.Equal(t, true, out)
+		require.True(t, out)
 
 		require.True(t, v.Equal(VisibilityValueBool(true)))
 		require.False(t, v.Equal(VisibilityValueBool(false)))

@@ -240,15 +240,15 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 
 	mutation := syncAttributes.StateMutation
 	// ensure it's a copy by checking the pointers are pointing to different memory addresses
-	s.True(executionInfo != mutation.ExecutionInfo)
+	s.NotSame(executionInfo, mutation.ExecutionInfo)
 	s.Nil(mutation.ExecutionInfo.UpdateInfos)
 	s.Nil(mutation.ExecutionInfo.SubStateMachinesByType)
 	s.Nil(mutation.ExecutionInfo.SubStateMachineTombstoneBatches)
 	s.Zero(mutation.ExecutionInfo.LastFirstEventTxnId) // field should be sanitized
 	s.Empty(mutation.UpdatedActivityInfos)
-	s.Len(mutation.UpdatedTimerInfos, 0)
+	s.Empty(mutation.UpdatedTimerInfos)
 	s.Len(mutation.UpdatedChildExecutionInfos, 1)
-	s.Len(mutation.UpdatedRequestCancelInfos, 0)
+	s.Empty(mutation.UpdatedRequestCancelInfos)
 	s.Len(mutation.UpdatedSignalInfos, 1)
 	s.Len(mutation.UpdatedChasmNodes, 1)
 	s.Nil(mutation.UpdatedChildExecutionInfos[13].Clock) // field should be sanitized
@@ -352,7 +352,7 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateRetrieverForNewWorkflow_WithEve
 
 	mutation := syncAttributes.StateMutation
 	// ensure it's a copy by checking the pointers are pointing to different memory addresses
-	s.True(executionInfo != mutation.ExecutionInfo)
+	s.NotSame(executionInfo, mutation.ExecutionInfo)
 	s.Nil(mutation.ExecutionInfo.UpdateInfos)
 	s.Nil(mutation.ExecutionInfo.SubStateMachinesByType)
 	s.Nil(mutation.ExecutionInfo.SubStateMachineTombstoneBatches)
@@ -881,15 +881,15 @@ func (s *syncWorkflowStateSuite) TestGetUpdatedSubStateMachine() {
 	s.NoError(err)
 	root.InternalRepr().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 10}
 	child1, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "child1"}, hsmtest.NewData(hsmtest.State1))
-	s.Nil(err)
+	s.NoError(err)
 	child1.InternalRepr().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 8}
 	child2, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "child2"}, hsmtest.NewData(hsmtest.State1))
-	s.Nil(err)
+	s.NoError(err)
 	child2.InternalRepr().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 10}
 
 	result, err := s.syncStateRetriever.getUpdatedSubStateMachine(root, &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 9})
 	s.NoError(err)
-	s.Equal(1, len(result))
-	s.Equal(len(child2.Path()), len(result[0].Path.Path))
+	s.Len(result, 1)
+	s.Len(result[0].Path.Path, len(child2.Path()))
 	s.Equal(child2.Path()[0].ID, result[0].Path.Path[0].Id)
 }

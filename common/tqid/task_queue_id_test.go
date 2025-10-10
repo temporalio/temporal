@@ -44,7 +44,7 @@ func TestFromProtoPartition_Sticky(t *testing.T) {
 	a.Equal(nsid, p.NamespaceId())
 	a.Equal(taskType, p.TaskType())
 	a.Equal(kind, p.Kind())
-	a.Equal("", p.TaskQueue().Name())
+	a.Empty(p.TaskQueue().Name())
 	a.Equal(stickyName, p.(*StickyPartition).StickyName())
 	a.Equal(stickyName, p.RpcName())
 	a.False(p.IsRoot())
@@ -53,7 +53,7 @@ func TestFromProtoPartition_Sticky(t *testing.T) {
 	proto.Name = "/_sys/my-basic-tq-name/23"
 	_, err = PartitionFromProto(proto, nsid, taskType)
 	// sticky queue cannot have non-zero prtn
-	a.True(errors.Is(err, ErrNonZeroSticky))
+	a.ErrorIs(err, ErrNonZeroSticky)
 }
 
 func TestFromProtoPartition_Normal(t *testing.T) {

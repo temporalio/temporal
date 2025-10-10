@@ -131,7 +131,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_Error() {
 	s.logger.Expect(testlogger.Error, "failed to refresh search attributes")
 	searchAttributes, err := s.manager.GetSearchAttributes("index-name", false)
 	s.Error(err)
-	s.Len(searchAttributes.Custom(), 0)
+	s.Empty(searchAttributes.Custom())
 }
 
 func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_NotFoundError() {
@@ -140,12 +140,12 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_NotFoundErro
 	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(nil, serviceerror.NewNotFound("not found"))
 	searchAttributes, err := s.manager.GetSearchAttributes("index-name", false)
 	s.NoError(err)
-	s.Len(searchAttributes.Custom(), 0)
+	s.Empty(searchAttributes.Custom())
 
 	// GetClusterMetadata() shouldn't be called, because results are cached.
 	searchAttributes, err = s.manager.GetSearchAttributes("index-name", false)
 	s.NoError(err)
-	s.Len(searchAttributes.Custom(), 0)
+	s.Empty(searchAttributes.Custom())
 }
 
 func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_UnavailableError() {
@@ -156,7 +156,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_UnavailableE
 	s.logger.Expect(testlogger.Error, "failed to refresh search attributes")
 	searchAttributes, err := s.manager.GetSearchAttributes("index-name", false)
 	s.Error(err)
-	s.Len(searchAttributes.Custom(), 0)
+	s.Empty(searchAttributes.Custom())
 
 	// Move time forward
 	s.timeSource.Update(time.Date(2020, 8, 22, 1, 1, 0, 0, time.UTC))
@@ -231,13 +231,13 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_RefreshIfAbs
 
 	searchAttributes, err := s.manager.GetSearchAttributes("index-name", false)
 	s.NoError(err)
-	s.Len(searchAttributes.Custom(), 0)
+	s.Empty(searchAttributes.Custom())
 
 	s.timeSource.Update(time.Date(2020, 8, 22, 1, 0, 1, 0, time.UTC))
 
 	searchAttributes, err = s.manager.GetSearchAttributes("index-name", false)
 	s.NoError(err)
-	s.Len(searchAttributes.Custom(), 0)
+	s.Empty(searchAttributes.Custom())
 
 	s.forceCacheRefresh = true
 	searchAttributes, err = s.manager.GetSearchAttributes("index-name", false)

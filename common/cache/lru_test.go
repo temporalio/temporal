@@ -67,7 +67,7 @@ func TestLRU(t *testing.T) {
 	assert.Nil(t, cache.Get("B")) // Oldest, should be evicted
 	assert.Equal(t, 4, cache.Size())
 	snapshot = capture.Snapshot()
-	assert.Equal(t, 2, len(snapshot[metrics.CacheUsage.Name()]))
+	assert.Len(t, snapshot[metrics.CacheUsage.Name()], 2)
 	assert.Equal(t, float64(4), snapshot[metrics.CacheUsage.Name()][1].Value)
 
 	// Access C, D is now LRU
@@ -81,7 +81,7 @@ func TestLRU(t *testing.T) {
 	assert.Nil(t, cache.Get("A"))
 	assert.Equal(t, 3, cache.Size())
 	snapshot = capture.Snapshot()
-	assert.Equal(t, 1, len(snapshot[metrics.CacheUsage.Name()]))
+	assert.Len(t, snapshot[metrics.CacheUsage.Name()], 1)
 	assert.Equal(t, float64(3), snapshot[metrics.CacheUsage.Name()][0].Value)
 }
 
@@ -136,10 +136,10 @@ func TestLRUWithTTL(t *testing.T) {
 	timeSource.Advance(time.Millisecond * 300)
 	assert.Nil(t, cache.Get("A"))
 	snapshot = capture.Snapshot()
-	assert.Equal(t, 2, len(snapshot[metrics.CacheUsage.Name()]))
+	assert.Len(t, snapshot[metrics.CacheUsage.Name()], 2)
 	assert.Equal(t, float64(0), snapshot[metrics.CacheUsage.Name()][1].Value)
 	assert.Equal(t, 0, cache.Size())
-	assert.Equal(t, 1, len(snapshot[metrics.CacheEntryAgeOnGet.Name()]))
+	assert.Len(t, snapshot[metrics.CacheEntryAgeOnGet.Name()], 1)
 	assert.Equal(t, time.Millisecond*300, snapshot[metrics.CacheEntryAgeOnEviction.Name()][0].Value)
 }
 
@@ -389,7 +389,7 @@ func TestZeroSizeCache(t *testing.T) {
 	cache := NewLRU(0, metrics.NoopMetricsHandler)
 	_, err := cache.PutIfNotExist("A", t)
 	assert.NoError(t, err)
-	assert.Equal(t, nil, cache.Get("A"))
+	assert.Nil(t, cache.Get("A"))
 	assert.Equal(t, 0, cache.Size())
 	it := cache.Iterator()
 	assert.False(t, it.HasNext())
@@ -398,7 +398,7 @@ func TestZeroSizeCache(t *testing.T) {
 	cache.Delete("A")
 	v, err := cache.PutIfNotExist("A", t)
 	assert.Equal(t, v, t)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, 0, cache.Size())
 }
 
@@ -409,12 +409,12 @@ func TestCache_ItemSizeTooLarge(t *testing.T) {
 	cache := NewLRU(maxTotalBytes, metrics.NoopMetricsHandler)
 
 	res := cache.Put(uuid.New(), &testEntryWithCacheSize{maxTotalBytes})
-	assert.Equal(t, res, nil)
+	assert.Nil(t, res)
 	assert.Equal(t, 10, cache.Size())
 
 	res, err := cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{maxTotalBytes + 1})
 	assert.Equal(t, err, ErrCacheItemTooLarge)
-	assert.Equal(t, res, nil)
+	assert.Nil(t, res)
 	assert.Equal(t, 10, cache.Size())
 
 }
@@ -435,7 +435,7 @@ func TestCache_ItemHasCacheSizeDefined(t *testing.T) {
 
 	go func() {
 		startWG.Wait()
-		assert.True(t, cache.Size() < maxTotalBytes)
+		assert.Less(t, cache.Size(), maxTotalBytes)
 	}()
 	for i := 0; i < numPuts; i++ {
 		go func() {
@@ -492,7 +492,7 @@ func TestCache_ItemHasCacheSizeDefined_PutWithSameKeyAndDifferentSizes(t *testin
 	assert.Equal(t, 8, cache.Size())
 	// put same key with smaller size, should not evict any items
 	cache.Put(key2, &testEntryWithCacheSize{3})
-	assert.Equal(t, cache.Get(key1), &testEntryWithCacheSize{4})
+	assert.Equal(t, &testEntryWithCacheSize{4}, cache.Get(key1))
 	// 8 - 4 + 3 = 7 < 10, should not evict any items
 	assert.Equal(t, 7, cache.Size())
 
@@ -501,15 +501,15 @@ func TestCache_ItemHasCacheSizeDefined_PutWithSameKeyAndDifferentSizes(t *testin
 	// 7 - 3 + 6 = 10 =< 10, should not evict any items
 	assert.Equal(t, 10, cache.Size())
 	// get key1 after to make it the most recently used
-	assert.Equal(t, cache.Get(key2), &testEntryWithCacheSize{6})
-	assert.Equal(t, cache.Get(key1), &testEntryWithCacheSize{4})
+	assert.Equal(t, &testEntryWithCacheSize{6}, cache.Get(key2))
+	assert.Equal(t, &testEntryWithCacheSize{4}, cache.Get(key1))
 
 	// put same key with larger size, but take all cache size, should evict all items
 	cache.Put(key2, &testEntryWithCacheSize{10})
 	// 10 - 4 - 6 + 10 = 10 =< 10, should evict all items
 	assert.Equal(t, 10, cache.Size())
-	assert.Equal(t, cache.Get(key1), nil)
-	assert.Equal(t, cache.Get(key2), &testEntryWithCacheSize{10})
+	assert.Nil(t, cache.Get(key1))
+	assert.Equal(t, &testEntryWithCacheSize{10}, cache.Get(key2))
 }
 
 func TestCache_ItemHasCacheSizeDefined_PutWithSameKey(t *testing.T) {
@@ -709,11 +709,11 @@ func TestCache_InvokeLifecycleCallbacks(t *testing.T) {
 			TTL:        ttl,
 			TimeSource: timeSource,
 			OnPut: func(val any) {
-				require.Equal(t, val, "value")
+				require.Equal(t, "value", val)
 				onPut++
 			},
 			OnEvict: func(val any) {
-				require.Equal(t, val, "value")
+				require.Equal(t, "value", val)
 				onEvict++
 			},
 		},
@@ -803,7 +803,7 @@ func TestCache_UnusedExpiry(t *testing.T) {
 	// The cache should still have entry 4,
 	r.Equal(1, cache.Size())
 	// but this Get call will check the (hard) ttl & expire it.
-	r.Equal(nil, cache.Get(4))
+	r.Nil(cache.Get(4))
 }
 
 func TestCache_UnusedExpiryPin(t *testing.T) {

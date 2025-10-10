@@ -54,9 +54,9 @@ func (s *validateOperationWorkflowModeStateSuite) TestCreateMode_UpdateCurrent()
 		for _, createMode := range creatModes {
 			err := ValidateCreateWorkflowModeState(createMode, testSnapshot)
 			if !expectError {
-				s.NoError(err, err)
+				s.NotErrorIs(err, err)
 			} else {
-				s.Error(err, err)
+				s.ErrorIs(err, err)
 			}
 		}
 	}
@@ -75,9 +75,9 @@ func (s *validateOperationWorkflowModeStateSuite) TestCreateMode_BypassCurrent()
 		testSnapshot := s.newTestWorkflowSnapshot(state)
 		err := ValidateCreateWorkflowModeState(CreateWorkflowModeBypassCurrent, testSnapshot)
 		if !expectError {
-			s.NoError(err, err)
+			s.NotErrorIs(err, err)
 		} else {
-			s.Error(err, err)
+			s.ErrorIs(err, err)
 		}
 	}
 }
@@ -99,9 +99,9 @@ func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_UpdateCurrent()
 			nil,
 		)
 		if !expectError {
-			s.NoError(err, err)
+			s.NotErrorIs(err, err)
 		} else {
-			s.Error(err, err)
+			s.ErrorIs(err, err)
 		}
 	}
 
@@ -128,9 +128,9 @@ func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_UpdateCurrent()
 				&testNewSnapshot,
 			)
 			if currentExpectError || newExpectError {
-				s.Error(err, err)
+				s.ErrorIs(err, err)
 			} else {
-				s.NoError(err, err)
+				s.NotErrorIs(err, err)
 			}
 		}
 	}
@@ -153,9 +153,9 @@ func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_BypassCurrent()
 			nil,
 		)
 		if !expectError {
-			s.NoError(err, err)
+			s.NotErrorIs(err, err)
 		} else {
-			s.Error(err, err)
+			s.ErrorIs(err, err)
 		}
 	}
 
@@ -182,9 +182,9 @@ func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_BypassCurrent()
 				&testNewSnapshot,
 			)
 			if currentExpectError || newExpectError {
-				s.Error(err, err)
+				s.ErrorIs(err, err)
 			} else {
-				s.NoError(err, err)
+				s.NotErrorIs(err, err)
 			}
 		}
 	}
@@ -208,9 +208,9 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Update
 			nil,
 		)
 		if !expectError {
-			s.NoError(err, err)
+			s.NotErrorIs(err, err)
 		} else {
-			s.Error(err, err)
+			s.ErrorIs(err, err)
 		}
 	}
 
@@ -238,9 +238,9 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Update
 				nil,
 			)
 			if resetExpectError || newExpectError {
-				s.Error(err, err)
+				s.ErrorIs(err, err)
 			} else {
-				s.NoError(err, err)
+				s.NotErrorIs(err, err)
 			}
 		}
 	}
@@ -269,9 +269,9 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Update
 				&testCurrentSnapshot,
 			)
 			if resetExpectError || currentExpectError {
-				s.Error(err, err)
+				s.ErrorIs(err, err)
 			} else {
-				s.NoError(err, err)
+				s.NotErrorIs(err, err)
 			}
 		}
 	}
@@ -308,9 +308,9 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Update
 					&testCurrentSnapshot,
 				)
 				if resetExpectError || newExpectError || currentExpectError {
-					s.Error(err, err)
+					s.ErrorIs(err, err)
 				} else {
-					s.NoError(err, err)
+					s.NotErrorIs(err, err)
 				}
 			}
 		}
@@ -335,9 +335,9 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Bypass
 			nil,
 		)
 		if !expectError {
-			s.NoError(err, err)
+			s.NotErrorIs(err, err)
 		} else {
-			s.Error(err, err)
+			s.ErrorIs(err, err)
 		}
 	}
 
@@ -368,9 +368,9 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Bypass
 				if err == nil {
 					fmt.Print("##")
 				}
-				s.Error(err, err)
+				s.ErrorIs(err, err)
 			} else {
-				s.NoError(err, err)
+				s.NotErrorIs(err, err)
 			}
 		}
 	}

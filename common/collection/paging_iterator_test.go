@@ -50,7 +50,7 @@ func (s *pagingIteratorSuite) TestIteration_NoErr() {
 	pagingFn := func(token []byte) ([]int, []byte, error) {
 		switch phase {
 		case 0:
-			s.Equal(0, len(token))
+			s.Empty(token)
 			defer func() { phase++ }()
 			return outputs[phase], tokens[phase], nil
 		case 1:
@@ -74,7 +74,7 @@ func (s *pagingIteratorSuite) TestIteration_NoErr() {
 	ite := NewPagingIterator(pagingFn)
 	for ite.HasNext() {
 		num, err := ite.Next()
-		s.Nil(err)
+		s.NoError(err)
 		result = append(result, num)
 	}
 	s.Equal([]int{1, 2, 3, 4, 5, 6}, result)
@@ -95,7 +95,7 @@ func (s *pagingIteratorSuite) TestIteration_Err_Beginging() {
 	s.True(ite.HasNext())
 	item, err := ite.Next()
 	s.Nil(item)
-	s.NotNil(err)
+	s.Error(err)
 	s.False(ite.HasNext())
 }
 
@@ -111,7 +111,7 @@ func (s *pagingIteratorSuite) TestIteration_Err_NotBegining() {
 	pagingFn := func(token []byte) ([]interface{}, []byte, error) {
 		switch phase {
 		case 0:
-			s.Equal(0, len(token))
+			s.Empty(token)
 			defer func() { phase++ }()
 			return outputs[phase], tokens[phase], nil
 		case 1:

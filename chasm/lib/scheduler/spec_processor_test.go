@@ -70,7 +70,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_LimitedActions() {
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	s.NoError(err)
-	s.Equal(1, len(res.BufferedStarts))
+	s.Len(res.BufferedStarts, 1)
 
 	// When a schedule has an action limit that has been exceeded, we don't bother
 	// buffering additional actions.
@@ -78,13 +78,13 @@ func (s *specProcessorSuite) TestProcessTimeRange_LimitedActions() {
 
 	res, err = s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	s.NoError(err)
-	s.Equal(0, len(res.BufferedStarts))
+	s.Empty(res.BufferedStarts)
 
 	// Manual starts should always be allowed.
 	backfillID := "backfill"
 	res, err = s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, backfillID, true, nil)
 	s.NoError(err)
-	s.Equal(1, len(res.BufferedStarts))
+	s.Len(res.BufferedStarts, 1)
 	bufferedStart := res.BufferedStarts[0]
 	s.True(bufferedStart.Manual)
 	s.Contains(bufferedStart.RequestId, backfillID)
@@ -104,7 +104,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_UpdateAfterHighWatermark() {
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	s.NoError(err)
-	s.Equal(3, len(res.BufferedStarts))
+	s.Len(res.BufferedStarts, 3)
 }
 
 // Tests that an update between a nominal time and jittered time for a start, that doesn't
@@ -133,7 +133,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_UpdateBetweenNominalAndJitter(
 	// A single start should have been buffered.
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	s.NoError(err)
-	s.Equal(1, len(res.BufferedStarts))
+	s.Len(res.BufferedStarts, 1)
 
 	// Validates the test case.
 	actualTime := res.BufferedStarts[0].GetActualTime().AsTime()
@@ -153,7 +153,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_CatchupWindow() {
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	s.NoError(err)
-	s.Equal(5, len(res.BufferedStarts))
+	s.Len(res.BufferedStarts, 5)
 }
 
 func (s *specProcessorSuite) TestProcessTimeRange_Limit() {
@@ -169,7 +169,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_Limit() {
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, &limit)
 	s.NoError(err)
-	s.Equal(2, len(res.BufferedStarts))
+	s.Len(res.BufferedStarts, 2)
 	s.Equal(0, limit)
 }
 
@@ -184,7 +184,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_OverlapPolicy() {
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	s.NoError(err)
-	s.Equal(5, len(res.BufferedStarts))
+	s.Len(res.BufferedStarts, 5)
 	for _, b := range res.BufferedStarts {
 		s.Equal(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, b.OverlapPolicy)
 	}
@@ -195,7 +195,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_OverlapPolicy() {
 
 	res, err = s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	s.NoError(err)
-	s.Equal(5, len(res.BufferedStarts))
+	s.Len(res.BufferedStarts, 5)
 	for _, b := range res.BufferedStarts {
 		s.Equal(overlapPolicy, b.OverlapPolicy)
 	}
@@ -210,7 +210,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_Basic() {
 	// Validate returned BufferedStarts for unique action times and request IDs.
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, "", false, nil)
 	s.NoError(err)
-	s.Equal(5, len(res.BufferedStarts))
+	s.Len(res.BufferedStarts, 5)
 
 	uniqueTimes := make(map[time.Time]bool)
 	uniqueIDs := make(map[string]bool)

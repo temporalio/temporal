@@ -421,8 +421,8 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Sticky() {
 		false,
 	)
 	s.NoError(err)
-	s.Equal("", wft.BuildId)
-	s.Equal("", e.GetWorkflowTaskStartedEventAttributes().GetWorkerVersion().GetBuildId())
+	s.Empty(wft.BuildId)
+	s.Empty(e.GetWorkflowTaskStartedEventAttributes().GetWorkerVersion().GetBuildId())
 	s.Equal("b1", s.mutableState.GetAssignedBuildId())
 	s.Equal(int64(0), wft.BuildIdRedirectCounter)
 	s.Equal(int64(0), s.mutableState.GetExecutionInfo().GetBuildIdRedirectCounter())
@@ -549,7 +549,7 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_WithWorkflowTaskTimeouts() {
 	// Verify that BestEffortDeleteTasks contains the timeout task keys
 	del := s.mutableState.BestEffortDeleteTasks
 	s.Contains(del, tasks.CategoryTimer)
-	s.Equal(2, len(del[tasks.CategoryTimer]), "Should have both ScheduleToStart and StartToClose timeout tasks")
+	s.Len(del[tasks.CategoryTimer], 2, "Should have both ScheduleToStart and StartToClose timeout tasks")
 	s.Contains(del[tasks.CategoryTimer], mockScheduleToStartTask.GetKey())
 	s.Contains(del[tasks.CategoryTimer], mockStartToCloseTask.GetKey())
 }
@@ -621,7 +621,7 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_LongTimeout_NotIncluded() {
 	// Verify that BestEffortDeleteTasks does NOT contain the long timeout task
 	del := s.mutableState.BestEffortDeleteTasks
 	if timerTasks, exists := del[tasks.CategoryTimer]; exists {
-		s.Equal(0, len(timerTasks), "Tasks with timeout > 120s should not be added to BestEffortDeleteTasks")
+		s.Empty(timerTasks, "Tasks with timeout > 120s should not be added to BestEffortDeleteTasks")
 	}
 }
 
@@ -1331,14 +1331,14 @@ func (s *mutableStateSuite) TestChecksum() {
 			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc()) // no errors expected
-			s.EqualValues(dbState.Checksum, s.mutableState.checksum)
+			s.Equal(dbState.Checksum, s.mutableState.checksum)
 			s.mutableState.namespaceEntry = s.newNamespaceCacheEntry()
 			csum, err := tc.closeTxFunc(s.mutableState)
-			s.Nil(err)
+			s.NoError(err)
 			s.NotNil(csum.Value)
 			s.Equal(enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY, csum.Flavor)
 			s.Equal(mutableStateChecksumPayloadV1, csum.Version)
-			s.EqualValues(csum, s.mutableState.checksum)
+			s.Equal(csum, s.mutableState.checksum)
 
 			// verify checksum is verified on Load
 			dbState.Checksum = csum
@@ -1348,7 +1348,7 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// generate checksum again and verify its the same
 			csum, err = tc.closeTxFunc(s.mutableState)
-			s.Nil(err)
+			s.NoError(err)
 			s.NotNil(csum.Value)
 			s.Equal(dbState.Checksum.Value, csum.Value)
 
@@ -1357,7 +1357,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 			s.Equal(loadErrors+1, loadErrorsFunc())
-			s.EqualValues(dbState.Checksum, s.mutableState.checksum)
+			s.Equal(dbState.Checksum, s.mutableState.checksum)
 
 			// test checksum is invalidated
 			loadErrors = loadErrorsFunc()
@@ -1413,20 +1413,20 @@ func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
 	// with no backoff, verify min backoff is in [3s, 5s]
 	minBackoff := s.mutableState.ContinueAsNewMinBackoff(nil).AsDuration()
 	s.NotZero(minBackoff)
-	s.True(minBackoff >= 3*time.Second)
-	s.True(minBackoff <= 5*time.Second)
+	s.GreaterOrEqual(minBackoff, 3*time.Second)
+	s.LessOrEqual(minBackoff, 5*time.Second)
 
 	// with 2s backoff, verify min backoff is in [3s, 5s]
 	minBackoff = s.mutableState.ContinueAsNewMinBackoff(durationpb.New(time.Second * 2)).AsDuration()
 	s.NotZero(minBackoff)
-	s.True(minBackoff >= 3*time.Second)
-	s.True(minBackoff <= 5*time.Second)
+	s.GreaterOrEqual(minBackoff, 3*time.Second)
+	s.LessOrEqual(minBackoff, 5*time.Second)
 
 	// with 6s backoff, verify min backoff unchanged
 	backoff := time.Second * 6
 	minBackoff = s.mutableState.ContinueAsNewMinBackoff(durationpb.New(backoff)).AsDuration()
 	s.NotZero(minBackoff)
-	s.True(minBackoff == backoff)
+	s.Equal(minBackoff, backoff)
 
 	// set start time to be 3s ago
 	startTime := timestamppb.New(time.Now().Add(-time.Second * 3))
@@ -1436,13 +1436,13 @@ func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
 	// with no backoff, verify min backoff is in [0, 2s]
 	minBackoff = s.mutableState.ContinueAsNewMinBackoff(nil).AsDuration()
 	s.NotNil(minBackoff)
-	s.True(minBackoff >= 0)
-	s.True(minBackoff <= 2*time.Second, "%v\n", minBackoff)
+	s.GreaterOrEqual(minBackoff, 0)
+	s.LessOrEqual(minBackoff, 2*time.Second, "%v\n", minBackoff)
 
 	// with 2s backoff, verify min backoff not changed
 	backoff = time.Second * 2
 	minBackoff = s.mutableState.ContinueAsNewMinBackoff(durationpb.New(backoff)).AsDuration()
-	s.True(minBackoff == backoff)
+	s.Equal(minBackoff, backoff)
 
 	// set start time to be 5s ago
 	startTime = timestamppb.New(time.Now().Add(-time.Second * 5))
@@ -1456,7 +1456,7 @@ func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
 	// with 2s backoff, verify backoff unchanged
 	backoff = time.Second * 2
 	minBackoff = s.mutableState.ContinueAsNewMinBackoff(durationpb.New(backoff)).AsDuration()
-	s.True(minBackoff == backoff)
+	s.Equal(minBackoff, backoff)
 }
 
 func (s *mutableStateSuite) TestEventReapplied() {
@@ -1556,8 +1556,8 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 
 	mutation, err := s.mutableState.hBuilder.Finish(true)
 	s.NoError(err)
-	s.Equal(1, len(mutation.DBEventsBatches))
-	s.Equal(2, len(mutation.DBEventsBatches[0]))
+	s.Len(mutation.DBEventsBatches, 1)
+	s.Len(mutation.DBEventsBatches[0], 2)
 	attrs := mutation.DBEventsBatches[0][0].GetWorkflowTaskScheduledEventAttributes()
 	s.NotNil(attrs)
 	s.Equal("tq", attrs.TaskQueue.Name)
@@ -1736,7 +1736,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		uuid.New(),
 		workflowStartEvent,
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	// setup transient workflow task
 	wt, err := s.mutableState.ApplyWorkflowTaskScheduledEvent(
@@ -1749,7 +1749,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		nil,
 		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(wt)
 
 	wt, err = s.mutableState.ApplyWorkflowTaskStartedEvent(
@@ -1764,11 +1764,11 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		nil,
 		int64(0),
 	)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(wt)
 
 	err = s.mutableState.ApplyWorkflowTaskFailedEvent()
-	s.Nil(err)
+	s.NoError(err)
 
 	workflowTaskAttempt = int32(123)
 	newWorkflowTaskScheduleEvent := &historypb.HistoryEvent{
@@ -1806,7 +1806,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		nil,
 		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(wt)
 
 	wt, err = s.mutableState.ApplyWorkflowTaskStartedEvent(
@@ -1821,7 +1821,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		nil,
 		int64(0),
 	)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(wt)
 
 	s.mutableState.SetHistoryBuilder(historybuilder.NewImmutable([]*historypb.HistoryEvent{
@@ -2081,8 +2081,8 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 			numAccepted++
 		}
 	})
-	s.Equal(numCompleted, 1, "expected 1 completed")
-	s.Equal(numAccepted, 1, "expected 1 accepted")
+	s.Equal(1, numCompleted, "expected 1 completed")
+	s.Equal(1, numAccepted, "expected 1 accepted")
 
 	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
 		namespaceEntry.IsGlobalNamespace(),
@@ -2137,12 +2137,12 @@ func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {
 		},
 	})
 	s.NoError(err)
-	s.Assert().Equal(version, ai.Version)
-	s.Assert().Equal(eventID, ai.StartedEventId)
+	s.Equal(version, ai.Version)
+	s.Equal(eventID, ai.StartedEventId)
 	s.NotNil(ai.StartedTime)
-	s.Assert().Equal(now, ai.StartedTime.AsTime())
-	s.Assert().Equal(requestID, ai.RequestId)
-	s.Assert().Nil(ai.LastHeartbeatDetails)
+	s.Equal(now, ai.StartedTime.AsTime())
+	s.Equal(requestID, ai.RequestId)
+	s.Nil(ai.LastHeartbeatDetails)
 }
 
 func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
@@ -2345,7 +2345,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 
 			// Normal WT is persisted as is.
 			execInfo, err := tc.closeTxFunc(s.mutableState)
-			s.Nil(err)
+			s.NoError(err)
 			s.Equal(enumsspb.WORKFLOW_TASK_TYPE_NORMAL, execInfo.WorkflowTaskType)
 			s.NotEqual(common.EmptyEventID, execInfo.WorkflowTaskScheduledEventId)
 			s.NotEqual(common.EmptyEventID, execInfo.WorkflowTaskStartedEventId)
@@ -2354,7 +2354,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 
 			// Speculative WT is converted to normal.
 			execInfo, err = tc.closeTxFunc(s.mutableState)
-			s.Nil(err)
+			s.NoError(err)
 			s.Equal(enumsspb.WORKFLOW_TASK_TYPE_NORMAL, execInfo.WorkflowTaskType)
 			s.NotEqual(common.EmptyEventID, execInfo.WorkflowTaskScheduledEventId)
 			s.NotEqual(common.EmptyEventID, execInfo.WorkflowTaskStartedEventId)
@@ -2377,7 +2377,7 @@ func (s *mutableStateSuite) TestRetryWorkflowTask_WithNextRetryDelay() {
 
 	duration, retryState := s.mutableState.GetRetryBackoffDuration(applicationFailure)
 	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
-	s.Equal(duration, expectedDelayDuration)
+	s.Equal(expectedDelayDuration, duration)
 }
 func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
@@ -2842,7 +2842,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			}
 
 			execInfo, err := tc.txFunc(s.mutableState)
-			s.Nil(err)
+			s.NoError(err)
 
 			protorequire.ProtoSliceEqual(t, expectedTransitionHistory, execInfo.TransitionHistory)
 		})
@@ -3337,7 +3337,7 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 			execInfo, err := tc.txFunc(s.mutableState)
 			s.NotNil(execInfo.PreviousTransitionHistory)
 			s.Nil(execInfo.TransitionHistory)
-			s.Nil(err)
+			s.NoError(err)
 		})
 	}
 }
@@ -3510,7 +3510,7 @@ func (s *mutableStateSuite) TestCollapseVisibilityTasks() {
 				ms.AddTasks(tc.tasks...)
 				ms.closeTransactionCollapseVisibilityTasks()
 				visTasks := ms.InsertTasks[tasks.CategoryVisibility]
-				s.Equal(len(tc.res), len(visTasks))
+				s.Len(visTasks, len(tc.res))
 				for i, expectTaskType := range tc.res {
 					s.Equal(expectTaskType, visTasks[i].GetType())
 				}
@@ -3675,10 +3675,10 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_HistoryT
 				ms.InsertTasks[tasks.CategoryReplication] = []tasks.Task{}
 				err := ms.closeTransactionPrepareReplicationTasks(historyi.TransactionPolicyActive, eventBatches, false)
 				if err != nil {
-					s.Fail("closeTransactionPrepareReplicationTasks failed", err)
+					s.Fail("closeTransactionPrepareReplicationTasks failed", "%+v", err)
 				}
 				repicationTasks := ms.InsertTasks[tasks.CategoryReplication]
-				s.Equal(len(tc.tasks), len(repicationTasks))
+				s.Len(repicationTasks, len(tc.tasks))
 				for i, task := range tc.tasks {
 					s.Equal(task, repicationTasks[i])
 				}
@@ -3744,7 +3744,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncVers
 	err := ms.closeTransactionPrepareReplicationTasks(historyi.TransactionPolicyActive, eventBatches, false)
 	s.NoError(err)
 	replicationTasks := ms.InsertTasks[tasks.CategoryReplication]
-	s.Equal(1, len(replicationTasks))
+	s.Len(replicationTasks, 1)
 	historyTasks := []tasks.Task{
 		&tasks.HistoryReplicationTask{
 			WorkflowKey:  s.mutableState.GetWorkflowKey(),
@@ -3772,7 +3772,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncVers
 	s.True(ok)
 	s.Equal(expectedTask.WorkflowKey, actualTask.WorkflowKey)
 	s.Equal(expectedTask.VersionedTransition, actualTask.VersionedTransition)
-	s.Equal(3, len(actualTask.TaskEquivalents))
+	s.Len(actualTask.TaskEquivalents, 3)
 	s.Equal(historyTasks[0], actualTask.TaskEquivalents[0])
 	s.Equal(historyTasks[1], actualTask.TaskEquivalents[1])
 	s.Equal(enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, actualTask.TaskEquivalents[2].GetType())
@@ -4277,7 +4277,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_CapIfLargerThanL
 	s.NoError(err)
 
 	tombstoneBatches := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches
-	s.Len(tombstoneBatches, 0)
+	s.Empty(tombstoneBatches)
 }
 
 func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_OnlyTrackFirstEmpty() {
@@ -4368,7 +4368,7 @@ func (s *mutableStateSuite) TestExecutionInfoClone() {
 			&info.NamespaceId,
 		}
 	})
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *mutableStateSuite) addChangesForStateReplication(state *persistencespb.WorkflowMutableState) {
@@ -4396,14 +4396,14 @@ func (s *mutableStateSuite) addChangesForStateReplication(state *persistencespb.
 }
 
 func compareMapOfProto[K comparable, V proto.Message](s *mutableStateSuite, expected, actual map[K]V) {
-	s.Equal(len(expected), len(actual))
+	s.Len(actual, len(expected))
 	for k, v := range expected {
 		s.True(proto.Equal(v, actual[k]))
 	}
 }
 
 func (s *mutableStateSuite) verifyChildExecutionInfos(expectedMap, actualMap, originMap map[int64]*persistencespb.ChildExecutionInfo) {
-	s.Equal(len(expectedMap), len(actualMap))
+	s.Len(actualMap, len(expectedMap))
 	for k, expected := range expectedMap {
 		actual, ok := actualMap[k]
 		s.True(ok)
@@ -4430,7 +4430,7 @@ func (s *mutableStateSuite) verifyChildExecutionInfos(expectedMap, actualMap, or
 }
 
 func (s *mutableStateSuite) verifyActivityInfos(expectedMap, actualMap map[int64]*persistencespb.ActivityInfo) {
-	s.Equal(len(expectedMap), len(actualMap))
+	s.Len(actualMap, len(expectedMap))
 	for k, expected := range expectedMap {
 		actual, ok := actualMap[k]
 		s.True(ok)

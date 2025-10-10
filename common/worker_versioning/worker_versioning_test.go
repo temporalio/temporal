@@ -245,10 +245,10 @@ func TestWorkerDeploymentVersionFromStringV32(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := WorkerDeploymentVersionFromStringV32(tt.input)
 			if tt.expectedErr != "" {
-				assert.NotNil(t, err)
+				assert.Error(t, err)
 				assert.EqualError(t, err, tt.expectedErr)
 			} else {
-				assert.Nil(t, err)
+				assert.NoError(t, err)
 				assert.Equal(t, tt.expected, result)
 			}
 		})

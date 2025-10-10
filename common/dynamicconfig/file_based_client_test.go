@@ -55,7 +55,7 @@ func (s *fileBasedClientSuite) SetupTest() {
 
 func (s *fileBasedClientSuite) TestGetValue() {
 	cvs := s.client.GetValue(testGetBoolPropertyKey)
-	s.Equal(3, len(cvs))
+	s.Len(cvs, 3)
 	s.ElementsMatch([]dynamicconfig.ConstrainedValue{
 		{Constraints: dynamicconfig.Constraints{}, Value: false},
 		{Constraints: dynamicconfig.Constraints{Namespace: "global-samples-namespace"}, Value: true},
@@ -74,10 +74,10 @@ func (s *fileBasedClientSuite) TestGetValue_NonExistKey() {
 
 func (s *fileBasedClientSuite) TestGetValue_CaseInsensitie() {
 	cvs := s.client.GetValue(testCaseInsensitivePropertyKey)
-	s.Equal(1, len(cvs))
+	s.Len(cvs, 1)
 
 	v := dynamicconfig.NewGlobalBoolSetting(testCaseInsensitivePropertyKey, false, "").Get(s.collection)()
-	s.Equal(true, v)
+	s.True(v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue() {
@@ -168,7 +168,7 @@ func (s *fileBasedClientSuite) TestGetFloatValue_WrongType() {
 
 func (s *fileBasedClientSuite) TestGetBoolValue() {
 	v := dynamicconfig.NewGlobalBoolSetting(testGetBoolPropertyKey, true, "").Get(s.collection)()
-	s.Equal(false, v)
+	s.False(v)
 }
 
 func (s *fileBasedClientSuite) TestGetStringValue() {
@@ -550,7 +550,7 @@ testGetFloat64PropertyKey:
 - value: 22.222
 `))
 	s.Empty(lr.Errors)
-	s.Equal(1, len(lr.Warnings))
+	s.Len(lr.Warnings, 1)
 	s.ErrorContains(lr.Warnings[0], `unregistered key "testGetFloat64PropertyKey"`)
 }
 
@@ -562,7 +562,7 @@ testGetIntPropertyKey:
 - value: not a number
 `))
 	s.Empty(lr.Errors)
-	s.Equal(1, len(lr.Warnings))
+	s.Len(lr.Warnings, 1)
 	s.ErrorContains(lr.Warnings[0], `validation failed: key "testGetIntPropertyKey" value not a number: value type is not int`)
 }
 
@@ -576,7 +576,7 @@ testGetIntPropertyKey:
     namespace: samples-namespace
 `))
 	s.Empty(lr.Errors)
-	s.Equal(1, len(lr.Warnings))
+	s.Len(lr.Warnings, 1)
 	s.ErrorContains(lr.Warnings[0], `constraint "namespace" isn't valid for dynamic config key "testGetIntPropertyKey"`)
 }
 
@@ -592,12 +592,12 @@ testGetIntPropertyKey:
     namespace: samples-namespace
 `))
 	s.Empty(lr.Errors)
-	s.Equal(3, len(lr.Warnings))
+	s.Len(lr.Warnings, 3)
 }
 
 func (s *fileBasedClientSuite) TestErrorYamlDecode() {
 	lr := dynamicconfig.ValidateFile([]byte(`}}}}}}}}}`))
-	s.Equal(1, len(lr.Errors))
+	s.Len(lr.Errors, 1)
 	s.ErrorContains(lr.Errors[0], "decode error")
 }
 
@@ -610,7 +610,7 @@ testGetBoolPropertyKey:
   constraints:
     namespace: 35
 `))
-	s.Equal(1, len(lr.Errors))
+	s.Len(lr.Errors, 1)
 	s.ErrorContains(lr.Errors[0], "namespace constraint must be string")
 }
 

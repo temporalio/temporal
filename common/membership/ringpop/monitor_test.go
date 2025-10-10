@@ -41,10 +41,10 @@ func (s *RpoSuite) TestMonitor() {
 	r, err := rpm.GetResolver(serviceName)
 	s.NoError(err)
 	err = r.AddListener("test-listener", listenCh)
-	s.Nil(err, "AddListener failed")
+	s.NoError(err, "AddListener failed")
 
 	host, err := r.Lookup("key")
-	s.Nil(err, "Ringpop monitor failed to find host for key")
+	s.NoError(err, "Ringpop monitor failed to find host for key")
 	s.NotNil(host, "Ringpop monitor returned a nil host")
 
 	s.Eventually(func() bool {
@@ -65,7 +65,7 @@ func (s *RpoSuite) TestMonitor() {
 	select {
 	case e := <-listenCh:
 		s.T().Log("Got update")
-		s.Equal(1, len(e.HostsRemoved), "ringpop monitor event does not report the removed host")
+		s.Len(e.HostsRemoved, 1, "ringpop monitor event does not report the removed host")
 		s.Equal(testService.hostAddrs[1], e.HostsRemoved[0].GetAddress(), "ringpop monitor reported that a wrong host was removed")
 		s.Nil(e.HostsAdded, "Unexpected host reported to be added by ringpop monitor")
 		s.Nil(e.HostsChanged, "Unexpected host reported to be changed by ringpop monitor")
@@ -75,11 +75,11 @@ func (s *RpoSuite) TestMonitor() {
 
 	for k := 0; k < 10; k++ {
 		host, err = r.Lookup(fmt.Sprintf("key%d", k))
-		s.Nil(err, "Ringpop monitor failed to find host for key")
+		s.NoError(err, "Ringpop monitor failed to find host for key")
 		s.NotEqual(testService.hostAddrs[1], host.GetAddress(), "Ringpop monitor assigned key to dead host")
 	}
-	s.Equal(2, len(r.Members()))
-	s.Equal(2, len(r.AvailableMembers()))
+	s.Len(r.Members(), 2)
+	s.Len(r.AvailableMembers(), 2)
 
 	s.T().Log("Draining host 2")
 	testService.DrainHost(testService.hostUUIDs[2])
@@ -89,17 +89,17 @@ func (s *RpoSuite) TestMonitor() {
 		s.T().Log("Got update")
 		s.Nil(e.HostsRemoved)
 		s.Nil(e.HostsAdded)
-		s.Equal(1, len(e.HostsChanged))
+		s.Len(e.HostsChanged, 1)
 		s.Equal(testService.hostAddrs[2], e.HostsChanged[0].GetAddress())
 	case <-timer.C:
 		s.Fail("Timed out waiting for failure to be detected by ringpop")
 	}
 
-	s.Equal(2, len(r.Members()))
-	s.Equal(1, len(r.AvailableMembers()))
+	s.Len(r.Members(), 2)
+	s.Len(r.AvailableMembers(), 1)
 
 	err = r.RemoveListener("test-listener")
-	s.Nil(err, "RemoveListener() failed")
+	s.NoError(err, "RemoveListener() failed")
 
 	testService.Stop()
 }
@@ -213,8 +213,8 @@ func (s *RpoSuite) TestCompareMembersWithDraining() {
 	resolver.ringAndHosts.Store(ringAndHosts{
 		hosts: newMembers,
 	})
-	s.Equal(3, len(resolver.Members()))
-	s.Equal(2, len(resolver.AvailableMembers()))
+	s.Len(resolver.Members(), 3)
+	s.Len(resolver.AvailableMembers(), 2)
 }
 
 func eventToString(event *membership.ChangedEvent) []string {

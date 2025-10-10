@@ -211,6 +211,6 @@ func (s *fieldsIteratorSuite) TestUnmanagedFieldsOf() {
 	for r := range unmanagedFieldsOf(reflect.TypeFor[unmanagedFields]()) {
 		result = append(result, r.name)
 	}
-	s.Equal(2, len(result))
+	s.Len(result, 2)
 	s.ElementsMatch([]string{"unmanaged", "anotherPtr"}, result)
 }

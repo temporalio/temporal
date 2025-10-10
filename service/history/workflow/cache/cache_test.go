@@ -219,7 +219,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		locks.PriorityHigh,
 	)
 	s.NoError(err4)
-	s.False(ctx == newContext)
+	s.NotEqual(ctx, newContext)
 	release(err4)
 }
 
@@ -724,7 +724,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 	)
 	s.NoError(err)
 	// Make sure execution 3 was evicted by checking if mutable state is nil.
-	s.Nil(ctx.(*workflow.ContextImpl).MutableState, nil)
+	s.Nil(ctx.(*workflow.ContextImpl).MutableState, "%+v", nil)
 	release1(nil)
 
 	// Insert execution3 again with size 400bytes.

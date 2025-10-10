@@ -2364,7 +2364,7 @@ func (s *ExecutionMutableStateSuite) assertHEWithDB(
 	if !assertPrefix {
 		s.Nil(resp.NextPageToken)
 	}
-	s.Equal(len(historyEvents), len(resp.HistoryEvents))
+	s.Len(resp.HistoryEvents, len(historyEvents))
 	for i, event := range historyEvents {
 		s.ProtoEqual(event, resp.HistoryEvents[i])
 	}

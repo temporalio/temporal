@@ -392,7 +392,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(genTasks))
+	require.Len(t, genTasks, 2)
 	invocationTask, ok := genTasks[0].(*tasks.StateMachineOutboundTask)
 	var backoffTask *tasks.StateMachineTimerTask
 	if ok {
@@ -433,7 +433,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.Equal(t, int64(3), backoffTask.Version)
 
 	timers := mutableState.GetExecutionInfo().StateMachineTimers
-	require.Equal(t, 1, len(timers))
+	require.Len(t, timers, 1)
 	protorequire.ProtoEqual(t, &persistencespb.StateMachineTimerGroup{
 		Deadline:  callbackToBackoff.NextAttemptScheduleTime,
 		Scheduled: true,
@@ -487,12 +487,12 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 
 	// No new timer tasks are generated they are collapsed.
 	// Only an outbound task is expected here.
-	require.Equal(t, 1, len(genTasks))
+	require.Len(t, genTasks, 1)
 	_, ok = genTasks[0].(*tasks.StateMachineOutboundTask)
 	require.True(t, ok)
 
 	timers = mutableState.GetExecutionInfo().StateMachineTimers
-	require.Equal(t, 2, len(timers))
+	require.Len(t, timers, 2)
 
 	protorequire.ProtoEqual(t, &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
@@ -817,14 +817,14 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 			)
 			resultTasks, _, err := taskGenerator.GenerateMigrationTasks(nil)
 			require.NoError(t, err)
-			require.Equal(t, len(tc.expectedTaskTypes), len(resultTasks))
+			require.Len(t, resultTasks, len(tc.expectedTaskTypes))
 			if tc.transitionHistoryEnabled {
-				require.Equal(t, 1, len(resultTasks))
+				require.Len(t, resultTasks, 1)
 				require.Equal(t, tc.expectedTaskTypes[0].String(), resultTasks[0].GetType().String())
 				syncVersionTask, ok := resultTasks[0].(*tasks.SyncVersionedTransitionTask)
 				require.True(t, ok)
 				taskEquivalent := syncVersionTask.TaskEquivalents
-				require.Equal(t, len(tc.expectedTaskEquivalentTypes), len(taskEquivalent))
+				require.Len(t, taskEquivalent, len(tc.expectedTaskEquivalentTypes))
 				for i, equivalent := range taskEquivalent {
 					require.Equal(t, tc.expectedTaskEquivalentTypes[i], equivalent.GetType())
 				}

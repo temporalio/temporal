@@ -93,7 +93,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 	assert.Equal(t, startTime, status.LastStartTime)
 	assert.Equal(t, closeTime, status.LastCloseTime)
 	assert.True(t, status.TaskQueueUserDataReplicationStatus.Done)
-	assert.Equal(t, "", status.TaskQueueUserDataReplicationStatus.FailureMessage)
+	assert.Empty(t, status.TaskQueueUserDataReplicationStatus.FailureMessage)
 	assert.Equal(t, int64(4), status.TotalWorkflowCount)
 	assert.Equal(t, int64(4), status.ReplicatedWorkflowCount)
 	assert.Equal(t, []byte(nil), status.PageTokenForRestart)
@@ -237,7 +237,7 @@ func testRunForceReplicationForContinueAsNew(t *testing.T,
 		require.NoError(t, err)
 	} else {
 		require.Error(t, err)
-		require.True(t, errors.As(err, &continueAsNewErr))
+		require.ErrorAs(t, err, &continueAsNewErr)
 
 		var params ForceReplicationParams
 		payloads := continueAsNewErr.Input.GetPayloads()
@@ -572,7 +572,7 @@ func TestSeedReplicationQueueWithUserDataEntries_Heartbeats(t *testing.T) {
 	}
 	_, err := env.ExecuteActivity(a.SeedReplicationQueueWithUserDataEntries, params)
 	assert.Error(t, err)
-	assert.Equal(t, len(iceptor.seedRecordedHeartbeats), 2)
+	assert.Equal(t, 2, len(iceptor.seedRecordedHeartbeats))
 	assert.Equal(t, []byte(nil), iceptor.seedRecordedHeartbeats[1].NextPageToken)
 	assert.Equal(t, 1, iceptor.seedRecordedHeartbeats[1].IndexInPage)
 	env.SetHeartbeatDetails(iceptor.seedRecordedHeartbeats[1])

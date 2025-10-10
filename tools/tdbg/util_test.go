@@ -12,7 +12,7 @@ func (s *utilSuite) TestStringToEnum_MapCaseInsensitive() {
 
 	result, err := tdbg.StringToEnum("timeR", enumValues)
 	s.NoError(err)
-	s.Equal(result, int32(2)) // Timer
+	s.Equal(int32(2), result) // Timer
 }
 
 func (s *utilSuite) TestStringToEnum_MapNonExisting() {
@@ -25,7 +25,7 @@ func (s *utilSuite) TestStringToEnum_MapNonExisting() {
 
 	result, err := tdbg.StringToEnum("Timer2", enumValues)
 	s.Error(err)
-	s.Equal(result, int32(0))
+	s.Equal(int32(0), result)
 }
 
 func (s *utilSuite) TestStringToEnum_MapEmptyValue() {
@@ -38,7 +38,7 @@ func (s *utilSuite) TestStringToEnum_MapEmptyValue() {
 
 	result, err := tdbg.StringToEnum("", enumValues)
 	s.NoError(err)
-	s.Equal(result, int32(0))
+	s.Equal(int32(0), result)
 }
 
 func (s *utilSuite) TestStringToEnum_MapEmptyEnum() {
@@ -46,5 +46,5 @@ func (s *utilSuite) TestStringToEnum_MapEmptyEnum() {
 
 	result, err := tdbg.StringToEnum("Timer", enumValues)
 	s.Error(err)
-	s.Equal(result, int32(0))
+	s.Equal(int32(0), result)
 }

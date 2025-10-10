@@ -2305,9 +2305,8 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		}
 		commandsWithEventsCount++
 	}
-	s.Equal(
-		commandsWithEventsCount,
-		len(commandEvents),
+	s.Len(
+		commandEvents, commandsWithEventsCount,
 		"This assertion is broken when a new command is added and no corresponding logic for corresponding command event is added to HistoryBuilder.bufferEvent",
 	)
 }
@@ -2355,8 +2354,8 @@ func (s *historyBuilderSuite) TestReorder() {
 }
 
 func (s *historyBuilderSuite) TestBufferSize_Memory() {
-	s.Assert().Zero(s.historyBuilder.NumBufferedEvents())
-	s.Assert().Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
+	s.Zero(s.historyBuilder.NumBufferedEvents())
+	s.Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
 	s.historyBuilder.AddWorkflowExecutionSignaledEvent(
 		"signal-name",
 		&commonpb.Payloads{},
@@ -2365,30 +2364,30 @@ func (s *historyBuilderSuite) TestBufferSize_Memory() {
 		nil,
 		nil,
 	)
-	s.Assert().Equal(1, s.historyBuilder.NumBufferedEvents())
+	s.Equal(1, s.historyBuilder.NumBufferedEvents())
 	// the size of the proto  is non-deterministic, so just assert that it's non-zero, and it isn't really high
-	s.Assert().Greater(s.historyBuilder.SizeInBytesOfBufferedEvents(), 0)
-	s.Assert().Less(s.historyBuilder.SizeInBytesOfBufferedEvents(), 100)
+	s.Assert().Positive(s.historyBuilder.SizeInBytesOfBufferedEvents())
+	s.Less(s.historyBuilder.SizeInBytesOfBufferedEvents(), 100)
 	s.flush()
-	s.Assert().Zero(s.historyBuilder.NumBufferedEvents())
-	s.Assert().Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
+	s.Zero(s.historyBuilder.NumBufferedEvents())
+	s.Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
 }
 
 func (s *historyBuilderSuite) TestBufferSize_DB() {
-	s.Assert().Zero(s.historyBuilder.NumBufferedEvents())
-	s.Assert().Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
+	s.Zero(s.historyBuilder.NumBufferedEvents())
+	s.Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
 	s.historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{{
 		EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 	}}
-	s.Assert().Equal(1, s.historyBuilder.NumBufferedEvents())
+	s.Equal(1, s.historyBuilder.NumBufferedEvents())
 	// the size of the proto  is non-deterministic, so just assert that it's non-zero, and it isn't really high
-	s.Assert().Greater(s.historyBuilder.SizeInBytesOfBufferedEvents(), 0)
-	s.Assert().Less(s.historyBuilder.SizeInBytesOfBufferedEvents(), 100)
+	s.Assert().Positive(s.historyBuilder.SizeInBytesOfBufferedEvents())
+	s.Less(s.historyBuilder.SizeInBytesOfBufferedEvents(), 100)
 	s.flush()
-	s.Assert().Zero(s.historyBuilder.NumBufferedEvents())
-	s.Assert().Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
+	s.Zero(s.historyBuilder.NumBufferedEvents())
+	s.Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
 }
 
 func (s *historyBuilderSuite) TestLastEventVersion() {
@@ -2451,13 +2450,13 @@ func (s *historyBuilderSuite) flush() *historypb.HistoryEvent {
 	s.Equal(make(map[int64]int64), historyMutation.ScheduledIDToStartedID)
 
 	if !hasBufferEvents {
-		s.Equal(1, len(historyMutation.DBEventsBatches))
-		s.Equal(1, len(historyMutation.DBEventsBatches[0]))
+		s.Len(historyMutation.DBEventsBatches, 1)
+		s.Len(historyMutation.DBEventsBatches[0], 1)
 		return historyMutation.DBEventsBatches[0][0]
 	}
 
 	if len(historyMutation.MemBufferBatch) > 0 {
-		s.Equal(1, len(historyMutation.MemBufferBatch))
+		s.Len(historyMutation.MemBufferBatch, 1)
 		return historyMutation.MemBufferBatch[0]
 	}
 

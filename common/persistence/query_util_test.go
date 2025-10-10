@@ -61,7 +61,7 @@ func (s *queryUtilSuite) TestLoadAndSplitQueryFromReaders() {
 	`
 	statements, err := LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBufferString(input)})
 	s.NoError(err)
-	s.Equal(4, len(statements))
+	s.Len(statements, 4)
 	s.Equal(
 		`DO LANGUAGE 'plpgsql' $$
 			BEGIN

@@ -199,7 +199,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 	s.NoError(err)
 	s.Equal(len(request.Executions), int(output.VerifiedWorkflowCount))
 
-	s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
+	s.NotEmpty(iceptor.replicationRecordedHeartbeats)
 	lastHeartBeat := iceptor.replicationRecordedHeartbeats[len(iceptor.replicationRecordedHeartbeats)-1]
 	s.Equal(len(request.Executions), lastHeartBeat.NextIndex)
 	s.Equal(execution2, lastHeartBeat.LastNotVerifiedWorkflowExecution)
@@ -254,7 +254,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 		})).Return(t.resp, t.err).Times(1)
 
 		_, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
-		s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
+		s.NotEmpty(iceptor.replicationRecordedHeartbeats)
 		lastHeartBeat := iceptor.replicationRecordedHeartbeats[len(iceptor.replicationRecordedHeartbeats)-1]
 		if t.expectedErr == nil {
 			s.NoError(err)
@@ -301,7 +301,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
 	s.Error(err)
 	s.ErrorContains(err, "verifyReplicationTasks was not able to make progress")
 
-	s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
+	s.NotEmpty(iceptor.replicationRecordedHeartbeats)
 	lastHeartBeat := iceptor.replicationRecordedHeartbeats[len(iceptor.replicationRecordedHeartbeats)-1]
 	s.Equal(0, lastHeartBeat.NextIndex)
 	s.Equal(execution1, lastHeartBeat.LastNotVerifiedWorkflowExecution)
@@ -325,7 +325,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_AlreadyVerified() {
 	_, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
 	s.NoError(err)
 
-	s.Equal(len(iceptor.replicationRecordedHeartbeats), 1)
+	s.Equal(1, len(iceptor.replicationRecordedHeartbeats))
 }
 
 func (s *activitiesSuite) Test_verifySingleReplicationTask() {
@@ -633,7 +633,7 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Success() {
 	_, err := env.ExecuteActivity(s.a.GenerateReplicationTasks, &request)
 	s.NoError(err)
 
-	s.Greater(len(iceptor.generateReplicationRecordedHeartbeats), 0)
+	s.NotEmpty(iceptor.generateReplicationRecordedHeartbeats)
 	lastIdx := len(iceptor.generateReplicationRecordedHeartbeats) - 1
 	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
 	s.Equal(lastIdx, lastHeartBeat)
@@ -662,7 +662,7 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Failed() {
 	_, err := env.ExecuteActivity(s.a.GenerateReplicationTasks, &request)
 	s.Error(err)
 
-	s.Greater(len(iceptor.generateReplicationRecordedHeartbeats), 0)
+	s.NotEmpty(iceptor.generateReplicationRecordedHeartbeats)
 	lastIdx := len(iceptor.generateReplicationRecordedHeartbeats) - 1
 	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
 	// Only the generation of 1st execution suceeded.

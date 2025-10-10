@@ -146,7 +146,7 @@ func testHappyPath(
 		NextPageToken: nil,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, len(response.Messages))
+	assert.Empty(t, response.Messages)
 
 	encodingType := enumspb.ENCODING_TYPE_JSON
 	_, err = persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
@@ -325,7 +325,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 		})
 		require.NoError(t, err)
 		require.Len(t, response.Messages, 1)
-		require.Equal(t, response.Messages[0].MetaData.ID, int64(3))
+		require.Equal(t, int64(3), response.Messages[0].MetaData.ID)
 	})
 
 	t.Run("DeleteSameRangeTwice", func(t *testing.T) {
@@ -399,7 +399,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			NextPageToken: nil,
 		})
 		require.NoError(t, err)
-		require.Equal(t, 0, len(response.Queues))
+		require.Empty(t, response.Queues)
 
 		// List of all created queues
 		var queueNames []string
@@ -418,7 +418,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			NextPageToken: nil,
 		})
 		require.NoError(t, err)
-		require.Equal(t, 1, len(response.Queues))
+		require.Len(t, response.Queues, 1)
 		require.Equal(t, queueName, response.Queues[0].QueueName)
 		require.Equal(t, int64(0), response.Queues[0].MessageCount)
 		require.Equal(t, int64(-1), response.Queues[0].LastMessageID)
@@ -437,7 +437,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			NextPageToken: nil,
 		})
 		require.NoError(t, err)
-		require.Equal(t, 2, len(response.Queues))
+		require.Len(t, response.Queues, 2)
 		require.Contains(t, []string{response.Queues[0].QueueName, response.Queues[1].QueueName}, queueName)
 		require.Equal(t, int64(0), response.Queues[0].MessageCount)
 		require.Equal(t, int64(-1), response.Queues[0].LastMessageID)
@@ -461,7 +461,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			NextPageToken: nil,
 		})
 		require.NoError(t, err)
-		require.Equal(t, 1, len(response.Queues))
+		require.Len(t, response.Queues, 1)
 		listedQueueNames = append(listedQueueNames, response.Queues[0].QueueName)
 		require.Equal(t, int64(0), response.Queues[0].MessageCount)
 		require.Equal(t, int64(-1), response.Queues[0].LastMessageID)
@@ -471,7 +471,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			NextPageToken: response.NextPageToken,
 		})
 		require.NoError(t, err)
-		require.Equal(t, 1, len(response.Queues))
+		require.Len(t, response.Queues, 1)
 		listedQueueNames = append(listedQueueNames, response.Queues[0].QueueName)
 		require.Equal(t, int64(0), response.Queues[0].MessageCount)
 		require.Equal(t, int64(-1), response.Queues[0].LastMessageID)
@@ -481,7 +481,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			NextPageToken: response.NextPageToken,
 		})
 		require.NoError(t, err)
-		require.Equal(t, 3, len(response.Queues))
+		require.Len(t, response.Queues, 3)
 		for _, queue := range response.Queues {
 			listedQueueNames = append(listedQueueNames, queue.QueueName)
 			require.Equal(t, int64(0), queue.MessageCount)
@@ -493,7 +493,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			NextPageToken: response.NextPageToken,
 		})
 		require.NoError(t, err)
-		require.Equal(t, 0, len(response.Queues))
+		require.Empty(t, response.Queues)
 		require.Empty(t, response.NextPageToken)
 		for _, queueName := range queueNames {
 			require.Contains(t, listedQueueNames, queueName)

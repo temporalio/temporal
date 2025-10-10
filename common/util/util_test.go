@@ -14,17 +14,17 @@ func TestRepeatSlice(t *testing.T) {
 	t.Run("when input slice is empty should return empty", func(t *testing.T) {
 		empty := []int{}
 		got := RepeatSlice(empty, 5)
-		require.Len(t, got, 0, "RepeatSlice filled empty slice")
+		require.Empty(t, got, "RepeatSlice filled empty slice")
 	})
 	t.Run("when requested repeat number equal 0 should return empty slice", func(t *testing.T) {
 		xs := []int{1, 2, 3, 4, 5}
 		got := RepeatSlice(xs, 0)
-		require.Len(t, got, 0, "RepeatSlice with repeat count 0 returned non-empty slice")
+		require.Empty(t, got, "RepeatSlice with repeat count 0 returned non-empty slice")
 	})
 	t.Run("when requested repeat number is less than 0 should return empty slice", func(t *testing.T) {
 		xs := []int{1, 2, 3, 4, 5}
 		got := RepeatSlice(xs, -1)
-		require.Len(t, got, 0, "RepeatSlice with repeat count -1 returned non-empty slice")
+		require.Empty(t, got, "RepeatSlice with repeat count -1 returned non-empty slice")
 	})
 	t.Run("when requested repeat number is 3 should return slice three times the input", func(t *testing.T) {
 		xs := []int{1, 2, 3, 4, 5}
@@ -55,7 +55,7 @@ func TestMapSlice(t *testing.T) {
 		xs := []int{}
 		var ys []uint32
 		ys = MapSlice(xs, func(x int) uint32 { return uint32(x) })
-		require.Len(t, ys, 0, "mapping over empty slice produced non empty slice got %v", ys)
+		require.Empty(t, ys, "mapping over empty slice produced non empty slice got %v", ys)
 	})
 	t.Run("when given a slice and a function should apply function to every element of the original slice", func(t *testing.T) {
 		xs := []int{1, 2, 3, 4, 5}

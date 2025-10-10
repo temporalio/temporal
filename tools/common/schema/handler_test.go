@@ -102,24 +102,24 @@ func (s *HandlerTestSuite) TestValidateUpdateConfig() {
 
 func (s *HandlerTestSuite) assertValidateSetupSucceeds(input *SetupConfig, db DB) {
 	err := validateSetupConfig(input, db)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *HandlerTestSuite) assertValidateSetupFails(input *SetupConfig, db DB) {
 	err := validateSetupConfig(input, db)
-	s.NotNil(err)
+	s.Error(err)
 	_, ok := err.(*ConfigError)
 	s.True(ok)
 }
 
 func (s *HandlerTestSuite) assertValidateUpdateSucceeds(input *UpdateConfig, db DB) {
 	err := validateUpdateConfig(input, db)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *HandlerTestSuite) assertValidateUpdateFails(input *UpdateConfig, db DB) {
 	err := validateUpdateConfig(input, db)
-	s.NotNil(err)
+	s.Error(err)
 	_, ok := err.(*ConfigError)
 	s.True(ok)
 }

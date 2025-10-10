@@ -139,7 +139,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	// validating TQ Stats
 	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, true, false)
 	s.NoError(err)
-	s.Equal(2, len(resp.VersionsInfoInternal))
+	s.Len(resp.VersionsInfoInternal, 2)
 
 	// validate PhysicalTaskQueueInfo structures
 	info1 := resp.VersionsInfoInternal[bld1].GetPhysicalTaskQueueInfo()
@@ -202,10 +202,10 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	}
 
 	status1 := resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
-	s.Equal(1, len(status1))
+	s.Len(status1, 1)
 	s.ProtoEqual(status0, status1[0])
 	status2 := resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
-	s.Equal(1, len(status2))
+	s.Len(status2, 1)
 	s.ProtoEqual(status0, status2[0])
 }
 
@@ -385,22 +385,22 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 func (s *PartitionManagerTestSuite) TestGetAllPollerInfo() {
 	// no pollers
 	pollers := s.partitionMgr.GetAllPollerInfo()
-	s.True(len(pollers) == 0)
+	s.Equal(len(pollers), 0)
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, false)
 	pollers = s.partitionMgr.GetAllPollerInfo()
-	s.True(len(pollers) == 1)
+	s.Equal(len(pollers), 1)
 
 	// one versioned poller
 	s.pollWithIdentity("v", "bid", true, false)
 	pollers = s.partitionMgr.GetAllPollerInfo()
-	s.True(len(pollers) == 2)
+	s.Equal(len(pollers), 2)
 
 	// one unversioned poller with deployment options
 	s.pollWithIdentity("uvdo", "bid", false, true)
 	pollers = s.partitionMgr.GetAllPollerInfo()
-	s.True(len(pollers) == 3)
+	s.Equal(len(pollers), 3)
 
 	for _, p := range pollers {
 		//nolint:staticcheck // SA1019 deprecated GetWorkerVersionCapabilities
@@ -472,19 +472,19 @@ func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	// no pollers
 	resp, err := s.partitionMgr.LegacyDescribeTaskQueue(false)
 	s.NoError(err)
-	s.Equal(0, len(resp.DescResponse.GetPollers()))
+	s.Empty(resp.DescResponse.GetPollers())
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, false)
 	resp, err = s.partitionMgr.LegacyDescribeTaskQueue(false)
 	s.NoError(err)
-	s.Equal(1, len(resp.DescResponse.GetPollers()))
+	s.Len(resp.DescResponse.GetPollers(), 1)
 
 	// one versioned poller
 	s.pollWithIdentity("v", "bid", true, false)
 	resp, err = s.partitionMgr.LegacyDescribeTaskQueue(false)
 	s.NoError(err)
-	s.Equal(2, len(resp.DescResponse.GetPollers()))
+	s.Len(resp.DescResponse.GetPollers(), 2)
 
 	for _, p := range resp.DescResponse.GetPollers() {
 		//nolint:staticcheck // SA1019 deprecated GetWorkerVersionCapabilities

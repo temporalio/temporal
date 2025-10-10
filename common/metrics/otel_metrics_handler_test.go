@@ -88,7 +88,7 @@ func TestMeter(t *testing.T) {
 
 	var got metricdata.ResourceMetrics
 	err = rdr.Collect(ctx, &got)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	want := []metricdata.Metrics{
 		{
@@ -232,7 +232,7 @@ func TestMeter_TimerInSeconds(t *testing.T) {
 
 	var got metricdata.ResourceMetrics
 	err = rdr.Collect(ctx, &got)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	want := []metricdata.Metrics{
 		{

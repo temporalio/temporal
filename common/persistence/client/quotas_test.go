@@ -62,7 +62,7 @@ func (s *quotasSuite) TestBackgroundTypeAPIPriorityOverrideMapping() {
 
 func (s *quotasSuite) TestRequestPrioritiesOrdered() {
 	for idx := range RequestPrioritiesOrdered[1:] {
-		s.True(RequestPrioritiesOrdered[idx] < RequestPrioritiesOrdered[idx+1])
+		s.Less(RequestPrioritiesOrdered[idx], RequestPrioritiesOrdered[idx+1])
 	}
 }
 

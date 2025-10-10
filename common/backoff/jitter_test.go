@@ -30,12 +30,12 @@ func (s *jitterSuite) TestJitter_Int64() {
 
 	for i := 0; i < 1048576; i++ {
 		result := Jitter(input, coefficient)
-		s.True(result >= lowerBound)
-		s.True(result < upperBound)
+		s.GreaterOrEqual(result, lowerBound)
+		s.Less(result, upperBound)
 
 		result = FullJitter(input)
-		s.True(result >= 0)
-		s.True(result < input)
+		s.GreaterOrEqual(result, 0)
+		s.Less(result, input)
 	}
 }
 
@@ -47,12 +47,12 @@ func (s *jitterSuite) TestJitter_Float64() {
 
 	for i := 0; i < 1048576; i++ {
 		result := Jitter(input, coefficient)
-		s.True(result >= lowerBound)
-		s.True(result < upperBound)
+		s.GreaterOrEqual(result, lowerBound)
+		s.Less(result, upperBound)
 
 		result = FullJitter(input)
-		s.True(result >= 0)
-		s.True(result < input)
+		s.GreaterOrEqual(result, 0)
+		s.Less(result, input)
 	}
 }
 
@@ -64,12 +64,12 @@ func (s *jitterSuite) TestJitter_Duration() {
 
 	for i := 0; i < 1048576; i++ {
 		result := Jitter(input, coefficient)
-		s.True(result >= lowerBound)
-		s.True(result < upperBound)
+		s.GreaterOrEqual(result, lowerBound)
+		s.Less(result, upperBound)
 
 		result = FullJitter(input)
-		s.True(result >= 0)
-		s.True(result < input)
+		s.GreaterOrEqual(result, 0)
+		s.Less(result, input)
 	}
 }
 

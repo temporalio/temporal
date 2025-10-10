@@ -35,32 +35,32 @@ func TestTallyScope(t *testing.T) {
 	counters, gauges, timers, histograms := snap.Counters(), snap.Gauges(), snap.Timers(), snap.Histograms()
 
 	assert.EqualValues(t, 8, counters["test.hits+"].Value())
-	assert.EqualValues(t, map[string]string{}, counters["test.hits+"].Tags())
+	assert.Equal(t, map[string]string{}, counters["test.hits+"].Tags())
 
 	assert.EqualValues(t, 11, counters["test.hits-tagged+taskqueue=__sticky__"].Value())
-	assert.EqualValues(t, map[string]string{"taskqueue": "__sticky__"}, counters["test.hits-tagged+taskqueue=__sticky__"].Tags())
+	assert.Equal(t, map[string]string{"taskqueue": "__sticky__"}, counters["test.hits-tagged+taskqueue=__sticky__"].Tags())
 
 	assert.EqualValues(t, 14, counters["test.hits-tagged-excluded+taskqueue="+tagExcludedValue].Value())
-	assert.EqualValues(t, map[string]string{"taskqueue": tagExcludedValue}, counters["test.hits-tagged-excluded+taskqueue="+tagExcludedValue].Tags())
+	assert.Equal(t, map[string]string{"taskqueue": tagExcludedValue}, counters["test.hits-tagged-excluded+taskqueue="+tagExcludedValue].Tags())
 
 	assert.EqualValues(t, float64(-100), gauges["test.temp+location=Mare Imbrium"].Value())
-	assert.EqualValues(t, map[string]string{
+	assert.Equal(t, map[string]string{
 		"location": "Mare Imbrium",
 	}, gauges["test.temp+location=Mare Imbrium"].Tags())
 
-	assert.EqualValues(t, []time.Duration{
+	assert.Equal(t, []time.Duration{
 		1248 * time.Millisecond,
 		5255 * time.Millisecond,
 	}, timers["test.latency+"].Values())
-	assert.EqualValues(t, map[string]string{}, timers["test.latency+"].Tags())
+	assert.Equal(t, map[string]string{}, timers["test.latency+"].Tags())
 
-	assert.EqualValues(t, map[float64]int64{
+	assert.Equal(t, map[float64]int64{
 		1024:            0,
 		2048:            0,
 		math.MaxFloat64: 1,
 	}, histograms["test.transmission+"].Values())
-	assert.EqualValues(t, map[time.Duration]int64(nil), histograms["test.transmission+"].Durations())
-	assert.EqualValues(t, map[string]string{}, histograms["test.transmission+"].Tags())
+	assert.Equal(t, map[time.Duration]int64(nil), histograms["test.transmission+"].Durations())
+	assert.Equal(t, map[string]string{}, histograms["test.transmission+"].Tags())
 
 	newTaggedHandler := mp.WithTags(NamespaceTag(uuid.New()))
 	recordTallyMetrics(newTaggedHandler)
@@ -68,7 +68,7 @@ func TestTallyScope(t *testing.T) {
 	counters = snap.Counters()
 
 	assert.EqualValues(t, 11, counters["test.hits-tagged+taskqueue=__sticky__"].Value())
-	assert.EqualValues(t, map[string]string{"taskqueue": "__sticky__"}, counters["test.hits-tagged+taskqueue=__sticky__"].Tags())
+	assert.Equal(t, map[string]string{"taskqueue": "__sticky__"}, counters["test.hits-tagged+taskqueue=__sticky__"].Tags())
 }
 
 func recordTallyMetrics(h Handler) {

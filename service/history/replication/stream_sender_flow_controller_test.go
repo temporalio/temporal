@@ -154,7 +154,7 @@ func (s *senderFlowControllerSuite) TestPauseToResume() {
 	}()
 
 	// Ensure the goroutine has time to start and block
-	assert.Eventually(s.T(), func() bool {
+	s.Eventually(func() bool {
 		state.mu.Lock()
 		defer state.mu.Unlock()
 		return state.waiters == 1

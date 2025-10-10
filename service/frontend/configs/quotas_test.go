@@ -67,19 +67,19 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIToPriorityMapping() {
 
 func (s *quotasSuite) TestExecutionAPIPrioritiesOrdered() {
 	for idx := range ExecutionAPIPrioritiesOrdered[1:] {
-		s.True(ExecutionAPIPrioritiesOrdered[idx] < ExecutionAPIPrioritiesOrdered[idx+1])
+		s.Less(ExecutionAPIPrioritiesOrdered[idx], ExecutionAPIPrioritiesOrdered[idx+1])
 	}
 }
 
 func (s *quotasSuite) TestVisibilityAPIPrioritiesOrdered() {
 	for idx := range VisibilityAPIPrioritiesOrdered[1:] {
-		s.True(VisibilityAPIPrioritiesOrdered[idx] < VisibilityAPIPrioritiesOrdered[idx+1])
+		s.Less(VisibilityAPIPrioritiesOrdered[idx], VisibilityAPIPrioritiesOrdered[idx+1])
 	}
 }
 
 func (s *quotasSuite) TestNamespaceReplicationInducingAPIPrioritiesOrdered() {
 	for idx := range NamespaceReplicationInducingAPIPrioritiesOrdered[1:] {
-		s.True(NamespaceReplicationInducingAPIPrioritiesOrdered[idx] < NamespaceReplicationInducingAPIPrioritiesOrdered[idx+1])
+		s.Less(NamespaceReplicationInducingAPIPrioritiesOrdered[idx], NamespaceReplicationInducingAPIPrioritiesOrdered[idx+1])
 	}
 }
 

@@ -218,7 +218,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -257,7 +257,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 	).Return(nil)
 
 	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflowClosedCleanup() {
@@ -304,7 +304,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -344,7 +344,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 	).Return(nil)
 
 	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask() {
@@ -374,7 +374,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 			FirstWorkflowTaskBackoff: durationpb.New(backoff),
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	taskID := int64(59)
 	wt := addWorkflowTaskScheduledEvent(mutableState)
@@ -398,7 +398,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 	).Return(nil)
 
 	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttributes() {
@@ -446,7 +446,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 	).Return(nil)
 
 	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessModifyWorkflowProperties() {
@@ -514,7 +514,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessModifyWorkflowProperties()
 		context.Background(),
 		s.newTaskExecutable(visibilityTask),
 	)
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessDeleteExecution() {
@@ -528,7 +528,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessDeleteExecution() {
 			WorkflowKey:                    workflowKey,
 			CloseExecutionVisibilityTaskID: 0,
 		})
-		s.Assert().NoError(err)
+		s.NoError(err)
 	})
 	s.Run("WorkflowCloseTime=1970-01-01T00:00:00Z", func() {
 		s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any())
@@ -536,7 +536,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessDeleteExecution() {
 			WorkflowKey: workflowKey,
 			CloseTime:   time.Unix(0, 0).UTC(),
 		})
-		s.Assert().NoError(err)
+		s.NoError(err)
 	})
 	s.Run("MultiCursorQueue", func() {
 		const highWatermark int64 = 5
@@ -579,7 +579,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_InvalidTask() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
 
 	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 
 	// Case 2: invalid task with a different initial versioned transition
 	componentInitVT := mutableState.ChasmNodes["Visibility"].Metadata.InitialVersionedTransition
@@ -590,7 +590,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_InvalidTask() {
 	}
 
 	resp = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_RunningExecution() {
@@ -631,7 +631,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_RunningExecution
 	)
 
 	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_ClosedExecution() {
@@ -664,7 +664,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_ClosedExecution(
 	)
 
 	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) buildChasmMutableState(

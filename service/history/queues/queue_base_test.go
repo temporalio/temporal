@@ -111,7 +111,7 @@ func (s *queueBaseSuite) TestNewProcessBase_NoPreviousState() {
 
 	base := s.newQueueBase(mockShard, tasks.CategoryTransfer, nil)
 
-	s.Len(base.readerGroup.Readers(), 0)
+	s.Empty(base.readerGroup.Readers())
 	s.Equal(int64(1), base.nonReadableScope.Range.InclusiveMin.TaskID)
 }
 
@@ -264,9 +264,9 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 	s.True(ok)
 	scopes := defaultReader.Scopes()
 	s.Len(scopes, 1)
-	s.True(scopes[0].Range.InclusiveMin.CompareTo(tasks.MinimumKey) == 0)
+	s.Equal(scopes[0].Range.InclusiveMin.CompareTo(tasks.MinimumKey), 0)
 	s.True(scopes[0].Predicate.Equals(predicates.Universal[tasks.Task]()))
-	s.True(time.Since(scopes[0].Range.ExclusiveMax.FireTime) <= time.Second)
+	s.LessOrEqual(time.Since(scopes[0].Range.ExclusiveMax.FireTime), time.Second)
 	s.True(base.nonReadableScope.Range.Equals(NewRange(scopes[0].Range.ExclusiveMax, tasks.MaximumKey)))
 }
 
@@ -304,7 +304,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_PerformRangeCompletion(
 	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
 	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
 
-	s.True(scopeMinKey.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
+	s.Equal(scopeMinKey.CompareTo(base.exclusiveDeletionHighWatermark), 0)
 
 	// set to a smaller value so that delete will be triggered
 	currentLowWatermark := tasks.MinimumKey
@@ -319,8 +319,8 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_PerformRangeCompletion(
 					s.True(request.InclusiveMinTaskKey.FireTime.Equal(currentLowWatermark.FireTime))
 					s.True(request.ExclusiveMaxTaskKey.FireTime.Equal(scopeMinKey.FireTime))
 				} else {
-					s.True(request.InclusiveMinTaskKey.CompareTo(currentLowWatermark) == 0)
-					s.True(request.ExclusiveMaxTaskKey.CompareTo(scopeMinKey) == 0)
+					s.Equal(request.InclusiveMinTaskKey.CompareTo(currentLowWatermark), 0)
+					s.Equal(request.ExclusiveMaxTaskKey.CompareTo(scopeMinKey), 0)
 				}
 
 				return nil
@@ -336,7 +336,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_PerformRangeCompletion(
 
 	base.checkpoint()
 
-	s.True(scopeMinKey.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
+	s.Equal(scopeMinKey.CompareTo(base.exclusiveDeletionHighWatermark), 0)
 }
 
 func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_SkipRangeCompletion() {
@@ -373,7 +373,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_SkipRangeCompletion() {
 	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
 	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
 
-	s.True(scopeMinKey.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
+	s.Equal(scopeMinKey.CompareTo(base.exclusiveDeletionHighWatermark), 0)
 
 	// set to a smaller value so that delete will be triggered
 	currentLowWatermark := tasks.MinimumKey
@@ -388,7 +388,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_SkipRangeCompletion() {
 
 	base.checkpoint()
 
-	s.True(scopeMinKey.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
+	s.Equal(scopeMinKey.CompareTo(base.exclusiveDeletionHighWatermark), 0)
 }
 
 func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
@@ -416,7 +416,7 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
 	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
 
-	s.True(exclusiveReaderHighWatermark.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
+	s.Equal(exclusiveReaderHighWatermark.CompareTo(base.exclusiveDeletionHighWatermark), 0)
 
 	// set to a smaller value so that delete will be triggered
 	currentLowWatermark := tasks.MinimumKey
@@ -427,13 +427,13 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 			func(ctx context.Context, request *persistence.RangeCompleteHistoryTasksRequest) error {
 				s.Equal(mockShard.GetShardID(), request.ShardID)
 				s.Equal(base.category, request.TaskCategory)
-				s.True(request.InclusiveMinTaskKey.CompareTo(currentLowWatermark) == 0)
+				s.Equal(request.InclusiveMinTaskKey.CompareTo(currentLowWatermark), 0)
 				if base.category.Type() == tasks.CategoryTypeScheduled {
 					s.True(request.InclusiveMinTaskKey.FireTime.Equal(currentLowWatermark.FireTime))
 					s.True(request.ExclusiveMaxTaskKey.FireTime.Equal(exclusiveReaderHighWatermark.FireTime))
 				} else {
-					s.True(request.InclusiveMinTaskKey.CompareTo(currentLowWatermark) == 0)
-					s.True(request.ExclusiveMaxTaskKey.CompareTo(exclusiveReaderHighWatermark) == 0)
+					s.Equal(request.InclusiveMinTaskKey.CompareTo(currentLowWatermark), 0)
+					s.Equal(request.ExclusiveMaxTaskKey.CompareTo(exclusiveReaderHighWatermark), 0)
 				}
 
 				return nil
@@ -449,7 +449,7 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 
 	base.checkpoint()
 
-	s.True(exclusiveReaderHighWatermark.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
+	s.Equal(exclusiveReaderHighWatermark.CompareTo(base.exclusiveDeletionHighWatermark), 0)
 }
 
 func (s *queueBaseSuite) TestCheckPoint_SlicePredicateAction() {
@@ -490,7 +490,7 @@ func (s *queueBaseSuite) TestCheckPoint_SlicePredicateAction() {
 
 	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
 	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
-	s.True(scopes[0].Range.InclusiveMin.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
+	s.Equal(scopes[0].Range.InclusiveMin.CompareTo(base.exclusiveDeletionHighWatermark), 0)
 
 	// set to a smaller value so that delete will be triggered
 	base.exclusiveDeletionHighWatermark = tasks.MinimumKey
@@ -510,7 +510,7 @@ func (s *queueBaseSuite) TestCheckPoint_SlicePredicateAction() {
 
 	base.checkpoint()
 
-	s.True(scopes[0].Range.InclusiveMin.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
+	s.Equal(scopes[0].Range.InclusiveMin.CompareTo(base.exclusiveDeletionHighWatermark), 0)
 }
 
 func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
