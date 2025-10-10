@@ -10,7 +10,6 @@ import (
 )
 
 type queryParserSuite struct {
-	*require.Assertions
 	suite.Suite
 
 	parser QueryParser
@@ -21,7 +20,6 @@ func TestQueryParserSuite(t *testing.T) {
 }
 
 func (s *queryParserSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 	s.parser = NewQueryParser()
 }
 
@@ -96,12 +94,12 @@ func (s *queryParserSuite) TestParseWorkflowIDAndWorkflowTypeName() {
 	for _, tc := range testCases {
 		parsedQuery, err := s.parser.Parse(tc.query)
 		if tc.expectErr {
-			s.Error(err)
+			require.Error(s.T(), err)
 			continue
 		}
-		s.NoError(err)
-		s.Equal(tc.parsedQuery.workflowID, parsedQuery.workflowID)
-		s.Equal(tc.parsedQuery.workflowTypeName, parsedQuery.workflowTypeName)
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), tc.parsedQuery.workflowID, parsedQuery.workflowID)
+		require.Equal(s.T(), tc.parsedQuery.workflowTypeName, parsedQuery.workflowTypeName)
 
 	}
 }
@@ -154,11 +152,11 @@ func (s *queryParserSuite) TestParsePrecision() {
 	for _, tc := range testCases {
 		parsedQuery, err := s.parser.Parse(tc.query)
 		if tc.expectErr {
-			s.Error(err)
+			require.Error(s.T(), err)
 			continue
 		}
-		s.NoError(err)
-		s.Equal(tc.parsedQuery.searchPrecision, parsedQuery.searchPrecision)
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), tc.parsedQuery.searchPrecision, parsedQuery.searchPrecision)
 	}
 }
 
@@ -197,11 +195,11 @@ func (s *queryParserSuite) TestParseCloseTime() {
 	for _, tc := range testCases {
 		parsedQuery, err := s.parser.Parse(tc.query)
 		if tc.expectErr {
-			s.Error(err)
+			require.Error(s.T(), err)
 			continue
 		}
-		s.NoError(err)
-		s.Equal(tc.parsedQuery.closeTime, parsedQuery.closeTime)
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), tc.parsedQuery.closeTime, parsedQuery.closeTime)
 
 	}
 }
@@ -241,10 +239,10 @@ func (s *queryParserSuite) TestParseStartTime() {
 	for _, tc := range testCases {
 		parsedQuery, err := s.parser.Parse(tc.query)
 		if tc.expectErr {
-			s.Error(err)
+			require.Error(s.T(), err)
 			continue
 		}
-		s.NoError(err)
-		s.Equal(tc.parsedQuery.closeTime, parsedQuery.closeTime)
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), tc.parsedQuery.closeTime, parsedQuery.closeTime)
 	}
 }

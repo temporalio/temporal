@@ -48,7 +48,6 @@ var (
 type (
 	defaultClaimMapperSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		controller     *gomock.Controller
 		tokenGenerator *tokenGenerator
@@ -63,7 +62,7 @@ func TestDefaultClaimMapperSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 func (s *defaultClaimMapperSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.controller = gomock.NewController(s.T())
 	s.tokenGenerator = newTokenGenerator()
 	s.config = &config.Authorization{}
@@ -83,34 +82,34 @@ func (s *defaultClaimMapperSuite) TestTokenGeneratorECDSA() {
 func (s *defaultClaimMapperSuite) testTokenGenerator(alg keyAlgorithm) {
 	tokenString, err := s.tokenGenerator.generateToken(alg,
 		testSubject, permissionsAdmin, errorTestOptionNoError)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	claims, err := parseJWT(tokenString, s.tokenGenerator)
-	s.NoError(err)
-	s.Equal(testSubject, claims["sub"])
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), testSubject, claims["sub"])
 }
 
 func (s *defaultClaimMapperSuite) TestTokenWithNoSubject() {
 	tokenString, err := s.tokenGenerator.generateRSAToken(
 		testSubject, permissionsAdmin, errorTestOptionNoSubject)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	claims, err := parseJWT(tokenString, s.tokenGenerator)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	subject := claims["sub"]
-	s.Nil(subject)
+	require.Nil(s.T(), subject)
 }
 func (s *defaultClaimMapperSuite) TestTokenWithNoKID() {
 	tokenString, err := s.tokenGenerator.generateRSAToken(
 		testSubject, permissionsAdmin, errorTestOptionNoKID)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	_, err = parseJWT(tokenString, s.tokenGenerator)
-	s.Error(err, "malformed token - no \"kid\" header")
+	require.Error(s.T(), err, "malformed token - no \"kid\" header")
 }
 func (s *defaultClaimMapperSuite) TestTokenWithNoAlgorithm() {
 	tokenString, err := s.tokenGenerator.generateRSAToken(
 		testSubject, permissionsAdmin, errorTestOptionNoAlgorithm)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	_, err = parseJWT(tokenString, s.tokenGenerator)
-	s.Error(err, "signing method (alg) is unspecified.")
+	require.Error(s.T(), err, "signing method (alg) is unspecified.")
 }
 
 func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissionsRSA() {
@@ -122,7 +121,7 @@ func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissionsECDSA() {
 func (s *defaultClaimMapperSuite) testTokenWithAdminPermissions(alg keyAlgorithm) {
 	tokenString, err := s.tokenGenerator.generateToken(alg,
 		testSubject, permissionsAdmin, errorTestOptionNoError)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	authInfo := &AuthInfo{
 		AddBearer(tokenString),
 		nil,
@@ -131,18 +130,18 @@ func (s *defaultClaimMapperSuite) testTokenWithAdminPermissions(alg keyAlgorithm
 		"",
 	}
 	claims, err := s.claimMapper.GetClaims(authInfo)
-	s.NoError(err)
-	s.Equal(testSubject, claims.Subject)
-	s.Equal(RoleAdmin, claims.System)
-	s.Equal(1, len(claims.Namespaces))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), testSubject, claims.Subject)
+	require.Equal(s.T(), RoleAdmin, claims.System)
+	require.Equal(s.T(), 1, len(claims.Namespaces))
 	defaultRole := claims.Namespaces[defaultNamespace]
-	s.Equal(RoleReader, defaultRole)
+	require.Equal(s.T(), RoleReader, defaultRole)
 }
 
 func (s *defaultClaimMapperSuite) TestNamespacePermissionCaseSensitive() {
 	tokenString, err := s.tokenGenerator.generateToken(RSA,
 		testSubject, []string{"Temporal-system:admin", "Foo:read"}, errorTestOptionNoError)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	authInfo := &AuthInfo{
 		AddBearer(tokenString),
 		nil,
@@ -151,13 +150,13 @@ func (s *defaultClaimMapperSuite) TestNamespacePermissionCaseSensitive() {
 		"",
 	}
 	claims, err := s.claimMapper.GetClaims(authInfo)
-	s.NoError(err)
-	s.Equal(testSubject, claims.Subject)
-	s.Equal(RoleUndefined, claims.System) // no system role
-	s.Equal(2, len(claims.Namespaces))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), testSubject, claims.Subject)
+	require.Equal(s.T(), RoleUndefined, claims.System) // no system role
+	require.Equal(s.T(), 2, len(claims.Namespaces))
 	// claims contain namespace role for 'Foo', not for 'foo'.
-	s.Equal(RoleReader, claims.Namespaces["Foo"])
-	s.Equal(RoleAdmin, claims.Namespaces["Temporal-system"])
+	require.Equal(s.T(), RoleReader, claims.Namespaces["Foo"])
+	require.Equal(s.T(), RoleAdmin, claims.Namespaces["Temporal-system"])
 }
 
 func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissionsRSA() {
@@ -169,7 +168,7 @@ func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissionsECDS
 func (s *defaultClaimMapperSuite) testTokenWithReaderWriterWorkerPermissions(alg keyAlgorithm) {
 	tokenString, err := s.tokenGenerator.generateToken(
 		alg, testSubject, permissionsReaderWriterWorker, errorTestOptionNoError)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	authInfo := &AuthInfo{
 		AddBearer(tokenString),
 		nil,
@@ -178,29 +177,29 @@ func (s *defaultClaimMapperSuite) testTokenWithReaderWriterWorkerPermissions(alg
 		"test-audience",
 	}
 	claims, err := s.claimMapper.GetClaims(authInfo)
-	s.NoError(err)
-	s.Equal(testSubject, claims.Subject)
-	s.Equal(RoleUndefined, claims.System)
-	s.Equal(1, len(claims.Namespaces))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), testSubject, claims.Subject)
+	require.Equal(s.T(), RoleUndefined, claims.System)
+	require.Equal(s.T(), 1, len(claims.Namespaces))
 	defaultRole := claims.Namespaces[defaultNamespace]
-	s.Equal(RoleReader|RoleWriter|RoleWorker, defaultRole)
+	require.Equal(s.T(), RoleReader|RoleWriter|RoleWorker, defaultRole)
 }
 
 func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissionsRegex() {
 	permissions := []string{"read:default", "write:default", "worker:default"}
 	tokenString, err := s.tokenGenerator.generateToken(RSA, testSubject, permissions, errorTestOptionNoError)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	authConfig := &config.Authorization{PermissionsRegex: `(?P<role>\w+):(?P<namespace>\w+)`}
 	claimMapper := NewDefaultJWTClaimMapper(s.tokenGenerator, authConfig, log.NewNoopLogger())
-	s.NotNil(claimMapper)
+	require.NotNil(s.T(), claimMapper)
 	authInfo := &AuthInfo{AuthToken: AddBearer(tokenString), Audience: "test-audience"}
 	claims, err := claimMapper.GetClaims(authInfo)
-	s.NoError(err)
-	s.Equal(testSubject, claims.Subject)
-	s.Equal(RoleUndefined, claims.System)
-	s.Equal(1, len(claims.Namespaces))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), testSubject, claims.Subject)
+	require.Equal(s.T(), RoleUndefined, claims.System)
+	require.Equal(s.T(), 1, len(claims.Namespaces))
 	defaultRole := claims.Namespaces[defaultNamespace]
-	s.Equal(RoleReader|RoleWriter|RoleWorker, defaultRole)
+	require.Equal(s.T(), RoleReader|RoleWriter|RoleWorker, defaultRole)
 }
 
 func (s *defaultClaimMapperSuite) TestGetClaimMapperFromConfigNoop() {
@@ -217,9 +216,9 @@ func (s *defaultClaimMapperSuite) TestGetClaimMapperFromConfigUnknown() {
 func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsRegexInvalidRegex() {
 	pattern := `(?P<namespace\w+):(?P<role>\w+)`
 	mapper := NewDefaultJWTClaimMapper(nil, &config.Authorization{PermissionsRegex: pattern}, log.NewNoopLogger()).(*defaultJWTClaimMapper)
-	s.Nil(mapper.permissionsRegex)
-	s.Zero(mapper.matchNamespaceIndex)
-	s.Zero(mapper.matchRoleIndex)
+	require.Nil(s.T(), mapper.permissionsRegex)
+	require.Zero(s.T(), mapper.matchNamespaceIndex)
+	require.Zero(s.T(), mapper.matchRoleIndex)
 }
 
 func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsRegexMissingNamespaceGroup() {
@@ -227,7 +226,7 @@ func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsRegexMissingN
 	mapper := NewDefaultJWTClaimMapper(
 		nil, &config.Authorization{PermissionsRegex: pattern}, log.NewNoopLogger(),
 	).(*defaultJWTClaimMapper)
-	s.Nil(mapper.permissionsRegex)
+	require.Nil(s.T(), mapper.permissionsRegex)
 }
 
 func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsRegexMissingRoleGroup() {
@@ -235,37 +234,37 @@ func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsRegexMissingR
 	mapper := NewDefaultJWTClaimMapper(
 		nil, &config.Authorization{PermissionsRegex: pattern}, log.NewNoopLogger(),
 	).(*defaultJWTClaimMapper)
-	s.Nil(mapper.permissionsRegex)
+	require.Nil(s.T(), mapper.permissionsRegex)
 }
 
 func (s *defaultClaimMapperSuite) TestGetClaimMapperWithPermissionsRegex() {
 	authConfig := &config.Authorization{PermissionsRegex: `(?P<role>\w+):(?P<namespace>\w+)`}
 	mapper := NewDefaultJWTClaimMapper(nil, authConfig, nil).(*defaultJWTClaimMapper)
-	s.NotNil(mapper.permissionsRegex)
-	s.NotZero(mapper.matchNamespaceIndex)
-	s.NotZero(mapper.matchRoleIndex)
+	require.NotNil(s.T(), mapper.permissionsRegex)
+	require.NotZero(s.T(), mapper.matchNamespaceIndex)
+	require.NotZero(s.T(), mapper.matchRoleIndex)
 }
 
 func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissionsRegex() {
 	permissions := []string{"admin:" + primitives.SystemLocalNamespace, "read:default"}
 	pattern := `(?P<role>[\w-]+):(?P<namespace>[\w-]+)`
 	tokenString, err := s.tokenGenerator.generateToken(RSA, testSubject, permissions, errorTestOptionNoError)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	authInfo := &AuthInfo{AuthToken: AddBearer(tokenString)}
 	authConfig := &config.Authorization{PermissionsRegex: pattern}
 	claimMapper := NewDefaultJWTClaimMapper(s.tokenGenerator, authConfig, nil)
 	claims, err := claimMapper.GetClaims(authInfo)
-	s.NoError(err)
-	s.Equal(testSubject, claims.Subject)
-	s.Equal(RoleAdmin, claims.System)
-	s.Equal(1, len(claims.Namespaces))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), testSubject, claims.Subject)
+	require.Equal(s.T(), RoleAdmin, claims.System)
+	require.Equal(s.T(), 1, len(claims.Namespaces))
 	defaultRole := claims.Namespaces[defaultNamespace]
-	s.Equal(RoleReader, defaultRole)
+	require.Equal(s.T(), RoleReader, defaultRole)
 }
 
 func (s *defaultClaimMapperSuite) TestWrongAudience() {
 	tokenString, err := s.tokenGenerator.generateRSAToken(testSubject, permissionsAdmin, errorTestOptionNoError)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	authInfo := &AuthInfo{
 		AddBearer(tokenString),
 		nil,
@@ -274,12 +273,12 @@ func (s *defaultClaimMapperSuite) TestWrongAudience() {
 		"foo",
 	}
 	_, err = s.claimMapper.GetClaims(authInfo)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *defaultClaimMapperSuite) TestCorrectAudience() {
 	tokenString, err := s.tokenGenerator.generateRSAToken(testSubject, permissionsAdmin, errorTestOptionNoError)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	authInfo := &AuthInfo{
 		AddBearer(tokenString),
 		nil,
@@ -288,12 +287,12 @@ func (s *defaultClaimMapperSuite) TestCorrectAudience() {
 		"test-audience",
 	}
 	_, err = s.claimMapper.GetClaims(authInfo)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *defaultClaimMapperSuite) TestIgnoreAudience() {
 	tokenString, err := s.tokenGenerator.generateRSAToken(testSubject, permissionsAdmin, errorTestOptionNoError)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	authInfo := &AuthInfo{
 		AddBearer(tokenString),
 		nil,
@@ -302,7 +301,7 @@ func (s *defaultClaimMapperSuite) TestIgnoreAudience() {
 		"",
 	}
 	_, err = s.claimMapper.GetClaims(authInfo)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *defaultClaimMapperSuite) testGetClaimMapperFromConfig(name string, valid bool, cmType reflect.Type) {
@@ -311,13 +310,13 @@ func (s *defaultClaimMapperSuite) testGetClaimMapperFromConfig(name string, vali
 	cfg.ClaimMapper = name
 	cm, err := GetClaimMapperFromConfig(&cfg, s.logger)
 	if valid {
-		s.NoError(err)
-		s.NotNil(cm)
+		require.NoError(s.T(), err)
+		require.NotNil(s.T(), cm)
 		t := reflect.TypeOf(cm)
-		s.True(t == cmType)
+		require.True(s.T(), t == cmType)
 	} else {
-		s.Error(err)
-		s.Nil(cm)
+		require.Error(s.T(), err)
+		require.Nil(s.T(), cm)
 	}
 }
 

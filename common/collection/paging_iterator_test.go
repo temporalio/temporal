@@ -18,16 +18,13 @@ func TestPagingIteratorSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *pagingIteratorSuite) SetupSuite() {
-}
+
 
 func (s *pagingIteratorSuite) TearDownSuite() {
 
 }
 
-func (s *pagingIteratorSuite) SetupTest() {
 
-}
 
 func (s *pagingIteratorSuite) TearDownTest() {
 

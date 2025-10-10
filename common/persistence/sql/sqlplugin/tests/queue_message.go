@@ -22,7 +22,6 @@ var (
 type (
 	queueMessageSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		store sqlplugin.QueueMessage
 	}
@@ -33,22 +32,18 @@ func NewQueueMessageSuite(
 	store sqlplugin.QueueMessage,
 ) *queueMessageSuite {
 	return &queueMessageSuite{
-		Assertions: require.New(t),
-		store:      store,
+
+		store: store,
 	}
 }
 
-func (s *queueMessageSuite) SetupSuite() {
 
-}
 
 func (s *queueMessageSuite) TearDownSuite() {
 
 }
 
-func (s *queueMessageSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *queueMessageSuite) TearDownTest() {
 
@@ -60,10 +55,10 @@ func (s *queueMessageSuite) TestInsert_Single_Success() {
 
 	message := s.newRandomQueueMessageRow(queueType, messageID)
 	result, err := s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *queueMessageSuite) TestInsert_Multiple_Success() {
@@ -74,10 +69,10 @@ func (s *queueMessageSuite) TestInsert_Multiple_Success() {
 	messageID++
 	message2 := s.newRandomQueueMessageRow(queueType, messageID)
 	result, err := s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message1, message2})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(2, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, int(rowsAffected))
 }
 
 func (s *queueMessageSuite) TestInsert_Single_Fail_Duplicate() {
@@ -86,14 +81,14 @@ func (s *queueMessageSuite) TestInsert_Single_Fail_Duplicate() {
 
 	message := s.newRandomQueueMessageRow(queueType, messageID)
 	result, err := s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	message = s.newRandomQueueMessageRow(queueType, messageID)
 	_, err = s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message})
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *queueMessageSuite) TestInsert_Multiple_Fail_Duplicate() {
@@ -104,16 +99,16 @@ func (s *queueMessageSuite) TestInsert_Multiple_Fail_Duplicate() {
 	messageID++
 	message2 := s.newRandomQueueMessageRow(queueType, messageID)
 	result, err := s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message1, message2})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(2, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, int(rowsAffected))
 
 	message2 = s.newRandomQueueMessageRow(queueType, messageID)
 	messageID++
 	message3 := s.newRandomQueueMessageRow(queueType, messageID)
 	_, err = s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message2, message3})
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *queueMessageSuite) TestInsertSelect() {
@@ -122,21 +117,21 @@ func (s *queueMessageSuite) TestInsertSelect() {
 
 	message := s.newRandomQueueMessageRow(queueType, messageID)
 	result, err := s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.QueueMessagesFilter{
 		QueueType: queueType,
 		MessageID: messageID,
 	}
 	rows, err := s.store.SelectFromMessages(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].QueueType = queueType
 	}
-	s.Equal([]sqlplugin.QueueMessageRow{message}, rows)
+	require.Equal(s.T(), []sqlplugin.QueueMessageRow{message}, rows)
 }
 
 func (s *queueMessageSuite) TestInsertSelect_Multiple() {
@@ -154,10 +149,10 @@ func (s *queueMessageSuite) TestInsertSelect_Multiple() {
 		messages = append(messages, message)
 	}
 	result, err := s.store.InsertIntoMessages(newExecutionContext(), messages)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numMessages, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numMessages, int(rowsAffected))
 
 	filter := sqlplugin.QueueMessagesRangeFilter{
 		QueueType:    queueType,
@@ -166,11 +161,11 @@ func (s *queueMessageSuite) TestInsertSelect_Multiple() {
 		PageSize:     numMessages,
 	}
 	rows, err := s.store.RangeSelectFromMessages(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].QueueType = queueType
 	}
-	s.Equal(messages, rows)
+	require.Equal(s.T(), messages, rows)
 }
 
 func (s *queueMessageSuite) TestDeleteSelect_Single() {
@@ -182,17 +177,17 @@ func (s *queueMessageSuite) TestDeleteSelect_Single() {
 		MessageID: messageID,
 	}
 	result, err := s.store.DeleteFromMessages(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	rows, err := s.store.SelectFromMessages(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].QueueType = queueType
 	}
-	s.Equal([]sqlplugin.QueueMessageRow(nil), rows)
+	require.Equal(s.T(), []sqlplugin.QueueMessageRow(nil), rows)
 }
 
 func (s *queueMessageSuite) TestDeleteSelect_Multiple() {
@@ -209,18 +204,18 @@ func (s *queueMessageSuite) TestDeleteSelect_Multiple() {
 		PageSize:     0,
 	}
 	result, err := s.store.RangeDeleteFromMessages(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	filter.PageSize = pageSize
 	rows, err := s.store.RangeSelectFromMessages(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].QueueType = queueType
 	}
-	s.Equal([]sqlplugin.QueueMessageRow(nil), rows)
+	require.Equal(s.T(), []sqlplugin.QueueMessageRow(nil), rows)
 }
 
 func (s *queueMessageSuite) TestInsertDeleteSelect_Single() {
@@ -229,27 +224,27 @@ func (s *queueMessageSuite) TestInsertDeleteSelect_Single() {
 
 	message := s.newRandomQueueMessageRow(queueType, messageID)
 	result, err := s.store.InsertIntoMessages(newExecutionContext(), []sqlplugin.QueueMessageRow{message})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.QueueMessagesFilter{
 		QueueType: queueType,
 		MessageID: messageID,
 	}
 	result, err = s.store.DeleteFromMessages(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	rows, err := s.store.SelectFromMessages(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].QueueType = queueType
 	}
-	s.Equal([]sqlplugin.QueueMessageRow(nil), rows)
+	require.Equal(s.T(), []sqlplugin.QueueMessageRow(nil), rows)
 }
 
 func (s *queueMessageSuite) TestInsertDeleteSelect_Multiple() {
@@ -268,10 +263,10 @@ func (s *queueMessageSuite) TestInsertDeleteSelect_Multiple() {
 		messages = append(messages, message)
 	}
 	result, err := s.store.InsertIntoMessages(newExecutionContext(), messages)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numMessages, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numMessages, int(rowsAffected))
 
 	filter := sqlplugin.QueueMessagesRangeFilter{
 		QueueType:    queueType,
@@ -280,18 +275,18 @@ func (s *queueMessageSuite) TestInsertDeleteSelect_Multiple() {
 		PageSize:     0,
 	}
 	result, err = s.store.RangeDeleteFromMessages(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numMessages, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numMessages, int(rowsAffected))
 
 	filter.PageSize = pageSize
 	rows, err := s.store.RangeSelectFromMessages(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].QueueType = queueType
 	}
-	s.Equal([]sqlplugin.QueueMessageRow(nil), rows)
+	require.Equal(s.T(), []sqlplugin.QueueMessageRow(nil), rows)
 }
 
 func (s *queueMessageSuite) newRandomQueueMessageRow(

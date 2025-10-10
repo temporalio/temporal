@@ -17,7 +17,6 @@ import (
 
 type (
 	interleavedWeightedRoundRobinSchedulerSuite struct {
-		*require.Assertions
 		suite.Suite
 
 		controller        *gomock.Controller
@@ -42,14 +41,12 @@ func TestInterleavedWeightedRoundRobinSchedulerSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupSuite() {
-}
+
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TearDownSuite() {
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.mockFIFOScheduler = NewMockScheduler[*testTask](s.controller)
@@ -98,11 +95,11 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_Succ
 		return true
 	})
 
-	s.True(s.scheduler.TrySubmit(mockTask))
+	require.True(s.T(), s.scheduler.TrySubmit(mockTask))
 
 	testWaitGroup.Wait()
 	s.scheduler.Stop()
-	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
+	require.Equal(s.T(), int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_FailThenSuccess() {
@@ -121,11 +118,11 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_Fail
 		testWaitGroup.Done()
 	}).Times(1)
 
-	s.True(s.scheduler.TrySubmit(mockTask))
+	require.True(s.T(), s.scheduler.TrySubmit(mockTask))
 
 	testWaitGroup.Wait()
 	s.scheduler.Stop()
-	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
+	require.Equal(s.T(), int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_Fail_Shutdown() {
@@ -141,10 +138,10 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_Fail
 	mockTask.EXPECT().Abort().Do(func() {
 		testWaitGroup.Done()
 	}).Times(1)
-	s.True(s.scheduler.TrySubmit(mockTask))
+	require.True(s.T(), s.scheduler.TrySubmit(mockTask))
 
 	testWaitGroup.Wait()
-	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
+	require.Equal(s.T(), int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Success() {
@@ -164,7 +161,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Success
 
 	testWaitGroup.Wait()
 	s.scheduler.Stop()
-	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
+	require.Equal(s.T(), int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Shutdown() {
@@ -184,18 +181,18 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Shutdow
 	s.scheduler.Submit(mockTask)
 
 	testWaitGroup.Wait()
-	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
+	require.Equal(s.T(), int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 	// need to manually set the number of pending task to 1
 	// so schedule by task priority logic will execute
 	numTasks := atomic.AddInt64(&s.scheduler.numInflightTask, 1)
-	s.Equal(int64(1), numTasks)
+	require.Equal(s.T(), int64(1), numTasks)
 	numPendingTasks := 0
 	defer func() {
 		numTasks := atomic.AddInt64(&s.scheduler.numInflightTask, -1)
-		s.Equal(int64(numPendingTasks), numTasks)
+		require.Equal(s.T(), int64(numPendingTasks), numTasks)
 	}()
 
 	var channelWeights []int
@@ -207,7 +204,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
-	s.Equal([]int{5, 5, 5, 5, 5}, channelWeights)
+	require.Equal(s.T(), []int{5, 5, 5, 5, 5}, channelWeights)
 
 	channelWeights = nil
 	mockTask1 := newTestTask(s.controller, 1)
@@ -216,7 +213,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
-	s.Equal([]int{5, 5, 5, 3, 5, 3, 5, 3}, channelWeights)
+	require.Equal(s.T(), []int{5, 5, 5, 3, 5, 3, 5, 3}, channelWeights)
 
 	channelWeights = nil
 	mockTask2 := newTestTask(s.controller, 2)
@@ -225,7 +222,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
-	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2}, channelWeights)
+	require.Equal(s.T(), []int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2}, channelWeights)
 
 	channelWeights = nil
 	mockTask3 := newTestTask(s.controller, 3)
@@ -234,7 +231,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
-	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
+	require.Equal(s.T(), []int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
 
 	channelWeights = nil
 	s.scheduler.Submit(mockTask0)
@@ -245,7 +242,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
-	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
+	require.Equal(s.T(), []int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule() {
@@ -304,8 +301,8 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule
 	testWaitGroup.Wait()
 
 	s.scheduler.Stop()
-	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
-	s.Len(submittedTasks, numSubmitter*numTasks)
+	require.Equal(s.T(), int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
+	require.Len(s.T(), submittedTasks, numSubmitter*numTasks)
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestUpdateWeight() {
@@ -337,7 +334,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestUpdateWeight() {
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
-	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
+	require.Equal(s.T(), []int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
 
 	// trigger weight update
 	s.channelKeyToWeight = map[int]int{
@@ -373,7 +370,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestUpdateWeight() {
 		}
 
 	}
-	s.Equal([]int{8, 8, 8, 8, 5, 8, 5, 8, 5, 8, 5, 8, 5, 1, 1}, channelWeights)
+	require.Equal(s.T(), []int{8, 8, 8, 8, 5, 8, 5, 8, 5, 8, 5, 8, 5, 1, 1}, channelWeights)
 
 	// set the number of pending task back
 	atomic.AddInt64(&s.scheduler.numInflightTask, -1)
@@ -409,7 +406,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestDeleteInactiveChannels
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
-	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
+	require.Equal(s.T(), []int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
 
 	s.ts.Advance(30 * time.Minute)
 
@@ -427,7 +424,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestDeleteInactiveChannels
 	// Advance time past 1 hour. This will make other two channels inactive for more than 1 hour.
 	s.ts.Advance(31 * time.Minute)
 
-	s.Eventually(func() bool {
+	require.Eventually(s.T(), func() bool {
 		channelWeights = []int{}
 		for _, channel := range s.scheduler.channels() {
 			channelWeights = append(channelWeights, channel.Weight())
@@ -483,7 +480,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletio
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
-	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
+	require.Equal(s.T(), []int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
 
 	s.ts.Advance(30 * time.Minute)
 
@@ -508,7 +505,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletio
 	}
 
 	// Check that all channels exist.
-	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
+	require.Equal(s.T(), []int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
 
 	// set the number of pending task back
 	atomic.AddInt64(&s.scheduler.numInflightTask, -1)
@@ -569,7 +566,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletio
 	}
 
 	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
-	s.Empty(s.scheduler.channels())
+	require.Empty(s.T(), s.scheduler.channels())
 }
 
 func newTestTask(

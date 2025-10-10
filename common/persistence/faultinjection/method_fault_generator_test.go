@@ -12,7 +12,6 @@ import (
 type (
 	methodFaultGeneratorSuite struct {
 		suite.Suite
-		*require.Assertions
 	}
 )
 
@@ -25,9 +24,7 @@ func (s *methodFaultGeneratorSuite) SetupSuite() {}
 
 func (s *methodFaultGeneratorSuite) TearDownSuite() {}
 
-func (s *methodFaultGeneratorSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *methodFaultGeneratorSuite) TearDownTest() {}
 
@@ -51,20 +48,20 @@ func (s *methodFaultGeneratorSuite) Test_Generate() {
 	}
 	gen := newMethodFaultGenerator(faults, 2208)
 
-	s.EqualValues(34, math.Round(gen.rate*100))
-	s.Len(gen.faultsMetadata, 3)
-	s.EqualValues(1, math.Round(gen.faultsMetadata[0].threshold*100))
-	s.EqualValues(12, math.Round(gen.faultsMetadata[1].threshold*100))
-	s.EqualValues(34, math.Round(gen.faultsMetadata[2].threshold*100))
+	require.EqualValues(s.T(), 34, math.Round(gen.rate*100))
+	require.Len(s.T(), gen.faultsMetadata, 3)
+	require.EqualValues(s.T(), 1, math.Round(gen.faultsMetadata[0].threshold*100))
+	require.EqualValues(s.T(), 12, math.Round(gen.faultsMetadata[1].threshold*100))
+	require.EqualValues(s.T(), 34, math.Round(gen.faultsMetadata[2].threshold*100))
 
 	f1 := gen.generate("")
-	s.Nil(f1)
+	require.Nil(s.T(), f1)
 	f2 := gen.generate("")
-	s.NotNil(f2)
-	s.Equal(faults[2], *f2)
+	require.NotNil(s.T(), f2)
+	require.Equal(s.T(), faults[2], *f2)
 	f3 := gen.generate("")
-	s.NotNil(f3)
-	s.Equal(faults[2], *f3)
+	require.NotNil(s.T(), f3)
+	require.Equal(s.T(), faults[2], *f3)
 	f4 := gen.generate("")
-	s.Nil(f4)
+	require.Nil(s.T(), f4)
 }

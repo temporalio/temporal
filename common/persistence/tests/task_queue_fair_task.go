@@ -24,7 +24,6 @@ import (
 type (
 	TaskQueueFairTaskSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		stickyTTL time.Duration
 		taskTTL   time.Duration
@@ -47,7 +46,7 @@ func NewTaskQueueFairTaskSuite(
 	logger log.Logger,
 ) *TaskQueueFairTaskSuite {
 	return &TaskQueueFairTaskSuite{
-		Assertions: require.New(t),
+
 		taskManager: p.NewTaskManager(
 			taskStore,
 			serialization.NewSerializer(),
@@ -56,14 +55,13 @@ func NewTaskQueueFairTaskSuite(
 	}
 }
 
-func (s *TaskQueueFairTaskSuite) SetupSuite() {
-}
+
 
 func (s *TaskQueueFairTaskSuite) TearDownSuite() {
 }
 
 func (s *TaskQueueFairTaskSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
 	s.stickyTTL = time.Second * 10
@@ -94,7 +92,7 @@ func (s *TaskQueueFairTaskSuite) TestCreateGet_Order() {
 		TaskQueueInfo: &p.PersistedTaskQueueInfo{RangeID: rangeID, Data: taskQueue},
 		Tasks:         tasks,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	resp, err := s.taskManager.GetTasks(s.ctx, &p.GetTasksRequest{
 		NamespaceID:        s.namespaceID,
@@ -105,11 +103,11 @@ func (s *TaskQueueFairTaskSuite) TestCreateGet_Order() {
 		ExclusiveMaxTaskID: math.MaxInt64,
 		PageSize:           10,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	expected := []*persistencespb.AllocatedTaskInfo{tasks[2], tasks[1], tasks[0], tasks[3]}
 	protorequire.ProtoSliceEqual(s.T(), expected, resp.Tasks)
-	s.Nil(resp.NextPageToken)
+	require.Nil(s.T(), resp.NextPageToken)
 }
 
 func (s *TaskQueueFairTaskSuite) TestCreateDelete_Range() {
@@ -124,7 +122,7 @@ func (s *TaskQueueFairTaskSuite) TestCreateDelete_Range() {
 		TaskQueueInfo: &p.PersistedTaskQueueInfo{RangeID: rangeID, Data: taskQueue},
 		Tasks:         tasks,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	_, err = s.taskManager.CompleteTasksLessThan(s.ctx, &p.CompleteTasksLessThanRequest{
 		NamespaceID:        s.namespaceID,
@@ -134,7 +132,7 @@ func (s *TaskQueueFairTaskSuite) TestCreateDelete_Range() {
 		ExclusiveMaxTaskID: 0,
 		Limit:              10,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	resp, err := s.taskManager.GetTasks(s.ctx, &p.GetTasksRequest{
 		NamespaceID:        s.namespaceID,
@@ -145,11 +143,11 @@ func (s *TaskQueueFairTaskSuite) TestCreateDelete_Range() {
 		ExclusiveMaxTaskID: math.MaxInt64,
 		PageSize:           10,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	expected := []*persistencespb.AllocatedTaskInfo{tasks[2], tasks[3], tasks[4]}
 	protorequire.ProtoSliceEqual(s.T(), expected, resp.Tasks)
-	s.Nil(resp.NextPageToken)
+	require.Nil(s.T(), resp.NextPageToken)
 }
 
 func (s *TaskQueueFairTaskSuite) createTaskQueue(rangeID int64) *persistencespb.TaskQueueInfo {
@@ -159,7 +157,7 @@ func (s *TaskQueueFairTaskSuite) createTaskQueue(rangeID int64) *persistencespb.
 		RangeID:       rangeID,
 		TaskQueueInfo: taskQueue,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	return taskQueue
 }
 

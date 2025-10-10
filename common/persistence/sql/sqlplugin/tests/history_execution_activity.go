@@ -14,7 +14,6 @@ import (
 type (
 	historyExecutionActivitySuite struct {
 		suite.Suite
-		*require.Assertions
 
 		store sqlplugin.HistoryExecutionActivity
 	}
@@ -33,22 +32,18 @@ func NewHistoryExecutionActivitySuite(
 	store sqlplugin.HistoryExecutionActivity,
 ) *historyExecutionActivitySuite {
 	return &historyExecutionActivitySuite{
-		Assertions: require.New(t),
-		store:      store,
+
+		store: store,
 	}
 }
 
-func (s *historyExecutionActivitySuite) SetupSuite() {
 
-}
 
 func (s *historyExecutionActivitySuite) TearDownSuite() {
 
 }
 
-func (s *historyExecutionActivitySuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *historyExecutionActivitySuite) TearDownTest() {
 
@@ -63,10 +58,10 @@ func (s *historyExecutionActivitySuite) TestReplace_Single() {
 
 	activity := s.newRandomExecutionActivityRow(shardID, namespaceID, workflowID, runID, scheduledEventID)
 	result, err := s.store.ReplaceIntoActivityInfoMaps(newExecutionContext(), []sqlplugin.ActivityInfoMapsRow{activity})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *historyExecutionActivitySuite) TestReplace_Multiple() {
@@ -78,10 +73,10 @@ func (s *historyExecutionActivitySuite) TestReplace_Multiple() {
 	activity1 := s.newRandomExecutionActivityRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 	activity2 := s.newRandomExecutionActivityRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 	result, err := s.store.ReplaceIntoActivityInfoMaps(newExecutionContext(), []sqlplugin.ActivityInfoMapsRow{activity1, activity2})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(2, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, int(rowsAffected))
 }
 
 func (s *historyExecutionActivitySuite) TestReplaceSelect_Single() {
@@ -93,10 +88,10 @@ func (s *historyExecutionActivitySuite) TestReplaceSelect_Single() {
 
 	activity := s.newRandomExecutionActivityRow(shardID, namespaceID, workflowID, runID, scheduledEventID)
 	result, err := s.store.ReplaceIntoActivityInfoMaps(newExecutionContext(), []sqlplugin.ActivityInfoMapsRow{activity})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -105,12 +100,12 @@ func (s *historyExecutionActivitySuite) TestReplaceSelect_Single() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowMap := map[int64]sqlplugin.ActivityInfoMapsRow{}
 	for _, activity := range rows {
 		rowMap[activity.ScheduleID] = activity
 	}
-	s.Equal(map[int64]sqlplugin.ActivityInfoMapsRow{
+	require.Equal(s.T(), map[int64]sqlplugin.ActivityInfoMapsRow{
 		activity.ScheduleID: activity,
 	}, rowMap)
 }
@@ -129,10 +124,10 @@ func (s *historyExecutionActivitySuite) TestReplaceSelect_Multiple() {
 		activities = append(activities, activity)
 	}
 	result, err := s.store.ReplaceIntoActivityInfoMaps(newExecutionContext(), activities)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numActivities, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numActivities, int(rowsAffected))
 
 	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -141,7 +136,7 @@ func (s *historyExecutionActivitySuite) TestReplaceSelect_Multiple() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	activityMap := map[int64]sqlplugin.ActivityInfoMapsRow{}
 	for _, activity := range activities {
 		activityMap[activity.ScheduleID] = activity
@@ -150,7 +145,7 @@ func (s *historyExecutionActivitySuite) TestReplaceSelect_Multiple() {
 	for _, activity := range rows {
 		rowMap[activity.ScheduleID] = activity
 	}
-	s.Equal(activityMap, rowMap)
+	require.Equal(s.T(), activityMap, rowMap)
 }
 
 func (s *historyExecutionActivitySuite) TestDeleteSelect_Single() {
@@ -168,10 +163,10 @@ func (s *historyExecutionActivitySuite) TestDeleteSelect_Single() {
 		ScheduleIDs: []int64{scheduledEventID},
 	}
 	result, err := s.store.DeleteFromActivityInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -180,8 +175,8 @@ func (s *historyExecutionActivitySuite) TestDeleteSelect_Single() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.ActivityInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.ActivityInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionActivitySuite) TestDeleteSelect_Multiple() {
@@ -198,10 +193,10 @@ func (s *historyExecutionActivitySuite) TestDeleteSelect_Multiple() {
 		ScheduleIDs: []int64{rand.Int63(), rand.Int63()},
 	}
 	result, err := s.store.DeleteFromActivityInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -210,8 +205,8 @@ func (s *historyExecutionActivitySuite) TestDeleteSelect_Multiple() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.ActivityInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.ActivityInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionActivitySuite) TestDeleteSelect_All() {
@@ -227,10 +222,10 @@ func (s *historyExecutionActivitySuite) TestDeleteSelect_All() {
 		RunID:       runID,
 	}
 	result, err := s.store.DeleteAllFromActivityInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -239,8 +234,8 @@ func (s *historyExecutionActivitySuite) TestDeleteSelect_All() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.ActivityInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.ActivityInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_Single() {
@@ -252,10 +247,10 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_Single() {
 
 	activity := s.newRandomExecutionActivityRow(shardID, namespaceID, workflowID, runID, scheduledEventID)
 	result, err := s.store.ReplaceIntoActivityInfoMaps(newExecutionContext(), []sqlplugin.ActivityInfoMapsRow{activity})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	deleteFilter := sqlplugin.ActivityInfoMapsFilter{
 		ShardID:     shardID,
@@ -265,10 +260,10 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_Single() {
 		ScheduleIDs: []int64{scheduledEventID},
 	}
 	result, err = s.store.DeleteFromActivityInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -277,8 +272,8 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_Single() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.ActivityInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.ActivityInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_Multiple() {
@@ -298,10 +293,10 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_Multiple() {
 		activities = append(activities, activity)
 	}
 	result, err := s.store.ReplaceIntoActivityInfoMaps(newExecutionContext(), activities)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numActivities, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numActivities, int(rowsAffected))
 
 	deleteFilter := sqlplugin.ActivityInfoMapsFilter{
 		ShardID:     shardID,
@@ -311,10 +306,10 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_Multiple() {
 		ScheduleIDs: activityScheduledEventIDs,
 	}
 	result, err = s.store.DeleteFromActivityInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numActivities, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numActivities, int(rowsAffected))
 
 	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -323,8 +318,8 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_Multiple() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.ActivityInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.ActivityInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_All() {
@@ -342,10 +337,10 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_All() {
 		activities = append(activities, activity)
 	}
 	result, err := s.store.ReplaceIntoActivityInfoMaps(newExecutionContext(), activities)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numActivities, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numActivities, int(rowsAffected))
 
 	deleteFilter := sqlplugin.ActivityInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -354,10 +349,10 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_All() {
 		RunID:       runID,
 	}
 	result, err = s.store.DeleteAllFromActivityInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numActivities, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numActivities, int(rowsAffected))
 
 	selectFilter := sqlplugin.ActivityInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -366,8 +361,8 @@ func (s *historyExecutionActivitySuite) TestReplaceDeleteSelect_All() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.ActivityInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.ActivityInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionActivitySuite) newRandomExecutionActivityRow(

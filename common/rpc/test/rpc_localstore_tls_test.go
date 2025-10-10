@@ -30,7 +30,6 @@ var (
 )
 
 type localStoreRPCSuite struct {
-	*require.Assertions
 	*suite.Suite
 
 	controller *gomock.Controller
@@ -105,49 +104,49 @@ func (s *localStoreRPCSuite) TearDownSuite() {
 }
 
 func (s *localStoreRPCSuite) SetupSuite() {
-	s.Assertions = require.New(s.T())
+
 	s.logger = log.NewTestLogger()
 
 	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, metrics.NoopMetricsHandler, s.logger, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	insecureFactory := rpc.NewFactory(cfg, "tester", s.logger, nil, provider, frontendURL, frontendHTTPURL, 0, nil, nil, nil)
-	s.NotNil(insecureFactory)
+	require.NotNil(s.T(), insecureFactory)
 	s.insecureRPCFactory = i(insecureFactory)
 
 	s.frontendCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontend")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.frontendChain, err = testutils.GenerateTestChain(s.frontendCertDir, localhostIPv4)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.internodeCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteInternode")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.internodeChain, err = testutils.GenerateTestChain(s.internodeCertDir, localhostIPv4)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.frontendAltCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendAlt")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.frontendAltChain, err = testutils.GenerateTestChain(s.frontendAltCertDir, localhost)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.frontendClientCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendClient")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.frontendClientChain, err = testutils.GenerateTestChain(s.frontendClientCertDir, localhostIPv4)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.frontendRollingCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendRolling")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.frontendRollingCerts, s.dynamicCACertPool, s.wrongCACertPool, err = testutils.GenerateTestCerts(s.frontendRollingCertDir, localhostIPv4, 2)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.internodeRefreshCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteInternodeRefresh")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.internodeRefreshChain, s.internodeRefreshCA, err = testutils.GenerateTestChainWithSN(s.internodeRefreshCertDir, localhostIPv4, internodeServerCertSerialNumber)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.frontendRefreshCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendRefresh")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.frontendRefreshChain, s.frontendRefreshCA, err = testutils.GenerateTestChainWithSN(s.frontendRefreshCertDir, localhostIPv4, frontendServerCertSerialNumber)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.membershipConfig = config.Membership{
 		MaxJoinDuration:  5,
@@ -317,30 +316,30 @@ func (s *localStoreRPCSuite) setupFrontend() {
 	}
 
 	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	tlsConfig, err := provider.GetFrontendClientConfig()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	frontendMutualTLSFactory := rpc.NewFactory(cfg, "tester", s.logger, nil, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
-	s.NotNil(frontendMutualTLSFactory)
+	require.NotNil(s.T(), frontendMutualTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	frontendServerTLSFactory := rpc.NewFactory(cfg, "tester", s.logger, nil, provider, frontendURL, frontendHTTPURL, 0, nil, nil, nil)
-	s.NotNil(frontendServerTLSFactory)
+	require.NotNil(s.T(), frontendServerTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSSystemWorker.TLS, metrics.NoopMetricsHandler, s.logger, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	tlsConfig, err = provider.GetFrontendClientConfig()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	frontendSystemWorkerMutualTLSFactory := rpc.NewFactory(cfg, "tester", s.logger, nil, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
-	s.NotNil(frontendSystemWorkerMutualTLSFactory)
+	require.NotNil(s.T(), frontendSystemWorkerMutualTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSWithRefresh.TLS, metrics.NoopMetricsHandler, s.logger, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	tlsConfig, err = provider.GetFrontendClientConfig()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	frontendMutualTLSRefreshFactory := rpc.NewFactory(cfg, "tester", s.logger, nil, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
-	s.NotNil(frontendMutualTLSRefreshFactory)
+	require.NotNil(s.T(), frontendMutualTLSRefreshFactory)
 
 	s.frontendMutualTLSRPCFactory = f(frontendMutualTLSFactory)
 	s.frontendServerTLSRPCFactory = f(frontendServerTLSFactory)
@@ -353,9 +352,9 @@ func (s *localStoreRPCSuite) setupFrontend() {
 		s.frontendRollingCerts,
 		s.dynamicCACertPool,
 		s.wrongCACertPool)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	tlsConfig, err = s.dynamicConfigProvider.GetFrontendClientConfig()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	dynamicServerTLSFactory := rpc.NewFactory(cfg, "tester", s.logger, nil, s.dynamicConfigProvider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
 	s.frontendDynamicTLSFactory = f(dynamicServerTLSFactory)
 	s.internodeDynamicTLSFactory = i(dynamicServerTLSFactory)
@@ -363,19 +362,19 @@ func (s *localStoreRPCSuite) setupFrontend() {
 	s.frontendMutualTLSRPCRefreshFactory = f(frontendMutualTLSRefreshFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreRootCAForceTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	tlsConfig, err = provider.GetFrontendClientConfig()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	frontendRootCAForceTLSFactory := rpc.NewFactory(cfg, "tester", s.logger, nil, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
-	s.NotNil(frontendServerTLSFactory)
+	require.NotNil(s.T(), frontendServerTLSFactory)
 	s.frontendConfigRootCAForceTLSFactory = f(frontendRootCAForceTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSRemoteCluster.TLS, metrics.NoopMetricsHandler, s.logger, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	tlsConfig, err = provider.GetFrontendClientConfig()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	remoteClusterMutualTLSRPCFactory := rpc.NewFactory(cfg, "tester", s.logger, nil, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
-	s.NotNil(remoteClusterMutualTLSRPCFactory)
+	require.NotNil(s.T(), remoteClusterMutualTLSRPCFactory)
 	s.remoteClusterMutualTLSRPCFactory = r(remoteClusterMutualTLSRPCFactory)
 }
 
@@ -409,32 +408,32 @@ func (s *localStoreRPCSuite) setupInternode() {
 	localStoreMutualTLSWithRefresh.TLS.RefreshInterval = time.Second
 
 	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	tlsConfig, err := provider.GetFrontendClientConfig()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	internodeMutualTLSFactory := rpc.NewFactory(cfg, "tester", s.logger, nil, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
-	s.NotNil(internodeMutualTLSFactory)
+	require.NotNil(s.T(), internodeMutualTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	tlsConfig, err = provider.GetFrontendClientConfig()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	internodeServerTLSFactory := rpc.NewFactory(cfg, "tester", s.logger, nil, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
-	s.NotNil(internodeServerTLSFactory)
+	require.NotNil(s.T(), internodeServerTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreAltMutualTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	tlsConfig, err = provider.GetFrontendClientConfig()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	internodeMutualAltTLSFactory := rpc.NewFactory(cfg, "tester", s.logger, nil, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
-	s.NotNil(internodeMutualAltTLSFactory)
+	require.NotNil(s.T(), internodeMutualAltTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSWithRefresh.TLS, metrics.NoopMetricsHandler, s.logger, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	tlsConfig, err = provider.GetFrontendClientConfig()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	internodeMutualTLSRefreshFactory := rpc.NewFactory(cfg, "tester", s.logger, nil, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
-	s.NotNil(internodeMutualTLSRefreshFactory)
+	require.NotNil(s.T(), internodeMutualTLSRefreshFactory)
 
 	s.internodeMutualTLSRPCFactory = i(internodeMutualTLSFactory)
 	s.internodeServerTLSRPCFactory = i(internodeServerTLSFactory)
@@ -560,10 +559,10 @@ func (s *localStoreRPCSuite) TestCertExpiration() {
 
 func (s *localStoreRPCSuite) testCertExpiration(factory *TestFactory, timeWindow time.Duration, nExpiring int) {
 	expiring, expired, err := factory.GetTLSConfigProvider().GetExpiringCerts(timeWindow)
-	s.NotNil(expiring)
-	s.Empty(expired)
-	s.NoError(err)
-	s.Equal(nExpiring, len(expiring))
+	require.NotNil(s.T(), expiring)
+	require.Empty(s.T(), expired)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), nExpiring, len(expiring))
 }
 
 func (s *localStoreRPCSuite) testDynamicRootCA(host string, frontend bool) {
@@ -573,9 +572,9 @@ func (s *localStoreRPCSuite) testDynamicRootCA(host string, frontend bool) {
 	runTestServerMultipleDials(s.Suite, host, server, client, 5,
 		func(tlsInfo *credentials.TLSInfo, err error) {
 			if valid {
-				s.NoError(err)
+				require.NoError(s.T(), err)
 			} else {
-				s.Error(err)
+				require.Error(s.T(), err)
 			}
 			index++
 			if index == 2 {
@@ -614,8 +613,8 @@ func (s *localStoreRPCSuite) testServerTLSRefresh(factory *TestFactory, ca *tls.
 	s.validateTLSInfo(tlsInfo, err, serialNumber) // serial number of server cert before refresh
 
 	srvrCert, err := testutils.GenerateServerCert(ca, localhostIPv4, serialNumber+100, testutils.CertFilePath(certDir), testutils.KeyFilePath(certDir))
-	s.NoError(err)
-	s.NotNil(srvrCert)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), srvrCert)
 
 	time.Sleep(time.Second * 2) // let server refresh certs
 
@@ -624,17 +623,17 @@ func (s *localStoreRPCSuite) testServerTLSRefresh(factory *TestFactory, ca *tls.
 }
 
 func (s *localStoreRPCSuite) validateTLSInfo(tlsInfo *credentials.TLSInfo, err error, serialNumber int64) {
-	s.NoError(err)
-	s.NotNil(tlsInfo)
-	s.NotNil(tlsInfo.State.PeerCertificates)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), tlsInfo)
+	require.NotNil(s.T(), tlsInfo.State.PeerCertificates)
 	sn := (*tlsInfo.State.PeerCertificates[0].SerialNumber).Int64()
-	s.Equal(serialNumber, sn)
+	require.Equal(s.T(), serialNumber, sn)
 }
 
 func (s *localStoreRPCSuite) TestClientForceTLS() {
 	options, err := s.frontendConfigRootCAForceTLSFactory.RPCFactory.GetFrontendGRPCServerOptions()
-	s.NoError(err)
-	s.Nil(options)
+	require.NoError(s.T(), err)
+	require.Nil(s.T(), options)
 }
 
 func (s *localStoreRPCSuite) TestSystemWorkerOnlyConfig() {
@@ -645,12 +644,12 @@ func (s *localStoreRPCSuite) TestSystemWorkerOnlyConfig() {
 		},
 	}
 	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreSystemWorkerOnly.TLS, metrics.NoopMetricsHandler, s.logger, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	tlsConfig, err := provider.GetFrontendClientConfig()
-	s.NoError(err)
-	s.NotNil(tlsConfig)
-	s.NotNil(tlsConfig.GetClientCertificate)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), tlsConfig)
+	require.NotNil(s.T(), tlsConfig.GetClientCertificate)
 	cert, err := tlsConfig.GetClientCertificate(nil)
-	s.NoError(err)
-	s.NotNil(cert)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), cert)
 }

@@ -9,7 +9,6 @@ import (
 
 type (
 	URISuite struct {
-		*require.Assertions
 		suite.Suite
 	}
 )
@@ -18,9 +17,7 @@ func TestURISuite(t *testing.T) {
 	suite.Run(t, new(URISuite))
 }
 
-func (s *URISuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *URISuite) TestURI() {
 	testCases := []struct {
@@ -109,20 +106,20 @@ func (s *URISuite) TestURI() {
 	for _, tc := range testCases {
 		URI, err := NewURI(tc.URIString)
 		if !tc.valid {
-			s.Error(err)
+			require.Error(s.T(), err)
 			continue
 		}
 
-		s.NoError(err)
-		s.Equal(tc.scheme, URI.Scheme())
-		s.Equal(tc.path, URI.Path())
-		s.Equal(tc.hostname, URI.Hostname())
-		s.Equal(tc.port, URI.Port())
-		s.Equal(tc.username, URI.Username())
-		s.Equal(tc.password, URI.Password())
-		s.Equal(tc.opaque, URI.Opaque())
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), tc.scheme, URI.Scheme())
+		require.Equal(s.T(), tc.path, URI.Path())
+		require.Equal(s.T(), tc.hostname, URI.Hostname())
+		require.Equal(s.T(), tc.port, URI.Port())
+		require.Equal(s.T(), tc.username, URI.Username())
+		require.Equal(s.T(), tc.password, URI.Password())
+		require.Equal(s.T(), tc.opaque, URI.Opaque())
 		if tc.query != nil {
-			s.Equal(tc.query, URI.Query())
+			require.Equal(s.T(), tc.query, URI.Query())
 		}
 	}
 }

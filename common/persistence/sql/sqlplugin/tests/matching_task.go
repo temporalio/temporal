@@ -22,7 +22,6 @@ var (
 type (
 	matchingTaskSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		store sqlplugin.MatchingTask
 	}
@@ -33,22 +32,18 @@ func NewMatchingTaskSuite(
 	store sqlplugin.MatchingTask,
 ) *matchingTaskSuite {
 	return &matchingTaskSuite{
-		Assertions: require.New(t),
-		store:      store,
+
+		store: store,
 	}
 }
 
-func (s *matchingTaskSuite) SetupSuite() {
 
-}
 
 func (s *matchingTaskSuite) TearDownSuite() {
 
 }
 
-func (s *matchingTaskSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *matchingTaskSuite) TearDownTest() {
 
@@ -60,10 +55,10 @@ func (s *matchingTaskSuite) TestInsert_Single_Success() {
 
 	task := s.newRandomTasksRow(queueID, taskID)
 	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *matchingTaskSuite) TestInsert_Multiple_Success() {
@@ -75,10 +70,10 @@ func (s *matchingTaskSuite) TestInsert_Multiple_Success() {
 	task2 := s.newRandomTasksRow(queueID, taskID)
 	taskID++
 	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task1, task2})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(2, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, int(rowsAffected))
 }
 
 func (s *matchingTaskSuite) TestInsert_Single_Fail_Duplicate() {
@@ -87,14 +82,14 @@ func (s *matchingTaskSuite) TestInsert_Single_Fail_Duplicate() {
 
 	task := s.newRandomTasksRow(queueID, taskID)
 	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	task = s.newRandomTasksRow(queueID, taskID)
 	_, err = s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task})
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *matchingTaskSuite) TestInsert_Multiple_Fail_Duplicate() {
@@ -105,16 +100,16 @@ func (s *matchingTaskSuite) TestInsert_Multiple_Fail_Duplicate() {
 	taskID++
 	task2 := s.newRandomTasksRow(queueID, taskID)
 	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task1, task2})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(2, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, int(rowsAffected))
 
 	task2 = s.newRandomTasksRow(queueID, taskID)
 	taskID++
 	task3 := s.newRandomTasksRow(queueID, taskID)
 	_, err = s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task2, task3})
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *matchingTaskSuite) TestInsertSelect_Single() {
@@ -123,10 +118,10 @@ func (s *matchingTaskSuite) TestInsertSelect_Single() {
 
 	task := s.newRandomTasksRow(queueID, taskID)
 	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	inclusiveMinTaskID := util.Ptr(taskID)
 	exclusiveMaxTaskID := util.Ptr(taskID + 1)
@@ -139,13 +134,13 @@ func (s *matchingTaskSuite) TestInsertSelect_Single() {
 		PageSize:           pageSize,
 	}
 	rows, err := s.store.SelectFromTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	// fill in some omitted info
 	for index := range rows {
 		rows[index].RangeHash = testMatchingTaskRangeHash
 		rows[index].TaskQueueID = queueID
 	}
-	s.Equal([]sqlplugin.TasksRow{task}, rows)
+	require.Equal(s.T(), []sqlplugin.TasksRow{task}, rows)
 }
 
 func (s *matchingTaskSuite) TestInsertSelect_Multiple() {
@@ -156,10 +151,10 @@ func (s *matchingTaskSuite) TestInsertSelect_Multiple() {
 	taskID++
 	task2 := s.newRandomTasksRow(queueID, taskID)
 	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task1, task2})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(2, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, int(rowsAffected))
 
 	inclusiveMinTaskID := util.Ptr(taskID - 1)
 	exclusiveMaxTaskID := util.Ptr(taskID + 1)
@@ -172,13 +167,13 @@ func (s *matchingTaskSuite) TestInsertSelect_Multiple() {
 		PageSize:           pageSize,
 	}
 	rows, err := s.store.SelectFromTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	// fill in some omitted info
 	for index := range rows {
 		rows[index].RangeHash = testMatchingTaskRangeHash
 		rows[index].TaskQueueID = queueID
 	}
-	s.Equal([]sqlplugin.TasksRow{task1, task2}, rows)
+	require.Equal(s.T(), []sqlplugin.TasksRow{task1, task2}, rows)
 }
 
 func (s *matchingTaskSuite) TestDeleteSingle_Fail() {
@@ -189,7 +184,7 @@ func (s *matchingTaskSuite) TestDeleteSingle_Fail() {
 		TaskQueueID: queueID,
 	}
 	_, err := s.store.DeleteFromTasks(newExecutionContext(), filter)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *matchingTaskSuite) TestInsertDeleteSingle_Fail() {
@@ -198,17 +193,17 @@ func (s *matchingTaskSuite) TestInsertDeleteSingle_Fail() {
 
 	task := s.newRandomTasksRow(queueID, taskID)
 	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.TasksFilter{
 		RangeHash:   testMatchingTaskRangeHash,
 		TaskQueueID: queueID,
 	}
 	result, err = s.store.DeleteFromTasks(newExecutionContext(), filter)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *matchingTaskSuite) TestInsertDeleteSelect_Multiple() {
@@ -219,10 +214,10 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Multiple() {
 	taskID++
 	task2 := s.newRandomTasksRow(queueID, taskID)
 	result, err := s.store.InsertIntoTasks(newExecutionContext(), []sqlplugin.TasksRow{task1, task2})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(2, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, int(rowsAffected))
 
 	filter := sqlplugin.TasksFilter{
 		RangeHash:          testMatchingTaskRangeHash,
@@ -231,10 +226,10 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Multiple() {
 		Limit:              util.Ptr(2),
 	}
 	result, err = s.store.DeleteFromTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(2, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, int(rowsAffected))
 
 	inclusiveMinTaskID := util.Ptr(taskID - 1)
 	exclusiveMaxTaskID := util.Ptr(taskID + 1)
@@ -247,8 +242,8 @@ func (s *matchingTaskSuite) TestInsertDeleteSelect_Multiple() {
 		PageSize:           pageSize,
 	}
 	rows, err := s.store.SelectFromTasks(newExecutionContext(), filter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.TasksRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.TasksRow(nil), rows)
 }
 
 func (s *matchingTaskSuite) newRandomTasksRow(

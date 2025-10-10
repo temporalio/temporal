@@ -23,7 +23,6 @@ import (
 type (
 	TaskQueueTaskSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		stickyTTL     time.Duration
 		taskTTL       time.Duration
@@ -45,7 +44,7 @@ func NewTaskQueueTaskSuite(
 	logger log.Logger,
 ) *TaskQueueTaskSuite {
 	return &TaskQueueTaskSuite{
-		Assertions: require.New(t),
+
 		taskManager: p.NewTaskManager(
 			taskStore,
 			serialization.NewSerializer(),
@@ -54,14 +53,13 @@ func NewTaskQueueTaskSuite(
 	}
 }
 
-func (s *TaskQueueTaskSuite) SetupSuite() {
-}
+
 
 func (s *TaskQueueTaskSuite) TearDownSuite() {
 }
 
 func (s *TaskQueueTaskSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
 	s.stickyTTL = time.Second * 10
@@ -90,7 +88,7 @@ func (s *TaskQueueTaskSuite) TestCreateGet_Conflict() {
 		},
 		Tasks: []*persistencespb.AllocatedTaskInfo{task},
 	})
-	s.IsType(&p.ConditionFailedError{}, err)
+	require.IsType(s.T(), &p.ConditionFailedError{}, err)
 
 	resp, err := s.taskManager.GetTasks(s.ctx, &p.GetTasksRequest{
 		NamespaceID:        s.namespaceID,
@@ -101,9 +99,9 @@ func (s *TaskQueueTaskSuite) TestCreateGet_Conflict() {
 		PageSize:           100,
 		NextPageToken:      nil,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	protorequire.ProtoSliceEqual(s.T(), []*persistencespb.AllocatedTaskInfo{}, resp.Tasks)
-	s.Nil(resp.NextPageToken)
+	require.Nil(s.T(), resp.NextPageToken)
 }
 
 func (s *TaskQueueTaskSuite) TestCreateGet_One() {
@@ -119,7 +117,7 @@ func (s *TaskQueueTaskSuite) TestCreateGet_One() {
 		},
 		Tasks: []*persistencespb.AllocatedTaskInfo{task},
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	resp, err := s.taskManager.GetTasks(s.ctx, &p.GetTasksRequest{
 		NamespaceID:        s.namespaceID,
@@ -130,9 +128,9 @@ func (s *TaskQueueTaskSuite) TestCreateGet_One() {
 		PageSize:           100,
 		NextPageToken:      nil,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	protorequire.ProtoSliceEqual(s.T(), []*persistencespb.AllocatedTaskInfo{task}, resp.Tasks)
-	s.Nil(resp.NextPageToken)
+	require.Nil(s.T(), resp.NextPageToken)
 }
 
 func (s *TaskQueueTaskSuite) TestCreateGet_Multiple() {
@@ -161,7 +159,7 @@ func (s *TaskQueueTaskSuite) TestCreateGet_Multiple() {
 			},
 			Tasks: tasks,
 		})
-		s.NoError(err)
+		require.NoError(s.T(), err)
 	}
 
 	var token []byte
@@ -176,7 +174,7 @@ func (s *TaskQueueTaskSuite) TestCreateGet_Multiple() {
 			PageSize:           1,
 			NextPageToken:      token,
 		})
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		token = resp.NextPageToken
 		actualTasks = append(actualTasks, resp.Tasks...)
 	}
@@ -207,7 +205,7 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_Multiple() {
 			},
 			Tasks: tasks,
 		})
-		s.NoError(err)
+		require.NoError(s.T(), err)
 	}
 
 	_, err := s.taskManager.CompleteTasksLessThan(s.ctx, &p.CompleteTasksLessThanRequest{
@@ -217,7 +215,7 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_Multiple() {
 		ExclusiveMaxTaskID: maxTaskID + 1,
 		Limit:              int(numTasks),
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	resp, err := s.taskManager.GetTasks(s.ctx, &p.GetTasksRequest{
 		NamespaceID:        s.namespaceID,
@@ -228,9 +226,9 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_Multiple() {
 		PageSize:           100,
 		NextPageToken:      nil,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	protorequire.ProtoSliceEqual(s.T(), []*persistencespb.AllocatedTaskInfo{}, resp.Tasks)
-	s.Nil(resp.NextPageToken)
+	require.Nil(s.T(), resp.NextPageToken)
 }
 
 func (s *TaskQueueTaskSuite) createTaskQueue(
@@ -244,7 +242,7 @@ func (s *TaskQueueTaskSuite) createTaskQueue(
 		RangeID:       rangeID,
 		TaskQueueInfo: taskQueue,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	return taskQueue
 }
 

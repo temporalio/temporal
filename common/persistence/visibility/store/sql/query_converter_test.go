@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/temporalio/sqlparser"
@@ -20,7 +19,6 @@ import (
 type (
 	queryConverterSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		pqc            pluginQueryConverter
 		queryConverter *QueryConverter
@@ -43,7 +41,7 @@ const (
 )
 
 func (s *queryConverterSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.queryConverter = newQueryConverterInternal(
 		s.pqc,
 		testNamespaceName,
@@ -148,11 +146,11 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 			)
 			qp, err := qc.convertWhereString(tc.input)
 			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, qp)
+				require.NoError(s.T(), err)
+				require.Equal(s.T(), tc.output, qp)
 			} else {
-				s.Error(err)
-				s.Equal(err, tc.err)
+				require.Error(s.T(), err)
+				require.Equal(s.T(), err, tc.err)
 			}
 		})
 	}
@@ -190,15 +188,15 @@ func (s *queryConverterSuite) TestConvertAndExpr() {
 		s.Run(tc.name, func() {
 			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
 			stmt, err := sqlparser.Parse(sql)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			expr := stmt.(*sqlparser.Select).Where.Expr
 			err = s.queryConverter.convertAndExpr(&expr)
 			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, sqlparser.String(expr))
+				require.NoError(s.T(), err)
+				require.Equal(s.T(), tc.output, sqlparser.String(expr))
 			} else {
-				s.Error(err)
-				s.Equal(err, tc.err)
+				require.Error(s.T(), err)
+				require.Equal(s.T(), err, tc.err)
 			}
 		})
 	}
@@ -236,15 +234,15 @@ func (s *queryConverterSuite) TestConvertOrExpr() {
 		s.Run(tc.name, func() {
 			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
 			stmt, err := sqlparser.Parse(sql)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			expr := stmt.(*sqlparser.Select).Where.Expr
 			err = s.queryConverter.convertOrExpr(&expr)
 			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, sqlparser.String(expr))
+				require.NoError(s.T(), err)
+				require.Equal(s.T(), tc.output, sqlparser.String(expr))
 			} else {
-				s.Error(err)
-				s.Equal(err, tc.err)
+				require.Error(s.T(), err)
+				require.Equal(s.T(), err, tc.err)
 			}
 		})
 	}
@@ -364,15 +362,15 @@ func (s *queryConverterSuite) TestConvertComparisonExpr() {
 		s.Run(tc.name, func() {
 			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
 			stmt, err := sqlparser.Parse(sql)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			expr := stmt.(*sqlparser.Select).Where.Expr
 			err = s.queryConverter.convertComparisonExpr(&expr)
 			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, sqlparser.String(expr))
+				require.NoError(s.T(), err)
+				require.Equal(s.T(), tc.output, sqlparser.String(expr))
 			} else {
-				s.Error(err)
-				s.Equal(err, tc.err)
+				require.Error(s.T(), err)
+				require.Equal(s.T(), err, tc.err)
 			}
 		})
 	}
@@ -433,15 +431,15 @@ func (s *queryConverterSuite) TestConvertRangeCond() {
 		s.Run(tc.name, func() {
 			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
 			stmt, err := sqlparser.Parse(sql)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			expr := stmt.(*sqlparser.Select).Where.Expr
 			err = s.queryConverter.convertRangeCond(&expr)
 			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, sqlparser.String(expr))
+				require.NoError(s.T(), err)
+				require.Equal(s.T(), tc.output, sqlparser.String(expr))
 			} else {
-				s.Error(err)
-				s.Equal(err, tc.err)
+				require.Error(s.T(), err)
+				require.Equal(s.T(), err, tc.err)
 			}
 		})
 	}
@@ -473,15 +471,15 @@ func (s *queryConverterSuite) TestConvertIsExpr() {
 		s.Run(tc.name, func() {
 			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
 			stmt, err := sqlparser.Parse(sql)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			expr := stmt.(*sqlparser.Select).Where.Expr
 			err = s.queryConverter.convertIsExpr(&expr)
 			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, sqlparser.String(expr))
+				require.NoError(s.T(), err)
+				require.Equal(s.T(), tc.output, sqlparser.String(expr))
 			} else {
-				s.Error(err)
-				s.Equal(err, tc.err)
+				require.Error(s.T(), err)
+				require.Equal(s.T(), err, tc.err)
 			}
 		})
 	}
@@ -649,25 +647,25 @@ func (s *queryConverterSuite) TestConvertColName() {
 
 			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
 			stmt, err := sqlparser.Parse(sql)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			expr := stmt.(*sqlparser.Select).Where.Expr
 			saColNameExpr, err := s.queryConverter.convertColName(&expr)
 			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, sqlparser.String(expr))
-				s.Equal(tc.retValue, saColNameExpr)
+				require.NoError(s.T(), err)
+				require.Equal(s.T(), tc.output, sqlparser.String(expr))
+				require.Equal(s.T(), tc.retValue, saColNameExpr)
 				if tc.input != searchattribute.CloseTime {
 					_, ok := expr.(*saColName)
-					s.True(ok)
+					require.True(s.T(), ok)
 				}
 				if tc.input == searchattribute.TemporalNamespaceDivision {
-					s.True(s.queryConverter.seenNamespaceDivision)
+					require.True(s.T(), s.queryConverter.seenNamespaceDivision)
 				} else {
-					s.False(s.queryConverter.seenNamespaceDivision)
+					require.False(s.T(), s.queryConverter.seenNamespaceDivision)
 				}
 			} else {
-				s.Error(err)
-				s.Equal(err, tc.err)
+				require.Error(s.T(), err)
+				require.Equal(s.T(), err, tc.err)
 			}
 		})
 	}
@@ -790,7 +788,7 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 
 			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
 			stmt, err := sqlparser.Parse(sql)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			expr := stmt.(*sqlparser.Select).Where.Expr
 			err = s.queryConverter.convertValueExpr(
 				&expr,
@@ -799,15 +797,15 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 				tc.args["saType"].(enumspb.IndexedValueType),
 			)
 			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.output, sqlparser.String(expr))
+				require.NoError(s.T(), err)
+				require.Equal(s.T(), tc.output, sqlparser.String(expr))
 				if len(tc.input) > 0 && tc.input[0] == '\'' {
 					_, ok := expr.(*unsafeSQLString)
-					s.True(ok)
+					require.True(s.T(), ok)
 				}
 			} else {
-				s.Error(err)
-				s.Equal(err, tc.err)
+				require.Error(s.T(), err)
+				require.Equal(s.T(), err, tc.err)
 			}
 		})
 	}
@@ -972,7 +970,7 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 		s.Run(tc.name, func() {
 			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
 			stmt, err := sqlparser.Parse(sql)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			expr := stmt.(*sqlparser.Select).Where.Expr
 			value, err := s.queryConverter.parseSQLVal(
 				expr.(*sqlparser.SQLVal),
@@ -980,67 +978,63 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 				tc.args["saType"].(enumspb.IndexedValueType),
 			)
 			if tc.err == nil {
-				s.NoError(err)
-				s.Equal(tc.input, sqlparser.String(expr)) // parseSQLVal does not change input expr
-				s.Equal(tc.retValue, value)
+				require.NoError(s.T(), err)
+				require.Equal(s.T(), tc.input, sqlparser.String(expr)) // parseSQLVal does not change input expr
+				require.Equal(s.T(), tc.retValue, value)
 			} else {
-				s.Error(err)
-				s.Equal(err, tc.err)
+				require.Error(s.T(), err)
+				require.Equal(s.T(), err, tc.err)
 			}
 		})
 	}
 }
 
 func TestSupportedComparisonOperators(t *testing.T) {
-	s := assert.New(t)
 	msg := "If you're changing the supported operators, remember to check they work with " +
 		"MySQL, PostgreSQL and SQLite, and check their respective plugin converters."
-	s.True(isSupportedComparisonOperator(sqlparser.EqualStr), msg)
-	s.True(isSupportedComparisonOperator(sqlparser.NotEqualStr), msg)
-	s.True(isSupportedComparisonOperator(sqlparser.LessThanStr), msg)
-	s.True(isSupportedComparisonOperator(sqlparser.GreaterThanStr), msg)
-	s.True(isSupportedComparisonOperator(sqlparser.LessEqualStr), msg)
-	s.True(isSupportedComparisonOperator(sqlparser.GreaterEqualStr), msg)
-	s.True(isSupportedComparisonOperator(sqlparser.InStr), msg)
-	s.True(isSupportedComparisonOperator(sqlparser.NotInStr), msg)
-	s.False(isSupportedComparisonOperator(sqlparser.LikeStr), msg)
-	s.False(isSupportedComparisonOperator(sqlparser.NotLikeStr), msg)
+	require.True(t, isSupportedComparisonOperator(sqlparser.EqualStr), msg)
+	require.True(t, isSupportedComparisonOperator(sqlparser.NotEqualStr), msg)
+	require.True(t, isSupportedComparisonOperator(sqlparser.LessThanStr), msg)
+	require.True(t, isSupportedComparisonOperator(sqlparser.GreaterThanStr), msg)
+	require.True(t, isSupportedComparisonOperator(sqlparser.LessEqualStr), msg)
+	require.True(t, isSupportedComparisonOperator(sqlparser.GreaterEqualStr), msg)
+	require.True(t, isSupportedComparisonOperator(sqlparser.InStr), msg)
+	require.True(t, isSupportedComparisonOperator(sqlparser.NotInStr), msg)
+	require.False(t, isSupportedComparisonOperator(sqlparser.LikeStr), msg)
+	require.False(t, isSupportedComparisonOperator(sqlparser.NotLikeStr), msg)
 }
 
 func TestSupportedKeywordListOperators(t *testing.T) {
-	s := assert.New(t)
 	msg := "If you're changing the supported operators, remember to check they work with " +
 		"MySQL, PostgreSQL and SQLite, and check their respective plugin converters."
-	s.True(isSupportedKeywordListOperator(sqlparser.EqualStr), msg)
-	s.True(isSupportedKeywordListOperator(sqlparser.NotEqualStr), msg)
-	s.True(isSupportedKeywordListOperator(sqlparser.InStr), msg)
-	s.True(isSupportedKeywordListOperator(sqlparser.NotInStr), msg)
-	s.False(isSupportedKeywordListOperator(sqlparser.LessThanStr), msg)
-	s.False(isSupportedKeywordListOperator(sqlparser.GreaterThanStr), msg)
-	s.False(isSupportedKeywordListOperator(sqlparser.LessEqualStr), msg)
-	s.False(isSupportedKeywordListOperator(sqlparser.GreaterEqualStr), msg)
-	s.False(isSupportedKeywordListOperator(sqlparser.LikeStr), msg)
-	s.False(isSupportedKeywordListOperator(sqlparser.NotLikeStr), msg)
+	require.True(t, isSupportedKeywordListOperator(sqlparser.EqualStr), msg)
+	require.True(t, isSupportedKeywordListOperator(sqlparser.NotEqualStr), msg)
+	require.True(t, isSupportedKeywordListOperator(sqlparser.InStr), msg)
+	require.True(t, isSupportedKeywordListOperator(sqlparser.NotInStr), msg)
+	require.False(t, isSupportedKeywordListOperator(sqlparser.LessThanStr), msg)
+	require.False(t, isSupportedKeywordListOperator(sqlparser.GreaterThanStr), msg)
+	require.False(t, isSupportedKeywordListOperator(sqlparser.LessEqualStr), msg)
+	require.False(t, isSupportedKeywordListOperator(sqlparser.GreaterEqualStr), msg)
+	require.False(t, isSupportedKeywordListOperator(sqlparser.LikeStr), msg)
+	require.False(t, isSupportedKeywordListOperator(sqlparser.NotLikeStr), msg)
 }
 
 func TestSupportedTextOperators(t *testing.T) {
-	s := assert.New(t)
 	msg := "If you're changing the supported operators, remember to check they work with " +
 		"MySQL, PostgreSQL and SQLite, and check their respective plugin converters."
-	s.True(isSupportedTextOperator(sqlparser.EqualStr), msg)
-	s.True(isSupportedTextOperator(sqlparser.NotEqualStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.LessThanStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.GreaterThanStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.LessEqualStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.GreaterEqualStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.InStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.NotInStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.LikeStr), msg)
-	s.False(isSupportedTextOperator(sqlparser.NotLikeStr), msg)
+	require.True(t, isSupportedTextOperator(sqlparser.EqualStr), msg)
+	require.True(t, isSupportedTextOperator(sqlparser.NotEqualStr), msg)
+	require.False(t, isSupportedTextOperator(sqlparser.LessThanStr), msg)
+	require.False(t, isSupportedTextOperator(sqlparser.GreaterThanStr), msg)
+	require.False(t, isSupportedTextOperator(sqlparser.LessEqualStr), msg)
+	require.False(t, isSupportedTextOperator(sqlparser.GreaterEqualStr), msg)
+	require.False(t, isSupportedTextOperator(sqlparser.InStr), msg)
+	require.False(t, isSupportedTextOperator(sqlparser.NotInStr), msg)
+	require.False(t, isSupportedTextOperator(sqlparser.LikeStr), msg)
+	require.False(t, isSupportedTextOperator(sqlparser.NotLikeStr), msg)
 }
 
 func TestSupportedTypeRangeCond(t *testing.T) {
-	s := assert.New(t)
 	msg := "If you're changing the supported types for range condition, " +
 		"remember to check they work correctly with MySQL, PostgreSQL and SQLite."
 	supportedTypesRangeCond = []enumspb.IndexedValueType{
@@ -1056,9 +1050,9 @@ func TestSupportedTypeRangeCond(t *testing.T) {
 			enumspb.INDEXED_VALUE_TYPE_DOUBLE,
 			enumspb.INDEXED_VALUE_TYPE_INT,
 			enumspb.INDEXED_VALUE_TYPE_KEYWORD:
-			s.True(isSupportedTypeRangeCond(tp), msg)
+			require.True(t, isSupportedTypeRangeCond(tp), msg)
 		default:
-			s.False(isSupportedTypeRangeCond(tp), msg)
+			require.False(t, isSupportedTypeRangeCond(tp), msg)
 		}
 	}
 }

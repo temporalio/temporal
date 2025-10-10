@@ -21,7 +21,6 @@ import (
 )
 
 func (s *clientSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	file, _ := json.MarshalIndent(&fakeData{data: "example"}, "", " ")
 
@@ -45,7 +44,6 @@ func TestClientSuite(t *testing.T) {
 }
 
 type clientSuite struct {
-	*require.Assertions
 	suite.Suite
 	controller *gomock.Controller
 }
@@ -167,18 +165,18 @@ func (s *clientSuite) TestExist() {
 		exists, err := storageWrapper.Exist(tc.callContext, URI, tc.fileName)
 		if tc.bucketExists && tc.fileName == "" {
 			s.Require().NoError(err)
-			s.True(exists)
+			require.True(s.T(), exists)
 		} else if !tc.bucketExists {
 			s.Require().Error(err)
 			s.Require().EqualError(err, "bucket not found")
-			s.False(exists)
+			require.False(s.T(), exists)
 		} else if tc.bucketExists && tc.fileName != "" && tc.objectExists {
 			s.Require().NoError(err)
-			s.True(exists)
+			require.True(s.T(), exists)
 		} else if tc.bucketExists && tc.fileName != "" && !tc.objectExists {
 			s.Require().Error(err)
 			s.Require().EqualError(err, "object not found")
-			s.False(exists)
+			require.False(s.T(), exists)
 		}
 	}
 
@@ -240,7 +238,7 @@ func (s *clientSuite) TestQuery() {
 	s.Require().NoError(err)
 	fileNames, err = storageWrapper.Query(ctx, URI, "7478875943689868082123907395549832634615673687049942026838")
 	s.Require().NoError(err)
-	s.Equal(strings.Join(fileNames, ", "), "fileName_01")
+	require.Equal(s.T(), strings.Join(fileNames, ", "), "fileName_01")
 }
 
 func (s *clientSuite) TestQueryWithFilter() {
@@ -277,7 +275,7 @@ func (s *clientSuite) TestQueryWithFilter() {
 	fileNames, _, _, err = storageWrapper.QueryWithFilters(ctx, URI, "closeTimeout_2020-02-27T09:42:28Z", 0, 0, []connector.Precondition{newWorkflowIDPrecondition("4418294404690464320")})
 
 	s.Require().NoError(err)
-	s.Equal(strings.Join(fileNames, ", "), "closeTimeout_2020-02-27T09:42:28Z_12851121011173788097_4418294404690464320_15619178330501475177.visibility")
+	require.Equal(s.T(), strings.Join(fileNames, ", "), "closeTimeout_2020-02-27T09:42:28Z_12851121011173788097_4418294404690464320_15619178330501475177.visibility")
 }
 
 func newWorkflowIDPrecondition(workflowID string) connector.Precondition {
@@ -308,9 +306,9 @@ func newWorkflowIDPrecondition(workflowID string) connector.Precondition {
 // since they are stripped from the binary via `disable_grpc_modules`. This is crude but effective.
 func (s *clientSuite) TestNoGRPCUsage() {
 	currentPackageFiles, err := filepath.Glob("*.go")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	parentPackageFiles, err := filepath.Glob("../*.go")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	allFiles := append(currentPackageFiles, parentPackageFiles...)
 
 	var checkedClientFile bool
@@ -320,7 +318,7 @@ func (s *clientSuite) TestNoGRPCUsage() {
 		}
 
 		content, err := os.ReadFile(file)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 
 		if strings.Contains(string(content), "NewGRPCClient") {
 			s.T().Errorf("❌ Found forbidden gRPC usage in file: %s", file)
@@ -330,5 +328,5 @@ func (s *clientSuite) TestNoGRPCUsage() {
 		checkedClientFile = checkedClientFile || strings.HasSuffix(file, "client.go")
 	}
 
-	s.True(checkedClientFile, "should have checked client.go for gRPC usage")
+	require.True(s.T(), checkedClientFile, "should have checked client.go for gRPC usage")
 }

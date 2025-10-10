@@ -12,15 +12,12 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (s *utilSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 func TestUtilSuite(t *testing.T) {
 	suite.Run(t, new(utilSuite))
 }
 
 type utilSuite struct {
-	*require.Assertions
 	suite.Suite
 }
 
@@ -55,11 +52,11 @@ func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
 
 	encoder := codec.NewJSONPBEncoder()
 	encodedHistoryBatches, err := encoder.EncodeHistories(historyBatches)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	decodedHistoryBatches, err := encoder.DecodeHistories(encodedHistoryBatches)
-	s.NoError(err)
-	s.Equal(historyBatches, decodedHistoryBatches)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), historyBatches, decodedHistoryBatches)
 }
 
 func (s *utilSuite) TestconstructHistoryFilename() {
@@ -81,7 +78,7 @@ func (s *utilSuite) TestconstructHistoryFilename() {
 
 	for _, tc := range testCases {
 		filename := constructHistoryFilenameMultipart(tc.namespaceID, tc.workflowID, tc.runID, tc.closeFailoverVersion, 0)
-		s.Equal(tc.expectBuiltName, filename)
+		require.Equal(s.T(), tc.expectBuiltName, filename)
 	}
 }
 
@@ -92,32 +89,32 @@ func (s *utilSuite) TestSerializeDeserializeGetHistoryToken() {
 	}
 
 	serializedToken, err := serializeToken(token)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
 	deserializedToken, err := deserializeGetHistoryToken(serializedToken)
-	s.Nil(err)
-	s.Equal(token, deserializedToken)
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), token, deserializedToken)
 }
 
 func (s *utilSuite) TestConstructHistoryFilenamePrefix() {
-	s.Equal("67753999582745295208344541402884576509131521284625246243", constructHistoryFilenamePrefix("namespaceID", "workflowID", "runID"))
+	require.Equal(s.T(), "67753999582745295208344541402884576509131521284625246243", constructHistoryFilenamePrefix("namespaceID", "workflowID", "runID"))
 }
 
 func (s *utilSuite) TestConstructHistoryFilenameMultipart() {
-	s.Equal("67753999582745295208344541402884576509131521284625246243_-24_0.history", constructHistoryFilenameMultipart("namespaceID", "workflowID", "runID", -24, 0))
+	require.Equal(s.T(), "67753999582745295208344541402884576509131521284625246243_-24_0.history", constructHistoryFilenameMultipart("namespaceID", "workflowID", "runID", -24, 0))
 }
 
 func (s *utilSuite) TestConstructVisibilityFilenamePrefix() {
-	s.Equal("namespaceID/startTimeout", constructVisibilityFilenamePrefix("namespaceID", indexKeyStartTimeout))
+	require.Equal(s.T(), "namespaceID/startTimeout", constructVisibilityFilenamePrefix("namespaceID", indexKeyStartTimeout))
 }
 
 func (s *utilSuite) TestConstructTimeBasedSearchKey() {
 	t, _ := time.Parse(time.RFC3339, "2019-10-04T11:00:00+00:00")
-	s.Equal("namespaceID/startTimeout_2019-10-04T", constructTimeBasedSearchKey("namespaceID", indexKeyStartTimeout, t, "Day"))
+	require.Equal(s.T(), "namespaceID/startTimeout_2019-10-04T", constructTimeBasedSearchKey("namespaceID", indexKeyStartTimeout, t, "Day"))
 }
 
 func (s *utilSuite) TestConstructVisibilityFilename() {
-	s.Equal("namespaceID/startTimeout_1970-01-01T00:24:32Z_4346151385925082125_8344541402884576509_131521284625246243.visibility", constructVisibilityFilename("namespaceID", "workflowTypeName", "workflowID", "runID", indexKeyStartTimeout, time.Date(1970, 01, 01, 0, 24, 32, 0, time.UTC)))
+	require.Equal(s.T(), "namespaceID/startTimeout_1970-01-01T00:24:32Z_4346151385925082125_8344541402884576509_131521284625246243.visibility", constructVisibilityFilename("namespaceID", "workflowTypeName", "workflowID", "runID", indexKeyStartTimeout, time.Date(1970, 01, 01, 0, 24, 32, 0, time.UTC)))
 }
 
 func (s *utilSuite) TestWorkflowIdPrecondition() {
@@ -144,7 +141,7 @@ func (s *utilSuite) TestWorkflowIdPrecondition() {
 	}
 
 	for _, testCase := range testCases {
-		s.Equal(newWorkflowIDPrecondition(testCase.workflowID)(testCase.fileName), testCase.expectedResult)
+		require.Equal(s.T(), newWorkflowIDPrecondition(testCase.workflowID)(testCase.fileName), testCase.expectedResult)
 	}
 
 }
@@ -177,7 +174,7 @@ func (s *utilSuite) TestRunIdPrecondition() {
 	}
 
 	for _, testCase := range testCases {
-		s.Equal(newRunIDPrecondition(testCase.runID)(testCase.fileName), testCase.expectedResult)
+		require.Equal(s.T(), newRunIDPrecondition(testCase.runID)(testCase.fileName), testCase.expectedResult)
 	}
 
 }
@@ -214,7 +211,7 @@ func (s *utilSuite) TestWorkflowTypeNamePrecondition() {
 	}
 
 	for _, testCase := range testCases {
-		s.Equal(newWorkflowTypeNamePrecondition(testCase.workflowTypeName)(testCase.fileName), testCase.expectedResult)
+		require.Equal(s.T(), newWorkflowTypeNamePrecondition(testCase.workflowTypeName)(testCase.fileName), testCase.expectedResult)
 	}
 
 }

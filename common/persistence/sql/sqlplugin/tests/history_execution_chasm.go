@@ -14,7 +14,6 @@ import (
 type (
 	historyExecutionChasmSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		store sqlplugin.HistoryExecutionChasm
 	}
@@ -25,14 +24,12 @@ func NewHistoryExecutionChasmSuite(
 	store sqlplugin.HistoryExecutionChasm,
 ) *historyExecutionChasmSuite {
 	return &historyExecutionChasmSuite{
-		Assertions: require.New(t),
-		store:      store,
+
+		store: store,
 	}
 }
 
-func (s *historyExecutionChasmSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 type testCase struct {
 	InsertRows    []sqlplugin.ChasmNodeMapsRow
@@ -49,18 +46,18 @@ func (s *historyExecutionChasmSuite) runTestCase(tc *testCase) {
 
 	if len(tc.InsertRows) > 0 {
 		res, err := s.store.ReplaceIntoChasmNodeMaps(ctx, tc.InsertRows)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		affected, err := res.RowsAffected()
-		s.NoError(err)
-		s.Equal(int64(len(tc.InsertRows)), affected)
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), int64(len(tc.InsertRows)), affected)
 	}
 
 	// Inserts and Replaces are applied identically, but in sequence.
 	if len(tc.ReplaceRows) > 0 {
 		res, err := s.store.ReplaceIntoChasmNodeMaps(ctx, tc.ReplaceRows)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		affected, err := res.RowsAffected()
-		s.NoError(err)
+		require.NoError(s.T(), err)
 
 		// We set clientFoundRows to true in our MySQL session, which makes the result count
 		// for updates not useful for comparison here, as rows that have been updated
@@ -70,27 +67,27 @@ func (s *historyExecutionChasmSuite) runTestCase(tc *testCase) {
 		//
 		// See common/persistence/sql/sqlplugin/mysql/session/session.go
 		if !strings.Contains(strings.ToLower(s.T().Name()), "mysql") {
-			s.Equal(int64(len(tc.ReplaceRows)), affected)
+			require.Equal(s.T(), int64(len(tc.ReplaceRows)), affected)
 		}
 	}
 
 	if tc.DeleteRows != nil {
 		res, err := s.store.DeleteFromChasmNodeMaps(ctx, *tc.DeleteRows)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		affected, err := res.RowsAffected()
-		s.NoError(err)
-		s.Equal(int64(len(tc.DeleteRows.ChasmPaths)), affected)
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), int64(len(tc.DeleteRows.ChasmPaths)), affected)
 	}
 
 	if tc.DeleteAllRows != nil {
 		_, err := s.store.DeleteAllFromChasmNodeMaps(ctx, *tc.DeleteAllRows)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 	}
 
 	// Verify expected rows are set after all mutations are applied.
 	actualRows, err := s.store.SelectAllFromChasmNodeMaps(ctx, tc.ExpectedRowsFilter)
-	s.NoError(err)
-	s.ElementsMatch(tc.ExpectedRows, actualRows)
+	require.NoError(s.T(), err)
+	require.ElementsMatch(s.T(), tc.ExpectedRows, actualRows)
 }
 
 func newChasmNodeMapsAllFilter() sqlplugin.ChasmNodeMapsAllFilter {

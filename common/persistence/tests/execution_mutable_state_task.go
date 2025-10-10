@@ -28,7 +28,6 @@ import (
 type (
 	ExecutionMutableStateTaskSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		ShardID     int32
 		RangeID     int64
@@ -71,7 +70,7 @@ func NewExecutionMutableStateTaskSuite(
 ) *ExecutionMutableStateTaskSuite {
 	serializer = newTestSerializer(serializer)
 	return &ExecutionMutableStateTaskSuite{
-		Assertions: require.New(t),
+
 		ShardManager: p.NewShardManager(
 			shardStore,
 			serializer,
@@ -89,7 +88,7 @@ func NewExecutionMutableStateTaskSuite(
 }
 
 func (s *ExecutionMutableStateTaskSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
 	s.ShardID++
@@ -101,14 +100,14 @@ func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 			Owner:   "test-shard-owner",
 		},
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	previousRangeID := resp.ShardInfo.RangeId
 	resp.ShardInfo.RangeId++
 	err = s.ShardManager.UpdateShard(s.Ctx, &p.UpdateShardRequest{
 		ShardInfo:       resp.ShardInfo,
 		PreviousRangeID: previousRangeID,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.RangeID = resp.ShardInfo.RangeId
 	s.Owner = resp.ShardInfo.Owner
 
@@ -127,7 +126,7 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 			InclusiveMinTaskKey: tasks.NewImmediateKey(0),
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(math.MaxInt64),
 		})
-		s.NoError(err)
+		require.NoError(s.T(), err)
 	}
 	err := s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 		ShardID:             s.ShardID,
@@ -135,7 +134,7 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 		InclusiveMinTaskKey: tasks.NewKey(time.Unix(0, 0), 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(time.Unix(0, math.MaxInt64), 0),
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.Cancel()
 }
@@ -180,7 +179,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteImmediateTasks_M
 		exclusiveMaxTaskKey,
 		rand.Intn(len(immediateTasks)*2)+1,
 	)
-	s.Equal(immediateTasks, loadedTasks)
+	require.Equal(s.T(), immediateTasks, loadedTasks)
 
 	err := s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 		ShardID:             s.ShardID,
@@ -188,7 +187,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteImmediateTasks_M
 		InclusiveMinTaskKey: tasks.NewImmediateKey(0),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(math.MaxInt64),
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	loadedTasks = s.PaginateTasks(
 		fakeImmediateTaskCategory,
@@ -196,7 +195,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteImmediateTasks_M
 		exclusiveMaxTaskKey,
 		1,
 	)
-	s.Empty(loadedTasks)
+	require.Empty(s.T(), loadedTasks)
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteScheduledTask_Single() {
@@ -239,7 +238,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteScheduledTasks_M
 		exclusiveMaxTaskKey,
 		rand.Intn(len(scheduledTasks)*2)+1,
 	)
-	s.Equal(scheduledTasks, loadedTasks)
+	require.Equal(s.T(), scheduledTasks, loadedTasks)
 
 	err := s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 		ShardID:             s.ShardID,
@@ -247,7 +246,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteScheduledTasks_M
 		InclusiveMinTaskKey: tasks.NewKey(time.Unix(0, 0), 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(time.Unix(0, math.MaxInt64), 0),
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	loadedTasks = s.PaginateTasks(
 		fakeScheduledTaskCategory,
@@ -255,7 +254,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteScheduledTasks_M
 		exclusiveMaxTaskKey,
 		1,
 	)
-	s.Empty(loadedTasks)
+	require.Empty(s.T(), loadedTasks)
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteTransferTask_Single() {
@@ -294,7 +293,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetTransferTasks_Multiple() {
 		exclusiveMaxTaskKey,
 		rand.Intn(len(transferTasks)*2)+1,
 	)
-	s.Equal(transferTasks, loadedTasks)
+	require.Equal(s.T(), transferTasks, loadedTasks)
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteTimerTask_Single() {
@@ -333,7 +332,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetTimerTasks_Multiple() {
 		exclusiveMaxTaskKey,
 		rand.Intn(len(timerTasks)*2)+1,
 	)
-	s.Equal(timerTasks, loadedTasks)
+	require.Equal(s.T(), timerTasks, loadedTasks)
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteReplicationTask_Single() {
@@ -372,7 +371,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetReplicationTasks_Multiple() {
 		exclusiveMaxTaskKey,
 		rand.Intn(len(replicationTasks)*2)+1,
 	)
-	s.Equal(replicationTasks, loadedTasks)
+	require.Equal(s.T(), replicationTasks, loadedTasks)
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteVisibilityTask_Single() {
@@ -411,7 +410,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetVisibilityTasks_Multiple() {
 		exclusiveMaxTaskKey,
 		rand.Intn(len(visibilityTasks)*2)+1,
 	)
-	s.Equal(visibilityTasks, loadedTasks)
+	require.Equal(s.T(), visibilityTasks, loadedTasks)
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestIsReplicationDLQEmpty() {
@@ -424,14 +423,14 @@ func (s *ExecutionMutableStateTaskSuite) TestIsReplicationDLQEmpty() {
 		},
 		SourceClusterName: "test",
 	})
-	s.NoError(err)
-	s.True(isEmpty)
+	require.NoError(s.T(), err)
+	require.True(s.T(), isEmpty)
 	err = s.ExecutionManager.PutReplicationTaskToDLQ(context.Background(), &p.PutReplicationTaskToDLQRequest{
 		ShardID:           testShardID,
 		SourceClusterName: "test",
 		TaskInfo:          &persistencespb.ReplicationTaskInfo{},
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	isEmpty, err = s.ExecutionManager.IsReplicationDLQEmpty(context.Background(), &p.GetReplicationTasksFromDLQRequest{
 		GetHistoryTasksRequest: p.GetHistoryTasksRequest{
 			ShardID:             testShardID,
@@ -440,8 +439,8 @@ func (s *ExecutionMutableStateTaskSuite) TestIsReplicationDLQEmpty() {
 		},
 		SourceClusterName: "test",
 	})
-	s.NoError(err)
-	s.False(isEmpty)
+	require.NoError(s.T(), err)
+	require.False(s.T(), isEmpty)
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
@@ -468,7 +467,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
 			tasks.CategoryTimer: timerTasks,
 		},
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// due to persistence layer precision loss,
 	// two tasks can be returned in either order,
@@ -479,8 +478,8 @@ func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
 		tasks.NewKey(now.Add(time.Second), 0),
 		10,
 	)
-	s.Len(loadedTasks, 2)
-	s.True(loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()) < 0)
+	require.Len(s.T(), loadedTasks, 2)
+	require.True(s.T(), loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()) < 0)
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
@@ -509,7 +508,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 			fakeScheduledTaskCategory: scheduledTasks,
 		},
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// due to persistence layer precision loss,
 	// two tasks can be returned in either order,
@@ -520,8 +519,8 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 		tasks.NewKey(now.Add(time.Second), 0),
 		10,
 	)
-	s.Len(loadedTasks, 2)
-	s.True(loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()) < 0)
+	require.Len(s.T(), loadedTasks, 2)
+	require.True(s.T(), loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()) < 0)
 
 	err = s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 		ShardID:             s.ShardID,
@@ -529,7 +528,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 		InclusiveMinTaskKey: tasks.NewKey(now, 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(now.Add(time.Second), 0),
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	response, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, &p.GetHistoryTasksRequest{
 		ShardID:             s.ShardID,
@@ -538,8 +537,8 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 		ExclusiveMaxTaskKey: tasks.NewKey(now.Add(time.Second), 0),
 		BatchSize:           10,
 	})
-	s.NoError(err)
-	s.Empty(response.Tasks)
+	require.NoError(s.T(), err)
+	require.Empty(s.T(), response.Tasks)
 }
 
 func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
@@ -566,7 +565,7 @@ func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 			category: randomTasks,
 		},
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	return randomTasks
 }
@@ -587,8 +586,8 @@ func (s *ExecutionMutableStateTaskSuite) PaginateTasks(
 	var loadedTasks []tasks.Task
 	for {
 		response, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, request)
-		s.NoError(err)
-		s.True(len(response.Tasks) <= batchSize)
+		require.NoError(s.T(), err)
+		require.True(s.T(), len(response.Tasks) <= batchSize)
 		loadedTasks = append(loadedTasks, response.Tasks...)
 		if len(response.NextPageToken) == 0 {
 			break
@@ -644,18 +643,18 @@ func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
 	}
 
 	historyTasks := s.PaginateTasks(category, minKey, maxKey, 1)
-	s.Len(historyTasks, 1)
-	s.Equal(task, historyTasks[0])
+	require.Len(s.T(), historyTasks, 1)
+	require.Equal(s.T(), task, historyTasks[0])
 
 	err := s.ExecutionManager.CompleteHistoryTask(s.Ctx, &p.CompleteHistoryTaskRequest{
 		ShardID:      s.ShardID,
 		TaskCategory: category,
 		TaskKey:      key,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	historyTasks = s.PaginateTasks(category, minKey, maxKey, 1)
-	s.Empty(historyTasks)
+	require.Empty(s.T(), historyTasks)
 }
 
 func newTestSerializer(

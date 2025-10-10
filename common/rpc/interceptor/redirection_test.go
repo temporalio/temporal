@@ -29,7 +29,6 @@ import (
 type (
 	redirectionInterceptorSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		controller      *gomock.Controller
 		namespaceCache  *namespace.MockRegistry
@@ -45,14 +44,13 @@ func TestRedirectionInterceptorSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *redirectionInterceptorSuite) SetupSuite() {
-}
+
 
 func (s *redirectionInterceptorSuite) TearDownSuite() {
 }
 
 func (s *redirectionInterceptorSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.controller = gomock.NewController(s.T())
 	s.namespaceCache = namespace.NewMockRegistry(s.controller)
 	s.clientBean = client.NewMockBean(s.controller)
@@ -83,7 +81,7 @@ func (s *redirectionInterceptorSuite) TestLocalAPI() {
 	for api := range localAPIResponses {
 		apis[api] = struct{}{}
 	}
-	s.Equal(map[string]struct{}{
+	require.Equal(s.T(), map[string]struct{}{
 		"DeprecateNamespace": {},
 		"DescribeNamespace":  {},
 		"ListNamespaces":     {},
@@ -101,7 +99,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 	for api := range globalAPIResponses {
 		apis[api] = struct{}{}
 	}
-	s.Equal(map[string]struct{}{
+	require.Equal(s.T(), map[string]struct{}{
 		"DescribeTaskQueue":                  {},
 		"DescribeWorkflowExecution":          {},
 		"GetWorkflowExecutionHistory":        {},
@@ -208,7 +206,7 @@ func (s *redirectionInterceptorSuite) TestAPIResultMapping() {
 	for api, respAllocFn := range globalAPIResponses {
 		actualAPIs[api] = reflect.TypeOf(respAllocFn())
 	}
-	s.Equal(expectedAPIs, actualAPIs)
+	require.Equal(s.T(), expectedAPIs, actualAPIs)
 }
 
 func (s *redirectionInterceptorSuite) TestHandleLocalAPIInvocation() {
@@ -227,9 +225,9 @@ func (s *redirectionInterceptorSuite) TestHandleLocalAPIInvocation() {
 		handler,
 		methodName,
 	)
-	s.NoError(err)
-	s.IsType(&workflowservice.RegisterNamespaceResponse{}, resp)
-	s.True(functionInvoked)
+	require.NoError(s.T(), err)
+	require.IsType(s.T(), &workflowservice.RegisterNamespaceResponse{}, resp)
+	require.True(s.T(), functionInvoked)
 }
 
 func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_Local() {
@@ -266,9 +264,9 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_Local() {
 		globalAPIResponses[methodName],
 		namespaceName,
 	)
-	s.NoError(err)
-	s.IsType(&workflowservice.SignalWithStartWorkflowExecutionResponse{}, resp)
-	s.True(functionInvoked)
+	require.NoError(s.T(), err)
+	require.IsType(s.T(), &workflowservice.SignalWithStartWorkflowExecutionResponse{}, resp)
+	require.True(s.T(), functionInvoked)
 }
 
 func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_Redirect() {
@@ -309,8 +307,8 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_Redirect() {
 		globalAPIResponses[methodName],
 		namespaceName,
 	)
-	s.NoError(err)
-	s.IsType(&workflowservice.SignalWithStartWorkflowExecutionResponse{}, resp)
+	require.NoError(s.T(), err)
+	require.IsType(s.T(), &workflowservice.SignalWithStartWorkflowExecutionResponse{}, resp)
 }
 
 func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_NamespaceNotFound() {
@@ -333,14 +331,14 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_NamespaceNot
 		globalAPIResponses[methodName],
 		namespaceName,
 	)
-	s.Nil(resp)
-	s.IsType(&serviceerror.NamespaceNotFound{}, err)
+	require.Nil(s.T(), resp)
+	require.IsType(s.T(), &serviceerror.NamespaceNotFound{}, err)
 }
 
 func (s *redirectionInterceptorSuite) TestRedirectionAllowed_Empty() {
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{}))
 	allowed := s.redirector.RedirectionAllowed(ctx)
-	s.True(allowed)
+	require.True(s.T(), allowed)
 }
 
 func (s *redirectionInterceptorSuite) TestRedirectionAllowed_Error() {
@@ -348,7 +346,7 @@ func (s *redirectionInterceptorSuite) TestRedirectionAllowed_Error() {
 		DCRedirectionContextHeaderName: "?",
 	}))
 	allowed := s.redirector.RedirectionAllowed(ctx)
-	s.True(allowed)
+	require.True(s.T(), allowed)
 }
 
 func (s *redirectionInterceptorSuite) TestRedirectionAllowed_True() {
@@ -356,7 +354,7 @@ func (s *redirectionInterceptorSuite) TestRedirectionAllowed_True() {
 		DCRedirectionContextHeaderName: "t",
 	}))
 	allowed := s.redirector.RedirectionAllowed(ctx)
-	s.True(allowed)
+	require.True(s.T(), allowed)
 }
 
 func (s *redirectionInterceptorSuite) TestRedirectionAllowed_False() {
@@ -364,7 +362,7 @@ func (s *redirectionInterceptorSuite) TestRedirectionAllowed_False() {
 		DCRedirectionContextHeaderName: "f",
 	}))
 	allowed := s.redirector.RedirectionAllowed(ctx)
-	s.False(allowed)
+	require.False(s.T(), allowed)
 }
 
 type (
@@ -384,8 +382,8 @@ func (s *mockClientConnInterface) Invoke(
 	reply interface{},
 	_ ...grpc.CallOption,
 ) error {
-	s.Equal(s.targetMethod, method)
-	s.Equal(s.targetResponse, reply)
+	require.Equal(s.T(), s.targetMethod, method)
+	require.Equal(s.T(), s.targetResponse, reply)
 	return nil
 }
 

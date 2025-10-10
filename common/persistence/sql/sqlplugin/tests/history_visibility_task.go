@@ -13,7 +13,6 @@ import (
 type (
 	historyHistoryVisibilityTaskSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		store sqlplugin.HistoryVisibilityTask
 	}
@@ -32,22 +31,18 @@ func NewHistoryVisibilityTaskSuite(
 	store sqlplugin.HistoryVisibilityTask,
 ) *historyHistoryVisibilityTaskSuite {
 	return &historyHistoryVisibilityTaskSuite{
-		Assertions: require.New(t),
-		store:      store,
+
+		store: store,
 	}
 }
 
-func (s *historyHistoryVisibilityTaskSuite) SetupSuite() {
 
-}
 
 func (s *historyHistoryVisibilityTaskSuite) TearDownSuite() {
 
 }
 
-func (s *historyHistoryVisibilityTaskSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *historyHistoryVisibilityTaskSuite) TearDownTest() {
 
@@ -59,10 +54,10 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsert_Single_Success() {
 
 	task := s.newRandomVisibilityTaskRow(shardID, taskID)
 	result, err := s.store.InsertIntoVisibilityTasks(newExecutionContext(), []sqlplugin.VisibilityTasksRow{task})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *historyHistoryVisibilityTaskSuite) TestInsert_Multiple_Success() {
@@ -73,10 +68,10 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsert_Multiple_Success() {
 	taskID++
 	task2 := s.newRandomVisibilityTaskRow(shardID, taskID)
 	result, err := s.store.InsertIntoVisibilityTasks(newExecutionContext(), []sqlplugin.VisibilityTasksRow{task1, task2})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(2, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, int(rowsAffected))
 }
 
 func (s *historyHistoryVisibilityTaskSuite) TestInsert_Single_Fail_Duplicate() {
@@ -85,14 +80,14 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsert_Single_Fail_Duplicate() {
 
 	task := s.newRandomVisibilityTaskRow(shardID, taskID)
 	result, err := s.store.InsertIntoVisibilityTasks(newExecutionContext(), []sqlplugin.VisibilityTasksRow{task})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	task = s.newRandomVisibilityTaskRow(shardID, taskID)
 	_, err = s.store.InsertIntoVisibilityTasks(newExecutionContext(), []sqlplugin.VisibilityTasksRow{task})
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *historyHistoryVisibilityTaskSuite) TestInsert_Multiple_Fail_Duplicate() {
@@ -103,16 +98,16 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsert_Multiple_Fail_Duplicate()
 	taskID++
 	task2 := s.newRandomVisibilityTaskRow(shardID, taskID)
 	result, err := s.store.InsertIntoVisibilityTasks(newExecutionContext(), []sqlplugin.VisibilityTasksRow{task1, task2})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(2, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, int(rowsAffected))
 
 	task2 = s.newRandomVisibilityTaskRow(shardID, taskID)
 	taskID++
 	task3 := s.newRandomVisibilityTaskRow(shardID, taskID)
 	_, err = s.store.InsertIntoVisibilityTasks(newExecutionContext(), []sqlplugin.VisibilityTasksRow{task2, task3})
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *historyHistoryVisibilityTaskSuite) TestInsertSelect_Single() {
@@ -121,10 +116,10 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertSelect_Single() {
 
 	task := s.newRandomVisibilityTaskRow(shardID, taskID)
 	result, err := s.store.InsertIntoVisibilityTasks(newExecutionContext(), []sqlplugin.VisibilityTasksRow{task})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	rangeFilter := sqlplugin.VisibilityTasksRangeFilter{
 		ShardID:            shardID,
@@ -133,11 +128,11 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertSelect_Single() {
 		PageSize:           1,
 	}
 	rows, err := s.store.RangeSelectFromVisibilityTasks(newExecutionContext(), rangeFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].ShardID = shardID
 	}
-	s.Equal([]sqlplugin.VisibilityTasksRow{task}, rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityTasksRow{task}, rows)
 }
 
 func (s *historyHistoryVisibilityTaskSuite) TestInsertSelect_Multiple() {
@@ -155,10 +150,10 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertSelect_Multiple() {
 		tasks = append(tasks, task)
 	}
 	result, err := s.store.InsertIntoVisibilityTasks(newExecutionContext(), tasks)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numTasks, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numTasks, int(rowsAffected))
 
 	for _, pageSize := range []int{numTasks / 2, numTasks * 2} {
 		filter := sqlplugin.VisibilityTasksRangeFilter{
@@ -168,13 +163,13 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertSelect_Multiple() {
 			PageSize:           pageSize,
 		}
 		rows, err := s.store.RangeSelectFromVisibilityTasks(newExecutionContext(), filter)
-		s.NoError(err)
-		s.NotEmpty(rows)
-		s.True(len(rows) <= filter.PageSize)
+		require.NoError(s.T(), err)
+		require.NotEmpty(s.T(), rows)
+		require.True(s.T(), len(rows) <= filter.PageSize)
 		for index := range rows {
 			rows[index].ShardID = shardID
 		}
-		s.Equal(tasks[:min(numTasks, pageSize)], rows)
+		require.Equal(s.T(), tasks[:min(numTasks, pageSize)], rows)
 	}
 }
 
@@ -187,10 +182,10 @@ func (s *historyHistoryVisibilityTaskSuite) TestDeleteSelect_Single() {
 		TaskID:  taskID,
 	}
 	result, err := s.store.DeleteFromVisibilityTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	rangeFilter := sqlplugin.VisibilityTasksRangeFilter{
 		ShardID:            shardID,
@@ -199,11 +194,11 @@ func (s *historyHistoryVisibilityTaskSuite) TestDeleteSelect_Single() {
 		PageSize:           1,
 	}
 	rows, err := s.store.RangeSelectFromVisibilityTasks(newExecutionContext(), rangeFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].ShardID = shardID
 	}
-	s.Equal([]sqlplugin.VisibilityTasksRow(nil), rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityTasksRow(nil), rows)
 }
 
 func (s *historyHistoryVisibilityTaskSuite) TestDeleteSelect_Multiple() {
@@ -218,17 +213,17 @@ func (s *historyHistoryVisibilityTaskSuite) TestDeleteSelect_Multiple() {
 		PageSize:           int(maxTaskID - minTaskID),
 	}
 	result, err := s.store.RangeDeleteFromVisibilityTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	rows, err := s.store.RangeSelectFromVisibilityTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].ShardID = shardID
 	}
-	s.Equal([]sqlplugin.VisibilityTasksRow(nil), rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityTasksRow(nil), rows)
 }
 
 func (s *historyHistoryVisibilityTaskSuite) TestInsertDeleteSelect_Single() {
@@ -237,20 +232,20 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertDeleteSelect_Single() {
 
 	task := s.newRandomVisibilityTaskRow(shardID, taskID)
 	result, err := s.store.InsertIntoVisibilityTasks(newExecutionContext(), []sqlplugin.VisibilityTasksRow{task})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.VisibilityTasksFilter{
 		ShardID: shardID,
 		TaskID:  taskID,
 	}
 	result, err = s.store.DeleteFromVisibilityTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	rangeFilter := sqlplugin.VisibilityTasksRangeFilter{
 		ShardID:            shardID,
@@ -259,11 +254,11 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertDeleteSelect_Single() {
 		PageSize:           1,
 	}
 	rows, err := s.store.RangeSelectFromVisibilityTasks(newExecutionContext(), rangeFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].ShardID = shardID
 	}
-	s.Equal([]sqlplugin.VisibilityTasksRow(nil), rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityTasksRow(nil), rows)
 }
 
 func (s *historyHistoryVisibilityTaskSuite) TestInsertDeleteSelect_Multiple() {
@@ -281,10 +276,10 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertDeleteSelect_Multiple() {
 		tasks = append(tasks, task)
 	}
 	result, err := s.store.InsertIntoVisibilityTasks(newExecutionContext(), tasks)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numTasks, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numTasks, int(rowsAffected))
 
 	filter := sqlplugin.VisibilityTasksRangeFilter{
 		ShardID:            shardID,
@@ -293,17 +288,17 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertDeleteSelect_Multiple() {
 		PageSize:           int(maxTaskID - minTaskID),
 	}
 	result, err = s.store.RangeDeleteFromVisibilityTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numTasks, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numTasks, int(rowsAffected))
 
 	rows, err := s.store.RangeSelectFromVisibilityTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].ShardID = shardID
 	}
-	s.Equal([]sqlplugin.VisibilityTasksRow(nil), rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityTasksRow(nil), rows)
 }
 
 func (s *historyHistoryVisibilityTaskSuite) newRandomVisibilityTaskRow(

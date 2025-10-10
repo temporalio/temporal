@@ -18,7 +18,6 @@ import (
 type (
 	namespaceSuite struct {
 		suite.Suite
-		*require.Assertions
 	}
 )
 
@@ -65,9 +64,7 @@ func TestNamespaceSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *namespaceSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *namespaceSuite) TearDownTest() {
 
@@ -93,7 +90,7 @@ func (s *namespaceSuite) TestFrontendAPIMetrics() {
 		}
 		request := methodType.In(1)
 		if !request.Implements(namespaceNameGetter) {
-			s.Fail(fmt.Sprintf("API: %v not implementing NamespaceNameGetter", methodName))
+			require.Fail(s.T(), fmt.Sprintf("API: %v not implementing NamespaceNameGetter", methodName))
 		}
 	}
 }
@@ -118,7 +115,7 @@ func (s *namespaceSuite) TestMatchingAPIMetrics() {
 		}
 		request := methodType.In(1)
 		if !request.Implements(namespaceIDGetter) {
-			s.Fail(fmt.Sprintf("API: %v not implementing NamespaceIDGetter", methodName))
+			require.Fail(s.T(), fmt.Sprintf("API: %v not implementing NamespaceIDGetter", methodName))
 		}
 	}
 }
@@ -143,7 +140,7 @@ func (s *namespaceSuite) TestHistoryAPIMetrics() {
 		}
 		request := methodType.In(1)
 		if !request.Implements(namespaceIDGetter) {
-			s.Fail(fmt.Sprintf("API: %v not implementing NamespaceIDGetter", methodName))
+			require.Fail(s.T(), fmt.Sprintf("API: %v not implementing NamespaceIDGetter", methodName))
 		}
 	}
 }
@@ -178,6 +175,6 @@ func (s *namespaceSuite) TestGetNamespace() {
 
 	for _, testCase := range testCases {
 		extractedNamespace := MustGetNamespaceName(register, testCase.method)
-		s.Equal(testCase.namespaceName, extractedNamespace)
+		require.Equal(s.T(), testCase.namespaceName, extractedNamespace)
 	}
 }

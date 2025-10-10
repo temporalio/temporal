@@ -10,7 +10,6 @@ import (
 )
 
 type serviceErrorWithDPanicSuite struct {
-	*require.Assertions
 	suite.Suite
 }
 
@@ -18,9 +17,7 @@ func TestServiceErrorWithDPanicSuite(t *testing.T) {
 	suite.Run(t, new(serviceErrorWithDPanicSuite))
 }
 
-func (s *serviceErrorWithDPanicSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *serviceErrorWithDPanicSuite) TestNewDPanicInProd() {
 	cfg := log.Config{
@@ -28,12 +25,12 @@ func (s *serviceErrorWithDPanicSuite) TestNewDPanicInProd() {
 	}
 
 	logger := log.NewZapLogger(log.BuildZapLogger(cfg))
-	s.NotNil(logger)
+	require.NotNil(s.T(), logger)
 
 	err := NewInternalErrorWithDPanic(logger, "Must not panic!")
-	s.NotNil(err)
+	require.NotNil(s.T(), err)
 	_, ok := err.(*serviceerror.Internal)
-	s.True(ok)
+	require.True(s.T(), ok)
 }
 
 func (s *serviceErrorWithDPanicSuite) TestNewDPanicInDev() {
@@ -43,10 +40,10 @@ func (s *serviceErrorWithDPanicSuite) TestNewDPanicInDev() {
 	}
 
 	logger := log.NewZapLogger(log.BuildZapLogger(cfg))
-	s.NotNil(logger)
+	require.NotNil(s.T(), logger)
 
-	s.Panics(nil, func() {
+	require.Panics(s.T(), nil, func() {
 		err := NewInternalErrorWithDPanic(logger, "Must panic!")
-		s.Nil(err)
+		require.Nil(s.T(), err)
 	})
 }

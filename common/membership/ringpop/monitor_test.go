@@ -15,7 +15,6 @@ import (
 )
 
 type RpoSuite struct {
-	*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 	suite.Suite
 }
 
@@ -24,14 +23,12 @@ func TestRpoSuite(t *testing.T) {
 	suite.Run(t, new(RpoSuite))
 }
 
-func (s *RpoSuite) SetupTest() {
-	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-}
+
 
 func (s *RpoSuite) TestMonitor() {
 	serviceName := primitives.HistoryService
 	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", nil, true)
-	s.NotNil(testService, "Failed to create test service")
+	require.NotNil(s.T(), testService, "Failed to create test service")
 
 	rpm := testService.rings[0]
 
@@ -39,21 +36,21 @@ func (s *RpoSuite) TestMonitor() {
 
 	listenCh := make(chan *membership.ChangedEvent, 5)
 	r, err := rpm.GetResolver(serviceName)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	err = r.AddListener("test-listener", listenCh)
-	s.Nil(err, "AddListener failed")
+	require.Nil(s.T(), err, "AddListener failed")
 
 	host, err := r.Lookup("key")
-	s.Nil(err, "Ringpop monitor failed to find host for key")
-	s.NotNil(host, "Ringpop monitor returned a nil host")
+	require.Nil(s.T(), err, "Ringpop monitor failed to find host for key")
+	require.NotNil(s.T(), host, "Ringpop monitor returned a nil host")
 
-	s.Eventually(func() bool {
+	require.Eventually(s.T(), func() bool {
 		return len(r.Members()) == 3 && len(r.AvailableMembers()) == 3
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Force refresh now and drain the notification channel
 	resolver, _ := rpm.GetResolver(serviceName)
-	s.NoError(resolver.(*serviceResolver).refresh(refreshModeAlways))
+	require.NoError(s.T(), resolver.(*serviceResolver).refresh(refreshModeAlways))
 	drainChannel(listenCh)
 
 	s.T().Log("Killing host 1")
@@ -65,21 +62,21 @@ func (s *RpoSuite) TestMonitor() {
 	select {
 	case e := <-listenCh:
 		s.T().Log("Got update")
-		s.Equal(1, len(e.HostsRemoved), "ringpop monitor event does not report the removed host")
-		s.Equal(testService.hostAddrs[1], e.HostsRemoved[0].GetAddress(), "ringpop monitor reported that a wrong host was removed")
-		s.Nil(e.HostsAdded, "Unexpected host reported to be added by ringpop monitor")
-		s.Nil(e.HostsChanged, "Unexpected host reported to be changed by ringpop monitor")
+		require.Equal(s.T(), 1, len(e.HostsRemoved), "ringpop monitor event does not report the removed host")
+		require.Equal(s.T(), testService.hostAddrs[1], e.HostsRemoved[0].GetAddress(), "ringpop monitor reported that a wrong host was removed")
+		require.Nil(s.T(), e.HostsAdded, "Unexpected host reported to be added by ringpop monitor")
+		require.Nil(s.T(), e.HostsChanged, "Unexpected host reported to be changed by ringpop monitor")
 	case <-timer.C:
-		s.Fail("Timed out waiting for failure to be detected by ringpop")
+		require.Fail(s.T(), "Timed out waiting for failure to be detected by ringpop")
 	}
 
 	for k := 0; k < 10; k++ {
 		host, err = r.Lookup(fmt.Sprintf("key%d", k))
-		s.Nil(err, "Ringpop monitor failed to find host for key")
-		s.NotEqual(testService.hostAddrs[1], host.GetAddress(), "Ringpop monitor assigned key to dead host")
+		require.Nil(s.T(), err, "Ringpop monitor failed to find host for key")
+		require.NotEqual(s.T(), testService.hostAddrs[1], host.GetAddress(), "Ringpop monitor assigned key to dead host")
 	}
-	s.Equal(2, len(r.Members()))
-	s.Equal(2, len(r.AvailableMembers()))
+	require.Equal(s.T(), 2, len(r.Members()))
+	require.Equal(s.T(), 2, len(r.AvailableMembers()))
 
 	s.T().Log("Draining host 2")
 	testService.DrainHost(testService.hostUUIDs[2])
@@ -87,19 +84,19 @@ func (s *RpoSuite) TestMonitor() {
 	select {
 	case e := <-listenCh:
 		s.T().Log("Got update")
-		s.Nil(e.HostsRemoved)
-		s.Nil(e.HostsAdded)
-		s.Equal(1, len(e.HostsChanged))
-		s.Equal(testService.hostAddrs[2], e.HostsChanged[0].GetAddress())
+		require.Nil(s.T(), e.HostsRemoved)
+		require.Nil(s.T(), e.HostsAdded)
+		require.Equal(s.T(), 1, len(e.HostsChanged))
+		require.Equal(s.T(), testService.hostAddrs[2], e.HostsChanged[0].GetAddress())
 	case <-timer.C:
-		s.Fail("Timed out waiting for failure to be detected by ringpop")
+		require.Fail(s.T(), "Timed out waiting for failure to be detected by ringpop")
 	}
 
-	s.Equal(2, len(r.Members()))
-	s.Equal(1, len(r.AvailableMembers()))
+	require.Equal(s.T(), 2, len(r.Members()))
+	require.Equal(s.T(), 1, len(r.AvailableMembers()))
 
 	err = r.RemoveListener("test-listener")
-	s.Nil(err, "RemoveListener() failed")
+	require.Nil(s.T(), err, "RemoveListener() failed")
 
 	testService.Stop()
 }
@@ -115,46 +112,46 @@ func (s *RpoSuite) TestScheduledUpdates() {
 		start.Add(4 * time.Second),
 	}
 	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", joinTimes, false)
-	s.NotNil(testService, "Failed to create test service")
+	require.NotNil(s.T(), testService, "Failed to create test service")
 
 	observer := rand.Intn(3)
 	r, err := testService.rings[observer].GetResolver(serviceName)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	waitAndCheckMembers := func(elements []string) {
 		var addrs []string
-		s.Eventually(func() bool {
+		require.Eventually(s.T(), func() bool {
 			addrs = util.MapSlice(r.Members(), func(h membership.HostInfo) string { return h.GetAddress() })
 			return len(addrs) == len(elements)
 		}, 15*time.Second, 100*time.Millisecond)
-		s.ElementsMatch(elements, addrs)
+		require.ElementsMatch(s.T(), elements, addrs)
 	}
 
 	// we should see only 1 first, then 0,1, then 0,1,2
 	waitAndCheckMembers([]string{testService.hostAddrs[1]})
 
 	waitAndCheckMembers([]string{testService.hostAddrs[0], testService.hostAddrs[1]})
-	s.Greater(time.Since(start), 1*time.Second)
+	require.Greater(s.T(), time.Since(start), 1*time.Second)
 
 	waitAndCheckMembers([]string{testService.hostAddrs[0], testService.hostAddrs[1], testService.hostAddrs[2]})
-	s.Greater(time.Since(start), 3*time.Second)
+	require.Greater(s.T(), time.Since(start), 3*time.Second)
 
 	// now remove two at scheduled times. we should see 1 disappear then 0.
 	observer = rand.Intn(3)
 	r, err = testService.rings[observer].GetResolver(serviceName)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	start = time.Now()
 	_, err = testService.rings[1].EvictSelfAt(start.Add(2 * time.Second))
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	_, err = testService.rings[0].EvictSelfAt(start.Add(4 * time.Second))
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	waitAndCheckMembers([]string{testService.hostAddrs[0], testService.hostAddrs[2]})
-	s.Greater(time.Since(start), 1*time.Second)
+	require.Greater(s.T(), time.Since(start), 1*time.Second)
 
 	waitAndCheckMembers([]string{testService.hostAddrs[2]})
-	s.Greater(time.Since(start), 3*time.Second)
+	require.Greater(s.T(), time.Since(start), 3*time.Second)
 
 	testService.Stop()
 }
@@ -182,10 +179,10 @@ func (s *RpoSuite) verifyMemberDiff(curr []string, new []string, expectedDiff []
 	})
 	newHosts := util.MapSlice(new, func(addr string) *hostInfo { return newHostInfo(addr, nil) })
 	newMembers, event := resolver.compareMembers(newHosts)
-	s.ElementsMatch(new, expmaps.Keys(newMembers))
-	s.Equal(expectedDiff != nil, event != nil)
+	require.ElementsMatch(s.T(), new, expmaps.Keys(newMembers))
+	require.Equal(s.T(), expectedDiff != nil, event != nil)
 	if event != nil {
-		s.ElementsMatch(expectedDiff, eventToString(event))
+		require.ElementsMatch(s.T(), expectedDiff, eventToString(event))
 	}
 }
 
@@ -204,17 +201,17 @@ func (s *RpoSuite) TestCompareMembersWithDraining() {
 		newHostInfo("b", map[string]string{drainingKey: "true"}),
 		newHostInfo("c", nil),
 	})
-	s.NotNil(newMembers)
-	s.Equal(map[string]string{drainingKey: "true"}, newMembers["b"].labels)
-	s.Equal("b[draining=true]", newMembers["b"].summary())
-	s.NotNil(event)
-	s.ElementsMatch([]string{"~b"}, eventToString(event))
+	require.NotNil(s.T(), newMembers)
+	require.Equal(s.T(), map[string]string{drainingKey: "true"}, newMembers["b"].labels)
+	require.Equal(s.T(), "b[draining=true]", newMembers["b"].summary())
+	require.NotNil(s.T(), event)
+	require.ElementsMatch(s.T(), []string{"~b"}, eventToString(event))
 
 	resolver.ringAndHosts.Store(ringAndHosts{
 		hosts: newMembers,
 	})
-	s.Equal(3, len(resolver.Members()))
-	s.Equal(2, len(resolver.AvailableMembers()))
+	require.Equal(s.T(), 3, len(resolver.Members()))
+	require.Equal(s.T(), 2, len(resolver.AvailableMembers()))
 }
 
 func eventToString(event *membership.ChangedEvent) []string {

@@ -17,7 +17,6 @@ import (
 type (
 	grpcSuite struct {
 		suite.Suite
-		*require.Assertions
 		controller *gomock.Controller
 	}
 )
@@ -28,7 +27,6 @@ func TestGrpcSuite(t *testing.T) {
 }
 
 func (s *grpcSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 }
 
@@ -42,7 +40,7 @@ func (s *grpcSuite) TestMetadataMetricInjection() {
 	anyMetricName := "any_metric_name"
 
 	smcii := NewServerMetricsContextInjectorInterceptor()
-	s.NotNil(smcii)
+	require.NotNil(s.T(), smcii)
 	res, err := smcii(
 		ctx, nil, nil,
 		func(ctx context.Context, req interface{}) (interface{}, error) {
@@ -50,7 +48,7 @@ func (s *grpcSuite) TestMetadataMetricInjection() {
 				ctx, req, nil,
 				func(ctx context.Context, req interface{}) (interface{}, error) {
 					cmtpi := NewClientMetricsTrailerPropagatorInterceptor(logger)
-					s.NotNil(cmtpi)
+					require.NotNil(s.T(), cmtpi)
 					cmtpi(
 						ctx, "any_value", nil, nil, nil,
 						func(
@@ -62,7 +60,7 @@ func (s *grpcSuite) TestMetadataMetricInjection() {
 							propagationContext.CountersInt[anyMetricName] = 1234
 							data, err := propagationContext.Marshal()
 							if err != nil {
-								s.Fail("failed to marshal values")
+								require.Fail(s.T(), "failed to marshal values")
 							}
 							*trailer.TrailerAddr = metadata.MD{}
 							trailer.TrailerAddr.Append(metricsTrailerKey, string(data))
@@ -73,22 +71,22 @@ func (s *grpcSuite) TestMetadataMetricInjection() {
 				},
 			)
 
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			trailers := ssts.CapturedTrailers()
-			s.Equal(1, len(trailers))
+			require.Equal(s.T(), 1, len(trailers))
 			propagationContextBlobs := trailers[0].Get(metricsTrailerKey)
-			s.NotNil(propagationContextBlobs)
-			s.Equal(1, len(propagationContextBlobs))
+			require.NotNil(s.T(), propagationContextBlobs)
+			require.Equal(s.T(), 1, len(propagationContextBlobs))
 			baggage := &metricsspb.Baggage{}
 			err = baggage.Unmarshal(([]byte)(propagationContextBlobs[0]))
-			s.Nil(err)
-			s.Equal(int64(1234), baggage.CountersInt[anyMetricName])
+			require.Nil(s.T(), err)
+			require.Equal(s.T(), int64(1234), baggage.CountersInt[anyMetricName])
 			return res, err
 		},
 	)
 
-	s.Nil(err)
-	s.Equal(10, res)
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), 10, res)
 	s.Assert()
 }
 
@@ -99,7 +97,7 @@ func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 	ctx = grpc.NewContextWithServerTransportStream(ctx, ssts)
 
 	smcii := NewServerMetricsContextInjectorInterceptor()
-	s.NotNil(smcii)
+	require.NotNil(s.T(), smcii)
 	res, err := smcii(
 		ctx, nil, nil,
 		func(ctx context.Context, req interface{}) (interface{}, error) {
@@ -107,7 +105,7 @@ func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 				ctx, req, nil,
 				func(ctx context.Context, req interface{}) (interface{}, error) {
 					cmtpi := NewClientMetricsTrailerPropagatorInterceptor(logger)
-					s.NotNil(cmtpi)
+					require.NotNil(s.T(), cmtpi)
 					cmtpi(
 						ctx, "any_value", nil, nil, nil,
 						func(
@@ -118,7 +116,7 @@ func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 							propagationContext := &metricsspb.Baggage{}
 							data, err := propagationContext.Marshal()
 							if err != nil {
-								s.Fail("failed to marshal values")
+								require.Fail(s.T(), "failed to marshal values")
 							}
 							trailer.TrailerAddr = &metadata.MD{}
 							trailer.TrailerAddr.Append(metricsTrailerKey, string(data))
@@ -129,22 +127,22 @@ func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 				},
 			)
 
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			trailers := ssts.CapturedTrailers()
-			s.Equal(1, len(trailers))
+			require.Equal(s.T(), 1, len(trailers))
 			propagationContextBlobs := trailers[0].Get(metricsTrailerKey)
-			s.NotNil(propagationContextBlobs)
-			s.Equal(1, len(propagationContextBlobs))
+			require.NotNil(s.T(), propagationContextBlobs)
+			require.Equal(s.T(), 1, len(propagationContextBlobs))
 			baggage := &metricsspb.Baggage{}
 			err = baggage.Unmarshal(([]byte)(propagationContextBlobs[0]))
-			s.Nil(err)
-			s.Nil(baggage.CountersInt)
+			require.Nil(s.T(), err)
+			require.Nil(s.T(), baggage.CountersInt)
 			return res, err
 		},
 	)
 
-	s.Nil(err)
-	s.Equal(10, res)
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), 10, res)
 	s.Assert()
 }
 
@@ -157,8 +155,8 @@ func (s *grpcSuite) TestContextCounterAdd() {
 	ContextCounterAdd(ctx, testCounterName, 3)
 
 	value, ok := ContextCounterGet(ctx, testCounterName)
-	s.True(ok)
-	s.Equal(int64(123), value)
+	require.True(s.T(), ok)
+	require.Equal(s.T(), int64(123), value)
 }
 
 func (s *grpcSuite) TestContextCounterAddNoMetricsContext() {

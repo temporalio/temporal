@@ -24,9 +24,8 @@ import (
 type (
 	temporalSerializerSuite struct {
 		suite.Suite
-		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
+		// override suite.Suite.Assertions with require.Assertions; this means that require.NotNil(s.T(), nil) will stop the test,
 		// not merely log an error
-		*require.Assertions
 		protorequire.ProtoAssertions
 		logger log.Logger
 
@@ -42,7 +41,7 @@ func TestTemporalSerializerSuite(t *testing.T) {
 func (s *temporalSerializerSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
+
 	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.serializer = NewSerializer()
@@ -81,46 +80,46 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			// serialize event
 			nilEvent, err := s.serializer.SerializeEvent(nil)
-			s.Nil(err)
-			s.Nil(nilEvent)
+			require.Nil(s.T(), err)
+			require.Nil(s.T(), nilEvent)
 
 			dProto, err := s.serializer.SerializeEvent(event0)
-			s.Nil(err)
-			s.NotNil(dProto)
+			require.Nil(s.T(), err)
+			require.NotNil(s.T(), dProto)
 
 			// serialize batch events
 			nilEvents, err := s.serializer.SerializeEvents(nil)
-			s.Nil(err)
-			s.NotNil(nilEvents)
+			require.Nil(s.T(), err)
+			require.NotNil(s.T(), nilEvents)
 
 			dsProto, err := s.serializer.SerializeEvents(history0.Events)
-			s.Nil(err)
-			s.NotNil(dsProto)
+			require.Nil(s.T(), err)
+			require.NotNil(s.T(), dsProto)
 
 			// deserialize event
 			dNilEvent, err := s.serializer.DeserializeEvent(nilEvent)
-			s.Nil(err)
-			s.Nil(dNilEvent)
+			require.Nil(s.T(), err)
+			require.Nil(s.T(), dNilEvent)
 
 			event2, err := s.serializer.DeserializeEvent(dProto)
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			s.ProtoEqual(event0, event2)
 
 			// deserialize events
 			dNilEvents, err := s.serializer.DeserializeEvents(nilEvents)
-			s.Nil(err)
-			s.Nil(dNilEvents)
+			require.Nil(s.T(), err)
+			require.Nil(s.T(), dNilEvents)
 
 			events, err := s.serializer.DeserializeEvents(dsProto)
 			history2 := &historypb.History{Events: events}
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			s.ProtoEqual(history0, history2)
 		}()
 	}
 
 	startWG.Done()
 	succ := common.AwaitWaitGroup(&doneWG, 10*time.Second)
-	s.True(succ, "test timed out")
+	require.True(s.T(), succ, "test timed out")
 }
 
 func (s *temporalSerializerSuite) TestSerializeShardInfo_EmptyMapSlice() {
@@ -140,11 +139,11 @@ func (s *temporalSerializerSuite) TestSerializeShardInfo_EmptyMapSlice() {
 	shardInfo.ReplicationDlqAckLevel = make(map[string]int64)
 
 	blob, err := s.serializer.ShardInfoToBlob(&shardInfo)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	deserializedShardInfo, err := s.serializer.ShardInfoFromBlob(blob)
-	s.NoError(err)
-	s.NotNil(deserializedShardInfo)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), deserializedShardInfo)
 
 	s.ProtoEqual(&shardInfo, deserializedShardInfo)
 }
@@ -152,14 +151,14 @@ func (s *temporalSerializerSuite) TestSerializeShardInfo_EmptyMapSlice() {
 func (s *temporalSerializerSuite) TestSerializeShardInfo_Random() {
 	var shardInfo persistencespb.ShardInfo
 	err := fakedata.FakeStruct(&shardInfo)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	blob, err := s.serializer.ShardInfoToBlob(&shardInfo)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	deserializedShardInfo, err := s.serializer.ShardInfoFromBlob(blob)
-	s.NoError(err)
-	s.NotNil(deserializedShardInfo)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), deserializedShardInfo)
 
 	s.ProtoEqual(&shardInfo, deserializedShardInfo)
 }
@@ -168,8 +167,8 @@ func (s *temporalSerializerSuite) TestDeserializeStrippedEvents() {
 	// 1. Nil data blob
 	s.Run("NilDataBlob", func() {
 		events, err := s.serializer.DeserializeStrippedEvents(nil)
-		s.NoError(err)
-		s.Nil(events)
+		require.NoError(s.T(), err)
+		require.Nil(s.T(), events)
 	})
 
 	// 2. Empty data
@@ -179,16 +178,16 @@ func (s *temporalSerializerSuite) TestDeserializeStrippedEvents() {
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         nil,
 		})
-		s.NoError(err)
-		s.Nil(events)
+		require.NoError(s.T(), err)
+		require.Nil(s.T(), events)
 
 		// Data is empty byte array
 		events, err = s.serializer.DeserializeStrippedEvents(&commonpb.DataBlob{
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte{},
 		})
-		s.NoError(err)
-		s.Nil(events)
+		require.NoError(s.T(), err)
+		require.Nil(s.T(), events)
 	})
 
 	// 3. Unknown encoding type
@@ -197,8 +196,8 @@ func (s *temporalSerializerSuite) TestDeserializeStrippedEvents() {
 			EncodingType: enumspb.ENCODING_TYPE_JSON, // Not handled by our switch
 			Data:         []byte("irrelevant-data"),
 		})
-		s.Error(err)
-		s.Contains(err.Error(), "unknown or unsupported encoding type")
+		require.Error(s.T(), err)
+		require.Contains(s.T(), err.Error(), "unknown or unsupported encoding type")
 	})
 
 	// 4. Proper proto decoding, discarding unknown fields
@@ -231,15 +230,15 @@ func (s *temporalSerializerSuite) TestDeserializeStrippedEvents() {
 
 		// Deserialize into StrippedHistoryEvents (should drop unknown fields)
 		deserializedEvents, err := s.serializer.DeserializeStrippedEvents(dataBlob)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		s.Require().Len(deserializedEvents, 1)
 
 		// Known fields should be preserved
-		s.EqualValues(123, deserializedEvents[0].EventId)
-		s.EqualValues(456, deserializedEvents[0].Version)
+		require.EqualValues(s.T(), 123, deserializedEvents[0].EventId)
+		require.EqualValues(s.T(), 456, deserializedEvents[0].Version)
 
 		reflectMsg := deserializedEvents[0].ProtoReflect()
-		s.Empty(reflectMsg.GetUnknown(), "Unknown fields should have been discarded")
+		require.Empty(s.T(), reflectMsg.GetUnknown(), "Unknown fields should have been discarded")
 	})
 }
 
@@ -248,14 +247,14 @@ func (s *temporalSerializerSuite) TestSerializeWorkflowExecutionState() {
 		RequestIds: make(map[string]*persistencespb.RequestIDInfo),
 	}
 	err := fakedata.FakeStruct(state)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	blob, err := s.serializer.WorkflowExecutionStateToBlob(state)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	deserializedState, err := s.serializer.WorkflowExecutionStateFromBlob(blob)
-	s.NoError(err)
-	s.NotNil(deserializedState)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), deserializedState)
 
 	// Deserialization adds the CreateRequestId to the Details.RequestIds map.
 	state.RequestIds[state.CreateRequestId] = &persistencespb.RequestIDInfo{
@@ -265,11 +264,11 @@ func (s *temporalSerializerSuite) TestSerializeWorkflowExecutionState() {
 	s.ProtoEqual(state, deserializedState)
 
 	blob, err = s.serializer.WorkflowExecutionStateToBlob(state)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	deserializedState, err = s.serializer.WorkflowExecutionStateFromBlob(blob)
-	s.NoError(err)
-	s.NotNil(deserializedState)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), deserializedState)
 	s.ProtoEqual(state, deserializedState)
 }
 
@@ -343,9 +342,9 @@ func (s *temporalSerializerSuite) TestGetWorkflowExecutionHistoryResponseWithRaw
 
 	// Verify resp has same list of history events as fullHistory
 	for i, event := range resp.History.Events {
-		s.Equal(fullHistory.Events[i].EventId, event.EventId)
-		s.Equal(fullHistory.Events[i].Version, event.Version)
-		s.Equal(fullHistory.Events[i].EventType, event.EventType)
-		s.Nil(event.Attributes)
+		require.Equal(s.T(), fullHistory.Events[i].EventId, event.EventId)
+		require.Equal(s.T(), fullHistory.Events[i].Version, event.Version)
+		require.Equal(s.T(), fullHistory.Events[i].EventType, event.EventType)
+		require.Nil(s.T(), event.Attributes)
 	}
 }

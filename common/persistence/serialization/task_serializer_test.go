@@ -25,7 +25,6 @@ import (
 type (
 	taskSerializerSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		workflowKey    definition.WorkflowKey
 		taskSerializer *TaskSerializer
@@ -36,16 +35,13 @@ func TestTaskSerializerSuite(t *testing.T) {
 	suite.Run(t, new(taskSerializerSuite))
 }
 
-func (s *taskSerializerSuite) SetupSuite() {
 
-}
 
 func (s *taskSerializerSuite) TearDownSuite() {
 
 }
 
 func (s *taskSerializerSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 
 	s.workflowKey = definition.NewWorkflowKey(
 		"random namespace ID",
@@ -387,7 +383,7 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 
 	s.assertEqualTasksWithOpts(syncVersionedTransitionTask,
 		func(task, deserializedTask tasks.Task) {
-			s.True(proto.Equal(task.(*tasks.SyncVersionedTransitionTask).VersionedTransition, deserializedTask.(*tasks.SyncVersionedTransitionTask).VersionedTransition))
+			require.True(s.T(), proto.Equal(task.(*tasks.SyncVersionedTransitionTask).VersionedTransition, deserializedTask.(*tasks.SyncVersionedTransitionTask).VersionedTransition))
 		},
 		cmpopts.IgnoreFields(tasks.SyncVersionedTransitionTask{}, "VersionedTransition"),
 	)
@@ -496,15 +492,15 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 	s.Assert().Equal(enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND, task.GetType())
 
 	blob, err := s.taskSerializer.SerializeTask(task)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	deserializedTaskIface, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
 	deserializedTask := deserializedTaskIface.(*tasks.StateMachineOutboundTask)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	protorequire.ProtoEqual(s.T(), task.Info, deserializedTask.Info)
 	task.Info = nil
 	deserializedTask.Info = nil
-	s.Equal(task, deserializedTask)
+	require.Equal(s.T(), task, deserializedTask)
 }
 
 func (s *taskSerializerSuite) TestTimerChasmTask() {
@@ -546,12 +542,12 @@ func (s *taskSerializerSuite) TestStateMachineTimerTask() {
 	s.Assert().Equal(enumsspb.TASK_TYPE_STATE_MACHINE_TIMER, task.GetType())
 
 	blob, err := s.taskSerializer.SerializeTask(task)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	deserializedTaskIface, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
 	deserializedTask := deserializedTaskIface.(*tasks.StateMachineTimerTask)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
-	s.Equal(task, deserializedTask)
+	require.Equal(s.T(), task, deserializedTask)
 }
 
 func (s *taskSerializerSuite) assertEqualTasksWithOpts(
@@ -560,10 +556,10 @@ func (s *taskSerializerSuite) assertEqualTasksWithOpts(
 	opts ...cmp.Option,
 ) {
 	blob, err := s.taskSerializer.SerializeTask(task)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	deserializedTask, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
-	s.NoError(err)
-	s.Empty(cmp.Diff(task, deserializedTask, opts...))
+	require.NoError(s.T(), err)
+	require.Empty(s.T(), cmp.Diff(task, deserializedTask, opts...))
 	if cmpFunc != nil {
 		cmpFunc(task, deserializedTask)
 	}
@@ -573,15 +569,15 @@ func (s *taskSerializerSuite) assertEqualTasks(
 	task tasks.Task,
 ) {
 	blob, err := s.taskSerializer.SerializeTask(task)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	deserializedTask, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// Find all top-level protobuf fields and compare them, then unset them, as their
 	// internal state parameters can cause direct struct comparison to fail.
 	taskValue := reflect.ValueOf(task).Elem()
 	deserializedTaskValue := reflect.ValueOf(deserializedTask).Elem()
-	s.Equal(taskValue.Type(), deserializedTaskValue.Type())
+	require.Equal(s.T(), taskValue.Type(), deserializedTaskValue.Type())
 
 	for i := range deserializedTaskValue.NumField() {
 		deField := deserializedTaskValue.Field(i)
@@ -598,5 +594,5 @@ func (s *taskSerializerSuite) assertEqualTasks(
 		}
 	}
 
-	s.Equal(task, deserializedTask)
+	require.Equal(s.T(), task, deserializedTask)
 }

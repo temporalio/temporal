@@ -34,7 +34,6 @@ const (
 )
 
 type visibilityArchiverSuite struct {
-	*require.Assertions
 	suite.Suite
 
 	logger             log.Logger
@@ -61,12 +60,11 @@ func (s *visibilityArchiverSuite) SetupSuite() {
 
 func (s *visibilityArchiverSuite) TearDownSuite() {
 	if err := os.RemoveAll(s.testQueryDirectory); err != nil {
-		s.Fail("Failed to remove test query directory %v: %v", s.testQueryDirectory, err)
+		require.Fail(s.T(), "Failed to remove test query directory %v: %v", s.testQueryDirectory, err)
 	}
 }
 
 func (s *visibilityArchiverSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 	s.logger = log.NewNoopLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.controller = gomock.NewController(s.T())
@@ -98,15 +96,15 @@ func (s *visibilityArchiverSuite) TestValidateURI() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	for _, tc := range testCases {
 		URI, err := archiver.NewURI(tc.URI)
-		s.NoError(err)
-		s.Equal(tc.expectedErr, visibilityArchiver.ValidateURI(URI))
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), tc.expectedErr, visibilityArchiver.ValidateURI(URI))
 	}
 }
 
 func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	URI, err := archiver.NewURI("wrongscheme://")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	request := &archiverspb.VisibilityRecord{
 		Namespace:        testNamespace,
 		NamespaceId:      testNamespaceID,
@@ -120,13 +118,13 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 		HistoryLength:    int64(101),
 	}
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidRequest() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	err := visibilityArchiver.Archive(context.Background(), s.testArchivalURI, &archiverspb.VisibilityRecord{})
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
@@ -138,7 +136,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 		&archiverspb.VisibilityRecord{},
 		archiver.GetNonRetryableErrorOption(nonRetryableErr),
 	)
-	s.Equal(nonRetryableErr, err)
+	require.Equal(s.T(), nonRetryableErr, err)
 }
 
 func (s *visibilityArchiverSuite) TestArchive_Success() {
@@ -167,22 +165,22 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		},
 	}
 	URI, err := archiver.NewURI("file://" + dir)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	expectedFilename := constructVisibilityFilename(closeTimestamp.AsTime(), testRunID)
 	filepath := path.Join(dir, testNamespaceID, expectedFilename)
 	s.assertFileExists(filepath)
 
 	data, err := readFile(filepath)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	archivedRecord := &archiverspb.VisibilityRecord{}
 	encoder := codec.NewJSONPBEncoder()
 	err = encoder.Decode(data, archivedRecord)
-	s.NoError(err)
-	s.Equal(request, archivedRecord)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), request, archivedRecord)
 }
 
 func (s *visibilityArchiverSuite) TestMatchQuery() {
@@ -265,7 +263,7 @@ func (s *visibilityArchiverSuite) TestMatchQuery() {
 	}
 
 	for _, tc := range testCases {
-		s.Equal(tc.shouldMatch, matchQuery(tc.record, tc.query))
+		require.Equal(s.T(), tc.shouldMatch, matchQuery(tc.record, tc.query))
 	}
 }
 
@@ -304,29 +302,29 @@ func (s *visibilityArchiverSuite) TestSortAndFilterFiles() {
 
 	for i, tc := range testCases {
 		result, err := sortAndFilterFiles(tc.filenames, tc.token)
-		s.NoError(err, "case %d", i)
-		s.Equal(tc.expectedResult, result, "case %d", i)
+		require.NoError(s.T(), err, "case %d", i)
+		require.Equal(s.T(), tc.expectedResult, result, "case %d", i)
 	}
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidURI() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	URI, err := archiver.NewURI("wrongscheme://")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	request := &archiver.QueryVisibilityRequest{
 		NamespaceID: testNamespaceID,
 		PageSize:    1,
 	}
 	response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap)
-	s.Error(err)
-	s.Nil(response)
+	require.Error(s.T(), err)
+	require.Nil(s.T(), response)
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidRequest() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, &archiver.QueryVisibilityRequest{}, searchattribute.TestNameTypeMap)
-	s.Error(err)
-	s.Nil(response)
+	require.Error(s.T(), err)
+	require.Nil(s.T(), response)
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {
@@ -339,8 +337,8 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {
 		PageSize:    10,
 		Query:       "some invalid query",
 	}, searchattribute.TestNameTypeMap)
-	s.Error(err)
-	s.Nil(response)
+	require.Error(s.T(), err)
+	require.Nil(s.T(), response)
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Success_DirectoryNotExist() {
@@ -357,10 +355,10 @@ func (s *visibilityArchiverSuite) TestQuery_Success_DirectoryNotExist() {
 		PageSize:    1,
 	}
 	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, request, searchattribute.TestNameTypeMap)
-	s.NoError(err)
-	s.NotNil(response)
-	s.Empty(response.Executions)
-	s.Empty(response.NextPageToken)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), response)
+	require.Empty(s.T(), response.Executions)
+	require.Empty(s.T(), response.NextPageToken)
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidToken() {
@@ -378,8 +376,8 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidToken() {
 		NextPageToken: []byte{1, 2, 3},
 	}
 	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, request, searchattribute.TestNameTypeMap)
-	s.Error(err)
-	s.Nil(response)
+	require.Error(s.T(), err)
+	require.Nil(s.T(), response)
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
@@ -397,15 +395,15 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 		Query:       "parsed by mockParser",
 	}
 	URI, err := archiver.NewURI("file://" + s.testQueryDirectory)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap)
-	s.NoError(err)
-	s.NotNil(response)
-	s.Nil(response.NextPageToken)
-	s.Len(response.Executions, 1)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), response)
+	require.Nil(s.T(), response.NextPageToken)
+	require.Len(s.T(), response.Executions, 1)
 	ei, err := convertToExecutionInfo(s.visibilityRecords[0], searchattribute.TestNameTypeMap)
-	s.NoError(err)
-	s.Equal(ei, response.Executions[0])
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), ei, response.Executions[0])
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
@@ -423,28 +421,28 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 		Query:       "parsed by mockParser",
 	}
 	URI, err := archiver.NewURI("file://" + s.testQueryDirectory)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap)
-	s.NoError(err)
-	s.NotNil(response)
-	s.NotNil(response.NextPageToken)
-	s.Len(response.Executions, 2)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), response)
+	require.NotNil(s.T(), response.NextPageToken)
+	require.Len(s.T(), response.Executions, 2)
 	ei, err := convertToExecutionInfo(s.visibilityRecords[0], searchattribute.TestNameTypeMap)
-	s.NoError(err)
-	s.Equal(ei, response.Executions[0])
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), ei, response.Executions[0])
 	ei, err = convertToExecutionInfo(s.visibilityRecords[1], searchattribute.TestNameTypeMap)
-	s.NoError(err)
-	s.Equal(ei, response.Executions[1])
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), ei, response.Executions[1])
 
 	request.NextPageToken = response.NextPageToken
 	response, err = visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap)
-	s.NoError(err)
-	s.NotNil(response)
-	s.Nil(response.NextPageToken)
-	s.Len(response.Executions, 1)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), response)
+	require.Nil(s.T(), response.NextPageToken)
+	require.Len(s.T(), response.Executions, 1)
 	ei, err = convertToExecutionInfo(s.visibilityRecords[3], searchattribute.TestNameTypeMap)
-	s.NoError(err)
-	s.Equal(ei, response.Executions[0])
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), ei, response.Executions[0])
 }
 
 func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
@@ -459,10 +457,10 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	URI, err := archiver.NewURI("file://" + dir)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for _, record := range s.visibilityRecords {
 		err := visibilityArchiver.Archive(context.Background(), URI, (*archiverspb.VisibilityRecord)(record))
-		s.NoError(err)
+		require.NoError(s.T(), err)
 	}
 
 	request := &archiver.QueryVisibilityRequest{
@@ -473,18 +471,18 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	executions := []*workflowpb.WorkflowExecutionInfo{}
 	for len(executions) == 0 || request.NextPageToken != nil {
 		response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap)
-		s.NoError(err)
-		s.NotNil(response)
+		require.NoError(s.T(), err)
+		require.NotNil(s.T(), response)
 		executions = append(executions, response.Executions...)
 		request.NextPageToken = response.NextPageToken
 	}
-	s.Len(executions, 2)
+	require.Len(s.T(), executions, 2)
 	ei, err := convertToExecutionInfo(s.visibilityRecords[0], searchattribute.TestNameTypeMap)
-	s.NoError(err)
-	s.Equal(ei, executions[0])
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), ei, executions[0])
 	ei, err = convertToExecutionInfo(s.visibilityRecords[1], searchattribute.TestNameTypeMap)
-	s.NoError(err)
-	s.Equal(ei, executions[1])
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), ei, executions[1])
 }
 
 func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_InvalidNamespace() {
@@ -508,7 +506,7 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_InvalidNamespace() {
 
 	var svcErr *serviceerror.InvalidArgument
 
-	s.ErrorAs(err, &svcErr)
+	require.ErrorAs(s.T(), err, &svcErr)
 }
 
 func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_ZeroPageSize() {
@@ -524,7 +522,7 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_ZeroPageSize() {
 
 	var svcErr *serviceerror.InvalidArgument
 
-	s.ErrorAs(err, &svcErr)
+	require.ErrorAs(s.T(), err, &svcErr)
 }
 
 func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
@@ -532,10 +530,10 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
 
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	URI, err := archiver.NewURI("file://" + dir)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for _, record := range s.visibilityRecords {
 		err := visibilityArchiver.Archive(context.Background(), URI, record)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 	}
 
 	request := &archiver.QueryVisibilityRequest{
@@ -546,12 +544,12 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
 	var executions []*workflowpb.WorkflowExecutionInfo
 	for len(executions) == 0 || request.NextPageToken != nil {
 		response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap)
-		s.NoError(err)
-		s.NotNil(response)
+		require.NoError(s.T(), err)
+		require.NotNil(s.T(), response)
 		executions = append(executions, response.Executions...)
 		request.NextPageToken = response.NextPageToken
 	}
-	s.Len(executions, 4)
+	require.Len(s.T(), executions, 4)
 }
 
 func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchiver {
@@ -560,7 +558,7 @@ func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchive
 		DirMode:  testDirModeStr,
 	}
 	a, err := NewVisibilityArchiver(s.logger, s.metricsHandler, config)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	return a.(*visibilityArchiver)
 }
 
@@ -643,6 +641,6 @@ func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(record *arch
 
 func (s *visibilityArchiverSuite) assertFileExists(filepath string) {
 	exists, err := fileExists(filepath)
-	s.NoError(err)
-	s.True(exists)
+	require.NoError(s.T(), err)
+	require.True(s.T(), exists)
 }

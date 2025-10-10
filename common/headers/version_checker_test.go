@@ -12,7 +12,6 @@ import (
 
 type (
 	VersionCheckerSuite struct {
-		*require.Assertions
 		suite.Suite
 	}
 )
@@ -21,9 +20,7 @@ func TestVersionCheckerSuite(t *testing.T) {
 	suite.Run(t, new(VersionCheckerSuite))
 }
 
-func (s *VersionCheckerSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *VersionCheckerSuite) TestClientSupported() {
 	serverVersion := "22.8.78"
@@ -100,14 +97,14 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 			switch err.(type) {
 			case *serviceerror.InvalidArgument, *serviceerror.ClientVersionNotSupported, *serviceerror.ServerVersionNotSupported:
 			default:
-				s.Fail("error has wrong type: %T", err)
+				require.Fail(s.T(), "error has wrong type: %T", err)
 			}
 		} else {
 			s.NoErrorf(err, "Case #%d", caseIndex)
 		}
 
 		if tc.callContext != nil {
-			s.Equal(tc.supportsMyFeature, versionChecker.ClientSupportsFeature(tc.callContext, myFeature))
+			require.Equal(s.T(), tc.supportsMyFeature, versionChecker.ClientSupportsFeature(tc.callContext, myFeature))
 		}
 	}
 }

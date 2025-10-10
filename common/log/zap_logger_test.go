@@ -18,7 +18,6 @@ import (
 )
 
 type LogSuite struct {
-	*require.Assertions
 	suite.Suite
 }
 
@@ -26,19 +25,17 @@ func TestLogSuite(t *testing.T) {
 	suite.Run(t, new(LogSuite))
 }
 
-func (s *LogSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *LogSuite) TestParseLogLevel() {
-	s.Equal(zap.DebugLevel, ParseZapLevel("debug"))
-	s.Equal(zap.InfoLevel, ParseZapLevel("info"))
-	s.Equal(zap.WarnLevel, ParseZapLevel("warn"))
-	s.Equal(zap.ErrorLevel, ParseZapLevel("error"))
-	s.Equal(zap.FatalLevel, ParseZapLevel("fatal"))
-	s.Equal(zap.DPanicLevel, ParseZapLevel("dpanic"))
-	s.Equal(zap.PanicLevel, ParseZapLevel("panic"))
-	s.Equal(zap.InfoLevel, ParseZapLevel("unknown"))
+	require.Equal(s.T(), zap.DebugLevel, ParseZapLevel("debug"))
+	require.Equal(s.T(), zap.InfoLevel, ParseZapLevel("info"))
+	require.Equal(s.T(), zap.WarnLevel, ParseZapLevel("warn"))
+	require.Equal(s.T(), zap.ErrorLevel, ParseZapLevel("error"))
+	require.Equal(s.T(), zap.FatalLevel, ParseZapLevel("fatal"))
+	require.Equal(s.T(), zap.DPanicLevel, ParseZapLevel("dpanic"))
+	require.Equal(s.T(), zap.PanicLevel, ParseZapLevel("panic"))
+	require.Equal(s.T(), zap.InfoLevel, ParseZapLevel("unknown"))
 }
 
 func (s *LogSuite) TestNewLogger() {
@@ -50,11 +47,11 @@ func (s *LogSuite) TestNewLogger() {
 	}
 
 	log := BuildZapLogger(cfg)
-	s.NotNil(log)
+	require.NotNil(s.T(), log)
 	_, err := os.Stat(dir + "/test.log")
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	log.DPanic("Development default is false; should not panic here!")
-	s.Panics(nil, func() {
+	require.Panics(s.T(), nil, func() {
 		log.Panic("Must Panic")
 	})
 
@@ -64,13 +61,13 @@ func (s *LogSuite) TestNewLogger() {
 		Development: true,
 	}
 	log = BuildZapLogger(cfg)
-	s.NotNil(log)
+	require.NotNil(s.T(), log)
 	_, err = os.Stat(dir + "/test.log")
-	s.Nil(err)
-	s.Panics(nil, func() {
+	require.Nil(s.T(), err)
+	require.Panics(s.T(), nil, func() {
 		log.DPanic("Must panic!")
 	})
-	s.Panics(nil, func() {
+	require.Panics(s.T(), nil, func() {
 		log.Panic("Must panic!")
 	})
 

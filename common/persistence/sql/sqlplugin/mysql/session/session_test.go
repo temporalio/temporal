@@ -25,9 +25,7 @@ func TestSessionTestSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *sessionTestSuite) SetupSuite() {
 
-}
 
 func (s *sessionTestSuite) TearDownSuite() {
 

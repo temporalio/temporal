@@ -13,7 +13,6 @@ import (
 type (
 	priorityStageRateLimiterSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		controller              *gomock.Controller
 		highPriorityRateLimiter *MockRateLimiter
@@ -32,16 +31,13 @@ func TestPriorityStageRateLimiterSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *priorityStageRateLimiterSuite) SetupSuite() {
 
-}
 
 func (s *priorityStageRateLimiterSuite) TearDownSuite() {
 
 }
 
 func (s *priorityStageRateLimiterSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.highPriorityRateLimiter = NewMockRateLimiter(s.controller)
@@ -82,7 +78,7 @@ func (s *priorityStageRateLimiterSuite) TestAllow_HighPriority_Allow() {
 	s.lowPriorityRateLimiter.EXPECT().ReserveN(now, token).Return(s.lowPriorityReservation)
 
 	allow := s.rateLimiter.Allow(now, req)
-	s.True(allow)
+	require.True(s.T(), allow)
 }
 
 func (s *priorityStageRateLimiterSuite) TestAllow_HighPriority_Disallow() {
@@ -97,7 +93,7 @@ func (s *priorityStageRateLimiterSuite) TestAllow_HighPriority_Disallow() {
 	s.highPriorityRateLimiter.EXPECT().AllowN(now, token).Return(false)
 
 	allow := s.rateLimiter.Allow(now, req)
-	s.False(allow)
+	require.False(s.T(), allow)
 }
 
 func (s *priorityStageRateLimiterSuite) TestAllow_LowPriority_Allow() {
@@ -112,7 +108,7 @@ func (s *priorityStageRateLimiterSuite) TestAllow_LowPriority_Allow() {
 	s.lowPriorityRateLimiter.EXPECT().AllowN(now, token).Return(true)
 
 	allow := s.rateLimiter.Allow(now, req)
-	s.True(allow)
+	require.True(s.T(), allow)
 }
 
 func (s *priorityStageRateLimiterSuite) TestAllow_LowPriority_Disallow() {
@@ -127,7 +123,7 @@ func (s *priorityStageRateLimiterSuite) TestAllow_LowPriority_Disallow() {
 	s.lowPriorityRateLimiter.EXPECT().AllowN(now, token).Return(false)
 
 	allow := s.rateLimiter.Allow(now, req)
-	s.False(allow)
+	require.False(s.T(), allow)
 }
 
 func (s *priorityStageRateLimiterSuite) TestReserve_HighPriority_OK() {
@@ -144,7 +140,7 @@ func (s *priorityStageRateLimiterSuite) TestReserve_HighPriority_OK() {
 	s.lowPriorityRateLimiter.EXPECT().ReserveN(now, token).Return(s.lowPriorityReservation)
 
 	reservation := s.rateLimiter.Reserve(now, req)
-	s.Equal(NewPriorityReservation(
+	require.Equal(s.T(), NewPriorityReservation(
 		s.highPriorityReservation,
 		[]Reservation{s.lowPriorityReservation},
 	), reservation)
@@ -163,7 +159,7 @@ func (s *priorityStageRateLimiterSuite) TestReserve_HighPriority_NotOK() {
 	s.highPriorityRateLimiter.EXPECT().ReserveN(now, token).Return(s.highPriorityReservation)
 
 	reservation := s.rateLimiter.Reserve(now, req)
-	s.Equal(s.highPriorityReservation, reservation)
+	require.Equal(s.T(), s.highPriorityReservation, reservation)
 }
 
 func (s *priorityStageRateLimiterSuite) TestReserve_LowPriority_OK() {
@@ -179,7 +175,7 @@ func (s *priorityStageRateLimiterSuite) TestReserve_LowPriority_OK() {
 	s.lowPriorityRateLimiter.EXPECT().ReserveN(now, token).Return(s.lowPriorityReservation)
 
 	reservation := s.rateLimiter.Reserve(now, req)
-	s.Equal(NewPriorityReservation(
+	require.Equal(s.T(), NewPriorityReservation(
 		s.lowPriorityReservation,
 		[]Reservation{},
 	), reservation)
@@ -198,7 +194,7 @@ func (s *priorityStageRateLimiterSuite) TestReserve_LowPriority_NotOK() {
 	s.lowPriorityRateLimiter.EXPECT().ReserveN(now, token).Return(s.lowPriorityReservation)
 
 	reservation := s.rateLimiter.Reserve(now, req)
-	s.Equal(s.lowPriorityReservation, reservation)
+	require.Equal(s.T(), s.lowPriorityReservation, reservation)
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_AlreadyExpired() {
@@ -212,7 +208,7 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_AlreadyExpired() {
 	}
 
 	err := s.rateLimiter.Wait(ctx, req)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_AlreadyExpired() {
@@ -226,7 +222,7 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_AlreadyExpired() {
 	}
 
 	err := s.rateLimiter.Wait(ctx, req)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExpiration_Error() {
@@ -250,7 +246,7 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExp
 	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpiration_Error() {
@@ -271,7 +267,7 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpi
 	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExpiration_Cancelled() {
@@ -299,7 +295,7 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExp
 	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpiration_Cancelled() {
@@ -324,7 +320,7 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpi
 	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExpiration_NoError() {
@@ -346,7 +342,7 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExp
 	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpiration_NoError() {
@@ -366,7 +362,7 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpi
 	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithoutExpiration() {
@@ -387,7 +383,7 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_Without
 	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithoutExpiration() {
@@ -406,5 +402,5 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithoutE
 	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }

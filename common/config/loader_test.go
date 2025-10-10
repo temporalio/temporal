@@ -13,7 +13,6 @@ const fileMode = os.FileMode(0644)
 
 type (
 	LoaderSuite struct {
-		*require.Assertions
 		suite.Suite
 	}
 
@@ -31,16 +30,14 @@ func TestLoaderSuite(t *testing.T) {
 	suite.Run(t, new(LoaderSuite))
 }
 
-func (s *LoaderSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *LoaderSuite) TestBaseYaml() {
 	dir := testutils.MkdirTemp(s.T(), "", "loader.testBaseYaml")
 
 	data := buildConfig(false, "", "")
 	err := os.WriteFile(path(dir, "base.yaml"), []byte(data), fileMode)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
 	envs := []string{"", "prod"}
 	zones := []string{"", "us-east-1a"}
@@ -49,9 +46,9 @@ func (s *LoaderSuite) TestBaseYaml() {
 		for _, zone := range zones {
 			var cfg testConfig
 			err = Load(env, dir, zone, &cfg)
-			s.Nil(err)
-			s.Equal("hello__", cfg.Items.Item1)
-			s.Equal("world__", cfg.Items.Item2)
+			require.Nil(s.T(), err)
+			require.Equal(s.T(), "hello__", cfg.Items.Item1)
+			require.Equal(s.T(), "world__", cfg.Items.Item2)
 		}
 	}
 }
@@ -84,21 +81,21 @@ func (s *LoaderSuite) TestHierarchy() {
 	for _, tc := range testCases {
 		var cfg testConfig
 		err := Load(tc.env, dir, tc.zone, &cfg)
-		s.Nil(err)
-		s.Equal(tc.item1, cfg.Items.Item1)
-		s.Equal(tc.item2, cfg.Items.Item2)
+		require.Nil(s.T(), err)
+		require.Equal(s.T(), tc.item1, cfg.Items.Item1)
+		require.Equal(s.T(), tc.item2, cfg.Items.Item2)
 	}
 }
 
 func (s *LoaderSuite) TestInvalidPath() {
 	var cfg testConfig
 	err := Load("prod", "", "", &cfg)
-	s.NotNil(err)
+	require.NotNil(s.T(), err)
 }
 
 func (s *LoaderSuite) createFile(dir string, file string, template bool, env string, zone string) {
 	err := os.WriteFile(path(dir, file), []byte(buildConfig(template, env, zone)), fileMode)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 }
 
 func buildConfig(template bool, env, zone string) string {

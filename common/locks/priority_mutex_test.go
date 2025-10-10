@@ -12,7 +12,6 @@ import (
 
 type (
 	priorityMutexSuite struct {
-		*require.Assertions
 		suite.Suite
 
 		lock *PriorityMutexImpl
@@ -46,9 +45,7 @@ func TestPriorityMutexSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *priorityMutexSuite) SetupSuite() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *priorityMutexSuite) TearDownSuite() {
 
@@ -63,20 +60,20 @@ func (s *priorityMutexSuite) TearDownTest() {
 }
 
 func (s *priorityMutexSuite) TestTryLock_High() {
-	s.True(s.lock.TryLockHigh())
-	s.False(s.lock.TryLockHigh())
-	s.False(s.lock.TryLockLow())
+	require.True(s.T(), s.lock.TryLockHigh())
+	require.False(s.T(), s.lock.TryLockHigh())
+	require.False(s.T(), s.lock.TryLockLow())
 	s.lock.UnlockHigh()
-	s.False(s.lock.IsLocked())
+	require.False(s.T(), s.lock.IsLocked())
 }
 
 func (s *priorityMutexSuite) TestLock_High_Success() {
 	ctx := context.Background()
 	err := s.lock.LockHigh(ctx)
-	s.NoError(err)
-	s.True(s.lock.IsLocked())
+	require.NoError(s.T(), err)
+	require.True(s.T(), s.lock.IsLocked())
 	s.lock.UnlockHigh()
-	s.False(s.lock.IsLocked())
+	require.False(s.T(), s.lock.IsLocked())
 }
 
 func (s *priorityMutexSuite) TestLock_High_Fail() {
@@ -85,25 +82,25 @@ func (s *priorityMutexSuite) TestLock_High_Fail() {
 	cancel()
 
 	err := s.lock.LockHigh(ctx)
-	s.Error(err)
-	s.False(s.lock.IsLocked())
+	require.Error(s.T(), err)
+	require.False(s.T(), s.lock.IsLocked())
 }
 
 func (s *priorityMutexSuite) TestTryLock_Low() {
-	s.True(s.lock.TryLockLow())
-	s.False(s.lock.TryLockHigh())
-	s.False(s.lock.TryLockLow())
+	require.True(s.T(), s.lock.TryLockLow())
+	require.False(s.T(), s.lock.TryLockHigh())
+	require.False(s.T(), s.lock.TryLockLow())
 	s.lock.UnlockLow()
-	s.False(s.lock.IsLocked())
+	require.False(s.T(), s.lock.IsLocked())
 }
 
 func (s *priorityMutexSuite) TestLock_Low_Success() {
 	ctx := context.Background()
 	err := s.lock.LockLow(ctx)
-	s.NoError(err)
-	s.True(s.lock.IsLocked())
+	require.NoError(s.T(), err)
+	require.True(s.T(), s.lock.IsLocked())
 	s.lock.UnlockLow()
-	s.False(s.lock.IsLocked())
+	require.False(s.T(), s.lock.IsLocked())
 }
 
 func (s *priorityMutexSuite) TestLock_Low_Fail() {
@@ -112,16 +109,16 @@ func (s *priorityMutexSuite) TestLock_Low_Fail() {
 	cancel()
 
 	err := s.lock.LockLow(ctx)
-	s.Error(err)
-	s.False(s.lock.IsLocked())
+	require.Error(s.T(), err)
+	require.False(s.T(), s.lock.IsLocked())
 }
 
 func (s *priorityMutexSuite) Test_LockHigh_UnlockLow() {
 	ctx := context.Background()
 
 	err := s.lock.LockHigh(ctx)
-	s.NoError(err)
-	s.Panics(s.lock.UnlockLow)
+	require.NoError(s.T(), err)
+	require.Panics(s.T(), s.lock.UnlockLow)
 	s.lock.UnlockHigh()
 }
 
@@ -129,8 +126,8 @@ func (s *priorityMutexSuite) Test_LockLow_UnlockHigh() {
 	ctx := context.Background()
 
 	err := s.lock.LockLow(ctx)
-	s.NoError(err)
-	s.Panics(s.lock.UnlockHigh)
+	require.NoError(s.T(), err)
+	require.Panics(s.T(), s.lock.UnlockHigh)
 	s.lock.UnlockLow()
 }
 
@@ -138,7 +135,7 @@ func (s *priorityMutexSuite) TestLock_Mixed() {
 	concurrency := 1024
 	ctx := context.Background()
 	err := s.lock.LockHigh(ctx)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	startWaitGroup := sync.WaitGroup{}
 	endWaitGroup := sync.WaitGroup{}
@@ -150,7 +147,7 @@ func (s *priorityMutexSuite) TestLock_Mixed() {
 	lowFn := func() {
 		startWaitGroup.Done()
 		err := s.lock.LockLow(ctx)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		resultChan <- 0
 
 		s.lock.UnlockLow()
@@ -159,7 +156,7 @@ func (s *priorityMutexSuite) TestLock_Mixed() {
 	highFn := func() {
 		startWaitGroup.Done()
 		err := s.lock.LockHigh(ctx)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		resultChan <- 1
 
 		s.lock.UnlockHigh()
@@ -179,7 +176,7 @@ func (s *priorityMutexSuite) TestLock_Mixed() {
 	for result := range resultChan {
 		results = append(results, result)
 	}
-	s.Equal(2*concurrency, len(results))
+	require.Equal(s.T(), 2*concurrency, len(results))
 
 	zeros := float64(0)
 	totalZeros := float64(concurrency)
@@ -197,5 +194,5 @@ func (s *priorityMutexSuite) TestLock_Mixed() {
 
 	overallPossibility := possibility / float64(concurrency)
 	fmt.Printf("overall possibility: %.2f\n", overallPossibility)
-	s.True(overallPossibility >= 0.5)
+	require.True(s.T(), overallPossibility >= 0.5)
 }

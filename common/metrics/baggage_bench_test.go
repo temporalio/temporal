@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
 )
@@ -19,7 +18,6 @@ type (
 	// These results are to be reviewed if the usage scenario of metricsContext changes.
 	baggageBenchTest struct {
 		suite.Suite
-		*require.Assertions
 		controller *gomock.Controller
 	}
 
@@ -44,7 +42,6 @@ func TestBaggageBenchSuite(t *testing.T) {
 }
 
 func (s *baggageBenchTest) SetupTest() {
-	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 }
 

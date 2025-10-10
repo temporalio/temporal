@@ -11,7 +11,6 @@ import (
 
 type (
 	callerInfoSuite struct {
-		*require.Assertions
 		suite.Suite
 	}
 )
@@ -20,69 +19,67 @@ func TestCallerInfoSuite(t *testing.T) {
 	suite.Run(t, &callerInfoSuite{})
 }
 
-func (s *callerInfoSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *callerInfoSuite) TestSetCallerName() {
 	ctx := context.Background()
 	info := GetCallerInfo(ctx)
-	s.Empty(info.CallerName)
+	require.Empty(s.T(), info.CallerName)
 
 	ctx = SetCallerName(ctx, CallerNameSystem)
 	info = GetCallerInfo(ctx)
-	s.Equal(CallerNameSystem, info.CallerName)
+	require.Equal(s.T(), CallerNameSystem, info.CallerName)
 
 	ctx = SetCallerName(ctx, "")
 	info = GetCallerInfo(ctx)
-	s.Equal(CallerNameSystem, info.CallerName)
+	require.Equal(s.T(), CallerNameSystem, info.CallerName)
 
 	newCallerName := "new caller name"
 	ctx = SetCallerName(ctx, newCallerName)
 	info = GetCallerInfo(ctx)
-	s.Equal(newCallerName, info.CallerName)
+	require.Equal(s.T(), newCallerName, info.CallerName)
 }
 
 func (s *callerInfoSuite) TestSetCallerType() {
 	ctx := context.Background()
 	info := GetCallerInfo(ctx)
-	s.Empty(info.CallerType)
+	require.Empty(s.T(), info.CallerType)
 
 	ctx = SetCallerType(ctx, CallerTypeBackgroundHigh)
 	info = GetCallerInfo(ctx)
-	s.Equal(CallerTypeBackgroundHigh, info.CallerType)
+	require.Equal(s.T(), CallerTypeBackgroundHigh, info.CallerType)
 
 	ctx = SetCallerName(ctx, "")
 	info = GetCallerInfo(ctx)
-	s.Equal(CallerTypeBackgroundHigh, info.CallerType)
+	require.Equal(s.T(), CallerTypeBackgroundHigh, info.CallerType)
 
 	ctx = SetCallerType(ctx, CallerTypeAPI)
 	info = GetCallerInfo(ctx)
-	s.Equal(CallerTypeAPI, info.CallerType)
+	require.Equal(s.T(), CallerTypeAPI, info.CallerType)
 
 	ctx = SetCallerType(ctx, CallerTypePreemptable)
 	info = GetCallerInfo(ctx)
-	s.Equal(CallerTypePreemptable, info.CallerType)
+	require.Equal(s.T(), CallerTypePreemptable, info.CallerType)
 }
 
 func (s *callerInfoSuite) TestSetCallOrigin() {
 	ctx := context.Background()
 	info := GetCallerInfo(ctx)
-	s.Empty(info.CallOrigin)
+	require.Empty(s.T(), info.CallOrigin)
 
 	initiation := "method name"
 	ctx = SetOrigin(ctx, initiation)
 	info = GetCallerInfo(ctx)
-	s.Equal(initiation, info.CallOrigin)
+	require.Equal(s.T(), initiation, info.CallOrigin)
 
 	ctx = SetOrigin(ctx, "")
 	info = GetCallerInfo(ctx)
-	s.Equal(initiation, info.CallOrigin)
+	require.Equal(s.T(), initiation, info.CallOrigin)
 
 	newCallOrigin := "another method name"
 	ctx = SetOrigin(ctx, newCallOrigin)
 	info = GetCallerInfo(ctx)
-	s.Equal(newCallOrigin, info.CallOrigin)
+	require.Equal(s.T(), newCallOrigin, info.CallOrigin)
 }
 
 func (s *callerInfoSuite) TestSetCallerInfo_PreserveOtherValues() {
@@ -100,12 +97,12 @@ func (s *callerInfoSuite) TestSetCallerInfo_PreserveOtherValues() {
 	ctx = SetCallerInfo(ctx, NewCallerInfo(callerName, callerType, callOrigin))
 
 	md, ok := metadata.FromIncomingContext(ctx)
-	s.True(ok)
-	s.Equal(existingValue, md.Get(existingKey)[0])
-	s.Equal(callerName, md.Get(CallerNameHeaderName)[0])
-	s.Equal(callerType, md.Get(CallerTypeHeaderName)[0])
-	s.Equal(callOrigin, md.Get(CallOriginHeaderName)[0])
-	s.Len(md, 4)
+	require.True(s.T(), ok)
+	require.Equal(s.T(), existingValue, md.Get(existingKey)[0])
+	require.Equal(s.T(), callerName, md.Get(CallerNameHeaderName)[0])
+	require.Equal(s.T(), callerType, md.Get(CallerTypeHeaderName)[0])
+	require.Equal(s.T(), callOrigin, md.Get(CallOriginHeaderName)[0])
+	require.Len(s.T(), md, 4)
 }
 
 func (s *callerInfoSuite) TestSetCallerInfo_NoExistingCallerInfo() {
@@ -120,11 +117,11 @@ func (s *callerInfoSuite) TestSetCallerInfo_NoExistingCallerInfo() {
 	})
 
 	md, ok := metadata.FromIncomingContext(ctx)
-	s.True(ok)
-	s.Equal(callerName, md.Get(CallerNameHeaderName)[0])
-	s.Equal(callerType, md.Get(CallerTypeHeaderName)[0])
-	s.Equal(callOrigin, md.Get(CallOriginHeaderName)[0])
-	s.Len(md, 3)
+	require.True(s.T(), ok)
+	require.Equal(s.T(), callerName, md.Get(CallerNameHeaderName)[0])
+	require.Equal(s.T(), callerType, md.Get(CallerTypeHeaderName)[0])
+	require.Equal(s.T(), callOrigin, md.Get(CallOriginHeaderName)[0])
+	require.Len(s.T(), md, 3)
 }
 
 func (s *callerInfoSuite) TestSetCallerInfo_WithExistingCallerInfo() {
@@ -143,11 +140,11 @@ func (s *callerInfoSuite) TestSetCallerInfo_WithExistingCallerInfo() {
 	})
 
 	md, ok := metadata.FromIncomingContext(ctx)
-	s.True(ok)
-	s.Equal(callerName, md.Get(CallerNameHeaderName)[0])
-	s.Equal(callerType, md.Get(CallerTypeHeaderName)[0])
-	s.Equal(callOrigin, md.Get(CallOriginHeaderName)[0])
-	s.Len(md, 3)
+	require.True(s.T(), ok)
+	require.Equal(s.T(), callerName, md.Get(CallerNameHeaderName)[0])
+	require.Equal(s.T(), callerType, md.Get(CallerTypeHeaderName)[0])
+	require.Equal(s.T(), callOrigin, md.Get(CallOriginHeaderName)[0])
+	require.Len(s.T(), md, 3)
 }
 
 func (s *callerInfoSuite) TestSetCallerInfo_WithPartialCallerInfo() {
@@ -161,9 +158,9 @@ func (s *callerInfoSuite) TestSetCallerInfo_WithPartialCallerInfo() {
 	})
 
 	md, ok := metadata.FromIncomingContext(ctx)
-	s.True(ok)
-	s.Equal(callerName, md.Get(CallerNameHeaderName)[0])
-	s.Equal(callerType, md.Get(CallerTypeHeaderName)[0])
-	s.Empty(md.Get(CallOriginHeaderName))
-	s.Len(md, 2)
+	require.True(s.T(), ok)
+	require.Equal(s.T(), callerName, md.Get(CallerNameHeaderName)[0])
+	require.Equal(s.T(), callerType, md.Get(CallerTypeHeaderName)[0])
+	require.Empty(s.T(), md.Get(CallOriginHeaderName))
+	require.Len(s.T(), md, 2)
 }

@@ -14,7 +14,6 @@ import (
 type (
 	historyExecutionTimerSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		store sqlplugin.HistoryExecutionTimer
 	}
@@ -34,22 +33,18 @@ func NewHistoryExecutionTimerSuite(
 	store sqlplugin.HistoryExecutionTimer,
 ) *historyExecutionTimerSuite {
 	return &historyExecutionTimerSuite{
-		Assertions: require.New(t),
-		store:      store,
+
+		store: store,
 	}
 }
 
-func (s *historyExecutionTimerSuite) SetupSuite() {
 
-}
 
 func (s *historyExecutionTimerSuite) TearDownSuite() {
 
 }
 
-func (s *historyExecutionTimerSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *historyExecutionTimerSuite) TearDownTest() {
 
@@ -64,10 +59,10 @@ func (s *historyExecutionTimerSuite) TestReplace_Single() {
 
 	timer := s.newRandomExecutionTimerRow(shardID, namespaceID, workflowID, runID, timerID)
 	result, err := s.store.ReplaceIntoTimerInfoMaps(newExecutionContext(), []sqlplugin.TimerInfoMapsRow{timer})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *historyExecutionTimerSuite) TestReplace_Multiple() {
@@ -79,10 +74,10 @@ func (s *historyExecutionTimerSuite) TestReplace_Multiple() {
 	timer1 := s.newRandomExecutionTimerRow(shardID, namespaceID, workflowID, runID, shuffle.String(testHistoryExecutionTimerID))
 	timer2 := s.newRandomExecutionTimerRow(shardID, namespaceID, workflowID, runID, shuffle.String(testHistoryExecutionTimerID))
 	result, err := s.store.ReplaceIntoTimerInfoMaps(newExecutionContext(), []sqlplugin.TimerInfoMapsRow{timer1, timer2})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(2, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, int(rowsAffected))
 }
 
 func (s *historyExecutionTimerSuite) TestReplaceSelect_Single() {
@@ -94,10 +89,10 @@ func (s *historyExecutionTimerSuite) TestReplaceSelect_Single() {
 
 	timer := s.newRandomExecutionTimerRow(shardID, namespaceID, workflowID, runID, timerID)
 	result, err := s.store.ReplaceIntoTimerInfoMaps(newExecutionContext(), []sqlplugin.TimerInfoMapsRow{timer})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -106,12 +101,12 @@ func (s *historyExecutionTimerSuite) TestReplaceSelect_Single() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowMap := map[string]sqlplugin.TimerInfoMapsRow{}
 	for _, timer := range rows {
 		rowMap[timer.TimerID] = timer
 	}
-	s.Equal(map[string]sqlplugin.TimerInfoMapsRow{
+	require.Equal(s.T(), map[string]sqlplugin.TimerInfoMapsRow{
 		timer.TimerID: timer,
 	}, rowMap)
 }
@@ -130,10 +125,10 @@ func (s *historyExecutionTimerSuite) TestReplaceSelect_Multiple() {
 		timers = append(timers, timer)
 	}
 	result, err := s.store.ReplaceIntoTimerInfoMaps(newExecutionContext(), timers)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numTimers, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numTimers, int(rowsAffected))
 
 	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -142,7 +137,7 @@ func (s *historyExecutionTimerSuite) TestReplaceSelect_Multiple() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	timerMap := map[string]sqlplugin.TimerInfoMapsRow{}
 	for _, timer := range timers {
 		timerMap[timer.TimerID] = timer
@@ -151,7 +146,7 @@ func (s *historyExecutionTimerSuite) TestReplaceSelect_Multiple() {
 	for _, timer := range rows {
 		rowMap[timer.TimerID] = timer
 	}
-	s.Equal(timerMap, rowMap)
+	require.Equal(s.T(), timerMap, rowMap)
 }
 
 func (s *historyExecutionTimerSuite) TestDeleteSelect_Single() {
@@ -169,10 +164,10 @@ func (s *historyExecutionTimerSuite) TestDeleteSelect_Single() {
 		TimerIDs:    []string{timerID},
 	}
 	result, err := s.store.DeleteFromTimerInfoMaps(newExecutionContext(), deletFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -181,8 +176,8 @@ func (s *historyExecutionTimerSuite) TestDeleteSelect_Single() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.TimerInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.TimerInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionTimerSuite) TestDeleteSelect_Multiple() {
@@ -199,10 +194,10 @@ func (s *historyExecutionTimerSuite) TestDeleteSelect_Multiple() {
 		TimerIDs:    []string{shuffle.String(testHistoryExecutionTimerID), shuffle.String(testHistoryExecutionTimerID)},
 	}
 	result, err := s.store.DeleteFromTimerInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -211,8 +206,8 @@ func (s *historyExecutionTimerSuite) TestDeleteSelect_Multiple() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.TimerInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.TimerInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionTimerSuite) TestDeleteSelect_All() {
@@ -228,10 +223,10 @@ func (s *historyExecutionTimerSuite) TestDeleteSelect_All() {
 		RunID:       runID,
 	}
 	result, err := s.store.DeleteAllFromTimerInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -240,8 +235,8 @@ func (s *historyExecutionTimerSuite) TestDeleteSelect_All() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.TimerInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.TimerInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_Single() {
@@ -253,10 +248,10 @@ func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_Single() {
 
 	timer := s.newRandomExecutionTimerRow(shardID, namespaceID, workflowID, runID, timerID)
 	result, err := s.store.ReplaceIntoTimerInfoMaps(newExecutionContext(), []sqlplugin.TimerInfoMapsRow{timer})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	deleteFilter := sqlplugin.TimerInfoMapsFilter{
 		ShardID:     shardID,
@@ -266,10 +261,10 @@ func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_Single() {
 		TimerIDs:    []string{timerID},
 	}
 	result, err = s.store.DeleteFromTimerInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -278,8 +273,8 @@ func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_Single() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.TimerInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.TimerInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_Multiple() {
@@ -299,10 +294,10 @@ func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_Multiple() {
 		timers = append(timers, timer)
 	}
 	result, err := s.store.ReplaceIntoTimerInfoMaps(newExecutionContext(), timers)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numTimers, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numTimers, int(rowsAffected))
 
 	deleteFilter := sqlplugin.TimerInfoMapsFilter{
 		ShardID:     shardID,
@@ -312,10 +307,10 @@ func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_Multiple() {
 		TimerIDs:    timerIDs,
 	}
 	result, err = s.store.DeleteFromTimerInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numTimers, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numTimers, int(rowsAffected))
 
 	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -324,8 +319,8 @@ func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_Multiple() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.TimerInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.TimerInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_All() {
@@ -342,10 +337,10 @@ func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_All() {
 		timers = append(timers, timer)
 	}
 	result, err := s.store.ReplaceIntoTimerInfoMaps(newExecutionContext(), timers)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numTimers, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numTimers, int(rowsAffected))
 
 	deleteFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -354,10 +349,10 @@ func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_All() {
 		RunID:       runID,
 	}
 	result, err = s.store.DeleteAllFromTimerInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numTimers, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numTimers, int(rowsAffected))
 
 	selectFilter := sqlplugin.TimerInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -366,8 +361,8 @@ func (s *historyExecutionTimerSuite) TestReplaceDeleteSelect_All() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromTimerInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.TimerInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.TimerInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionTimerSuite) newRandomExecutionTimerRow(

@@ -20,7 +20,6 @@ import (
 type (
 	historyCurrentExecutionSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		store sqlplugin.HistoryExecution
 	}
@@ -53,22 +52,18 @@ func NewHistoryCurrentExecutionSuite(
 	store sqlplugin.HistoryExecution,
 ) *historyCurrentExecutionSuite {
 	return &historyCurrentExecutionSuite{
-		Assertions: require.New(t),
-		store:      store,
+
+		store: store,
 	}
 }
 
-func (s *historyCurrentExecutionSuite) SetupSuite() {
 
-}
 
 func (s *historyCurrentExecutionSuite) TearDownSuite() {
 
 }
 
-func (s *historyCurrentExecutionSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *historyCurrentExecutionSuite) TearDownTest() {
 
@@ -84,10 +79,10 @@ func (s *historyCurrentExecutionSuite) TestInsert_Success() {
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *historyCurrentExecutionSuite) TestInsert_Fail_Duplicate() {
@@ -100,14 +95,14 @@ func (s *historyCurrentExecutionSuite) TestInsert_Fail_Duplicate() {
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	currentExecution = s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	_, err = s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *historyCurrentExecutionSuite) TestInsertSelect() {
@@ -120,10 +115,10 @@ func (s *historyCurrentExecutionSuite) TestInsertSelect() {
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.CurrentExecutionsFilter{
 		ShardID:     shardID,
@@ -132,8 +127,8 @@ func (s *historyCurrentExecutionSuite) TestInsertSelect() {
 		RunID:       nil,
 	}
 	row, err := s.store.SelectFromCurrentExecutions(newExecutionContext(), filter)
-	s.NoError(err)
-	s.Equal(&currentExecution, row)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), &currentExecution, row)
 }
 
 func (s *historyCurrentExecutionSuite) TestInsertUpdate_Success() {
@@ -146,17 +141,17 @@ func (s *historyCurrentExecutionSuite) TestInsertUpdate_Success() {
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	currentExecution = s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, primitives.NewUUID().String(), rand.Int63())
 	result, err = s.store.UpdateCurrentExecutions(newExecutionContext(), &currentExecution)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *historyCurrentExecutionSuite) TestUpdate_Fail() {
@@ -169,10 +164,10 @@ func (s *historyCurrentExecutionSuite) TestUpdate_Fail() {
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.UpdateCurrentExecutions(newExecutionContext(), &currentExecution)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 }
 
 func (s *historyCurrentExecutionSuite) TestInsertUpdateSelect() {
@@ -185,17 +180,17 @@ func (s *historyCurrentExecutionSuite) TestInsertUpdateSelect() {
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	currentExecution = s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, primitives.NewUUID().String(), rand.Int63())
 	result, err = s.store.UpdateCurrentExecutions(newExecutionContext(), &currentExecution)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.CurrentExecutionsFilter{
 		ShardID:     shardID,
@@ -204,8 +199,8 @@ func (s *historyCurrentExecutionSuite) TestInsertUpdateSelect() {
 		RunID:       nil,
 	}
 	row, err := s.store.SelectFromCurrentExecutions(newExecutionContext(), filter)
-	s.NoError(err)
-	s.Equal(&currentExecution, row)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), &currentExecution, row)
 }
 
 func (s *historyCurrentExecutionSuite) TestInsertDeleteSelect_Success() {
@@ -218,10 +213,10 @@ func (s *historyCurrentExecutionSuite) TestInsertDeleteSelect_Success() {
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.CurrentExecutionsFilter{
 		ShardID:     shardID,
@@ -230,14 +225,14 @@ func (s *historyCurrentExecutionSuite) TestInsertDeleteSelect_Success() {
 		RunID:       runID,
 	}
 	result, err = s.store.DeleteFromCurrentExecutions(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter.RunID = nil
 	_, err = s.store.SelectFromCurrentExecutions(newExecutionContext(), filter)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *historyCurrentExecutionSuite) TestInsertDeleteSelect_Fail() {
@@ -250,10 +245,10 @@ func (s *historyCurrentExecutionSuite) TestInsertDeleteSelect_Fail() {
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.CurrentExecutionsFilter{
 		ShardID:     shardID,
@@ -262,15 +257,15 @@ func (s *historyCurrentExecutionSuite) TestInsertDeleteSelect_Fail() {
 		RunID:       primitives.NewUUID(),
 	}
 	result, err = s.store.DeleteFromCurrentExecutions(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	filter.RunID = nil
 	row, err := s.store.SelectFromCurrentExecutions(newExecutionContext(), filter)
-	s.NoError(err)
-	s.Equal(&currentExecution, row)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), &currentExecution, row)
 }
 
 func (s *historyCurrentExecutionSuite) TestLock() {
@@ -283,10 +278,10 @@ func (s *historyCurrentExecutionSuite) TestLock() {
 
 	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	// NOTE: lock without transaction is equivalent to select
 	//  this test only test the select functionality
@@ -297,8 +292,8 @@ func (s *historyCurrentExecutionSuite) TestLock() {
 		RunID:       nil,
 	}
 	row, err := s.store.LockCurrentExecutions(newExecutionContext(), filter)
-	s.NoError(err)
-	s.Equal(&currentExecution, row)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), &currentExecution, row)
 }
 
 func (s *historyCurrentExecutionSuite) newRandomCurrentExecutionRow(

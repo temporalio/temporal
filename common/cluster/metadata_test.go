@@ -18,7 +18,6 @@ import (
 type (
 	metadataSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		controller               *gomock.Controller
 		mockClusterMetadataStore *persistence.MockClusterMetadataManager
@@ -37,15 +36,13 @@ func TestMetadataSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *metadataSuite) SetupSuite() {
-}
+
 
 func (s *metadataSuite) TearDownSuite() {
 
 }
 
 func (s *metadataSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.mockClusterMetadataStore = persistence.NewMockClusterMetadataManager(s.controller)
 
@@ -95,68 +92,68 @@ func (s *metadataSuite) TearDownTest() {
 }
 
 func (s *metadataSuite) Test_Initialization() {
-	s.Equal(s.isGlobalNamespaceEnabled, s.metadata.IsGlobalNamespaceEnabled())
-	s.Equal(s.clusterName, s.metadata.GetMasterClusterName())
-	s.Equal(s.clusterName, s.metadata.GetCurrentClusterName())
-	s.True(s.metadata.IsMasterCluster())
-	s.Equal(s.failoverVersionIncrement, s.metadata.GetFailoverVersionIncrement())
+	require.Equal(s.T(), s.isGlobalNamespaceEnabled, s.metadata.IsGlobalNamespaceEnabled())
+	require.Equal(s.T(), s.clusterName, s.metadata.GetMasterClusterName())
+	require.Equal(s.T(), s.clusterName, s.metadata.GetCurrentClusterName())
+	require.True(s.T(), s.metadata.IsMasterCluster())
+	require.Equal(s.T(), s.failoverVersionIncrement, s.metadata.GetFailoverVersionIncrement())
 }
 
 func (s *metadataSuite) Test_GetNextFailoverVersion() {
 	currentVersion := int64(102)
-	s.Equal(currentVersion+s.failoverVersionIncrement-1, s.metadata.GetNextFailoverVersion(s.clusterName, currentVersion))
+	require.Equal(s.T(), currentVersion+s.failoverVersionIncrement-1, s.metadata.GetNextFailoverVersion(s.clusterName, currentVersion))
 }
 
 func (s *metadataSuite) Test_IsVersionFromSameCluster() {
-	s.True(s.metadata.IsVersionFromSameCluster(101, 1001))
-	s.False(s.metadata.IsVersionFromSameCluster(101, 103))
+	require.True(s.T(), s.metadata.IsVersionFromSameCluster(101, 1001))
+	require.False(s.T(), s.metadata.IsVersionFromSameCluster(101, 103))
 }
 
 func (s *metadataSuite) Test_ClusterNameForFailoverVersion() {
 	clusterName := s.metadata.ClusterNameForFailoverVersion(true, 101)
-	s.Equal(s.clusterName, clusterName)
+	require.Equal(s.T(), s.clusterName, clusterName)
 
 	clusterName2 := s.metadata.ClusterNameForFailoverVersion(true, 204)
-	s.Equal(s.secondClusterName, clusterName2)
+	require.Equal(s.T(), s.secondClusterName, clusterName2)
 
 	clusterName3 := s.metadata.ClusterNameForFailoverVersion(true, 217)
-	s.Equal(unknownClusterNamePrefix+"17", clusterName3)
+	require.Equal(s.T(), unknownClusterNamePrefix+"17", clusterName3)
 }
 
 func (s *metadataSuite) Test_RegisterMetadataChangeCallback() {
 	s.metadata.RegisterMetadataChangeCallback(
 		s,
 		func(oldClusterMetadata map[string]*ClusterInformation, newClusterMetadata map[string]*ClusterInformation) {
-			s.Equal(3, len(newClusterMetadata))
+			require.Equal(s.T(), 3, len(newClusterMetadata))
 		})
 
 	s.metadata.UnRegisterMetadataChangeCallback(s)
-	s.Equal(0, len(s.metadata.clusterChangeCallback))
+	require.Equal(s.T(), 0, len(s.metadata.clusterChangeCallback))
 }
 
 func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 	id := uuid.New()
 	s.metadata.clusterChangeCallback[id] = func(oldClusterMetadata map[string]*ClusterInformation, newClusterMetadata map[string]*ClusterInformation) {
 		oldMetadata, ok := oldClusterMetadata[id]
-		s.True(ok)
-		s.Nil(oldMetadata)
+		require.True(s.T(), ok)
+		require.Nil(s.T(), oldMetadata)
 		newMetadata, ok := newClusterMetadata[id]
-		s.True(ok)
-		s.NotNil(newMetadata)
+		require.True(s.T(), ok)
+		require.NotNil(s.T(), newMetadata)
 
 		oldMetadata, ok = oldClusterMetadata[s.secondClusterName]
-		s.True(ok)
-		s.NotNil(oldMetadata)
+		require.True(s.T(), ok)
+		require.NotNil(s.T(), oldMetadata)
 		newMetadata, ok = newClusterMetadata[s.secondClusterName]
-		s.True(ok)
-		s.Nil(newMetadata)
+		require.True(s.T(), ok)
+		require.Nil(s.T(), newMetadata)
 
 		oldMetadata, ok = oldClusterMetadata[s.thirdClusterName]
-		s.True(ok)
-		s.NotNil(oldMetadata)
+		require.True(s.T(), ok)
+		require.NotNil(s.T(), oldMetadata)
 		newMetadata, ok = newClusterMetadata[s.thirdClusterName]
-		s.True(ok)
-		s.NotNil(newMetadata)
+		require.True(s.T(), ok)
+		require.NotNil(s.T(), newMetadata)
 	}
 
 	s.mockClusterMetadataStore.EXPECT().ListClusterMetadata(gomock.Any(), gomock.Any()).Return(
@@ -203,10 +200,10 @@ func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 			},
 		}, nil)
 	err := s.metadata.refreshClusterMetadata(context.Background())
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	clusterInfo := s.metadata.GetAllClusterInfo()
-	s.Equal("test", clusterInfo[s.thirdClusterName].Tags["test"])
-	s.Equal("test", clusterInfo[id].Tags["test"])
+	require.Equal(s.T(), "test", clusterInfo[s.thirdClusterName].Tags["test"])
+	require.Equal(s.T(), "test", clusterInfo[id].Tags["test"])
 }
 
 func (s *metadataSuite) Test_ListAllClusterMetadataFromDB_Success() {
@@ -253,6 +250,6 @@ func (s *metadataSuite) Test_ListAllClusterMetadataFromDB_Success() {
 		}, nil).Times(1)
 
 	resp, err := s.metadata.listAllClusterMetadataFromDB(context.Background())
-	s.NoError(err)
-	s.Equal(2, len(resp))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, len(resp))
 }

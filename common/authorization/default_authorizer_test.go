@@ -76,7 +76,6 @@ var (
 type (
 	defaultAuthorizerSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		controller *gomock.Controller
 		authorizer Authorizer
@@ -89,7 +88,7 @@ func TestDefaultAuthorizerSuite(t *testing.T) {
 }
 
 func (s *defaultAuthorizerSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.controller = gomock.NewController(s.T())
 	s.authorizer = NewDefaultAuthorizer()
 }
@@ -150,8 +149,8 @@ func (s *defaultAuthorizerSuite) TestAuthorize() {
 
 	for _, tt := range testCases {
 		result, err := s.authorizer.Authorize(context.TODO(), &tt.Claims, &tt.Target)
-		s.NoError(err)
-		s.Equal(tt.Decision, result.Decision, "Failed case: %v", tt.Name)
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), tt.Decision, result.Decision, "Failed case: %v", tt.Name)
 	}
 }
 
@@ -170,12 +169,12 @@ func (s *defaultAuthorizerSuite) testGetAuthorizerFromConfig(name string, valid 
 	cfg := config.Authorization{Authorizer: name}
 	auth, err := GetAuthorizerFromConfig(&cfg)
 	if valid {
-		s.NoError(err)
-		s.NotNil(auth)
+		require.NoError(s.T(), err)
+		require.NotNil(s.T(), auth)
 		t := reflect.TypeOf(auth)
-		s.True(t == authorizerType)
+		require.True(s.T(), t == authorizerType)
 	} else {
-		s.Error(err)
-		s.Nil(auth)
+		require.Error(s.T(), err)
+		require.Nil(s.T(), auth)
 	}
 }

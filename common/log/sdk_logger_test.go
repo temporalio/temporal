@@ -3,7 +3,6 @@ package log
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/log"
 	"go.temporal.io/server/common/log/tag"
@@ -11,7 +10,6 @@ import (
 )
 
 type SdkLoggerSuite struct {
-	*require.Assertions
 	suite.Suite
 
 	controller       *gomock.Controller
@@ -24,7 +22,7 @@ func TestSdkLoggerSuite(t *testing.T) {
 }
 
 func (s *SdkLoggerSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.controller = gomock.NewController(s.T())
 
 	s.underlyingLogger = NewMockLogger(s.controller)

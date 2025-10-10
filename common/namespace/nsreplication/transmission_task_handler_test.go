@@ -35,8 +35,7 @@ func TestTransmissionTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *transmissionTaskSuite) SetupSuite() {
-}
+
 
 func (s *transmissionTaskSuite) TearDownSuite() {
 

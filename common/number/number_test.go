@@ -11,7 +11,6 @@ import (
 type (
 	numberSuite struct {
 		suite.Suite
-		*require.Assertions
 	}
 )
 
@@ -24,9 +23,7 @@ func (s *numberSuite) SetupSuite() {}
 
 func (s *numberSuite) TearDownSuite() {}
 
-func (s *numberSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *numberSuite) TearDownTest() {
 
@@ -41,9 +38,9 @@ func (s *numberSuite) TestInt() {
 		int64(number),
 		int(number),
 	} {
-		s.Equal(float64(number), NewNumber(n).GetFloatOrDefault(rand.Float64()))
-		s.Equal(int(number), NewNumber(n).GetIntOrDefault(rand.Int()))
-		s.Equal(uint(number), NewNumber(n).GetUintOrDefault(uint(rand.Uint64())))
+		require.Equal(s.T(), float64(number), NewNumber(n).GetFloatOrDefault(rand.Float64()))
+		require.Equal(s.T(), int(number), NewNumber(n).GetIntOrDefault(rand.Int()))
+		require.Equal(s.T(), uint(number), NewNumber(n).GetUintOrDefault(uint(rand.Uint64())))
 	}
 }
 
@@ -56,9 +53,9 @@ func (s *numberSuite) TestUint() {
 		uint64(number),
 		uint(number),
 	} {
-		s.Equal(float64(number), NewNumber(n).GetFloatOrDefault(rand.Float64()))
-		s.Equal(int(number), NewNumber(n).GetIntOrDefault(rand.Int()))
-		s.Equal(uint(number), NewNumber(n).GetUintOrDefault(uint(rand.Uint64())))
+		require.Equal(s.T(), float64(number), NewNumber(n).GetFloatOrDefault(rand.Float64()))
+		require.Equal(s.T(), int(number), NewNumber(n).GetIntOrDefault(rand.Int()))
+		require.Equal(s.T(), uint(number), NewNumber(n).GetUintOrDefault(uint(rand.Uint64())))
 	}
 }
 
@@ -68,8 +65,8 @@ func (s *numberSuite) TestFloat() {
 		float32(number),
 		float64(number),
 	} {
-		s.Equal(float64(number), NewNumber(n).GetFloatOrDefault(rand.Float64()))
-		s.Equal(int(number), NewNumber(n).GetIntOrDefault(rand.Int()))
-		s.Equal(uint(number), NewNumber(n).GetUintOrDefault(uint(rand.Uint64())))
+		require.Equal(s.T(), float64(number), NewNumber(n).GetFloatOrDefault(rand.Float64()))
+		require.Equal(s.T(), int(number), NewNumber(n).GetIntOrDefault(rand.Int()))
+		require.Equal(s.T(), uint(number), NewNumber(n).GetUintOrDefault(uint(rand.Uint64())))
 	}
 }

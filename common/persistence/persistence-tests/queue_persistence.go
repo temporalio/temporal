@@ -17,9 +17,8 @@ type (
 	// QueuePersistenceSuite contains queue persistence tests
 	QueuePersistenceSuite struct {
 		*TestBase
-		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
+		// override suite.Suite.Assertions with require.Assertions; this means that require.NotNil(s.T(), nil) will stop the test,
 		// not merely log an error
-		*require.Assertions
 
 		ctx    context.Context
 		cancel context.CancelFunc
@@ -27,13 +26,12 @@ type (
 )
 
 // SetupSuite implementation
-func (s *QueuePersistenceSuite) SetupSuite() {
-}
+
 
 // SetupTest implementation
 func (s *QueuePersistenceSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
+
 	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 }
 
@@ -77,7 +75,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 			for message := range messageChan {
 				err := s.Publish(s.ctx, message)
 				id := message.Attributes.(*replicationspb.ReplicationTask_NamespaceTaskAttributes).NamespaceTaskAttributes.Id
-				s.Nil(err, "Enqueue message failed when sender %d tried to send %s", senderNum, id)
+				require.Nil(s.T(), err, "Enqueue message failed when sender %d tried to send %s", senderNum, id)
 			}
 		}(i)
 	}
@@ -85,9 +83,9 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 	wg.Wait()
 
 	result, lastRetrievedMessageID, err := s.GetReplicationMessages(s.ctx, persistence.EmptyQueueMessageID, numMessages)
-	s.Nil(err, "GetReplicationMessages failed.")
-	s.Len(result, numMessages)
-	s.Equal(int64(numMessages-1), lastRetrievedMessageID)
+	require.Nil(s.T(), err, "GetReplicationMessages failed.")
+	require.Len(s.T(), result, numMessages)
+	require.Equal(s.T(), int64(numMessages-1), lastRetrievedMessageID)
 }
 
 // TestQueueMetadataOperations tests queue metadata operations
@@ -154,7 +152,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 			for message := range messageChan {
 				err := s.PublishToNamespaceDLQ(s.ctx, message)
 				id := message.Attributes.(*replicationspb.ReplicationTask_NamespaceTaskAttributes).NamespaceTaskAttributes.Id
-				s.Nil(err, "Enqueue message failed when sender %d tried to send %s", senderNum, id)
+				require.Nil(s.T(), err, "Enqueue message failed when sender %d tried to send %s", senderNum, id)
 			}
 		}(i)
 	}
@@ -162,49 +160,49 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 	wg.Wait()
 
 	result1, token, err := s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, maxMessageID, numMessages/2, nil)
-	s.Nil(err, "GetReplicationMessages failed.")
-	s.NotNil(token)
+	require.Nil(s.T(), err, "GetReplicationMessages failed.")
+	require.NotNil(s.T(), token)
 	result2, token, err := s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)
-	s.Nil(err, "GetReplicationMessages failed.")
-	s.Equal(len(token), 0)
-	s.Equal(len(result1)+len(result2), numMessages)
+	require.Nil(s.T(), err, "GetReplicationMessages failed.")
+	require.Equal(s.T(), len(token), 0)
+	require.Equal(s.T(), len(result1)+len(result2), numMessages)
 	_, _, err = s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, 1<<63-1, numMessages, nil)
-	s.NoError(err, "GetReplicationMessages failed.")
-	s.Equal(len(token), 0)
+	require.NoError(s.T(), err, "GetReplicationMessages failed.")
+	require.Equal(s.T(), len(token), 0)
 
 	lastMessageID := result2[len(result2)-1].SourceTaskId
 	err = s.DeleteMessageFromNamespaceDLQ(s.ctx, lastMessageID)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	result3, token, err := s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)
-	s.Nil(err, "GetReplicationMessages failed.")
-	s.Equal(len(token), 0)
-	s.Equal(len(result3), numMessages-1)
+	require.Nil(s.T(), err, "GetReplicationMessages failed.")
+	require.Equal(s.T(), len(token), 0)
+	require.Equal(s.T(), len(result3), numMessages-1)
 
 	err = s.RangeDeleteMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, lastMessageID)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	result4, token, err := s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)
-	s.Nil(err, "GetReplicationMessages failed.")
-	s.Equal(len(token), 0)
-	s.Equal(len(result4), 0)
+	require.Nil(s.T(), err, "GetReplicationMessages failed.")
+	require.Equal(s.T(), len(token), 0)
+	require.Equal(s.T(), len(result4), 0)
 }
 
 // TestNamespaceDLQMetadataOperations tests queue metadata operations
 func (s *QueuePersistenceSuite) TestNamespaceDLQMetadataOperations() {
 	ackLevel, err := s.GetNamespaceDLQAckLevel(s.ctx)
 	s.Require().NoError(err)
-	s.Equal(persistence.EmptyQueueMessageID, ackLevel)
+	require.Equal(s.T(), persistence.EmptyQueueMessageID, ackLevel)
 
 	err = s.UpdateNamespaceDLQAckLevel(s.ctx, 10)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	ackLevel, err = s.GetNamespaceDLQAckLevel(s.ctx)
 	s.Require().NoError(err)
-	s.Equal(int64(10), ackLevel)
+	require.Equal(s.T(), int64(10), ackLevel)
 
 	err = s.UpdateNamespaceDLQAckLevel(s.ctx, 1)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	ackLevel, err = s.GetNamespaceDLQAckLevel(s.ctx)
 	s.Require().NoError(err)
-	s.Equal(int64(10), ackLevel)
+	require.Equal(s.T(), int64(10), ackLevel)
 }

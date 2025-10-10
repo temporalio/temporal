@@ -17,7 +17,6 @@ import (
 type (
 	connectionSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		factory *sql.Factory
 	}
@@ -28,22 +27,18 @@ func newConnectionSuite(
 	factory *sql.Factory,
 ) *connectionSuite {
 	return &connectionSuite{
-		Assertions: require.New(t),
-		factory:    factory,
+
+		factory: factory,
 	}
 }
 
-func (s *connectionSuite) SetupSuite() {
 
-}
 
 func (s *connectionSuite) TearDownSuite() {
 
 }
 
-func (s *connectionSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *connectionSuite) TearDownTest() {
 
@@ -61,7 +56,7 @@ func (s *connectionSuite) TestClosedConnectionError() {
 	shardInfo := RandomShardInfo(shardID, rangeID)
 
 	store, err := s.factory.NewShardStore()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	store.Close() // Connection will be closed by this call
 	manager := p.NewShardManager(store, serialization.NewSerializer())
@@ -71,6 +66,6 @@ func (s *connectionSuite) TestClosedConnectionError() {
 		InitialShardInfo: shardInfo,
 	})
 
-	s.Nil(resp)
-	s.ErrorContains(err, sqlplugin.DatabaseUnavailableError.Error())
+	require.Nil(s.T(), resp)
+	require.ErrorContains(s.T(), err, sqlplugin.DatabaseUnavailableError.Error())
 }

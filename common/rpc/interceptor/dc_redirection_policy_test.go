@@ -19,7 +19,6 @@ import (
 type (
 	noopDCRedirectionPolicySuite struct {
 		suite.Suite
-		*require.Assertions
 
 		currentClusterName string
 		policy             *NoopRedirectionPolicy
@@ -27,7 +26,6 @@ type (
 
 	selectedAPIsForwardingRedirectionPolicySuite struct {
 		suite.Suite
-		*require.Assertions
 
 		controller          *gomock.Controller
 		mockClusterMetadata *cluster.MockMetadata
@@ -48,15 +46,13 @@ func TestNoopDCRedirectionPolicySuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *noopDCRedirectionPolicySuite) SetupSuite() {
-}
+
 
 func (s *noopDCRedirectionPolicySuite) TearDownSuite() {
 
 }
 
 func (s *noopDCRedirectionPolicySuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 
 	s.currentClusterName = cluster.TestCurrentClusterName
 	s.policy = NewNoopRedirectionPolicy(s.currentClusterName)
@@ -73,17 +69,17 @@ func (s *noopDCRedirectionPolicySuite) TestWithNamespaceRedirect() {
 	callCount := 0
 	callFn := func(targetCluster string) error {
 		callCount++
-		s.Equal(s.currentClusterName, targetCluster)
+		require.Equal(s.T(), s.currentClusterName, targetCluster)
 		return nil
 	}
 
 	err := s.policy.WithNamespaceIDRedirect(context.Background(), namespaceID, apiName, callFn)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
 	err = s.policy.WithNamespaceRedirect(context.Background(), namespaceName, apiName, callFn)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
-	s.Equal(2, callCount)
+	require.Equal(s.T(), 2, callCount)
 }
 
 func TestSelectedAPIsForwardingRedirectionPolicySuite(t *testing.T) {
@@ -91,15 +87,13 @@ func TestSelectedAPIsForwardingRedirectionPolicySuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupSuite() {
-}
+
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TearDownSuite() {
 
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
@@ -129,17 +123,17 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 	callCount := 0
 	callFn := func(targetCluster string) error {
 		callCount++
-		s.Equal(s.currentClusterName, targetCluster)
+		require.Equal(s.T(), s.currentClusterName, targetCluster)
 		return nil
 	}
 
 	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
 	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
-	s.Equal(2, callCount)
+	require.Equal(s.T(), 2, callCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_OneReplicationCluster() {
@@ -149,17 +143,17 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 	callCount := 0
 	callFn := func(targetCluster string) error {
 		callCount++
-		s.Equal(s.currentClusterName, targetCluster)
+		require.Equal(s.T(), s.currentClusterName, targetCluster)
 		return nil
 	}
 
 	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
 	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
-	s.Equal(2, callCount)
+	require.Equal(s.T(), 2, callCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_NoForwarding_NamespaceNotWhiltelisted() {
@@ -169,17 +163,17 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 	callCount := 0
 	callFn := func(targetCluster string) error {
 		callCount++
-		s.Equal(s.currentClusterName, targetCluster)
+		require.Equal(s.T(), s.currentClusterName, targetCluster)
 		return nil
 	}
 
 	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
 	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
-	s.Equal(2, callCount)
+	require.Equal(s.T(), 2, callCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_NoForwarding_APINotWhiltelisted() {
@@ -188,19 +182,19 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 	callCount := 0
 	callFn := func(targetCluster string) error {
 		callCount++
-		s.Equal(s.currentClusterName, targetCluster)
+		require.Equal(s.T(), s.currentClusterName, targetCluster)
 		return nil
 	}
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
-		s.Nil(err)
+		require.Nil(s.T(), err)
 
 		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
-		s.Nil(err)
+		require.Nil(s.T(), err)
 	}
 
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
+	require.Equal(s.T(), 2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_CurrentCluster() {
@@ -209,19 +203,19 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	callCount := 0
 	callFn := func(targetCluster string) error {
 		callCount++
-		s.Equal(s.currentClusterName, targetCluster)
+		require.Equal(s.T(), s.currentClusterName, targetCluster)
 		return nil
 	}
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
-		s.Nil(err)
+		require.Nil(s.T(), err)
 
 		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
-		s.Nil(err)
+		require.Nil(s.T(), err)
 	}
 
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
+	require.Equal(s.T(), 2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_AlternativeCluster() {
@@ -230,19 +224,19 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	callCount := 0
 	callFn := func(targetCluster string) error {
 		callCount++
-		s.Equal(s.alternativeClusterName, targetCluster)
+		require.Equal(s.T(), s.alternativeClusterName, targetCluster)
 		return nil
 	}
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
-		s.Nil(err)
+		require.Nil(s.T(), err)
 
 		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
-		s.Nil(err)
+		require.Nil(s.T(), err)
 	}
 
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
+	require.Equal(s.T(), 2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_OneCluster() {
@@ -296,13 +290,13 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 					api = api + "_notwhitelisted"
 				}
 				err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, api, callFn)
-				s.Nil(err)
+				require.Nil(s.T(), err)
 
 				err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, api, callFn)
-				s.Nil(err)
+				require.Nil(s.T(), err)
 			}
 
-			s.Equal(tc.expectedCallCount, callCountByCluster)
+			require.Equal(s.T(), tc.expectedCallCount, callCountByCluster)
 		})
 	}
 }
@@ -327,14 +321,14 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
-		s.Nil(err)
+		require.Nil(s.T(), err)
 
 		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
-		s.Nil(err)
+		require.Nil(s.T(), err)
 	}
 
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), currentClustercallCount)
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), alternativeClustercallCount)
+	require.Equal(s.T(), 2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), currentClustercallCount)
+	require.Equal(s.T(), 2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), alternativeClustercallCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_AlternativeClusterToCurrentCluster() {
@@ -357,14 +351,14 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
-		s.Nil(err)
+		require.Nil(s.T(), err)
 
 		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
-		s.Nil(err)
+		require.Nil(s.T(), err)
 	}
 
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), currentClustercallCount)
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), alternativeClustercallCount)
+	require.Equal(s.T(), 2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), currentClustercallCount)
+	require.Equal(s.T(), 2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), alternativeClustercallCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_AlternativeClusterToCurrentCluster_AllAPIs() {
@@ -388,13 +382,13 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 
 	apiName := "NotExistRandomAPI"
 	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
 	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
-	s.Equal(2, currentClustercallCount)
-	s.Equal(2, alternativeClustercallCount)
+	require.Equal(s.T(), 2, currentClustercallCount)
+	require.Equal(s.T(), 2, alternativeClustercallCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalNamespace() {

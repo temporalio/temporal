@@ -11,7 +11,6 @@ import (
 
 type (
 	HeadersSuite struct {
-		*require.Assertions
 		suite.Suite
 	}
 )
@@ -20,9 +19,7 @@ func TestHeadersSuite(t *testing.T) {
 	suite.Run(t, &HeadersSuite{})
 }
 
-func (s *HeadersSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *HeadersSuite) TestPropagate_CreateNewOutgoingContext() {
 	ctx := context.Background()
@@ -36,12 +33,12 @@ func (s *HeadersSuite) TestPropagate_CreateNewOutgoingContext() {
 	ctx = Propagate(ctx)
 
 	md, ok := metadata.FromOutgoingContext(ctx)
-	s.True(ok)
+	require.True(s.T(), ok)
 
-	s.Equal("22.08.78", md.Get(ClientVersionHeaderName)[0])
-	s.Equal(">21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
-	s.Equal("28.08.14", md.Get(ClientNameHeaderName)[0])
-	s.Equal("my-feature", md.Get(SupportedFeaturesHeaderName)[0])
+	require.Equal(s.T(), "22.08.78", md.Get(ClientVersionHeaderName)[0])
+	require.Equal(s.T(), ">21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
+	require.Equal(s.T(), "28.08.14", md.Get(ClientNameHeaderName)[0])
+	require.Equal(s.T(), "my-feature", md.Get(SupportedFeaturesHeaderName)[0])
 }
 
 func (s *HeadersSuite) TestPropagate_CreateNewOutgoingContext_SomeMissing() {
@@ -54,12 +51,12 @@ func (s *HeadersSuite) TestPropagate_CreateNewOutgoingContext_SomeMissing() {
 	ctx = Propagate(ctx)
 
 	md, ok := metadata.FromOutgoingContext(ctx)
-	s.True(ok)
+	require.True(s.T(), ok)
 
-	s.Equal("22.08.78", md.Get(ClientVersionHeaderName)[0])
-	s.Equal(0, len(md.Get(SupportedServerVersionsHeaderName)))
-	s.Equal("28.08.14", md.Get(ClientNameHeaderName)[0])
-	s.Equal(0, len(md.Get(SupportedFeaturesHeaderName)))
+	require.Equal(s.T(), "22.08.78", md.Get(ClientVersionHeaderName)[0])
+	require.Equal(s.T(), 0, len(md.Get(SupportedServerVersionsHeaderName)))
+	require.Equal(s.T(), "28.08.14", md.Get(ClientNameHeaderName)[0])
+	require.Equal(s.T(), 0, len(md.Get(SupportedFeaturesHeaderName)))
 }
 
 func (s *HeadersSuite) TestPropagate_UpdateExistingEmptyOutgoingContext() {
@@ -76,12 +73,12 @@ func (s *HeadersSuite) TestPropagate_UpdateExistingEmptyOutgoingContext() {
 	ctx = Propagate(ctx)
 
 	md, ok := metadata.FromOutgoingContext(ctx)
-	s.True(ok)
+	require.True(s.T(), ok)
 
-	s.Equal("22.08.78", md.Get(ClientVersionHeaderName)[0])
-	s.Equal("<21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
-	s.Equal("28.08.14", md.Get(ClientNameHeaderName)[0])
-	s.Equal("my-feature", md.Get(SupportedFeaturesHeaderName)[0])
+	require.Equal(s.T(), "22.08.78", md.Get(ClientVersionHeaderName)[0])
+	require.Equal(s.T(), "<21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
+	require.Equal(s.T(), "28.08.14", md.Get(ClientNameHeaderName)[0])
+	require.Equal(s.T(), "my-feature", md.Get(SupportedFeaturesHeaderName)[0])
 }
 
 func (s *HeadersSuite) TestPropagate_UpdateExistingNonEmptyOutgoingContext() {
@@ -101,12 +98,12 @@ func (s *HeadersSuite) TestPropagate_UpdateExistingNonEmptyOutgoingContext() {
 	ctx = Propagate(ctx)
 
 	md, ok := metadata.FromOutgoingContext(ctx)
-	s.True(ok)
+	require.True(s.T(), ok)
 
-	s.Equal("22.08.78", md.Get(ClientVersionHeaderName)[0])
-	s.Equal("<21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
-	s.Equal("28.08.14", md.Get(ClientNameHeaderName)[0])
-	s.Equal("my-feature", md.Get(SupportedFeaturesHeaderName)[0])
+	require.Equal(s.T(), "22.08.78", md.Get(ClientVersionHeaderName)[0])
+	require.Equal(s.T(), "<21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
+	require.Equal(s.T(), "28.08.14", md.Get(ClientNameHeaderName)[0])
+	require.Equal(s.T(), "my-feature", md.Get(SupportedFeaturesHeaderName)[0])
 }
 
 func (s *HeadersSuite) TestPropagate_EmptyIncomingContext() {
@@ -121,9 +118,9 @@ func (s *HeadersSuite) TestPropagate_EmptyIncomingContext() {
 	ctx = Propagate(ctx)
 
 	md, ok := metadata.FromOutgoingContext(ctx)
-	s.True(ok)
+	require.True(s.T(), ok)
 
-	s.Equal("22.08.78", md.Get(ClientVersionHeaderName)[0])
-	s.Equal("<21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
-	s.Equal("28.08.14", md.Get(ClientNameHeaderName)[0])
+	require.Equal(s.T(), "22.08.78", md.Get(ClientVersionHeaderName)[0])
+	require.Equal(s.T(), "<21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
+	require.Equal(s.T(), "28.08.14", md.Get(ClientNameHeaderName)[0])
 }

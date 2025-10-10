@@ -11,7 +11,6 @@ import (
 
 type (
 	conditionVariableSuite struct {
-		*require.Assertions
 		suite.Suite
 
 		lock sync.Locker
@@ -24,9 +23,7 @@ func TestConditionVariableSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *conditionVariableSuite) SetupSuite() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *conditionVariableSuite) TearDownSuite() {
 }
@@ -57,12 +54,12 @@ func (s *conditionVariableSuite) testChannelSize(
 	case channel <- struct{}{}:
 		// noop
 	default:
-		s.Fail("conditional variable size should be 1")
+		require.Fail(s.T(), "conditional variable size should be 1")
 	}
 
 	select {
 	case channel <- struct{}{}:
-		s.Fail("conditional variable size should be 1")
+		require.Fail(s.T(), "conditional variable size should be 1")
 	default:
 		// noop
 	}

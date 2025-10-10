@@ -14,7 +14,6 @@ import (
 type (
 	QueryInterceptorSuite struct {
 		suite.Suite
-		*require.Assertions
 		controller *gomock.Controller
 	}
 )
@@ -24,7 +23,7 @@ func TestQueryInterceptorSuite(t *testing.T) {
 }
 
 func (s *QueryInterceptorSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.controller = gomock.NewController(s.T())
 }
 
@@ -60,12 +59,12 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 	for i, testCase := range cases {
 		v, err := vi.Values(testCase.key, testCase.key, testCase.value)
 		if expected[i].returnErr {
-			s.Error(err)
+			require.Error(s.T(), err)
 			continue
 		}
-		s.NoError(err)
-		s.Len(v, 1)
-		s.Equal(expected[i].value, v[0])
+		require.NoError(s.T(), err)
+		require.Len(s.T(), v, 1)
+		require.Equal(s.T(), expected[i].value, v[0])
 	}
 }
 
@@ -103,12 +102,12 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 	for i, testCase := range cases {
 		v, err := vi.Values(testCase.key, testCase.key, testCase.value)
 		if expected[i].returnErr {
-			s.Error(err)
+			require.Error(s.T(), err)
 			continue
 		}
-		s.NoError(err)
-		s.Len(v, 1)
-		s.Equal(expected[i].value, v[0])
+		require.NoError(s.T(), err)
+		require.Len(s.T(), v, 1)
+		require.Equal(s.T(), expected[i].value, v[0])
 	}
 }
 
@@ -146,14 +145,14 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 	for i, testCase := range cases {
 		v, err := vi.Values(testCase.key, testCase.key, testCase.value)
 		if expected[i].returnErr {
-			s.Error(err)
+			require.Error(s.T(), err)
 			var converterErr *query.ConverterError
-			s.ErrorAs(err, &converterErr)
+			require.ErrorAs(s.T(), err, &converterErr)
 			continue
 		}
-		s.NoError(err)
-		s.Len(v, 1)
-		s.Equal(expected[i].value, v[0])
+		require.NoError(s.T(), err)
+		require.Len(s.T(), v, 1)
+		require.Equal(s.T(), expected[i].value, v[0])
 	}
 }
 
@@ -162,8 +161,8 @@ func (s *QueryInterceptorSuite) TestNameInterceptor_ScheduleIDToWorkflowID() {
 	ni := s.createMockNameInterceptor(nil)
 
 	fieldName, err := ni.Name(searchattribute.ScheduleID, query.FieldNameFilter)
-	s.NoError(err)
-	s.Equal(searchattribute.WorkflowID, fieldName)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), searchattribute.WorkflowID, fieldName)
 }
 
 // Ensures the valuesInterceptor applies the ScheduleID to WorkflowID transformation,
@@ -175,18 +174,18 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 	)
 
 	values, err := vi.Values(searchattribute.ScheduleID, searchattribute.WorkflowID, "test-schedule-id")
-	s.NoError(err)
-	s.Len(values, 1)
-	s.Equal(primitives.ScheduleWorkflowIDPrefix+"test-schedule-id", values[0])
+	require.NoError(s.T(), err)
+	require.Len(s.T(), values, 1)
+	require.Equal(s.T(), primitives.ScheduleWorkflowIDPrefix+"test-schedule-id", values[0])
 
 	values, err = vi.Values(searchattribute.ScheduleID,
 		searchattribute.WorkflowID,
 		"test-schedule-id-1",
 		"test-schedule-id-2")
-	s.NoError(err)
-	s.Len(values, 2)
-	s.Equal(primitives.ScheduleWorkflowIDPrefix+"test-schedule-id-1", values[0])
-	s.Equal(primitives.ScheduleWorkflowIDPrefix+"test-schedule-id-2", values[1])
+	require.NoError(s.T(), err)
+	require.Len(s.T(), values, 2)
+	require.Equal(s.T(), primitives.ScheduleWorkflowIDPrefix+"test-schedule-id-1", values[0])
+	require.Equal(s.T(), primitives.ScheduleWorkflowIDPrefix+"test-schedule-id-2", values[1])
 }
 
 // Ensures the valuesInterceptor doesn't modify values when no transformation is needed.
@@ -197,18 +196,18 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
 	)
 
 	values, err := vi.Values(searchattribute.ScheduleID, searchattribute.ScheduleID, "test-workflow-id")
-	s.NoError(err)
-	s.Len(values, 1)
-	s.Equal("test-workflow-id", values[0])
+	require.NoError(s.T(), err)
+	require.Len(s.T(), values, 1)
+	require.Equal(s.T(), "test-workflow-id", values[0])
 
 	values, err = vi.Values(searchattribute.ScheduleID,
 		searchattribute.ScheduleID,
 		"test-workflow-id-1",
 		"test-workflow-id-2")
-	s.NoError(err)
-	s.Len(values, 2)
-	s.Equal("test-workflow-id-1", values[0])
-	s.Equal("test-workflow-id-2", values[1])
+	require.NoError(s.T(), err)
+	require.Len(s.T(), values, 2)
+	require.Equal(s.T(), "test-workflow-id-1", values[0])
+	require.Equal(s.T(), "test-workflow-id-2", values[1])
 }
 
 func (s *QueryInterceptorSuite) createMockNameInterceptor(mapper searchattribute.Mapper) *nameInterceptor {

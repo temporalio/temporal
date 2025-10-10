@@ -13,7 +13,6 @@ import (
 type (
 	historyHistoryReplicationDLQTaskSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		store sqlplugin.HistoryReplicationDLQTask
 	}
@@ -34,22 +33,18 @@ func NewHistoryReplicationDLQTaskSuite(
 	store sqlplugin.HistoryReplicationDLQTask,
 ) *historyHistoryReplicationDLQTaskSuite {
 	return &historyHistoryReplicationDLQTaskSuite{
-		Assertions: require.New(t),
-		store:      store,
+
+		store: store,
 	}
 }
 
-func (s *historyHistoryReplicationDLQTaskSuite) SetupSuite() {
 
-}
 
 func (s *historyHistoryReplicationDLQTaskSuite) TearDownSuite() {
 
 }
 
-func (s *historyHistoryReplicationDLQTaskSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *historyHistoryReplicationDLQTaskSuite) TearDownTest() {
 
@@ -62,10 +57,10 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsert_Single_Success() {
 
 	task := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
 	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *historyHistoryReplicationDLQTaskSuite) TestInsert_Multiple_Success() {
@@ -77,10 +72,10 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsert_Multiple_Success() {
 	taskID++
 	task2 := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
 	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task1, task2})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(2, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, int(rowsAffected))
 }
 
 func (s *historyHistoryReplicationDLQTaskSuite) TestInsert_Single_Fail_Duplicate() {
@@ -90,14 +85,14 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsert_Single_Fail_Duplicate
 
 	task := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
 	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	task = s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
 	_, err = s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task})
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *historyHistoryReplicationDLQTaskSuite) TestInsert_Multiple_Fail_Duplicate() {
@@ -109,16 +104,16 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsert_Multiple_Fail_Duplica
 	taskID++
 	task2 := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
 	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task1, task2})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(2, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, int(rowsAffected))
 
 	task2 = s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
 	taskID++
 	task3 := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
 	_, err = s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task2, task3})
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *historyHistoryReplicationDLQTaskSuite) TestInsertSelect_Single() {
@@ -128,10 +123,10 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertSelect_Single() {
 
 	task := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
 	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	rangeFilter := sqlplugin.ReplicationDLQTasksRangeFilter{
 		ShardID:            shardID,
@@ -141,12 +136,12 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertSelect_Single() {
 		PageSize:           1,
 	}
 	rows, err := s.store.RangeSelectFromReplicationDLQTasks(newExecutionContext(), rangeFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].ShardID = shardID
 		rows[index].SourceClusterName = sourceCluster
 	}
-	s.Equal([]sqlplugin.ReplicationDLQTasksRow{task}, rows)
+	require.Equal(s.T(), []sqlplugin.ReplicationDLQTasksRow{task}, rows)
 }
 
 func (s *historyHistoryReplicationDLQTaskSuite) TestInsertSelect_Multiple() {
@@ -166,10 +161,10 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertSelect_Multiple() {
 		tasks = append(tasks, task)
 	}
 	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), tasks)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numTasks, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numTasks, int(rowsAffected))
 
 	filter := sqlplugin.ReplicationDLQTasksRangeFilter{
 		ShardID:            shardID,
@@ -179,12 +174,12 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertSelect_Multiple() {
 		PageSize:           pageSize,
 	}
 	rows, err := s.store.RangeSelectFromReplicationDLQTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].ShardID = shardID
 		rows[index].SourceClusterName = sourceCluster
 	}
-	s.Equal(tasks, rows)
+	require.Equal(s.T(), tasks, rows)
 }
 
 func (s *historyHistoryReplicationDLQTaskSuite) TestDeleteSelect_Single() {
@@ -198,10 +193,10 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestDeleteSelect_Single() {
 		TaskID:            taskID,
 	}
 	result, err := s.store.DeleteFromReplicationDLQTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	rangeFilter := sqlplugin.ReplicationDLQTasksRangeFilter{
 		ShardID:            shardID,
@@ -211,12 +206,12 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestDeleteSelect_Single() {
 		PageSize:           1,
 	}
 	rows, err := s.store.RangeSelectFromReplicationDLQTasks(newExecutionContext(), rangeFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].ShardID = shardID
 		rows[index].SourceClusterName = sourceCluster
 	}
-	s.Equal([]sqlplugin.ReplicationDLQTasksRow(nil), rows)
+	require.Equal(s.T(), []sqlplugin.ReplicationDLQTasksRow(nil), rows)
 }
 
 func (s *historyHistoryReplicationDLQTaskSuite) TestDeleteSelect_Multiple() {
@@ -233,18 +228,18 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestDeleteSelect_Multiple() {
 		PageSize:           0,
 	}
 	result, err := s.store.RangeDeleteFromReplicationDLQTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	rows, err := s.store.RangeSelectFromReplicationDLQTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].ShardID = shardID
 		rows[index].SourceClusterName = sourceCluster
 	}
-	s.Equal([]sqlplugin.ReplicationDLQTasksRow(nil), rows)
+	require.Equal(s.T(), []sqlplugin.ReplicationDLQTasksRow(nil), rows)
 }
 
 func (s *historyHistoryReplicationDLQTaskSuite) TestInsertDeleteSelect_Single() {
@@ -254,10 +249,10 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertDeleteSelect_Single() 
 
 	task := s.newRandomReplicationTasksDLQRow(sourceCluster, shardID, taskID)
 	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), []sqlplugin.ReplicationDLQTasksRow{task})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.ReplicationDLQTasksFilter{
 		ShardID:           shardID,
@@ -265,10 +260,10 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertDeleteSelect_Single() 
 		TaskID:            taskID,
 	}
 	result, err = s.store.DeleteFromReplicationDLQTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	rangeFilter := sqlplugin.ReplicationDLQTasksRangeFilter{
 		ShardID:            shardID,
@@ -278,12 +273,12 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertDeleteSelect_Single() 
 		PageSize:           1,
 	}
 	rows, err := s.store.RangeSelectFromReplicationDLQTasks(newExecutionContext(), rangeFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].ShardID = shardID
 		rows[index].SourceClusterName = sourceCluster
 	}
-	s.Equal([]sqlplugin.ReplicationDLQTasksRow(nil), rows)
+	require.Equal(s.T(), []sqlplugin.ReplicationDLQTasksRow(nil), rows)
 }
 
 func (s *historyHistoryReplicationDLQTaskSuite) TestInsertDeleteSelect_Multiple() {
@@ -303,10 +298,10 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertDeleteSelect_Multiple(
 		tasks = append(tasks, task)
 	}
 	result, err := s.store.InsertIntoReplicationDLQTasks(newExecutionContext(), tasks)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numTasks, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numTasks, int(rowsAffected))
 
 	filter := sqlplugin.ReplicationDLQTasksRangeFilter{
 		ShardID:            shardID,
@@ -316,18 +311,18 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertDeleteSelect_Multiple(
 		PageSize:           pageSize,
 	}
 	result, err = s.store.RangeDeleteFromReplicationDLQTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numTasks, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numTasks, int(rowsAffected))
 
 	rows, err := s.store.RangeSelectFromReplicationDLQTasks(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].ShardID = shardID
 		rows[index].SourceClusterName = sourceCluster
 	}
-	s.Equal([]sqlplugin.ReplicationDLQTasksRow(nil), rows)
+	require.Equal(s.T(), []sqlplugin.ReplicationDLQTasksRow(nil), rows)
 }
 
 func (s *historyHistoryReplicationDLQTaskSuite) newRandomReplicationTasksDLQRow(

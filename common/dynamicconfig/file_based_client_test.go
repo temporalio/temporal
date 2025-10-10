@@ -19,7 +19,6 @@ import (
 // provided from a file.
 type fileBasedClientSuite struct {
 	suite.Suite
-	*require.Assertions
 	client     dynamicconfig.Client
 	collection *dynamicconfig.Collection
 	doneCh     chan interface{}
@@ -49,14 +48,13 @@ func (s *fileBasedClientSuite) TearDownSuite() {
 }
 
 func (s *fileBasedClientSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 	dynamicconfig.ResetRegistryForTest()
 }
 
 func (s *fileBasedClientSuite) TestGetValue() {
 	cvs := s.client.GetValue(testGetBoolPropertyKey)
-	s.Equal(3, len(cvs))
-	s.ElementsMatch([]dynamicconfig.ConstrainedValue{
+	require.Equal(s.T(), 3, len(cvs))
+	require.ElementsMatch(s.T(), []dynamicconfig.ConstrainedValue{
 		{Constraints: dynamicconfig.Constraints{}, Value: false},
 		{Constraints: dynamicconfig.Constraints{Namespace: "global-samples-namespace"}, Value: true},
 		{Constraints: dynamicconfig.Constraints{Namespace: "samples-namespace"}, Value: true},
@@ -65,42 +63,42 @@ func (s *fileBasedClientSuite) TestGetValue() {
 
 func (s *fileBasedClientSuite) TestGetValue_NonExistKey() {
 	cvs := s.client.GetValue(unknownKey)
-	s.Nil(cvs)
+	require.Nil(s.T(), cvs)
 
 	defaultValue := true
 	v := dynamicconfig.NewGlobalBoolSetting(unknownKey, defaultValue, "").Get(s.collection)()
-	s.Equal(defaultValue, v)
+	require.Equal(s.T(), defaultValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetValue_CaseInsensitie() {
 	cvs := s.client.GetValue(testCaseInsensitivePropertyKey)
-	s.Equal(1, len(cvs))
+	require.Equal(s.T(), 1, len(cvs))
 
 	v := dynamicconfig.NewGlobalBoolSetting(testCaseInsensitivePropertyKey, false, "").Get(s.collection)()
-	s.Equal(true, v)
+	require.Equal(s.T(), true, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue() {
 	v := dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 1, "").Get(s.collection)()
-	s.Equal(1000, v)
+	require.Equal(s.T(), 1000, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterNotMatch() {
 	v := dynamicconfig.NewNamespaceIntSetting(testGetIntPropertyKey, 500, "").Get(s.collection)("samples-namespace")
-	s.Equal(1000, v)
+	require.Equal(s.T(), 1000, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_WrongType() {
 	defaultValue := 2000
 	v := dynamicconfig.NewNamespaceIntSetting(testGetIntPropertyKey, defaultValue, "").Get(s.collection)("global-samples-namespace")
-	s.Equal(defaultValue, v)
+	require.Equal(s.T(), defaultValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByWorkflowTaskQueueInfo() {
 	expectedValue := 1001
 	v := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 0, "").Get(s.collection)(
 		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.Equal(expectedValue, v)
+	require.Equal(s.T(), expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByNoTaskTypeQueueInfo() {
@@ -109,31 +107,31 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilteredByNoTaskTypeQueueInfo() {
 		// this is contrived, but simulates something that doesn't match workflow or activity
 		"global-samples-namespace", "test-tq", enumspb.TaskQueueType(3),
 	)
-	s.Equal(expectedValue, v)
+	require.Equal(s.T(), expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByActivityTaskQueueInfo() {
 	expectedValue := 1002
 	v := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 0, "").Get(s.collection)(
 		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	s.Equal(expectedValue, v)
+	require.Equal(s.T(), expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByTaskQueueNameOnly() {
 	expectedValue := 1005
 	v := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 0, "").Get(s.collection)(
 		"some-other-namespace", "other-test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.Equal(expectedValue, v)
+	require.Equal(s.T(), expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_NamespaceOnly() {
 	expectedValue := 1004
 	setting := dynamicconfig.NewTaskQueueIntSetting(testGetIntPropertyKey, 0, "")
 	v := setting.Get(s.collection)("another-namespace", "test-tq", 0)
-	s.Equal(expectedValue, v)
+	require.Equal(s.T(), expectedValue, v)
 	expectedValue = 1005
 	v = setting.Get(s.collection)("another-namespace", "other-test-tq", 0)
-	s.Equal(expectedValue, v)
+	require.Equal(s.T(), expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchFallback() {
@@ -143,37 +141,37 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchFallback() {
 		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	v2 := setting.WithDefault(0).Get(s.collection)(
 		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.Equal(v1, v2)
+	require.Equal(s.T(), v1, v2)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterByDestination() {
 	dc := dynamicconfig.NewDestinationIntSetting(testGetIntPropertyFilteredByDestinationKey, 5, "").Get(s.collection)
-	s.Equal(10, dc("foo", "bar"))
-	s.Equal(20, dc("test-namespace", "test-destination-1"))
-	s.Equal(30, dc("test-namespace", "random-destination"))
-	s.Equal(40, dc("random-namespace", "test-destination-1"))
-	s.Equal(50, dc("test-namespace", "test-destination-2"))
+	require.Equal(s.T(), 10, dc("foo", "bar"))
+	require.Equal(s.T(), 20, dc("test-namespace", "test-destination-1"))
+	require.Equal(s.T(), 30, dc("test-namespace", "random-destination"))
+	require.Equal(s.T(), 40, dc("random-namespace", "test-destination-1"))
+	require.Equal(s.T(), 50, dc("test-namespace", "test-destination-2"))
 }
 
 func (s *fileBasedClientSuite) TestGetFloatValue() {
 	v := dynamicconfig.NewGlobalFloatSetting(testGetFloat64PropertyKey, 1, "").Get(s.collection)()
-	s.Equal(12.0, v)
+	require.Equal(s.T(), 12.0, v)
 }
 
 func (s *fileBasedClientSuite) TestGetFloatValue_WrongType() {
 	defaultValue := 1.0
 	v := dynamicconfig.NewNamespaceFloatSetting(testGetFloat64PropertyKey, defaultValue, "").Get(s.collection)("samples-namespace")
-	s.Equal(defaultValue, v)
+	require.Equal(s.T(), defaultValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetBoolValue() {
 	v := dynamicconfig.NewGlobalBoolSetting(testGetBoolPropertyKey, true, "").Get(s.collection)()
-	s.Equal(false, v)
+	require.Equal(s.T(), false, v)
 }
 
 func (s *fileBasedClientSuite) TestGetStringValue() {
 	v := dynamicconfig.NewNamespaceStringSetting(testGetStringPropertyKey, "defaultString", "").Get(s.collection)("random-namespace")
-	s.Equal("constrained-string", v)
+	require.Equal(s.T(), "constrained-string", v)
 }
 
 func (s *fileBasedClientSuite) TestGetMapValue() {
@@ -190,7 +188,7 @@ func (s *fileBasedClientSuite) TestGetMapValue() {
 			},
 		},
 	}
-	s.Equal(expectedVal, v)
+	require.Equal(s.T(), expectedVal, v)
 }
 
 func (s *fileBasedClientSuite) TestGetTypedValue() {
@@ -216,48 +214,48 @@ func (s *fileBasedClientSuite) TestGetTypedValue() {
 		},
 		UnsetInFile: "unset", // note this value comes from the default
 	}
-	s.Equal(expectedVal, v)
+	require.Equal(s.T(), expectedVal, v)
 }
 
 func (s *fileBasedClientSuite) TestGetMapValue_WrongType() {
 	var defaultVal map[string]interface{}
 	v := dynamicconfig.NewNamespaceMapSetting(testGetMapPropertyKey, defaultVal, "").Get(s.collection)("random-namespace")
-	s.Equal(defaultVal, v)
+	require.Equal(s.T(), defaultVal, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue() {
 	v := dynamicconfig.NewGlobalDurationSetting(testGetDurationPropertyKey, time.Second, "").Get(s.collection)()
-	s.Equal(time.Minute, v)
+	require.Equal(s.T(), time.Minute, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_DefaultSeconds() {
 	v := dynamicconfig.NewNamespaceDurationSetting(testGetDurationPropertyKey, time.Second, "").Get(s.collection)("samples-namespace")
-	s.Equal(2*time.Second, v)
+	require.Equal(s.T(), 2*time.Second, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_NotStringRepresentation() {
 	v := dynamicconfig.NewNamespaceDurationSetting(testGetDurationPropertyKey, time.Second, "").Get(s.collection)("broken-namespace")
-	s.Equal(time.Second, v)
+	require.Equal(s.T(), time.Second, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_ParseFailed() {
 	v := dynamicconfig.NewTaskQueueDurationSetting(testGetDurationPropertyKey, time.Second, "").Get(s.collection)(
 		"samples-namespace", "longIdleTimeTaskqueue", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.Equal(time.Second, v)
+	require.Equal(s.T(), time.Second, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_FilteredByTaskTypeQueue() {
 	expectedValue := time.Second * 10
 	setting := dynamicconfig.NewTaskTypeDurationSetting(testGetDurationPropertyFilteredByTaskTypeKey, 0, "")
 	v := setting.Get(s.collection)(enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER)
-	s.Equal(expectedValue, v)
+	require.Equal(s.T(), expectedValue, v)
 	v = setting.Get(s.collection)(enumsspb.TASK_TYPE_REPLICATION_HISTORY)
-	s.Equal(expectedValue, v)
+	require.Equal(s.T(), expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestValidateConfig_ConfigNotExist() {
 	_, err := dynamicconfig.NewFileBasedClient(nil, nil, nil)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *fileBasedClientSuite) TestValidateConfig_FileNotExist() {
@@ -265,7 +263,7 @@ func (s *fileBasedClientSuite) TestValidateConfig_FileNotExist() {
 		Filepath:     "file/not/exist.yaml",
 		PollInterval: time.Second * 10,
 	}, nil, nil)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *fileBasedClientSuite) TestValidateConfig_ShortPollInterval() {
@@ -273,7 +271,7 @@ func (s *fileBasedClientSuite) TestValidateConfig_ShortPollInterval() {
 		Filepath:     "config/testConfig.yaml",
 		PollInterval: time.Second,
 	}, nil, nil)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *fileBasedClientSuite) TestUpdate_ChangedValue() {
@@ -340,7 +338,7 @@ testGetBoolPropertyKey:
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
 		}, mockLogger, doneCh)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	c := dynamicconfig.NewCollection(client, mockLogger)
 	c.Start()
@@ -348,10 +346,10 @@ testGetBoolPropertyKey:
 
 	val1 := make(chan bool, 1)
 	initial1, cancel1 := sub("global-samples-namespace", func(n bool) { val1 <- n })
-	s.True(initial1)
+	require.True(s.T(), initial1)
 	val2 := make(chan bool, 1)
 	initial2, cancel2 := sub("other-namespace", func(n bool) { val2 <- n })
-	s.False(initial2)
+	require.False(s.T(), initial2)
 
 	reader.EXPECT().GetModTime().Return(updatedModTime, nil)
 	reader.EXPECT().ReadFile().Return(updatedFileData, nil)
@@ -361,10 +359,10 @@ testGetBoolPropertyKey:
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetboolpropertykey oldValue: { constraints: {} value: false } newValue: { constraints: {} value: true }", gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetboolpropertykey oldValue: { constraints: {{Namespace:global-samples-namespace}} value: true } newValue: { constraints: {{Namespace:global-samples-namespace}} value: false }", gomock.Any())
 	mockLogger.EXPECT().Info(gomock.Any())
-	s.NoError(client.Update())
+	require.NoError(s.T(), client.Update())
 
-	s.False(<-val1)
-	s.True(<-val2)
+	require.False(s.T(), <-val1)
+	require.True(s.T(), <-val2)
 	cancel1()
 	cancel2()
 	c.Stop()
@@ -412,15 +410,15 @@ history.fakeRetryPolicy:
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
 		}, mockLogger, s.doneCh)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	reader.EXPECT().GetModTime().Return(updatedModTime, nil)
 	reader.EXPECT().ReadFile().Return(updatedFileData, nil)
 
 	mockLogger.EXPECT().Info("dynamic config changed for the key: history.fakeretrypolicy oldValue: { constraints: {} value: map[BackoffCoefficient:3 InitialIntervalInSeconds:1 MaximumAttempts:0 MaximumIntervalCoefficient:100] } newValue: { constraints: {} value: map[BackoffCoefficient:2 InitialIntervalInSeconds:3 MaximumAttempts:0 MaximumIntervalCoefficient:100] }", gomock.Any())
 	mockLogger.EXPECT().Info(gomock.Any())
-	s.NoError(client.Update())
-	s.NoError(err)
+	require.NoError(s.T(), client.Update())
+	require.NoError(s.T(), err)
 	close(doneCh)
 }
 
@@ -467,7 +465,7 @@ testGetIntPropertyKey:
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
 		}, mockLogger, s.doneCh)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	reader.EXPECT().GetModTime().Return(updatedModTime, nil)
 	reader.EXPECT().ReadFile().Return(updatedFileData, nil)
@@ -475,8 +473,8 @@ testGetIntPropertyKey:
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetfloat64propertykey oldValue: nil newValue: { constraints: {{Namespace:samples-namespace}} value: 22 }", gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetintpropertykey oldValue: nil newValue: { constraints: {} value: 2000 }", gomock.Any())
 	mockLogger.EXPECT().Info(gomock.Any())
-	s.NoError(client.Update())
-	s.NoError(err)
+	require.NoError(s.T(), client.Update())
+	require.NoError(s.T(), err)
 	close(doneCh)
 }
 
@@ -529,14 +527,14 @@ testGetFloat64PropertyKey:
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
 		}, mockLogger, s.doneCh)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	reader.EXPECT().GetModTime().Return(updatedModTime, nil)
 	reader.EXPECT().ReadFile().Return(updatedFileData, nil)
 
 	mockLogger.EXPECT().Info(gomock.Any()).Times(1)
-	s.NoError(client.Update())
-	s.NoError(err)
+	require.NoError(s.T(), client.Update())
+	require.NoError(s.T(), err)
 	close(doneCh)
 }
 
@@ -549,9 +547,9 @@ testGetIntPropertyKey:
 testGetFloat64PropertyKey:
 - value: 22.222
 `))
-	s.Empty(lr.Errors)
-	s.Equal(1, len(lr.Warnings))
-	s.ErrorContains(lr.Warnings[0], `unregistered key "testGetFloat64PropertyKey"`)
+	require.Empty(s.T(), lr.Errors)
+	require.Equal(s.T(), 1, len(lr.Warnings))
+	require.ErrorContains(s.T(), lr.Warnings[0], `unregistered key "testGetFloat64PropertyKey"`)
 }
 
 func (s *fileBasedClientSuite) TestWarnValidationInt() {
@@ -561,9 +559,9 @@ func (s *fileBasedClientSuite) TestWarnValidationInt() {
 testGetIntPropertyKey:
 - value: not a number
 `))
-	s.Empty(lr.Errors)
-	s.Equal(1, len(lr.Warnings))
-	s.ErrorContains(lr.Warnings[0], `validation failed: key "testGetIntPropertyKey" value not a number: value type is not int`)
+	require.Empty(s.T(), lr.Errors)
+	require.Equal(s.T(), 1, len(lr.Warnings))
+	require.ErrorContains(s.T(), lr.Warnings[0], `validation failed: key "testGetIntPropertyKey" value not a number: value type is not int`)
 }
 
 func (s *fileBasedClientSuite) TestWarnConstraint() {
@@ -575,9 +573,9 @@ testGetIntPropertyKey:
   constraints:
     namespace: samples-namespace
 `))
-	s.Empty(lr.Errors)
-	s.Equal(1, len(lr.Warnings))
-	s.ErrorContains(lr.Warnings[0], `constraint "namespace" isn't valid for dynamic config key "testGetIntPropertyKey"`)
+	require.Empty(s.T(), lr.Errors)
+	require.Equal(s.T(), 1, len(lr.Warnings))
+	require.ErrorContains(s.T(), lr.Warnings[0], `constraint "namespace" isn't valid for dynamic config key "testGetIntPropertyKey"`)
 }
 
 func (s *fileBasedClientSuite) TestWarnMultiple() {
@@ -591,14 +589,14 @@ testGetIntPropertyKey:
   constraints:
     namespace: samples-namespace
 `))
-	s.Empty(lr.Errors)
-	s.Equal(3, len(lr.Warnings))
+	require.Empty(s.T(), lr.Errors)
+	require.Equal(s.T(), 3, len(lr.Warnings))
 }
 
 func (s *fileBasedClientSuite) TestErrorYamlDecode() {
 	lr := dynamicconfig.ValidateFile([]byte(`}}}}}}}}}`))
-	s.Equal(1, len(lr.Errors))
-	s.ErrorContains(lr.Errors[0], "decode error")
+	require.Equal(s.T(), 1, len(lr.Errors))
+	require.ErrorContains(s.T(), lr.Errors[0], "decode error")
 }
 
 func (s *fileBasedClientSuite) TestErrorBadConstraint() {
@@ -610,8 +608,8 @@ testGetBoolPropertyKey:
   constraints:
     namespace: 35
 `))
-	s.Equal(1, len(lr.Errors))
-	s.ErrorContains(lr.Errors[0], "namespace constraint must be string")
+	require.Equal(s.T(), 1, len(lr.Errors))
+	require.ErrorContains(s.T(), lr.Errors[0], "namespace constraint must be string")
 }
 
 func (s *fileBasedClientSuite) TestErrorBadConstraints() {
@@ -639,5 +637,5 @@ testGetBoolPropertyKey:
 			found++
 		}
 	}
-	s.Equal(3, found)
+	require.Equal(s.T(), 3, found)
 }

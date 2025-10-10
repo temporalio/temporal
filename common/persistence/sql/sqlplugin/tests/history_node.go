@@ -17,7 +17,6 @@ import (
 type (
 	historyNodeSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		store sqlplugin.HistoryNode
 	}
@@ -36,22 +35,18 @@ func NewHistoryNodeSuite(
 	store sqlplugin.HistoryNode,
 ) *historyNodeSuite {
 	return &historyNodeSuite{
-		Assertions: require.New(t),
-		store:      store,
+
+		store: store,
 	}
 }
 
-func (s *historyNodeSuite) SetupSuite() {
 
-}
 
 func (s *historyNodeSuite) TearDownSuite() {
 
 }
 
-func (s *historyNodeSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *historyNodeSuite) TearDownTest() {
 
@@ -67,10 +62,10 @@ func (s *historyNodeSuite) TestInsert_Success() {
 
 	node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, prevTransactionID, transactionID)
 	result, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *historyNodeSuite) TestInsert_Fail_Duplicate() {
@@ -83,14 +78,14 @@ func (s *historyNodeSuite) TestInsert_Fail_Duplicate() {
 
 	node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, prevTransactionID, transactionID)
 	result, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	node = s.newRandomNodeRow(shardID, treeID, branchID, nodeID, prevTransactionID, transactionID)
 	_, err = s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
-	s.NoError(err) // TODO persistence layer should do proper error translation
+	require.NoError(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *historyNodeSuite) TestInsertSelect_Single() {
@@ -105,10 +100,10 @@ func (s *historyNodeSuite) TestInsertSelect_Single() {
 
 	node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, prevTransactionID, transactionID)
 	result, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	selectFilter := sqlplugin.HistoryNodeSelectFilter{
 		ShardID:   shardID,
@@ -120,7 +115,7 @@ func (s *historyNodeSuite) TestInsertSelect_Single() {
 		PageSize:  pageSize,
 	}
 	rows, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	// NOTE: TxnID is *= -1 within InsertIntoHistoryNode
 	node.TxnID = -node.TxnID
 	for index := range rows {
@@ -128,7 +123,7 @@ func (s *historyNodeSuite) TestInsertSelect_Single() {
 		rows[index].TreeID = treeID
 		rows[index].BranchID = branchID
 	}
-	s.Equal([]sqlplugin.HistoryNodeRow{node}, rows)
+	require.Equal(s.T(), []sqlplugin.HistoryNodeRow{node}, rows)
 }
 
 func (s *historyNodeSuite) TestInsertSelect_Multiple() {
@@ -149,10 +144,10 @@ func (s *historyNodeSuite) TestInsertSelect_Multiple() {
 		for j := 0; j < nodePerNodeID; j++ {
 			node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, rand.Int63(), rand.Int63())
 			result, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			rowsAffected, err := result.RowsAffected()
-			s.NoError(err)
-			s.Equal(1, int(rowsAffected))
+			require.NoError(s.T(), err)
+			require.Equal(s.T(), 1, int(rowsAffected))
 			nodes = append(nodes, node)
 		}
 		nodeID++
@@ -170,7 +165,7 @@ func (s *historyNodeSuite) TestInsertSelect_Multiple() {
 	var rows []sqlplugin.HistoryNodeRow
 	for {
 		rowsPerPage, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), selectFilter)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		rows = append(rows, rowsPerPage...)
 
 		if len(rowsPerPage) > 0 {
@@ -211,7 +206,7 @@ func (s *historyNodeSuite) TestInsertSelect_Multiple() {
 		rows[index].TreeID = treeID
 		rows[index].BranchID = branchID
 	}
-	s.Equal(nodes, rows)
+	require.Equal(s.T(), nodes, rows)
 }
 
 func (s *historyNodeSuite) TestDeleteSelect() {
@@ -229,10 +224,10 @@ func (s *historyNodeSuite) TestDeleteSelect() {
 		MinNodeID: nodeID,
 	}
 	result, err := s.store.RangeDeleteFromHistoryNode(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	selectFilter := sqlplugin.HistoryNodeSelectFilter{
 		ShardID:   shardID,
@@ -244,13 +239,13 @@ func (s *historyNodeSuite) TestDeleteSelect() {
 		PageSize:  pageSize,
 	}
 	rows, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].ShardID = shardID
 		rows[index].TreeID = treeID
 		rows[index].BranchID = branchID
 	}
-	s.Equal([]sqlplugin.HistoryNodeRow(nil), rows)
+	require.Equal(s.T(), []sqlplugin.HistoryNodeRow(nil), rows)
 }
 
 func (s *historyNodeSuite) TestInsertDeleteSelect_Single() {
@@ -265,18 +260,18 @@ func (s *historyNodeSuite) TestInsertDeleteSelect_Single() {
 
 	node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, prevTransactionID, transactionID)
 	result, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 	// transaction ID is *= -1 within InsertIntoHistoryNode
 	node.TxnID = -node.TxnID
 
 	result, err = s.store.DeleteFromHistoryNode(newExecutionContext(), &node)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	selectFilter := sqlplugin.HistoryNodeSelectFilter{
 		ShardID:   shardID,
@@ -288,13 +283,13 @@ func (s *historyNodeSuite) TestInsertDeleteSelect_Single() {
 		PageSize:  pageSize,
 	}
 	rows, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].ShardID = shardID
 		rows[index].TreeID = treeID
 		rows[index].BranchID = branchID
 	}
-	s.Equal([]sqlplugin.HistoryNodeRow(nil), rows)
+	require.Equal(s.T(), []sqlplugin.HistoryNodeRow(nil), rows)
 }
 
 func (s *historyNodeSuite) TestInsertDeleteSelect_Multiple() {
@@ -313,10 +308,10 @@ func (s *historyNodeSuite) TestInsertDeleteSelect_Multiple() {
 		for j := 0; j < nodePerNodeID; j++ {
 			node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, rand.Int63(), rand.Int63())
 			result, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			rowsAffected, err := result.RowsAffected()
-			s.NoError(err)
-			s.Equal(1, int(rowsAffected))
+			require.NoError(s.T(), err)
+			require.Equal(s.T(), 1, int(rowsAffected))
 		}
 		nodeID++
 	}
@@ -328,10 +323,10 @@ func (s *historyNodeSuite) TestInsertDeleteSelect_Multiple() {
 		MinNodeID: minNodeID,
 	}
 	result, err := s.store.RangeDeleteFromHistoryNode(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numNodeIDs*nodePerNodeID, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numNodeIDs*nodePerNodeID, int(rowsAffected))
 
 	selectFilter := sqlplugin.HistoryNodeSelectFilter{
 		ShardID:   shardID,
@@ -343,13 +338,13 @@ func (s *historyNodeSuite) TestInsertDeleteSelect_Multiple() {
 		PageSize:  pageSize,
 	}
 	rows, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].ShardID = shardID
 		rows[index].TreeID = treeID
 		rows[index].BranchID = branchID
 	}
-	s.Equal([]sqlplugin.HistoryNodeRow(nil), rows)
+	require.Equal(s.T(), []sqlplugin.HistoryNodeRow(nil), rows)
 }
 
 func (s *historyNodeSuite) newRandomNodeRow(

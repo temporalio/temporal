@@ -23,7 +23,6 @@ var (
 type (
 	matchingTaskQueueSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		store   sqlplugin.MatchingTaskQueue
 		version sqlplugin.MatchingTaskVersion
@@ -39,23 +38,19 @@ func NewMatchingTaskQueueSuite(
 	version sqlplugin.MatchingTaskVersion,
 ) *matchingTaskQueueSuite {
 	return &matchingTaskQueueSuite{
-		Assertions: require.New(t),
-		store:      store,
-		version:    version,
+
+		store:   store,
+		version: version,
 	}
 }
 
-func (s *matchingTaskQueueSuite) SetupSuite() {
 
-}
 
 func (s *matchingTaskQueueSuite) TearDownSuite() {
 
 }
 
-func (s *matchingTaskQueueSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *matchingTaskQueueSuite) TearDownTest() {
 
@@ -67,10 +62,10 @@ func (s *matchingTaskQueueSuite) TestInsert_Success() {
 
 	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
 	result, err := s.store.InsertIntoTaskQueues(newExecutionContext(), &taskQueue, s.version)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *matchingTaskQueueSuite) TestInsert_Fail_Duplicate() {
@@ -79,14 +74,14 @@ func (s *matchingTaskQueueSuite) TestInsert_Fail_Duplicate() {
 
 	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
 	result, err := s.store.InsertIntoTaskQueues(newExecutionContext(), &taskQueue, s.version)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	taskQueue = s.newRandomTasksQueueRow(queueID, rangeID)
 	_, err = s.store.InsertIntoTaskQueues(newExecutionContext(), &taskQueue, s.version)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *matchingTaskQueueSuite) TestInsertSelect() {
@@ -95,18 +90,18 @@ func (s *matchingTaskQueueSuite) TestInsertSelect() {
 
 	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
 	result, err := s.store.InsertIntoTaskQueues(newExecutionContext(), &taskQueue, s.version)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
 	}
 	rows, err := s.store.SelectFromTaskQueues(newExecutionContext(), filter, s.version)
-	s.NoError(err)
-	s.Equal([]sqlplugin.TaskQueuesRow{taskQueue}, rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.TaskQueuesRow{taskQueue}, rows)
 }
 
 func (s *matchingTaskQueueSuite) TestInsertUpdate_Success() {
@@ -116,17 +111,17 @@ func (s *matchingTaskQueueSuite) TestInsertUpdate_Success() {
 	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
 	rangeID++
 	result, err := s.store.InsertIntoTaskQueues(newExecutionContext(), &taskQueue, s.version)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	taskQueue = s.newRandomTasksQueueRow(queueID, rangeID)
 	result, err = s.store.UpdateTaskQueues(newExecutionContext(), &taskQueue, s.version)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *matchingTaskQueueSuite) TestUpdate_Fail() {
@@ -135,10 +130,10 @@ func (s *matchingTaskQueueSuite) TestUpdate_Fail() {
 
 	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
 	result, err := s.store.UpdateTaskQueues(newExecutionContext(), &taskQueue, s.version)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 }
 
 func (s *matchingTaskQueueSuite) TestInsertUpdateSelect() {
@@ -148,25 +143,25 @@ func (s *matchingTaskQueueSuite) TestInsertUpdateSelect() {
 	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
 	rangeID++
 	result, err := s.store.InsertIntoTaskQueues(newExecutionContext(), &taskQueue, s.version)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	taskQueue = s.newRandomTasksQueueRow(queueID, rangeID)
 	result, err = s.store.UpdateTaskQueues(newExecutionContext(), &taskQueue, s.version)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
 	}
 	rows, err := s.store.SelectFromTaskQueues(newExecutionContext(), filter, s.version)
-	s.NoError(err)
-	s.Equal([]sqlplugin.TaskQueuesRow{taskQueue}, rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.TaskQueuesRow{taskQueue}, rows)
 }
 
 func (s *matchingTaskQueueSuite) TestDeleteSelect() {
@@ -179,10 +174,10 @@ func (s *matchingTaskQueueSuite) TestDeleteSelect() {
 		RangeID:     util.Ptr(rangeID),
 	}
 	result, err := s.store.DeleteFromTaskQueues(newExecutionContext(), filter, s.version)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	filter = sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
@@ -190,7 +185,7 @@ func (s *matchingTaskQueueSuite) TestDeleteSelect() {
 	}
 	// TODO the behavior is weird
 	_, err = s.store.SelectFromTaskQueues(newExecutionContext(), filter, s.version)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Success() {
@@ -199,10 +194,10 @@ func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Success() {
 
 	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
 	result, err := s.store.InsertIntoTaskQueues(newExecutionContext(), &taskQueue, s.version)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
@@ -210,18 +205,18 @@ func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Success() {
 		RangeID:     util.Ptr(rangeID),
 	}
 	result, err = s.store.DeleteFromTaskQueues(newExecutionContext(), filter, s.version)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter = sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
 	}
 	rows, err := s.store.SelectFromTaskQueues(newExecutionContext(), filter, s.version)
-	s.Error(err) // TODO persistence layer should do proper error translation
-	s.Nil(rows)
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
+	require.Nil(s.T(), rows)
 }
 
 func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Fail() {
@@ -230,10 +225,10 @@ func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Fail() {
 
 	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
 	result, err := s.store.InsertIntoTaskQueues(newExecutionContext(), &taskQueue, s.version)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
@@ -241,18 +236,18 @@ func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Fail() {
 		RangeID:     util.Ptr(rangeID + 1),
 	}
 	result, err = s.store.DeleteFromTaskQueues(newExecutionContext(), filter, s.version)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	filter = sqlplugin.TaskQueuesFilter{
 		RangeHash:   testMatchingTaskQueueRangeHash,
 		TaskQueueID: queueID,
 	}
 	rows, err := s.store.SelectFromTaskQueues(newExecutionContext(), filter, s.version)
-	s.NoError(err)
-	s.Equal([]sqlplugin.TaskQueuesRow{taskQueue}, rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.TaskQueuesRow{taskQueue}, rows)
 }
 
 func (s *matchingTaskQueueSuite) TestInsertLock() {
@@ -261,10 +256,10 @@ func (s *matchingTaskQueueSuite) TestInsertLock() {
 
 	taskQueue := s.newRandomTasksQueueRow(queueID, rangeID)
 	result, err := s.store.InsertIntoTaskQueues(newExecutionContext(), &taskQueue, s.version)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	// NOTE: lock without transaction is equivalent to select
 	//  this test only test the select functionality
@@ -273,8 +268,8 @@ func (s *matchingTaskQueueSuite) TestInsertLock() {
 		TaskQueueID: queueID,
 	}
 	rangeIDInDB, err := s.store.LockTaskQueues(newExecutionContext(), filter, s.version)
-	s.NoError(err)
-	s.Equal(rangeID, rangeIDInDB)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), rangeID, rangeIDInDB)
 }
 
 func (s *matchingTaskQueueSuite) newRandomTasksQueueRow(

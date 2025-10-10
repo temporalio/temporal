@@ -39,7 +39,6 @@ var (
 
 type (
 	HistoryIteratorSuite struct {
-		*require.Assertions
 		suite.Suite
 
 		controller       *gomock.Controller
@@ -73,7 +72,6 @@ func TestHistoryIteratorSuite(t *testing.T) {
 }
 
 func (s *HistoryIteratorSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.mockExecutionMgr = persistence.NewMockExecutionManager(s.controller)
 }
@@ -86,8 +84,8 @@ func (s *HistoryIteratorSuite) TestReadHistory_Failed_EventsV2() {
 	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Return(nil, errors.New("got error reading history branch"))
 	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, testDefaultTargetHistoryBlobSize, nil)
 	history, err := itr.readHistory(context.Background(), common.FirstEventID)
-	s.Error(err)
-	s.Nil(history)
+	require.Error(s.T(), err)
+	require.Nil(s.T(), history)
 }
 
 func (s *HistoryIteratorSuite) TestReadHistory_Success_EventsV2() {
@@ -98,8 +96,8 @@ func (s *HistoryIteratorSuite) TestReadHistory_Success_EventsV2() {
 	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Return(&resp, nil)
 	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, testDefaultTargetHistoryBlobSize, nil)
 	history, err := itr.readHistory(context.Background(), common.FirstEventID)
-	s.NoError(err)
-	s.Len(history, 0)
+	require.NoError(s.T(), err)
+	require.Len(s.T(), history, 0)
 }
 
 // In the following test:
@@ -123,10 +121,10 @@ func (s *HistoryIteratorSuite) TestReadHistoryBatches_Fail_FirstCallToReadHistor
 	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, testDefaultTargetHistoryBlobSize, nil)
 	startingIteratorState := s.copyIteratorState(itr)
 	events, nextIterState, err := itr.readHistoryBatches(context.Background(), common.FirstEventID)
-	s.Error(err)
-	s.Nil(events)
-	s.False(nextIterState.FinishedIteration)
-	s.Zero(nextIterState.NextEventID)
+	require.Error(s.T(), err)
+	require.Nil(s.T(), events)
+	require.False(s.T(), nextIterState.FinishedIteration)
+	require.Zero(s.T(), nextIterState.NextEventID)
 	s.assertStateMatches(startingIteratorState, itr)
 }
 
@@ -150,10 +148,10 @@ func (s *HistoryIteratorSuite) TestReadHistoryBatches_Fail_NonFirstCallToReadHis
 	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, testDefaultTargetHistoryBlobSize, nil)
 	startingIteratorState := s.copyIteratorState(itr)
 	events, nextIterState, err := itr.readHistoryBatches(context.Background(), common.FirstEventID)
-	s.Error(err)
-	s.Nil(events)
-	s.False(nextIterState.FinishedIteration)
-	s.Zero(nextIterState.NextEventID)
+	require.Error(s.T(), err)
+	require.Nil(s.T(), events)
+	require.False(s.T(), nextIterState.FinishedIteration)
+	require.Zero(s.T(), nextIterState.NextEventID)
 	s.assertStateMatches(startingIteratorState, itr)
 }
 
@@ -184,11 +182,11 @@ func (s *HistoryIteratorSuite) TestReadHistoryBatches_Success_ReadToHistoryEnd()
 	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, 20*testDefaultHistoryEventSize, nil)
 	startingIteratorState := s.copyIteratorState(itr)
 	history, nextIterState, err := itr.readHistoryBatches(context.Background(), common.FirstEventID)
-	s.NoError(err)
-	s.NotNil(history)
-	s.Len(history, 9)
-	s.True(nextIterState.FinishedIteration)
-	s.Zero(nextIterState.NextEventID)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), history)
+	require.Len(s.T(), history, 9)
+	require.True(s.T(), nextIterState.FinishedIteration)
+	require.Zero(s.T(), nextIterState.NextEventID)
 	s.assertStateMatches(startingIteratorState, itr)
 }
 
@@ -219,11 +217,11 @@ func (s *HistoryIteratorSuite) TestReadHistoryBatches_Success_TargetSizeSatisfie
 	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, 11*testDefaultHistoryEventSize, nil)
 	startingIteratorState := s.copyIteratorState(itr)
 	history, nextIterState, err := itr.readHistoryBatches(context.Background(), common.FirstEventID)
-	s.NoError(err)
-	s.NotNil(history)
-	s.Len(history, 7)
-	s.False(nextIterState.FinishedIteration)
-	s.Equal(int64(13), nextIterState.NextEventID)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), history)
+	require.Len(s.T(), history, 7)
+	require.False(s.T(), nextIterState.FinishedIteration)
+	require.Equal(s.T(), int64(13), nextIterState.NextEventID)
 	s.assertStateMatches(startingIteratorState, itr)
 }
 
@@ -254,11 +252,11 @@ func (s *HistoryIteratorSuite) TestReadHistoryBatches_Success_ReadExactlyToHisto
 	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, 16*testDefaultHistoryEventSize, nil)
 	startingIteratorState := s.copyIteratorState(itr)
 	history, nextIterState, err := itr.readHistoryBatches(context.Background(), common.FirstEventID)
-	s.NoError(err)
-	s.NotNil(history)
-	s.Len(history, 9)
-	s.True(nextIterState.FinishedIteration)
-	s.Zero(nextIterState.NextEventID)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), history)
+	require.Len(s.T(), history, 9)
+	require.True(s.T(), nextIterState.FinishedIteration)
+	require.Zero(s.T(), nextIterState.NextEventID)
 	s.assertStateMatches(startingIteratorState, itr)
 }
 
@@ -283,19 +281,19 @@ func (s *HistoryIteratorSuite) TestReadHistoryBatches_Success_ReadPageMultipleTi
 	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, 2*testDefaultHistoryEventSize, nil)
 	startingIteratorState := s.copyIteratorState(itr)
 	history, nextIterState, err := itr.readHistoryBatches(context.Background(), common.FirstEventID)
-	s.NoError(err)
-	s.NotNil(history)
-	s.Len(history, 2)
-	s.False(nextIterState.FinishedIteration)
-	s.Equal(int64(5), nextIterState.NextEventID)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), history)
+	require.Len(s.T(), history, 2)
+	require.False(s.T(), nextIterState.FinishedIteration)
+	require.Equal(s.T(), int64(5), nextIterState.NextEventID)
 	s.assertStateMatches(startingIteratorState, itr)
 
 	history, nextIterState, err = itr.readHistoryBatches(context.Background(), nextIterState.NextEventID)
-	s.NoError(err)
-	s.NotNil(history)
-	s.Len(history, 1)
-	s.True(nextIterState.FinishedIteration)
-	s.Zero(nextIterState.NextEventID)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), history)
+	require.Len(s.T(), history, 1)
+	require.True(s.T(), nextIterState.FinishedIteration)
+	require.Zero(s.T(), nextIterState.NextEventID)
 	s.assertStateMatches(startingIteratorState, itr)
 }
 
@@ -325,7 +323,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 	// set target history batches such that a single call to next will read all of history
 	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, 16*testDefaultHistoryEventSize, nil)
 	blob, err := itr.Next(context.Background())
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
 	expectedIteratorState := historyIteratorState{
 		// when iteration is finished page token is not advanced
@@ -333,7 +331,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 		NextEventID:       0,
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
-	s.NotNil(blob)
+	require.NotNil(s.T(), blob)
 	expectedHeader := &archiverspb.HistoryBlobHeader{
 		Namespace:            testNamespace,
 		NamespaceId:          testNamespaceID,
@@ -346,14 +344,14 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 		LastEventId:          16,
 		EventCount:           16,
 	}
-	s.Equal(expectedHeader, blob.Header)
-	s.Len(blob.Body, 7)
-	s.NoError(err)
-	s.False(itr.HasNext())
+	require.Equal(s.T(), expectedHeader, blob.Header)
+	require.Len(s.T(), blob.Body, 7)
+	require.NoError(s.T(), err)
+	require.False(s.T(), itr.HasNext())
 
 	blob, err = itr.Next(context.Background())
-	s.Equal(err, errIteratorDepleted)
-	s.Nil(blob)
+	require.Equal(s.T(), err, errIteratorDepleted)
+	require.Nil(s.T(), blob)
 	s.assertStateMatches(expectedIteratorState, itr)
 }
 
@@ -389,13 +387,13 @@ func (s *HistoryIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 	// set target blob size such that the first two pages are read for blob one without error, third page will return error
 	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, 6*testDefaultHistoryEventSize, nil)
 	blob, err := itr.Next(context.Background())
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	expectedIteratorState := historyIteratorState{
 		FinishedIteration: false,
 		NextEventID:       7,
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
-	s.NotNil(blob)
+	require.NotNil(s.T(), blob)
 	expectedHeader := &archiverspb.HistoryBlobHeader{
 		Namespace:            testNamespace,
 		NamespaceId:          testNamespaceID,
@@ -408,13 +406,13 @@ func (s *HistoryIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 		LastEventId:          6,
 		EventCount:           6,
 	}
-	s.Equal(expectedHeader, blob.Header)
-	s.NoError(err)
-	s.True(itr.HasNext())
+	require.Equal(s.T(), expectedHeader, blob.Header)
+	require.NoError(s.T(), err)
+	require.True(s.T(), itr.HasNext())
 
 	blob, err = itr.Next(context.Background())
-	s.Error(err)
-	s.Nil(blob)
+	require.Error(s.T(), err)
+	require.Nil(s.T(), blob)
 	s.assertStateMatches(expectedIteratorState, itr)
 }
 
@@ -442,10 +440,10 @@ func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 	}
 	for i := 0; i < 10; i++ {
 		s.assertStateMatches(expectedIteratorState, itr)
-		s.True(itr.HasNext())
+		require.True(s.T(), itr.HasNext())
 		blob, err := itr.Next(context.Background())
-		s.NoError(err)
-		s.NotNil(blob)
+		require.NoError(s.T(), err)
+		require.NotNil(s.T(), blob)
 		expectedHeader := &archiverspb.HistoryBlobHeader{
 			Namespace:            testNamespace,
 			NamespaceId:          testNamespaceID,
@@ -461,7 +459,7 @@ func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 		if i == 9 {
 			expectedHeader.IsLast = true
 		}
-		s.Equal(expectedHeader, blob.Header)
+		require.Equal(s.T(), expectedHeader, blob.Header)
 
 		if i < 9 {
 			expectedIteratorState.FinishedIteration = false
@@ -472,7 +470,7 @@ func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 		}
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
-	s.False(itr.HasNext())
+	require.False(s.T(), itr.HasNext())
 }
 
 func (s *HistoryIteratorSuite) TestNext_Success_SameHistoryDifferentPage() {
@@ -552,18 +550,18 @@ func (s *HistoryIteratorSuite) TestNext_Success_SameHistoryDifferentPage() {
 	totalPages := 3
 	expectedFirstEventID := []int64{1, 7, 14}
 	for i := 0; i != totalPages; i++ {
-		s.True(itr1.HasNext())
+		require.True(s.T(), itr1.HasNext())
 		history1, err := itr1.Next(context.Background())
-		s.NoError(err)
+		require.NoError(s.T(), err)
 
-		s.True(itr2.HasNext())
+		require.True(s.T(), itr2.HasNext())
 		history2, err := itr2.Next(context.Background())
-		s.NoError(err)
+		require.NoError(s.T(), err)
 
-		s.Equal(history1.Header, history2.Header)
-		s.Equal(len(history1.Body), len(history2.Body))
-		s.Equal(expectedFirstEventID[i], history1.Body[0].Events[0].GetEventId())
-		s.Equal(expectedFirstEventID[i], history2.Body[0].Events[0].GetEventId())
+		require.Equal(s.T(), history1.Header, history2.Header)
+		require.Equal(s.T(), len(history1.Body), len(history2.Body))
+		require.Equal(s.T(), expectedFirstEventID[i], history1.Body[0].Events[0].GetEventId())
+		require.Equal(s.T(), expectedFirstEventID[i], history2.Body[0].Events[0].GetEventId())
 	}
 	expectedIteratorState := historyIteratorState{
 		NextEventID:       0,
@@ -571,8 +569,8 @@ func (s *HistoryIteratorSuite) TestNext_Success_SameHistoryDifferentPage() {
 	}
 	s.assertStateMatches(expectedIteratorState, itr1)
 	s.assertStateMatches(expectedIteratorState, itr2)
-	s.False(itr1.HasNext())
-	s.False(itr2.HasNext())
+	require.False(s.T(), itr1.HasNext())
+	require.False(s.T(), itr2.HasNext())
 }
 
 func (s *HistoryIteratorSuite) TestNewIteratorWithState() {
@@ -583,7 +581,7 @@ func (s *HistoryIteratorSuite) TestNewIteratorWithState() {
 	}
 	itr.historyIteratorState = testIteratorState
 	stateToken, err := itr.GetState()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	newItr := s.constructTestHistoryIterator(nil, testDefaultTargetHistoryBlobSize, stateToken)
 	s.assertStateMatches(testIteratorState, newItr)
@@ -632,8 +630,8 @@ func (s *HistoryIteratorSuite) copyIteratorState(itr *historyIterator) historyIt
 }
 
 func (s *HistoryIteratorSuite) assertStateMatches(expected historyIteratorState, itr *historyIterator) {
-	s.Equal(expected.NextEventID, itr.NextEventID)
-	s.Equal(expected.FinishedIteration, itr.FinishedIteration)
+	require.Equal(s.T(), expected.NextEventID, itr.NextEventID)
+	require.Equal(s.T(), expected.FinishedIteration, itr.FinishedIteration)
 }
 
 func (s *HistoryIteratorSuite) constructHistoryBatches(batchInfo []int, page page, firstEventID int64) []*historypb.History {
@@ -677,7 +675,7 @@ func (s *HistoryIteratorSuite) constructTestHistoryIterator(
 	itr := newHistoryIterator(request, mockExecutionMgr, targetHistoryBlobSize)
 	if initialState != nil {
 		err := itr.reset(initialState)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 	}
 	itr.sizeEstimator = newTestSizeEstimator()
 	return itr
@@ -708,8 +706,8 @@ func (s *HistoryIteratorSuite) TestJSONSizeEstimator() {
 	}
 
 	size, err := e.EstimateSize(h)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// The size seems to fluctuate between compiles using google's protoc toolchain. I'd like to delete this altogether
-	s.Contains([]int{295, 303}, size)
+	require.Contains(s.T(), []int{295, 303}, size)
 }

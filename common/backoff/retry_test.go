@@ -12,7 +12,6 @@ import (
 
 type (
 	RetrySuite struct {
-		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 		suite.Suite
 	}
 
@@ -23,9 +22,7 @@ func TestRetrySuite(t *testing.T) {
 	suite.Run(t, new(RetrySuite))
 }
 
-func (s *RetrySuite) SetupTest() {
-	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-}
+
 
 func (s *RetrySuite) TestRetrySuccess() {
 	i := 0
@@ -44,8 +41,8 @@ func (s *RetrySuite) TestRetrySuccess() {
 		WithMaximumAttempts(10)
 
 	err := ThrottleRetry(op, policy, nil)
-	s.NoError(err)
-	s.Equal(5, i)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 5, i)
 }
 
 func (s *RetrySuite) TestRetryFailed() {
@@ -65,7 +62,7 @@ func (s *RetrySuite) TestRetryFailed() {
 		WithMaximumAttempts(5)
 
 	err := ThrottleRetry(op, policy, nil)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *RetrySuite) TestIsRetryableSuccess() {
@@ -93,8 +90,8 @@ func (s *RetrySuite) TestIsRetryableSuccess() {
 		WithMaximumAttempts(10)
 
 	err := ThrottleRetry(op, policy, isRetryable)
-	s.NoError(err, "Retry count: %v", i)
-	s.Equal(5, i)
+	require.NoError(s.T(), err, "Retry count: %v", i)
+	require.Equal(s.T(), 5, i)
 }
 
 func (s *RetrySuite) TestIsRetryableFailure() {
@@ -115,8 +112,8 @@ func (s *RetrySuite) TestIsRetryableFailure() {
 		WithMaximumAttempts(10)
 
 	err := ThrottleRetry(op, policy, IgnoreErrors([]error{&theErr}))
-	s.Error(err)
-	s.Equal(1, i)
+	require.Error(s.T(), err)
+	require.Equal(s.T(), 1, i)
 }
 
 func (s *RetrySuite) TestRetryContextCancel() {
@@ -124,7 +121,7 @@ func (s *RetrySuite) TestRetryContextCancel() {
 	cancel()
 	err := ThrottleRetryContext(ctx, func(ctx context.Context) error { return ctx.Err() },
 		NewExponentialRetryPolicy(1*time.Millisecond), retryEverything)
-	s.ErrorIs(err, context.Canceled)
+	require.ErrorIs(s.T(), err, context.Canceled)
 }
 
 func (s *RetrySuite) TestRetryContextTimeout() {
@@ -135,8 +132,8 @@ func (s *RetrySuite) TestRetryContextTimeout() {
 	err := ThrottleRetryContext(ctx, func(ctx context.Context) error { return &someError{} },
 		NewExponentialRetryPolicy(1*time.Second), retryEverything)
 	elapsed := time.Since(start)
-	s.ErrorIs(err, &someError{})
-	s.Less(elapsed, timeout,
+	require.ErrorIs(s.T(), err, &someError{})
+	require.Less(s.T(), elapsed, timeout,
 		"Call to retry should return early if backoff exceeds context timeout")
 }
 
@@ -152,7 +149,7 @@ func (s *RetrySuite) TestContextErrorFromSomeOtherContext() {
 		},
 		NewExponentialRetryPolicy(1*time.Millisecond),
 		retryEverything)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *RetrySuite) TestThrottleRetryContext() {
@@ -179,8 +176,8 @@ func (s *RetrySuite) TestThrottleRetryContext() {
 
 	start := time.Now()
 	err := ThrottleRetryContext(context.Background(), op, policy, retryEverything)
-	s.Equal(&someError{}, err)
-	s.GreaterOrEqual(
+	require.Equal(s.T(), &someError{}, err)
+	require.GreaterOrEqual(s.T(),
 		time.Since(start),
 		throttleInitialInterval/2, // due to jitter
 		"Resource exhausted error should use throttle retry policy",
@@ -190,8 +187,8 @@ func (s *RetrySuite) TestThrottleRetryContext() {
 	start = time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	err = ThrottleRetryContext(ctx, func(_ context.Context) error { return &serviceerror.ResourceExhausted{} }, policy, retryEverything)
-	s.Equal(&serviceerror.ResourceExhausted{}, err)
-	s.LessOrEqual(
+	require.Equal(s.T(), &serviceerror.ResourceExhausted{}, err)
+	require.LessOrEqual(s.T(),
 		time.Since(start),
 		throttleInitialInterval,
 		"Context timeout should be respected",
@@ -205,8 +202,8 @@ func (s *RetrySuite) TestThrottleRetryContext() {
 		return &serviceerror.ResourceExhausted{}
 	}
 	err = ThrottleRetryContext(context.Background(), op, policy, retryEverything)
-	s.Equal(&serviceerror.ResourceExhausted{}, err)
-	s.Equal(2, attempt)
+	require.Equal(s.T(), &serviceerror.ResourceExhausted{}, err)
+	require.Equal(s.T(), 2, attempt)
 
 	// set the default global throttle retry policy back to its original value
 	throttleRetryPolicy = originalThrottleRetryPolicy

@@ -23,7 +23,6 @@ const (
 )
 
 type UtilSuite struct {
-	*require.Assertions
 	suite.Suite
 }
 
@@ -31,27 +30,25 @@ func TestUtilSuite(t *testing.T) {
 	suite.Run(t, new(UtilSuite))
 }
 
-func (s *UtilSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *UtilSuite) TestFileExists() {
 	dir := testutils.MkdirTemp(s.T(), "", "TestFileExists")
 	s.assertDirectoryExists(dir)
 
 	exists, err := fileExists(dir)
-	s.Error(err)
-	s.False(exists)
+	require.Error(s.T(), err)
+	require.False(s.T(), exists)
 
 	filename := "test-file-name"
 	exists, err = fileExists(filepath.Join(dir, filename))
-	s.NoError(err)
-	s.False(exists)
+	require.NoError(s.T(), err)
+	require.False(s.T(), exists)
 
 	s.createFile(dir, filename)
 	exists, err = fileExists(filepath.Join(dir, filename))
-	s.NoError(err)
-	s.True(exists)
+	require.NoError(s.T(), err)
+	require.True(s.T(), exists)
 }
 
 func (s *UtilSuite) TestDirectoryExists() {
@@ -60,34 +57,34 @@ func (s *UtilSuite) TestDirectoryExists() {
 
 	subdir := "subdir"
 	exists, err := directoryExists(filepath.Join(dir, subdir))
-	s.NoError(err)
-	s.False(exists)
+	require.NoError(s.T(), err)
+	require.False(s.T(), exists)
 
 	filename := "test-file-name"
 	s.createFile(dir, filename)
 	fpath := filepath.Join(dir, filename)
 	exists, err = directoryExists(fpath)
-	s.Error(err)
-	s.False(exists)
+	require.Error(s.T(), err)
+	require.False(s.T(), exists)
 }
 
 func (s *UtilSuite) TestMkdirAll() {
 	dir := testutils.MkdirTemp(s.T(), "", "TestMkdirAll")
 	s.assertDirectoryExists(dir)
 
-	s.NoError(mkdirAll(dir, testDirMode))
+	require.NoError(s.T(), mkdirAll(dir, testDirMode))
 	s.assertDirectoryExists(dir)
 
 	subDirPath := filepath.Join(dir, "subdir_1", "subdir_2", "subdir_3")
 	s.assertDirectoryNotExists(subDirPath)
-	s.NoError(mkdirAll(subDirPath, testDirMode))
+	require.NoError(s.T(), mkdirAll(subDirPath, testDirMode))
 	s.assertDirectoryExists(subDirPath)
 	s.assertCorrectFileMode(subDirPath)
 
 	filename := "test-file-name"
 	s.createFile(dir, filename)
 	fpath := filepath.Join(dir, filename)
-	s.Error(mkdirAll(fpath, testDirMode))
+	require.Error(s.T(), mkdirAll(fpath, testDirMode))
 }
 
 func (s *UtilSuite) TestWriteFile() {
@@ -96,15 +93,15 @@ func (s *UtilSuite) TestWriteFile() {
 
 	filename := "test-file-name"
 	fpath := filepath.Join(dir, filename)
-	s.NoError(writeFile(fpath, []byte("file body 1"), testFileMode))
+	require.NoError(s.T(), writeFile(fpath, []byte("file body 1"), testFileMode))
 	s.assertFileExists(fpath)
 	s.assertCorrectFileMode(fpath)
 
-	s.NoError(writeFile(fpath, []byte("file body 2"), testFileMode))
+	require.NoError(s.T(), writeFile(fpath, []byte("file body 2"), testFileMode))
 	s.assertFileExists(fpath)
 	s.assertCorrectFileMode(fpath)
 
-	s.Error(writeFile(dir, []byte(""), testFileMode))
+	require.Error(s.T(), writeFile(dir, []byte(""), testFileMode))
 	s.assertFileExists(fpath)
 }
 
@@ -115,14 +112,14 @@ func (s *UtilSuite) TestReadFile() {
 	filename := "test-file-name"
 	fpath := filepath.Join(dir, filename)
 	data, err := readFile(fpath)
-	s.Error(err)
-	s.Empty(data)
+	require.Error(s.T(), err)
+	require.Empty(s.T(), data)
 
 	err = writeFile(fpath, []byte("file contents"), testFileMode)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	data, err = readFile(fpath)
-	s.NoError(err)
-	s.Equal("file contents", string(data))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "file contents", string(data))
 }
 
 func (s *UtilSuite) TestListFilesByPrefix() {
@@ -132,11 +129,11 @@ func (s *UtilSuite) TestListFilesByPrefix() {
 	filename := "test-file-name"
 	fpath := filepath.Join(dir, filename)
 	files, err := listFilesByPrefix(fpath, "test-")
-	s.Error(err)
-	s.Nil(files)
+	require.Error(s.T(), err)
+	require.Nil(s.T(), files)
 
 	subDirPath := filepath.Join(dir, "subdir")
-	s.NoError(mkdirAll(subDirPath, testDirMode))
+	require.NoError(s.T(), mkdirAll(subDirPath, testDirMode))
 	s.assertDirectoryExists(subDirPath)
 	expectedFileNames := []string{"file_1", "file_2", "file_3"}
 	for _, f := range expectedFileNames {
@@ -146,8 +143,8 @@ func (s *UtilSuite) TestListFilesByPrefix() {
 		s.createFile(dir, f)
 	}
 	actualFileNames, err := listFilesByPrefix(dir, "file_")
-	s.NoError(err)
-	s.Equal(len(expectedFileNames), len(actualFileNames))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), len(expectedFileNames), len(actualFileNames))
 }
 
 func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
@@ -181,11 +178,11 @@ func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
 
 	encoder := codec.NewJSONPBEncoder()
 	encodedHistoryBatches, err := encoder.EncodeHistories(historyBatches)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	decodedHistoryBatches, err := encoder.DecodeHistories(encodedHistoryBatches)
-	s.NoError(err)
-	s.Equal(historyBatches, decodedHistoryBatches)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), historyBatches, decodedHistoryBatches)
 }
 
 func (s *UtilSuite) TestValidateDirPath() {
@@ -222,7 +219,7 @@ func (s *UtilSuite) TestValidateDirPath() {
 	}
 
 	for _, tc := range testCases {
-		s.Equal(tc.expectedErr, validateDirPath(tc.dirPath))
+		require.Equal(s.T(), tc.expectedErr, validateDirPath(tc.dirPath))
 	}
 }
 
@@ -245,7 +242,7 @@ func (s *UtilSuite) TestconstructHistoryFilename() {
 
 	for _, tc := range testCases {
 		filename := constructHistoryFilename(tc.namespaceID, tc.workflowID, tc.runID, tc.closeFailoverVersion)
-		s.Equal(tc.expectBuiltName, filename)
+		require.Equal(s.T(), tc.expectBuiltName, filename)
 	}
 }
 
@@ -283,10 +280,10 @@ func (s *UtilSuite) TestExtractCloseFailoverVersion() {
 	for _, tc := range testCases {
 		version, err := extractCloseFailoverVersion(tc.filename)
 		if tc.expectedErr {
-			s.Error(err)
+			require.Error(s.T(), err)
 		} else {
-			s.NoError(err)
-			s.Equal(tc.expectedVersion, version)
+			require.NoError(s.T(), err)
+			require.Equal(s.T(), tc.expectedVersion, version)
 		}
 	}
 }
@@ -387,7 +384,7 @@ func (s *UtilSuite) TestHistoryMutated() {
 		},
 	}
 	for _, tc := range testCases {
-		s.Equal(tc.isMutated, historyMutated(tc.request, tc.historyBatches, tc.isLast))
+		require.Equal(s.T(), tc.isMutated, historyMutated(tc.request, tc.historyBatches, tc.isLast))
 	}
 }
 
@@ -398,44 +395,44 @@ func (s *UtilSuite) TestSerializeDeserializeGetHistoryToken() {
 	}
 
 	serializedToken, err := serializeToken(token)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
 	deserializedToken, err := deserializeGetHistoryToken(serializedToken)
-	s.Nil(err)
-	s.Equal(token, deserializedToken)
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), token, deserializedToken)
 }
 
 func (s *UtilSuite) createFile(dir string, filename string) {
 	err := os.WriteFile(filepath.Join(dir, filename), []byte("file contents"), testFileMode)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 }
 
 func (s *UtilSuite) assertFileExists(filepath string) {
 	exists, err := fileExists(filepath)
-	s.NoError(err)
-	s.True(exists)
+	require.NoError(s.T(), err)
+	require.True(s.T(), exists)
 }
 
 func (s *UtilSuite) assertDirectoryExists(path string) {
 	exists, err := directoryExists(path)
-	s.NoError(err)
-	s.True(exists)
+	require.NoError(s.T(), err)
+	require.True(s.T(), exists)
 }
 
 func (s *UtilSuite) assertDirectoryNotExists(path string) {
 	exists, err := directoryExists(path)
-	s.NoError(err)
-	s.False(exists)
+	require.NoError(s.T(), err)
+	require.False(s.T(), exists)
 }
 
 func (s *UtilSuite) assertCorrectFileMode(path string) {
 	info, err := os.Stat(path)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	mode := testFileMode
 	if info.IsDir() {
 		mode = testDirMode | os.ModeDir
 	}
-	s.Equal(mode, info.Mode())
+	require.Equal(s.T(), mode, info.Mode())
 }
 
 func toWorkflowExecutionStatusPtr(in enumspb.WorkflowExecutionStatus) *enumspb.WorkflowExecutionStatus {

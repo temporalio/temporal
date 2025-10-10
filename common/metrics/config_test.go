@@ -12,7 +12,6 @@ import (
 )
 
 type MetricsSuite struct {
-	*require.Assertions
 	suite.Suite
 	controller *gomock.Controller
 }
@@ -22,7 +21,6 @@ func TestMetricsSuite(t *testing.T) {
 }
 
 func (s *MetricsSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 }
 
@@ -35,7 +33,7 @@ func (s *MetricsSuite) TestStatsd() {
 	config := new(Config)
 	config.Statsd = statsd
 	scope := NewScope(log.NewNoopLogger(), config)
-	s.NotNil(scope)
+	require.NotNil(s.T(), scope)
 }
 
 func (s *MetricsSuite) TestPrometheus() {
@@ -47,7 +45,7 @@ func (s *MetricsSuite) TestPrometheus() {
 	config := new(Config)
 	config.Prometheus = prom
 	scope := NewScope(log.NewNoopLogger(), config)
-	s.NotNil(scope)
+	require.NotNil(s.T(), scope)
 }
 
 func (s *MetricsSuite) TestPrometheusWithSanitizeOptions() {
@@ -83,13 +81,13 @@ func (s *MetricsSuite) TestPrometheusWithSanitizeOptions() {
 	config := new(Config)
 	config.Prometheus = prom
 	scope := NewScope(log.NewNoopLogger(), config)
-	s.NotNil(scope)
+	require.NotNil(s.T(), scope)
 }
 
 func (s *MetricsSuite) TestNoop() {
 	config := &Config{}
 	scope := NewScope(log.NewNoopLogger(), config)
-	s.Equal(tally.NoopScope, scope)
+	require.Equal(s.T(), tally.NoopScope, scope)
 }
 
 func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
@@ -126,7 +124,7 @@ func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
 	for _, test := range testCases {
 		config := &ClientConfig{PerUnitHistogramBoundaries: test.input}
 		setDefaultPerUnitHistogramBoundaries(config)
-		s.Equal(test.expectResult, config.PerUnitHistogramBoundaries)
+		require.Equal(s.T(), test.expectResult, config.PerUnitHistogramBoundaries)
 	}
 }
 

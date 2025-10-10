@@ -10,7 +10,6 @@ import (
 type (
 	orSuite struct {
 		suite.Suite
-		*require.Assertions
 	}
 )
 
@@ -19,9 +18,7 @@ func TestOrSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *orSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *orSuite) TestOr_Normal() {
 	p1 := newTestPredicate(1, 2, 6)
@@ -32,9 +29,9 @@ func (s *orSuite) TestOr_Normal() {
 	p := Or[int](p1, p2)
 
 	for i := 1; i != 7; i++ {
-		s.True(p.Test(i))
+		require.True(s.T(), p.Test(i))
 	}
-	s.False(p.Test(7))
+	require.False(s.T(), p.Test(7))
 }
 
 func (s *orSuite) TestOr_All() {
@@ -44,7 +41,7 @@ func (s *orSuite) TestOr_All() {
 	)
 
 	for i := 1; i != 7; i++ {
-		s.True(p.Test(i))
+		require.True(s.T(), p.Test(i))
 	}
 }
 
@@ -55,10 +52,10 @@ func (s *orSuite) TestOr_None() {
 	)
 
 	for i := 1; i != 4; i++ {
-		s.True(p.Test(i))
+		require.True(s.T(), p.Test(i))
 	}
 	for i := 4; i != 7; i++ {
-		s.False(p.Test(i))
+		require.False(s.T(), p.Test(i))
 	}
 
 	p = Or(
@@ -66,7 +63,7 @@ func (s *orSuite) TestOr_None() {
 		Empty[int](),
 	)
 	for i := 1; i != 7; i++ {
-		s.False(p.Test(i))
+		require.False(s.T(), p.Test(i))
 	}
 }
 
@@ -76,24 +73,24 @@ func (s *orSuite) TestOr_Duplication() {
 	p3 := newTestPredicate(3, 4, 5)
 
 	_, ok := Or[int](p1, p1).(*testPredicate)
-	s.True(ok)
+	require.True(s.T(), ok)
 
 	p := Or[int](p1, p2)
 	pOr, ok := Or[int](p, p1).(*OrImpl[int])
-	s.True(ok)
-	s.Len(pOr.Predicates, 2)
+	require.True(s.T(), ok)
+	require.Len(s.T(), pOr.Predicates, 2)
 
 	pOr, ok = Or(p, p).(*OrImpl[int])
-	s.True(ok)
-	s.Len(pOr.Predicates, 2)
+	require.True(s.T(), ok)
+	require.Len(s.T(), pOr.Predicates, 2)
 
 	pOr, ok = Or(p, Or[int](p1, p2)).(*OrImpl[int])
-	s.True(ok)
-	s.Len(pOr.Predicates, 2)
+	require.True(s.T(), ok)
+	require.Len(s.T(), pOr.Predicates, 2)
 
 	pOr, ok = Or(p, Or[int](p1, p2, p3)).(*OrImpl[int])
-	s.True(ok)
-	s.Len(pOr.Predicates, 3)
+	require.True(s.T(), ok)
+	require.Len(s.T(), pOr.Predicates, 3)
 }
 
 func (s *orSuite) TestOr_Equals() {
@@ -101,22 +98,22 @@ func (s *orSuite) TestOr_Equals() {
 	p2 := newTestPredicate(2, 3, 4)
 	p := Or[int](p1, p2)
 
-	s.True(p.Equals(p))
-	s.True(p.Equals(Or[int](p1, p2)))
-	s.True(p.Equals(Or[int](p2, p1)))
-	s.True(p.Equals(Or[int](p1, p1, p2)))
-	s.True(p.Equals(Or[int](
+	require.True(s.T(), p.Equals(p))
+	require.True(s.T(), p.Equals(Or[int](p1, p2)))
+	require.True(s.T(), p.Equals(Or[int](p2, p1)))
+	require.True(s.T(), p.Equals(Or[int](p1, p1, p2)))
+	require.True(s.T(), p.Equals(Or[int](
 		newTestPredicate(4, 3, 2),
 		newTestPredicate(3, 2, 1),
 	)))
 
-	s.False(p.Equals(p1))
-	s.False(p.Equals(Or[int](p2, p2)))
-	s.False(p.Equals(Or[int](p2, newTestPredicate(5, 6, 7))))
-	s.False(p.Equals(And[int](p1, p2)))
-	s.False(p.Equals(Not(p)))
-	s.False(p.Equals(Empty[int]()))
-	s.False(p.Equals(Universal[int]()))
+	require.False(s.T(), p.Equals(p1))
+	require.False(s.T(), p.Equals(Or[int](p2, p2)))
+	require.False(s.T(), p.Equals(Or[int](p2, newTestPredicate(5, 6, 7))))
+	require.False(s.T(), p.Equals(And[int](p1, p2)))
+	require.False(s.T(), p.Equals(Not(p)))
+	require.False(s.T(), p.Equals(Empty[int]()))
+	require.False(s.T(), p.Equals(Universal[int]()))
 }
 
 func (s *orSuite) TestOr_Size() {
@@ -124,5 +121,5 @@ func (s *orSuite) TestOr_Size() {
 	p2 := newTestPredicate(2, 3, 4)
 	p := Or(p1, p2)
 
-	s.Equal(52, p.Size()) // 8 bytes per int64 * 6 ints + 4 bytes of overhead.
+	require.Equal(s.T(), 52, p.Size()) // 8 bytes per int64 * 6 ints + 4 bytes of overhead.
 }

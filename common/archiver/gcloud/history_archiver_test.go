@@ -41,7 +41,6 @@ var (
 )
 
 func (h *historyArchiverSuite) SetupTest() {
-	h.Assertions = require.New(h.T())
 	h.controller = gomock.NewController(h.T())
 	h.logger = log.NewNoopLogger()
 	h.metricsHandler = metrics.NoopMetricsHandler
@@ -57,7 +56,6 @@ func TestHistoryArchiverSuite(t *testing.T) {
 }
 
 type historyArchiverSuite struct {
-	*require.Assertions
 	suite.Suite
 
 	controller *gomock.Controller
@@ -112,8 +110,8 @@ func (h *historyArchiverSuite) TestValidateURI() {
 	historyArchiver.gcloudStorage = storageWrapper
 	for _, tc := range testCases {
 		URI, err := archiver.NewURI(tc.URI)
-		h.NoError(err)
-		h.Equal(tc.expectedErr, historyArchiver.ValidateURI(URI))
+		require.NoError(h.T(), err)
+		require.Equal(h.T(), tc.expectedErr, historyArchiver.ValidateURI(URI))
 	}
 }
 
@@ -134,9 +132,9 @@ func (h *historyArchiverSuite) TestArchive_Fail_InvalidURI() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	URI, err := archiver.NewURI("wrongscheme://")
-	h.NoError(err)
+	require.NoError(h.T(), err)
 	err = historyArchiver.Archive(context.Background(), URI, request)
-	h.Error(err)
+	require.Error(h.T(), err)
 }
 
 func (h *historyArchiverSuite) TestArchive_Fail_InvalidRequest() {
@@ -158,7 +156,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_InvalidRequest() {
 	}
 
 	err := historyArchiver.Archive(ctx, h.testArchivalURI, request)
-	h.Error(err)
+	require.Error(h.T(), err)
 }
 
 func (h *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
@@ -183,7 +181,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	err := historyArchiver.Archive(ctx, h.testArchivalURI, request)
-	h.Error(err)
+	require.Error(h.T(), err)
 }
 
 func (h *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
@@ -216,7 +214,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	err := historyArchiver.Archive(ctx, h.testArchivalURI, request)
-	h.Error(err)
+	require.Error(h.T(), err)
 }
 
 func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
@@ -258,7 +256,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	err := historyArchiver.Archive(ctx, h.testArchivalURI, request)
-	h.Error(err)
+	require.Error(h.T(), err)
 }
 
 func (h *historyArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
@@ -284,7 +282,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	err := historyArchiver.Archive(ctx, h.testArchivalURI, request, archiver.GetNonRetryableErrorOption(errUploadNonRetryable))
-	h.Equal(errUploadNonRetryable, err)
+	require.Equal(h.T(), errUploadNonRetryable, err)
 }
 
 func (h *historyArchiverSuite) TestArchive_Skip() {
@@ -330,7 +328,7 @@ func (h *historyArchiverSuite) TestArchive_Skip() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	err := historyArchiver.Archive(ctx, h.testArchivalURI, request)
-	h.NoError(err)
+	require.NoError(h.T(), err)
 }
 
 func (h *historyArchiverSuite) TestArchive_Success() {
@@ -392,7 +390,7 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 	}
 
 	err := historyArchiver.Archive(ctx, h.testArchivalURI, request)
-	h.NoError(err)
+	require.NoError(h.T(), err)
 }
 
 func (h *historyArchiverSuite) TestGet_Fail_InvalidURI() {
@@ -409,10 +407,10 @@ func (h *historyArchiverSuite) TestGet_Fail_InvalidURI() {
 		PageSize:    100,
 	}
 	URI, err := archiver.NewURI("wrongscheme://")
-	h.NoError(err)
+	require.NoError(h.T(), err)
 	response, err := historyArchiver.Get(ctx, URI, request)
-	h.Nil(response)
-	h.Error(err)
+	require.Nil(h.T(), response)
+	require.Error(h.T(), err)
 }
 
 func (h *historyArchiverSuite) TestGet_Fail_InvalidToken() {
@@ -429,11 +427,11 @@ func (h *historyArchiverSuite) TestGet_Fail_InvalidToken() {
 		NextPageToken: []byte{'r', 'a', 'n', 'd', 'o', 'm'},
 	}
 	URI, err := archiver.NewURI("gs:///")
-	h.NoError(err)
+	require.NoError(h.T(), err)
 	response, err := historyArchiver.Get(ctx, URI, request)
-	h.Nil(response)
-	h.Error(err)
-	h.IsType(&serviceerror.InvalidArgument{}, err)
+	require.Nil(h.T(), response)
+	require.Error(h.T(), err)
+	require.IsType(h.T(), &serviceerror.InvalidArgument{}, err)
 }
 
 func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
@@ -452,8 +450,8 @@ func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 	}
 
 	response, err := historyArchiver.Get(ctx, h.testArchivalURI, request)
-	h.NoError(err)
-	h.Nil(response.NextPageToken)
+	require.NoError(h.T(), err)
+	require.Nil(h.T(), response.NextPageToken)
 }
 
 func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion_OldJSON() {
@@ -472,8 +470,8 @@ func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion_OldJSON() {
 	}
 
 	response, err := historyArchiver.Get(ctx, h.testArchivalURI, request)
-	h.NoError(err)
-	h.Nil(response.NextPageToken)
+	require.NoError(h.T(), err)
+	require.Nil(h.T(), response.NextPageToken)
 }
 
 func (h *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
@@ -493,8 +491,8 @@ func (h *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 	}
 
 	response, err := historyArchiver.Get(ctx, h.testArchivalURI, request)
-	h.NoError(err)
-	h.Nil(response.NextPageToken)
+	require.NoError(h.T(), err)
+	require.Nil(h.T(), response.NextPageToken)
 }
 
 func (h *historyArchiverSuite) TestGet_Success_PageSize() {
@@ -515,9 +513,9 @@ func (h *historyArchiverSuite) TestGet_Success_PageSize() {
 	}
 
 	response, err := historyArchiver.Get(ctx, h.testArchivalURI, request)
-	h.NoError(err)
-	h.NotNil(response.NextPageToken)
-	h.EqualValues(len(response.HistoryBatches), 2)
+	require.NoError(h.T(), err)
+	require.NotNil(h.T(), response.NextPageToken)
+	require.EqualValues(h.T(), len(response.HistoryBatches), 2)
 }
 
 func (h *historyArchiverSuite) TestGet_Success_FromToken() {
@@ -539,7 +537,7 @@ func (h *historyArchiverSuite) TestGet_Success_FromToken() {
 	}
 
 	nextPageToken, err := serializeToken(token)
-	h.NoError(err)
+	require.NoError(h.T(), err)
 
 	request := &archiver.GetHistoryRequest{
 		NamespaceID:   testNamespaceID,
@@ -549,23 +547,23 @@ func (h *historyArchiverSuite) TestGet_Success_FromToken() {
 		NextPageToken: nextPageToken,
 	}
 
-	h.NoError(err)
+	require.NoError(h.T(), err)
 	response, err := historyArchiver.Get(ctx, h.testArchivalURI, request)
-	h.NoError(err)
-	h.NotNil(response.NextPageToken)
+	require.NoError(h.T(), err)
+	require.NotNil(h.T(), response.NextPageToken)
 
 	token, err = deserializeGetHistoryToken(response.NextPageToken)
-	h.NoError(err)
+	require.NoError(h.T(), err)
 
-	h.EqualValues(5, token.HighestPart)
-	h.EqualValues(5, token.CurrentPart)
-	h.EqualValues(3, len(response.HistoryBatches))
+	require.EqualValues(h.T(), 5, token.HighestPart)
+	require.EqualValues(h.T(), 5, token.CurrentPart)
+	require.EqualValues(h.T(), 3, len(response.HistoryBatches))
 	numOfEvents := 0
 	for _, batch := range response.HistoryBatches {
 		numOfEvents += len(batch.Events)
 	}
 
-	h.EqualValues(4, numOfEvents)
+	require.EqualValues(h.T(), 4, numOfEvents)
 }
 
 func (h *historyArchiverSuite) TestGet_NoHistory() {

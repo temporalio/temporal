@@ -20,7 +20,6 @@ import (
 type (
 	TaskQueueUserDataSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		namespaceID string
 
@@ -38,7 +37,7 @@ func NewTaskQueueUserDataSuite(
 	logger log.Logger,
 ) *TaskQueueUserDataSuite {
 	return &TaskQueueUserDataSuite{
-		Assertions: require.New(t),
+
 		taskManager: p.NewTaskManager(
 			taskStore,
 			serialization.NewSerializer(),
@@ -48,7 +47,7 @@ func NewTaskQueueUserDataSuite(
 }
 
 func (s *TaskQueueUserDataSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
 	s.namespaceID = uuid.New().String()
@@ -67,7 +66,7 @@ func (s *TaskQueueUserDataSuite) TestSetInitialAndIncrement() {
 		NamespaceID: s.namespaceID,
 		TaskQueue:   tq1,
 	})
-	s.Error(err)
+	require.Error(s.T(), err)
 
 	// set initial user data
 	d1 := s.makeData(hlc.Zero(12345), version)
@@ -79,7 +78,7 @@ func (s *TaskQueueUserDataSuite) TestSetInitialAndIncrement() {
 			},
 		},
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	version++
 
 	// check that we can get it back
@@ -87,9 +86,9 @@ func (s *TaskQueueUserDataSuite) TestSetInitialAndIncrement() {
 		NamespaceID: s.namespaceID,
 		TaskQueue:   tq1,
 	})
-	s.NoError(err)
-	s.Equal(version, res.UserData.Version)
-	s.True(hlc.Equal(d1.Data.Clock, res.UserData.Data.Clock))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), version, res.UserData.Version)
+	require.True(s.T(), hlc.Equal(d1.Data.Clock, res.UserData.Data.Clock))
 
 	// increment it
 	d2 := s.makeData(d1.Data.Clock, version)
@@ -101,7 +100,7 @@ func (s *TaskQueueUserDataSuite) TestSetInitialAndIncrement() {
 			},
 		},
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	version++
 
 	// check that we can get it back
@@ -109,9 +108,9 @@ func (s *TaskQueueUserDataSuite) TestSetInitialAndIncrement() {
 		NamespaceID: s.namespaceID,
 		TaskQueue:   tq1,
 	})
-	s.NoError(err)
-	s.Equal(version, res.UserData.Version)
-	s.True(hlc.Equal(d2.Data.Clock, res.UserData.Data.Clock))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), version, res.UserData.Version)
+	require.True(s.T(), hlc.Equal(d2.Data.Clock, res.UserData.Data.Clock))
 }
 
 func (s *TaskQueueUserDataSuite) TestUpdateConflict() {
@@ -130,15 +129,15 @@ func (s *TaskQueueUserDataSuite) TestUpdateConflict() {
 				tq3: &p.SingleTaskQueueUserDataUpdate{UserData: data, Applied: &applied3, Conflicting: &conflict3},
 			},
 		})
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		data.Version++
 	}
-	s.True(applied1)
-	s.True(applied2)
-	s.True(applied3)
-	s.False(conflict1)
-	s.False(conflict2)
-	s.False(conflict3)
+	require.True(s.T(), applied1)
+	require.True(s.T(), applied2)
+	require.True(s.T(), applied3)
+	require.False(s.T(), conflict1)
+	require.False(s.T(), conflict2)
+	require.False(s.T(), conflict3)
 
 	// get all and verify
 	for _, tq := range []string{tq1, tq2, tq3} {
@@ -146,9 +145,9 @@ func (s *TaskQueueUserDataSuite) TestUpdateConflict() {
 			NamespaceID: s.namespaceID,
 			TaskQueue:   tq,
 		})
-		s.NoError(err)
-		s.Equal(int64(3), res.UserData.Version)
-		s.True(hlc.Equal(data.Data.Clock, res.UserData.Data.Clock))
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), int64(3), res.UserData.Version)
+		require.True(s.T(), hlc.Equal(data.Data.Clock, res.UserData.Data.Clock))
 	}
 
 	// do update where one conflicts
@@ -161,14 +160,14 @@ func (s *TaskQueueUserDataSuite) TestUpdateConflict() {
 			tq3: &p.SingleTaskQueueUserDataUpdate{UserData: data, Applied: &applied3, Conflicting: &conflict3},
 		},
 	})
-	s.Error(err)
-	s.True(p.IsConflictErr(err))
-	s.False(applied1)
-	s.False(applied2)
-	s.False(applied3)
-	s.False(conflict1)
-	s.True(conflict2)
-	s.False(conflict3)
+	require.Error(s.T(), err)
+	require.True(s.T(), p.IsConflictErr(err))
+	require.False(s.T(), applied1)
+	require.False(s.T(), applied2)
+	require.False(s.T(), applied3)
+	require.False(s.T(), conflict1)
+	require.True(s.T(), conflict2)
+	require.False(s.T(), conflict3)
 
 	// verify that none were updated
 	for _, tq := range []string{tq1, tq2, tq3} {
@@ -176,9 +175,9 @@ func (s *TaskQueueUserDataSuite) TestUpdateConflict() {
 			NamespaceID: s.namespaceID,
 			TaskQueue:   tq,
 		})
-		s.NoError(err)
-		s.Equal(int64(3), res.UserData.Version)
-		s.True(hlc.Equal(data.Data.Clock, res.UserData.Data.Clock))
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), int64(3), res.UserData.Version)
+		require.True(s.T(), hlc.Equal(data.Data.Clock, res.UserData.Data.Clock))
 	}
 }
 

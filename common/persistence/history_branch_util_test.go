@@ -12,7 +12,6 @@ import (
 type (
 	historyBranchUtilSuite struct {
 		suite.Suite
-		*require.Assertions
 	}
 )
 
@@ -21,15 +20,12 @@ func TestHistoryBranchUtilSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *historyBranchUtilSuite) SetupSuite() {
-}
+
 
 func (s *historyBranchUtilSuite) TearDownSuite() {
 }
 
-func (s *historyBranchUtilSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *historyBranchUtilSuite) TearDownTest() {
 }
@@ -51,13 +47,13 @@ func (s *historyBranchUtilSuite) TestHistoryBranchUtil() {
 		0,
 		0,
 	)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	branchInfo0, err := historyBranchUtil.ParseHistoryBranchInfo(branchToken0)
-	s.NoError(err)
-	s.Equal(treeID0, branchInfo0.TreeId)
-	s.Equal(branchID0, branchInfo0.BranchId)
-	s.Equal(ancestors, branchInfo0.Ancestors)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), treeID0, branchInfo0.TreeId)
+	require.Equal(s.T(), branchID0, branchInfo0.BranchId)
+	require.Equal(s.T(), ancestors, branchInfo0.Ancestors)
 
 	treeID1 := primitives.NewUUID().String()
 	branchID1 := primitives.NewUUID().String()
@@ -70,11 +66,11 @@ func (s *historyBranchUtilSuite) TestHistoryBranchUtil() {
 		},
 		primitives.NewUUID().String(),
 	)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	branchInfo1, err := historyBranchUtil.ParseHistoryBranchInfo(branchToken1)
-	s.NoError(err)
-	s.Equal(treeID1, branchInfo1.TreeId)
-	s.Equal(branchID1, branchInfo1.BranchId)
-	s.Equal(ancestors, branchInfo1.Ancestors)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), treeID1, branchInfo1.TreeId)
+	require.Equal(s.T(), branchID1, branchInfo1.BranchId)
+	require.Equal(s.T(), ancestors, branchInfo1.Ancestors)
 }

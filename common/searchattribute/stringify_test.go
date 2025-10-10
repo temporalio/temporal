@@ -19,11 +19,9 @@ func TestStringifySuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *StringifySuite) SetupSuite() {
-}
 
-func (s *StringifySuite) SetupTest() {
-}
+
+
 
 func (s *StringifySuite) TearDownTest() {
 }

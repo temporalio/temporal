@@ -14,7 +14,6 @@ import (
 type (
 	historyExecutionSignalSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		store sqlplugin.HistoryExecutionSignal
 	}
@@ -33,22 +32,18 @@ func NewHistoryExecutionSignalSuite(
 	store sqlplugin.HistoryExecutionSignal,
 ) *historyExecutionSignalSuite {
 	return &historyExecutionSignalSuite{
-		Assertions: require.New(t),
-		store:      store,
+
+		store: store,
 	}
 }
 
-func (s *historyExecutionSignalSuite) SetupSuite() {
 
-}
 
 func (s *historyExecutionSignalSuite) TearDownSuite() {
 
 }
 
-func (s *historyExecutionSignalSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *historyExecutionSignalSuite) TearDownTest() {
 
@@ -63,10 +58,10 @@ func (s *historyExecutionSignalSuite) TestReplace_Single() {
 
 	signal := s.newRandomExecutionSignalRow(shardID, namespaceID, workflowID, runID, initiatedID)
 	result, err := s.store.ReplaceIntoSignalInfoMaps(newExecutionContext(), []sqlplugin.SignalInfoMapsRow{signal})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *historyExecutionSignalSuite) TestReplace_Multiple() {
@@ -78,10 +73,10 @@ func (s *historyExecutionSignalSuite) TestReplace_Multiple() {
 	signal1 := s.newRandomExecutionSignalRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 	signal2 := s.newRandomExecutionSignalRow(shardID, namespaceID, workflowID, runID, rand.Int63())
 	result, err := s.store.ReplaceIntoSignalInfoMaps(newExecutionContext(), []sqlplugin.SignalInfoMapsRow{signal1, signal2})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(2, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, int(rowsAffected))
 }
 
 func (s *historyExecutionSignalSuite) TestReplaceSelect_Single() {
@@ -93,10 +88,10 @@ func (s *historyExecutionSignalSuite) TestReplaceSelect_Single() {
 
 	signal := s.newRandomExecutionSignalRow(shardID, namespaceID, workflowID, runID, initiatedID)
 	result, err := s.store.ReplaceIntoSignalInfoMaps(newExecutionContext(), []sqlplugin.SignalInfoMapsRow{signal})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	selectFilter := sqlplugin.SignalInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -105,12 +100,12 @@ func (s *historyExecutionSignalSuite) TestReplaceSelect_Single() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromSignalInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowMap := map[int64]sqlplugin.SignalInfoMapsRow{}
 	for _, signal := range rows {
 		rowMap[signal.InitiatedID] = signal
 	}
-	s.Equal(map[int64]sqlplugin.SignalInfoMapsRow{
+	require.Equal(s.T(), map[int64]sqlplugin.SignalInfoMapsRow{
 		signal.InitiatedID: signal,
 	}, rowMap)
 }
@@ -129,10 +124,10 @@ func (s *historyExecutionSignalSuite) TestReplaceSelect_Multiple() {
 		signals = append(signals, signal)
 	}
 	result, err := s.store.ReplaceIntoSignalInfoMaps(newExecutionContext(), signals)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numSignals, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numSignals, int(rowsAffected))
 
 	selectFilter := sqlplugin.SignalInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -141,7 +136,7 @@ func (s *historyExecutionSignalSuite) TestReplaceSelect_Multiple() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromSignalInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	signalMap := map[int64]sqlplugin.SignalInfoMapsRow{}
 	for _, signal := range signals {
 		signalMap[signal.InitiatedID] = signal
@@ -150,7 +145,7 @@ func (s *historyExecutionSignalSuite) TestReplaceSelect_Multiple() {
 	for _, signal := range rows {
 		rowMap[signal.InitiatedID] = signal
 	}
-	s.Equal(signalMap, rowMap)
+	require.Equal(s.T(), signalMap, rowMap)
 }
 
 func (s *historyExecutionSignalSuite) TestDeleteSelect_Single() {
@@ -168,10 +163,10 @@ func (s *historyExecutionSignalSuite) TestDeleteSelect_Single() {
 		InitiatedIDs: []int64{initiatedID},
 	}
 	result, err := s.store.DeleteFromSignalInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	selectFilter := sqlplugin.SignalInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -180,8 +175,8 @@ func (s *historyExecutionSignalSuite) TestDeleteSelect_Single() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromSignalInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.SignalInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.SignalInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionSignalSuite) TestDeleteSelect_Multiple() {
@@ -198,10 +193,10 @@ func (s *historyExecutionSignalSuite) TestDeleteSelect_Multiple() {
 		InitiatedIDs: []int64{rand.Int63(), rand.Int63()},
 	}
 	result, err := s.store.DeleteFromSignalInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	selectFilter := sqlplugin.SignalInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -210,8 +205,8 @@ func (s *historyExecutionSignalSuite) TestDeleteSelect_Multiple() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromSignalInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.SignalInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.SignalInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionSignalSuite) TestDeleteSelect_All() {
@@ -227,10 +222,10 @@ func (s *historyExecutionSignalSuite) TestDeleteSelect_All() {
 		RunID:       runID,
 	}
 	result, err := s.store.DeleteAllFromSignalInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	selectFilter := sqlplugin.SignalInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -239,8 +234,8 @@ func (s *historyExecutionSignalSuite) TestDeleteSelect_All() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromSignalInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.SignalInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.SignalInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_Single() {
@@ -252,10 +247,10 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_Single() {
 
 	signal := s.newRandomExecutionSignalRow(shardID, namespaceID, workflowID, runID, initiatedID)
 	result, err := s.store.ReplaceIntoSignalInfoMaps(newExecutionContext(), []sqlplugin.SignalInfoMapsRow{signal})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	deleteFilter := sqlplugin.SignalInfoMapsFilter{
 		ShardID:      shardID,
@@ -265,10 +260,10 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_Single() {
 		InitiatedIDs: []int64{initiatedID},
 	}
 	result, err = s.store.DeleteFromSignalInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	selectFilter := sqlplugin.SignalInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -277,8 +272,8 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_Single() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromSignalInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.SignalInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.SignalInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_Multiple() {
@@ -298,10 +293,10 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_Multiple() {
 		signals = append(signals, signal)
 	}
 	result, err := s.store.ReplaceIntoSignalInfoMaps(newExecutionContext(), signals)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numSignals, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numSignals, int(rowsAffected))
 
 	deleteFilter := sqlplugin.SignalInfoMapsFilter{
 		ShardID:      shardID,
@@ -311,10 +306,10 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_Multiple() {
 		InitiatedIDs: signalInitiatedIDs,
 	}
 	result, err = s.store.DeleteFromSignalInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numSignals, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numSignals, int(rowsAffected))
 
 	selectFilter := sqlplugin.SignalInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -323,8 +318,8 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_Multiple() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromSignalInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.SignalInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.SignalInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_All() {
@@ -341,10 +336,10 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_All() {
 		signals = append(signals, signal)
 	}
 	result, err := s.store.ReplaceIntoSignalInfoMaps(newExecutionContext(), signals)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numSignals, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numSignals, int(rowsAffected))
 
 	deleteFilter := sqlplugin.SignalInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -353,10 +348,10 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_All() {
 		RunID:       runID,
 	}
 	result, err = s.store.DeleteAllFromSignalInfoMaps(newExecutionContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numSignals, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numSignals, int(rowsAffected))
 
 	selectFilter := sqlplugin.SignalInfoMapsAllFilter{
 		ShardID:     shardID,
@@ -365,8 +360,8 @@ func (s *historyExecutionSignalSuite) TestReplaceDeleteSelect_All() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectAllFromSignalInfoMaps(newExecutionContext(), selectFilter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.SignalInfoMapsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.SignalInfoMapsRow(nil), rows)
 }
 
 func (s *historyExecutionSignalSuite) newRandomExecutionSignalRow(

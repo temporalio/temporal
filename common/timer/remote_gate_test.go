@@ -4,14 +4,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
 type (
 	remoteGateSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		currentTime     time.Time
 		remoteTimerGate RemoteGate
@@ -23,17 +21,13 @@ func TestRemoteTimerGateSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *remoteGateSuite) SetupSuite() {
 
-}
 
 func (s *remoteGateSuite) TearDownSuite() {
 
 }
 
 func (s *remoteGateSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-
 	s.currentTime = time.Now().UTC().Add(-10 * time.Minute)
 	s.remoteTimerGate = NewRemoteGate()
 	s.remoteTimerGate.SetCurrentTime(s.currentTime)

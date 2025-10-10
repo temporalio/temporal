@@ -36,7 +36,6 @@ type (
 
 	HistoryEventsSuite struct {
 		suite.Suite
-		*require.Assertions
 		protorequire.ProtoAssertions
 
 		ShardID int32
@@ -57,7 +56,7 @@ func NewHistoryEventsSuite(
 ) *HistoryEventsSuite {
 	eventSerializer := serialization.NewSerializer()
 	return &HistoryEventsSuite{
-		Assertions:      require.New(t),
+
 		ProtoAssertions: protorequire.New(t),
 		store: p.NewExecutionManager(
 			store,
@@ -72,16 +71,14 @@ func NewHistoryEventsSuite(
 	}
 }
 
-func (s *HistoryEventsSuite) SetupSuite() {
 
-}
 
 func (s *HistoryEventsSuite) TearDownSuite() {
 
 }
 
 func (s *HistoryEventsSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
@@ -106,7 +103,7 @@ func (s *HistoryEventsSuite) TestAppendSelect_First() {
 		time.Duration(0),
 		time.Duration(0),
 	)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	eventsPacket := s.newHistoryEvents(
 		[]int64{1, 2, 3},
@@ -133,7 +130,7 @@ func (s *HistoryEventsSuite) TestAppendSelect_NonShadowing() {
 		time.Duration(0),
 		time.Duration(0),
 	)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	var events []*historypb.HistoryEvent
 
 	eventsPacket0 := s.newHistoryEvents(
@@ -171,7 +168,7 @@ func (s *HistoryEventsSuite) TestAppendSelect_Shadowing() {
 		time.Duration(0),
 		time.Duration(0),
 	)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	var events0 []*historypb.HistoryEvent
 	var events1 []*historypb.HistoryEvent
 
@@ -221,7 +218,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_NoShadowing() {
 		time.Duration(0),
 		time.Duration(0),
 	)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	var events0 []*historypb.HistoryEvent
 	var events1 []*historypb.HistoryEvent
 
@@ -273,7 +270,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_NonLastBranch() {
 		time.Duration(0),
 		time.Duration(0),
 	)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	var events0 []*historypb.HistoryEvent
 	var events1 []*historypb.HistoryEvent
 
@@ -342,7 +339,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
 		time.Duration(0),
 		time.Duration(0),
 	)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	var events0 []*historypb.HistoryEvent
 	var events1 []*historypb.HistoryEvent
 
@@ -401,7 +398,7 @@ func (s *HistoryEventsSuite) TestAppendSelectTrim() {
 		time.Duration(0),
 		time.Duration(0),
 	)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	var events []*historypb.HistoryEvent
 
 	eventsPacket0 := s.newHistoryEvents(
@@ -445,7 +442,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_NonLastBranch() {
 		time.Duration(0),
 		time.Duration(0),
 	)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	var events0 []*historypb.HistoryEvent
 	var events1 []*historypb.HistoryEvent
 
@@ -514,7 +511,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_LastBranch() {
 		time.Duration(0),
 		time.Duration(0),
 	)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	var events []*historypb.HistoryEvent
 
 	eventsPacket0 := s.newHistoryEvents(
@@ -565,7 +562,7 @@ func (s *HistoryEventsSuite) TestAppendBatches() {
 		time.Duration(0),
 		time.Duration(0),
 	)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	eventsPacket1 := s.newHistoryEvents(
 		[]int64{1, 2, 3},
@@ -606,7 +603,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
 		time.Duration(0),
 		time.Duration(0),
 	)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	eventsPacket0 := s.newHistoryEvents(
 		[]int64{1, 2, 3},
@@ -648,7 +645,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
 		MaxEventID:  common.LastEventID,
 		PageSize:    1,
 	})
-	s.Error(err, "Workflow execution history not found.")
+	require.Error(s.T(), err, "Workflow execution history not found.")
 
 	_, err = s.store.ReadHistoryBranch(s.Ctx, &p.ReadHistoryBranchRequest{
 		ShardID:     s.ShardID,
@@ -657,7 +654,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
 		MaxEventID:  common.LastEventID,
 		PageSize:    1,
 	})
-	s.Error(err, "Workflow execution history not found.")
+	require.Error(s.T(), err, "Workflow execution history not found.")
 }
 
 func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteForkedBranchFirst() {
@@ -674,7 +671,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteForkedBranchFirst() {
 		time.Duration(0),
 		time.Duration(0),
 	)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	transactionID := rand.Int63()
 	eventsPacket0 := s.newHistoryEvents(
@@ -710,7 +707,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteForkedBranchFirst() {
 		MaxEventID:  common.LastEventID,
 		PageSize:    1,
 	})
-	s.Error(err, "Workflow execution history not found.")
+	require.Error(s.T(), err, "Workflow execution history not found.")
 
 	// delete branch1, should delete branch1:[1,2,3] [4,5]
 	s.deleteHistoryBranch(s.ShardID, br1Token)
@@ -723,7 +720,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteForkedBranchFirst() {
 		MaxEventID:  common.LastEventID,
 		PageSize:    1,
 	})
-	s.Error(err, "Workflow execution history not found.")
+	require.Error(s.T(), err, "Workflow execution history not found.")
 }
 
 func (s *HistoryEventsSuite) appendHistoryEvents(
@@ -740,7 +737,7 @@ func (s *HistoryEventsSuite) appendHistoryEvents(
 		IsNewBranch:       packet.nodeID == common.FirstEventID,
 		Info:              "",
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *HistoryEventsSuite) appendRawHistoryBatches(
@@ -749,7 +746,7 @@ func (s *HistoryEventsSuite) appendRawHistoryBatches(
 	packet HistoryEventsPacket,
 ) {
 	blob, err := s.serializer.SerializeEvents(packet.events)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	_, err = s.store.AppendRawHistoryNodes(s.Ctx, &p.AppendRawHistoryNodesRequest{
 		ShardID:           shardID,
 		BranchToken:       branchToken,
@@ -760,7 +757,7 @@ func (s *HistoryEventsSuite) appendRawHistoryBatches(
 		Info:              "",
 		History:           blob,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *HistoryEventsSuite) forkHistoryBranch(
@@ -776,7 +773,7 @@ func (s *HistoryEventsSuite) forkHistoryBranch(
 		Info:            "",
 		NewRunID:        uuid.New(),
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	return resp.NewBranchToken
 }
 
@@ -788,7 +785,7 @@ func (s *HistoryEventsSuite) deleteHistoryBranch(
 		ShardID:     shardID,
 		BranchToken: branchToken,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *HistoryEventsSuite) trimHistoryBranch(
@@ -803,7 +800,7 @@ func (s *HistoryEventsSuite) trimHistoryBranch(
 		NodeID:        nodeID,
 		TransactionID: transactionID,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *HistoryEventsSuite) listHistoryEvents(
@@ -823,7 +820,7 @@ func (s *HistoryEventsSuite) listHistoryEvents(
 			PageSize:      1, // use 1 here for better testing exp
 			NextPageToken: token,
 		})
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		token = resp.NextPageToken
 		events = append(events, resp.HistoryEvents...)
 	}
@@ -845,7 +842,7 @@ func (s *HistoryEventsSuite) listAllHistoryEvents(
 			PageSize:      1, // use 1 here for better testing exp
 			NextPageToken: token,
 		})
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		token = resp.NextPageToken
 		events = append(events, resp.HistoryEvents...)
 	}

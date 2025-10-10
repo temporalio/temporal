@@ -15,7 +15,6 @@ import (
 
 type (
 	fifoSchedulerSuite struct {
-		*require.Assertions
 		suite.Suite
 
 		controller *gomock.Controller
@@ -31,7 +30,6 @@ func TestFIFOSchedulerSuite(t *testing.T) {
 }
 
 func (s *fifoSchedulerSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 
@@ -149,7 +147,7 @@ func (s *fifoSchedulerSuite) TestParallelSubmitProcess() {
 				mockTask.EXPECT().Nack(executionErr).Do(func(_ error) { testWaitGroup.Done() }).Times(1)
 
 			default:
-				s.Fail("case not expected")
+				require.Fail(s.T(), "case not expected")
 			}
 			channel <- mockTask
 		}
@@ -179,13 +177,13 @@ func (s *fifoSchedulerSuite) TestStartStopWorkers() {
 
 	numWorkers := 10
 	processor.startWorkers(numWorkers)
-	s.Len(processor.workerShutdownCh, numWorkers)
+	require.Len(s.T(), processor.workerShutdownCh, numWorkers)
 
 	processor.stopWorkers(numWorkers / 2)
-	s.Len(processor.workerShutdownCh, numWorkers/2)
+	require.Len(s.T(), processor.workerShutdownCh, numWorkers/2)
 
 	processor.stopWorkers(len(processor.workerShutdownCh))
-	s.Empty(processor.workerShutdownCh)
+	require.Empty(s.T(), processor.workerShutdownCh)
 
 	processor.shutdownWG.Wait()
 }

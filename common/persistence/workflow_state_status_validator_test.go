@@ -12,7 +12,6 @@ import (
 type (
 	workflowStateStatusSuite struct {
 		suite.Suite
-		*require.Assertions
 	}
 )
 
@@ -21,16 +20,13 @@ func TestWorkflowStateStatusSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *workflowStateStatusSuite) SetupSuite() {
-}
+
 
 func (s *workflowStateStatusSuite) TearDownSuite() {
 
 }
 
-func (s *workflowStateStatusSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *workflowStateStatusSuite) TearDownTest() {
 
@@ -46,10 +42,10 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateCr
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.NoError(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	require.NoError(s.T(), ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, status))
+		require.NotNil(s.T(), ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, status))
 	}
 }
 
@@ -63,10 +59,10 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateRu
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.NoError(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	require.NoError(s.T(), ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, status))
+		require.NotNil(s.T(), ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, status))
 	}
 }
 
@@ -80,10 +76,10 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateCo
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Error(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	require.Error(s.T(), ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NoError(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
+		require.NoError(s.T(), ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
 	}
 }
 
@@ -97,10 +93,10 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateZo
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.NoError(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	require.NoError(s.T(), ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.Error(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, status))
+		require.Error(s.T(), ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, status))
 	}
 }
 
@@ -114,10 +110,10 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCr
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	require.NoError(s.T(), ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.Error(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, status))
+		require.Error(s.T(), ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, status))
 	}
 }
 
@@ -131,10 +127,10 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateRu
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	require.NoError(s.T(), ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.Error(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, status))
+		require.Error(s.T(), ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, status))
 	}
 }
 
@@ -148,10 +144,10 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCo
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Error(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	require.Error(s.T(), ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
+		require.NoError(s.T(), ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
 	}
 }
 
@@ -165,9 +161,9 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateZo
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	require.NoError(s.T(), ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.Error(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, status))
+		require.Error(s.T(), ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, status))
 	}
 }

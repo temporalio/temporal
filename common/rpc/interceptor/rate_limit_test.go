@@ -15,7 +15,6 @@ type (
 	// rateLimitInterceptorSuite struct {
 	rateLimitInterceptorSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		controller      *gomock.Controller
 		mockRateLimiter *quotas.MockRequestRateLimiter
@@ -27,7 +26,7 @@ func TestRateLimitInterceptorSuite(t *testing.T) {
 }
 
 func (s *rateLimitInterceptorSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.controller = gomock.NewController(s.T())
 	s.mockRateLimiter = quotas.NewMockRequestRateLimiter(s.controller)
 }
@@ -44,8 +43,8 @@ func (s *rateLimitInterceptorSuite) TestInterceptWithTokenConfig() {
 		return nil, nil
 	}
 	_, err := interceptor.Intercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: methodName}, handler)
-	s.NoError(err)
-	s.True(handlerCalled)
+	require.NoError(s.T(), err)
+	require.True(s.T(), handlerCalled)
 }
 
 func (s *rateLimitInterceptorSuite) TestInterceptWithNoTokenConfig() {
@@ -59,8 +58,8 @@ func (s *rateLimitInterceptorSuite) TestInterceptWithNoTokenConfig() {
 		return nil, nil
 	}
 	_, err := interceptor.Intercept(context.Background(), nil, &grpc.UnaryServerInfo{}, handler)
-	s.Error(err)
-	s.False(handlerCalled)
+	require.Error(s.T(), err)
+	require.False(s.T(), handlerCalled)
 }
 
 func (s *rateLimitInterceptorSuite) TestInterceptWithNonZeroTokenConfig() {
@@ -75,6 +74,6 @@ func (s *rateLimitInterceptorSuite) TestInterceptWithNonZeroTokenConfig() {
 		return nil, nil
 	}
 	_, err := interceptor.Intercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: methodName}, handler)
-	s.NoError(err)
-	s.True(handlerCalled)
+	require.NoError(s.T(), err)
+	require.True(s.T(), handlerCalled)
 }

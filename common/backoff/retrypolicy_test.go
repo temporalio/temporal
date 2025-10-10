@@ -14,7 +14,6 @@ import (
 
 type (
 	RetryPolicySuite struct {
-		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 		suite.Suite
 	}
 )
@@ -65,9 +64,7 @@ func TestRetryPolicySuite(t *testing.T) {
 	suite.Run(t, new(RetryPolicySuite))
 }
 
-func (s *RetryPolicySuite) SetupTest() {
-	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-}
+
 
 func (s *RetryPolicySuite) TestExponentialBackoff() {
 	policy := createPolicy(time.Second).
@@ -82,8 +79,8 @@ func (s *RetryPolicySuite) TestExponentialBackoff() {
 	for _, expected := range expectedResult {
 		min, max := getNextBackoffRange(expected)
 		next := r.NextBackOff(nil)
-		s.True(next >= min, "NextBackoff too low")
-		s.True(next < max, "NextBackoff too high")
+		require.True(s.T(), next >= min, "NextBackoff too low")
+		require.True(s.T(), next < max, "NextBackoff too high")
 	}
 }
 
@@ -96,10 +93,10 @@ func (s *RetryPolicySuite) TestNumberOfAttempts() {
 	var next time.Duration
 	for i := 0; i < maxAttempts-1; i++ {
 		next = r.NextBackOff(nil)
-		s.NotEqual(done, next)
+		require.NotEqual(s.T(), done, next)
 	}
 
-	s.Equal(done, r.NextBackOff(nil))
+	require.Equal(s.T(), done, r.NextBackOff(nil))
 }
 
 // Test to make sure relative maximum interval for each retry is honoured
@@ -116,8 +113,8 @@ func (s *RetryPolicySuite) TestMaximumInterval() {
 	for _, expected := range expectedResult {
 		min, max := getNextBackoffRange(expected)
 		next := r.NextBackOff(nil)
-		s.True(next >= min, "NextBackoff too low")
-		s.True(next < max, "NextBackoff too high")
+		require.True(s.T(), next >= min, "NextBackoff too low")
+		require.True(s.T(), next < max, "NextBackoff too high")
 	}
 }
 
@@ -129,8 +126,8 @@ func (s *RetryPolicySuite) TestBackoffCoefficient() {
 	min, max := getNextBackoffRange(2 * time.Second)
 	for i := 0; i < 10; i++ {
 		next := r.NextBackOff(nil)
-		s.True(next >= min, "NextBackoff too low")
-		s.True(next < max, "NextBackoff too high")
+		require.True(s.T(), next >= min, "NextBackoff too low")
+		require.True(s.T(), next < max, "NextBackoff too high")
 	}
 }
 
@@ -142,7 +139,7 @@ func (s *RetryPolicySuite) TestExpirationInterval() {
 	ts.Advance(6 * time.Minute)
 	next := r.NextBackOff(nil)
 
-	s.Equal(done, next)
+	require.Equal(s.T(), done, next)
 }
 
 func (s *RetryPolicySuite) TestExpirationOverflow() {
@@ -152,15 +149,15 @@ func (s *RetryPolicySuite) TestExpirationOverflow() {
 	r, ts := createRetrier(policy)
 	next := r.NextBackOff(nil)
 	min, max := getNextBackoffRange(2 * time.Second)
-	s.True(next >= min, "NextBackoff too low")
-	s.True(next < max, "NextBackoff too high")
+	require.True(s.T(), next >= min, "NextBackoff too low")
+	require.True(s.T(), next < max, "NextBackoff too high")
 
 	ts.Advance(2 * time.Second)
 
 	next = r.NextBackOff(nil)
 	min, max = getNextBackoffRange(3 * time.Second)
-	s.True(next >= min, "NextBackoff too low")
-	s.True(next < max, "NextBackoff too high")
+	require.True(s.T(), next >= min, "NextBackoff too low")
+	require.True(s.T(), next < max, "NextBackoff too high")
 }
 
 func (s *RetryPolicySuite) TestDefaultPublishRetryPolicy() {
@@ -189,11 +186,11 @@ func (s *RetryPolicySuite) TestDefaultPublishRetryPolicy() {
 	for _, expected := range expectedResult {
 		next := r.NextBackOff(nil)
 		if expected == done {
-			s.Equal(done, next, "backoff not done yet!!!")
+			require.Equal(s.T(), done, next, "backoff not done yet!!!")
 		} else {
 			min, max := getNextBackoffRange(expected)
-			s.True(next >= min, "NextBackoff too low: actual: %v, min: %v", next, min)
-			s.True(next < max, "NextBackoff too high: actual: %v, max: %v", next, max)
+			require.True(s.T(), next >= min, "NextBackoff too low: actual: %v, min: %v", next, min)
+			require.True(s.T(), next < max, "NextBackoff too high: actual: %v, max: %v", next, max)
 			ts.Advance(expected)
 		}
 	}
@@ -207,7 +204,7 @@ func (s *RetryPolicySuite) TestNoMaxAttempts() {
 	r, ts := createRetrier(policy)
 	for i := 0; i < 100; i++ {
 		next := r.NextBackOff(nil)
-		s.True(next > 0 || next == done, "Unexpected value for next retry duration: %v", next)
+		require.True(s.T(), next > 0 || next == done, "Unexpected value for next retry duration: %v", next)
 		ts.Advance(next)
 	}
 }
@@ -218,7 +215,7 @@ func (s *RetryPolicySuite) TestUnbounded() {
 	r, ts := createRetrier(policy)
 	for i := 0; i < 100; i++ {
 		next := r.NextBackOff(nil)
-		s.True(next > 0 || next == done, "Unexpected value for next retry duration: %v", next)
+		require.True(s.T(), next > 0 || next == done, "Unexpected value for next retry duration: %v", next)
 		ts.Advance(next)
 	}
 }
@@ -243,27 +240,27 @@ func (s *RetryPolicySuite) TestErrorDependentPolicy() {
 	retrier, ts := createRetrier(policy)
 
 	delay := retrier.NextBackOff(fmt.Errorf("other error"))
-	s.Equal(1*time.Second, delay)
+	require.Equal(s.T(), 1*time.Second, delay)
 	ts.Advance(delay)
 
 	delay = retrier.NextBackOff(twoSecondError)
-	s.Equal(2*time.Second, delay)
+	require.Equal(s.T(), 2*time.Second, delay)
 	ts.Advance(delay)
 
 	delay = retrier.NextBackOff(threeSecondError)
-	s.Equal(3*time.Second, delay)
+	require.Equal(s.T(), 3*time.Second, delay)
 	ts.Advance(delay)
 
 	delay = retrier.NextBackOff(threeSecondError)
-	s.Equal(done, delay)
+	require.Equal(s.T(), done, delay)
 
 	// test with jitter
 	policy = NewErrorDependentRetryPolicy(delayForError).WithMaximumAttempts(4).WithJitter(0.1)
 	retrier, _ = createRetrier(policy)
 
 	delay = retrier.NextBackOff(fmt.Errorf("other error"))
-	s.True(delay >= 1*time.Second)
-	s.True(delay < 1500*time.Millisecond)
+	require.True(s.T(), delay >= 1*time.Second)
+	require.True(s.T(), delay < 1500*time.Millisecond)
 }
 
 func (s *RetryPolicySuite) TestConstantDelayPolicy() {
@@ -271,27 +268,27 @@ func (s *RetryPolicySuite) TestConstantDelayPolicy() {
 	retrier, ts := createRetrier(policy)
 
 	delay := retrier.NextBackOff(nil)
-	s.Equal(2*time.Second, delay)
+	require.Equal(s.T(), 2*time.Second, delay)
 	ts.Advance(delay)
 
 	delay = retrier.NextBackOff(nil)
-	s.Equal(2*time.Second, delay)
+	require.Equal(s.T(), 2*time.Second, delay)
 	ts.Advance(delay)
 
 	delay = retrier.NextBackOff(nil)
-	s.Equal(2*time.Second, delay)
+	require.Equal(s.T(), 2*time.Second, delay)
 	ts.Advance(delay)
 
 	delay = retrier.NextBackOff(nil)
-	s.Equal(done, delay)
+	require.Equal(s.T(), done, delay)
 
 	// test with jitter
 	policy = NewConstantDelayRetryPolicy(2 * time.Second).WithMaximumAttempts(4).WithJitter(0.1)
 	retrier, _ = createRetrier(policy)
 
 	delay = retrier.NextBackOff(nil)
-	s.True(delay >= 2*time.Second)
-	s.True(delay < 2200*time.Millisecond)
+	require.True(s.T(), delay >= 2*time.Second)
+	require.True(s.T(), delay < 2200*time.Millisecond)
 }
 
 // Validate jitter computation
@@ -300,8 +297,8 @@ func (s *RetryPolicySuite) TestAddJitter() {
 		delay := 1 * time.Second
 		jitter := 0.5
 		jitteredDelay := addJitter(delay, jitter)
-		s.True(jitteredDelay >= 1*time.Second)
-		s.True(jitteredDelay < 1500*time.Millisecond)
+		require.True(s.T(), jitteredDelay >= 1*time.Second)
+		require.True(s.T(), jitteredDelay < 1500*time.Millisecond)
 	}
 }
 

@@ -13,7 +13,6 @@ import (
 
 type (
 	streamErrorSuite struct {
-		*require.Assertions
 		suite.Suite
 	}
 )
@@ -23,29 +22,26 @@ func TestStreamErrorSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *streamErrorSuite) SetupSuite() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *streamErrorSuite) TearDownSuite() {
 }
 
-func (s *streamErrorSuite) SetupTest() {
-}
+
 
 func (s *streamErrorSuite) TearDownTest() {
 }
 
 func (s *streamErrorSuite) TestErrorConversion() {
-	s.Equal(nil, errorConvert(nil))
-	s.Equal(io.EOF, errorConvert(io.EOF))
+	require.Equal(s.T(), nil, errorConvert(nil))
+	require.Equal(s.T(), io.EOF, errorConvert(io.EOF))
 
-	s.IsType(nil, errorConvert(status.Error(codes.OK, "")))
-	s.IsType(&serviceerror.DeadlineExceeded{}, errorConvert(status.Error(codes.DeadlineExceeded, "")))
-	s.IsType(&serviceerror.Canceled{}, errorConvert(status.Error(codes.Canceled, "")))
-	s.IsType(&serviceerror.InvalidArgument{}, errorConvert(status.Error(codes.InvalidArgument, "")))
-	s.IsType(&serviceerror.FailedPrecondition{}, errorConvert(status.Error(codes.FailedPrecondition, "")))
-	s.IsType(&serviceerror.Unavailable{}, errorConvert(status.Error(codes.Unavailable, "")))
-	s.IsType(&serviceerror.Internal{}, errorConvert(status.Error(codes.Internal, "")))
-	s.IsType(&serviceerror.Internal{}, errorConvert(status.Error(codes.Unknown, "")))
+	require.IsType(s.T(), nil, errorConvert(status.Error(codes.OK, "")))
+	require.IsType(s.T(), &serviceerror.DeadlineExceeded{}, errorConvert(status.Error(codes.DeadlineExceeded, "")))
+	require.IsType(s.T(), &serviceerror.Canceled{}, errorConvert(status.Error(codes.Canceled, "")))
+	require.IsType(s.T(), &serviceerror.InvalidArgument{}, errorConvert(status.Error(codes.InvalidArgument, "")))
+	require.IsType(s.T(), &serviceerror.FailedPrecondition{}, errorConvert(status.Error(codes.FailedPrecondition, "")))
+	require.IsType(s.T(), &serviceerror.Unavailable{}, errorConvert(status.Error(codes.Unavailable, "")))
+	require.IsType(s.T(), &serviceerror.Internal{}, errorConvert(status.Error(codes.Internal, "")))
+	require.IsType(s.T(), &serviceerror.Internal{}, errorConvert(status.Error(codes.Unknown, "")))
 }

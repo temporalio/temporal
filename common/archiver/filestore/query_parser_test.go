@@ -11,7 +11,6 @@ import (
 )
 
 type queryParserSuite struct {
-	*require.Assertions
 	suite.Suite
 
 	parser QueryParser
@@ -22,7 +21,6 @@ func TestQueryParserSuite(t *testing.T) {
 }
 
 func (s *queryParserSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 	s.parser = NewQueryParser()
 }
 
@@ -108,15 +106,15 @@ func (s *queryParserSuite) TestParseWorkflowID_RunID_WorkflowType() {
 	for _, tc := range testCases {
 		parsedQuery, err := s.parser.Parse(tc.query)
 		if tc.expectErr {
-			s.Error(err)
+			require.Error(s.T(), err)
 			continue
 		}
-		s.NoError(err)
-		s.Equal(tc.parsedQuery.emptyResult, parsedQuery.emptyResult)
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), tc.parsedQuery.emptyResult, parsedQuery.emptyResult)
 		if !tc.parsedQuery.emptyResult {
-			s.Equal(tc.parsedQuery.workflowID, parsedQuery.workflowID)
-			s.Equal(tc.parsedQuery.runID, parsedQuery.runID)
-			s.Equal(tc.parsedQuery.workflowTypeName, parsedQuery.workflowTypeName)
+			require.Equal(s.T(), tc.parsedQuery.workflowID, parsedQuery.workflowID)
+			require.Equal(s.T(), tc.parsedQuery.runID, parsedQuery.runID)
+			require.Equal(s.T(), tc.parsedQuery.workflowTypeName, parsedQuery.workflowTypeName)
 		}
 	}
 }
@@ -215,13 +213,13 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 	for _, tc := range testCases {
 		parsedQuery, err := s.parser.Parse(tc.query)
 		if tc.expectErr {
-			s.Error(err)
+			require.Error(s.T(), err)
 			continue
 		}
-		s.NoError(err)
-		s.Equal(tc.parsedQuery.emptyResult, parsedQuery.emptyResult)
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), tc.parsedQuery.emptyResult, parsedQuery.emptyResult)
 		if !tc.parsedQuery.emptyResult {
-			s.EqualValues(tc.parsedQuery.status, parsedQuery.status)
+			require.EqualValues(s.T(), tc.parsedQuery.status, parsedQuery.status)
 		}
 	}
 }
@@ -281,14 +279,14 @@ func (s *queryParserSuite) TestParseCloseTime() {
 	for i, tc := range testCases {
 		parsedQuery, err := s.parser.Parse(tc.query)
 		if tc.expectErr {
-			s.Error(err)
+			require.Error(s.T(), err)
 			continue
 		}
-		s.NoError(err, "case %d", i)
-		s.Equal(tc.parsedQuery.emptyResult, parsedQuery.emptyResult, "case %d", i)
+		require.NoError(s.T(), err, "case %d", i)
+		require.Equal(s.T(), tc.parsedQuery.emptyResult, parsedQuery.emptyResult, "case %d", i)
 		if !tc.parsedQuery.emptyResult {
-			s.True(tc.parsedQuery.earliestCloseTime.Equal(parsedQuery.earliestCloseTime), "case %d", i)
-			s.True(tc.parsedQuery.latestCloseTime.Equal(parsedQuery.latestCloseTime), "case %d", i)
+			require.True(s.T(), tc.parsedQuery.earliestCloseTime.Equal(parsedQuery.earliestCloseTime), "case %d", i)
+			require.True(s.T(), tc.parsedQuery.latestCloseTime.Equal(parsedQuery.latestCloseTime), "case %d", i)
 		}
 	}
 }
@@ -330,13 +328,13 @@ func (s *queryParserSuite) TestParse() {
 	for i, tc := range testCases {
 		parsedQuery, err := s.parser.Parse(tc.query)
 		if tc.expectErr {
-			s.Error(err)
+			require.Error(s.T(), err)
 			continue
 		}
-		s.NoError(err, "case %d", i)
-		s.Equal(tc.parsedQuery.emptyResult, parsedQuery.emptyResult, "case %d", i)
+		require.NoError(s.T(), err, "case %d", i)
+		require.Equal(s.T(), tc.parsedQuery.emptyResult, parsedQuery.emptyResult, "case %d", i)
 		if !tc.parsedQuery.emptyResult {
-			s.Equal(tc.parsedQuery, parsedQuery, "case %d", i)
+			require.Equal(s.T(), tc.parsedQuery, parsedQuery, "case %d", i)
 		}
 	}
 }

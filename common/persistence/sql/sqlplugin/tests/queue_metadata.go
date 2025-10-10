@@ -22,7 +22,6 @@ var (
 type (
 	queueMetadataSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		store sqlplugin.QueueMetadata
 	}
@@ -33,22 +32,18 @@ func NewQueueMetadataSuite(
 	store sqlplugin.QueueMetadata,
 ) *queueMetadataSuite {
 	return &queueMetadataSuite{
-		Assertions: require.New(t),
-		store:      store,
+
+		store: store,
 	}
 }
 
-func (s *queueMetadataSuite) SetupSuite() {
 
-}
 
 func (s *queueMetadataSuite) TearDownSuite() {
 
 }
 
-func (s *queueMetadataSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *queueMetadataSuite) TearDownTest() {
 
@@ -59,10 +54,10 @@ func (s *queueMetadataSuite) TestInsert_Success() {
 
 	queueMetadata := s.newRandomQueueMetadataRow(queueType)
 	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *queueMetadataSuite) TestInsert_Fail_Duplicate() {
@@ -70,14 +65,14 @@ func (s *queueMetadataSuite) TestInsert_Fail_Duplicate() {
 
 	queueMetadata := s.newRandomQueueMetadataRow(queueType)
 	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	queueMetadata = s.newRandomQueueMetadataRow(queueType)
 	_, err = s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *queueMetadataSuite) TestInsertSelect() {
@@ -85,18 +80,18 @@ func (s *queueMetadataSuite) TestInsertSelect() {
 
 	queueMetadata := s.newRandomQueueMetadataRow(queueType)
 	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.QueueMetadataFilter{
 		QueueType: queueType,
 	}
 	row, err := s.store.SelectFromQueueMetadata(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	row.QueueType = queueType
-	s.Equal(&queueMetadata, row)
+	require.Equal(s.T(), &queueMetadata, row)
 }
 
 func (s *queueMetadataSuite) TestInsertUpdate_Success() {
@@ -104,17 +99,17 @@ func (s *queueMetadataSuite) TestInsertUpdate_Success() {
 
 	queueMetadata := s.newRandomQueueMetadataRow(queueType)
 	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	queueMetadata = s.newRandomQueueMetadataRow(queueType)
 	result, err = s.store.UpdateQueueMetadata(newExecutionContext(), &queueMetadata)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *queueMetadataSuite) TestUpdate_Fail() {
@@ -122,10 +117,10 @@ func (s *queueMetadataSuite) TestUpdate_Fail() {
 
 	queueMetadata := s.newRandomQueueMetadataRow(queueType)
 	result, err := s.store.UpdateQueueMetadata(newExecutionContext(), &queueMetadata)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 }
 
 func (s *queueMetadataSuite) TestInsertUpdateSelect() {
@@ -133,26 +128,26 @@ func (s *queueMetadataSuite) TestInsertUpdateSelect() {
 
 	queueMetadata := s.newRandomQueueMetadataRow(queueType)
 	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	queueMetadata = s.newRandomQueueMetadataRow(queueType)
 	result, err = s.store.UpdateQueueMetadata(newExecutionContext(), &queueMetadata)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.QueueMetadataFilter{
 		QueueType: queueType,
 	}
 	row, err := s.store.SelectFromQueueMetadata(newExecutionContext(), filter)
-	s.NoError(err)
-	s.Equal(queueMetadata.DataEncoding, row.DataEncoding)
-	s.Equal(queueMetadata.Data, row.Data)
-	s.Equal(queueMetadata.Version+1, row.Version) // version increase by one after update
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), queueMetadata.DataEncoding, row.DataEncoding)
+	require.Equal(s.T(), queueMetadata.Data, row.Data)
+	require.Equal(s.T(), queueMetadata.Version+1, row.Version) // version increase by one after update
 }
 
 func (s *queueMetadataSuite) TestSelectReadLock() {
@@ -160,10 +155,10 @@ func (s *queueMetadataSuite) TestSelectReadLock() {
 
 	queueMetadata := s.newRandomQueueMetadataRow(queueType)
 	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	// NOTE: lock without transaction is equivalent to select
 	//  this test only test the select functionality
@@ -171,9 +166,9 @@ func (s *queueMetadataSuite) TestSelectReadLock() {
 		QueueType: queueType,
 	}
 	row, err := s.store.LockQueueMetadata(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	row.QueueType = queueType
-	s.Equal(&queueMetadata, row)
+	require.Equal(s.T(), &queueMetadata, row)
 }
 
 func (s *queueMetadataSuite) newRandomQueueMetadataRow(

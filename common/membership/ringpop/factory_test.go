@@ -22,7 +22,6 @@ import (
 
 type (
 	RingpopSuite struct {
-		*require.Assertions
 		suite.Suite
 
 		controller *gomock.Controller
@@ -68,15 +67,15 @@ func TestRingpopSuite(t *testing.T) {
 }
 
 func (s *RingpopSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.logger = log.NewTestLogger()
 	s.controller = gomock.NewController(s.T())
 
 	var err error
 	s.internodeCertDir, err = os.MkdirTemp("", "RingpopSuiteInternode")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.internodeChain, err = testutils.GenerateTestChain(s.internodeCertDir, localhostIPv4)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.internodeConfigMutualTLS = config.GroupTLS{
 		Server: config.ServerTLS{
@@ -110,9 +109,9 @@ func (s *RingpopSuite) TearDownSuite() {
 func (s *RingpopSuite) TestHostsMode() {
 	var cfg config.Membership
 	err := yaml.Unmarshal([]byte(getHostsConfig()), &cfg)
-	s.Nil(err)
-	s.Equal("1.2.3.4", cfg.BroadcastAddress)
-	s.Equal(time.Second*30, cfg.MaxJoinDuration)
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), "1.2.3.4", cfg.BroadcastAddress)
+	require.Equal(s.T(), time.Second*30, cfg.MaxJoinDuration)
 
 	params := factoryParams{
 		Config:      &cfg,
@@ -120,8 +119,8 @@ func (s *RingpopSuite) TestHostsMode() {
 		Logger:      log.Logger(log.NewNoopLogger()),
 	}
 	f, err := newFactory(params)
-	s.Nil(err)
-	s.NotNil(f)
+	require.Nil(s.T(), err)
+	require.NotNil(s.T(), f)
 }
 
 func getHostsConfig() string {
@@ -143,8 +142,8 @@ func (s *RingpopSuite) TestInvalidBroadcastAddress() {
 	}
 	_, err := newFactory(params)
 
-	s.ErrorIs(err, errMalformedBroadcastAddress)
-	s.ErrorContains(err, "oopsie")
+	require.ErrorIs(s.T(), err, errMalformedBroadcastAddress)
+	require.ErrorContains(s.T(), err, "oopsie")
 }
 
 func newTestRingpopFactory(
@@ -164,15 +163,15 @@ func newTestRingpopFactory(
 }
 
 func (s *RingpopSuite) TestRingpopMutualTLS() {
-	s.NoError(runRingpopTLSTest(&s.Suite, s.mutualTLSFactoryA, s.mutualTLSFactoryB))
+	require.NoError(s.T(), runRingpopTLSTest(&s.Suite, s.mutualTLSFactoryA, s.mutualTLSFactoryB))
 }
 
 func (s *RingpopSuite) TestRingpopServerTLS() {
-	s.NoError(runRingpopTLSTest(&s.Suite, s.serverTLSFactoryA, s.serverTLSFactoryB))
+	require.NoError(s.T(), runRingpopTLSTest(&s.Suite, s.serverTLSFactoryA, s.serverTLSFactoryB))
 }
 
 func (s *RingpopSuite) TestRingpopInvalidTLS() {
-	s.Error(runRingpopTLSTest(&s.Suite, s.insecureFactory, s.serverTLSFactoryB))
+	require.Error(s.T(), runRingpopTLSTest(&s.Suite, s.insecureFactory, s.serverTLSFactoryB))
 }
 
 func runRingpopTLSTest(s *suite.Suite, serverA *factory, serverB *factory) error {
@@ -190,7 +189,7 @@ func runRingpopTLSTest(s *suite.Suite, serverA *factory, serverB *factory) error
 
 	// Confirm that A's listener is actually using TLS
 	clientTLSConfig, err := serverB.TLSFactory.GetInternodeClientConfig()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	conn, err := tls.Dial("tcp", hostPortA, clientTLSConfig)
 	if err != nil {
@@ -204,9 +203,9 @@ func runRingpopTLSTest(s *suite.Suite, serverA *factory, serverB *factory) error
 
 func (s *RingpopSuite) setupInternodeRingpop() {
 	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, metrics.NoopMetricsHandler, s.logger, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.insecureFactory = newTestRingpopFactory("tester", s.logger, rpcTestCfgDefault, provider, dynamicconfig.NewNoopCollection())
-	s.NotNil(s.insecureFactory)
+	require.NotNil(s.T(), s.insecureFactory)
 
 	serverTLS := &config.Global{
 		Membership: s.membershipConfig,
@@ -230,16 +229,16 @@ func (s *RingpopSuite) setupInternodeRingpop() {
 	}), s.logger)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(mutualTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.mutualTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, rpcCfgA, provider, dc)
-	s.NotNil(s.mutualTLSFactoryA)
+	require.NotNil(s.T(), s.mutualTLSFactoryA)
 	s.mutualTLSFactoryB = newTestRingpopFactory("tester-B", s.logger, rpcCfgB, provider, dc)
-	s.NotNil(s.mutualTLSFactoryB)
+	require.NotNil(s.T(), s.mutualTLSFactoryB)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(serverTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.serverTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, rpcCfgA, provider, dc)
-	s.NotNil(s.serverTLSFactoryA)
+	require.NotNil(s.T(), s.serverTLSFactoryA)
 	s.serverTLSFactoryB = newTestRingpopFactory("tester-B", s.logger, rpcCfgB, provider, dc)
-	s.NotNil(s.serverTLSFactoryB)
+	require.NotNil(s.T(), s.serverTLSFactoryB)
 }

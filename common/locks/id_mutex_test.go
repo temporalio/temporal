@@ -111,8 +111,7 @@ func TestIDMutexSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *idMutexSuite) SetupSuite() {
-}
+
 
 func (s *idMutexSuite) TearDownSuite() {
 

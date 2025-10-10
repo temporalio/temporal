@@ -13,9 +13,8 @@ import (
 type (
 	queryUtilSuite struct {
 		suite.Suite
-		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
+		// override suite.Suite.Assertions with require.Assertions; this means that require.NotNil(s.T(), nil) will stop the test,
 		// not merely log an error
-		*require.Assertions
 		logger log.Logger
 	}
 )
@@ -28,7 +27,7 @@ func TestQueryUtilSuite(t *testing.T) {
 func (s *queryUtilSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
+
 }
 
 func (s *queryUtilSuite) TestLoadAndSplitQueryFromReaders() {
@@ -60,9 +59,9 @@ func (s *queryUtilSuite) TestLoadAndSplitQueryFromReaders() {
 		-- trailing comment
 	`
 	statements, err := LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBufferString(input)})
-	s.NoError(err)
-	s.Equal(4, len(statements))
-	s.Equal(
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 4, len(statements))
+	require.Equal(s.T(),
 		`DO LANGUAGE 'plpgsql' $$
 			BEGIN
 				IF ( NOT EXISTS (select extname from pg_extension where extname = 'btree_gin') ) THEN
@@ -72,7 +71,7 @@ func (s *queryUtilSuite) TestLoadAndSplitQueryFromReaders() {
 		$$;`,
 		statements[0],
 	)
-	s.Equal(
+	require.Equal(s.T(),
 		`CREATE TABLE test (
 			id BIGINT not null,
 			col1 BIGINT,
@@ -81,9 +80,9 @@ func (s *queryUtilSuite) TestLoadAndSplitQueryFromReaders() {
 		);`,
 		statements[1],
 	)
-	s.Equal(`CREATE INDEX test_idx ON test (col1);`, statements[2])
+	require.Equal(s.T(), `CREATE INDEX test_idx ON test (col1);`, statements[2])
 	// comments are removed, but the inner content is not trimmed
-	s.Equal(
+	require.Equal(s.T(),
 		`CREATE TRIGGER test_ai AFTER INSERT ON test
 		BEGIN
 			SELECT *, 'string with unmatched chars ")' FROM test;
@@ -94,37 +93,37 @@ func (s *queryUtilSuite) TestLoadAndSplitQueryFromReaders() {
 
 	input = "CREATE TABLE test (;"
 	statements, err = LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBufferString(input)})
-	s.Error(err, "error reading contents: unmatched left parenthesis")
-	s.Nil(statements)
+	require.Error(s.T(), err, "error reading contents: unmatched left parenthesis")
+	require.Nil(s.T(), statements)
 
 	input = "CREATE TABLE test ());"
 	statements, err = LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBufferString(input)})
-	s.Error(err, "error reading contents: unmatched right parenthesis")
-	s.Nil(statements)
+	require.Error(s.T(), err, "error reading contents: unmatched right parenthesis")
+	require.Nil(s.T(), statements)
 
 	input = "begin"
 	statements, err = LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBufferString(input)})
-	s.Error(err, "error reading contents: unmatched `BEGIN` keyword")
-	s.Nil(statements)
+	require.Error(s.T(), err, "error reading contents: unmatched `BEGIN` keyword")
+	require.Nil(s.T(), statements)
 
 	input = "end"
 	statements, err = LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBufferString(input)})
-	s.Error(err, "error reading contents: unmatched `END` keyword")
-	s.Nil(statements)
+	require.Error(s.T(), err, "error reading contents: unmatched `END` keyword")
+	require.Nil(s.T(), statements)
 
 	input = "select ' from test;"
 	statements, err = LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBufferString(input)})
-	s.Error(err, "error reading contents: unmatched quotes")
-	s.Nil(statements)
+	require.Error(s.T(), err, "error reading contents: unmatched quotes")
+	require.Nil(s.T(), statements)
 }
 
 func (s *queryUtilSuite) TestHasWordAt() {
-	s.True(hasWordAt("BEGIN", "BEGIN", 0))
-	s.True(hasWordAt(" BEGIN ", "BEGIN", 1))
-	s.True(hasWordAt(")BEGIN;", "BEGIN", 1))
-	s.False(hasWordAt("BEGIN", "BEGIN", 1))
-	s.False(hasWordAt("sBEGIN", "BEGIN", 1))
-	s.False(hasWordAt("BEGINs", "BEGIN", 0))
-	s.False(hasWordAt("7BEGIN", "BEGIN", 1))
-	s.False(hasWordAt("BEGIN7", "BEGIN", 0))
+	require.True(s.T(), hasWordAt("BEGIN", "BEGIN", 0))
+	require.True(s.T(), hasWordAt(" BEGIN ", "BEGIN", 1))
+	require.True(s.T(), hasWordAt(")BEGIN;", "BEGIN", 1))
+	require.False(s.T(), hasWordAt("BEGIN", "BEGIN", 1))
+	require.False(s.T(), hasWordAt("sBEGIN", "BEGIN", 1))
+	require.False(s.T(), hasWordAt("BEGINs", "BEGIN", 0))
+	require.False(s.T(), hasWordAt("7BEGIN", "BEGIN", 1))
+	require.False(s.T(), hasWordAt("BEGIN7", "BEGIN", 0))
 }

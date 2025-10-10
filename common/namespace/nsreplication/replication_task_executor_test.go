@@ -37,8 +37,7 @@ func TestNamespaceReplicationTaskExecutorSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *namespaceReplicationTaskExecutorSuite) SetupSuite() {
-}
+
 
 func (s *namespaceReplicationTaskExecutorSuite) TearDownSuite() {
 

@@ -21,7 +21,6 @@ import (
 )
 
 type VisibilityManagerSuite struct {
-	*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 	suite.Suite
 	controller *gomock.Controller
 
@@ -45,7 +44,6 @@ func TestVisibilityManagerSuite(t *testing.T) {
 }
 
 func (s *VisibilityManagerSuite) SetupTest() {
-	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 
 	s.controller = gomock.NewController(s.T())
 	s.visibilityStore = store.NewMockVisibilityStore(s.controller)
@@ -84,7 +82,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted() {
 	}
 
 	memoBlob, err := serializeMemo(request.Memo)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.visibilityStore.EXPECT().RecordWorkflowExecutionStarted(
 		gomock.Any(),
@@ -108,12 +106,12 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted() {
 			metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
-	s.NoError(s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request))
+	require.NoError(s.T(), s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request))
 
 	// no remaining tokens
 	err = s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request)
-	s.Error(err)
-	s.ErrorIs(err, persistence.ErrPersistenceSystemLimitExceeded)
+	require.Error(s.T(), err)
+	require.ErrorIs(s.T(), err, persistence.ErrPersistenceSystemLimitExceeded)
 }
 
 func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
@@ -135,7 +133,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
 	}
 
 	memoBlob, err := serializeMemo(request.Memo)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.visibilityStore.EXPECT().RecordWorkflowExecutionClosed(
 		gomock.Any(),
@@ -161,11 +159,11 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
 			metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
-	s.NoError(s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request))
+	require.NoError(s.T(), s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request))
 
 	err = s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request)
-	s.Error(err)
-	s.ErrorIs(err, persistence.ErrPersistenceSystemLimitExceeded)
+	require.Error(s.T(), err)
+	require.ErrorIs(s.T(), err, persistence.ErrPersistenceSystemLimitExceeded)
 }
 
 func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
@@ -187,9 +185,9 @@ func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.GetWorkflowExecution(context.Background(), request)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// no remaining tokens
 	_, err = s.visibilityManager.GetWorkflowExecution(context.Background(), request)
-	s.Equal(persistence.ErrPersistenceSystemLimitExceeded, err)
+	require.Equal(s.T(), persistence.ErrPersistenceSystemLimitExceeded, err)
 }

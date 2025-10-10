@@ -12,7 +12,6 @@ import (
 type (
 	multiReservationSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		controller        *gomock.Controller
 		firstReservation  *MockReservation
@@ -25,16 +24,13 @@ func TestMultiReservationSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *multiReservationSuite) SetupSuite() {
 
-}
 
 func (s *multiReservationSuite) TearDownSuite() {
 
 }
 
 func (s *multiReservationSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.firstReservation = NewMockReservation(s.controller)
@@ -49,7 +45,7 @@ func (s *multiReservationSuite) Test_NotOK_OK() {
 	reservation := NewMultiReservation(false, nil)
 
 	result := reservation.OK()
-	s.False(result)
+	require.False(s.T(), result)
 }
 
 func (s *multiReservationSuite) Test_NotOK_CancelAt() {
@@ -64,14 +60,14 @@ func (s *multiReservationSuite) Test_NotOK_DelayFrom() {
 	reservation := NewMultiReservation(false, nil)
 
 	result := reservation.DelayFrom(now)
-	s.Equal(InfDuration, result)
+	require.Equal(s.T(), InfDuration, result)
 }
 
 func (s *multiReservationSuite) Test_OK_OK() {
 	reservation := NewMultiReservation(true, []Reservation{s.firstReservation, s.secondReservation})
 
 	result := reservation.OK()
-	s.True(result)
+	require.True(s.T(), result)
 }
 
 func (s *multiReservationSuite) Test_OK_CancelAt() {
@@ -92,5 +88,5 @@ func (s *multiReservationSuite) Test_OK_DelayFrom() {
 	reservation := NewMultiReservation(true, []Reservation{s.firstReservation, s.secondReservation})
 
 	result := reservation.DelayFrom(now)
-	s.Equal(secondReservationDelay, result)
+	require.Equal(s.T(), secondReservationDelay, result)
 }

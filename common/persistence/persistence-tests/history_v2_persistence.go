@@ -24,9 +24,8 @@ type (
 	HistoryV2PersistenceSuite struct {
 		// suite.Suite
 		*TestBase
-		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
+		// override suite.Suite.Assertions with require.Assertions; this means that require.NotNil(s.T(), nil) will stop the test,
 		// not merely log an error
-		*require.Assertions
 		protorequire.ProtoAssertions
 
 		ctx    context.Context
@@ -52,8 +51,7 @@ func isConditionFail(err error) bool {
 }
 
 // SetupSuite implementation
-func (s *HistoryV2PersistenceSuite) SetupSuite() {
-}
+
 
 // TearDownSuite implementation
 func (s *HistoryV2PersistenceSuite) TearDownSuite() {
@@ -63,7 +61,7 @@ func (s *HistoryV2PersistenceSuite) TearDownSuite() {
 // SetupTest implementation
 func (s *HistoryV2PersistenceSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
+
 	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
@@ -93,7 +91,7 @@ func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 		cnt++
 		return true
 	})
-	s.Equal(concurrency, cnt)
+	require.Equal(s.T(), concurrency, cnt)
 }
 
 // TestScanAllTrees test
@@ -101,8 +99,8 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 	resp, err := s.ExecutionManager.GetAllHistoryTreeBranches(s.ctx, &p.GetAllHistoryTreeBranchesRequest{
 		PageSize: 1,
 	})
-	s.Nil(err)
-	s.Equal(0, len(resp.Branches), "some trees were leaked in other tests")
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), 0, len(resp.Branches), "some trees were leaked in other tests")
 
 	trees := map[string]bool{}
 	totalTrees := 1002
@@ -111,11 +109,11 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 	for i := 0; i < totalTrees; i++ {
 		treeID := uuid.NewRandom().String()
 		bi, err := s.newHistoryBranch(treeID)
-		s.Nil(err)
+		require.Nil(s.T(), err)
 
 		events := s.genRandomEvents([]int64{1, 2, 3}, 1)
 		err = s.appendNewBranchAndFirstNode(bi, events, 1, "branchInfo")
-		s.Nil(err)
+		require.Nil(s.T(), err)
 		trees[string(treeID)] = true
 	}
 
@@ -125,17 +123,17 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 			PageSize:      pgSize,
 			NextPageToken: pgToken,
 		})
-		s.Nil(err)
+		require.Nil(s.T(), err)
 		for _, br := range resp.Branches {
 			uuidTreeId := br.BranchInfo.TreeId
 			if trees[uuidTreeId] {
 				delete(trees, uuidTreeId)
 
-				s.True(br.ForkTime.AsTime().UnixNano() > 0)
-				s.True(len(br.BranchInfo.BranchId) > 0)
-				s.Equal("branchInfo", br.Info)
+				require.True(s.T(), br.ForkTime.AsTime().UnixNano() > 0)
+				require.True(s.T(), len(br.BranchInfo.BranchId) > 0)
+				require.Equal(s.T(), "branchInfo", br.Info)
 			} else {
-				s.Fail("treeID not found", br.BranchInfo.TreeId)
+				require.Fail(s.T(), "treeID not found", br.BranchInfo.TreeId)
 			}
 		}
 
@@ -145,47 +143,47 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 		pgToken = resp.NextPageToken
 	}
 
-	s.Equal(0, len(trees))
+	require.Equal(s.T(), 0, len(trees))
 }
 
 // TestReadBranchByPagination test
 func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	treeID := uuid.NewRandom().String()
 	bi, err := s.newHistoryBranch(treeID)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
 	historyW := &historypb.History{}
 	events := s.genRandomEvents([]int64{1, 2, 3}, 0)
 	err = s.appendNewBranchAndFirstNode(bi, events, 1, "branchInfo")
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	historyW.Events = events
 
 	events = s.genRandomEvents([]int64{4}, 0)
 	err = s.appendNewNode(bi, events, 2)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	historyW.Events = append(historyW.Events, events...)
 
 	events = s.genRandomEvents([]int64{5, 6, 7, 8}, 4)
 	err = s.appendNewNode(bi, events, 6)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	historyW.Events = append(historyW.Events, events...)
 
 	// stale event batch
 	events = s.genRandomEvents([]int64{6, 7, 8}, 1)
 	err = s.appendNewNode(bi, events, 3)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	// stale event batch
 	events = s.genRandomEvents([]int64{6, 7, 8}, 2)
 	err = s.appendNewNode(bi, events, 4)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	// stale event batch
 	events = s.genRandomEvents([]int64{6, 7, 8}, 3)
 	err = s.appendNewNode(bi, events, 5)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
 	events = s.genRandomEvents([]int64{9}, 4)
 	err = s.appendNewNode(bi, events, 7)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	historyW.Events = append(historyW.Events, events...)
 
 	// Start to read from middle, should not return error, but the first batch should be ignored by application layer
@@ -199,53 +197,53 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	}
 	// first page
 	resp, err := s.ExecutionManager.ReadHistoryBranch(s.ctx, req)
-	s.Nil(err)
-	s.Equal(4, len(resp.HistoryEvents))
-	s.Equal(int64(6), resp.HistoryEvents[0].GetEventId())
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), 4, len(resp.HistoryEvents))
+	require.Equal(s.T(), int64(6), resp.HistoryEvents[0].GetEventId())
 
 	events = s.genRandomEvents([]int64{10}, 4)
 	err = s.appendNewNode(bi, events, 8)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	historyW.Events = append(historyW.Events, events...)
 
 	events = s.genRandomEvents([]int64{11}, 4)
 	err = s.appendNewNode(bi, events, 9)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	historyW.Events = append(historyW.Events, events...)
 
 	events = s.genRandomEvents([]int64{12}, 4)
 	err = s.appendNewNode(bi, events, 10)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	historyW.Events = append(historyW.Events, events...)
 
 	events = s.genRandomEvents([]int64{13, 14, 15}, 4)
 	err = s.appendNewNode(bi, events, 11)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	// we don't append this batch because we will fork from 13
 	// historyW.Events = append(historyW.Events, events...)
 
 	// fork from here
 	bi2, err := s.fork(bi, 13)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
 	events = s.genRandomEvents([]int64{13}, 4)
 	err = s.appendNewNode(bi2, events, 12)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	historyW.Events = append(historyW.Events, events...)
 
 	events = s.genRandomEvents([]int64{14}, 4)
 	err = s.appendNewNode(bi2, events, 13)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	historyW.Events = append(historyW.Events, events...)
 
 	events = s.genRandomEvents([]int64{15, 16, 17}, 4)
 	err = s.appendNewNode(bi2, events, 14)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	historyW.Events = append(historyW.Events, events...)
 
 	events = s.genRandomEvents([]int64{18, 19, 20}, 4)
 	err = s.appendNewNode(bi2, events, 15)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	historyW.Events = append(historyW.Events, events...)
 
 	// read branch to verify
@@ -262,9 +260,9 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 
 	// first page
 	resp, err = s.ExecutionManager.ReadHistoryBranch(s.ctx, req)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
-	s.Equal(8, len(resp.HistoryEvents))
+	require.Equal(s.T(), 8, len(resp.HistoryEvents))
 	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
 	req.NextPageToken = resp.NextPageToken
 
@@ -272,33 +270,33 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	// doe to difference in Cassandra / MySQL pagination
 	// the stale event batch may get returned
 	resp, err = s.ExecutionManager.ReadHistoryBranch(s.ctx, req)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
 	req.NextPageToken = resp.NextPageToken
 	if len(resp.HistoryEvents) == 0 {
 		// second page
 		resp, err = s.ExecutionManager.ReadHistoryBranch(s.ctx, req)
-		s.Nil(err)
-		s.Equal(3, len(resp.HistoryEvents))
+		require.Nil(s.T(), err)
+		require.Equal(s.T(), 3, len(resp.HistoryEvents))
 		historyR.Events = append(historyR.Events, resp.HistoryEvents...)
 		req.NextPageToken = resp.NextPageToken
 	} else if len(resp.HistoryEvents) == 3 {
 		// no op
 	} else {
-		s.Fail("should either return 0 (Cassandra) or 3 (MySQL) events")
+		require.Fail(s.T(), "should either return 0 (Cassandra) or 3 (MySQL) events")
 	}
 
 	// 3rd page, since we fork from nodeID=13, we can only see one batch of 12 here
 	resp, err = s.ExecutionManager.ReadHistoryBranch(s.ctx, req)
-	s.Nil(err)
-	s.Equal(1, len(resp.HistoryEvents))
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), 1, len(resp.HistoryEvents))
 	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
 	req.NextPageToken = resp.NextPageToken
 
 	// 4th page, 13~17
 	resp, err = s.ExecutionManager.ReadHistoryBranch(s.ctx, req)
-	s.Nil(err)
-	s.Equal(5, len(resp.HistoryEvents))
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), 5, len(resp.HistoryEvents))
 	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
 	req.NextPageToken = resp.NextPageToken
 
@@ -309,32 +307,32 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	// to get history again, no error and history events should be returned.
 	req.PageSize = 1
 	resp, err = s.ExecutionManager.ReadHistoryBranch(s.ctx, req)
-	s.Nil(err)
-	s.Equal(3, len(resp.HistoryEvents))
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), 3, len(resp.HistoryEvents))
 	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
 	req.NextPageToken = resp.NextPageToken
 	if len(resp.NextPageToken) != 0 {
 		resp, err = s.ExecutionManager.ReadHistoryBranch(s.ctx, req)
-		s.Nil(err)
-		s.Equal(0, len(resp.HistoryEvents))
+		require.Nil(s.T(), err)
+		require.Equal(s.T(), 0, len(resp.HistoryEvents))
 	}
 
 	s.ProtoEqual(historyW, historyR)
-	s.Equal(0, len(resp.NextPageToken))
+	require.Equal(s.T(), 0, len(resp.NextPageToken))
 
 	// MinEventID is in the middle of the last batch and this is the first request (NextPageToken
 	// is empty), the call should return an error.
 	req.MinEventID = 19
 	req.NextPageToken = nil
 	_, err = s.ExecutionManager.ReadHistoryBranch(s.ctx, req)
-	s.IsType(&serviceerror.NotFound{}, err)
+	require.IsType(s.T(), &serviceerror.NotFound{}, err)
 
 	err = s.deleteHistoryBranch(bi2)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	err = s.deleteHistoryBranch(bi)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	branches := s.descTree(treeID)
-	s.Equal(0, len(branches))
+	require.Equal(s.T(), 0, len(branches))
 }
 
 // TestConcurrentlyCreateAndAppendBranches test
@@ -350,34 +348,34 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 		go func(idx int) {
 			defer wg.Done()
 			bi, err := s.newHistoryBranch(treeID)
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			historyW := &historypb.History{}
 			m.Store(idx, bi)
 
 			events := s.genRandomEvents([]int64{1, 2, 3}, 1)
 			err = s.appendNewBranchAndFirstNode(bi, events, 1, "branchInfo")
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			historyW.Events = events
 
 			events = s.genRandomEvents([]int64{4}, 1)
 			err = s.appendNewNode(bi, events, 2)
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			historyW.Events = append(historyW.Events, events...)
 
 			events = s.genRandomEvents([]int64{5, 6, 7, 8}, 1)
 			err = s.appendNewNode(bi, events, 3)
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			historyW.Events = append(historyW.Events, events...)
 
 			events = s.genRandomEvents([]int64{9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, 1)
 			err = s.appendNewNode(bi, events, 4000)
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			historyW.Events = append(historyW.Events, events...)
 
 			// read branch to verify
 			historyR := &historypb.History{}
 			events = s.read(bi, 1, 21)
-			s.Equal(20, len(events))
+			require.Equal(s.T(), 20, len(events))
 			historyR.Events = events
 
 			s.ProtoEqual(historyW, historyR)
@@ -386,7 +384,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 	wg.Wait()
 	branches := s.descTree(treeID)
-	s.Equal(concurrency, len(branches))
+	require.Equal(s.T(), concurrency, len(branches))
 
 	wg = sync.WaitGroup{}
 	// test appending nodes(override and new nodes) on each branch concurrently
@@ -400,48 +398,48 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 			// override with smaller txn_id
 			events := s.genRandomEvents([]int64{5}, 1)
 			err := s.appendNewNode(branch, events, 0)
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			// it shouldn't change anything
 			events = s.read(branch, 1, 25)
-			s.Equal(20, len(events))
+			require.Equal(s.T(), 20, len(events))
 
 			// override with greatest txn_id
 			events = s.genRandomEvents([]int64{5}, 1)
 			err = s.appendNewNode(branch, events, 3000)
-			s.Nil(err)
+			require.Nil(s.T(), err)
 
 			// read to verify override success, at this point history is corrupted, missing 6/7/8, so we should only see 5 events
 			events = s.read(branch, 1, 6)
-			s.Equal(5, len(events))
+			require.Equal(s.T(), 5, len(events))
 			_, err = s.readWithError(branch, 1, 25)
 			_, ok := err.(*serviceerror.DataLoss)
-			s.Equal(true, ok)
+			require.Equal(s.T(), true, ok)
 
 			// override with even larger txn_id and same version
 			events = s.genRandomEvents([]int64{5, 6}, 1)
 			err = s.appendNewNode(branch, events, 3001)
-			s.Nil(err)
+			require.Nil(s.T(), err)
 
 			// read to verify override success, at this point history is corrupted, missing 7/8, so we should only see 6 events
 			events = s.read(branch, 1, 7)
-			s.Equal(6, len(events))
+			require.Equal(s.T(), 6, len(events))
 			_, err = s.readWithError(branch, 1, 25)
 			_, ok = err.(*serviceerror.DataLoss)
-			s.Equal(true, ok)
+			require.Equal(s.T(), true, ok)
 
 			// override more with larger txn_id, this would fix the corrupted hole so that we cna get 20 events again
 			events = s.genRandomEvents([]int64{7, 8}, 1)
 			err = s.appendNewNode(branch, events, 3002)
-			s.Nil(err)
+			require.Nil(s.T(), err)
 
 			// read to verify override
 			events = s.read(branch, 1, 25)
-			s.Equal(20, len(events))
+			require.Equal(s.T(), 20, len(events))
 			events = s.genRandomEvents([]int64{9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23}, 1)
 			err = s.appendNewNode(branch, events, 4001)
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			events = s.read(branch, 1, 25)
-			s.Equal(23, len(events))
+			require.Equal(s.T(), 23, len(events))
 		}(i)
 	}
 
@@ -451,12 +449,12 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 		br := v.([]byte)
 		// delete old branches along with create new branches
 		err := s.deleteHistoryBranch(br)
-		s.Nil(err)
+		require.Nil(s.T(), err)
 		return true
 	})
 
 	branches = s.descTree(treeID)
-	s.Equal(0, len(branches))
+	require.Equal(s.T(), 0, len(branches))
 }
 
 // TestConcurrentlyForkAndAppendBranches test
@@ -465,9 +463,9 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	wg := sync.WaitGroup{}
 	concurrency := 10
 	masterBr, err := s.newHistoryBranch(treeID)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	branches := s.descTree(treeID)
-	s.Equal(0, len(branches))
+	require.Equal(s.T(), 0, len(branches))
 
 	// append first batch to master branch
 	eids := []int64{}
@@ -476,14 +474,14 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	}
 	events := s.genRandomEvents(eids, 1)
 	err = s.appendNewBranchAndFirstNode(masterBr, events[0:1], 1, "masterbr")
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
 	readEvents := s.read(masterBr, 1, int64(concurrency)+2)
-	s.Nil(err)
-	s.Equal(1, len(readEvents))
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), 1, len(readEvents))
 
 	branches = s.descTree(treeID)
-	s.Equal(1, len(branches))
+	require.Equal(s.T(), 1, len(branches))
 	mbrID := branches[0].BranchId
 
 	txn := int64(1)
@@ -498,10 +496,10 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	}
 
 	err = s.appendOneByOne(masterBr, events[1:], reserveTxn(len(events[1:])))
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	events = s.read(masterBr, 1, int64(concurrency)+2)
-	s.Nil(err)
-	s.Equal((concurrency)+1, len(events))
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), (concurrency)+1, len(events))
 
 	level1ID := new(sync.Map)
 	level1Br := new(sync.Map)
@@ -515,14 +513,14 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			level1ID.Store(idx, forkNodeID)
 
 			bi, err := s.fork(masterBr, forkNodeID)
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			level1Br.Store(idx, bi)
 
 			// cannot append to ancestors
 			events := s.genRandomEvents([]int64{forkNodeID - 1}, 1)
 			err = s.appendNewNode(bi, events, reserveTxn(1))
 			_, ok := err.(*p.InvalidPersistenceRequestError)
-			s.Equal(true, ok)
+			require.Equal(s.T(), true, ok)
 
 			// append second batch to first level
 			eids := make([]int64, 0)
@@ -532,18 +530,18 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			events = s.genRandomEvents(eids, 1)
 
 			err = s.appendNewNode(bi, events[0:1], reserveTxn(1))
-			s.Nil(err)
+			require.Nil(s.T(), err)
 
 			err = s.appendOneByOne(bi, events[1:], reserveTxn(len(events[1:])))
-			s.Nil(err)
+			require.Nil(s.T(), err)
 
 			events = s.read(bi, 1, int64(concurrency)*2+2)
-			s.Nil(err)
-			s.Equal((concurrency)*2+1, len(events))
+			require.Nil(s.T(), err)
+			require.Equal(s.T(), (concurrency)*2+1, len(events))
 
 			if idx == 0 {
 				err = s.deleteHistoryBranch(bi)
-				s.Nil(err)
+				require.Nil(s.T(), err)
 			}
 
 		}(i)
@@ -551,7 +549,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 	wg.Wait()
 	branches = s.descTree(treeID)
-	s.Equal(concurrency, len(branches))
+	require.Equal(s.T(), concurrency, len(branches))
 	forkOnLevel1 := int32(0)
 	level2Br := new(sync.Map)
 	wg = sync.WaitGroup{}
@@ -572,7 +570,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			}
 
 			bi, err := s.fork(forkBr, forkNodeID)
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			level2Br.Store(idx, bi)
 
 			// append second batch to second level
@@ -582,36 +580,36 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			}
 			events := s.genRandomEvents(eids, 1)
 			err = s.appendNewNode(bi, events[0:1], reserveTxn(1))
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			err = s.appendOneByOne(bi, events[1:], reserveTxn(len(events[1:])))
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			events = s.read(bi, 1, int64(concurrency)*3+2)
-			s.Nil(err)
-			s.Equal((concurrency)*3+1, len(events))
+			require.Nil(s.T(), err)
+			require.Equal(s.T(), (concurrency)*3+1, len(events))
 
 			// try override last event
 			events = s.genRandomEvents([]int64{int64(concurrency)*3 + 1}, 1)
 			err = s.appendNewNode(bi, events, reserveTxn(1))
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			events = s.read(bi, 1, int64(concurrency)*3+2)
-			s.Nil(err)
-			s.Equal((concurrency)*3+1, len(events))
+			require.Nil(s.T(), err)
+			require.Equal(s.T(), (concurrency)*3+1, len(events))
 
 			// test fork and newBranch concurrently
 			bi, err = s.newHistoryBranch(treeID)
-			s.Nil(err)
+			require.Nil(s.T(), err)
 			level2Br.Store(concurrency+idx, bi)
 
 			events = s.genRandomEvents([]int64{1}, 1)
 			err = s.appendNewBranchAndFirstNode(bi, events, reserveTxn(1), "newbr")
-			s.Nil(err)
+			require.Nil(s.T(), err)
 
 		}(i)
 	}
 
 	wg.Wait()
 	branches = s.descTree(treeID)
-	s.Equal(concurrency*3-2, len(branches))
+	require.Equal(s.T(), concurrency*3-2, len(branches))
 	actualForkOnLevel1 := int32(0)
 	masterCnt := 0
 	for _, b := range branches {
@@ -620,19 +618,19 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 		} else if len(b.Ancestors) == 0 {
 			masterCnt++
 		} else {
-			s.Equal(1, len(b.Ancestors))
-			s.Equal(mbrID, b.Ancestors[0].GetBranchId())
+			require.Equal(s.T(), 1, len(b.Ancestors))
+			require.Equal(s.T(), mbrID, b.Ancestors[0].GetBranchId())
 		}
 	}
-	s.Equal(forkOnLevel1, actualForkOnLevel1)
-	s.Equal(concurrency, masterCnt)
+	require.Equal(s.T(), forkOnLevel1, actualForkOnLevel1)
+	require.Equal(s.T(), concurrency, masterCnt)
 
 	// Finally lets clean up all branches
 	level1Br.Range(func(k, v interface{}) bool {
 		br := v.([]byte)
 		// delete old branches along with create new branches
 		err := s.deleteHistoryBranch(br)
-		s.Nil(err)
+		require.Nil(s.T(), err)
 
 		return true
 	})
@@ -640,28 +638,28 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 		br := v.([]byte)
 		// delete old branches along with create new branches
 		err := s.deleteHistoryBranch(br)
-		s.Nil(err)
+		require.Nil(s.T(), err)
 
 		return true
 	})
 	err = s.deleteHistoryBranch(masterBr)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 
 	branches = s.descTree(treeID)
-	s.Equal(0, len(branches))
+	require.Equal(s.T(), 0, len(branches))
 
 }
 
 func (s *HistoryV2PersistenceSuite) getBranchByKey(m *sync.Map, k int) []byte {
 	v, ok := m.Load(k)
-	s.Equal(true, ok)
+	require.Equal(s.T(), true, ok)
 	br := v.([]byte)
 	return br
 }
 
 func (s *HistoryV2PersistenceSuite) getIDByKey(m *sync.Map, k int) int64 {
 	v, ok := m.Load(k)
-	s.Equal(true, ok)
+	require.Equal(s.T(), true, ok)
 	id := v.(int64)
 	return id
 }
@@ -716,7 +714,7 @@ func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistencespb.Hi
 			NextPageToken: nextPageToken,
 			PageSize:      100,
 		})
-		s.NoError(err)
+		require.NoError(s.T(), err)
 
 		for _, branch := range resp.Branches {
 			if branch.BranchInfo.TreeId == treeID {
@@ -736,7 +734,7 @@ func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistencespb.Hi
 // persistence helper
 func (s *HistoryV2PersistenceSuite) read(branch []byte, minID, maxID int64) []*historypb.HistoryEvent {
 	res, err := s.readWithError(branch, minID, maxID)
-	s.Nil(err)
+	require.Nil(s.T(), err)
 	return res
 }
 
@@ -759,7 +757,7 @@ func (s *HistoryV2PersistenceSuite) readWithError(branch []byte, minID, maxID in
 			return nil, err
 		}
 		if len(resp.HistoryEvents) > 0 {
-			s.True(resp.Size > 0)
+			require.True(s.T(), resp.Size > 0)
 		}
 		res = append(res, resp.HistoryEvents...)
 		token = resp.NextPageToken
@@ -811,7 +809,7 @@ func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*historypb.Hi
 	if err != nil {
 		return err
 	}
-	s.True(resp.Size > 0)
+	require.True(s.T(), resp.Size > 0)
 
 	return err
 }

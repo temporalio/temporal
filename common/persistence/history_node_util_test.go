@@ -14,7 +14,6 @@ import (
 type (
 	historyNodeMetadataSuite struct {
 		suite.Suite
-		*require.Assertions
 	}
 )
 
@@ -23,16 +22,13 @@ func TestHistoryNodeMetadataSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *historyNodeMetadataSuite) SetupSuite() {
-}
+
 
 func (s *historyNodeMetadataSuite) TearDownSuite() {
 
 }
 
-func (s *historyNodeMetadataSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *historyNodeMetadataSuite) TearDownTest() {
 
@@ -65,7 +61,7 @@ func (s *historyNodeMetadataSuite) TestIndexNodeIDToNode() {
 	for nodeID := common.FirstEventID; nodeID < int64(numNodeIDs+1); nodeID++ {
 		nodes := nodeIDToNode[int64(nodeID)]
 		for i := 1; i < nodePerNodeID; i++ {
-			s.True(nodes[i-1].transactionID >= nodes[i].transactionID)
+			require.True(s.T(), nodes[i-1].transactionID >= nodes[i].transactionID)
 		}
 	}
 }
@@ -99,8 +95,8 @@ func (s *historyNodeMetadataSuite) TestReverselyLinkNode() {
 	expectedNodes = append([]historyNodeMetadata{lastValidNode}, expectedNodes...)
 
 	nodes, err := reverselyLinkNode(lastValidNode.nodeID, lastValidNode.transactionID, transactionIDToNode)
-	s.NoError(err)
-	s.Equal(expectedNodes, nodes)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), expectedNodes, nodes)
 }
 
 func (s *historyNodeMetadataSuite) TestTrimNodes() {
@@ -141,7 +137,7 @@ func (s *historyNodeMetadataSuite) TestTrimNodes() {
 	}
 
 	nodesToTrim := trimNodes(nodeIDToNodes, []historyNodeMetadata{node4Valid, node3Valid, node2Valid, node1Valid})
-	s.Equal([]historyNodeMetadata{node4Trim1, node4Trim0, node1Trim1, node1Trim0}, nodesToTrim)
+	require.Equal(s.T(), []historyNodeMetadata{node4Trim1, node4Trim0, node1Trim1, node1Trim0}, nodesToTrim)
 }
 
 func (s *historyNodeMetadataSuite) newRandomHistoryNodeMetadata(

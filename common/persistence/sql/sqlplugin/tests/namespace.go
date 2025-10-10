@@ -24,7 +24,6 @@ var (
 type (
 	namespaceSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		store sqlplugin.DB
 	}
@@ -35,22 +34,18 @@ func NewNamespaceSuite(
 	store sqlplugin.DB,
 ) *namespaceSuite {
 	return &namespaceSuite{
-		Assertions: require.New(t),
-		store:      store,
+
+		store: store,
 	}
 }
 
-func (s *namespaceSuite) SetupSuite() {
 
-}
 
 func (s *namespaceSuite) TearDownSuite() {
 
 }
 
-func (s *namespaceSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *namespaceSuite) TearDownTest() {
 
@@ -63,10 +58,10 @@ func (s *namespaceSuite) TestInsert_Success() {
 
 	namespace := s.newRandomNamespaceRow(id, name, notificationVersion)
 	result, err := s.store.InsertIntoNamespace(newExecutionContext(), &namespace)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *namespaceSuite) TestInsert_Fail_Duplicate() {
@@ -76,22 +71,22 @@ func (s *namespaceSuite) TestInsert_Fail_Duplicate() {
 
 	namespace := s.newRandomNamespaceRow(id, name, notificationVersion)
 	result, err := s.store.InsertIntoNamespace(newExecutionContext(), &namespace)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	namespace = s.newRandomNamespaceRow(id, name, notificationVersion)
 	_, err = s.store.InsertIntoNamespace(newExecutionContext(), &namespace)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 
 	namespace = s.newRandomNamespaceRow(id, shuffle.String(testNamespaceName), notificationVersion)
 	_, err = s.store.InsertIntoNamespace(newExecutionContext(), &namespace)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 
 	namespace = s.newRandomNamespaceRow(primitives.NewUUID(), name, notificationVersion)
 	_, err = s.store.InsertIntoNamespace(newExecutionContext(), &namespace)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *namespaceSuite) TestInsertSelect() {
@@ -101,24 +96,24 @@ func (s *namespaceSuite) TestInsertSelect() {
 
 	namespace := s.newRandomNamespaceRow(id, name, notificationVersion)
 	result, err := s.store.InsertIntoNamespace(newExecutionContext(), &namespace)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.NamespaceFilter{
 		ID: &id,
 	}
 	rows, err := s.store.SelectFromNamespace(newExecutionContext(), filter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.NamespaceRow{namespace}, rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.NamespaceRow{namespace}, rows)
 
 	filter = sqlplugin.NamespaceFilter{
 		Name: &name,
 	}
 	rows, err = s.store.SelectFromNamespace(newExecutionContext(), filter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.NamespaceRow{namespace}, rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.NamespaceRow{namespace}, rows)
 }
 
 func (s *namespaceSuite) TestInsertUpdate_Success() {
@@ -128,17 +123,17 @@ func (s *namespaceSuite) TestInsertUpdate_Success() {
 
 	namespace := s.newRandomNamespaceRow(id, name, notificationVersion)
 	result, err := s.store.InsertIntoNamespace(newExecutionContext(), &namespace)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	namespace = s.newRandomNamespaceRow(id, name, notificationVersion)
 	result, err = s.store.UpdateNamespace(newExecutionContext(), &namespace)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *namespaceSuite) TestUpdate_Fail() {
@@ -148,10 +143,10 @@ func (s *namespaceSuite) TestUpdate_Fail() {
 
 	namespace := s.newRandomNamespaceRow(id, name, notificationVersion)
 	result, err := s.store.UpdateNamespace(newExecutionContext(), &namespace)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 }
 
 func (s *namespaceSuite) TestInsertUpdateSelect() {
@@ -161,31 +156,31 @@ func (s *namespaceSuite) TestInsertUpdateSelect() {
 
 	namespace := s.newRandomNamespaceRow(id, name, notificationVersion)
 	result, err := s.store.InsertIntoNamespace(newExecutionContext(), &namespace)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	namespace = s.newRandomNamespaceRow(id, name, notificationVersion)
 	result, err = s.store.UpdateNamespace(newExecutionContext(), &namespace)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.NamespaceFilter{
 		ID: &id,
 	}
 	rows, err := s.store.SelectFromNamespace(newExecutionContext(), filter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.NamespaceRow{namespace}, rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.NamespaceRow{namespace}, rows)
 
 	filter = sqlplugin.NamespaceFilter{
 		Name: &name,
 	}
 	rows, err = s.store.SelectFromNamespace(newExecutionContext(), filter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.NamespaceRow{namespace}, rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.NamespaceRow{namespace}, rows)
 }
 
 func (s *namespaceSuite) TestInsertDeleteSelect_ID() {
@@ -195,31 +190,31 @@ func (s *namespaceSuite) TestInsertDeleteSelect_ID() {
 
 	namespace := s.newRandomNamespaceRow(id, name, notificationVersion)
 	result, err := s.store.InsertIntoNamespace(newExecutionContext(), &namespace)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.NamespaceFilter{
 		ID: &id,
 	}
 	result, err = s.store.DeleteFromNamespace(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter = sqlplugin.NamespaceFilter{
 		ID: &id,
 	}
 	_, err = s.store.SelectFromNamespace(newExecutionContext(), filter)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 
 	filter = sqlplugin.NamespaceFilter{
 		Name: &name,
 	}
 	_, err = s.store.SelectFromNamespace(newExecutionContext(), filter)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *namespaceSuite) TestInsertDeleteSelect_Name() {
@@ -229,31 +224,31 @@ func (s *namespaceSuite) TestInsertDeleteSelect_Name() {
 
 	namespace := s.newRandomNamespaceRow(id, name, notificationVersion)
 	result, err := s.store.InsertIntoNamespace(newExecutionContext(), &namespace)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter := sqlplugin.NamespaceFilter{
 		Name: &name,
 	}
 	result, err = s.store.DeleteFromNamespace(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	filter = sqlplugin.NamespaceFilter{
 		ID: &id,
 	}
 	_, err = s.store.SelectFromNamespace(newExecutionContext(), filter)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 
 	filter = sqlplugin.NamespaceFilter{
 		Name: &name,
 	}
 	_, err = s.store.SelectFromNamespace(newExecutionContext(), filter)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *namespaceSuite) TestInsertSelect_Pagination() {
@@ -268,12 +263,12 @@ func (s *namespaceSuite) TestInsertSelect_Pagination() {
 			_, err := s.store.DeleteFromNamespace(newExecutionContext(), sqlplugin.NamespaceFilter{
 				ID: &row.ID,
 			})
-			s.NoError(err)
+			require.NoError(s.T(), err)
 		}
 	case sql.ErrNoRows:
 		// noop
 	default:
-		s.NoError(err)
+		require.NoError(s.T(), err)
 	}
 
 	namespaces := map[string]*sqlplugin.NamespaceRow{}
@@ -287,10 +282,10 @@ func (s *namespaceSuite) TestInsertSelect_Pagination() {
 
 		namespace := s.newRandomNamespaceRow(id, name, notificationVersion)
 		result, err := s.store.InsertIntoNamespace(newExecutionContext(), &namespace)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		rowsAffected, err := result.RowsAffected()
-		s.NoError(err)
-		s.Equal(1, int(rowsAffected))
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), 1, int(rowsAffected))
 
 		namespaces[namespace.ID.String()] = &namespace
 	}
@@ -318,55 +313,55 @@ func (s *namespaceSuite) TestInsertSelect_Pagination() {
 			filter.GreaterThanID = nil
 
 		default:
-			s.NoError(err)
+			require.NoError(s.T(), err)
 		}
 	}
-	s.Equal(namespaces, rows)
+	require.Equal(s.T(), namespaces, rows)
 }
 
 func (s *namespaceSuite) TestSelectLockMetadata() {
 	row, err := s.store.SelectFromNamespaceMetadata(newExecutionContext())
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	tx, err := s.store.BeginTx(newExecutionContext())
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	metadata, err := tx.LockNamespaceMetadata(newExecutionContext())
-	s.NoError(err)
-	s.Equal(row, metadata)
-	s.NoError(tx.Commit())
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), row, metadata)
+	require.NoError(s.T(), tx.Commit())
 }
 
 func (s *namespaceSuite) TestSelectUpdateSelectMetadata_Success() {
 	row, err := s.store.SelectFromNamespaceMetadata(newExecutionContext())
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	originalVersion := row.NotificationVersion
 
 	result, err := s.store.UpdateNamespaceMetadata(newExecutionContext(), row)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	row, err = s.store.SelectFromNamespaceMetadata(newExecutionContext())
-	s.NoError(err)
-	s.Equal(originalVersion+1, row.NotificationVersion)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), originalVersion+1, row.NotificationVersion)
 }
 
 func (s *namespaceSuite) TestSelectUpdateSelectMetadata_Fail() {
 	row, err := s.store.SelectFromNamespaceMetadata(newExecutionContext())
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	originalVersion := row.NotificationVersion
 
 	namespaceMetadata := s.newRandomNamespaceMetadataRow(row.NotificationVersion + 1000)
 	result, err := s.store.UpdateNamespaceMetadata(newExecutionContext(), &namespaceMetadata)
-	s.NoError(err) // TODO persistence layer should do proper error translation
+	require.NoError(s.T(), err) // TODO persistence layer should do proper error translation
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	row, err = s.store.SelectFromNamespaceMetadata(newExecutionContext())
-	s.NoError(err)
-	s.Equal(originalVersion, row.NotificationVersion)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), originalVersion, row.NotificationVersion)
 }
 
 func (s *namespaceSuite) newRandomNamespaceRow(

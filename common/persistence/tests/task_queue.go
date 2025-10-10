@@ -23,7 +23,6 @@ import (
 type (
 	TaskQueueSuite struct {
 		suite.Suite
-		*require.Assertions
 		protorequire.ProtoAssertions
 
 		stickyTTL     time.Duration
@@ -45,7 +44,7 @@ func NewTaskQueueSuite(
 	logger log.Logger,
 ) *TaskQueueSuite {
 	return &TaskQueueSuite{
-		Assertions:      require.New(t),
+
 		ProtoAssertions: protorequire.New(t),
 		taskManager: p.NewTaskManager(
 			taskStore,
@@ -55,14 +54,13 @@ func NewTaskQueueSuite(
 	}
 }
 
-func (s *TaskQueueSuite) SetupSuite() {
-}
+
 
 func (s *TaskQueueSuite) TearDownSuite() {
 }
 
 func (s *TaskQueueSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
 	s.stickyTTL = time.Second * 10
@@ -99,7 +97,7 @@ func (s *TaskQueueSuite) TestCreate_Normal_Dup() {
 		RangeID:       rangID,
 		TaskQueueInfo: s.randomTaskQueueInfo(enumspb.TASK_QUEUE_KIND_NORMAL),
 	})
-	s.IsType(&p.ConditionFailedError{}, err)
+	require.IsType(s.T(), &p.ConditionFailedError{}, err)
 
 	s.assertEqualWithDB(rangID, taskQueue)
 }
@@ -112,7 +110,7 @@ func (s *TaskQueueSuite) TestCreate_Sticky_Dup() {
 		RangeID:       rangID,
 		TaskQueueInfo: s.randomTaskQueueInfo(enumspb.TASK_QUEUE_KIND_STICKY),
 	})
-	s.IsType(&p.ConditionFailedError{}, err)
+	require.IsType(s.T(), &p.ConditionFailedError{}, err)
 
 	s.assertEqualWithDB(rangID, taskQueue)
 }
@@ -129,7 +127,7 @@ func (s *TaskQueueSuite) TestUpdate_Normal() {
 
 		PrevRangeID: prevRangeID,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.assertEqualWithDB(rangID, taskQueue)
 }
@@ -145,7 +143,7 @@ func (s *TaskQueueSuite) TestUpdate_Normal_Conflict() {
 
 		PrevRangeID: rand.Int63(),
 	})
-	s.IsType(&p.ConditionFailedError{}, err)
+	require.IsType(s.T(), &p.ConditionFailedError{}, err)
 
 	s.assertEqualWithDB(prevRangeID, taskQueue)
 }
@@ -162,7 +160,7 @@ func (s *TaskQueueSuite) TestUpdate_Sticky() {
 
 		PrevRangeID: prevRangeID,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.assertEqualWithDB(rangID, taskQueue)
 }
@@ -178,7 +176,7 @@ func (s *TaskQueueSuite) TestUpdate_Sticky_Conflict() {
 
 		PrevRangeID: rand.Int63(),
 	})
-	s.IsType(&p.ConditionFailedError{}, err)
+	require.IsType(s.T(), &p.ConditionFailedError{}, err)
 
 	s.assertEqualWithDB(prevRangeID, taskQueue)
 }
@@ -200,7 +198,7 @@ func (s *TaskQueueSuite) TestDelete() {
 		},
 		RangeID: rangeID,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.assertMissingFromDB(taskQueue.NamespaceId, taskQueue.Name, taskQueue.TaskType)
 }
@@ -222,7 +220,7 @@ func (s *TaskQueueSuite) TestDelete_Conflict() {
 		},
 		RangeID: rand.Int63(),
 	})
-	s.IsType(&p.ConditionFailedError{}, err)
+	require.IsType(s.T(), &p.ConditionFailedError{}, err)
 
 	s.assertEqualWithDB(rangeID, taskQueue)
 }
@@ -240,7 +238,7 @@ func (s *TaskQueueSuite) createTaskQueue(
 		RangeID:       rangeID,
 		TaskQueueInfo: taskQueue,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	return taskQueue
 }
 
@@ -274,7 +272,7 @@ func (s *TaskQueueSuite) assertMissingFromDB(
 		TaskQueue:   taskQueue,
 		TaskType:    taskType,
 	})
-	s.IsType(&serviceerror.NotFound{}, err)
+	require.IsType(s.T(), &serviceerror.NotFound{}, err)
 }
 
 func (s *TaskQueueSuite) assertEqualWithDB(
@@ -286,8 +284,8 @@ func (s *TaskQueueSuite) assertEqualWithDB(
 		TaskQueue:   taskQueueInfo.Name,
 		TaskType:    taskQueueInfo.TaskType,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
-	s.Equal(rangeID, resp.RangeID)
+	require.Equal(s.T(), rangeID, resp.RangeID)
 	s.ProtoEqual(taskQueueInfo, resp.TaskQueueInfo)
 }

@@ -32,7 +32,6 @@ import (
 type (
 	ExecutionMutableStateSuite struct {
 		suite.Suite
-		*require.Assertions
 		protorequire.ProtoAssertions
 
 		ShardID     int32
@@ -60,7 +59,7 @@ func NewExecutionMutableStateSuite(
 	logger log.Logger,
 ) *ExecutionMutableStateSuite {
 	return &ExecutionMutableStateSuite{
-		Assertions:      require.New(t),
+
 		ProtoAssertions: protorequire.New(t),
 		ShardManager: p.NewShardManager(
 			shardStore,
@@ -79,14 +78,12 @@ func NewExecutionMutableStateSuite(
 	}
 }
 
-func (s *ExecutionMutableStateSuite) SetupSuite() {
-}
+
 
 func (s *ExecutionMutableStateSuite) TearDownSuite() {
 }
 
 func (s *ExecutionMutableStateSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
 	s.ShardID++
@@ -97,14 +94,14 @@ func (s *ExecutionMutableStateSuite) SetupTest() {
 			RangeId: 1,
 		},
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	previousRangeID := resp.ShardInfo.RangeId
 	resp.ShardInfo.RangeId++
 	err = s.ShardManager.UpdateShard(s.Ctx, &p.UpdateShardRequest{
 		ShardInfo:       resp.ShardInfo,
 		PreviousRangeID: previousRangeID,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.RangeID = resp.ShardInfo.RangeId
 
 	s.NamespaceID = uuid.New().String()
@@ -151,7 +148,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 
 	// Remember original execution stats because the CreateWorkflowExecution mutates the stats before failing to persist
 	executionStats, ok := proto.Clone(newSnapshot.ExecutionInfo.ExecutionStats).(*persistencespb.ExecutionStats)
-	s.True(ok)
+	require.True(s.T(), ok)
 
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -218,7 +215,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse() {
 		NewWorkflowSnapshot: *newSnapshot,
 		NewWorkflowEvents:   newEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(newSnapshot)
 	s.AssertHEEqualWithDB(newBranchToken, newEvents)
@@ -247,7 +244,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CHASM() {
 		rand.Int63(),
 		nil, // CHASM snapshot has no events
 	)
-	s.Empty(newEvents)
+	require.Empty(s.T(), newEvents)
 
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -260,7 +257,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CHASM() {
 		NewWorkflowSnapshot: *newSnapshot,
 		NewWorkflowEvents:   newEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(newSnapshot)
 }
@@ -276,7 +273,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 
 	// Remember original execution stats because the CreateWorkflowExecution mutates the stats before failing to persist
 	executionStats, ok := proto.Clone(prevSnapshot.ExecutionInfo.ExecutionStats).(*persistencespb.ExecutionStats)
-	s.True(ok)
+	require.True(s.T(), ok)
 
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -343,7 +340,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Zombie() {
 		NewWorkflowSnapshot: *newSnapshot,
 		NewWorkflowEvents:   newEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(newSnapshot)
 	s.AssertHEEqualWithDB(newBranchToken, newEvents)
@@ -369,7 +366,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Conflict() {
 		NewWorkflowSnapshot: *newSnapshot,
 		NewWorkflowEvents:   newEvents,
 	})
-	s.IsType(&p.WorkflowConditionFailedError{}, err)
+	require.IsType(s.T(), &p.WorkflowConditionFailedError{}, err)
 }
 
 func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_BrandNew() {
@@ -419,7 +416,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_Bypass() {
 		NewWorkflowSnapshot: *newSnapshot,
 		NewWorkflowEvents:   newEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(newSnapshot)
 	s.AssertHEEqualWithDB(newBranchToken, newEvents)
@@ -460,7 +457,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_UpdateCurrent() {
 		NewWorkflowSnapshot: *newSnapshot,
 		NewWorkflowEvents:   newEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(newSnapshot)
 	s.AssertHEEqualWithDB(newBranchToken, newEvents)
@@ -497,7 +494,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(newSnapshot, currentMutation)
 	s.AssertHEEqualWithDB(branchToken, newEvents, currentEvents)
@@ -534,7 +531,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CHASM() {
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(newSnapshot, currentMutation)
 }
@@ -574,7 +571,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 	})
-	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
+	require.IsType(s.T(), &p.CurrentWorkflowConditionFailedError{}, err)
 
 	s.AssertMissingFromDB(
 		currentMutation.ExecutionInfo.NamespaceId,
@@ -614,7 +611,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 	})
-	s.IsType(&p.WorkflowConditionFailedError{}, err)
+	require.IsType(s.T(), &p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(newSnapshot)
 	s.AssertHEPrefixWithDB(branchToken, newEvents)
@@ -665,7 +662,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
 		NewWorkflowSnapshot: newSnapshot,
 		NewWorkflowEvents:   newEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(currentSnapshot, updateMutation)
 	s.AssertMSEqualWithDB(newSnapshot)
@@ -706,7 +703,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
 		NewWorkflowSnapshot: *zombieSnapshot,
 		NewWorkflowEvents:   zombieEvents1,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	zombieMutation, zombieEvents2 := RandomMutation(
 		s.T(),
@@ -731,7 +728,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(zombieSnapshot, zombieMutation)
 	s.AssertHEEqualWithDB(zombieBranchToken, zombieEvents1, zombieEvents2)
@@ -768,7 +765,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_CurrentConflict() {
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 	})
-	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
+	require.IsType(s.T(), &p.CurrentWorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(newSnapshot)
 	s.AssertHEPrefixWithDB(branchToken, newEvents)
@@ -807,7 +804,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_Conflict() {
 		NewWorkflowSnapshot: *zombieSnapshot,
 		NewWorkflowEvents:   zombieEvents1,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	zombieMutation, zombieEvents2 := RandomMutation(
 		s.T(),
@@ -832,7 +829,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_Conflict() {
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 	})
-	s.IsType(&p.WorkflowConditionFailedError{}, err)
+	require.IsType(s.T(), &p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(zombieSnapshot)
 	s.AssertHEPrefixWithDB(zombieBranchToken, zombieEvents1)
@@ -870,7 +867,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 		NewWorkflowSnapshot: *zombieSnapshot,
 		NewWorkflowEvents:   zombieEvents1,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	zombieMutation, zombieEvents2 := RandomMutation(
 		s.T(),
@@ -909,7 +906,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 		NewWorkflowSnapshot: newZombieSnapshot,
 		NewWorkflowEvents:   newEvents3,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(zombieSnapshot, zombieMutation)
 	s.AssertMSEqualWithDB(newZombieSnapshot)
@@ -949,7 +946,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsCurrent() {
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(newSnapshot, currentMutation)
 	s.AssertHEEqualWithDB(branchToken, newEvents)
@@ -990,7 +987,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsNonCurrent() {
 		NewWorkflowSnapshot: *currentSnapshot,
 		NewWorkflowEvents:   currentEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// Update the original closed workflow
 	// NOTE: no new events for closed workflows
@@ -1017,7 +1014,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsNonCurrent() {
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(nonCurrentSnapshot, nonCurrentMutation)
 	s.AssertHEEqualWithDB(nonCurrentBranchToken, nonCurrentEvents)
@@ -1058,7 +1055,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 		NewWorkflowSnapshot: *baseSnapshot,
 		NewWorkflowEvents:   baseEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	resetSnapshot, resetEvents := RandomSnapshot(
 		s.T(),
@@ -1098,7 +1095,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 		CurrentWorkflowMutation: currentMutation,
 		CurrentWorkflowEvents:   currentEvents2,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(resetSnapshot)
 	s.AssertMSEqualWithDB(currentSnapshot, currentMutation)
@@ -1139,7 +1136,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 		NewWorkflowSnapshot: *baseSnapshot,
 		NewWorkflowEvents:   baseEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	resetSnapshot, resetEvents := RandomSnapshot(
 		s.T(),
@@ -1181,7 +1178,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 		CurrentWorkflowMutation: currentMutation,
 		CurrentWorkflowEvents:   currentEvents,
 	})
-	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
+	require.IsType(s.T(), &p.CurrentWorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(baseSnapshot)
 	s.AssertMSEqualWithDB(currentSnapshot)
@@ -1221,7 +1218,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		NewWorkflowSnapshot: *baseSnapshot,
 		NewWorkflowEvents:   baseEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	resetSnapshot, resetEvents := RandomSnapshot(
 		s.T(),
@@ -1261,7 +1258,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		CurrentWorkflowMutation: currentMutation,
 		CurrentWorkflowEvents:   currentEvents2,
 	})
-	s.IsType(&p.WorkflowConditionFailedError{}, err)
+	require.IsType(s.T(), &p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(baseSnapshot)
 	s.AssertMSEqualWithDB(currentSnapshot)
@@ -1301,7 +1298,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		NewWorkflowSnapshot: *baseSnapshot,
 		NewWorkflowEvents:   baseEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	resetSnapshot, resetEvents := RandomSnapshot(
 		s.T(),
@@ -1341,7 +1338,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		CurrentWorkflowMutation: currentMutation,
 		CurrentWorkflowEvents:   currentEvents2,
 	})
-	s.IsType(&p.WorkflowConditionFailedError{}, err)
+	require.IsType(s.T(), &p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(baseSnapshot)
 	s.AssertMSEqualWithDB(currentSnapshot)
@@ -1381,7 +1378,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		NewWorkflowSnapshot: *baseSnapshot,
 		NewWorkflowEvents:   baseEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	resetSnapshot, resetEvents := RandomSnapshot(
 		s.T(),
@@ -1435,7 +1432,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		CurrentWorkflowMutation: currentMutation,
 		CurrentWorkflowEvents:   currentEvents2,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(resetSnapshot)
 	s.AssertMSEqualWithDB(newSnapshot)
@@ -1466,7 +1463,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		rand.Int63(),
 		nil,
 	)
-	s.Empty(baseEvents)
+	require.Empty(s.T(), baseEvents)
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
@@ -1478,7 +1475,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		NewWorkflowSnapshot: *baseSnapshot,
 		NewWorkflowEvents:   baseEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	resetSnapshot, resetEvents := RandomSnapshot(
 		s.T(),
@@ -1492,7 +1489,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		baseSnapshot.DBRecordVersion+1,
 		nil,
 	)
-	s.Empty(resetEvents)
+	require.Empty(s.T(), resetEvents)
 
 	newRunID := uuid.New().String()
 	newSnapshot, newEvents := RandomSnapshot(
@@ -1507,7 +1504,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		rand.Int63(),
 		nil,
 	)
-	s.Empty(newEvents)
+	require.Empty(s.T(), newEvents)
 
 	currentMutation, currentEvents := RandomMutation(
 		s.T(),
@@ -1521,7 +1518,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		currentSnapshot.DBRecordVersion+1,
 		nil,
 	)
-	s.Empty(currentEvents)
+	require.Empty(s.T(), currentEvents)
 
 	_, err = s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
 		ShardID: s.ShardID,
@@ -1537,7 +1534,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		CurrentWorkflowMutation: currentMutation,
 		CurrentWorkflowEvents:   currentEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(resetSnapshot)
 	s.AssertMSEqualWithDB(newSnapshot)
@@ -1578,7 +1575,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent() {
 		CurrentWorkflowMutation: nil,
 		CurrentWorkflowEvents:   nil,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(resetSnapshot)
 	s.AssertHEEqualWithDB(branchToken, baseEvents, resetEvents)
@@ -1616,7 +1613,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_CurrentCon
 		NewWorkflowSnapshot: *baseSnapshot,
 		NewWorkflowEvents:   baseEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	resetSnapshot, resetEvents := RandomSnapshot(
 		s.T(),
@@ -1644,7 +1641,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_CurrentCon
 		CurrentWorkflowMutation: nil,
 		CurrentWorkflowEvents:   nil,
 	})
-	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
+	require.IsType(s.T(), &p.CurrentWorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(baseSnapshot)
 	s.AssertHEPrefixWithDB(baseBranchToken, baseEvents)
@@ -1684,7 +1681,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_Conflict()
 		CurrentWorkflowMutation: nil,
 		CurrentWorkflowEvents:   nil,
 	})
-	s.IsType(&p.WorkflowConditionFailedError{}, err)
+	require.IsType(s.T(), &p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(baseSnapshot)
 	s.AssertHEPrefixWithDB(branchToken, baseEvents)
@@ -1738,7 +1735,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_WithNew() 
 		CurrentWorkflowMutation: nil,
 		CurrentWorkflowEvents:   nil,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(resetSnapshot)
 	s.AssertMSEqualWithDB(newSnapshot)
@@ -1778,7 +1775,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie() {
 		NewWorkflowSnapshot: *baseSnapshot,
 		NewWorkflowEvents:   baseEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	resetSnapshot, resetEvents := RandomSnapshot(
 		s.T(),
@@ -1806,7 +1803,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie() {
 		CurrentWorkflowMutation: nil,
 		CurrentWorkflowEvents:   nil,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(resetSnapshot)
 	s.AssertHEEqualWithDB(baseBranchToken, baseEvents, resetEvents)
@@ -1846,7 +1843,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_CurrentConflict(
 		CurrentWorkflowMutation: nil,
 		CurrentWorkflowEvents:   nil,
 	})
-	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
+	require.IsType(s.T(), &p.CurrentWorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(baseSnapshot)
 	s.AssertHEPrefixWithDB(branchToken, baseEvents)
@@ -1884,7 +1881,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
 		NewWorkflowSnapshot: *baseSnapshot,
 		NewWorkflowEvents:   baseEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	resetSnapshot, resetEvents := RandomSnapshot(
 		s.T(),
@@ -1912,7 +1909,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
 		CurrentWorkflowMutation: nil,
 		CurrentWorkflowEvents:   nil,
 	})
-	s.IsType(&p.WorkflowConditionFailedError{}, err)
+	require.IsType(s.T(), &p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(baseSnapshot)
 	s.AssertHEPrefixWithDB(baseBranchToken, baseEvents)
@@ -1950,7 +1947,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 		NewWorkflowSnapshot: *baseSnapshot,
 		NewWorkflowEvents:   baseEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	resetSnapshot, resetEvents := RandomSnapshot(
 		s.T(),
@@ -1992,7 +1989,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 		CurrentWorkflowMutation: nil,
 		CurrentWorkflowEvents:   nil,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(resetSnapshot)
 	s.AssertMSEqualWithDB(newSnapshot)
@@ -2020,7 +2017,7 @@ func (s *ExecutionMutableStateSuite) TestSet_NotExists() {
 
 		SetWorkflowSnapshot: *setSnapshot,
 	})
-	s.IsType(&p.ConditionFailedError{}, err)
+	require.IsType(s.T(), &p.ConditionFailedError{}, err)
 
 	s.AssertMissingFromDB(s.NamespaceID, s.WorkflowID, s.RunID)
 }
@@ -2051,7 +2048,7 @@ func (s *ExecutionMutableStateSuite) TestSet_Conflict() {
 
 		SetWorkflowSnapshot: *setSnapshot,
 	})
-	s.IsType(&p.WorkflowConditionFailedError{}, err)
+	require.IsType(s.T(), &p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(snapshot)
 	s.AssertHEEqualWithDB(branchToken, events)
@@ -2083,7 +2080,7 @@ func (s *ExecutionMutableStateSuite) TestSet() {
 
 		SetWorkflowSnapshot: *setSnapshot,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(setSnapshot)
 	s.AssertHEEqualWithDB(branchToken, events)
@@ -2115,7 +2112,7 @@ func (s *ExecutionMutableStateSuite) TestSet_CHASM() {
 
 		SetWorkflowSnapshot: *setSnapshot,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMSEqualWithDB(setSnapshot)
 }
@@ -2134,14 +2131,14 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
 		WorkflowID:  s.WorkflowID,
 		RunID:       s.RunID,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	_, err = s.ExecutionManager.GetCurrentExecution(s.Ctx, &p.GetCurrentExecutionRequest{
 		ShardID:     s.ShardID,
 		NamespaceID: s.NamespaceID,
 		WorkflowID:  s.WorkflowID,
 	})
-	s.IsType(&serviceerror.NotFound{}, err)
+	require.IsType(s.T(), &serviceerror.NotFound{}, err)
 	s.EqualError(err, "workflow not found for ID: "+s.WorkflowID)
 
 	s.AssertMSEqualWithDB(newSnapshot)
@@ -2174,7 +2171,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
 		NewWorkflowSnapshot: *newSnapshot,
 		NewWorkflowEvents:   newEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	err = s.ExecutionManager.DeleteCurrentWorkflowExecution(s.Ctx, &p.DeleteCurrentWorkflowExecutionRequest{
 		ShardID:     s.ShardID,
@@ -2182,14 +2179,14 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
 		WorkflowID:  s.WorkflowID,
 		RunID:       s.RunID,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	_, err = s.ExecutionManager.GetCurrentExecution(s.Ctx, &p.GetCurrentExecutionRequest{
 		ShardID:     s.ShardID,
 		NamespaceID: s.NamespaceID,
 		WorkflowID:  s.WorkflowID,
 	})
-	s.IsType(&serviceerror.NotFound{}, err)
+	require.IsType(s.T(), &serviceerror.NotFound{}, err)
 	s.EqualError(err, "workflow not found for ID: "+s.WorkflowID)
 
 	s.AssertMSEqualWithDB(newSnapshot)
@@ -2222,7 +2219,7 @@ func (s *ExecutionMutableStateSuite) TestDelete_Exists() {
 		NewWorkflowSnapshot: *newSnapshot,
 		NewWorkflowEvents:   newEvents,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	err = s.ExecutionManager.DeleteWorkflowExecution(s.Ctx, &p.DeleteWorkflowExecutionRequest{
 		ShardID:     s.ShardID,
@@ -2230,7 +2227,7 @@ func (s *ExecutionMutableStateSuite) TestDelete_Exists() {
 		WorkflowID:  s.WorkflowID,
 		RunID:       s.RunID,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMissingFromDB(s.NamespaceID, s.WorkflowID, s.RunID)
 }
@@ -2242,7 +2239,7 @@ func (s *ExecutionMutableStateSuite) TestDelete_NotExists() {
 		WorkflowID:  s.WorkflowID,
 		RunID:       s.RunID,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	s.AssertMissingFromDB(s.NamespaceID, s.WorkflowID, s.RunID)
 }
@@ -2277,7 +2274,7 @@ func (s *ExecutionMutableStateSuite) CreateWorkflow(
 		NewWorkflowSnapshot: *snapshot,
 		NewWorkflowEvents:   events,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	return branchToken, snapshot, events
 }
 
@@ -2310,7 +2307,7 @@ func (s *ExecutionMutableStateSuite) CreateCHASMSnapshot(
 		NewWorkflowSnapshot: *snapshot,
 		NewWorkflowEvents:   events,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	return snapshot
 }
 
@@ -2325,7 +2322,7 @@ func (s *ExecutionMutableStateSuite) AssertMissingFromDB(
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	})
-	s.IsType(&serviceerror.NotFound{}, err)
+	require.IsType(s.T(), &serviceerror.NotFound{}, err)
 	s.EqualError(err, fmt.Sprintf("workflow execution not found for workflow ID %q and run ID %q", workflowID, runID))
 }
 
@@ -2360,11 +2357,11 @@ func (s *ExecutionMutableStateSuite) assertHEWithDB(
 		PageSize:      pageSize,
 		NextPageToken: nil,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	if !assertPrefix {
-		s.Nil(resp.NextPageToken)
+		require.Nil(s.T(), resp.NextPageToken)
 	}
-	s.Equal(len(historyEvents), len(resp.HistoryEvents))
+	require.Equal(s.T(), len(historyEvents), len(resp.HistoryEvents))
 	for i, event := range historyEvents {
 		s.ProtoEqual(event, resp.HistoryEvents[i])
 	}
@@ -2380,7 +2377,7 @@ func (s *ExecutionMutableStateSuite) AssertMSEqualWithDB(
 		WorkflowID:  snapshot.ExecutionInfo.WorkflowId,
 		RunID:       snapshot.ExecutionState.RunId,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	actualMutableState := resp.State
 	actualDBRecordVersion := resp.DBRecordVersion
@@ -2389,13 +2386,13 @@ func (s *ExecutionMutableStateSuite) AssertMSEqualWithDB(
 
 	// need to special handling signal request IDs ...
 	// since ^ is slice
-	s.Equal(
+	require.Equal(s.T(),
 		convert.StringSliceToSet(expectedMutableState.SignalRequestedIds),
 		convert.StringSliceToSet(actualMutableState.SignalRequestedIds),
 	)
 	actualMutableState.SignalRequestedIds = expectedMutableState.SignalRequestedIds
 
-	s.Equal(expectedDBRecordVersion, actualDBRecordVersion)
+	require.Equal(s.T(), expectedDBRecordVersion, actualDBRecordVersion)
 	s.ProtoEqual(expectedMutableState, actualMutableState)
 }
 
@@ -2418,7 +2415,7 @@ func (s *ExecutionMutableStateSuite) Accumulate(
 	dbRecordVersion := snapshot.DBRecordVersion
 
 	for _, mutation := range mutations {
-		s.Equal(dbRecordVersion, mutation.DBRecordVersion-1)
+		require.Equal(s.T(), dbRecordVersion, mutation.DBRecordVersion-1)
 		dbRecordVersion = mutation.DBRecordVersion
 
 		mutableState.ExecutionInfo = mutation.ExecutionInfo
@@ -2480,10 +2477,10 @@ func (s *ExecutionMutableStateSuite) Accumulate(
 
 	// need to serialize & deserialize to get rid of timezone information ...
 	bytes, err := proto.Marshal(mutableState)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	mutableState = &persistencespb.WorkflowMutableState{}
 	err = proto.Unmarshal(bytes, mutableState)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	// make equal test easier
 	if mutableState.ActivityInfos == nil {

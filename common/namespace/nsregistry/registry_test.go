@@ -25,7 +25,6 @@ import (
 type (
 	registrySuite struct {
 		suite.Suite
-		*require.Assertions
 
 		controller     *gomock.Controller
 		regPersistence *nsregistry.MockPersistence
@@ -43,7 +42,6 @@ func (s *registrySuite) SetupSuite() {}
 func (s *registrySuite) TearDownSuite() {}
 
 func (s *registrySuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.regPersistence = nsregistry.NewMockPersistence(s.controller)
 	s.registry = nsregistry.NewRegistry(
@@ -174,18 +172,18 @@ func (s *registrySuite) TestListNamespace() {
 	defer s.registry.Stop()
 
 	entryByName1, err := s.registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.Info.Name))
-	s.Nil(err)
-	s.Equal(entry1, entryByName1)
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), entry1, entryByName1)
 	entryByID1, err := s.registry.GetNamespaceByID(namespace.ID(namespaceRecord1.Namespace.Info.Id))
-	s.Nil(err)
-	s.Equal(entry1, entryByID1)
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), entry1, entryByID1)
 
 	entryByName2, err := s.registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.Info.Name))
-	s.Nil(err)
-	s.Equal(entry2, entryByName2)
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), entry2, entryByName2)
 	entryByID2, err := s.registry.GetNamespaceByID(namespace.ID(namespaceRecord2.Namespace.Info.Id))
-	s.Nil(err)
-	s.Equal(entry2, entryByID2)
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), entry2, entryByID2)
 }
 
 func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
@@ -269,16 +267,16 @@ func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 	s.registry.RegisterStateChangeCallback(
 		"0",
 		func(ns *namespace.Namespace, deletedFromDb bool) {
-			s.False(deletedFromDb)
+			require.False(s.T(), deletedFromDb)
 			entriesNotification = append(entriesNotification, ns)
 		},
 	)
 
-	s.Len(entriesNotification, 2)
+	require.Len(s.T(), entriesNotification, 2)
 	if entriesNotification[0].NotificationVersion() > entriesNotification[1].NotificationVersion() {
 		entriesNotification[0], entriesNotification[1] = entriesNotification[1], entriesNotification[0]
 	}
-	s.Equal([]*namespace.Namespace{entry1, entry2}, entriesNotification)
+	require.Equal(s.T(), []*namespace.Namespace{entry1, entry2}, entriesNotification)
 }
 
 func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
@@ -418,17 +416,17 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 		"0",
 		func(ns *namespace.Namespace, deletedFromDb bool) {
 			defer wg.Done()
-			s.False(deletedFromDb)
+			require.False(s.T(), deletedFromDb)
 			entries = append(entries, ns)
 		},
 	)
 	wg.Wait()
 
-	s.Len(entries, 2)
+	require.Len(s.T(), entries, 2)
 	if entries[0].NotificationVersion() > entries[1].NotificationVersion() {
 		entries[0], entries[1] = entries[1], entries[0]
 	}
-	s.Equal([]*namespace.Namespace{entry1Old, entry2Old}, entries)
+	require.Equal(s.T(), []*namespace.Namespace{entry1Old, entry2Old}, entries)
 
 	wg.Add(1)
 	wg.Wait()
@@ -436,8 +434,8 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	newEntries := entries[2:]
 
 	// entry1 only has descrption update, so won't trigger the state change callback
-	s.Len(newEntries, 1)
-	s.Equal([]*namespace.Namespace{entry2New}, newEntries)
+	require.Len(s.T(), newEntries, 1)
+	require.Equal(s.T(), []*namespace.Namespace{entry2New}, newEntries)
 }
 
 func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
@@ -485,16 +483,16 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 		entryNew, err := s.registry.GetNamespaceByID(id)
 		switch err.(type) {
 		case nil:
-			s.Equal(entryOld, entryNew)
+			require.Equal(s.T(), entryOld, entryNew)
 			waitGroup.Done()
 		case *serviceerror.NamespaceNotFound:
 			time.Sleep(4 * time.Second)
 			entryNew, err := s.registry.GetNamespaceByID(id)
-			s.NoError(err)
-			s.Equal(entryOld, entryNew)
+			require.NoError(s.T(), err)
+			require.Equal(s.T(), entryOld, entryNew)
 			waitGroup.Done()
 		default:
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			waitGroup.Done()
 		}
 	}
@@ -601,8 +599,8 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 	wg.Wait()
 
 	ns2FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.Info.Name))
-	s.NotNil(ns2FromRegistry)
-	s.NoError(err)
+	require.NotNil(s.T(), ns2FromRegistry)
+	require.NoError(s.T(), err)
 
 	// expect readthrough call for missing ns
 	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
@@ -610,10 +608,10 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 	}).Return(nil, serviceerror.NewNamespaceNotFound(namespaceRecord1.Namespace.Info.Name))
 
 	ns1FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.Info.Name))
-	s.Nil(ns1FromRegistry)
-	s.Error(err)
+	require.Nil(s.T(), ns1FromRegistry)
+	require.Error(s.T(), err)
 	var notFound *serviceerror.NamespaceNotFound
-	s.ErrorAs(err, &notFound)
+	require.ErrorAs(s.T(), err, &notFound)
 }
 
 func (s *registrySuite) TestCacheByName() {
@@ -635,8 +633,8 @@ func (s *registrySuite) TestCacheByName() {
 	s.registry.Start()
 	defer s.registry.Stop()
 	ns, err := s.registry.GetNamespace(namespace.Name("foo"))
-	s.NoError(err)
-	s.Equal(namespace.Name("foo"), ns.Name())
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), namespace.Name("foo"), ns.Name())
 }
 
 func (s *registrySuite) TestGetByNameWithoutReadthrough() {
@@ -663,11 +661,11 @@ func (s *registrySuite) TestGetByNameWithoutReadthrough() {
 
 	ns, err := s.registry.GetNamespaceWithOptions(namespace.Name("foo"), namespace.GetNamespaceOptions{DisableReadthrough: true})
 	var notFound *serviceerror.NamespaceNotFound
-	s.ErrorAs(err, &notFound)
+	require.ErrorAs(s.T(), err, &notFound)
 
 	ns, err = s.registry.GetNamespaceWithOptions(namespace.Name("foo"), namespace.GetNamespaceOptions{DisableReadthrough: false})
-	s.NoError(err)
-	s.Equal(namespace.Name("foo"), ns.Name())
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), namespace.Name("foo"), ns.Name())
 }
 
 func (s *registrySuite) TestGetByIDWithoutReadthrough() {
@@ -696,11 +694,11 @@ func (s *registrySuite) TestGetByIDWithoutReadthrough() {
 
 	ns, err := s.registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: true})
 	var notFound *serviceerror.NamespaceNotFound
-	s.ErrorAs(err, &notFound)
+	require.ErrorAs(s.T(), err, &notFound)
 
 	ns, err = s.registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: false})
-	s.NoError(err)
-	s.Equal(namespace.Name("foo"), ns.Name())
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), namespace.Name("foo"), ns.Name())
 }
 
 func (s *registrySuite) TestRefreshSingleCacheKeyById() {
@@ -744,18 +742,18 @@ func (s *registrySuite) TestRefreshSingleCacheKeyById() {
 		ID: id.String(),
 	}).Return(&nsV1, nil).Times(1)
 	ns, err := s.registry.GetNamespaceByID(id)
-	s.NoError(err)
-	s.Equal(nsV1.Namespace.FailoverVersion, ns.FailoverVersion())
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), nsV1.Namespace.FailoverVersion, ns.FailoverVersion())
 
 	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		ID: id.String(),
 	}).Return(&nsV2, nil).Times(1)
 
 	ns, err = s.registry.RefreshNamespaceById(id)
-	s.NoError(err)
-	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion())
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), nsV2.Namespace.FailoverVersion, ns.FailoverVersion())
 
 	ns, err = s.registry.GetNamespaceByID(id)
-	s.NoError(err)
-	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion())
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), nsV2.Namespace.FailoverVersion, ns.FailoverVersion())
 }

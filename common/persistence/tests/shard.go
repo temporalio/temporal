@@ -18,7 +18,6 @@ import (
 type (
 	ShardSuite struct {
 		suite.Suite
-		*require.Assertions
 		protorequire.ProtoAssertions
 
 		ShardID int32
@@ -38,7 +37,7 @@ func NewShardSuite(
 	logger log.Logger,
 ) *ShardSuite {
 	return &ShardSuite{
-		Assertions:      require.New(t),
+
 		ProtoAssertions: protorequire.New(t),
 		ShardManager: p.NewShardManager(
 			shardStore,
@@ -48,14 +47,13 @@ func NewShardSuite(
 	}
 }
 
-func (s *ShardSuite) SetupSuite() {
-}
+
 
 func (s *ShardSuite) TearDownSuite() {
 }
 
 func (s *ShardSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
@@ -74,7 +72,7 @@ func (s *ShardSuite) TestGetOrCreateShard_Create() {
 		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.ProtoEqual(shardInfo, resp.ShardInfo)
 
 }
@@ -87,14 +85,14 @@ func (s *ShardSuite) TestGetOrCreateShard_Get() {
 		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.ProtoEqual(shardInfo, resp.ShardInfo)
 
 	resp, err = s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID:          s.ShardID,
 		InitialShardInfo: RandomShardInfo(s.ShardID, rand.Int63()),
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.ProtoEqual(shardInfo, resp.ShardInfo)
 }
 
@@ -106,7 +104,7 @@ func (s *ShardSuite) TestUpdateShard_OwnershipLost() {
 		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.ProtoEqual(shardInfo, resp.ShardInfo)
 
 	updateRangeID := rand.Int63()
@@ -115,13 +113,13 @@ func (s *ShardSuite) TestUpdateShard_OwnershipLost() {
 		ShardInfo:       updateShardInfo,
 		PreviousRangeID: updateRangeID,
 	})
-	s.IsType(&p.ShardOwnershipLostError{}, err)
+	require.IsType(s.T(), &p.ShardOwnershipLostError{}, err)
 
 	resp, err = s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.ProtoEqual(shardInfo, resp.ShardInfo)
 }
 
@@ -133,7 +131,7 @@ func (s *ShardSuite) TestUpdateShard_Success() {
 		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.ProtoEqual(shardInfo, resp.ShardInfo)
 
 	updateShardInfo := RandomShardInfo(s.ShardID, rangeID+1)
@@ -141,12 +139,12 @@ func (s *ShardSuite) TestUpdateShard_Success() {
 		ShardInfo:       updateShardInfo,
 		PreviousRangeID: rangeID,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	resp, err = s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.ProtoEqual(updateShardInfo, resp.ShardInfo)
 }

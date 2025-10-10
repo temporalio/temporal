@@ -43,7 +43,6 @@ var (
 )
 
 type historyArchiverSuite struct {
-	*require.Assertions
 	suite.Suite
 
 	logger             log.Logger
@@ -70,12 +69,11 @@ func (s *historyArchiverSuite) SetupSuite() {
 
 func (s *historyArchiverSuite) TearDownSuite() {
 	if err := os.RemoveAll(s.testGetDirectory); err != nil {
-		s.Fail("Failed to remove test directory %v: %v", s.testGetDirectory, err)
+		require.Fail(s.T(), "Failed to remove test directory %v: %v", s.testGetDirectory, err)
 	}
 }
 
 func (s *historyArchiverSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 	s.logger = log.NewNoopLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
 }
@@ -102,8 +100,8 @@ func (s *historyArchiverSuite) TestValidateURI() {
 	historyArchiver := s.newTestHistoryArchiver(nil)
 	for _, tc := range testCases {
 		URI, err := archiver.NewURI(tc.URI)
-		s.NoError(err)
-		s.Equal(tc.expectedErr, historyArchiver.ValidateURI(URI))
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), tc.expectedErr, historyArchiver.ValidateURI(URI))
 	}
 }
 
@@ -119,9 +117,9 @@ func (s *historyArchiverSuite) TestArchive_Fail_InvalidURI() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	URI, err := archiver.NewURI("wrongscheme://")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	err = historyArchiver.Archive(context.Background(), URI, request)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *historyArchiverSuite) TestArchive_Fail_InvalidRequest() {
@@ -136,7 +134,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_InvalidRequest() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	err := historyArchiver.Archive(context.Background(), s.testArchivalURI, request)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
@@ -159,7 +157,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	err := historyArchiver.Archive(context.Background(), s.testArchivalURI, request)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
@@ -189,7 +187,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	err := historyArchiver.Archive(getCanceledContext(), s.testArchivalURI, request)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
@@ -229,7 +227,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	err := historyArchiver.Archive(context.Background(), s.testArchivalURI, request)
-	s.Error(err)
+	require.Error(s.T(), err)
 }
 
 func (s *historyArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
@@ -253,7 +251,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 	}
 	nonRetryableErr := errors.New("some non-retryable error")
 	err := historyArchiver.Archive(context.Background(), s.testArchivalURI, request, archiver.GetNonRetryableErrorOption(nonRetryableErr))
-	s.Equal(nonRetryableErr, err)
+	require.Equal(s.T(), nonRetryableErr, err)
 }
 
 func (s *historyArchiverSuite) TestArchive_Skip() {
@@ -294,7 +292,7 @@ func (s *historyArchiverSuite) TestArchive_Skip() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	err := historyArchiver.Archive(context.Background(), s.testArchivalURI, request)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *historyArchiverSuite) TestArchive_Success() {
@@ -351,9 +349,9 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	URI, err := archiver.NewURI("file://" + dir)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	err = historyArchiver.Archive(context.Background(), URI, request)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	expectedFilename := constructHistoryFilename(testNamespaceID, testWorkflowID, testRunID, testCloseFailoverVersion)
 	s.assertFileExists(path.Join(dir, expectedFilename))
@@ -368,10 +366,10 @@ func (s *historyArchiverSuite) TestGet_Fail_InvalidURI() {
 		PageSize:    100,
 	}
 	URI, err := archiver.NewURI("wrongscheme://")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	response, err := historyArchiver.Get(context.Background(), URI, request)
-	s.Nil(response)
-	s.Error(err)
+	require.Nil(s.T(), response)
+	require.Error(s.T(), err)
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_InvalidRequest() {
@@ -383,9 +381,9 @@ func (s *historyArchiverSuite) TestGet_Fail_InvalidRequest() {
 		PageSize:    0, // pageSize should be greater than 0
 	}
 	response, err := historyArchiver.Get(context.Background(), s.testArchivalURI, request)
-	s.Nil(response)
-	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	require.Nil(s.T(), response)
+	require.Error(s.T(), err)
+	require.IsType(s.T(), &serviceerror.InvalidArgument{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_DirectoryNotExist() {
@@ -397,9 +395,9 @@ func (s *historyArchiverSuite) TestGet_Fail_DirectoryNotExist() {
 		PageSize:    testPageSize,
 	}
 	response, err := historyArchiver.Get(context.Background(), s.testArchivalURI, request)
-	s.Nil(response)
-	s.Error(err)
-	s.IsType(&serviceerror.NotFound{}, err)
+	require.Nil(s.T(), response)
+	require.Error(s.T(), err)
+	require.IsType(s.T(), &serviceerror.NotFound{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_InvalidToken() {
@@ -412,11 +410,11 @@ func (s *historyArchiverSuite) TestGet_Fail_InvalidToken() {
 		NextPageToken: []byte{'r', 'a', 'n', 'd', 'o', 'm'},
 	}
 	URI, err := archiver.NewURI("file:///")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	response, err := historyArchiver.Get(context.Background(), URI, request)
-	s.Nil(response)
-	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	require.Nil(s.T(), response)
+	require.Error(s.T(), err)
+	require.IsType(s.T(), &serviceerror.InvalidArgument{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_FileNotExist() {
@@ -430,11 +428,11 @@ func (s *historyArchiverSuite) TestGet_Fail_FileNotExist() {
 		CloseFailoverVersion: &testCloseFailoverVersion,
 	}
 	URI, err := archiver.NewURI("file:///")
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	response, err := historyArchiver.Get(context.Background(), URI, request)
-	s.Nil(response)
-	s.Error(err)
-	s.IsType(&serviceerror.NotFound{}, err)
+	require.Nil(s.T(), response)
+	require.Error(s.T(), err)
+	require.IsType(s.T(), &serviceerror.NotFound{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
@@ -446,11 +444,11 @@ func (s *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 		PageSize:    testPageSize,
 	}
 	URI, err := archiver.NewURI("file://" + s.testGetDirectory)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	response, err := historyArchiver.Get(context.Background(), URI, request)
-	s.NoError(err)
-	s.Nil(response.NextPageToken)
-	s.Equal(s.historyBatchesV100, response.HistoryBatches)
+	require.NoError(s.T(), err)
+	require.Nil(s.T(), response.NextPageToken)
+	require.Equal(s.T(), s.historyBatchesV100, response.HistoryBatches)
 }
 
 func (s *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
@@ -464,11 +462,11 @@ func (s *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 		CloseFailoverVersion: &testCloseFailoverVersion,
 	}
 	URI, err := archiver.NewURI("file://" + s.testGetDirectory)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	response, err := historyArchiver.Get(context.Background(), URI, request)
-	s.NoError(err)
-	s.Nil(response.NextPageToken)
-	s.Equal(s.historyBatchesV1, response.HistoryBatches)
+	require.NoError(s.T(), err)
+	require.Nil(s.T(), response.NextPageToken)
+	require.Equal(s.T(), s.historyBatchesV1, response.HistoryBatches)
 }
 
 func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
@@ -484,25 +482,25 @@ func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
 	var combinedHistory []*historypb.History
 
 	URI, err := archiver.NewURI("file://" + s.testGetDirectory)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	response, err := historyArchiver.Get(context.Background(), URI, request)
-	s.NoError(err)
-	s.NotNil(response)
-	s.NotNil(response.NextPageToken)
-	s.NotNil(response.HistoryBatches)
-	s.Len(response.HistoryBatches, 1)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), response)
+	require.NotNil(s.T(), response.NextPageToken)
+	require.NotNil(s.T(), response.HistoryBatches)
+	require.Len(s.T(), response.HistoryBatches, 1)
 	combinedHistory = append(combinedHistory, response.HistoryBatches...)
 
 	request.NextPageToken = response.NextPageToken
 	response, err = historyArchiver.Get(context.Background(), URI, request)
-	s.NoError(err)
-	s.NotNil(response)
-	s.Nil(response.NextPageToken)
-	s.NotNil(response.HistoryBatches)
-	s.Len(response.HistoryBatches, 1)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), response)
+	require.Nil(s.T(), response.NextPageToken)
+	require.NotNil(s.T(), response.HistoryBatches)
+	require.Len(s.T(), response.HistoryBatches, 1)
 	combinedHistory = append(combinedHistory, response.HistoryBatches...)
 
-	s.Equal(s.historyBatchesV100, combinedHistory)
+	require.Equal(s.T(), s.historyBatchesV100, combinedHistory)
 }
 
 func (s *historyArchiverSuite) TestArchiveAndGet() {
@@ -534,9 +532,9 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 	URI, err := archiver.NewURI("file://" + dir)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	err = historyArchiver.Archive(context.Background(), URI, archiveRequest)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	expectedFilename := constructHistoryFilename(testNamespaceID, testWorkflowID, testRunID, testCloseFailoverVersion)
 	s.assertFileExists(path.Join(dir, expectedFilename))
@@ -548,10 +546,10 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 		PageSize:    testPageSize,
 	}
 	response, err := historyArchiver.Get(context.Background(), URI, getRequest)
-	s.NoError(err)
-	s.NotNil(response)
-	s.Nil(response.NextPageToken)
-	s.Equal(s.historyBatchesV100, response.HistoryBatches)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), response)
+	require.Nil(s.T(), response.NextPageToken)
+	require.Equal(s.T(), s.historyBatchesV100, response.HistoryBatches)
 }
 
 func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.HistoryIterator) *historyArchiver {
@@ -560,7 +558,7 @@ func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.H
 		DirMode:  testDirModeStr,
 	}
 	a, err := newHistoryArchiver(s.executionManager, s.logger, s.metricsHandler, config, historyIterator)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	return a
 }
 
@@ -618,8 +616,8 @@ func (s *historyArchiverSuite) writeHistoryBatchesForGetTest(historyBatches []*h
 
 func (s *historyArchiverSuite) assertFileExists(filepath string) {
 	exists, err := fileExists(filepath)
-	s.NoError(err)
-	s.True(exists)
+	require.NoError(s.T(), err)
+	require.True(s.T(), exists)
 }
 
 func getCanceledContext() context.Context {

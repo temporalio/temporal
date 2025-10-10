@@ -27,7 +27,6 @@ import (
 type (
 	namespaceValidatorSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		controller   *gomock.Controller
 		mockRegistry *namespace.MockRegistry
@@ -38,14 +37,12 @@ func TestNamespaceValidatorSuite(t *testing.T) {
 	suite.Run(t, &namespaceValidatorSuite{})
 }
 
-func (s *namespaceValidatorSuite) SetupSuite() {
-}
+
 
 func (s *namespaceValidatorSuite) TearDownSuite() {
 }
 
 func (s *namespaceValidatorSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.mockRegistry = namespace.NewMockRegistry(s.controller)
@@ -101,11 +98,11 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_NamespaceNotSet(
 		})
 
 		if testCase.expectedErr != nil {
-			s.IsType(testCase.expectedErr, err)
-			s.False(handlerCalled)
+			require.IsType(s.T(), testCase.expectedErr, err)
+			require.False(s.T(), handlerCalled)
 		} else {
-			s.NoError(err)
-			s.True(handlerCalled)
+			require.NoError(s.T(), err)
+			require.True(s.T(), handlerCalled)
 		}
 	}
 }
@@ -128,8 +125,8 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_NamespaceNotFoun
 		return &workflowservice.StartWorkflowExecutionResponse{}, nil
 	})
 
-	s.IsType(&serviceerror.NamespaceNotFound{}, err)
-	s.False(handlerCalled)
+	require.IsType(s.T(), &serviceerror.NamespaceNotFound{}, err)
+	require.False(s.T(), handlerCalled)
 
 	s.mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("not-found-namespace-id")).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	taskToken, _ := tasktoken.NewSerializer().Serialize(&tokenspb.Task{
@@ -145,8 +142,8 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_NamespaceNotFoun
 		return &workflowservice.RespondWorkflowTaskCompletedResponse{}, nil
 	})
 
-	s.IsType(&serviceerror.NamespaceNotFound{}, err)
-	s.False(handlerCalled)
+	require.IsType(s.T(), &serviceerror.NamespaceNotFound{}, err)
+	require.False(s.T(), handlerCalled)
 }
 
 type nexusRequest struct{}
@@ -399,11 +396,11 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 			})
 
 			if testCase.expectedErr != nil {
-				s.IsType(testCase.expectedErr, err)
-				s.False(handlerCalled)
+				require.IsType(s.T(), testCase.expectedErr, err)
+				require.False(s.T(), handlerCalled)
 			} else {
-				s.NoError(err)
-				s.True(handlerCalled)
+				require.NoError(s.T(), err)
+				require.True(s.T(), handlerCalled)
 			}
 		})
 	}
@@ -473,11 +470,11 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromToken(
 		})
 
 		if testCase.expectedErr != nil {
-			s.IsType(testCase.expectedErr, err)
-			s.False(handlerCalled)
+			require.IsType(s.T(), testCase.expectedErr, err)
+			require.False(s.T(), handlerCalled)
 		} else {
-			s.NoError(err)
-			s.True(handlerCalled)
+			require.NoError(s.T(), err)
+			require.True(s.T(), handlerCalled)
 		}
 	}
 }
@@ -498,8 +495,8 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_DescribeNamespac
 		return &workflowservice.DescribeNamespaceResponse{}, nil
 	})
 
-	s.NoError(err)
-	s.True(handlerCalled)
+	require.NoError(s.T(), err)
+	require.True(s.T(), handlerCalled)
 
 	req = &workflowservice.DescribeNamespaceRequest{}
 	handlerCalled = false
@@ -508,8 +505,8 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_DescribeNamespac
 		return &workflowservice.DescribeNamespaceResponse{}, nil
 	})
 
-	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.False(handlerCalled)
+	require.IsType(s.T(), &serviceerror.InvalidArgument{}, err)
+	require.False(s.T(), handlerCalled)
 }
 
 func (s *namespaceValidatorSuite) Test_StateValidationIntercept_GetClusterInfo() {
@@ -529,8 +526,8 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_GetClusterInfo()
 		return &workflowservice.GetClusterInfoResponse{}, nil
 	})
 
-	s.NoError(err)
-	s.True(handlerCalled)
+	require.NoError(s.T(), err)
+	require.True(s.T(), handlerCalled)
 }
 
 func (s *namespaceValidatorSuite) Test_Intercept_RegisterNamespace() {
@@ -549,8 +546,8 @@ func (s *namespaceValidatorSuite) Test_Intercept_RegisterNamespace() {
 		return &workflowservice.RegisterNamespaceResponse{}, nil
 	})
 
-	s.NoError(err)
-	s.True(handlerCalled)
+	require.NoError(s.T(), err)
+	require.True(s.T(), handlerCalled)
 
 	req = &workflowservice.RegisterNamespaceRequest{}
 	handlerCalled = false
@@ -559,8 +556,8 @@ func (s *namespaceValidatorSuite) Test_Intercept_RegisterNamespace() {
 		return &workflowservice.RegisterNamespaceResponse{}, nil
 	})
 
-	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.False(handlerCalled)
+	require.IsType(s.T(), &serviceerror.InvalidArgument{}, err)
+	require.False(s.T(), handlerCalled)
 }
 
 func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEnforcement() {
@@ -663,13 +660,13 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEn
 		})
 
 		if testCase.expectedErr != nil {
-			s.IsType(testCase.expectedErr, err)
-			s.IsType(testCase.expectedErr, queryErr)
-			s.False(handlerCalled)
+			require.IsType(s.T(), testCase.expectedErr, err)
+			require.IsType(s.T(), testCase.expectedErr, queryErr)
+			require.False(s.T(), handlerCalled)
 		} else {
-			s.NoError(err)
-			s.NoError(queryErr)
-			s.True(handlerCalled)
+			require.NoError(s.T(), err)
+			require.NoError(s.T(), queryErr)
+			require.True(s.T(), handlerCalled)
 		}
 	}
 }
@@ -707,8 +704,8 @@ func (s *namespaceValidatorSuite) Test_Intercept_DescribeHistoryHostRequests() {
 				return nil, nil
 			},
 		)
-		s.NoError(err)
-		s.True(handlerCalled)
+		require.NoError(s.T(), err)
+		require.True(s.T(), handlerCalled)
 	}
 }
 
@@ -792,8 +789,8 @@ func (s *namespaceValidatorSuite) Test_Intercept_SearchAttributeRequests() {
 				return nil, nil
 			},
 		)
-		s.NoError(err)
-		s.True(handlerCalled)
+		require.NoError(s.T(), err)
+		require.True(s.T(), handlerCalled)
 	}
 }
 
@@ -833,8 +830,8 @@ func (s *namespaceValidatorSuite) Test_NamespaceValidateIntercept() {
 		handlerCalled = true
 		return &workflowservice.StartWorkflowExecutionResponse{}, nil
 	})
-	s.True(handlerCalled)
-	s.NoError(err)
+	require.True(s.T(), handlerCalled)
+	require.NoError(s.T(), err)
 
 	req = &workflowservice.StartWorkflowExecutionRequest{Namespace: "namespaceTooLong"}
 	handlerCalled = false
@@ -842,8 +839,8 @@ func (s *namespaceValidatorSuite) Test_NamespaceValidateIntercept() {
 		handlerCalled = true
 		return &workflowservice.StartWorkflowExecutionResponse{}, nil
 	})
-	s.False(handlerCalled)
-	s.Error(err)
+	require.False(s.T(), handlerCalled)
+	require.Error(s.T(), err)
 }
 
 func (s *namespaceValidatorSuite) TestSetNamespace() {
@@ -868,50 +865,50 @@ func (s *namespaceValidatorSuite) TestSetNamespace() {
 
 	queryReq := &workflowservice.RespondQueryTaskCompletedRequest{}
 	nvi.setNamespace(namespaceEntry, queryReq)
-	s.Equal(namespaceEntryName, queryReq.Namespace)
+	require.Equal(s.T(), namespaceEntryName, queryReq.Namespace)
 	queryReq.Namespace = namespaceRequestName
 	nvi.setNamespace(namespaceEntry, queryReq)
-	s.Equal(namespaceRequestName, queryReq.Namespace)
+	require.Equal(s.T(), namespaceRequestName, queryReq.Namespace)
 
 	completeWorkflowTaskReq := &workflowservice.RespondWorkflowTaskCompletedRequest{}
 	nvi.setNamespace(namespaceEntry, completeWorkflowTaskReq)
-	s.Equal(namespaceEntryName, completeWorkflowTaskReq.Namespace)
+	require.Equal(s.T(), namespaceEntryName, completeWorkflowTaskReq.Namespace)
 	completeWorkflowTaskReq.Namespace = namespaceRequestName
 	nvi.setNamespace(namespaceEntry, completeWorkflowTaskReq)
-	s.Equal(namespaceRequestName, completeWorkflowTaskReq.Namespace)
+	require.Equal(s.T(), namespaceRequestName, completeWorkflowTaskReq.Namespace)
 
 	failWorkflowTaskReq := &workflowservice.RespondWorkflowTaskFailedRequest{}
 	nvi.setNamespace(namespaceEntry, failWorkflowTaskReq)
-	s.Equal(namespaceEntryName, failWorkflowTaskReq.Namespace)
+	require.Equal(s.T(), namespaceEntryName, failWorkflowTaskReq.Namespace)
 	failWorkflowTaskReq.Namespace = namespaceRequestName
 	nvi.setNamespace(namespaceEntry, failWorkflowTaskReq)
-	s.Equal(namespaceRequestName, failWorkflowTaskReq.Namespace)
+	require.Equal(s.T(), namespaceRequestName, failWorkflowTaskReq.Namespace)
 
 	heartbeatActivityTaskReq := &workflowservice.RecordActivityTaskHeartbeatRequest{}
 	nvi.setNamespace(namespaceEntry, heartbeatActivityTaskReq)
-	s.Equal(namespaceEntryName, heartbeatActivityTaskReq.Namespace)
+	require.Equal(s.T(), namespaceEntryName, heartbeatActivityTaskReq.Namespace)
 	heartbeatActivityTaskReq.Namespace = namespaceRequestName
 	nvi.setNamespace(namespaceEntry, heartbeatActivityTaskReq)
-	s.Equal(namespaceRequestName, heartbeatActivityTaskReq.Namespace)
+	require.Equal(s.T(), namespaceRequestName, heartbeatActivityTaskReq.Namespace)
 
 	cancelActivityTaskReq := &workflowservice.RespondActivityTaskCanceledRequest{}
 	nvi.setNamespace(namespaceEntry, cancelActivityTaskReq)
-	s.Equal(namespaceEntryName, cancelActivityTaskReq.Namespace)
+	require.Equal(s.T(), namespaceEntryName, cancelActivityTaskReq.Namespace)
 	cancelActivityTaskReq.Namespace = namespaceRequestName
 	nvi.setNamespace(namespaceEntry, cancelActivityTaskReq)
-	s.Equal(namespaceRequestName, cancelActivityTaskReq.Namespace)
+	require.Equal(s.T(), namespaceRequestName, cancelActivityTaskReq.Namespace)
 
 	completeActivityTaskReq := &workflowservice.RespondActivityTaskCompletedRequest{}
 	nvi.setNamespace(namespaceEntry, completeActivityTaskReq)
-	s.Equal(namespaceEntryName, completeActivityTaskReq.Namespace)
+	require.Equal(s.T(), namespaceEntryName, completeActivityTaskReq.Namespace)
 	completeActivityTaskReq.Namespace = namespaceRequestName
 	nvi.setNamespace(namespaceEntry, completeActivityTaskReq)
-	s.Equal(namespaceRequestName, completeActivityTaskReq.Namespace)
+	require.Equal(s.T(), namespaceRequestName, completeActivityTaskReq.Namespace)
 
 	failActivityTaskReq := &workflowservice.RespondActivityTaskFailedRequest{}
 	nvi.setNamespace(namespaceEntry, failActivityTaskReq)
-	s.Equal(namespaceEntryName, failActivityTaskReq.Namespace)
+	require.Equal(s.T(), namespaceEntryName, failActivityTaskReq.Namespace)
 	failActivityTaskReq.Namespace = namespaceRequestName
 	nvi.setNamespace(namespaceEntry, failActivityTaskReq)
-	s.Equal(namespaceRequestName, failActivityTaskReq.Namespace)
+	require.Equal(s.T(), namespaceRequestName, failActivityTaskReq.Namespace)
 }

@@ -30,9 +30,8 @@ type (
 	// MetadataPersistenceSuiteV2 is test of the V2 version of metadata persistence
 	MetadataPersistenceSuiteV2 struct {
 		*TestBase
-		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
+		// override suite.Suite.Assertions with require.Assertions; this means that require.NotNil(s.T(), nil) will stop the test,
 		// not merely log an error
-		*require.Assertions
 		protorequire.ProtoAssertions
 
 		ctx    context.Context
@@ -41,13 +40,10 @@ type (
 )
 
 // SetupSuite implementation
-func (m *MetadataPersistenceSuiteV2) SetupSuite() {
-}
+
 
 // SetupTest implementation
 func (m *MetadataPersistenceSuiteV2) SetupTest() {
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	m.Assertions = require.New(m.T())
 	m.ProtoAssertions = protorequire.New(m.T())
 	m.ctx, m.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
@@ -57,10 +53,10 @@ func (m *MetadataPersistenceSuiteV2) SetupTest() {
 ListLoop:
 	for {
 		resp, err := m.ListNamespaces(pageSize, token)
-		m.NoError(err)
+		require.NoError(m.T(), err)
 		token = resp.NextPageToken
 		for _, n := range resp.Namespaces {
-			m.NoError(m.DeleteNamespace(n.Namespace.Info.Id, ""))
+			require.NoError(m.T(), m.DeleteNamespace(n.Namespace.Info.Id, ""))
 		}
 		if len(token) == 0 {
 			break ListLoop
@@ -87,18 +83,18 @@ func (m *MetadataPersistenceSuiteV2) createPartialNamespace(id string, name stri
 		`VALUES(?, ?) IF NOT EXISTS`
 	query := m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query(templateCreateNamespaceQuery, id, name).WithContext(context.Background())
 	err := query.Exec()
-	m.NoError(err)
+	require.NoError(m.T(), err)
 
 }
 
 func (m *MetadataPersistenceSuiteV2) truncatePartialNamespace() {
 	query := m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query("TRUNCATE namespaces_by_id").WithContext(context.Background())
 	err := query.Exec()
-	m.NoError(err)
+	require.NoError(m.T(), err)
 
 	query = m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query("TRUNCATE namespaces").WithContext(context.Background())
 	err = query.Exec()
-	m.NoError(err)
+	require.NoError(m.T(), err)
 }
 
 func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameID() {
@@ -148,34 +144,34 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameI
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err0)
-	m.NotNil(resp0)
-	m.EqualValues(id, resp0.ID)
+	require.NoError(m.T(), err0)
+	require.NotNil(m.T(), resp0)
+	require.EqualValues(m.T(), id, resp0.ID)
 
 	// for namespace which do not have replication config set, will default to
 	// use current cluster as active, with current cluster as all clusters
 	resp1, err1 := m.GetNamespace(id, "")
-	m.NoError(err1)
-	m.NotNil(resp1)
-	m.EqualValues(id, resp1.Namespace.Info.Id)
-	m.Equal(name, resp1.Namespace.Info.Name)
-	m.Equal(state, resp1.Namespace.Info.State)
-	m.Equal(description, resp1.Namespace.Info.Description)
-	m.Equal(owner, resp1.Namespace.Info.Owner)
-	m.Equal(data, resp1.Namespace.Info.Data)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, resp1.Namespace.Config.Retention.AsDuration())
-	m.Equal(historyArchivalState, resp1.Namespace.Config.HistoryArchivalState)
-	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
-	m.Equal(visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
-	m.Equal(visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalUri)
+	require.NoError(m.T(), err1)
+	require.NotNil(m.T(), resp1)
+	require.EqualValues(m.T(), id, resp1.Namespace.Info.Id)
+	require.Equal(m.T(), name, resp1.Namespace.Info.Name)
+	require.Equal(m.T(), state, resp1.Namespace.Info.State)
+	require.Equal(m.T(), description, resp1.Namespace.Info.Description)
+	require.Equal(m.T(), owner, resp1.Namespace.Info.Owner)
+	require.Equal(m.T(), data, resp1.Namespace.Info.Data)
+	require.EqualValues(m.T(), time.Duration(retention)*time.Hour*24, resp1.Namespace.Config.Retention.AsDuration())
+	require.Equal(m.T(), historyArchivalState, resp1.Namespace.Config.HistoryArchivalState)
+	require.Equal(m.T(), historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
+	require.Equal(m.T(), visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
+	require.Equal(m.T(), visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(badBinaries, resp1.Namespace.Config.BadBinaries)
-	m.Equal(cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(1, len(resp1.Namespace.ReplicationConfig.Clusters))
-	m.Equal(isGlobalNamespace, resp1.IsGlobalNamespace)
-	m.Equal(configVersion, resp1.Namespace.ConfigVersion)
-	m.Equal(failoverVersion, resp1.Namespace.FailoverVersion)
-	m.True(resp1.Namespace.ReplicationConfig.Clusters[0] == cluster.TestCurrentClusterName)
-	m.Equal(p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
+	require.Equal(m.T(), cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.ActiveClusterName)
+	require.Equal(m.T(), 1, len(resp1.Namespace.ReplicationConfig.Clusters))
+	require.Equal(m.T(), isGlobalNamespace, resp1.IsGlobalNamespace)
+	require.Equal(m.T(), configVersion, resp1.Namespace.ConfigVersion)
+	require.Equal(m.T(), failoverVersion, resp1.Namespace.FailoverVersion)
+	require.True(m.T(), resp1.Namespace.ReplicationConfig.Clusters[0] == cluster.TestCurrentClusterName)
+	require.Equal(m.T(), p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
 	m.truncatePartialNamespace()
 }
 
@@ -227,34 +223,34 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDiffe
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err0)
-	m.NotNil(resp0)
-	m.EqualValues(id, resp0.ID)
+	require.NoError(m.T(), err0)
+	require.NotNil(m.T(), resp0)
+	require.EqualValues(m.T(), id, resp0.ID)
 
 	// for namespace which do not have replication config set, will default to
 	// use current cluster as active, with current cluster as all clusters
 	resp1, err1 := m.GetNamespace(id, "")
-	m.NoError(err1)
-	m.NotNil(resp1)
-	m.EqualValues(id, resp1.Namespace.Info.Id)
-	m.Equal(name, resp1.Namespace.Info.Name)
-	m.Equal(state, resp1.Namespace.Info.State)
-	m.Equal(description, resp1.Namespace.Info.Description)
-	m.Equal(owner, resp1.Namespace.Info.Owner)
-	m.Equal(data, resp1.Namespace.Info.Data)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, resp1.Namespace.Config.Retention.AsDuration())
-	m.Equal(historyArchivalState, resp1.Namespace.Config.HistoryArchivalState)
-	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
-	m.Equal(visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
-	m.Equal(visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalUri)
+	require.NoError(m.T(), err1)
+	require.NotNil(m.T(), resp1)
+	require.EqualValues(m.T(), id, resp1.Namespace.Info.Id)
+	require.Equal(m.T(), name, resp1.Namespace.Info.Name)
+	require.Equal(m.T(), state, resp1.Namespace.Info.State)
+	require.Equal(m.T(), description, resp1.Namespace.Info.Description)
+	require.Equal(m.T(), owner, resp1.Namespace.Info.Owner)
+	require.Equal(m.T(), data, resp1.Namespace.Info.Data)
+	require.EqualValues(m.T(), time.Duration(retention)*time.Hour*24, resp1.Namespace.Config.Retention.AsDuration())
+	require.Equal(m.T(), historyArchivalState, resp1.Namespace.Config.HistoryArchivalState)
+	require.Equal(m.T(), historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
+	require.Equal(m.T(), visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
+	require.Equal(m.T(), visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(badBinaries, resp1.Namespace.Config.BadBinaries)
-	m.Equal(cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(1, len(resp1.Namespace.ReplicationConfig.Clusters))
-	m.Equal(isGlobalNamespace, resp1.IsGlobalNamespace)
-	m.Equal(configVersion, resp1.Namespace.ConfigVersion)
-	m.Equal(failoverVersion, resp1.Namespace.FailoverVersion)
-	m.True(resp1.Namespace.ReplicationConfig.Clusters[0] == cluster.TestCurrentClusterName)
-	m.Equal(p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
+	require.Equal(m.T(), cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.ActiveClusterName)
+	require.Equal(m.T(), 1, len(resp1.Namespace.ReplicationConfig.Clusters))
+	require.Equal(m.T(), isGlobalNamespace, resp1.IsGlobalNamespace)
+	require.Equal(m.T(), configVersion, resp1.Namespace.ConfigVersion)
+	require.Equal(m.T(), failoverVersion, resp1.Namespace.FailoverVersion)
+	require.True(m.T(), resp1.Namespace.ReplicationConfig.Clusters[0] == cluster.TestCurrentClusterName)
+	require.Equal(m.T(), p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
 	m.truncatePartialNamespace()
 }
 
@@ -305,9 +301,9 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceDifferentName
 		configVersion,
 		failoverVersion,
 	)
-	m.Error(err0)
-	m.IsType(&serviceerror.NamespaceAlreadyExists{}, err0)
-	m.Nil(resp0)
+	require.Error(m.T(), err0)
+	require.IsType(m.T(), &serviceerror.NamespaceAlreadyExists{}, err0)
+	require.Nil(m.T(), resp0)
 	m.truncatePartialNamespace()
 }
 
@@ -351,34 +347,34 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err0)
-	m.NotNil(resp0)
-	m.EqualValues(id, resp0.ID)
+	require.NoError(m.T(), err0)
+	require.NotNil(m.T(), resp0)
+	require.EqualValues(m.T(), id, resp0.ID)
 
 	// for namespace which do not have replication config set, will default to
 	// use current cluster as active, with current cluster as all clusters
 	resp1, err1 := m.GetNamespace(id, "")
-	m.NoError(err1)
-	m.NotNil(resp1)
-	m.EqualValues(id, resp1.Namespace.Info.Id)
-	m.Equal(name, resp1.Namespace.Info.Name)
-	m.Equal(state, resp1.Namespace.Info.State)
-	m.Equal(description, resp1.Namespace.Info.Description)
-	m.Equal(owner, resp1.Namespace.Info.Owner)
-	m.Equal(data, resp1.Namespace.Info.Data)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, resp1.Namespace.Config.Retention.AsDuration())
-	m.Equal(historyArchivalState, resp1.Namespace.Config.HistoryArchivalState)
-	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
-	m.Equal(visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
-	m.Equal(visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalUri)
+	require.NoError(m.T(), err1)
+	require.NotNil(m.T(), resp1)
+	require.EqualValues(m.T(), id, resp1.Namespace.Info.Id)
+	require.Equal(m.T(), name, resp1.Namespace.Info.Name)
+	require.Equal(m.T(), state, resp1.Namespace.Info.State)
+	require.Equal(m.T(), description, resp1.Namespace.Info.Description)
+	require.Equal(m.T(), owner, resp1.Namespace.Info.Owner)
+	require.Equal(m.T(), data, resp1.Namespace.Info.Data)
+	require.EqualValues(m.T(), time.Duration(retention)*time.Hour*24, resp1.Namespace.Config.Retention.AsDuration())
+	require.Equal(m.T(), historyArchivalState, resp1.Namespace.Config.HistoryArchivalState)
+	require.Equal(m.T(), historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
+	require.Equal(m.T(), visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
+	require.Equal(m.T(), visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(badBinaries, resp1.Namespace.Config.BadBinaries)
-	m.Equal(cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(1, len(resp1.Namespace.ReplicationConfig.Clusters))
-	m.Equal(isGlobalNamespace, resp1.IsGlobalNamespace)
-	m.Equal(configVersion, resp1.Namespace.ConfigVersion)
-	m.Equal(failoverVersion, resp1.Namespace.FailoverVersion)
-	m.True(resp1.Namespace.ReplicationConfig.Clusters[0] == cluster.TestCurrentClusterName)
-	m.Equal(p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
+	require.Equal(m.T(), cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.ActiveClusterName)
+	require.Equal(m.T(), 1, len(resp1.Namespace.ReplicationConfig.Clusters))
+	require.Equal(m.T(), isGlobalNamespace, resp1.IsGlobalNamespace)
+	require.Equal(m.T(), configVersion, resp1.Namespace.ConfigVersion)
+	require.Equal(m.T(), failoverVersion, resp1.Namespace.FailoverVersion)
+	require.True(m.T(), resp1.Namespace.ReplicationConfig.Clusters[0] == cluster.TestCurrentClusterName)
+	require.Equal(m.T(), p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
 
 	resp2, err2 := m.CreateNamespace(
 		&persistencespb.NamespaceInfo{
@@ -401,9 +397,9 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 		configVersion,
 		failoverVersion,
 	)
-	m.Error(err2)
-	m.IsType(&serviceerror.NamespaceAlreadyExists{}, err2)
-	m.Nil(resp2)
+	require.Error(m.T(), err2)
+	require.IsType(m.T(), &serviceerror.NamespaceAlreadyExists{}, err2)
+	require.Nil(m.T(), resp2)
 }
 
 // TestGetNamespace test
@@ -428,9 +424,9 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	clusters := []string{clusterActive, clusterStandby}
 
 	resp0, err0 := m.GetNamespace("", "does-not-exist")
-	m.Nil(resp0)
-	m.Error(err0)
-	m.IsType(&serviceerror.NamespaceNotFound{}, err0)
+	require.Nil(m.T(), resp0)
+	require.Error(m.T(), err0)
+	require.IsType(m.T(), &serviceerror.NamespaceNotFound{}, err0)
 	testBinaries := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"abc": {
@@ -466,67 +462,67 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err1)
-	m.NotNil(resp1)
-	m.EqualValues(id, resp1.ID)
+	require.NoError(m.T(), err1)
+	require.NotNil(m.T(), resp1)
+	require.EqualValues(m.T(), id, resp1.ID)
 
 	resp2, err2 := m.GetNamespace(id, "")
-	m.NoError(err2)
-	m.NotNil(resp2)
-	m.EqualValues(id, resp2.Namespace.Info.Id)
-	m.Equal(name, resp2.Namespace.Info.Name)
-	m.Equal(state, resp2.Namespace.Info.State)
-	m.Equal(description, resp2.Namespace.Info.Description)
-	m.Equal(owner, resp2.Namespace.Info.Owner)
-	m.Equal(data, resp2.Namespace.Info.Data)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, resp2.Namespace.Config.Retention.AsDuration())
-	m.Equal(historyArchivalState, resp2.Namespace.Config.HistoryArchivalState)
-	m.Equal(historyArchivalURI, resp2.Namespace.Config.HistoryArchivalUri)
-	m.Equal(visibilityArchivalState, resp2.Namespace.Config.VisibilityArchivalState)
-	m.Equal(visibilityArchivalURI, resp2.Namespace.Config.VisibilityArchivalUri)
+	require.NoError(m.T(), err2)
+	require.NotNil(m.T(), resp2)
+	require.EqualValues(m.T(), id, resp2.Namespace.Info.Id)
+	require.Equal(m.T(), name, resp2.Namespace.Info.Name)
+	require.Equal(m.T(), state, resp2.Namespace.Info.State)
+	require.Equal(m.T(), description, resp2.Namespace.Info.Description)
+	require.Equal(m.T(), owner, resp2.Namespace.Info.Owner)
+	require.Equal(m.T(), data, resp2.Namespace.Info.Data)
+	require.EqualValues(m.T(), time.Duration(retention)*time.Hour*24, resp2.Namespace.Config.Retention.AsDuration())
+	require.Equal(m.T(), historyArchivalState, resp2.Namespace.Config.HistoryArchivalState)
+	require.Equal(m.T(), historyArchivalURI, resp2.Namespace.Config.HistoryArchivalUri)
+	require.Equal(m.T(), visibilityArchivalState, resp2.Namespace.Config.VisibilityArchivalState)
+	require.Equal(m.T(), visibilityArchivalURI, resp2.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(testBinaries, resp2.Namespace.Config.BadBinaries)
-	m.Equal(clusterActive, resp2.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(len(clusters), len(resp2.Namespace.ReplicationConfig.Clusters))
+	require.Equal(m.T(), clusterActive, resp2.Namespace.ReplicationConfig.ActiveClusterName)
+	require.Equal(m.T(), len(clusters), len(resp2.Namespace.ReplicationConfig.Clusters))
 	for index := range clusters {
-		m.Equal(clusters[index], resp2.Namespace.ReplicationConfig.Clusters[index])
+		require.Equal(m.T(), clusters[index], resp2.Namespace.ReplicationConfig.Clusters[index])
 	}
-	m.Equal(isGlobalNamespace, resp2.IsGlobalNamespace)
-	m.Equal(configVersion, resp2.Namespace.ConfigVersion)
-	m.Equal(failoverVersion, resp2.Namespace.FailoverVersion)
-	m.Equal(p.InitialFailoverNotificationVersion, resp2.Namespace.FailoverNotificationVersion)
+	require.Equal(m.T(), isGlobalNamespace, resp2.IsGlobalNamespace)
+	require.Equal(m.T(), configVersion, resp2.Namespace.ConfigVersion)
+	require.Equal(m.T(), failoverVersion, resp2.Namespace.FailoverVersion)
+	require.Equal(m.T(), p.InitialFailoverNotificationVersion, resp2.Namespace.FailoverNotificationVersion)
 
 	resp3, err3 := m.GetNamespace("", name)
-	m.NoError(err3)
-	m.NotNil(resp3)
-	m.EqualValues(id, resp3.Namespace.Info.Id)
-	m.Equal(name, resp3.Namespace.Info.Name)
-	m.Equal(state, resp3.Namespace.Info.State)
-	m.Equal(description, resp3.Namespace.Info.Description)
-	m.Equal(owner, resp3.Namespace.Info.Owner)
-	m.Equal(data, resp3.Namespace.Info.Data)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, resp3.Namespace.Config.Retention.AsDuration())
-	m.Equal(historyArchivalState, resp3.Namespace.Config.HistoryArchivalState)
-	m.Equal(historyArchivalURI, resp3.Namespace.Config.HistoryArchivalUri)
-	m.Equal(visibilityArchivalState, resp3.Namespace.Config.VisibilityArchivalState)
-	m.Equal(visibilityArchivalURI, resp3.Namespace.Config.VisibilityArchivalUri)
-	m.Equal(clusterActive, resp3.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(len(clusters), len(resp3.Namespace.ReplicationConfig.Clusters))
+	require.NoError(m.T(), err3)
+	require.NotNil(m.T(), resp3)
+	require.EqualValues(m.T(), id, resp3.Namespace.Info.Id)
+	require.Equal(m.T(), name, resp3.Namespace.Info.Name)
+	require.Equal(m.T(), state, resp3.Namespace.Info.State)
+	require.Equal(m.T(), description, resp3.Namespace.Info.Description)
+	require.Equal(m.T(), owner, resp3.Namespace.Info.Owner)
+	require.Equal(m.T(), data, resp3.Namespace.Info.Data)
+	require.EqualValues(m.T(), time.Duration(retention)*time.Hour*24, resp3.Namespace.Config.Retention.AsDuration())
+	require.Equal(m.T(), historyArchivalState, resp3.Namespace.Config.HistoryArchivalState)
+	require.Equal(m.T(), historyArchivalURI, resp3.Namespace.Config.HistoryArchivalUri)
+	require.Equal(m.T(), visibilityArchivalState, resp3.Namespace.Config.VisibilityArchivalState)
+	require.Equal(m.T(), visibilityArchivalURI, resp3.Namespace.Config.VisibilityArchivalUri)
+	require.Equal(m.T(), clusterActive, resp3.Namespace.ReplicationConfig.ActiveClusterName)
+	require.Equal(m.T(), len(clusters), len(resp3.Namespace.ReplicationConfig.Clusters))
 	for index := range clusters {
-		m.Equal(clusters[index], resp3.Namespace.ReplicationConfig.Clusters[index])
+		require.Equal(m.T(), clusters[index], resp3.Namespace.ReplicationConfig.Clusters[index])
 	}
-	m.Equal(isGlobalNamespace, resp3.IsGlobalNamespace)
-	m.Equal(configVersion, resp3.Namespace.ConfigVersion)
-	m.Equal(failoverVersion, resp3.Namespace.FailoverVersion)
-	m.Equal(p.InitialFailoverNotificationVersion, resp3.Namespace.FailoverNotificationVersion)
+	require.Equal(m.T(), isGlobalNamespace, resp3.IsGlobalNamespace)
+	require.Equal(m.T(), configVersion, resp3.Namespace.ConfigVersion)
+	require.Equal(m.T(), failoverVersion, resp3.Namespace.FailoverVersion)
+	require.Equal(m.T(), p.InitialFailoverNotificationVersion, resp3.Namespace.FailoverNotificationVersion)
 
 	resp4, err4 := m.GetNamespace(id, name)
-	m.Error(err4)
-	m.IsType(&serviceerror.InvalidArgument{}, err4)
-	m.Nil(resp4)
+	require.Error(m.T(), err4)
+	require.IsType(m.T(), &serviceerror.InvalidArgument{}, err4)
+	require.Nil(m.T(), resp4)
 
 	resp5, err5 := m.GetNamespace("", "")
-	m.Nil(resp5)
-	m.IsType(&serviceerror.InvalidArgument{}, err5)
+	require.Nil(m.T(), resp5)
+	require.IsType(m.T(), &serviceerror.InvalidArgument{}, err5)
 }
 
 // TestConcurrentCreateNamespace test
@@ -598,36 +594,36 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 		}(map[string]string{"k0": newValue})
 	}
 	wg.Wait()
-	m.Equal(int32(1), successCount)
+	require.Equal(m.T(), int32(1), successCount)
 
 	resp, err3 := m.GetNamespace("", name)
-	m.NoError(err3)
-	m.NotNil(resp)
-	m.Equal(name, resp.Namespace.Info.Name)
-	m.Equal(state, resp.Namespace.Info.State)
-	m.Equal(description, resp.Namespace.Info.Description)
-	m.Equal(owner, resp.Namespace.Info.Owner)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, resp.Namespace.Config.Retention.AsDuration())
-	m.Equal(historyArchivalState, resp.Namespace.Config.HistoryArchivalState)
-	m.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
-	m.Equal(visibilityArchivalState, resp.Namespace.Config.VisibilityArchivalState)
-	m.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalUri)
+	require.NoError(m.T(), err3)
+	require.NotNil(m.T(), resp)
+	require.Equal(m.T(), name, resp.Namespace.Info.Name)
+	require.Equal(m.T(), state, resp.Namespace.Info.State)
+	require.Equal(m.T(), description, resp.Namespace.Info.Description)
+	require.Equal(m.T(), owner, resp.Namespace.Info.Owner)
+	require.EqualValues(m.T(), time.Duration(retention)*time.Hour*24, resp.Namespace.Config.Retention.AsDuration())
+	require.Equal(m.T(), historyArchivalState, resp.Namespace.Config.HistoryArchivalState)
+	require.Equal(m.T(), historyArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
+	require.Equal(m.T(), visibilityArchivalState, resp.Namespace.Config.VisibilityArchivalState)
+	require.Equal(m.T(), visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(testBinaries, resp.Namespace.Config.BadBinaries)
-	m.Equal(clusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(len(clusters), len(resp.Namespace.ReplicationConfig.Clusters))
+	require.Equal(m.T(), clusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
+	require.Equal(m.T(), len(clusters), len(resp.Namespace.ReplicationConfig.Clusters))
 	for index := range clusters {
-		m.Equal(clusters[index], resp.Namespace.ReplicationConfig.Clusters[index])
+		require.Equal(m.T(), clusters[index], resp.Namespace.ReplicationConfig.Clusters[index])
 	}
-	m.Equal(isGlobalNamespace, resp.IsGlobalNamespace)
-	m.Equal(configVersion, resp.Namespace.ConfigVersion)
-	m.Equal(failoverVersion, resp.Namespace.FailoverVersion)
+	require.Equal(m.T(), isGlobalNamespace, resp.IsGlobalNamespace)
+	require.Equal(m.T(), configVersion, resp.Namespace.ConfigVersion)
+	require.Equal(m.T(), failoverVersion, resp.Namespace.FailoverVersion)
 
 	// check namespace data
 	ss := strings.Split(resp.Namespace.Info.Data["k0"], "-")
-	m.Equal(2, len(ss))
+	require.Equal(m.T(), 2, len(ss))
 	vi, err := strconv.Atoi(ss[1])
-	m.NoError(err)
-	m.Equal(true, vi > 0 && vi <= concurrency)
+	require.NoError(m.T(), err)
+	require.Equal(m.T(), true, vi > 0 && vi <= concurrency)
 }
 
 // TestConcurrentUpdateNamespace test
@@ -677,14 +673,14 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err1)
-	m.EqualValues(id, resp1.ID)
+	require.NoError(m.T(), err1)
+	require.EqualValues(m.T(), id, resp1.ID)
 
 	resp2, err2 := m.GetNamespace(id, "")
-	m.NoError(err2)
+	require.NoError(m.T(), err2)
 	m.ProtoEqual(badBinaries, resp2.Namespace.Config.BadBinaries)
 	metadata, err := m.MetadataManager.GetMetadata(m.ctx)
-	m.NoError(err)
+	require.NoError(m.T(), err)
 	notificationVersion := metadata.NotificationVersion
 
 	testBinaries := &namespacepb.BadBinaries{
@@ -738,39 +734,39 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 		}(map[string]string{"k0": newValue})
 	}
 	wg.Wait()
-	m.Equal(int32(1), successCount)
+	require.Equal(m.T(), int32(1), successCount)
 
 	resp3, err3 := m.GetNamespace("", name)
-	m.NoError(err3)
-	m.NotNil(resp3)
-	m.EqualValues(id, resp3.Namespace.Info.Id)
-	m.Equal(name, resp3.Namespace.Info.Name)
-	m.Equal(state, resp3.Namespace.Info.State)
-	m.Equal(isGlobalNamespace, resp3.IsGlobalNamespace)
-	m.Equal(description, resp3.Namespace.Info.Description)
-	m.Equal(owner, resp3.Namespace.Info.Owner)
+	require.NoError(m.T(), err3)
+	require.NotNil(m.T(), resp3)
+	require.EqualValues(m.T(), id, resp3.Namespace.Info.Id)
+	require.Equal(m.T(), name, resp3.Namespace.Info.Name)
+	require.Equal(m.T(), state, resp3.Namespace.Info.State)
+	require.Equal(m.T(), isGlobalNamespace, resp3.IsGlobalNamespace)
+	require.Equal(m.T(), description, resp3.Namespace.Info.Description)
+	require.Equal(m.T(), owner, resp3.Namespace.Info.Owner)
 
-	m.EqualValues(time.Duration(retention)*time.Hour*24, resp3.Namespace.Config.Retention.AsDuration())
-	m.Equal(historyArchivalState, resp3.Namespace.Config.HistoryArchivalState)
-	m.Equal(historyArchivalURI, resp3.Namespace.Config.HistoryArchivalUri)
-	m.Equal(visibilityArchivalState, resp3.Namespace.Config.VisibilityArchivalState)
-	m.Equal(visibilityArchivalURI, resp3.Namespace.Config.VisibilityArchivalUri)
+	require.EqualValues(m.T(), time.Duration(retention)*time.Hour*24, resp3.Namespace.Config.Retention.AsDuration())
+	require.Equal(m.T(), historyArchivalState, resp3.Namespace.Config.HistoryArchivalState)
+	require.Equal(m.T(), historyArchivalURI, resp3.Namespace.Config.HistoryArchivalUri)
+	require.Equal(m.T(), visibilityArchivalState, resp3.Namespace.Config.VisibilityArchivalState)
+	require.Equal(m.T(), visibilityArchivalURI, resp3.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(testBinaries, resp3.Namespace.Config.BadBinaries)
-	m.Equal(clusterActive, resp3.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(len(clusters), len(resp3.Namespace.ReplicationConfig.Clusters))
+	require.Equal(m.T(), clusterActive, resp3.Namespace.ReplicationConfig.ActiveClusterName)
+	require.Equal(m.T(), len(clusters), len(resp3.Namespace.ReplicationConfig.Clusters))
 	for index := range clusters {
-		m.Equal(clusters[index], resp3.Namespace.ReplicationConfig.Clusters[index])
+		require.Equal(m.T(), clusters[index], resp3.Namespace.ReplicationConfig.Clusters[index])
 	}
-	m.Equal(isGlobalNamespace, resp3.IsGlobalNamespace)
-	m.Equal(configVersion, resp3.Namespace.ConfigVersion)
-	m.Equal(failoverVersion, resp3.Namespace.FailoverVersion)
+	require.Equal(m.T(), isGlobalNamespace, resp3.IsGlobalNamespace)
+	require.Equal(m.T(), configVersion, resp3.Namespace.ConfigVersion)
+	require.Equal(m.T(), failoverVersion, resp3.Namespace.FailoverVersion)
 
 	// check namespace data
 	ss := strings.Split(resp3.Namespace.Info.Data["k0"], "-")
-	m.Equal(2, len(ss))
+	require.Equal(m.T(), 2, len(ss))
 	vi, err := strconv.Atoi(ss[1])
-	m.NoError(err)
-	m.Equal(true, vi > 0 && vi <= concurrency)
+	require.NoError(m.T(), err)
+	require.Equal(m.T(), true, vi > 0 && vi <= concurrency)
 }
 
 // TestUpdateNamespace test
@@ -819,13 +815,13 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err1)
-	m.EqualValues(id, resp1.ID)
+	require.NoError(m.T(), err1)
+	require.EqualValues(m.T(), id, resp1.ID)
 
 	resp2, err2 := m.GetNamespace(id, "")
-	m.NoError(err2)
+	require.NoError(m.T(), err2)
 	metadata, err := m.MetadataManager.GetMetadata(m.ctx)
-	m.NoError(err)
+	require.NoError(m.T(), err)
 	notificationVersion := metadata.NotificationVersion
 
 	updatedState := enumspb.NAMESPACE_STATE_DEPRECATED
@@ -884,59 +880,59 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 		notificationVersion,
 		isGlobalNamespace,
 	)
-	m.NoError(err3)
+	require.NoError(m.T(), err3)
 
 	resp4, err4 := m.GetNamespace("", name)
-	m.NoError(err4)
-	m.NotNil(resp4)
-	m.EqualValues(id, resp4.Namespace.Info.Id)
-	m.Equal(name, resp4.Namespace.Info.Name)
-	m.Equal(isGlobalNamespace, resp4.IsGlobalNamespace)
-	m.Equal(updatedState, resp4.Namespace.Info.State)
-	m.Equal(updatedDescription, resp4.Namespace.Info.Description)
-	m.Equal(updatedOwner, resp4.Namespace.Info.Owner)
-	m.Equal(updatedData, resp4.Namespace.Info.Data)
+	require.NoError(m.T(), err4)
+	require.NotNil(m.T(), resp4)
+	require.EqualValues(m.T(), id, resp4.Namespace.Info.Id)
+	require.Equal(m.T(), name, resp4.Namespace.Info.Name)
+	require.Equal(m.T(), isGlobalNamespace, resp4.IsGlobalNamespace)
+	require.Equal(m.T(), updatedState, resp4.Namespace.Info.State)
+	require.Equal(m.T(), updatedDescription, resp4.Namespace.Info.Description)
+	require.Equal(m.T(), updatedOwner, resp4.Namespace.Info.Owner)
+	require.Equal(m.T(), updatedData, resp4.Namespace.Info.Data)
 	m.ProtoEqual(updatedRetention, resp4.Namespace.Config.Retention)
-	m.Equal(updatedHistoryArchivalState, resp4.Namespace.Config.HistoryArchivalState)
-	m.Equal(updatedHistoryArchivalURI, resp4.Namespace.Config.HistoryArchivalUri)
-	m.Equal(updatedVisibilityArchivalState, resp4.Namespace.Config.VisibilityArchivalState)
-	m.Equal(updatedVisibilityArchivalURI, resp4.Namespace.Config.VisibilityArchivalUri)
+	require.Equal(m.T(), updatedHistoryArchivalState, resp4.Namespace.Config.HistoryArchivalState)
+	require.Equal(m.T(), updatedHistoryArchivalURI, resp4.Namespace.Config.HistoryArchivalUri)
+	require.Equal(m.T(), updatedVisibilityArchivalState, resp4.Namespace.Config.VisibilityArchivalState)
+	require.Equal(m.T(), updatedVisibilityArchivalURI, resp4.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(testBinaries, resp4.Namespace.Config.BadBinaries)
-	m.Equal(updateClusterActive, resp4.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(len(updateClusters), len(resp4.Namespace.ReplicationConfig.Clusters))
+	require.Equal(m.T(), updateClusterActive, resp4.Namespace.ReplicationConfig.ActiveClusterName)
+	require.Equal(m.T(), len(updateClusters), len(resp4.Namespace.ReplicationConfig.Clusters))
 	for index := range clusters {
-		m.Equal(updateClusters[index], resp4.Namespace.ReplicationConfig.Clusters[index])
+		require.Equal(m.T(), updateClusters[index], resp4.Namespace.ReplicationConfig.Clusters[index])
 	}
-	m.Equal(updateConfigVersion, resp4.Namespace.ConfigVersion)
-	m.Equal(updateFailoverVersion, resp4.Namespace.FailoverVersion)
-	m.Equal(updateFailoverNotificationVersion, resp4.Namespace.FailoverNotificationVersion)
-	m.Equal(notificationVersion, resp4.NotificationVersion)
+	require.Equal(m.T(), updateConfigVersion, resp4.Namespace.ConfigVersion)
+	require.Equal(m.T(), updateFailoverVersion, resp4.Namespace.FailoverVersion)
+	require.Equal(m.T(), updateFailoverNotificationVersion, resp4.Namespace.FailoverNotificationVersion)
+	require.Equal(m.T(), notificationVersion, resp4.NotificationVersion)
 	m.EqualTimes(failoverEndTime, resp4.Namespace.FailoverEndTime.AsTime())
 
 	resp5, err5 := m.GetNamespace(id, "")
-	m.NoError(err5)
-	m.NotNil(resp5)
-	m.EqualValues(id, resp5.Namespace.Info.Id)
-	m.Equal(name, resp5.Namespace.Info.Name)
-	m.Equal(isGlobalNamespace, resp5.IsGlobalNamespace)
-	m.Equal(updatedState, resp5.Namespace.Info.State)
-	m.Equal(updatedDescription, resp5.Namespace.Info.Description)
-	m.Equal(updatedOwner, resp5.Namespace.Info.Owner)
-	m.Equal(updatedData, resp5.Namespace.Info.Data)
+	require.NoError(m.T(), err5)
+	require.NotNil(m.T(), resp5)
+	require.EqualValues(m.T(), id, resp5.Namespace.Info.Id)
+	require.Equal(m.T(), name, resp5.Namespace.Info.Name)
+	require.Equal(m.T(), isGlobalNamespace, resp5.IsGlobalNamespace)
+	require.Equal(m.T(), updatedState, resp5.Namespace.Info.State)
+	require.Equal(m.T(), updatedDescription, resp5.Namespace.Info.Description)
+	require.Equal(m.T(), updatedOwner, resp5.Namespace.Info.Owner)
+	require.Equal(m.T(), updatedData, resp5.Namespace.Info.Data)
 	m.ProtoEqual(updatedRetention, resp5.Namespace.Config.Retention)
-	m.Equal(updatedHistoryArchivalState, resp5.Namespace.Config.HistoryArchivalState)
-	m.Equal(updatedHistoryArchivalURI, resp5.Namespace.Config.HistoryArchivalUri)
-	m.Equal(updatedVisibilityArchivalState, resp5.Namespace.Config.VisibilityArchivalState)
-	m.Equal(updatedVisibilityArchivalURI, resp5.Namespace.Config.VisibilityArchivalUri)
-	m.Equal(updateClusterActive, resp5.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(len(updateClusters), len(resp5.Namespace.ReplicationConfig.Clusters))
+	require.Equal(m.T(), updatedHistoryArchivalState, resp5.Namespace.Config.HistoryArchivalState)
+	require.Equal(m.T(), updatedHistoryArchivalURI, resp5.Namespace.Config.HistoryArchivalUri)
+	require.Equal(m.T(), updatedVisibilityArchivalState, resp5.Namespace.Config.VisibilityArchivalState)
+	require.Equal(m.T(), updatedVisibilityArchivalURI, resp5.Namespace.Config.VisibilityArchivalUri)
+	require.Equal(m.T(), updateClusterActive, resp5.Namespace.ReplicationConfig.ActiveClusterName)
+	require.Equal(m.T(), len(updateClusters), len(resp5.Namespace.ReplicationConfig.Clusters))
 	for index := range clusters {
-		m.Equal(updateClusters[index], resp5.Namespace.ReplicationConfig.Clusters[index])
+		require.Equal(m.T(), updateClusters[index], resp5.Namespace.ReplicationConfig.Clusters[index])
 	}
-	m.Equal(updateConfigVersion, resp5.Namespace.ConfigVersion)
-	m.Equal(updateFailoverVersion, resp5.Namespace.FailoverVersion)
-	m.Equal(updateFailoverNotificationVersion, resp5.Namespace.FailoverNotificationVersion)
-	m.Equal(notificationVersion, resp5.NotificationVersion)
+	require.Equal(m.T(), updateConfigVersion, resp5.Namespace.ConfigVersion)
+	require.Equal(m.T(), updateFailoverVersion, resp5.Namespace.FailoverVersion)
+	require.Equal(m.T(), updateFailoverNotificationVersion, resp5.Namespace.FailoverNotificationVersion)
+	require.Equal(m.T(), notificationVersion, resp5.NotificationVersion)
 	m.EqualTimes(failoverEndTime, resp4.Namespace.FailoverEndTime.AsTime())
 
 	notificationVersion++
@@ -968,33 +964,33 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 		notificationVersion,
 		isGlobalNamespace,
 	)
-	m.NoError(err6)
+	require.NoError(m.T(), err6)
 
 	resp6, err6 := m.GetNamespace(id, "")
-	m.NoError(err6)
-	m.NotNil(resp6)
-	m.EqualValues(id, resp6.Namespace.Info.Id)
-	m.Equal(name, resp6.Namespace.Info.Name)
-	m.Equal(isGlobalNamespace, resp6.IsGlobalNamespace)
-	m.Equal(updatedState, resp6.Namespace.Info.State)
-	m.Equal(updatedDescription, resp6.Namespace.Info.Description)
-	m.Equal(updatedOwner, resp6.Namespace.Info.Owner)
-	m.Equal(updatedData, resp6.Namespace.Info.Data)
+	require.NoError(m.T(), err6)
+	require.NotNil(m.T(), resp6)
+	require.EqualValues(m.T(), id, resp6.Namespace.Info.Id)
+	require.Equal(m.T(), name, resp6.Namespace.Info.Name)
+	require.Equal(m.T(), isGlobalNamespace, resp6.IsGlobalNamespace)
+	require.Equal(m.T(), updatedState, resp6.Namespace.Info.State)
+	require.Equal(m.T(), updatedDescription, resp6.Namespace.Info.Description)
+	require.Equal(m.T(), updatedOwner, resp6.Namespace.Info.Owner)
+	require.Equal(m.T(), updatedData, resp6.Namespace.Info.Data)
 	m.ProtoEqual(updatedRetention, resp6.Namespace.Config.Retention)
-	m.Equal(updatedHistoryArchivalState, resp6.Namespace.Config.HistoryArchivalState)
-	m.Equal(updatedHistoryArchivalURI, resp6.Namespace.Config.HistoryArchivalUri)
-	m.Equal(updatedVisibilityArchivalState, resp6.Namespace.Config.VisibilityArchivalState)
-	m.Equal(updatedVisibilityArchivalURI, resp6.Namespace.Config.VisibilityArchivalUri)
+	require.Equal(m.T(), updatedHistoryArchivalState, resp6.Namespace.Config.HistoryArchivalState)
+	require.Equal(m.T(), updatedHistoryArchivalURI, resp6.Namespace.Config.HistoryArchivalUri)
+	require.Equal(m.T(), updatedVisibilityArchivalState, resp6.Namespace.Config.VisibilityArchivalState)
+	require.Equal(m.T(), updatedVisibilityArchivalURI, resp6.Namespace.Config.VisibilityArchivalUri)
 	m.ProtoEqual(testBinaries, resp6.Namespace.Config.BadBinaries)
-	m.Equal(updateClusterActive, resp6.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal(len(updateClusters), len(resp6.Namespace.ReplicationConfig.Clusters))
+	require.Equal(m.T(), updateClusterActive, resp6.Namespace.ReplicationConfig.ActiveClusterName)
+	require.Equal(m.T(), len(updateClusters), len(resp6.Namespace.ReplicationConfig.Clusters))
 	for index := range clusters {
-		m.Equal(updateClusters[index], resp4.Namespace.ReplicationConfig.Clusters[index])
+		require.Equal(m.T(), updateClusters[index], resp4.Namespace.ReplicationConfig.Clusters[index])
 	}
-	m.Equal(updateConfigVersion, resp6.Namespace.ConfigVersion)
-	m.Equal(updateFailoverVersion, resp6.Namespace.FailoverVersion)
-	m.Equal(updateFailoverNotificationVersion, resp6.Namespace.FailoverNotificationVersion)
-	m.Equal(notificationVersion, resp6.NotificationVersion)
+	require.Equal(m.T(), updateConfigVersion, resp6.Namespace.ConfigVersion)
+	require.Equal(m.T(), updateFailoverVersion, resp6.Namespace.FailoverVersion)
+	require.Equal(m.T(), updateFailoverNotificationVersion, resp6.Namespace.FailoverNotificationVersion)
+	require.Equal(m.T(), notificationVersion, resp6.NotificationVersion)
 	m.EqualTimes(time.Unix(0, 0).UTC(), resp6.Namespace.FailoverEndTime.AsTime())
 }
 
@@ -1044,44 +1040,44 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespace() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err1)
-	m.EqualValues(id, resp1.ID)
+	require.NoError(m.T(), err1)
+	require.EqualValues(m.T(), id, resp1.ID)
 
 	_, err2 := m.GetNamespace(id, "")
-	m.NoError(err2)
+	require.NoError(m.T(), err2)
 
 	err3 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
 		PreviousName: name,
 		NewName:      newName,
 	})
-	m.NoError(err3)
+	require.NoError(m.T(), err3)
 
 	resp4, err4 := m.GetNamespace("", newName)
-	m.NoError(err4)
-	m.NotNil(resp4)
-	m.EqualValues(id, resp4.Namespace.Info.Id)
-	m.Equal(newName, resp4.Namespace.Info.Name)
-	m.Equal(isGlobalNamespace, resp4.IsGlobalNamespace)
+	require.NoError(m.T(), err4)
+	require.NotNil(m.T(), resp4)
+	require.EqualValues(m.T(), id, resp4.Namespace.Info.Id)
+	require.Equal(m.T(), newName, resp4.Namespace.Info.Name)
+	require.Equal(m.T(), isGlobalNamespace, resp4.IsGlobalNamespace)
 
 	resp5, err5 := m.GetNamespace(id, "")
-	m.NoError(err5)
-	m.NotNil(resp5)
-	m.EqualValues(id, resp5.Namespace.Info.Id)
-	m.Equal(newName, resp5.Namespace.Info.Name)
-	m.Equal(isGlobalNamespace, resp5.IsGlobalNamespace)
+	require.NoError(m.T(), err5)
+	require.NotNil(m.T(), resp5)
+	require.EqualValues(m.T(), id, resp5.Namespace.Info.Id)
+	require.Equal(m.T(), newName, resp5.Namespace.Info.Name)
+	require.Equal(m.T(), isGlobalNamespace, resp5.IsGlobalNamespace)
 
 	err6 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
 		PreviousName: newName,
 		NewName:      newNewName,
 	})
-	m.NoError(err6)
+	require.NoError(m.T(), err6)
 
 	resp6, err6 := m.GetNamespace(id, "")
-	m.NoError(err6)
-	m.NotNil(resp6)
-	m.EqualValues(id, resp6.Namespace.Info.Id)
-	m.Equal(newNewName, resp6.Namespace.Info.Name)
-	m.Equal(isGlobalNamespace, resp6.IsGlobalNamespace)
+	require.NoError(m.T(), err6)
+	require.NotNil(m.T(), resp6)
+	require.EqualValues(m.T(), id, resp6.Namespace.Info.Id)
+	require.Equal(m.T(), newNewName, resp6.Namespace.Info.Name)
+	require.Equal(m.T(), isGlobalNamespace, resp6.IsGlobalNamespace)
 }
 
 // TestDeleteNamespace test
@@ -1129,22 +1125,22 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err1)
-	m.EqualValues(id, resp1.ID)
+	require.NoError(m.T(), err1)
+	require.EqualValues(m.T(), id, resp1.ID)
 
 	resp2, err2 := m.GetNamespace("", name)
-	m.NoError(err2)
-	m.NotNil(resp2)
+	require.NoError(m.T(), err2)
+	require.NotNil(m.T(), resp2)
 
 	err3 := m.DeleteNamespace("", name)
-	m.NoError(err3)
+	require.NoError(m.T(), err3)
 
 	// May need to loop here to avoid potential inconsistent read-after-write in cassandra
-	m.Eventually(
+	require.Eventually(m.T(),
 		func() bool {
 			resp, err := m.GetNamespace("", name)
 			if errors.As(err, new(*serviceerror.NamespaceNotFound)) {
-				m.Nil(resp)
+				require.Nil(m.T(), resp)
 				return true
 			}
 			return false
@@ -1154,9 +1150,9 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 	)
 
 	resp5, err5 := m.GetNamespace(id, "")
-	m.Error(err5)
-	m.IsType(&serviceerror.NamespaceNotFound{}, err5)
-	m.Nil(resp5)
+	require.Error(m.T(), err5)
+	require.IsType(m.T(), &serviceerror.NamespaceNotFound{}, err5)
+	require.Nil(m.T(), resp5)
 
 	id = uuid.New()
 	resp6, err6 := m.CreateNamespace(
@@ -1183,21 +1179,21 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err6)
-	m.EqualValues(id, resp6.ID)
+	require.NoError(m.T(), err6)
+	require.EqualValues(m.T(), id, resp6.ID)
 
 	err7 := m.DeleteNamespace(id, "")
-	m.NoError(err7)
+	require.NoError(m.T(), err7)
 
 	resp8, err8 := m.GetNamespace("", name)
-	m.Error(err8)
-	m.IsType(&serviceerror.NamespaceNotFound{}, err8)
-	m.Nil(resp8)
+	require.Error(m.T(), err8)
+	require.IsType(m.T(), &serviceerror.NamespaceNotFound{}, err8)
+	require.Nil(m.T(), resp8)
 
 	resp9, err9 := m.GetNamespace(id, "")
-	m.Error(err9)
-	m.IsType(&serviceerror.NamespaceNotFound{}, err9)
-	m.Nil(resp9)
+	require.Error(m.T(), err9)
+	require.IsType(m.T(), &serviceerror.NamespaceNotFound{}, err9)
+	require.Nil(m.T(), resp9)
 }
 
 // TestListNamespaces test
@@ -1295,7 +1291,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 			namespace.Namespace.ConfigVersion,
 			namespace.Namespace.FailoverVersion,
 		)
-		m.NoError(err)
+		require.NoError(m.T(), err)
 	}
 
 	var token []byte
@@ -1304,7 +1300,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 	outputNamespaces := make(map[string]*p.GetNamespaceResponse)
 	for {
 		resp, err := m.ListNamespaces(pageSize, token)
-		m.NoError(err)
+		require.NoError(m.T(), err)
 		token = resp.NextPageToken
 		for _, namespace := range resp.Namespaces {
 			outputNamespaces[namespace.Namespace.Info.Id] = namespace
@@ -1322,8 +1318,8 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 	}
 
 	// There should be 2 non-empty pages.
-	m.Equal(pageCount, 2)
-	m.Equal(len(inputNamespaces), len(outputNamespaces))
+	require.Equal(m.T(), pageCount, 2)
+	require.Equal(m.T(), len(inputNamespaces), len(outputNamespaces))
 	for _, namespace := range inputNamespaces {
 		m.DeepEqual(namespace, outputNamespaces[namespace.Namespace.Info.Id])
 	}
@@ -1385,7 +1381,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 			namespace.Namespace.ConfigVersion,
 			namespace.Namespace.FailoverVersion,
 		)
-		m.NoError(err)
+		require.NoError(m.T(), err)
 	}
 
 	var token []byte
@@ -1393,7 +1389,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 	pageCount := 0
 	for {
 		resp, err := m.ListNamespaces(2, token)
-		m.NoError(err)
+		require.NoError(m.T(), err)
 		token = resp.NextPageToken
 		listNamespacesPageSize2 = append(listNamespacesPageSize2, resp.Namespaces...)
 		// Some persistence backends return an unavoidable empty final page.
@@ -1406,17 +1402,17 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 	}
 
 	// There should be 1 non-empty page.
-	m.Equal(1, pageCount)
-	m.Len(listNamespacesPageSize2, 2)
+	require.Equal(m.T(), 1, pageCount)
+	require.Len(m.T(), listNamespacesPageSize2, 2)
 	for _, namespace := range listNamespacesPageSize2 {
-		m.NotEqual(namespace.Namespace.Info.State, enumspb.NAMESPACE_STATE_DELETED)
+		require.NotEqual(m.T(), namespace.Namespace.Info.State, enumspb.NAMESPACE_STATE_DELETED)
 	}
 
 	pageCount = 0
 	var listNamespacesPageSize1 []*p.GetNamespaceResponse
 	for {
 		resp, err := m.ListNamespaces(1, token)
-		m.NoError(err)
+		require.NoError(m.T(), err)
 		token = resp.NextPageToken
 		listNamespacesPageSize1 = append(listNamespacesPageSize1, resp.Namespaces...)
 		// Some persistence backends return an unavoidable empty final page.
@@ -1429,10 +1425,10 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 	}
 
 	// There should be 2 non-empty pages.
-	m.Equal(2, pageCount)
-	m.Len(listNamespacesPageSize1, 2)
+	require.Equal(m.T(), 2, pageCount)
+	require.Len(m.T(), listNamespacesPageSize1, 2)
 	for _, namespace := range listNamespacesPageSize1 {
-		m.NotEqual(namespace.Namespace.Info.State, enumspb.NAMESPACE_STATE_DELETED)
+		require.NotEqual(m.T(), namespace.Namespace.Info.State, enumspb.NAMESPACE_STATE_DELETED)
 	}
 }
 
@@ -1549,13 +1545,13 @@ func (m *MetadataPersistenceSuiteV2) TestCASFailureUpdateNamespace() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err1)
-	m.EqualValues(id, resp1.ID)
+	require.NoError(m.T(), err1)
+	require.EqualValues(m.T(), id, resp1.ID)
 
 	resp2, err2 := m.GetNamespace(id, "")
-	m.NoError(err2)
+	require.NoError(m.T(), err2)
 	metadata, err := m.MetadataManager.GetMetadata(m.ctx)
-	m.NoError(err)
+	require.NoError(m.T(), err)
 	notificationVersion := metadata.NotificationVersion
 
 	updatedDescription := "description-updated"
@@ -1589,12 +1585,12 @@ func (m *MetadataPersistenceSuiteV2) TestCASFailureUpdateNamespace() {
 		notificationVersion-1, // Use stale notification version to trigger CAS failure
 		isGlobalNamespace,
 	)
-	m.ErrorAs(err3, new(*serviceerror.Unavailable))
+	require.ErrorAs(m.T(), err3, new(*serviceerror.Unavailable))
 
 	// Verify that the namespace was not updated
 	resp4, err4 := m.GetNamespace(id, "")
-	m.NoError(err4)
-	m.Equal(description, resp4.Namespace.Info.Description) // Should still have old description
+	require.NoError(m.T(), err4)
+	require.Equal(m.T(), description, resp4.Namespace.Info.Description) // Should still have old description
 }
 
 // TestRenameNamespaceWithNameConflict tests name conflict when trying to rename a namespace
@@ -1645,8 +1641,8 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceWithNameConflict() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err1)
-	m.EqualValues(id1, resp1.ID)
+	require.NoError(m.T(), err1)
+	require.EqualValues(m.T(), id1, resp1.ID)
 
 	// Create second namespace
 	resp2, err2 := m.CreateNamespace(
@@ -1673,8 +1669,8 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceWithNameConflict() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err2)
-	m.EqualValues(id2, resp2.ID)
+	require.NoError(m.T(), err2)
+	require.EqualValues(m.T(), id2, resp2.ID)
 
 	// Try to rename namespace1 to the same name as namespace2 (should fail)
 	err3 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
@@ -1682,26 +1678,26 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceWithNameConflict() {
 		NewName:      name2,
 	})
 	// The error should be a conflict/unavailable error due to CAS failure
-	m.ErrorAs(err3, new(*serviceerror.Unavailable))
+	require.ErrorAs(m.T(), err3, new(*serviceerror.Unavailable))
 
 	// Verify that we can still query namespace2 by name, proving the rename didn't affect it
 	resp5, err5 := m.GetNamespace("", name2)
-	m.NoError(err5)
-	m.Equal(name2, resp5.Namespace.Info.Name)
-	m.Equal(id2, resp5.Namespace.Info.Id)
+	require.NoError(m.T(), err5)
+	require.Equal(m.T(), name2, resp5.Namespace.Info.Name)
+	require.Equal(m.T(), id2, resp5.Namespace.Info.Id)
 
 	// Verify that namespace1 can still be queried by its original name
 	resp6, err6 := m.GetNamespace("", name1)
-	m.NoError(err6)
-	m.Equal(name1, resp6.Namespace.Info.Name)
-	m.Equal(id1, resp6.Namespace.Info.Id)
+	require.NoError(m.T(), err6)
+	require.Equal(m.T(), name1, resp6.Namespace.Info.Name)
+	require.Equal(m.T(), id1, resp6.Namespace.Info.Id)
 }
 
 // TestGetMetadataVersionIncrement tests that GetMetadata correctly increments the version after a namespace is created
 func (m *MetadataPersistenceSuiteV2) TestGetMetadataVersionIncrement() {
 	// Get initial metadata version
 	metadata1, err1 := m.MetadataManager.GetMetadata(m.ctx)
-	m.NoError(err1)
+	require.NoError(m.T(), err1)
 	initialVersion := metadata1.NotificationVersion
 
 	// Create a namespace
@@ -1748,16 +1744,16 @@ func (m *MetadataPersistenceSuiteV2) TestGetMetadataVersionIncrement() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err2)
-	m.NotNil(resp1)
+	require.NoError(m.T(), err2)
+	require.NotNil(m.T(), resp1)
 
 	// Get metadata version after creation
 	metadata2, err3 := m.MetadataManager.GetMetadata(m.ctx)
-	m.NoError(err3)
+	require.NoError(m.T(), err3)
 	afterCreationVersion := metadata2.NotificationVersion
 
 	// Verify that the version was incremented
-	m.Equal(initialVersion+1, afterCreationVersion, "NotificationVersion should be incremented by exactly 1")
+	require.Equal(m.T(), initialVersion+1, afterCreationVersion, "NotificationVersion should be incremented by exactly 1")
 }
 
 // TestCreateNamespaceWithDuplicateName tests creating a namespace with a name that already exists
@@ -1806,14 +1802,14 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespaceWithDuplicateName() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err1)
-	m.NotNil(resp1)
+	require.NoError(m.T(), err1)
+	require.NotNil(m.T(), resp1)
 
 	// Verify the namespace was created
 	getResp1, err2 := m.GetNamespace(id1, "")
-	m.NoError(err2)
-	m.NotNil(getResp1)
-	m.Equal(name, getResp1.Namespace.Info.Name)
+	require.NoError(m.T(), err2)
+	require.NotNil(m.T(), getResp1)
+	require.Equal(m.T(), name, getResp1.Namespace.Info.Name)
 
 	// Try to create another namespace with the same name but different ID
 	id2 := uuid.New()
@@ -1841,19 +1837,19 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespaceWithDuplicateName() {
 		configVersion,
 		failoverVersion,
 	)
-	m.ErrorAs(err3, new(*serviceerror.NamespaceAlreadyExists))
+	require.ErrorAs(m.T(), err3, new(*serviceerror.NamespaceAlreadyExists))
 
 	// Verify that the original namespace still exists and was not modified
 	getResp2, err4 := m.GetNamespace(id1, "")
-	m.NoError(err4)
-	m.NotNil(getResp2)
-	m.Equal(name, getResp2.Namespace.Info.Name)
-	m.Equal(description, getResp2.Namespace.Info.Description)
-	m.Equal(owner, getResp2.Namespace.Info.Owner)
+	require.NoError(m.T(), err4)
+	require.NotNil(m.T(), getResp2)
+	require.Equal(m.T(), name, getResp2.Namespace.Info.Name)
+	require.Equal(m.T(), description, getResp2.Namespace.Info.Description)
+	require.Equal(m.T(), owner, getResp2.Namespace.Info.Owner)
 
 	// Verify that the second namespace ID does not exist
 	_, err5 := m.GetNamespace(id2, "")
-	m.ErrorAs(err5, new(*serviceerror.NamespaceNotFound))
+	require.ErrorAs(m.T(), err5, new(*serviceerror.NamespaceNotFound))
 }
 
 // TestCreateNamespaceWithDuplicateID tests creating a namespace with an ID that already exists
@@ -1903,15 +1899,15 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespaceWithDuplicateID() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err1)
-	m.NotNil(resp1)
+	require.NoError(m.T(), err1)
+	require.NotNil(m.T(), resp1)
 
 	// Verify the namespace was created
 	getResp1, err2 := m.GetNamespace(id, "")
-	m.NoError(err2)
-	m.NotNil(getResp1)
-	m.Equal(name1, getResp1.Namespace.Info.Name)
-	m.Equal(id, getResp1.Namespace.Info.Id)
+	require.NoError(m.T(), err2)
+	require.NotNil(m.T(), getResp1)
+	require.Equal(m.T(), name1, getResp1.Namespace.Info.Name)
+	require.Equal(m.T(), id, getResp1.Namespace.Info.Id)
 
 	// Try to create another namespace with the same ID but different name
 	_, err3 := m.CreateNamespace(
@@ -1938,20 +1934,20 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespaceWithDuplicateID() {
 		configVersion,
 		failoverVersion,
 	)
-	m.ErrorAs(err3, new(*serviceerror.NamespaceAlreadyExists))
+	require.ErrorAs(m.T(), err3, new(*serviceerror.NamespaceAlreadyExists))
 
 	// Verify that the original namespace still exists and was not modified
 	getResp2, err4 := m.GetNamespace(id, "")
-	m.NoError(err4)
-	m.NotNil(getResp2)
-	m.Equal(name1, getResp2.Namespace.Info.Name) // Should still have the original name
-	m.Equal(description, getResp2.Namespace.Info.Description)
-	m.Equal(owner, getResp2.Namespace.Info.Owner)
-	m.Equal(id, getResp2.Namespace.Info.Id)
+	require.NoError(m.T(), err4)
+	require.NotNil(m.T(), getResp2)
+	require.Equal(m.T(), name1, getResp2.Namespace.Info.Name) // Should still have the original name
+	require.Equal(m.T(), description, getResp2.Namespace.Info.Description)
+	require.Equal(m.T(), owner, getResp2.Namespace.Info.Owner)
+	require.Equal(m.T(), id, getResp2.Namespace.Info.Id)
 
 	// Verify that the second name doesn't exist in the system
 	_, err5 := m.GetNamespace("", name2)
-	m.ErrorAs(err5, new(*serviceerror.NamespaceNotFound))
+	require.ErrorAs(m.T(), err5, new(*serviceerror.NamespaceNotFound))
 }
 
 // TestInitializeSystemNamespaces tests the initialization of system namespaces
@@ -1960,24 +1956,24 @@ func (m *MetadataPersistenceSuiteV2) TestInitializeSystemNamespaces() {
 
 	// First initialization should succeed
 	err1 := m.MetadataManager.InitializeSystemNamespaces(m.ctx, clusterName)
-	m.NoError(err1)
+	require.NoError(m.T(), err1)
 
 	// Verify the system namespace was created with correct properties
 	resp, err2 := m.GetNamespace("", "temporal-system")
-	m.NoError(err2)
-	m.NotNil(resp)
-	m.Equal("temporal-system", resp.Namespace.Info.Name)
-	m.Equal("32049b68-7872-4094-8e63-d0dd59896a83", resp.Namespace.Info.Id)
-	m.Equal(enumspb.NAMESPACE_STATE_REGISTERED, resp.Namespace.Info.State)
-	m.Equal("Temporal internal system namespace", resp.Namespace.Info.Description)
-	m.Equal("temporal-core@temporal.io", resp.Namespace.Info.Owner)
-	m.Equal(clusterName, resp.Namespace.ReplicationConfig.ActiveClusterName)
-	m.Equal([]string{clusterName}, resp.Namespace.ReplicationConfig.Clusters)
-	m.False(resp.IsGlobalNamespace)
+	require.NoError(m.T(), err2)
+	require.NotNil(m.T(), resp)
+	require.Equal(m.T(), "temporal-system", resp.Namespace.Info.Name)
+	require.Equal(m.T(), "32049b68-7872-4094-8e63-d0dd59896a83", resp.Namespace.Info.Id)
+	require.Equal(m.T(), enumspb.NAMESPACE_STATE_REGISTERED, resp.Namespace.Info.State)
+	require.Equal(m.T(), "Temporal internal system namespace", resp.Namespace.Info.Description)
+	require.Equal(m.T(), "temporal-core@temporal.io", resp.Namespace.Info.Owner)
+	require.Equal(m.T(), clusterName, resp.Namespace.ReplicationConfig.ActiveClusterName)
+	require.Equal(m.T(), []string{clusterName}, resp.Namespace.ReplicationConfig.Clusters)
+	require.False(m.T(), resp.IsGlobalNamespace)
 
 	// Second initialization should be idempotent
 	err3 := m.MetadataManager.InitializeSystemNamespaces(m.ctx, clusterName)
-	m.NoError(err3, "InitializeSystemNamespaces should be idempotent")
+	require.NoError(m.T(), err3, "InitializeSystemNamespaces should be idempotent")
 }
 
 // TestDeleteNamespaceIdempotency tests that delete operations are idempotent
@@ -2014,25 +2010,25 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespaceIdempotency() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err1)
-	m.NotNil(resp1)
+	require.NoError(m.T(), err1)
+	require.NotNil(m.T(), resp1)
 
 	// Verify it exists
 	resp2, err2 := m.GetNamespace(id, "")
-	m.NoError(err2)
-	m.NotNil(resp2)
-	m.Equal(name, resp2.Namespace.Info.Name)
+	require.NoError(m.T(), err2)
+	require.NotNil(m.T(), resp2)
+	require.Equal(m.T(), name, resp2.Namespace.Info.Name)
 
 	// Delete by ID - first delete should succeed
 	err3 := m.DeleteNamespace(id, "")
-	m.NoError(err3)
+	require.NoError(m.T(), err3)
 
 	// May need to loop here to avoid potential inconsistent read-after-write in cassandra
-	m.Eventually(
+	require.Eventually(m.T(),
 		func() bool {
 			resp, err := m.GetNamespace(id, "")
 			if errors.As(err, new(*serviceerror.NamespaceNotFound)) {
-				m.Nil(resp)
+				require.Nil(m.T(), resp)
 				return true
 			}
 			return false
@@ -2043,11 +2039,11 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespaceIdempotency() {
 
 	// Delete again - This should NOT error (deleting a non-existent namespace is a no-op)
 	err5 := m.DeleteNamespace(id, "")
-	m.NoError(err5, "Delete should be idempotent")
+	require.NoError(m.T(), err5, "Delete should be idempotent")
 
 	// Delete by name should also be idempotent
 	err6 := m.DeleteNamespace("", name)
-	m.NoError(err6, "Delete by name should be idempotent")
+	require.NoError(m.T(), err6, "Delete by name should be idempotent")
 }
 
 // TestUpdateNamespaceNotFound tests updating a non-existent namespace
@@ -2067,7 +2063,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespaceNotFound() {
 
 	// Get current notification version
 	metadata, err := m.MetadataManager.GetMetadata(m.ctx)
-	m.NoError(err)
+	require.NoError(m.T(), err)
 	notificationVersion := metadata.NotificationVersion
 
 	// Try to update a non-existent namespace
@@ -2099,7 +2095,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespaceNotFound() {
 	// or may fail depending on implementation. For now, we just verify the operation completes.
 	// The key test is that after the update, the namespace still doesn't exist.
 	_, err3 := m.GetNamespace(nonExistentID, "")
-	m.ErrorAs(err3, new(*serviceerror.NamespaceNotFound))
+	require.ErrorAs(m.T(), err3, new(*serviceerror.NamespaceNotFound))
 }
 
 // TestRenameNamespaceNotFound tests renaming a non-existent namespace
@@ -2111,7 +2107,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceNotFound() {
 		PreviousName: nonExistentName,
 		NewName:      newName,
 	})
-	m.ErrorAs(err, new(*serviceerror.NamespaceNotFound))
+	require.ErrorAs(m.T(), err, new(*serviceerror.NamespaceNotFound))
 }
 
 // TestRenameNamespaceCassandra tests Cassandra-specific RenameNamespace behavior
@@ -2169,38 +2165,38 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceCassandra() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err1)
-	m.EqualValues(id, resp1.ID)
+	require.NoError(m.T(), err1)
+	require.EqualValues(m.T(), id, resp1.ID)
 
 	// Verify namespace exists with original name
 	resp2, err2 := m.GetNamespace(id, "")
-	m.NoError(err2)
-	m.Equal(name, resp2.Namespace.Info.Name)
+	require.NoError(m.T(), err2)
+	require.Equal(m.T(), name, resp2.Namespace.Info.Name)
 
 	// Test 1: Rename to a new name
 	err3 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
 		PreviousName: name,
 		NewName:      newName,
 	})
-	m.NoError(err3)
+	require.NoError(m.T(), err3)
 
 	// Verify namespace can be retrieved by new name
 	resp4, err4 := m.GetNamespace("", newName)
-	m.NoError(err4)
-	m.NotNil(resp4)
-	m.EqualValues(id, resp4.Namespace.Info.Id)
-	m.Equal(newName, resp4.Namespace.Info.Name)
-	m.Equal(description, resp4.Namespace.Info.Description)
-	m.Equal(owner, resp4.Namespace.Info.Owner)
-	m.Equal(data, resp4.Namespace.Info.Data)
+	require.NoError(m.T(), err4)
+	require.NotNil(m.T(), resp4)
+	require.EqualValues(m.T(), id, resp4.Namespace.Info.Id)
+	require.Equal(m.T(), newName, resp4.Namespace.Info.Name)
+	require.Equal(m.T(), description, resp4.Namespace.Info.Description)
+	require.Equal(m.T(), owner, resp4.Namespace.Info.Owner)
+	require.Equal(m.T(), data, resp4.Namespace.Info.Data)
 
 	// Verify namespace can be retrieved by ID and has new name
 	resp5, err5 := m.GetNamespace(id, "")
-	m.NoError(err5)
-	m.Equal(newName, resp5.Namespace.Info.Name)
+	require.NoError(m.T(), err5)
+	require.Equal(m.T(), newName, resp5.Namespace.Info.Name)
 
 	// Verify old name no longer exists (may need eventual consistency check for Cassandra)
-	m.Eventually(
+	require.Eventually(m.T(),
 		func() bool {
 			_, err := m.GetNamespace("", name)
 			return errors.As(err, new(*serviceerror.NamespaceNotFound))
@@ -2211,7 +2207,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceCassandra() {
 
 	// Fetch metadata version before renaming
 	metadataBeforeRename, err9 := m.MetadataManager.GetMetadata(m.ctx)
-	m.NoError(err9)
+	require.NoError(m.T(), err9)
 
 	// Test 2: Rename to the same name
 	// In Cassandra, this will fail because it tries to INSERT a row that already exists
@@ -2220,22 +2216,22 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceCassandra() {
 		PreviousName: newName,
 		NewName:      newName,
 	})
-	m.ErrorAs(err6, new(*serviceerror.Unavailable), "Renaming to the same name fails in Cassandra due to IF NOT EXISTS")
+	require.ErrorAs(m.T(), err6, new(*serviceerror.Unavailable), "Renaming to the same name fails in Cassandra due to IF NOT EXISTS")
 
 	// Test 3: Verify namespace still exists with same name (unchanged)
 	resp7, err7 := m.GetNamespace(id, "")
-	m.NoError(err7)
-	m.Equal(newName, resp7.Namespace.Info.Name)
+	require.NoError(m.T(), err7)
+	require.Equal(m.T(), newName, resp7.Namespace.Info.Name)
 
 	// Test 4: Verify namespace can still be fetched by ID
 	resp8, err8 := m.GetNamespace(id, "")
-	m.NoError(err8)
-	m.Equal(newName, resp8.Namespace.Info.Name)
+	require.NoError(m.T(), err8)
+	require.Equal(m.T(), newName, resp8.Namespace.Info.Name)
 
 	// Test 5: Verify metadata version was not incremented
 	metadataAfterRename, err10 := m.MetadataManager.GetMetadata(m.ctx)
-	m.NoError(err10)
-	m.Equal(metadataBeforeRename.NotificationVersion, metadataAfterRename.NotificationVersion, "Notification version should not have been incremented")
+	require.NoError(m.T(), err10)
+	require.Equal(m.T(), metadataBeforeRename.NotificationVersion, metadataAfterRename.NotificationVersion, "Notification version should not have been incremented")
 }
 
 // TestRenameNamespaceSQL tests SQL RenameNamespace behavior
@@ -2293,68 +2289,68 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceSQL() {
 		configVersion,
 		failoverVersion,
 	)
-	m.NoError(err1)
-	m.EqualValues(id, resp1.ID)
+	require.NoError(m.T(), err1)
+	require.EqualValues(m.T(), id, resp1.ID)
 
 	// Verify namespace exists with original name
 	resp2, err2 := m.GetNamespace(id, "")
-	m.NoError(err2)
-	m.Equal(name, resp2.Namespace.Info.Name)
+	require.NoError(m.T(), err2)
+	require.Equal(m.T(), name, resp2.Namespace.Info.Name)
 
 	// Test 1: Rename to a new name
 	err3 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
 		PreviousName: name,
 		NewName:      newName,
 	})
-	m.NoError(err3)
+	require.NoError(m.T(), err3)
 
 	// Verify namespace can be retrieved by new name
 	resp4, err4 := m.GetNamespace("", newName)
-	m.NoError(err4)
-	m.NotNil(resp4)
-	m.EqualValues(id, resp4.Namespace.Info.Id)
-	m.Equal(newName, resp4.Namespace.Info.Name)
-	m.Equal(description, resp4.Namespace.Info.Description)
-	m.Equal(owner, resp4.Namespace.Info.Owner)
-	m.Equal(data, resp4.Namespace.Info.Data)
+	require.NoError(m.T(), err4)
+	require.NotNil(m.T(), resp4)
+	require.EqualValues(m.T(), id, resp4.Namespace.Info.Id)
+	require.Equal(m.T(), newName, resp4.Namespace.Info.Name)
+	require.Equal(m.T(), description, resp4.Namespace.Info.Description)
+	require.Equal(m.T(), owner, resp4.Namespace.Info.Owner)
+	require.Equal(m.T(), data, resp4.Namespace.Info.Data)
 
 	// Verify namespace can be retrieved by ID and has new name
 	resp5, err5 := m.GetNamespace(id, "")
-	m.NoError(err5)
-	m.Equal(newName, resp5.Namespace.Info.Name)
+	require.NoError(m.T(), err5)
+	require.Equal(m.T(), newName, resp5.Namespace.Info.Name)
 
 	// Verify old name no longer exists
 	_, err6 := m.GetNamespace("", name)
-	m.ErrorAs(err6, new(*serviceerror.NamespaceNotFound), "Old name should not exist after rename")
+	require.ErrorAs(m.T(), err6, new(*serviceerror.NamespaceNotFound), "Old name should not exist after rename")
 
 	// Fetch metadata version before renaming
 	metadataBeforeRename, err9 := m.MetadataManager.GetMetadata(m.ctx)
-	m.NoError(err9)
+	require.NoError(m.T(), err9)
 
 	// Test 2: Rename to the same name (idempotent operation)
 	err7 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
 		PreviousName: newName,
 		NewName:      newName,
 	})
-	m.NoError(err7, "Renaming to the same name should succeed")
+	require.NoError(m.T(), err7, "Renaming to the same name should succeed")
 
 	// Verify namespace still exists with same name and data is unchanged
 	resp8, err8 := m.GetNamespace(id, "")
-	m.NoError(err8)
-	m.Equal(newName, resp8.Namespace.Info.Name)
-	m.Equal(description, resp8.Namespace.Info.Description)
-	m.Equal(owner, resp8.Namespace.Info.Owner)
-	m.Equal(data, resp8.Namespace.Info.Data)
+	require.NoError(m.T(), err8)
+	require.Equal(m.T(), newName, resp8.Namespace.Info.Name)
+	require.Equal(m.T(), description, resp8.Namespace.Info.Description)
+	require.Equal(m.T(), owner, resp8.Namespace.Info.Owner)
+	require.Equal(m.T(), data, resp8.Namespace.Info.Data)
 
 	// Test 3: Verify atomicity - query by both ID and name should be consistent
 	resp9, err9 := m.GetNamespace("", newName)
-	m.NoError(err9)
-	m.Equal(resp9.Namespace.Info.Id, resp8.Namespace.Info.Id)
-	m.Equal(resp9.Namespace.Info.Name, resp8.Namespace.Info.Name)
-	m.Equal(resp9.Namespace.Info.Description, resp8.Namespace.Info.Description)
+	require.NoError(m.T(), err9)
+	require.Equal(m.T(), resp9.Namespace.Info.Id, resp8.Namespace.Info.Id)
+	require.Equal(m.T(), resp9.Namespace.Info.Name, resp8.Namespace.Info.Name)
+	require.Equal(m.T(), resp9.Namespace.Info.Description, resp8.Namespace.Info.Description)
 
 	// Test 4: Verify metadata version was incremented
 	metadataAfterRename, err11 := m.MetadataManager.GetMetadata(m.ctx)
-	m.NoError(err11)
-	m.Greater(metadataAfterRename.NotificationVersion, metadataBeforeRename.NotificationVersion, "Notification version should have been incremented")
+	require.NoError(m.T(), err11)
+	require.Greater(m.T(), metadataAfterRename.NotificationVersion, metadataBeforeRename.NotificationVersion, "Notification version should have been incremented")
 }

@@ -10,7 +10,6 @@ import (
 type (
 	rateLimiterSuite struct {
 		suite.Suite
-		*require.Assertions
 	}
 )
 
@@ -19,17 +18,13 @@ func TestRateLimiterSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *rateLimiterSuite) SetupSuite() {
 
-}
 
 func (s *rateLimiterSuite) TearDownSuite() {
 
 }
 
-func (s *rateLimiterSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *rateLimiterSuite) TearDownTest() {
 
@@ -41,9 +36,9 @@ func (s *rateLimiterSuite) TestSetRate_Same() {
 	rateLimiterBefore := rateLimiter.ClockedRateLimiter
 	rateLimiter.SetRPS(testRate)
 	rateLimiterAfter := rateLimiter.ClockedRateLimiter
-	s.Equal(testRate, rateLimiter.Rate())
-	s.Equal(testBurst, rateLimiter.Burst())
-	s.Equal(rateLimiterBefore, rateLimiterAfter)
+	require.Equal(s.T(), testRate, rateLimiter.Rate())
+	require.Equal(s.T(), testBurst, rateLimiter.Burst())
+	require.Equal(s.T(), rateLimiterBefore, rateLimiterAfter)
 }
 
 func (s *rateLimiterSuite) TestSetRate_Diff() {
@@ -51,8 +46,8 @@ func (s *rateLimiterSuite) TestSetRate_Diff() {
 
 	newRate := testRate * 2
 	rateLimiter.SetRPS(newRate)
-	s.Equal(newRate, rateLimiter.Rate())
-	s.Equal(testBurst, rateLimiter.Burst())
+	require.Equal(s.T(), newRate, rateLimiter.Rate())
+	require.Equal(s.T(), testBurst, rateLimiter.Burst())
 }
 
 func (s *rateLimiterSuite) TestSetBurst_Same() {
@@ -61,9 +56,9 @@ func (s *rateLimiterSuite) TestSetBurst_Same() {
 	rateLimiterBefore := rateLimiter.ClockedRateLimiter
 	rateLimiter.SetBurst(testBurst)
 	rateLimiterAfter := rateLimiter.ClockedRateLimiter
-	s.Equal(testRate, rateLimiter.Rate())
-	s.Equal(testBurst, rateLimiter.Burst())
-	s.Equal(rateLimiterBefore, rateLimiterAfter)
+	require.Equal(s.T(), testRate, rateLimiter.Rate())
+	require.Equal(s.T(), testBurst, rateLimiter.Burst())
+	require.Equal(s.T(), rateLimiterBefore, rateLimiterAfter)
 }
 
 func (s *rateLimiterSuite) TestSetBurst_Diff() {
@@ -71,8 +66,8 @@ func (s *rateLimiterSuite) TestSetBurst_Diff() {
 
 	newBurst := testBurst * 2
 	rateLimiter.SetBurst(newBurst)
-	s.Equal(testRate, rateLimiter.Rate())
-	s.Equal(newBurst, rateLimiter.Burst())
+	require.Equal(s.T(), testRate, rateLimiter.Rate())
+	require.Equal(s.T(), newBurst, rateLimiter.Burst())
 }
 
 func (s *rateLimiterSuite) TestSetRateBurst_Same() {
@@ -81,9 +76,9 @@ func (s *rateLimiterSuite) TestSetRateBurst_Same() {
 	rateLimiterBefore := rateLimiter.ClockedRateLimiter
 	rateLimiter.SetRateBurst(rateLimiter.Rate(), rateLimiter.Burst())
 	rateLimiterAfter := rateLimiter.ClockedRateLimiter
-	s.Equal(testRate, rateLimiter.Rate())
-	s.Equal(testBurst, rateLimiter.Burst())
-	s.Equal(rateLimiterBefore, rateLimiterAfter)
+	require.Equal(s.T(), testRate, rateLimiter.Rate())
+	require.Equal(s.T(), testBurst, rateLimiter.Burst())
+	require.Equal(s.T(), rateLimiterBefore, rateLimiterAfter)
 }
 
 func (s *rateLimiterSuite) TestSetRateBurst_Diff() {
@@ -92,18 +87,18 @@ func (s *rateLimiterSuite) TestSetRateBurst_Diff() {
 	newRate := rateLimiter.Rate() * 2
 	newBurst := rateLimiter.Burst()
 	rateLimiter.SetRateBurst(newRate, newBurst)
-	s.Equal(newRate, rateLimiter.Rate())
-	s.Equal(newBurst, rateLimiter.Burst())
+	require.Equal(s.T(), newRate, rateLimiter.Rate())
+	require.Equal(s.T(), newBurst, rateLimiter.Burst())
 
 	newRate = rateLimiter.Rate()
 	newBurst = rateLimiter.Burst() * 2
 	rateLimiter.SetRateBurst(newRate, newBurst)
-	s.Equal(newRate, rateLimiter.Rate())
-	s.Equal(newBurst, rateLimiter.Burst())
+	require.Equal(s.T(), newRate, rateLimiter.Rate())
+	require.Equal(s.T(), newBurst, rateLimiter.Burst())
 
 	newRate = rateLimiter.Rate() * 2
 	newBurst = rateLimiter.Burst() * 2
 	rateLimiter.SetRateBurst(newRate, newBurst)
-	s.Equal(newRate, rateLimiter.Rate())
-	s.Equal(newBurst, rateLimiter.Burst())
+	require.Equal(s.T(), newRate, rateLimiter.Rate())
+	require.Equal(s.T(), newBurst, rateLimiter.Burst())
 }

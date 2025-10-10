@@ -14,7 +14,6 @@ import (
 type (
 	historyExecutionBufferSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		store sqlplugin.HistoryExecutionBuffer
 	}
@@ -33,22 +32,18 @@ func NewHistoryExecutionBufferSuite(
 	store sqlplugin.HistoryExecutionBuffer,
 ) *historyExecutionBufferSuite {
 	return &historyExecutionBufferSuite{
-		Assertions: require.New(t),
-		store:      store,
+
+		store: store,
 	}
 }
 
-func (s *historyExecutionBufferSuite) SetupSuite() {
 
-}
 
 func (s *historyExecutionBufferSuite) TearDownSuite() {
 
 }
 
-func (s *historyExecutionBufferSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *historyExecutionBufferSuite) TearDownTest() {
 
@@ -62,10 +57,10 @@ func (s *historyExecutionBufferSuite) TestInsert_Single() {
 
 	buffer := s.newRandomExecutionBufferRow(shardID, namespaceID, workflowID, runID)
 	result, err := s.store.InsertIntoBufferedEvents(newExecutionContext(), []sqlplugin.BufferedEventsRow{buffer})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 }
 
 func (s *historyExecutionBufferSuite) TestInsert_Multiple() {
@@ -77,10 +72,10 @@ func (s *historyExecutionBufferSuite) TestInsert_Multiple() {
 	buffer1 := s.newRandomExecutionBufferRow(shardID, namespaceID, workflowID, runID)
 	buffer2 := s.newRandomExecutionBufferRow(shardID, namespaceID, workflowID, runID)
 	result, err := s.store.InsertIntoBufferedEvents(newExecutionContext(), []sqlplugin.BufferedEventsRow{buffer1, buffer2})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(2, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 2, int(rowsAffected))
 }
 
 func (s *historyExecutionBufferSuite) TestInsertSelect() {
@@ -97,10 +92,10 @@ func (s *historyExecutionBufferSuite) TestInsertSelect() {
 		buffers = append(buffers, buffer)
 	}
 	result, err := s.store.InsertIntoBufferedEvents(newExecutionContext(), buffers)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numBufferedEvents, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numBufferedEvents, int(rowsAffected))
 
 	filter := sqlplugin.BufferedEventsFilter{
 		ShardID:     shardID,
@@ -109,8 +104,8 @@ func (s *historyExecutionBufferSuite) TestInsertSelect() {
 		RunID:       runID,
 	}
 	rows, err := s.store.SelectFromBufferedEvents(newExecutionContext(), filter)
-	s.NoError(err)
-	s.Equal(buffers, rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), buffers, rows)
 }
 
 func (s *historyExecutionBufferSuite) TestDeleteSelect() {
@@ -126,14 +121,14 @@ func (s *historyExecutionBufferSuite) TestDeleteSelect() {
 		RunID:       runID,
 	}
 	result, err := s.store.DeleteFromBufferedEvents(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	rows, err := s.store.SelectFromBufferedEvents(newExecutionContext(), filter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.BufferedEventsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.BufferedEventsRow(nil), rows)
 }
 
 func (s *historyExecutionBufferSuite) TestInsertDelete() {
@@ -150,10 +145,10 @@ func (s *historyExecutionBufferSuite) TestInsertDelete() {
 		buffers = append(buffers, buffer)
 	}
 	result, err := s.store.InsertIntoBufferedEvents(newExecutionContext(), buffers)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numBufferedEvents, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numBufferedEvents, int(rowsAffected))
 
 	filter := sqlplugin.BufferedEventsFilter{
 		ShardID:     shardID,
@@ -162,14 +157,14 @@ func (s *historyExecutionBufferSuite) TestInsertDelete() {
 		RunID:       runID,
 	}
 	result, err = s.store.DeleteFromBufferedEvents(newExecutionContext(), filter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(numBufferedEvents, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), numBufferedEvents, int(rowsAffected))
 
 	rows, err := s.store.SelectFromBufferedEvents(newExecutionContext(), filter)
-	s.NoError(err)
-	s.Equal([]sqlplugin.BufferedEventsRow(nil), rows)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []sqlplugin.BufferedEventsRow(nil), rows)
 }
 
 func (s *historyExecutionBufferSuite) newRandomExecutionBufferRow(

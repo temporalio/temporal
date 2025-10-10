@@ -12,7 +12,6 @@ import (
 
 type (
 	futureSuite struct {
-		*require.Assertions
 		suite.Suite
 
 		future *FutureImpl[int]
@@ -64,9 +63,7 @@ func TestFutureSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *futureSuite) SetupSuite() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *futureSuite) TearDownSuite() {
 
@@ -83,13 +80,13 @@ func (s *futureSuite) TearDownTest() {
 }
 
 func (s *futureSuite) TestSetGetReady_Sequential() {
-	s.False(s.future.Ready())
+	require.False(s.T(), s.future.Ready())
 	s.future.Set(s.value, s.err)
 
 	value, err := s.future.Get(context.Background())
-	s.True(s.future.Ready())
-	s.Equal(s.value, value)
-	s.Equal(s.err, err)
+	require.True(s.T(), s.future.Ready())
+	require.Equal(s.T(), s.value, value)
+	require.Equal(s.T(), s.err, err)
 }
 
 func (s *futureSuite) TestSetGetReady_Parallel() {
@@ -101,7 +98,7 @@ func (s *futureSuite) TestSetGetReady_Parallel() {
 	startWG.Add(numGets)
 	endWG.Add(numGets)
 
-	s.False(s.future.Ready())
+	require.False(s.T(), s.future.Ready())
 	go func() {
 		startWG.Wait()
 		s.future.Set(s.value, s.err)
@@ -114,9 +111,9 @@ func (s *futureSuite) TestSetGetReady_Parallel() {
 			startWG.Wait()
 
 			value, err := s.future.Get(ctx)
-			s.True(s.future.Ready())
-			s.Equal(s.value, value)
-			s.Equal(s.err, err)
+			require.True(s.T(), s.future.Ready())
+			require.Equal(s.T(), s.value, value)
+			require.Equal(s.T(), s.err, err)
 		}()
 		startWG.Done()
 	}
@@ -125,13 +122,13 @@ func (s *futureSuite) TestSetGetReady_Parallel() {
 }
 
 func (s *futureSuite) TestSetReadyGet_Sequential() {
-	s.False(s.future.Ready())
+	require.False(s.T(), s.future.Ready())
 	s.future.Set(s.value, s.err)
 
-	s.True(s.future.Ready())
+	require.True(s.T(), s.future.Ready())
 	value, err := s.future.Get(context.Background())
-	s.Equal(s.value, value)
-	s.Equal(s.err, err)
+	require.Equal(s.T(), s.value, value)
+	require.Equal(s.T(), s.err, err)
 }
 
 func (s *futureSuite) TestSetReadyGet_Parallel() {
@@ -143,7 +140,7 @@ func (s *futureSuite) TestSetReadyGet_Parallel() {
 	startWG.Add(numGets)
 	endWG.Add(numGets)
 
-	s.False(s.future.Ready())
+	require.False(s.T(), s.future.Ready())
 	go func() {
 		startWG.Wait()
 		s.future.Set(s.value, s.err)
@@ -160,8 +157,8 @@ func (s *futureSuite) TestSetReadyGet_Parallel() {
 			}
 
 			value, err := s.future.Get(ctx)
-			s.Equal(s.value, value)
-			s.Equal(s.err, err)
+			require.Equal(s.T(), s.value, value)
+			require.Equal(s.T(), s.err, err)
 		}()
 		startWG.Done()
 	}
@@ -170,14 +167,14 @@ func (s *futureSuite) TestSetReadyGet_Parallel() {
 }
 
 func (s *futureSuite) TestGetWhenContextCanceled() {
-	s.False(s.future.Ready())
+	require.False(s.T(), s.future.Ready())
 	s.future.Set(s.value, s.err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	s.True(s.future.Ready())
+	require.True(s.T(), s.future.Ready())
 	value, err := s.future.Get(ctx)
-	s.NoError(err, "When .Ready(), .Get() should return the value even if the context is canceled")
-	s.Equal(s.value, value)
+	require.NoError(s.T(), err, "When .Ready(), .Get() should return the value even if the context is canceled")
+	require.Equal(s.T(), s.value, value)
 }

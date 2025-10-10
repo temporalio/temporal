@@ -13,7 +13,6 @@ import (
 type (
 	multiStageRateLimiterSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		controller        *gomock.Controller
 		firstRateLimiter  *MockRateLimiter
@@ -30,16 +29,13 @@ func TestMultiStageRateLimiterSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *multiStageRateLimiterSuite) SetupSuite() {
 
-}
 
 func (s *multiStageRateLimiterSuite) TearDownSuite() {
 
 }
 
 func (s *multiStageRateLimiterSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.firstRateLimiter = NewMockRateLimiter(s.controller)
@@ -62,7 +58,7 @@ func (s *multiStageRateLimiterSuite) TestAllowN_NonSuccess() {
 	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation)
 
 	result := s.rateLimiter.AllowN(now, numToken)
-	s.False(result)
+	require.False(s.T(), result)
 }
 
 func (s *multiStageRateLimiterSuite) TestAllowN_SomeSuccess_Case1() {
@@ -79,7 +75,7 @@ func (s *multiStageRateLimiterSuite) TestAllowN_SomeSuccess_Case1() {
 	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.AllowN(now, numToken)
-	s.False(result)
+	require.False(s.T(), result)
 }
 
 func (s *multiStageRateLimiterSuite) TestAllowN_SomeSuccess_Case2() {
@@ -97,7 +93,7 @@ func (s *multiStageRateLimiterSuite) TestAllowN_SomeSuccess_Case2() {
 	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.AllowN(now, numToken)
-	s.False(result)
+	require.False(s.T(), result)
 }
 
 func (s *multiStageRateLimiterSuite) TestAllowN_AllSuccess() {
@@ -113,7 +109,7 @@ func (s *multiStageRateLimiterSuite) TestAllowN_AllSuccess() {
 	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.AllowN(now, numToken)
-	s.True(result)
+	require.True(s.T(), result)
 }
 
 func (s *multiStageRateLimiterSuite) TestReserveN_NonSuccess() {
@@ -124,7 +120,7 @@ func (s *multiStageRateLimiterSuite) TestReserveN_NonSuccess() {
 	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation)
 
 	result := s.rateLimiter.ReserveN(now, numToken)
-	s.Equal(&MultiReservationImpl{
+	require.Equal(s.T(), &MultiReservationImpl{
 		ok:           false,
 		reservations: nil,
 	}, result)
@@ -142,7 +138,7 @@ func (s *multiStageRateLimiterSuite) TestReserveN_SomeSuccess() {
 	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.ReserveN(now, numToken)
-	s.Equal(&MultiReservationImpl{
+	require.Equal(s.T(), &MultiReservationImpl{
 		ok:           false,
 		reservations: nil,
 	}, result)
@@ -159,7 +155,7 @@ func (s *multiStageRateLimiterSuite) TestReserveN_AllSuccess() {
 	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.ReserveN(now, numToken)
-	s.Equal(&MultiReservationImpl{
+	require.Equal(s.T(), &MultiReservationImpl{
 		ok:           true,
 		reservations: []Reservation{s.firstReservation, s.secondReservation},
 	}, result)
@@ -171,7 +167,7 @@ func (s *multiStageRateLimiterSuite) TestWaitN_AlreadyExpired() {
 	numToken := 4
 
 	result := s.rateLimiter.WaitN(ctx, numToken)
-	s.Error(result)
+	require.Error(s.T(), result)
 }
 
 func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithExpiration_Error() {
@@ -192,7 +188,7 @@ func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithExpiration_Error()
 	s.secondRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.WaitN(ctx, numToken)
-	s.Error(result)
+	require.Error(s.T(), result)
 }
 
 func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithExpiration_Cancelled() {
@@ -217,7 +213,7 @@ func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithExpiration_Cancell
 	s.secondRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.WaitN(ctx, numToken)
-	s.Error(result)
+	require.Error(s.T(), result)
 }
 
 func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithExpiration_NoError() {
@@ -236,7 +232,7 @@ func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithExpiration_NoError
 	s.secondRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.WaitN(ctx, numToken)
-	s.NoError(result)
+	require.NoError(s.T(), result)
 }
 
 func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithoutExpiration() {
@@ -254,7 +250,7 @@ func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithoutExpiration() {
 	s.secondRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.WaitN(ctx, numToken)
-	s.NoError(result)
+	require.NoError(s.T(), result)
 }
 
 func (s *multiStageRateLimiterSuite) TestRate() {
@@ -265,7 +261,7 @@ func (s *multiStageRateLimiterSuite) TestRate() {
 	s.secondRateLimiter.EXPECT().Rate().Return(secondRateLimiterRate).AnyTimes()
 
 	result := s.rateLimiter.Rate()
-	s.Equal(secondRateLimiterRate, result)
+	require.Equal(s.T(), secondRateLimiterRate, result)
 }
 
 func (s *multiStageRateLimiterSuite) TestBurst() {
@@ -276,5 +272,5 @@ func (s *multiStageRateLimiterSuite) TestBurst() {
 	s.secondRateLimiter.EXPECT().Burst().Return(secondRateLimiterBurst).AnyTimes()
 
 	result := s.rateLimiter.Burst()
-	s.Equal(firstRateLimiterBurst, result)
+	require.Equal(s.T(), firstRateLimiterBurst, result)
 }

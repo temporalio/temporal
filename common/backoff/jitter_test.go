@@ -19,8 +19,7 @@ func TestJitterSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *jitterSuite) SetupSuite() {
-}
+
 
 func (s *jitterSuite) TestJitter_Int64() {
 	input := int64(1048576)

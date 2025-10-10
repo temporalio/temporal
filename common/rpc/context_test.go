@@ -12,7 +12,6 @@ import (
 
 type (
 	contextSuite struct {
-		*require.Assertions
 		suite.Suite
 	}
 )
@@ -21,9 +20,7 @@ func TestContextSuite(t *testing.T) {
 	suite.Run(t, &contextSuite{})
 }
 
-func (s *contextSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *contextSuite) TestCopyContextValues_ValueCopied() {
 	key := struct{}{}
@@ -42,10 +39,10 @@ func (s *contextSuite) TestCopyContextValues_ValueCopied() {
 
 	newContext = CopyContextValues(newContext, ctx)
 
-	s.Equal(value, newContext.Value(key))
+	require.Equal(s.T(), value, newContext.Value(key))
 	md, ok := metadata.FromIncomingContext(newContext)
-	s.True(ok)
-	s.Equal(metadataValue, md[metadataKey][0])
+	require.True(s.T(), ok)
+	require.Equal(s.T(), metadataValue, md[metadataKey][0])
 }
 
 func (s *contextSuite) TestCopyContextValue_DeadlineSeparated() {
@@ -59,8 +56,8 @@ func (s *contextSuite) TestCopyContextValue_DeadlineSeparated() {
 	newContext = CopyContextValues(newContext, ctx)
 
 	cancel()
-	s.NotNil(ctx.Err())
-	s.Nil(newContext.Err())
+	require.NotNil(s.T(), ctx.Err())
+	require.Nil(s.T(), newContext.Err())
 }
 
 func (s *contextSuite) TestCopyContextValue_ValueNotOverWritten() {
@@ -73,5 +70,5 @@ func (s *contextSuite) TestCopyContextValue_ValueNotOverWritten() {
 
 	newContext = CopyContextValues(newContext, ctx)
 
-	s.Equal(newValue, newContext.Value(key))
+	require.Equal(s.T(), newValue, newContext.Value(key))
 }

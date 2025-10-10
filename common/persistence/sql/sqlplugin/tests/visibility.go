@@ -18,7 +18,6 @@ import (
 type (
 	visibilitySuite struct {
 		suite.Suite
-		*require.Assertions
 
 		store sqlplugin.Visibility
 
@@ -50,22 +49,18 @@ func NewVisibilitySuite(
 	store sqlplugin.Visibility,
 ) *visibilitySuite {
 	return &visibilitySuite{
-		Assertions: require.New(t),
-		store:      store,
+
+		store: store,
 	}
 }
 
-func (s *visibilitySuite) SetupSuite() {
 
-}
 
 func (s *visibilitySuite) TearDownSuite() {
 
 }
 
-func (s *visibilitySuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *visibilitySuite) TearDownTest() {
 
@@ -94,21 +89,21 @@ func (s *visibilitySuite) TestInsertSelect_NonExists() {
 		historyLength,
 	)
 	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID: namespaceID.String(),
 		RunID:       util.Ptr(runID.String()),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal([]sqlplugin.VisibilityRow{visibility}, rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityRow{visibility}, rows)
 }
 
 func (s *visibilitySuite) TestInsertSelect_Exists() {
@@ -134,10 +129,10 @@ func (s *visibilitySuite) TestInsertSelect_Exists() {
 		historyLength,
 	)
 	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility1)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	visibility2 := s.newRandomVisibilityRow(
 		namespaceID,
@@ -151,7 +146,7 @@ func (s *visibilitySuite) TestInsertSelect_Exists() {
 		historyLength,
 	)
 	_, err = s.store.InsertIntoVisibility(newVisibilityContext(), &visibility2)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	// NOTE: cannot do assertion on affected rows
 	//  PostgreSQL will return 0
 	//  MySQL will return 1: ref https://dev.mysql.com/doc/c-api/5.7/en/mysql-affected-rows.html
@@ -161,11 +156,11 @@ func (s *visibilitySuite) TestInsertSelect_Exists() {
 		RunID:       util.Ptr(runID.String()),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal([]sqlplugin.VisibilityRow{visibility1}, rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityRow{visibility1}, rows)
 }
 
 func (s *visibilitySuite) TestReplaceSelect_NonExists() {
@@ -191,21 +186,21 @@ func (s *visibilitySuite) TestReplaceSelect_NonExists() {
 		util.Ptr(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID: namespaceID.String(),
 		RunID:       util.Ptr(runID.String()),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal([]sqlplugin.VisibilityRow{visibility}, rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityRow{visibility}, rows)
 }
 
 func (s *visibilitySuite) TestReplaceSelect_Exists() {
@@ -231,10 +226,10 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 		util.Ptr(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	visibility = s.newRandomVisibilityRow(
 		namespaceID,
@@ -248,7 +243,7 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 		util.Ptr(historyLength),
 	)
 	_, err = s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	// NOTE: cannot do assertion on affected rows
 	//  PostgreSQL will return 1
 	//  MySQL will return 2: ref https://dev.mysql.com/doc/c-api/5.7/en/mysql-affected-rows.html
@@ -258,11 +253,11 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 		RunID:       util.Ptr(runID.String()),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal([]sqlplugin.VisibilityRow{visibility}, rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityRow{visibility}, rows)
 }
 
 func (s *visibilitySuite) TestDeleteGet() {
@@ -274,17 +269,17 @@ func (s *visibilitySuite) TestDeleteGet() {
 		RunID:       runID.String(),
 	}
 	result, err := s.store.DeleteFromVisibility(newVisibilityContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(0, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, int(rowsAffected))
 
 	getFilter := sqlplugin.VisibilityGetFilter{
 		NamespaceID: namespaceID.String(),
 		RunID:       runID.String(),
 	}
 	_, err = s.store.GetFromVisibility(newVisibilityContext(), getFilter)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *visibilitySuite) TestInsertDeleteGet() {
@@ -310,27 +305,27 @@ func (s *visibilitySuite) TestInsertDeleteGet() {
 		historyLength,
 	)
 	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	deleteFilter := sqlplugin.VisibilityDeleteFilter{
 		NamespaceID: namespaceID.String(),
 		RunID:       runID.String(),
 	}
 	result, err = s.store.DeleteFromVisibility(newVisibilityContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	getFilter := sqlplugin.VisibilityGetFilter{
 		NamespaceID: namespaceID.String(),
 		RunID:       runID.String(),
 	}
 	_, err = s.store.GetFromVisibility(newVisibilityContext(), getFilter)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *visibilitySuite) TestReplaceDeleteGet() {
@@ -356,27 +351,27 @@ func (s *visibilitySuite) TestReplaceDeleteGet() {
 		util.Ptr(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	deleteFilter := sqlplugin.VisibilityDeleteFilter{
 		NamespaceID: namespaceID.String(),
 		RunID:       runID.String(),
 	}
 	result, err = s.store.DeleteFromVisibility(newVisibilityContext(), deleteFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err = result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	getFilter := sqlplugin.VisibilityGetFilter{
 		NamespaceID: namespaceID.String(),
 		RunID:       runID.String(),
 	}
 	_, err = s.store.GetFromVisibility(newVisibilityContext(), getFilter)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	require.Error(s.T(), err) // TODO persistence layer should do proper error translation
 }
 
 func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_StatusOpen_Single() {
@@ -404,10 +399,10 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		historyLength,
 	)
 	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	minStartTime := startTime
 	maxStartTime := startTime
@@ -422,11 +417,11 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		PageSize:         util.Ptr(pageSize),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal([]sqlplugin.VisibilityRow{visibility}, rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityRow{visibility}, rows)
 }
 
 func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_StatusOpen_Multiple() {
@@ -461,10 +456,10 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 				historyLength,
 			)
 			result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			rowsAffected, err := result.RowsAffected()
-			s.NoError(err)
-			s.Equal(1, int(rowsAffected))
+			require.NoError(s.T(), err)
+			require.Equal(s.T(), 1, int(rowsAffected))
 
 			visibilities = append(visibilities, visibility)
 		}
@@ -485,7 +480,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 	var rows []sqlplugin.VisibilityRow
 	for {
 		rowsPerPage, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		rows = append(rows, rowsPerPage...)
 
 		if len(rowsPerPage) > 0 {
@@ -496,12 +491,12 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 			break
 		}
 	}
-	s.Len(rows, len(visibilities))
+	require.Len(s.T(), rows, len(visibilities))
 	s.sortByStartTimeDescRunIDAsc(visibilities)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal(visibilities, rows)
+	require.Equal(s.T(), visibilities, rows)
 }
 
 func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_StatusClose_Single() {
@@ -529,10 +524,10 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		util.Ptr(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	minStartTime := closeTime
 	maxStartTime := closeTime
@@ -547,11 +542,11 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		PageSize:         util.Ptr(pageSize),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal([]sqlplugin.VisibilityRow{visibility}, rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityRow{visibility}, rows)
 }
 
 func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_StatusClose_Multiple() {
@@ -586,10 +581,10 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 				util.Ptr(historyLength),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			rowsAffected, err := result.RowsAffected()
-			s.NoError(err)
-			s.Equal(1, int(rowsAffected))
+			require.NoError(s.T(), err)
+			require.Equal(s.T(), 1, int(rowsAffected))
 
 			visibilities = append(visibilities, visibility)
 		}
@@ -609,7 +604,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 	var rows []sqlplugin.VisibilityRow
 	for {
 		rowsPerPage, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		rows = append(rows, rowsPerPage...)
 
 		if len(rowsPerPage) > 0 {
@@ -620,12 +615,12 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 			break
 		}
 	}
-	s.Len(rows, len(visibilities))
+	require.Len(s.T(), rows, len(visibilities))
 	s.sortByCloseTimeDescRunIDAsc(visibilities)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal(visibilities, rows)
+	require.Equal(s.T(), visibilities, rows)
 }
 
 func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_StatusOpen_Single() {
@@ -653,10 +648,10 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		historyLength,
 	)
 	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	minStartTime := startTime
 	maxStartTime := startTime
@@ -671,11 +666,11 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		PageSize:         util.Ptr(pageSize),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal([]sqlplugin.VisibilityRow{visibility}, rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityRow{visibility}, rows)
 }
 
 func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_StatusOpen_Multiple() {
@@ -710,10 +705,10 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 				historyLength,
 			)
 			result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			rowsAffected, err := result.RowsAffected()
-			s.NoError(err)
-			s.Equal(1, int(rowsAffected))
+			require.NoError(s.T(), err)
+			require.Equal(s.T(), 1, int(rowsAffected))
 
 			visibilities = append(visibilities, visibility)
 		}
@@ -734,7 +729,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 	var rows []sqlplugin.VisibilityRow
 	for {
 		rowsPerPage, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		rows = append(rows, rowsPerPage...)
 
 		if len(rowsPerPage) > 0 {
@@ -745,12 +740,12 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 			break
 		}
 	}
-	s.Len(rows, len(visibilities))
+	require.Len(s.T(), rows, len(visibilities))
 	s.sortByStartTimeDescRunIDAsc(visibilities)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal(visibilities, rows)
+	require.Equal(s.T(), visibilities, rows)
 }
 
 func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_StatusClose_Single() {
@@ -778,10 +773,10 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		util.Ptr(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	minStartTime := closeTime
 	maxStartTime := closeTime
@@ -796,11 +791,11 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		PageSize:         util.Ptr(pageSize),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal([]sqlplugin.VisibilityRow{visibility}, rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityRow{visibility}, rows)
 }
 
 func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_StatusClose_Multiple() {
@@ -835,10 +830,10 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 				util.Ptr(historyLength),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			rowsAffected, err := result.RowsAffected()
-			s.NoError(err)
-			s.Equal(1, int(rowsAffected))
+			require.NoError(s.T(), err)
+			require.Equal(s.T(), 1, int(rowsAffected))
 
 			visibilities = append(visibilities, visibility)
 		}
@@ -858,7 +853,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 	var rows []sqlplugin.VisibilityRow
 	for {
 		rowsPerPage, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		rows = append(rows, rowsPerPage...)
 
 		if len(rowsPerPage) > 0 {
@@ -869,12 +864,12 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 			break
 		}
 	}
-	s.Len(rows, len(visibilities))
+	require.Len(s.T(), rows, len(visibilities))
 	s.sortByCloseTimeDescRunIDAsc(visibilities)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal(visibilities, rows)
+	require.Equal(s.T(), visibilities, rows)
 }
 
 func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Single() {
@@ -902,10 +897,10 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Single
 		historyLength,
 	)
 	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	minStartTime := startTime
 	maxStartTime := startTime
@@ -920,11 +915,11 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Single
 		PageSize:         util.Ptr(pageSize),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal([]sqlplugin.VisibilityRow{visibility}, rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityRow{visibility}, rows)
 }
 
 func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Multiple() {
@@ -959,10 +954,10 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Multip
 				historyLength,
 			)
 			result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			rowsAffected, err := result.RowsAffected()
-			s.NoError(err)
-			s.Equal(1, int(rowsAffected))
+			require.NoError(s.T(), err)
+			require.Equal(s.T(), 1, int(rowsAffected))
 
 			visibilities = append(visibilities, visibility)
 		}
@@ -983,7 +978,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Multip
 	var rows []sqlplugin.VisibilityRow
 	for {
 		rowsPerPage, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		rows = append(rows, rowsPerPage...)
 
 		if len(rowsPerPage) > 0 {
@@ -994,12 +989,12 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Multip
 			break
 		}
 	}
-	s.Len(rows, len(visibilities))
+	require.Len(s.T(), rows, len(visibilities))
 	s.sortByStartTimeDescRunIDAsc(visibilities)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal(visibilities, rows)
+	require.Equal(s.T(), visibilities, rows)
 }
 
 func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Single() {
@@ -1034,10 +1029,10 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseSingle(
 		util.Ptr(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	minStartTime := closeTime
 	maxStartTime := closeTime
@@ -1052,11 +1047,11 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseSingle(
 		PageSize:         util.Ptr(pageSize),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal([]sqlplugin.VisibilityRow{visibility}, rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityRow{visibility}, rows)
 }
 
 func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Multiple() {
@@ -1092,10 +1087,10 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Multi
 				util.Ptr(historyLength),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			rowsAffected, err := result.RowsAffected()
-			s.NoError(err)
-			s.Equal(1, int(rowsAffected))
+			require.NoError(s.T(), err)
+			require.Equal(s.T(), 1, int(rowsAffected))
 
 			visibilities = append(visibilities, visibility)
 		}
@@ -1115,7 +1110,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Multi
 	var rows []sqlplugin.VisibilityRow
 	for {
 		rowsPerPage, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		rows = append(rows, rowsPerPage...)
 
 		if len(rowsPerPage) > 0 {
@@ -1126,12 +1121,12 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Multi
 			break
 		}
 	}
-	s.Len(rows, len(visibilities))
+	require.Len(s.T(), rows, len(visibilities))
 	s.sortByCloseTimeDescRunIDAsc(visibilities)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal(visibilities, rows)
+	require.Equal(s.T(), visibilities, rows)
 }
 
 func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusCloseByType_Single() {
@@ -1166,10 +1161,10 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeSin
 		util.Ptr(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	rowsAffected, err := result.RowsAffected()
-	s.NoError(err)
-	s.Equal(1, int(rowsAffected))
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 1, int(rowsAffected))
 
 	minStartTime := closeTime
 	maxStartTime := closeTime
@@ -1184,11 +1179,11 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeSin
 		PageSize:         util.Ptr(pageSize),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal([]sqlplugin.VisibilityRow{visibility}, rows)
+	require.Equal(s.T(), []sqlplugin.VisibilityRow{visibility}, rows)
 }
 
 func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusCloseByType_Multiple() {
@@ -1230,10 +1225,10 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeMul
 				util.Ptr(historyLength),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
-			s.NoError(err)
+			require.NoError(s.T(), err)
 			rowsAffected, err := result.RowsAffected()
-			s.NoError(err)
-			s.Equal(1, int(rowsAffected))
+			require.NoError(s.T(), err)
+			require.Equal(s.T(), 1, int(rowsAffected))
 
 			visibilities = append(visibilities, visibility)
 		}
@@ -1253,7 +1248,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeMul
 	var rows []sqlplugin.VisibilityRow
 	for {
 		rowsPerPage, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 		rows = append(rows, rowsPerPage...)
 
 		if len(rowsPerPage) > 0 {
@@ -1265,12 +1260,12 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeMul
 		}
 	}
 
-	s.Len(rows, len(visibilities))
+	require.Len(s.T(), rows, len(visibilities))
 	s.sortByCloseTimeDescRunIDAsc(visibilities)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
 	}
-	s.Equal(visibilities, rows)
+	require.Equal(s.T(), visibilities, rows)
 }
 
 func (s *visibilitySuite) sortByStartTimeDescRunIDAsc(

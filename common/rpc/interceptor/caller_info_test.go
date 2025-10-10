@@ -16,7 +16,6 @@ import (
 type (
 	callerInfoSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		controller   *gomock.Controller
 		mockRegistry *namespace.MockRegistry
@@ -31,7 +30,6 @@ func TestCallerInfoSuite(t *testing.T) {
 }
 
 func (s *callerInfoSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.mockRegistry = namespace.NewMockRegistry(s.controller)
@@ -117,10 +115,10 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 				return nil, nil
 			},
 		)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 
 		actualCallerName := headers.GetCallerInfo(resultingCtx).CallerName
-		s.Equal(testCase.expectedCallerName, actualCallerName)
+		require.Equal(s.T(), testCase.expectedCallerName, actualCallerName)
 	}
 }
 
@@ -187,10 +185,10 @@ func (s *callerInfoSuite) TestIntercept_CallerType() {
 				return nil, nil
 			},
 		)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 
 		actualCallerType := headers.GetCallerInfo(resultingCtx).CallerType
-		s.Equal(testCase.expectedCallerType, actualCallerType)
+		require.Equal(s.T(), testCase.expectedCallerType, actualCallerType)
 	}
 }
 
@@ -269,9 +267,9 @@ func (s *callerInfoSuite) TestIntercept_CallOrigin() {
 				return nil, nil
 			},
 		)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 
 		actualCallOrigin := headers.GetCallerInfo(resultingCtx).CallOrigin
-		s.Equal(testCase.expectedCallOrigin, actualCallOrigin)
+		require.Equal(s.T(), testCase.expectedCallOrigin, actualCallOrigin)
 	}
 }

@@ -35,7 +35,6 @@ var (
 type (
 	authorizerInterceptorSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		controller         *gomock.Controller
 		mockAuthorizer     *MockAuthorizer
@@ -54,7 +53,7 @@ func TestAuthorizerInterceptorSuite(t *testing.T) {
 }
 
 func (s *authorizerInterceptorSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.controller = gomock.NewController(s.T())
 
 	s.mockAuthorizer = NewMockAuthorizer(s.controller)
@@ -89,8 +88,8 @@ func (s *authorizerInterceptorSuite) TestIsAuthorized() {
 		Return(Result{Decision: DecisionAllow}, nil)
 
 	res, err := s.interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
-	s.True(res.(bool))
-	s.NoError(err)
+	require.True(s.T(), res.(bool))
+	require.NoError(s.T(), err)
 }
 
 func (s *authorizerInterceptorSuite) TestIsAuthorizedWithNamespace() {
@@ -98,8 +97,8 @@ func (s *authorizerInterceptorSuite) TestIsAuthorizedWithNamespace() {
 		Return(Result{Decision: DecisionAllow}, nil)
 
 	res, err := s.interceptor.Intercept(ctx, startWorkflowExecutionRequest, startWorkflowExecutionInfo, s.handler)
-	s.True(res.(bool))
-	s.NoError(err)
+	require.True(s.T(), res.(bool))
+	require.NoError(s.T(), err)
 }
 
 func (s *authorizerInterceptorSuite) TestIsUnauthorized() {
@@ -108,8 +107,8 @@ func (s *authorizerInterceptorSuite) TestIsUnauthorized() {
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ServiceErrUnauthorizedCounter.Name()).Return(metrics.NoopCounterMetricFunc)
 
 	res, err := s.interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
-	s.Nil(res)
-	s.Error(err)
+	require.Nil(s.T(), res)
+	require.Error(s.T(), err)
 }
 
 func (s *authorizerInterceptorSuite) TestIsUnknown() {
@@ -125,8 +124,8 @@ func (s *authorizerInterceptorSuite) TestIsUnknown() {
 	handler.EXPECT().Timer(metrics.ServiceAuthorizationLatency.Name()).Return(metrics.NoopTimerMetricFunc)
 
 	res, err := s.interceptor.Intercept(ctx, request, describeNamespaceInfo, s.handler)
-	s.Nil(res)
-	s.Error(err)
+	require.Nil(s.T(), res)
+	require.Error(s.T(), err)
 }
 
 func (s *authorizerInterceptorSuite) TestAuthorizationFailed() {
@@ -135,8 +134,8 @@ func (s *authorizerInterceptorSuite) TestAuthorizationFailed() {
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ServiceErrAuthorizeFailedCounter.Name()).Return(metrics.NoopCounterMetricFunc)
 
 	res, err := s.interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
-	s.Nil(res)
-	s.Error(err)
+	require.Nil(s.T(), res)
+	require.Error(s.T(), err)
 }
 
 func (s *authorizerInterceptorSuite) TestAuthorizationFailedExposed() {
@@ -158,8 +157,8 @@ func (s *authorizerInterceptorSuite) TestAuthorizationFailedExposed() {
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ServiceErrAuthorizeFailedCounter.Name()).Return(metrics.NoopCounterMetricFunc)
 
 	res, err := interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
-	s.Nil(res)
-	s.ErrorIs(err, authErr)
+	require.Nil(s.T(), res)
+	require.ErrorIs(s.T(), err, authErr)
 }
 
 func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
@@ -167,7 +166,7 @@ func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
 	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), admin, describeNamespaceTarget).
 		DoAndReturn(func(ctx context.Context, caller *Claims, target *CallTarget) (Result, error) {
 			// check that claims are present in ctx also
-			s.Equal(admin, ctx.Value(MappedClaims))
+			require.Equal(s.T(), admin, ctx.Value(MappedClaims))
 
 			return Result{Decision: DecisionAllow}, nil
 		})
@@ -184,7 +183,7 @@ func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
 		dynamicconfig.GetBoolPropertyFn(false),
 	)
 	_, err := interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *authorizerInterceptorSuite) TestAlternateHeaders() {
@@ -236,7 +235,7 @@ func (s *authorizerInterceptorSuite) TestAlternateHeaders() {
 		}
 		inCtx := metadata.NewIncomingContext(ctx, testCase.md)
 		_, err := interceptor.Intercept(inCtx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
-		s.NoError(err)
+		require.NoError(s.T(), err)
 	}
 }
 

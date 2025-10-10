@@ -23,7 +23,6 @@ import (
 type (
 	cassandraErrorsSuite struct {
 		suite.Suite
-		*require.Assertions
 		protorequire.ProtoAssertions
 	}
 )
@@ -33,15 +32,14 @@ func TestCassandraErrorsSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *cassandraErrorsSuite) SetupSuite() {
-}
+
 
 func (s *cassandraErrorsSuite) TearDownSuite() {
 
 }
 
 func (s *cassandraErrorsSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
+
 	s.ProtoAssertions = protorequire.New(s.T())
 }
 
@@ -71,7 +69,7 @@ func (s *cassandraErrorsSuite) TestSortErrors_Sorted() {
 		genericErr,
 		randomErr,
 	}
-	s.Equal(expectedErrors, sortErrors(errorsCaseSorted))
+	require.Equal(s.T(), expectedErrors, sortErrors(errorsCaseSorted))
 }
 
 func (s *cassandraErrorsSuite) TestSortErrors_ReverseSorted() {
@@ -96,7 +94,7 @@ func (s *cassandraErrorsSuite) TestSortErrors_ReverseSorted() {
 		currentWorkflowErr,
 		shardOwnershipLostErr,
 	}
-	s.Equal(expectedErrors, sortErrors(errorsCaseReverseSorted))
+	require.Equal(s.T(), expectedErrors, sortErrors(errorsCaseReverseSorted))
 }
 
 func (s *cassandraErrorsSuite) TestSortErrors_Random() {
@@ -124,7 +122,7 @@ func (s *cassandraErrorsSuite) TestSortErrors_Random() {
 	rand.Shuffle(len(errorsCaseShuffled), func(i int, j int) {
 		errorsCaseShuffled[i], errorsCaseShuffled[j] = errorsCaseShuffled[j], errorsCaseShuffled[i]
 	})
-	s.Equal(expectedErrors, sortErrors(errorsCaseShuffled))
+	require.Equal(s.T(), expectedErrors, sortErrors(errorsCaseShuffled))
 }
 
 func (s *cassandraErrorsSuite) TestSortErrors_One() {
@@ -134,32 +132,32 @@ func (s *cassandraErrorsSuite) TestSortErrors_One() {
 	genericErr := &p.ConditionFailedError{}
 	randomErr := errors.New("random error")
 
-	s.Equal([]error{shardOwnershipLostErr}, sortErrors([]error{shardOwnershipLostErr}))
-	s.Equal([]error{currentWorkflowErr}, sortErrors([]error{currentWorkflowErr}))
-	s.Equal([]error{workflowErr}, sortErrors([]error{workflowErr}))
-	s.Equal([]error{genericErr}, sortErrors([]error{genericErr}))
-	s.Equal([]error{randomErr}, sortErrors([]error{randomErr}))
+	require.Equal(s.T(), []error{shardOwnershipLostErr}, sortErrors([]error{shardOwnershipLostErr}))
+	require.Equal(s.T(), []error{currentWorkflowErr}, sortErrors([]error{currentWorkflowErr}))
+	require.Equal(s.T(), []error{workflowErr}, sortErrors([]error{workflowErr}))
+	require.Equal(s.T(), []error{genericErr}, sortErrors([]error{genericErr}))
+	require.Equal(s.T(), []error{randomErr}, sortErrors([]error{randomErr}))
 }
 
 func (s *cassandraErrorsSuite) TestExtractShardOwnershipLostError_Failed() {
 	rangeID := int64(1234)
 
 	err := extractShardOwnershipLostError(map[string]interface{}{}, rand.Int31(), rangeID)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	t := rowTypeExecution
 	err = extractShardOwnershipLostError(map[string]interface{}{
 		"type":     &t,
 		"range_id": rangeID,
 	}, rand.Int31(), rangeID)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	t = rowTypeShard
 	err = extractShardOwnershipLostError(map[string]interface{}{
 		"type":     &t,
 		"range_id": rangeID,
 	}, rand.Int31(), rangeID)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *cassandraErrorsSuite) TestExtractShardOwnershipLostError_Success() {
@@ -171,7 +169,7 @@ func (s *cassandraErrorsSuite) TestExtractShardOwnershipLostError_Success() {
 	}
 
 	err := extractShardOwnershipLostError(record, rand.Int31(), rangeID+1)
-	s.IsType(&p.ShardOwnershipLostError{}, err)
+	require.IsType(s.T(), &p.ShardOwnershipLostError{}, err)
 }
 
 func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Failed() {
@@ -179,7 +177,7 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Failed() 
 	currentRunID := uuid.New()
 
 	err := extractCurrentWorkflowConflictError(map[string]interface{}{}, uuid.New().String())
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	t := rowTypeShard
 	err = extractCurrentWorkflowConflictError(map[string]interface{}{
@@ -187,7 +185,7 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Failed() 
 		"run_id":         gocql.UUID(runID),
 		"current_run_id": gocql.UUID(currentRunID),
 	}, uuid.New().String())
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	t = rowTypeExecution
 	err = extractCurrentWorkflowConflictError(map[string]interface{}{
@@ -195,7 +193,7 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Failed() 
 		"run_id":         gocql.UUID([16]byte{}),
 		"current_run_id": gocql.UUID(currentRunID),
 	}, uuid.New().String())
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	t = rowTypeExecution
 	err = extractCurrentWorkflowConflictError(map[string]interface{}{
@@ -203,7 +201,7 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Failed() 
 		"run_id":         gocql.UUID(runID),
 		"current_run_id": gocql.UUID(currentRunID),
 	}, currentRunID.String())
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success() {
@@ -230,7 +228,7 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 	}
 	blob, err := serialization.WorkflowExecutionStateToBlob(workflowState)
 	lastWriteVersion := rand.Int63()
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	t := rowTypeExecution
 	record := map[string]interface{}{
 		"type":                        &t,
@@ -264,7 +262,7 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed() {
 	dbVersion := rand.Int63() + 1
 
 	err := extractWorkflowConflictError(map[string]interface{}{}, runID.String(), dbVersion, rand.Int63())
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	t := rowTypeShard
 	err = extractWorkflowConflictError(map[string]interface{}{
@@ -272,7 +270,7 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed() {
 		"run_id":            gocql.UUID(runID),
 		"db_record_version": dbVersion,
 	}, runID.String(), dbVersion+1, rand.Int63())
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	t = rowTypeExecution
 	err = extractWorkflowConflictError(map[string]interface{}{
@@ -280,7 +278,7 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed() {
 		"run_id":            gocql.UUID([16]byte{}),
 		"db_record_version": dbVersion,
 	}, runID.String(), dbVersion+1, rand.Int63())
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	t = rowTypeExecution
 	err = extractWorkflowConflictError(map[string]interface{}{
@@ -288,7 +286,7 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed() {
 		"run_id":            gocql.UUID(runID),
 		"db_record_version": dbVersion,
 	}, runID.String(), dbVersion, rand.Int63())
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Success() {
@@ -302,7 +300,7 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Success() {
 	}
 
 	err := extractWorkflowConflictError(record, runID.String(), dbVersion+1, rand.Int63())
-	s.IsType(&p.WorkflowConditionFailedError{}, err)
+	require.IsType(s.T(), &p.WorkflowConditionFailedError{}, err)
 }
 
 // TODO remove this block once DB version comparison is the default
@@ -311,7 +309,7 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed_NextEvent
 	nextEventID := rand.Int63()
 
 	err := extractWorkflowConflictError(map[string]interface{}{}, runID.String(), 0, nextEventID)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	t := rowTypeShard
 	err = extractWorkflowConflictError(map[string]interface{}{
@@ -319,7 +317,7 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed_NextEvent
 		"run_id":        gocql.UUID(runID),
 		"next_event_id": nextEventID + 1,
 	}, runID.String(), 0, nextEventID)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	t = rowTypeExecution
 	err = extractWorkflowConflictError(map[string]interface{}{
@@ -327,7 +325,7 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed_NextEvent
 		"run_id":        gocql.UUID([16]byte{}),
 		"next_event_id": nextEventID + 1,
 	}, runID.String(), 0, nextEventID)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 
 	t = rowTypeExecution
 	err = extractWorkflowConflictError(map[string]interface{}{
@@ -335,7 +333,7 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed_NextEvent
 		"run_id":        gocql.UUID(runID),
 		"next_event_id": nextEventID,
 	}, runID.String(), 0, nextEventID)
-	s.NoError(err)
+	require.NoError(s.T(), err)
 }
 
 // TODO remove this block once DB version comparison is the default
@@ -350,5 +348,5 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Success_NextEven
 	}
 
 	err := extractWorkflowConflictError(record, runID.String(), 0, nextEventID+1)
-	s.IsType(&p.WorkflowConditionFailedError{}, err)
+	require.IsType(s.T(), &p.WorkflowConditionFailedError{}, err)
 }

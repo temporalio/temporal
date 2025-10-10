@@ -17,7 +17,6 @@ import (
 type (
 	quotasSuite struct {
 		suite.Suite
-		*require.Assertions
 	}
 )
 
@@ -26,15 +25,12 @@ func TestQuotasSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *quotasSuite) SetupSuite() {
-}
+
 
 func (s *quotasSuite) TearDownSuite() {
 }
 
-func (s *quotasSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
+
 
 func (s *quotasSuite) TearDownTest() {
 }
@@ -42,27 +38,27 @@ func (s *quotasSuite) TearDownTest() {
 func (s *quotasSuite) TestCallerTypeDefaultPriorityMapping() {
 	for _, priority := range CallerTypeDefaultPriority {
 		index := slices.Index(RequestPrioritiesOrdered, priority)
-		s.NotEqual(-1, index)
+		require.NotEqual(s.T(), -1, index)
 	}
 }
 
 func (s *quotasSuite) TestAPITypeCallOriginPriorityOverrideMapping() {
 	for _, priority := range APITypeCallOriginPriorityOverride {
 		index := slices.Index(RequestPrioritiesOrdered, priority)
-		s.NotEqual(-1, index)
+		require.NotEqual(s.T(), -1, index)
 	}
 }
 
 func (s *quotasSuite) TestBackgroundTypeAPIPriorityOverrideMapping() {
 	for _, priority := range BackgroundTypeAPIPriorityOverride {
 		index := slices.Index(RequestPrioritiesOrdered, priority)
-		s.NotEqual(-1, index)
+		require.NotEqual(s.T(), -1, index)
 	}
 }
 
 func (s *quotasSuite) TestRequestPrioritiesOrdered() {
 	for idx := range RequestPrioritiesOrdered[1:] {
-		s.True(RequestPrioritiesOrdered[idx] < RequestPrioritiesOrdered[idx+1])
+		require.True(s.T(), RequestPrioritiesOrdered[idx] < RequestPrioritiesOrdered[idx+1])
 	}
 }
 
@@ -75,7 +71,7 @@ func (s *quotasSuite) TestCallOriginDefined() {
 
 	for api := range APITypeCallOriginPriorityOverride {
 		_, ok := definedAPIs[api]
-		s.True(ok)
+		require.True(s.T(), ok)
 	}
 }
 
@@ -111,7 +107,7 @@ func (s *quotasSuite) TestPriorityNamespaceRateLimiter_DoesLimit() {
 		}
 	}
 
-	s.True(wasLimited)
+	require.True(s.T(), wasLimited)
 }
 
 func (s *quotasSuite) TestPerShardNamespaceRateLimiter_DoesLimit() {
@@ -146,7 +142,7 @@ func (s *quotasSuite) TestPerShardNamespaceRateLimiter_DoesLimit() {
 		}
 	}
 
-	s.True(wasLimited)
+	require.True(s.T(), wasLimited)
 }
 
 func (s *quotasSuite) TestOperatorPrioritized() {
@@ -182,8 +178,8 @@ func (s *quotasSuite) TestOperatorPrioritized() {
 	for i := 0; i < 6; i++ {
 		if !limiter.Allow(requestTime, apiRequest) {
 			wasLimited = true
-			s.True(limiter.Allow(requestTime, operatorRequest))
+			require.True(s.T(), limiter.Allow(requestTime, operatorRequest))
 		}
 	}
-	s.True(wasLimited)
+	require.True(s.T(), wasLimited)
 }

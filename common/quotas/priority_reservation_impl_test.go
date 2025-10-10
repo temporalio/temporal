@@ -12,7 +12,6 @@ import (
 type (
 	priorityReservationSuite struct {
 		suite.Suite
-		*require.Assertions
 
 		controller          *gomock.Controller
 		decidingReservation *MockReservation
@@ -25,16 +24,13 @@ func TestPriorityReservationSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *priorityReservationSuite) SetupSuite() {
 
-}
 
 func (s *priorityReservationSuite) TearDownSuite() {
 
 }
 
 func (s *priorityReservationSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.decidingReservation = NewMockReservation(s.controller)
@@ -50,7 +46,7 @@ func (s *priorityReservationSuite) Test_NotOK_OK() {
 	reservation := NewPriorityReservation(s.decidingReservation, []Reservation{s.otherReservation})
 
 	result := reservation.OK()
-	s.False(result)
+	require.False(s.T(), result)
 }
 
 func (s *priorityReservationSuite) Test_OK_OK() {
@@ -58,7 +54,7 @@ func (s *priorityReservationSuite) Test_OK_OK() {
 	reservation := NewPriorityReservation(s.decidingReservation, []Reservation{s.otherReservation})
 
 	result := reservation.OK()
-	s.True(result)
+	require.True(s.T(), result)
 }
 
 func (s *priorityReservationSuite) Test_CancelAt() {
@@ -79,5 +75,5 @@ func (s *priorityReservationSuite) Test_DelayFrom() {
 	reservation := NewPriorityReservation(s.decidingReservation, []Reservation{s.otherReservation})
 
 	result := reservation.DelayFrom(now)
-	s.Equal(decidingReservationDelay, result)
+	require.Equal(s.T(), decidingReservationDelay, result)
 }

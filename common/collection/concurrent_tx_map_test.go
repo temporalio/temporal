@@ -14,7 +14,6 @@ import (
 
 type (
 	ConcurrentTxMapSuite struct {
-		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 		suite.Suite
 	}
 	boolType bool
@@ -25,32 +24,30 @@ func TestConcurrentTxMapSuite(t *testing.T) {
 	suite.Run(t, new(ConcurrentTxMapSuite))
 }
 
-func (s *ConcurrentTxMapSuite) SetupTest() {
-	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-}
+
 
 func (s *ConcurrentTxMapSuite) TestLen() {
 	testMap := NewShardedConcurrentTxMap(1, UUIDHashCode)
 
 	key1 := "0001"
 	testMap.Put(key1, boolType(true))
-	s.Equal(1, testMap.Len(), "Wrong concurrent map size")
+	require.Equal(s.T(), 1, testMap.Len(), "Wrong concurrent map size")
 
 	testMap.Put(key1, boolType(false))
-	s.Equal(1, testMap.Len(), "Wrong concurrent map size")
+	require.Equal(s.T(), 1, testMap.Len(), "Wrong concurrent map size")
 
 	key2 := "0002"
 	testMap.Put(key2, boolType(false))
-	s.Equal(2, testMap.Len(), "Wrong concurrent map size")
+	require.Equal(s.T(), 2, testMap.Len(), "Wrong concurrent map size")
 
 	testMap.PutIfNotExist(key2, boolType(false))
-	s.Equal(2, testMap.Len(), "Wrong concurrent map size")
+	require.Equal(s.T(), 2, testMap.Len(), "Wrong concurrent map size")
 
 	testMap.Remove(key2)
-	s.Equal(1, testMap.Len(), "Wrong concurrent map size")
+	require.Equal(s.T(), 1, testMap.Len(), "Wrong concurrent map size")
 
 	testMap.Remove(key2)
-	s.Equal(1, testMap.Len(), "Wrong concurrent map size")
+	require.Equal(s.T(), 1, testMap.Len(), "Wrong concurrent map size")
 }
 
 func (s *ConcurrentTxMapSuite) TestGetAndDo() {
@@ -63,10 +60,10 @@ func (s *ConcurrentTxMapSuite) TestGetAndDo() {
 		fnApplied = true
 		return nil
 	})
-	s.Nil(interf, "GetAndDo should return nil when key not found")
-	s.Nil(err, "GetAndDo should return nil when function not applied")
-	s.False(ok, "GetAndDo should return false when key not found")
-	s.False(fnApplied, "GetAndDo should not apply function when key not exixts")
+	require.Nil(s.T(), interf, "GetAndDo should return nil when key not found")
+	require.Nil(s.T(), err, "GetAndDo should return nil when function not applied")
+	require.False(s.T(), ok, "GetAndDo should return false when key not found")
+	require.False(s.T(), fnApplied, "GetAndDo should not apply function when key not exixts")
 
 	value = intType(1)
 	testMap.Put(key, &value)
@@ -78,10 +75,10 @@ func (s *ConcurrentTxMapSuite) TestGetAndDo() {
 	})
 
 	value1 := interf.(*intType)
-	s.Equal(*(value1), intType(2))
-	s.NotNil(err, "GetAndDo should return non nil when function applied")
-	s.True(ok, "GetAndDo should return true when key found")
-	s.True(fnApplied, "GetAndDo should apply function when key exixts")
+	require.Equal(s.T(), *(value1), intType(2))
+	require.NotNil(s.T(), err, "GetAndDo should return non nil when function applied")
+	require.True(s.T(), ok, "GetAndDo should return true when key found")
+	require.True(s.T(), fnApplied, "GetAndDo should apply function when key exixts")
 }
 
 func (s *ConcurrentTxMapSuite) TestPutOrDo() {
@@ -96,10 +93,10 @@ func (s *ConcurrentTxMapSuite) TestPutOrDo() {
 		return errors.New("some err")
 	})
 	valueRetuern := interf.(*intType)
-	s.Equal(value, *valueRetuern)
-	s.Nil(err, "PutOrDo should return nil when function not applied")
-	s.False(ok, "PutOrDo should return false when function not applied")
-	s.False(fnApplied, "PutOrDo should not apply function when key not exixts")
+	require.Equal(s.T(), value, *valueRetuern)
+	require.Nil(s.T(), err, "PutOrDo should return nil when function not applied")
+	require.False(s.T(), ok, "PutOrDo should return false when function not applied")
+	require.False(s.T(), fnApplied, "PutOrDo should not apply function when key not exixts")
 
 	anotherValue := intType(111)
 	interf, ok, err = testMap.PutOrDo(key, &anotherValue, func(key interface{}, value interface{}) error {
@@ -109,10 +106,10 @@ func (s *ConcurrentTxMapSuite) TestPutOrDo() {
 		return errors.New("some err")
 	})
 	valueRetuern = interf.(*intType)
-	s.Equal(value, *valueRetuern)
-	s.NotNil(err, "PutOrDo should return non nil when function applied")
-	s.True(ok, "PutOrDo should return true when function applied")
-	s.True(fnApplied, "PutOrDo should apply function when key exixts")
+	require.Equal(s.T(), value, *valueRetuern)
+	require.NotNil(s.T(), err, "PutOrDo should return non nil when function applied")
+	require.True(s.T(), ok, "PutOrDo should return true when function applied")
+	require.True(s.T(), fnApplied, "PutOrDo should apply function when key exixts")
 }
 
 func (s *ConcurrentTxMapSuite) TestRemoveIf() {
@@ -125,15 +122,15 @@ func (s *ConcurrentTxMapSuite) TestRemoveIf() {
 		intValue := value.(*intType)
 		return *intValue == intType(2)
 	})
-	s.Equal(1, testMap.Len(), "TestRemoveIf should only entry if condition is met")
-	s.False(removed, "TestRemoveIf should return false if key is not deleted")
+	require.Equal(s.T(), 1, testMap.Len(), "TestRemoveIf should only entry if condition is met")
+	require.False(s.T(), removed, "TestRemoveIf should return false if key is not deleted")
 
 	removed = testMap.RemoveIf(key, func(key interface{}, value interface{}) bool {
 		intValue := value.(*intType)
 		return *intValue == intType(1)
 	})
-	s.Equal(0, testMap.Len(), "TestRemoveIf should only entry if condition is met")
-	s.True(removed, "TestRemoveIf should return true if key is deleted")
+	require.Equal(s.T(), 0, testMap.Len(), "TestRemoveIf should only entry if condition is met")
+	require.True(s.T(), removed, "TestRemoveIf should return true if key is deleted")
 }
 
 func (s *ConcurrentTxMapSuite) TestGetAfterPut() {
@@ -150,11 +147,11 @@ func (s *ConcurrentTxMapSuite) TestGetAfterPut() {
 	for k := range countMap {
 		v, ok := testMap.Get(k)
 		boolValue := v.(boolType)
-		s.True(ok, "Get after put failed")
-		s.True(bool(boolValue), "Wrong value returned from map")
+		require.True(s.T(), ok, "Get after put failed")
+		require.True(s.T(), bool(boolValue), "Wrong value returned from map")
 	}
 
-	s.Equal(len(countMap), testMap.Len(), "Size() returned wrong value")
+	require.Equal(s.T(), len(countMap), testMap.Len(), "Size() returned wrong value")
 
 	it := testMap.Iter()
 	for entry := range it.Entries() {
@@ -163,23 +160,23 @@ func (s *ConcurrentTxMapSuite) TestGetAfterPut() {
 	it.Close()
 
 	for _, v := range countMap {
-		s.Equal(1, v, "Iterator test failed")
+		require.Equal(s.T(), 1, v, "Iterator test failed")
 	}
 
 	for k := range countMap {
 		testMap.Remove(k)
 	}
 
-	s.Equal(0, testMap.Len(), "Map returned non-zero size after deleting all entries")
+	require.Equal(s.T(), 0, testMap.Len(), "Map returned non-zero size after deleting all entries")
 }
 
 func (s *ConcurrentTxMapSuite) TestPutIfNotExist() {
 	testMap := NewShardedConcurrentTxMap(1, UUIDHashCode)
 	key := uuid.New()
 	ok := testMap.PutIfNotExist(key, boolType(true))
-	s.True(ok, "PutIfNotExist failed to insert item")
+	require.True(s.T(), ok, "PutIfNotExist failed to insert item")
 	ok = testMap.PutIfNotExist(key, boolType(true))
-	s.False(ok, "PutIfNotExist invariant failed")
+	require.False(s.T(), ok, "PutIfNotExist invariant failed")
 }
 
 func (s *ConcurrentTxMapSuite) TestMapConcurrency() {
@@ -207,7 +204,7 @@ func (s *ConcurrentTxMapSuite) TestMapConcurrency() {
 				if testMap.PutIfNotExist(keys[n], val) {
 					atomic.AddInt32(&total, int32(val))
 					_, ok := testMap.Get(keys[n])
-					s.True(ok, "Concurrency Get test failed")
+					require.True(s.T(), ok, "Concurrency Get test failed")
 				}
 			}
 			doneWG.Done()
@@ -217,15 +214,15 @@ func (s *ConcurrentTxMapSuite) TestMapConcurrency() {
 	startWG.Done()
 	doneWG.Wait()
 
-	s.Equal(nKeys, testMap.Len(), "Wrong concurrent map size")
+	require.Equal(s.T(), nKeys, testMap.Len(), "Wrong concurrent map size")
 
 	var gotTotal int32
 	for i := 0; i < nKeys; i++ {
 		v, ok := testMap.Get(keys[i])
-		s.True(ok, "Get failed to find previously inserted key")
+		require.True(s.T(), ok, "Get failed to find previously inserted key")
 		intVal := v.(intType)
 		gotTotal += int32(intVal)
 	}
 
-	s.Equal(total, gotTotal, "Concurrent put test failed, wrong sum of values inserted")
+	require.Equal(s.T(), total, gotTotal, "Concurrent put test failed, wrong sum of values inserted")
 }

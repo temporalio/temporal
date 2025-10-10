@@ -15,7 +15,6 @@ import (
 
 type (
 	sequentialSchedulerSuite struct {
-		*require.Assertions
 		suite.Suite
 
 		controller *gomock.Controller
@@ -31,7 +30,6 @@ func TestSequentialSchedulerSuite(t *testing.T) {
 }
 
 func (s *sequentialSchedulerSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 
@@ -165,7 +163,7 @@ func (s *sequentialSchedulerSuite) TestParallelSubmitProcess() {
 				mockTask.EXPECT().Nack(executionErr).Do(func(_ error) { testWaitGroup.Done() }).Times(1)
 
 			default:
-				s.Fail("case not expected")
+				require.Fail(s.T(), "case not expected")
 			}
 			channel <- mockTask
 		}
@@ -195,13 +193,13 @@ func (s *sequentialSchedulerSuite) TestStartStopWorkers() {
 
 	numWorkers := 10
 	processor.startWorkers(numWorkers)
-	s.Len(processor.workerShutdownCh, numWorkers)
+	require.Len(s.T(), processor.workerShutdownCh, numWorkers)
 
 	processor.stopWorkers(numWorkers / 2)
-	s.Len(processor.workerShutdownCh, numWorkers/2)
+	require.Len(s.T(), processor.workerShutdownCh, numWorkers/2)
 
 	processor.stopWorkers(len(processor.workerShutdownCh))
-	s.Empty(processor.workerShutdownCh)
+	require.Empty(s.T(), processor.workerShutdownCh)
 
 	processor.shutdownWG.Wait()
 }

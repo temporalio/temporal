@@ -39,8 +39,7 @@ func TestElasticsearchProcessorSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *processorSuite) SetupSuite() {
-}
+
 
 func (s *processorSuite) SetupTest() {
 	logger := log.NewTestLogger()
