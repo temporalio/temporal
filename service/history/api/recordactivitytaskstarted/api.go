@@ -7,6 +7,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -56,7 +57,14 @@ func Invoke(
 		}
 
 		return &historyservice.RecordActivityTaskStartedResponse{
-			// TODO
+			ScheduledEvent: &history.HistoryEvent{
+				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
+				Attributes: &history.HistoryEvent_ActivityTaskScheduledEventAttributes{
+					ActivityTaskScheduledEventAttributes: &history.ActivityTaskScheduledEventAttributes{
+						ActivityId: componentRef.BusinessID,
+					},
+				},
+			},
 		}, nil
 	}
 
