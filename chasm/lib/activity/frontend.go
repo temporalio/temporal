@@ -57,3 +57,16 @@ func (h *frontendHandler) DescribeActivityExecution(ctx context.Context, req *wo
 	})
 	return resp.GetFrontendResponse(), err
 }
+
+func (h *frontendHandler) GetActivityExecutionResult(ctx context.Context, req *workflowservice.GetActivityExecutionResultRequest) (*workflowservice.GetActivityExecutionResultResponse, error) {
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := h.client.GetActivityExecutionResult(ctx, &activitypb.GetActivityExecutionResultRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	return resp.GetFrontendResponse(), err
+}

@@ -25,3 +25,13 @@ message DescribeActivityExecutionRequest {
 message DescribeActivityExecutionResponse {
   temporal.api.workflowservice.v1.DescribeActivityExecutionResponse frontend_response = 1;
 }
+
+message GetActivityExecutionResultRequest {
+  string namespace_id = 1;
+
+  temporal.api.workflowservice.v1.GetActivityExecutionResultRequest frontend_request = 2;
+}
+
+message GetActivityExecutionResultResponse {
+  temporal.api.workflowservice.v1.GetActivityExecutionResultResponse frontend_response = 1;
+}
