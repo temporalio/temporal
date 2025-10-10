@@ -648,9 +648,9 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_WithActivityTimeouts() {
 			RunId:      runID,
 		},
 		&historyservice.StartWorkflowExecutionRequest{
-			Attempt:             1,
-			NamespaceId:         s.namespaceEntry.ID().String(),
-			StartRequest:        &workflowservice.StartWorkflowExecutionRequest{},
+			Attempt:                  1,
+			NamespaceId:              s.namespaceEntry.ID().String(),
+			StartRequest:             &workflowservice.StartWorkflowExecutionRequest{},
 			FirstWorkflowTaskBackoff: durationpb.New(0),
 		},
 	)
@@ -770,9 +770,9 @@ func (s *mutableStateSuite) TestDeleteScheduleToStartTimeout_WhenActivityStarts(
 			RunId:      runID,
 		},
 		&historyservice.StartWorkflowExecutionRequest{
-			Attempt:             1,
-			NamespaceId:         s.namespaceEntry.ID().String(),
-			StartRequest:        &workflowservice.StartWorkflowExecutionRequest{},
+			Attempt:                  1,
+			NamespaceId:              s.namespaceEntry.ID().String(),
+			StartRequest:             &workflowservice.StartWorkflowExecutionRequest{},
 			FirstWorkflowTaskBackoff: durationpb.New(0),
 		},
 	)
@@ -885,9 +885,9 @@ func (s *mutableStateSuite) TestDeleteHeartbeatTimeout_WhenHeartbeatReceived() {
 			RunId:      runID,
 		},
 		&historyservice.StartWorkflowExecutionRequest{
-			Attempt:             1,
-			NamespaceId:         s.namespaceEntry.ID().String(),
-			StartRequest:        &workflowservice.StartWorkflowExecutionRequest{},
+			Attempt:                  1,
+			NamespaceId:              s.namespaceEntry.ID().String(),
+			StartRequest:             &workflowservice.StartWorkflowExecutionRequest{},
 			FirstWorkflowTaskBackoff: durationpb.New(0),
 		},
 	)
@@ -913,10 +913,10 @@ func (s *mutableStateSuite) TestDeleteHeartbeatTimeout_WhenHeartbeatReceived() {
 	activityScheduledEvent, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
 		wft.StartedEventID,
 		&commandpb.ScheduleActivityTaskCommandAttributes{
-			ActivityId:       activityID,
-			ActivityType:     &commonpb.ActivityType{Name: "test-activity-type"},
-			TaskQueue:        &taskqueuepb.TaskQueue{Name: "test-tq"},
-			HeartbeatTimeout: durationpb.New(5 * time.Second),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-tq"},
+			HeartbeatTimeout:    durationpb.New(5 * time.Second),
 			StartToCloseTimeout: durationpb.New(20 * time.Second),
 		},
 		false,
@@ -1010,9 +1010,9 @@ func (s *mutableStateSuite) TestActivityTimeoutDeletion_AllTimersDeletedOnComple
 			RunId:      runID,
 		},
 		&historyservice.StartWorkflowExecutionRequest{
-			Attempt:             1,
-			NamespaceId:         s.namespaceEntry.ID().String(),
-			StartRequest:        &workflowservice.StartWorkflowExecutionRequest{},
+			Attempt:                  1,
+			NamespaceId:              s.namespaceEntry.ID().String(),
+			StartRequest:             &workflowservice.StartWorkflowExecutionRequest{},
 			FirstWorkflowTaskBackoff: durationpb.New(0),
 		},
 	)
@@ -1199,9 +1199,9 @@ func (s *mutableStateSuite) TestDeleteScheduleToStartTimeout_BothPathsWhenActivi
 					RunId:      runID,
 				},
 				&historyservice.StartWorkflowExecutionRequest{
-					Attempt:             1,
-					NamespaceId:         s.namespaceEntry.ID().String(),
-					StartRequest:        &workflowservice.StartWorkflowExecutionRequest{},
+					Attempt:                  1,
+					NamespaceId:              s.namespaceEntry.ID().String(),
+					StartRequest:             &workflowservice.StartWorkflowExecutionRequest{},
 					FirstWorkflowTaskBackoff: durationpb.New(0),
 				},
 			)
