@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -88,7 +87,7 @@ func TestMeter(t *testing.T) {
 
 	var got metricdata.ResourceMetrics
 	err = rdr.Collect(ctx, &got)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	want := []metricdata.Metrics{
 		{
@@ -232,7 +231,7 @@ func TestMeter_TimerInSeconds(t *testing.T) {
 
 	var got metricdata.ResourceMetrics
 	err = rdr.Collect(ctx, &got)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	want := []metricdata.Metrics{
 		{

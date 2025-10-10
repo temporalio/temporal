@@ -94,7 +94,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 func (s *QueuePersistenceSuite) TestQueueMetadataOperations() {
 	clusterAckLevels, err := s.GetAckLevels(s.ctx)
 	s.Require().NoError(err)
-	s.Assert().Empty(clusterAckLevels)
+	s.Empty(clusterAckLevels)
 
 	err = s.UpdateAckLevel(s.ctx, 10, "test1")
 	s.Require().NoError(err)

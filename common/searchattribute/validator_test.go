@@ -55,10 +55,10 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	var attr *commonpb.SearchAttributes
 
 	err := saValidator.Validate(attr, namespace)
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	intPayload, err := payload.Encode(1)
-	s.NoError(err)
+	s.Require().NoError(err)
 	fields := map[string]*commonpb.Payload{
 		"CustomIntField": intPayload,
 	}
@@ -66,7 +66,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		IndexedFields: fields,
 	}
 	err = saValidator.Validate(attr, namespace)
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	fields = map[string]*commonpb.Payload{
 		"CustomIntField":     intPayload,
@@ -96,13 +96,13 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	s.Equal("invalid value for search attribute CustomBoolField of type Bool: 123", err.Error())
 
 	intArrayPayload, err := payload.Encode([]int{1, 2})
-	s.NoError(err)
+	s.Require().NoError(err)
 	fields = map[string]*commonpb.Payload{
 		"CustomIntField": intArrayPayload,
 	}
 	attr.IndexedFields = fields
 	err = saValidator.Validate(attr, namespace)
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	fields = map[string]*commonpb.Payload{
 		"StartTime": intPayload,
@@ -154,7 +154,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_SuppressEr
 	}
 
 	err := saValidator.Validate(attr, namespace)
-	s.NoError(err)
+	s.Require().NoError(err)
 }
 
 func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
@@ -177,10 +177,10 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	var attr *commonpb.SearchAttributes
 
 	err := saValidator.Validate(attr, namespace)
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	intPayload, err := payload.Encode(1)
-	s.NoError(err)
+	s.Require().NoError(err)
 	fields := map[string]*commonpb.Payload{
 		"CustomIntField": intPayload,
 	}
@@ -188,7 +188,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 		IndexedFields: fields,
 	}
 	err = saValidator.Validate(attr, namespace)
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	fields = map[string]*commonpb.Payload{
 		"CustomIntField": intPayload,
@@ -197,7 +197,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 		IndexedFields: fields,
 	}
 	err = saValidator.Validate(attr, "test-namespace")
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	fields = map[string]*commonpb.Payload{
 		"InvalidKey": payload.EncodeString("1"),

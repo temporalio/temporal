@@ -3273,7 +3273,7 @@ func TestContextNearDeadline(t *testing.T) {
 func TestValidateRequestId(t *testing.T) {
 	req := workflowservice.StartWorkflowExecutionRequest{RequestId: ""}
 	err := validateRequestId(&req.RequestId, 100)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Len(t, req.RequestId, 36) // new UUID length
 }
 

@@ -325,7 +325,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_AlreadyVerified() {
 	_, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
 	s.NoError(err)
 
-	s.Equal(1, len(iceptor.replicationRecordedHeartbeats))
+	s.Len(iceptor.replicationRecordedHeartbeats, 1)
 }
 
 func (s *activitiesSuite) Test_verifySingleReplicationTask() {

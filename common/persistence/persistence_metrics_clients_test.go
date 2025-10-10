@@ -56,7 +56,7 @@ func TestExecutionPersistenceClient_DataLossMetrics_EmittedOnDataLossError(t *te
 
 	// Verify error is returned
 	require.Error(t, err)
-	assert.ErrorIs(t, err, dataLossErr)
+	require.ErrorIs(t, err, dataLossErr)
 
 	// Verify data loss metrics are emitted
 	snapshot := capture.Snapshot()

@@ -1,7 +1,6 @@
 package tqid
 
 import (
-	"errors"
 	"math/rand"
 	"strconv"
 	"testing"

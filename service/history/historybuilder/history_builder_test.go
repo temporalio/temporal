@@ -2366,7 +2366,7 @@ func (s *historyBuilderSuite) TestBufferSize_Memory() {
 	)
 	s.Equal(1, s.historyBuilder.NumBufferedEvents())
 	// the size of the proto  is non-deterministic, so just assert that it's non-zero, and it isn't really high
-	s.Assert().Positive(s.historyBuilder.SizeInBytesOfBufferedEvents())
+	s.Positive(s.historyBuilder.SizeInBytesOfBufferedEvents())
 	s.Less(s.historyBuilder.SizeInBytesOfBufferedEvents(), 100)
 	s.flush()
 	s.Zero(s.historyBuilder.NumBufferedEvents())
@@ -2383,7 +2383,7 @@ func (s *historyBuilderSuite) TestBufferSize_DB() {
 	}}
 	s.Equal(1, s.historyBuilder.NumBufferedEvents())
 	// the size of the proto  is non-deterministic, so just assert that it's non-zero, and it isn't really high
-	s.Assert().Positive(s.historyBuilder.SizeInBytesOfBufferedEvents())
+	s.Positive(s.historyBuilder.SizeInBytesOfBufferedEvents())
 	s.Less(s.historyBuilder.SizeInBytesOfBufferedEvents(), 100)
 	s.flush()
 	s.Zero(s.historyBuilder.NumBufferedEvents())

@@ -1138,7 +1138,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 
 	workflowTask := s.getMutableStateFromCache(workflowKey).GetPendingWorkflowTask()
 	s.NotNil(workflowTask)
-	s.NotEqual(workflowTask.ScheduledEventID, common.EmptyEventID)
+	s.NotEqual(common.EmptyEventID, workflowTask.ScheduledEventID)
 	s.Equal(common.EmptyEventID, workflowTask.StartedEventID)
 	s.Equal(int32(2), workflowTask.Attempt)
 }
@@ -1237,7 +1237,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Fire() {
 
 	workflowTask := s.getMutableStateFromCache(workflowKey).GetPendingWorkflowTask()
 	s.NotNil(workflowTask)
-	s.NotEqual(workflowTask.ScheduledEventID, common.EmptyEventID)
+	s.NotEqual(common.EmptyEventID, workflowTask.ScheduledEventID)
 	s.Equal(common.EmptyEventID, workflowTask.StartedEventID)
 	s.Equal(int32(1), workflowTask.Attempt)
 }

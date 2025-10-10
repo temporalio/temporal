@@ -1,10 +1,10 @@
 package searchattribute
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
@@ -60,10 +60,10 @@ func Test_GetType(t *testing.T) {
 
 	ivt, err = NameTypeMap{}.GetType("key1")
 	assert.Error(err)
-	assert.ErrorIs(err, ErrInvalidName)
+	require.ErrorIs(t, err, ErrInvalidName)
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
 	ivt, err = typeMap.GetType("key4")
 	assert.Error(err)
-	assert.ErrorIs(err, ErrInvalidName)
+	require.ErrorIs(t, err, ErrInvalidName)
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
 }

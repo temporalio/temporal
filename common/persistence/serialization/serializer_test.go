@@ -104,7 +104,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			event2, err := s.serializer.DeserializeEvent(dProto)
 			s.NoError(err)
-			s.ProtoEqual(event0, event2)
+			protorequire.New(s.T()).ProtoEqual(event0, event2)
 
 			// deserialize events
 			dNilEvents, err := s.serializer.DeserializeEvents(nilEvents)
@@ -114,7 +114,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			events, err := s.serializer.DeserializeEvents(dsProto)
 			history2 := &historypb.History{Events: events}
 			s.NoError(err)
-			s.ProtoEqual(history0, history2)
+			protorequire.New(s.T()).ProtoEqual(history0, history2)
 		}()
 	}
 

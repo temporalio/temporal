@@ -1551,7 +1551,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 			s.Equal(int64(5), updatedWorkflowMutation.NextEventID, "%+v", iVar)
 			s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastCompletedWorkflowTaskStartedEventId, "%+v", iVar)
 			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State, "%+v", iVar)
-			s.NotEqual(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId, common.EmptyEventID, iVar)
+			s.NotEqual(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId, iVar)
 		}
 		s.TearDownTest()
 		s.SetupTest()
@@ -1618,7 +1618,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
 	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
-	s.NotEqual(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId, common.EmptyEventID)
+	s.NotEqual(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWorkflowTask() {
@@ -4013,7 +4013,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NotSchedule
 	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
 	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
-	s.NotEqual(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId, common.EmptyEventID)
+	s.NotEqual(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId)
 }
 
 func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled() {
@@ -4791,7 +4791,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
 	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
-	s.NotEqual(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId, common.EmptyEventID)
+	s.NotEqual(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId)
 }
 
 func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() {
@@ -4828,7 +4828,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 
 	wfMs := workflow.TestCloneToProto(ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
-	s.Positive(len(gwmsResponse.State.BufferedEvents))
+	s.NotEmpty(gwmsResponse.State.BufferedEvents)
 
 	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER,
@@ -5337,7 +5337,7 @@ func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 		return response, err
 	})
 	s.NoError(err)
-	s.Equal(3, len(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events))
+	s.Len(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events, 3)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[0].EventType)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[1].EventType)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[2].EventType)

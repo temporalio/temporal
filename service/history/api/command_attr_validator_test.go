@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -703,7 +702,7 @@ func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
 			}
 
 			err := s.validator.validateActivityRetryPolicy(s.testNamespaceID, attr.GetRetryPolicy())
-			assert.NoError(s.T(), err, "expected no error")
+			s.NoError(err, "expected no error")
 			s.Equal(tt.want, attr.RetryPolicy, "unexpected retry policy")
 		})
 	}

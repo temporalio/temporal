@@ -4,7 +4,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/log"
@@ -114,7 +113,7 @@ func (s *UpdateTaskTestSuite) TestReadSchemaDirWithEndVersion_ReturnsErrorWhenNo
 func (s *UpdateTaskTestSuite) TestReadSchemaDirWithSameStartAndEnd_ReturnsEmptyList() {
 	ans, err := readSchemaDir(os.DirFS(s.versionsDir), ".", "1.7", "1.7", s.logger)
 	s.NoError(err)
-	assert.Empty(s.T(), ans)
+	s.Empty(ans)
 }
 
 func (s *UpdateTaskTestSuite) TestReadSchemaDirWithEmptyDir_ReturnsError() {
@@ -217,6 +216,6 @@ func (s *UpdateTaskTestSuite) runReadManifestTest(
 	s.Equal(currVer, m.CurrVersion)
 	s.Equal(minVer, m.MinCompatibleVersion)
 	s.Equal(desc, m.Description)
-	s.Positive(len(m.md5))
+	s.NotEmpty(m.md5)
 	s.Equal(files, m.SchemaUpdateCqlFiles)
 }

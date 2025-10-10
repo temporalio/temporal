@@ -174,7 +174,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameI
 	m.Equal(isGlobalNamespace, resp1.IsGlobalNamespace)
 	m.Equal(configVersion, resp1.Namespace.ConfigVersion)
 	m.Equal(failoverVersion, resp1.Namespace.FailoverVersion)
-	m.Equal(resp1.Namespace.ReplicationConfig.Clusters[0], cluster.TestCurrentClusterName)
+	m.Equal(cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.Clusters[0])
 	m.Equal(p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
 	m.truncatePartialNamespace()
 }
@@ -253,7 +253,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDiffe
 	m.Equal(isGlobalNamespace, resp1.IsGlobalNamespace)
 	m.Equal(configVersion, resp1.Namespace.ConfigVersion)
 	m.Equal(failoverVersion, resp1.Namespace.FailoverVersion)
-	m.Equal(resp1.Namespace.ReplicationConfig.Clusters[0], cluster.TestCurrentClusterName)
+	m.Equal(cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.Clusters[0])
 	m.Equal(p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
 	m.truncatePartialNamespace()
 }
@@ -377,7 +377,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 	m.Equal(isGlobalNamespace, resp1.IsGlobalNamespace)
 	m.Equal(configVersion, resp1.Namespace.ConfigVersion)
 	m.Equal(failoverVersion, resp1.Namespace.FailoverVersion)
-	m.Equal(resp1.Namespace.ReplicationConfig.Clusters[0], cluster.TestCurrentClusterName)
+	m.Equal(cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.Clusters[0])
 	m.Equal(p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
 
 	resp2, err2 := m.CreateNamespace(

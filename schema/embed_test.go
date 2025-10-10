@@ -34,7 +34,7 @@ func TestElasticsearchIndexTemplateIsLatest(t *testing.T) {
 	symlinkPath := "elasticsearch/visibility/index_template_v7.json"
 	symlinkInfo, err := os.Lstat(symlinkPath)
 	require.NoError(t, err, "Failed to get symlink info")
-	require.NotEqual(t, symlinkInfo.Mode()&os.ModeSymlink, 0, "File is not a symlink")
+	require.NotEqual(t, 0, symlinkInfo.Mode()&os.ModeSymlink, "File is not a symlink")
 
 	targetPath, err := os.Readlink(symlinkPath)
 	require.NoError(t, err, "Failed to read symlink target")

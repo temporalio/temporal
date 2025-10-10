@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -40,7 +41,7 @@ func TestReachable_CurrentDeployment(t *testing.T) {
 	testCache := newReachabilityCache(metrics.NoopMetricsHandler, vm, testReachabilityCacheOpenWFsTTL, testReachabilityCacheClosedWFsTTL)
 
 	reach, _, err := getDeploymentReachability(ctx, "", "", seriesName, buildId, true, testCache)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, reach)
 }
 
@@ -60,20 +61,20 @@ func TestReachable_OpenWorkflow(t *testing.T) {
 
 	// put a value in cold cache
 	reach, reachValidTime, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, false, testCache)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Greater(t, time.Now(), reachValidTime)
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, reach)
 
 	// get the cached value and time
 	reach, reachValidTimeCached, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, false, testCache)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, reachValidTime, reachValidTimeCached)
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, reach)
 
 	// check that the cache is cold again after TTL (as shown by newer valid time)
 	time.Sleep(testReachabilityCacheOpenWFsTTL) //nolint:forbidigo
 	reach, reachValidTimeCacheCold, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, false, testCache)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Greater(t, reachValidTimeCacheCold, reachValidTime)
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, reach)
 }
@@ -94,20 +95,20 @@ func TestReachable_ClosedWorkflow(t *testing.T) {
 
 	// put a value in cold cache
 	reach, reachValidTime, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, false, testCache)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Greater(t, time.Now(), reachValidTime)
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_CLOSED_WORKFLOWS_ONLY, reach)
 
 	// get the cached value and time
 	reach, reachValidTimeCacheHot, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, false, testCache)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, reachValidTime, reachValidTimeCacheHot)
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_CLOSED_WORKFLOWS_ONLY, reach)
 
 	// check that the cache is cold again after TTL (as shown by newer valid time)
 	time.Sleep(testReachabilityCacheClosedWFsTTL) //nolint:forbidigo
 	reach, reachValidTimeCacheCold, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, false, testCache)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Greater(t, reachValidTimeCacheCold, reachValidTime)
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_CLOSED_WORKFLOWS_ONLY, reach)
 }

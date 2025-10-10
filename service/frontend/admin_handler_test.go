@@ -1473,7 +1473,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 			}
 			s.NoError(err)
 			s.NotNil(response)
-			s.Equal(tc.expectedResponse, *response)
+			s.Equal(&tc.expectedResponse, response)
 		})
 	}
 }

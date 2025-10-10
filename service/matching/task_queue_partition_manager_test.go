@@ -385,22 +385,22 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 func (s *PartitionManagerTestSuite) TestGetAllPollerInfo() {
 	// no pollers
 	pollers := s.partitionMgr.GetAllPollerInfo()
-	s.Equal(len(pollers), 0)
+	s.Empty(pollers)
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, false)
 	pollers = s.partitionMgr.GetAllPollerInfo()
-	s.Equal(len(pollers), 1)
+	s.Len(pollers, 1)
 
 	// one versioned poller
 	s.pollWithIdentity("v", "bid", true, false)
 	pollers = s.partitionMgr.GetAllPollerInfo()
-	s.Equal(len(pollers), 2)
+	s.Len(pollers, 2)
 
 	// one unversioned poller with deployment options
 	s.pollWithIdentity("uvdo", "bid", false, true)
 	pollers = s.partitionMgr.GetAllPollerInfo()
-	s.Equal(len(pollers), 3)
+	s.Len(pollers, 3)
 
 	for _, p := range pollers {
 		//nolint:staticcheck // SA1019 deprecated GetWorkerVersionCapabilities

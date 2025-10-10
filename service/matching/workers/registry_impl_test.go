@@ -54,7 +54,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 
 	// Check capacity utilization metric
 	utilizationMetrics := snapshot["worker_registry_capacity_utilization"]
-	assert.Equal(t, 1, len(utilizationMetrics), "should have capacity utilization metric")
+	assert.Len(t, utilizationMetrics, 1, "should have capacity utilization metric")
 	lastUtilization := utilizationMetrics[0]
 	assert.Equal(t, float64(2)/float64(10), lastUtilization.Value, "should record correct capacity utilization")
 }

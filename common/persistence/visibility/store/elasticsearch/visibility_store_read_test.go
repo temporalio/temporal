@@ -579,7 +579,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 	newToken := &visibilityPageToken{SearchAfter: []interface{}{sortTime, tieBreaker}}
 	data, err = s.visibilityStore.serializePageToken(newToken)
 	s.NoError(err)
-	s.Positive(len(data))
+	s.NotEmpty(data)
 	token, err = s.visibilityStore.deserializePageToken(data)
 	s.NoError(err)
 	resultSortValue, err := token.SearchAfter[0].(json.Number).Int64()

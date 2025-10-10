@@ -398,7 +398,7 @@ func TestZeroSizeCache(t *testing.T) {
 	cache.Delete("A")
 	v, err := cache.PutIfNotExist("A", t)
 	assert.Equal(t, v, t)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 0, cache.Size())
 }
 

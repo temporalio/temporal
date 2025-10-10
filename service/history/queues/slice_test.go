@@ -428,7 +428,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkPredicate() {
 	namespacePredicate, ok := slice.Scope().Predicate.(*tasks.NamespacePredicate)
 	s.True(ok)
 	for namespaceID := range namespacePredicate.NamespaceIDs {
-		s.NotEqual(slices.Index(pendingNamespaceID, namespaceID), -1)
+		s.NotEqual(-1, slices.Index(pendingNamespaceID, namespaceID))
 	}
 }
 

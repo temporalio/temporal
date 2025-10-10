@@ -111,7 +111,7 @@ func (tb *DBTestBase) RunUpdateTest(db DB) {
 func (tb *DBTestBase) RunDropTest(db DB) {
 	tables, err := db.ListTables()
 	tb.NoError(err)
-	tb.Positive(len(tables))
+	tb.NotEmpty(tables)
 
 	err = db.DropAllTables()
 	tb.NoError(err)

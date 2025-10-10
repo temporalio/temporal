@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -245,10 +246,10 @@ func TestWorkerDeploymentVersionFromStringV32(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := WorkerDeploymentVersionFromStringV32(tt.input)
 			if tt.expectedErr != "" {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.EqualError(t, err, tt.expectedErr)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.expected, result)
 			}
 		})

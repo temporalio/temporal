@@ -130,7 +130,7 @@ func (s *ClusterMetadataManagerSuite) validateUpsert(req *p.UpsertClusterMembers
 	s.NoError(err)
 	s.NotNil(resp)
 	s.NotEmpty(resp.ActiveMembers)
-	s.Equal(1, len(resp.ActiveMembers))
+	s.Len(resp.ActiveMembers, 1)
 	// Have to round to 1 second due to SQL implementations. Cassandra truncates at 1ms.
 	s.Equal(resp.ActiveMembers[0].SessionStart.Round(time.Second), req.SessionStart.Round(time.Second))
 	s.Equal(resp.ActiveMembers[0].RPCAddress.String(), req.RPCAddress.String())
@@ -224,7 +224,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertExpiresCorrectl
 	s.NoError(err)
 	s.NotNil(resp)
 	s.NotEmpty(resp.ActiveMembers)
-	s.Equal(1, len(resp.ActiveMembers))
+	s.Len(resp.ActiveMembers, 1)
 	// Have to round to 1 second due to SQL implementations. Cassandra truncates at 1ms.
 	s.Equal(resp.ActiveMembers[0].SessionStart.Round(time.Second), req.SessionStart.Round(time.Second))
 	s.Equal(resp.ActiveMembers[0].RPCAddress.String(), req.RPCAddress.String())
@@ -325,7 +325,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 
 	// Validate they match our initializations
 	s.NoError(err)
-	s.NotEqual(getResp, nil)
+	s.NotNil(getResp)
 	s.Equal(clusterNameToPersist, getResp.ClusterName)
 	s.Equal(historyShardsToPersist, getResp.HistoryShardCount)
 	s.Equal(clusterIdToPersist, getResp.ClusterId)
@@ -415,7 +415,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 
 	// Validate they match our initializations
 	s.NoError(err)
-	s.NotEqual(getResp, nil)
+	s.NotNil(getResp)
 	s.Equal(clusterNameToPersist, getResp.ClusterName)
 	s.Equal(historyShardsToPersist, getResp.HistoryShardCount)
 	s.Equal(clusterIdToPersist, getResp.ClusterId)

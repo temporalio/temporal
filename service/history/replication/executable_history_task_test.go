@@ -464,7 +464,7 @@ func (s *executableHistoryTaskSuite) TestNewExecutableHistoryTask() {
 	if s.processToolBox.Config.ReplicationMultipleBatches() {
 		s.Equal(s.eventsBlobs, s.task.eventsBlobs)
 	} else {
-		s.Equal(1, len(s.task.eventsBlobs))
+		s.Len(s.task.eventsBlobs, 1)
 		s.Equal(s.eventsBlob, s.task.eventsBlobs[0])
 	}
 }
@@ -536,7 +536,7 @@ func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHis
 	s.Equal(incomingVersionHistoryItems, resultHistoryTask.versionHistoryItems)
 	expectedBatchedEvents := append(currentEvent, incomingEvent...)
 
-	s.Equal(len(expectedBatchedEvents), len(resultHistoryTask.eventsDesResponse.events))
+	s.Len(resultHistoryTask.eventsDesResponse.events, len(expectedBatchedEvents))
 	for i := range expectedBatchedEvents {
 		protorequire.ProtoSliceEqual(s.T(), expectedBatchedEvents[i], resultHistoryTask.eventsDesResponse.events[i])
 	}

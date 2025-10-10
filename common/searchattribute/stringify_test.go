@@ -1,7 +1,6 @@
 package searchattribute
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -42,10 +41,10 @@ func (s *StringifySuite) Test_Stringify() {
 		"key2": 2,
 		"key3": true,
 	}, &typeMap)
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	saStr, err := Stringify(sa, nil)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Len(saStr, 3)
 	s.Equal("val1", saStr["key1"])
 	s.Equal("2", saStr["key2"])
@@ -57,7 +56,7 @@ func (s *StringifySuite) Test_Stringify() {
 	delete(sa.IndexedFields["key3"].Metadata, "type")
 
 	saStr, err = Stringify(sa, &typeMap)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Len(saStr, 3)
 	s.Equal("val1", saStr["key1"])
 	s.Equal("2", saStr["key2"])
@@ -65,8 +64,8 @@ func (s *StringifySuite) Test_Stringify() {
 
 	// Even w/o typeMap error is returned but string values are set with  raw JSON from GetData().
 	saStr, err = Stringify(sa, nil)
-	s.Error(err)
-	s.ErrorIs(err, ErrInvalidType)
+	s.Require().Error(err)
+	s.Require().ErrorIs(err, ErrInvalidType)
 	s.Len(saStr, 3)
 	s.Equal(`"val1"`, saStr["key1"])
 	s.Equal("2", saStr["key2"])
@@ -87,10 +86,10 @@ func (s *StringifySuite) Test_Stringify_Array() {
 		"key2": []int64{2, 3, 4},
 		"key3": []bool{true, false, true},
 	}, &typeMap)
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	saStr, err := Stringify(sa, nil)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Len(saStr, 3)
 	s.Equal(`["val1","val2"]`, saStr["key1"])
 	s.Equal("[2,3,4]", saStr["key2"])
@@ -102,7 +101,7 @@ func (s *StringifySuite) Test_Stringify_Array() {
 	delete(sa.IndexedFields["key3"].Metadata, "type")
 
 	saStr, err = Stringify(sa, &typeMap)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Len(saStr, 3)
 	s.Equal(`["val1","val2"]`, saStr["key1"])
 	s.Equal("[2,3,4]", saStr["key2"])
@@ -110,8 +109,8 @@ func (s *StringifySuite) Test_Stringify_Array() {
 
 	// Even w/o typeMap error is returned but string values are set with  raw JSON from GetData().
 	saStr, err = Stringify(sa, nil)
-	s.Error(err)
-	s.ErrorIs(err, ErrInvalidType)
+	s.Require().Error(err)
+	s.Require().ErrorIs(err, ErrInvalidType)
 	s.Len(saStr, 3)
 	s.Equal(`["val1","val2"]`, saStr["key1"])
 	s.Equal("[2,3,4]", saStr["key2"])
@@ -130,7 +129,7 @@ func (s *StringifySuite) Test_Parse_ValidTypeMap() {
 			"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
 		}})
 
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Len(sa.IndexedFields, 3)
 	s.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
 	s.Equal("Text", string(sa.IndexedFields["key1"].GetMetadata()["type"]))
@@ -147,7 +146,7 @@ func (s *StringifySuite) Test_Parse_NilTypeMap() {
 		"key3": "true",
 	}, nil)
 
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Len(sa.IndexedFields, 3)
 	s.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
 	s.Equal("2", string(sa.IndexedFields["key2"].GetData()))
@@ -164,7 +163,7 @@ func (s *StringifySuite) Test_Parse_WrongTypesInTypeMap() {
 			"key2": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		}})
 
-	s.Error(err)
+	s.Require().Error(err)
 	s.Len(sa.IndexedFields, 2)
 	s.Nil(sa.IndexedFields["key1"])
 	s.Equal(`"2"`, string(sa.IndexedFields["key2"].GetData()))
@@ -181,7 +180,7 @@ func (s *StringifySuite) Test_Parse_MissedFieldsInTypeMap() {
 			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		}})
 
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Len(sa.IndexedFields, 2)
 	s.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
 	s.Nil(sa.IndexedFields["key1"].GetMetadata()["type"])
@@ -199,7 +198,7 @@ func (s *StringifySuite) Test_Parse_Array() {
 			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		}})
 
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Len(sa.IndexedFields, 2)
 	s.Equal(`["val1","val2"]`, string(sa.IndexedFields["key1"].GetData()))
 	s.Equal("Text", string(sa.IndexedFields["key1"].GetMetadata()["type"]))
@@ -213,19 +212,19 @@ func (s *StringifySuite) Test_parseValueOrArray() {
 
 	// int
 	res, err = parseValueOrArray("1", enumspb.INDEXED_VALUE_TYPE_INT)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal("Int", string(res.Metadata["type"]))
 	s.Equal("1", string(res.Data))
 
 	// array must be in JSON format.
 	res, err = parseValueOrArray(`["qwe"]`, enumspb.INDEXED_VALUE_TYPE_TEXT)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal("Text", string(res.Metadata["type"]))
 	s.Equal(`["qwe"]`, string(res.Data))
 
 	// array must be in JSON format.
 	res, err = parseValueOrArray(`[qwe]`, enumspb.INDEXED_VALUE_TYPE_TEXT)
-	s.Error(err)
+	s.Require().Error(err)
 	s.Nil(res)
 }
 
@@ -235,50 +234,50 @@ func (s *StringifySuite) Test_parseValueTyped() {
 
 	// int
 	res, err = parseValueTyped("1", enumspb.INDEXED_VALUE_TYPE_INT)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(int64(1), res)
 
 	res, err = parseValueTyped("qwe", enumspb.INDEXED_VALUE_TYPE_INT)
-	s.Error(err)
+	s.Require().Error(err)
 	s.Equal(int64(0), res)
 
 	// bool
 	res, err = parseValueTyped("true", enumspb.INDEXED_VALUE_TYPE_BOOL)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(true, res)
 	res, err = parseValueTyped("false", enumspb.INDEXED_VALUE_TYPE_BOOL)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(false, res)
 	res, err = parseValueTyped("qwe", enumspb.INDEXED_VALUE_TYPE_BOOL)
-	s.Error(err)
+	s.Require().Error(err)
 	s.Equal(false, res)
 
 	// double
 	res, err = parseValueTyped("1.0", enumspb.INDEXED_VALUE_TYPE_DOUBLE)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(float64(1.0), res)
 
 	res, err = parseValueTyped("qwe", enumspb.INDEXED_VALUE_TYPE_DOUBLE)
-	s.Error(err)
+	s.Require().Error(err)
 	s.Equal(float64(0), res)
 
 	// datetime
 	res, err = parseValueTyped("2019-01-01T01:01:01Z", enumspb.INDEXED_VALUE_TYPE_DATETIME)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(time.Date(2019, 1, 1, 1, 1, 1, 0, time.UTC), res)
 
 	res, err = parseValueTyped("qwe", enumspb.INDEXED_VALUE_TYPE_DATETIME)
-	s.Error(err)
+	s.Require().Error(err)
 	s.Equal(time.Time{}, res)
 
 	// string
 	res, err = parseValueTyped("test string", enumspb.INDEXED_VALUE_TYPE_TEXT)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal("test string", res)
 
 	// unspecified
 	res, err = parseValueTyped("test string", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal("test string", res)
 }
 
@@ -372,7 +371,7 @@ func (s *StringifySuite) Test_parseJsonArray() {
 	for _, testCase := range testCases {
 		s.Run(testCase.name, func() {
 			res, err := parseJsonArray(testCase.input, testCase.indexedValueType)
-			s.NoError(err)
+			s.Require().NoError(err)
 			s.Equal(testCase.expected, res)
 		})
 	}
@@ -401,7 +400,7 @@ func (s *StringifySuite) Test_parseJsonArray() {
 	}
 	for _, testCase := range testCases2 {
 		res, err := parseJsonArray(testCase.input, testCase.indexedValueType)
-		s.Error(err)
+		s.Require().Error(err)
 		s.Nil(res)
 	}
 }

@@ -70,7 +70,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	cfg.MaxWaitForPollerBeforeFwd = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 
 	f, err := tqid.NewTaskQueueFamily("", "tl0")
-	t.NoError(err)
+	t.Require().NoError(err)
 	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
 	t.queue = UnversionedQueueKey(prtn)
 	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
@@ -82,7 +82,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	}
 	t.childConfig = tlCfg
 	t.fwdr, err = newForwarder(&t.childConfig.forwarderConfig, t.queue, t.client)
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.childMatcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler, t.newDefaultRateLimiter())
 	t.childMatcher.Start()
 
@@ -120,7 +120,7 @@ func (t *MatcherTestSuite) TestLocalSyncMatch() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	syncMatch, err := t.childMatcher.Offer(ctx, task)
 	cancel()
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.True(syncMatch)
 }
 
@@ -197,7 +197,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	t.NoError(err0)
 	cancel()
 	t.NotNil(req)
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.True(remoteSyncMatch)
 	t.Equal(t.queue.PersistenceName(), req.GetForwardInfo().GetSourcePartition())
 	t.Equal(mustParent(t.queue.partition.(*tqid.NormalPartition), 20).RpcName(), req.GetTaskQueue().GetName())
@@ -243,7 +243,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 
 	}
 	t.False(happened)
-	t.NoError(err)
+	t.Require().NoError(err)
 	newCtxCancel()
 
 	// poll old task which is from the backlog
@@ -285,7 +285,7 @@ func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
 
 	// task is not forwarded because there is a local poller waiting
 	err := t.childMatcher.MustOffer(ctx, historyTask, intruptC)
-	t.NoError(err)
+	t.Require().NoError(err)
 	cancel()
 
 	// young task is forwarded
@@ -464,7 +464,7 @@ func (t *MatcherTestSuite) TestSyncMatchFailure() {
 	syncMatch, err := t.childMatcher.Offer(ctx, task)
 	cancel()
 	t.NotNil(req)
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.False(syncMatch)
 }
 
@@ -479,7 +479,7 @@ func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
 	// make a poll that expires
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.Zero(task.started.workflowTaskInfo.StartedEventId)
 	cancel()
 
@@ -511,7 +511,7 @@ func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 	// make a poll that expires
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.Zero(task.started.workflowTaskInfo.StartedEventId)
 	cancel()
 
@@ -580,7 +580,7 @@ func (t *MatcherTestSuite) TestQueryLocalSyncMatch() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	resp, err := t.childMatcher.OfferQuery(ctx, task)
 	cancel()
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.Nil(resp)
 }
 
@@ -625,20 +625,20 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 			close(pollSigC)
 			time.Sleep(10 * time.Millisecond)
 			_, err := t.rootMatcher.OfferQuery(ctx, task)
-			t.NoError(err)
+			t.Require().NoError(err)
 		},
 	).Return(&matchingservice.QueryWorkflowResponse{QueryResult: payloads.EncodeString("answer")}, nil)
 
 	result, err := t.childMatcher.OfferQuery(ctx, task)
 	cancel()
 	t.NotNil(req)
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.NotNil(result)
 	t.True(querySet.Load())
 
 	var answer string
 	err = payloads.Decode(result.GetQueryResult(), &answer)
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.Equal("answer", answer)
 	t.Equal(t.queue.PersistenceName(), req.GetForwardInfo().GetSourcePartition())
 	t.Equal(mustParent(t.queue.partition.(*tqid.NormalPartition), 20).RpcName(), req.GetTaskQueue().GetName())
@@ -676,7 +676,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
 	result, err := t.childMatcher.OfferQuery(ctx, task)
 	cancel()
 	t.NotNil(req)
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.Nil(result)
 	t.True(matched)
 }
@@ -705,7 +705,7 @@ func (t *MatcherTestSuite) TestMustOfferLocalMatch() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	err := t.childMatcher.MustOffer(ctx, task, nil)
 	cancel()
-	t.NoError(err)
+	t.Require().NoError(err)
 }
 
 func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
@@ -765,11 +765,11 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	// fail the test as the PollWorkflowTaskQueue and the 2nd AddWorkflowTask expectations would then never be met.
 	wg.Wait()
 
-	t.NoError(t.childMatcher.MustOffer(ctx, task, nil))
+	t.Require().NoError(t.childMatcher.MustOffer(ctx, task, nil))
 	cancel()
 
 	t.NotNil(req)
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.True(remoteSyncMatch)
 	t.True(taskCompleted)
 	t.Equal(t.queue.PersistenceName(), req.GetForwardInfo().GetSourcePartition())
@@ -794,7 +794,7 @@ func (t *MatcherTestSuite) TestRemotePoll() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	task, forwarded, err := t.childMatcher.poll(ctx, &pollMetadata{}, false)
 	cancel()
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.NotNil(req)
 	t.NotNil(task)
 	t.True(task.isStarted())
@@ -819,7 +819,7 @@ func (t *MatcherTestSuite) TestRemotePollForQuery() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
 	cancel()
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.NotNil(req)
 	t.NotNil(task)
 	t.True(task.isStarted())

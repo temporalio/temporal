@@ -572,7 +572,7 @@ func TestSeedReplicationQueueWithUserDataEntries_Heartbeats(t *testing.T) {
 	}
 	_, err := env.ExecuteActivity(a.SeedReplicationQueueWithUserDataEntries, params)
 	assert.Error(t, err)
-	assert.Equal(t, 2, len(iceptor.seedRecordedHeartbeats))
+	assert.Len(t, iceptor.seedRecordedHeartbeats, 2)
 	assert.Equal(t, []byte(nil), iceptor.seedRecordedHeartbeats[1].NextPageToken)
 	assert.Equal(t, 1, iceptor.seedRecordedHeartbeats[1].IndexInPage)
 	env.SetHeartbeatDetails(iceptor.seedRecordedHeartbeats[1])

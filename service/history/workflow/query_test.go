@@ -196,7 +196,7 @@ func (s *QuerySuite) assertCompletionStateEqual(expected *historyi.QueryCompleti
 		s.Equal(expected.Err.Error(), actual.Err.Error())
 	}
 	if expected.Result != nil {
-		s.EqualValues(expected.Result, actual.Result)
+		s.Equal(expected.Result, actual.Result)
 	}
 }
 

@@ -105,7 +105,7 @@ func TestDefaultLogger(t *testing.T) {
 	out := <-outC
 	sps := strings.Split(preCaller, ":")
 	par, err := strconv.Atoi(sps[1])
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	assert.Regexp(t, `{"level":"info","msg":"test info","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":".*zap_logger_test.go:`+lineNum+`"}`+"\n", out)
 
@@ -139,7 +139,7 @@ func TestThrottleLogger(t *testing.T) {
 	out := <-outC
 	sps := strings.Split(preCaller, ":")
 	par, err := strconv.Atoi(sps[1])
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
 	assert.Regexp(t, `{"level":"info","msg":"test info","error":"test error","component":"shard-context","wf-action":"add-workflow-started-event","logging-call-at":".*zap_logger_test.go:`+lineNum+`"}`+"\n", out)
@@ -168,7 +168,7 @@ func TestEmptyMsg(t *testing.T) {
 	out := <-outC
 	sps := strings.Split(preCaller, ":")
 	par, err := strconv.Atoi(sps[1])
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
 	assert.Regexp(t, `{"level":"info","msg":"`+defaultMsgForEmpty+`","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":".*zap_logger_test.go:`+lineNum+`"}`+"\n", out)

@@ -1,7 +1,6 @@
 package migration
 
 import (
-	"errors"
 	"testing"
 	"time"
 

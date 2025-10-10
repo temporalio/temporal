@@ -422,6 +422,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Sticky() {
 	)
 	s.NoError(err)
 	s.Empty(wft.BuildId)
+	//nolint:staticcheck // Testing deprecated field for backwards compatibility
 	s.Empty(e.GetWorkflowTaskStartedEventAttributes().GetWorkerVersion().GetBuildId())
 	s.Equal("b1", s.mutableState.GetAssignedBuildId())
 	s.Equal(int64(0), wft.BuildIdRedirectCounter)

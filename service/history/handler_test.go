@@ -2,10 +2,9 @@ package history
 
 import (
 	"context"
-	"errors"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -49,9 +48,9 @@ func TestDescribeHistoryHost(t *testing.T) {
 	_, err := h.DescribeHistoryHost(context.Background(), &historyservice.DescribeHistoryHostRequest{
 		ShardId: 1,
 	})
-	assert.Error(t, err)
+	require.Error(t, err)
 	var sol *serviceerror.ShardOwnershipLost
-	assert.ErrorAs(t, err, &sol)
+	require.ErrorAs(t, err, &sol)
 
 	mockShard2 := shard.NewTestContext(
 		ctrl,
@@ -68,5 +67,5 @@ func TestDescribeHistoryHost(t *testing.T) {
 	_, err = h.DescribeHistoryHost(context.Background(), &historyservice.DescribeHistoryHostRequest{
 		ShardId: 2,
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }

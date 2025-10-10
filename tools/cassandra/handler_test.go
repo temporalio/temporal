@@ -40,11 +40,11 @@ func (s *HandlerTestSuite) TestParsingOfOptionsMap() {
 	s.Equal("value1", parsedMap["key1"])
 	s.Equal("value2", parsedMap["key2"])
 	s.Equal("value3", parsedMap["key3"])
-	s.Assert().Empty(parsedMap["key4"])
+	s.Empty(parsedMap["key4"])
 
 	parsedMap2 := parseOptionsMap("key1=,=value2")
 
-	s.Assert().Empty(parsedMap2)
+	s.Empty(parsedMap2)
 }
 
 func (s *HandlerTestSuite) TestDropKeyspaceError() {

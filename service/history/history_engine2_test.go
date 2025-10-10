@@ -742,7 +742,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 	s.NoError(err)
 	s.NotNil(response)
 	s.Equal("wType", response.WorkflowType.Name)
-	s.Equal(response.PreviousStartedEventId, 0)
+	s.Equal(0, response.PreviousStartedEventId)
 	s.Equal(int64(3), response.StartedEventId)
 	expectedQueryMap := map[string]*querypb.WorkflowQuery{
 		id1: {},
@@ -844,7 +844,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessWithInternalRawHistor
 	s.NoError(err)
 	s.NotNil(response)
 	s.Equal("wType", response.WorkflowType.Name)
-	s.Equal(response.PreviousStartedEventId, 0)
+	s.Equal(0, response.PreviousStartedEventId)
 	s.Equal(int64(3), response.StartedEventId)
 	expectedQueryMap := map[string]*querypb.WorkflowQuery{
 		id1: {},
