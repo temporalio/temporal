@@ -34,6 +34,8 @@ func (a Activity) LifecycleState(context chasm.Context) chasm.LifecycleState {
 func NewActivity(namespace, namespaceID, activityId string,
 	activityExecutionInfo *activity.ActivityExecutionInfo) *Activity {
 
+	// Do task here
+
 	return &Activity{
 		ActivityState: &activitypb.ActivityState{
 			Namespace:             namespace,
@@ -72,5 +74,23 @@ func GetActivity(ctx context.Context, req *activitypb.DescribeActivityExecutionR
 	return &Activity{
 		ActivityState: state,
 	}, nil
+}
 
+func UpdateActivityStarted(ctx context.Context, activityRef chasm.ComponentRef) error {
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		activityRef,
+		func(a *Activity, ctx chasm.MutableContext, _ any) (struct{}, error) {
+			a.ActivityExecutionInfo.Status = enums.ACTIVITY_EXECUTION_STATUS_RUNNING
+
+			return struct{}{}, nil
+		},
+		nil,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

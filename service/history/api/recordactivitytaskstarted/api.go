@@ -12,6 +12,8 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -42,6 +44,21 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 ) (resp *historyservice.RecordActivityTaskStartedResponse, retError error) {
+
+	// Check if this has a workflow ID associated. Need to reroute this to Activity component if no WF ID.
+	componentRefProto := request.GetComponentRef()
+	if componentRefProto != nil {
+		componentRef := chasm.ProtoRefToComponentRef(componentRefProto)
+
+		err := activity.UpdateActivityStarted(ctx, componentRef)
+		if err != nil {
+			return nil, err
+		}
+
+		return &historyservice.RecordActivityTaskStartedResponse{
+			// TODO
+		}, nil
+	}
 
 	var err error
 	response := &historyservice.RecordActivityTaskStartedResponse{}

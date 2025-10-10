@@ -53,7 +53,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 			newActivity := NewActivity(frontendRequest.GetNamespace(), req.NamespaceId, frontendRequest.ActivityId, activityInfo)
 
-			mutableContext.AddTask(newActivity, chasm.TaskAttributes{}, &activitypb.ActivityStartExecuteTask{})
+			mutableContext.AddTask(newActivity, chasm.TaskAttributes{}, &activitypb.ActivityStartExecuteTask{}) // Move to component
 
 			return newActivity, nil, nil
 		},

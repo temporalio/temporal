@@ -81,6 +81,32 @@ func (c *clientImpl) DeepHealthCheck(ctx context.Context, request *historyservic
 	return c.connections.getOrCreateClientConn(rpcAddress(request.GetHostAddress())).grpcClient.DeepHealthCheck(ctx, request, opts...)
 }
 
+func (c *clientImpl) RecordActivityTaskStarted(
+	ctx context.Context,
+	request *historyservice.RecordActivityTaskStartedRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.RecordActivityTaskStartedResponse, error) {
+	var shardID int32
+	if request.ComponentRef != nil {
+		shardID = c.shardIDFromWorkflowID(request.ComponentRef.GetNamespaceId(), request.ComponentRef.GetBusinessId())
+	} else {
+		shardID = c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
+	}
+
+	var response *historyservice.RecordActivityTaskStartedResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.RecordActivityTaskStarted(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) DescribeHistoryHost(
 	ctx context.Context,
 	request *historyservice.DescribeHistoryHostRequest,

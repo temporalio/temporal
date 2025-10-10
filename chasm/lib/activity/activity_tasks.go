@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -50,20 +49,27 @@ func (e *ActivityStartTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ActivityStartExecuteTask,
 ) error {
+	protoRef, err := chasm.ComponentRefToProtoRef(activityRef, nil)
+	if err != nil {
+		return err
+	}
+
 	request := &matchingservice.AddActivityTaskRequest{
 		NamespaceId: activityRef.NamespaceID,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: activityRef.BusinessID,
-			RunId:      "my-run-id",
-		},
+		//Execution: &commonpb.WorkflowExecution{
+		//	WorkflowId: activityRef.BusinessID,
+		//	RunId:      activityRef.EntityID,
+		//},
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "my-task-queue",
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		ScheduledEventId:       11,
+		//ScheduledEventId:       11,
 		ScheduleToStartTimeout: durationpb.New(0),
 		Clock:                  vclock.NewVectorClock(1, 1, 1),
+		ComponentRef:           protoRef,
 	}
+
 	r, err := e.MatchingClient.AddActivityTask(ctx, request)
 	if err != nil {
 		return err
@@ -73,3 +79,5 @@ func (e *ActivityStartTaskExecutor) Execute(
 
 	return nil
 }
+
+// Add schedule to close timeout task. Check WF activity. Pure task

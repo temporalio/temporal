@@ -252,6 +252,7 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 		verifyFieldExists(t, routingOptions.WorkflowId)
 		return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(%s, %s)", toGetter(namespaceIdField), toGetter(routingOptions.WorkflowId))
 	}
+	// TODO Generate - check compref NSID and make sure grab it from there if exists
 	if routingOptions.TaskToken != "" {
 		namespaceIdField := routingOptions.NamespaceId
 		if namespaceIdField == "" {

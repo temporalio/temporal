@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -59,5 +60,30 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 
 	fmt.Println(resp)
 
-	//time.Sleep(10 * time.Second)
+	pollResponse, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "my-task-queue",
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, pollResponse)
+
+	//s.EventuallyWithT(func(t *assert.CollectT) {
+	//	r, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+	//		Namespace: s.Namespace().String(),
+	//		TaskQueue: &taskqueuepb.TaskQueue{
+	//			Name: "my-task-queue",
+	//			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	//		},
+	//	})
+	//
+	//	require.NoError(t, err)
+	//	require.NotNil(t, r)
+	//
+	//	fmt.Println("Polled activity task:", r)
+	//
+	//}, 30*time.Second, 1000*time.Millisecond)
 }
