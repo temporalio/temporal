@@ -373,7 +373,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 		}, nil,
 	).AnyTimes()
 
-	// First call: dynamic configs disabled.
+	// First call: Use default value of dynamic configs.
 	resp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
 	})
@@ -382,12 +382,13 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 	s.True(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
 	s.True(resp.NamespaceInfo.Capabilities.SyncUpdate)
 	s.True(resp.NamespaceInfo.Capabilities.AsyncUpdate)
+	s.False(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 
+	// Second call: Override the default value of dynamic configs.
 	s.config.EnableEagerWorkflowStart = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.EnableUpdateWorkflowExecution = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.EnableUpdateWorkflowExecutionAsyncAccepted = dc.GetBoolPropertyFnFilteredByNamespace(false)
-
-	// Second call: dynamic configs enabled.
+	s.config.WorkerHeartbeatsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
 	})
@@ -395,6 +396,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 	s.False(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
 	s.False(resp.NamespaceInfo.Capabilities.SyncUpdate)
 	s.False(resp.NamespaceInfo.Capabilities.AsyncUpdate)
+	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 }
 
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithOneCluster() {
@@ -1897,19 +1899,19 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 		},
 		{
 			name: "no rule to delete", deletedRule: "", rules: map[string]*rulespb.WorkflowRule{
-				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1"}},
-			},
+			"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1"}},
+		},
 		},
 		{
 			name: "single rule to delete", deletedRule: "rule 1", rules: map[string]*rulespb.WorkflowRule{
-				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
-			},
+			"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
+		},
 		},
 		{
 			name: "two candidates to delete", deletedRule: "rule 2", rules: map[string]*rulespb.WorkflowRule{
-				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
-				"rule 2": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 2", ExpirationTime: timestamppb.New(expiredTime2)}},
-			},
+			"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
+			"rule 2": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 2", ExpirationTime: timestamppb.New(expiredTime2)}},
+		},
 		},
 	}
 
