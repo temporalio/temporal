@@ -263,6 +263,121 @@ func TestIsExperimentEnabled(t *testing.T) {
 			checkExperiment: "not-present",
 			expected:        false,
 		},
+		// Edge cases: malformed headers and special characters
+		{
+			name:            "only commas",
+			headerValues:    []string{",,,"},
+			checkExperiment: "test-experiment",
+			expected:        false,
+		},
+		{
+			name:            "leading comma",
+			headerValues:    []string{",chasm-sch"},
+			checkExperiment: "chasm-sch",
+			expected:        true,
+		},
+		{
+			name:            "trailing comma",
+			headerValues:    []string{"chasm-sch,"},
+			checkExperiment: "chasm-sch",
+			expected:        true,
+		},
+		{
+			name:            "multiple consecutive commas",
+			headerValues:    []string{"chasm-sch,,,,other-exp"},
+			checkExperiment: "other-exp",
+			expected:        true,
+		},
+		{
+			name:            "only spaces",
+			headerValues:    []string{"   "},
+			checkExperiment: "test-experiment",
+			expected:        false,
+		},
+		{
+			name:            "tabs and spaces",
+			headerValues:    []string{"chasm-sch\t,\tother-exp"},
+			checkExperiment: "other-exp",
+			expected:        true,
+		},
+		{
+			name:            "experiment with special characters - match",
+			headerValues:    []string{"chasm-sch_v2"},
+			checkExperiment: "chasm-sch_v2",
+			expected:        true,
+		},
+		{
+			name:            "experiment with dots - match",
+			headerValues:    []string{"chasm.sch.v2"},
+			checkExperiment: "chasm.sch.v2",
+			expected:        true,
+		},
+		{
+			name:            "experiment with colon - match",
+			headerValues:    []string{"chasm:sch"},
+			checkExperiment: "chasm:sch",
+			expected:        true,
+		},
+		{
+			name:            "experiment with slash - match",
+			headerValues:    []string{"chasm/sch"},
+			checkExperiment: "chasm/sch",
+			expected:        true,
+		},
+		{
+			name:            "unicode characters - match",
+			headerValues:    []string{"chasm-sch-日本語"},
+			checkExperiment: "chasm-sch-日本語",
+			expected:        true,
+		},
+		{
+			name:            "very long experiment name",
+			headerValues:    []string{"this-is-a-very-long-experiment-name-that-might-be-used-in-testing-scenarios"},
+			checkExperiment: "this-is-a-very-long-experiment-name-that-might-be-used-in-testing-scenarios",
+			expected:        true,
+		},
+		{
+			name:            "wildcard with spaces",
+			headerValues:    []string{" * "},
+			checkExperiment: "any-experiment",
+			expected:        true,
+		},
+		{
+			name:            "partial wildcard - should not match",
+			headerValues:    []string{"chasm-*"},
+			checkExperiment: "chasm-sch",
+			expected:        false,
+		},
+		{
+			name:            "wildcard as part of name - should not match like wildcard",
+			headerValues:    []string{"test-*-experiment"},
+			checkExperiment: "other-experiment",
+			expected:        false,
+		},
+		{
+			name:            "wildcard as part of name - exact match should work",
+			headerValues:    []string{"test-*-experiment"},
+			checkExperiment: "test-*-experiment",
+			expected:        true,
+		},
+		{
+			name:            "newline in header value",
+			headerValues:    []string{"chasm-sch\nother-exp"},
+			checkExperiment: "other-exp",
+			expected:        false,
+		},
+		{
+			name:            "experiment name with equals sign",
+			headerValues:    []string{"feature=enabled"},
+			checkExperiment: "feature=enabled",
+			expected:        true,
+		},
+		{
+			name:            "experiment name with query params style",
+			headerValues:    []string{"feature?param=value"},
+			checkExperiment: "feature?param=value",
+			expected:        true,
+		},
 	}
 
 	for _, tt := range tests {
