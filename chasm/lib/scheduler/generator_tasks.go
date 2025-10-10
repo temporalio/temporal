@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"fmt"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
@@ -9,6 +10,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -89,16 +91,12 @@ func (g *GeneratorTaskExecutor) Execute(
 		invoker.EnqueueBufferedStarts(ctx, result.BufferedStarts)
 	}
 
-	// Write the new high water mark.
+	// Write the new high water mark and future action times.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
-
-	// Update visibility, since future action times may have changed.
-	err = scheduler.UpdateVisibility(ctx, g.SpecProcessor, nil)
-	if err != nil {
-		msg := "failed to update visibility"
-		logger.Error(msg, tag.Error(err))
+	if err := g.updateFutureActionTimes(ctx, generator, scheduler); err != nil {
+		logger.Error("failed to update future action times", tag.Error(err))
 		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal(msg),
+			serviceerror.NewInternal("failed to update future action times"),
 			err)
 	}
 
@@ -134,6 +132,47 @@ func (g *GeneratorTaskExecutor) logSchedule(logger log.Logger, msg string, sched
 	logger.Debug(msg,
 		tag.NewStringerTag("spec", jsonStringer{scheduler.Schedule.Spec}),
 		tag.NewStringerTag("policies", jsonStringer{scheduler.Schedule.Policies}))
+}
+
+func (g *GeneratorTaskExecutor) updateFutureActionTimes(
+	ctx chasm.MutableContext,
+	generator *Generator,
+	scheduler *Scheduler,
+) error {
+	nextTime := func(t time.Time) (time.Time, error) {
+		res, err := g.SpecProcessor.GetNextTime(scheduler, t)
+		return res.Next, err
+	}
+
+	// Make sure we don't emit more future times than are remaining.
+	count := recentActionCount
+	if scheduler.Schedule.State.LimitedActions {
+		count = min(int(scheduler.Schedule.State.RemainingActions), recentActionCount)
+	}
+
+	futureTimes := make([]*timestamppb.Timestamp, 0, count)
+	t := timestamp.TimeValue(generator.LastProcessedTime)
+	var err error
+	for len(futureTimes) < count {
+		t, err = nextTime(t)
+		if err != nil {
+			return err
+		}
+		if t.IsZero() {
+			break
+		}
+
+		if scheduler.Info.UpdateTime.AsTime().After(t) {
+			// Skip action times that occur before the schedule's update time.
+			continue
+		}
+
+		futureTimes = append(futureTimes, timestamppb.New(t))
+	}
+
+	generator.FutureActionTimes = futureTimes
+
+	return nil
 }
 
 func (g *GeneratorTaskExecutor) Validate(

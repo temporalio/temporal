@@ -1,11 +1,9 @@
 package scheduler
 
 import (
-	"bytes"
 	"fmt"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -68,34 +66,4 @@ type jsonStringer struct {
 func (j jsonStringer) String() string {
 	json, _ := protojson.Marshal(j.Message)
 	return string(json)
-}
-
-// mergeCustomSearchAttributes takes a map of existing search attributes
-// (currentAttrs) and a map of incoming custom search attributes (customAttrs),
-// mutating upsertAttrs with their merged result. Keys present in currentAttrs
-// but not within customAttrs will be explicitly deleted in upsertAttrs. Keys
-// with unchanged payloads will not be set in upsertAttrs.
-func mergeCustomSearchAttributes(
-	currentAttrs map[string]*commonpb.Payload,
-	customAttrs map[string]*commonpb.Payload,
-	upsertAttrs map[string]any,
-) {
-	// Insert new and updated values.
-	for key, newPayload := range customAttrs {
-		oldPayload, alreadySet := currentAttrs[key]
-
-		if !alreadySet || !bytes.Equal(oldPayload.Data, newPayload.Data) {
-			// New or out-of-date search attribute.
-			upsertAttrs[key] = newPayload
-		}
-	}
-
-	// Remove keys missing from customAttrs.
-	for key := range currentAttrs {
-		_, keep := customAttrs[key]
-		if !keep {
-			// Key isn't in the new map, delete it.
-			upsertAttrs[key] = nil
-		}
-	}
 }

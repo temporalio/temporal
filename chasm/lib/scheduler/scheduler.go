@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"bytes"
 	"fmt"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -309,99 +307,32 @@ func (s *Scheduler) recordActionResult(result *schedulerActionResult) {
 	}
 }
 
-// UpdateVisibility updates the schedule's visibility record, including memo
-// and search attributes. customSearchAttributes is optional, and custom search
-// attributes will be left as-is with it unset.
-//
-// See mergeCustomSearchAttributes for how custom search attributes are merged.
-func (s *Scheduler) UpdateVisibility(
-	ctx chasm.MutableContext,
-	specProcessor SpecProcessor,
-	customSearchAttributes *commonpb.SearchAttributes,
-) error {
-	needsTask := false // Set to true if we need to write anything to Visibility.
-	visibility, err := s.Visibility.Get(ctx)
+func (s *Scheduler) Memo(
+	ctx chasm.Context,
+) map[string]chasm.VisibilityValue {
+	newInfo, err := s.GetListInfo(ctx)
 	if err != nil {
-		return err
+		// Unable to retrieve list info. Return nil to skip memo update.
+		// Error will be logged once loggers are available in CHASM.
+		return nil
 	}
 
-	// Update the schedule's search attributes. This includes both Temporal-managed
-	// fields (paused state), as well as upserts for customer-specified fields.
-	upsertAttrs := make(map[string]any)
-	currentAttrs, err := visibility.GetSearchAttributes(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Only attempt to merge additional search attributes if any are given, otherwise
-	// we'll unset existing attributes.
-	if customSearchAttributes != nil &&
-		len(customSearchAttributes.GetIndexedFields()) > 0 {
-		mergeCustomSearchAttributes(
-			currentAttrs,
-			customSearchAttributes.GetIndexedFields(),
-			upsertAttrs,
-		)
-	}
-
-	// Update Paused status.
-	var currentPaused bool
-	currentPausedPayload, ok := currentAttrs[searchattribute.TemporalSchedulePaused]
-	if ok {
-		err = payload.Decode(currentPausedPayload, &currentPaused)
-		if err != nil {
-			return err
-		}
-	}
-	if !ok || currentPaused != s.Schedule.State.Paused {
-		upsertAttrs[searchattribute.TemporalSchedulePaused] = s.Schedule.State.Paused
-	}
-
-	if len(upsertAttrs) > 0 {
-		err = visibility.UpsertSearchAttributes(ctx, upsertAttrs)
-		if err != nil {
-			return err
-		}
-		needsTask = true
-	}
-
-	newInfo, err := s.GetListInfo(ctx, specProcessor)
-	if err != nil {
-		return err
-	}
 	newInfoPayload, err := newInfo.Marshal()
 	if err != nil {
-		return err
-	}
-	currentMemo, err := visibility.GetMemo(ctx)
-	if err != nil {
-		return err
-	}
-	currentInfoPayload := currentMemo[visibilityMemoFieldInfo]
-
-	// Update visibility if the memo is out-of-date or absent.
-	if currentInfoPayload == nil ||
-		!bytes.Equal(currentInfoPayload.Data, newInfoPayload) {
-		newMemo := map[string]any{visibilityMemoFieldInfo: newInfoPayload}
-		err = visibility.UpsertMemo(ctx, newMemo)
-		if err != nil {
-			return err
-		}
-		needsTask = true
+		// Unable to marshal list info. Return nil to skip memo update.
+		// Error will be logged once loggers are available in CHASM.
+		return nil
 	}
 
-	if needsTask {
-		visibility.GenerateTask(ctx)
+	return map[string]chasm.VisibilityValue{
+		visibilityMemoFieldInfo: chasm.VisibilityValueByteSlice(newInfoPayload),
 	}
-
-	return nil
 }
 
 // GetListInfo returns the ScheduleListInfo, used as the visibility memo, and to
 // answer List queries.
 func (s *Scheduler) GetListInfo(
 	ctx chasm.Context,
-	specProcessor SpecProcessor,
 ) (*schedulepb.ScheduleListInfo, error) {
 	spec := common.CloneProto(s.Schedule.Spec)
 
@@ -413,7 +344,7 @@ func (s *Scheduler) GetListInfo(
 	spec.Interval = util.SliceHead(spec.Interval, listInfoSpecFieldLimit)
 	spec.StructuredCalendar = util.SliceHead(spec.StructuredCalendar, listInfoSpecFieldLimit)
 
-	futureActionTimes, err := s.getFutureActionTimes(ctx, specProcessor)
+	generator, err := s.Generator.Get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -424,49 +355,26 @@ func (s *Scheduler) GetListInfo(
 		Notes:             s.Schedule.State.Notes,
 		Paused:            s.Schedule.State.Paused,
 		RecentActions:     util.SliceTail(s.Info.RecentActions, recentActionCount),
-		FutureActionTimes: futureActionTimes,
+		FutureActionTimes: generator.FutureActionTimes,
 	}, nil
 }
 
-// getFutureActionTimes returns up to min(`recentActionCount`, `RemainingActions`)
-// future action times. Future action times that precede the schedule's UpdateTime
-// are not included.
-func (s *Scheduler) getFutureActionTimes(
-	ctx chasm.Context,
-	specProcessor SpecProcessor,
-) ([]*timestamppb.Timestamp, error) {
-	generator, err := s.Generator.Get(ctx)
+func (s *Scheduler) SetPaused(ctx chasm.MutableContext, paused bool) error {
+	s.Schedule.State.Paused = paused
+
+	vis, err := s.Visibility.Get(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	nextTime := func(t time.Time) (time.Time, error) {
-		res, err := specProcessor.GetNextTime(s, t)
-		return res.Next, err
+	p, err := payload.Encode(paused)
+	if err != nil {
+		return err
 	}
 
-	count := recentActionCount
-	if s.Schedule.State.LimitedActions {
-		count = min(int(s.Schedule.State.RemainingActions), recentActionCount)
-	}
-	out := make([]*timestamppb.Timestamp, 0, count)
-	t := timestamp.TimeValue(generator.LastProcessedTime)
-	for len(out) < count {
-		t, err = nextTime(t)
-		if err != nil {
-			return nil, err
-		}
-		if t.IsZero() {
-			break
-		}
-
-		if s.Info.UpdateTime.AsTime().After(t) {
-			// Skip action times whose nominal times are prior to the schedule's update time.
-			continue
-		}
-
-		out = append(out, timestamppb.New(t))
-	}
-
-	return out, nil
+	// "Pause" is the only Temporal-managed search attribute for schedules, so it is
+	// updated here ad-hoc, instead of via the SearchAttributesProvider interface.
+	pauseAttr := make(map[string]*commonpb.Payload)
+	pauseAttr[searchattribute.TemporalSchedulePaused] = p
+	return vis.SetSearchAttributes(ctx, pauseAttr) // merges with custom search attributes
 }
