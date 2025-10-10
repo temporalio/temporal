@@ -854,9 +854,10 @@ func (d *namespaceHandler) createResponse(
 		Id:          info.Id,
 
 		Capabilities: &namespacepb.NamespaceInfo_Capabilities{
-			EagerWorkflowStart: d.config.EnableEagerWorkflowStart(info.Name),
-			SyncUpdate:         d.config.EnableUpdateWorkflowExecution(info.Name),
-			AsyncUpdate:        d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
+			EagerWorkflowStart:              d.config.EnableEagerWorkflowStart(info.Name),
+			SyncUpdate:                      d.config.EnableUpdateWorkflowExecution(info.Name),
+			AsyncUpdate:                     d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
+			WorkerHeartbeats:                d.config.WorkerHeartbeatsEnabled(info.Name),
 		},
 		SupportsSchedules: d.config.EnableSchedules(info.Name),
 	}
