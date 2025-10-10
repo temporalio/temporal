@@ -24,6 +24,7 @@ func Invoke(
 	req *historyservice.RespondActivityTaskCompletedRequest,
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	chasmEngine chasm.Engine,
 ) (resp *historyservice.RespondActivityTaskCompletedResponse, retError error) {
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
@@ -36,7 +37,7 @@ func Invoke(
 	token, err0 := tokenSerializer.Deserialize(request.TaskToken)
 
 	if activity.IsChasmActivityTaskToken(token) {
-		return activity.HandleRespondActivityTaskCompleted(ctx, req, chasm.EntityKey{
+		return activity.HandleRespondActivityTaskCompleted(ctx, chasmEngine, req, chasm.EntityKey{
 			NamespaceID: token.NamespaceId,
 			BusinessID:  token.ActivityId,
 			EntityID:    token.RunId,

@@ -82,19 +82,28 @@ func IsChasmActivityTaskToken(token *tokenspb.Task) bool {
 // TODO(dan): What is the right place for this?
 func HandleRespondActivityTaskCompleted(
 	ctx context.Context,
+	// TODO(dan): I've wired chasm.Engine through to the history handler in this commit because I
+	// wasn't sure of the best way to get hold of it. If we try to call chasm.UpdateComponent
+	// directly, there's a panic in engineFromContext.
+	engine chasm.Engine,
 	req *historyservice.RespondActivityTaskCompletedRequest,
 	key chasm.EntityKey,
 ) (*historyservice.RespondActivityTaskCompletedResponse, error) {
-	chasm.UpdateComponent(
+	_, err := engine.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*Activity](key),
-		func(a *Activity, ctx chasm.MutableContext, _ any) (struct{}, error) {
+		func(mutableCtx chasm.MutableContext, component chasm.Component) error {
+			a := component.(*Activity)
 			a.ActivityExecutionInfo.Status = enums.ACTIVITY_EXECUTION_STATUS_COMPLETED
 			a.Outcome = &activitypb.ActivityState_Result{
 				Result: req.CompleteRequest.Result,
 			}
-			return struct{}{}, nil
-		}, nil)
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
 }
