@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/payload"
@@ -323,7 +324,7 @@ func Test_EncodeValue(t *testing.T) {
 
 	encodedPayload, err = EncodeValue(nil, enumspb.INDEXED_VALUE_TYPE_DOUBLE)
 	s.NoError(err)
-	s.Equal("", string(encodedPayload.GetData()))
+	s.Empty(string(encodedPayload.GetData()))
 	s.Equal("Double", string(encodedPayload.Metadata["type"]))
 	s.Equal("binary/null", string(encodedPayload.Metadata["encoding"]))
 
@@ -359,7 +360,7 @@ func Test_ValidateStrings(t *testing.T) {
 	assert.Contains(t, err.Error(), "is not a valid UTF-8 string")
 
 	value, err := validateStrings("anything here", nil)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "anything here", value)
 
 	_, err = validateStrings([]string{"abc", "\x87\x01"}, nil)

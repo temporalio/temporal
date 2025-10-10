@@ -190,21 +190,21 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestReaderBacklogAge() {
 	go blm.taskReader.dispatchBufferedTasks()
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.InDelta(s.T(), time.Minute, blm.taskReader.getBacklogHeadAge(), float64(time.Second))
+		s.Require().InDelta(time.Minute, blm.taskReader.getBacklogHeadAge(), float64(time.Second))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err := blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	s.NoError(err)
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.InDelta(s.T(), 10*time.Second, blm.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
+		s.Require().InDelta(10*time.Second, blm.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err = blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	s.NoError(err)
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.Equalf(s.T(), time.Duration(0), blm.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
+		s.Require().Equalf(time.Duration(0), blm.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
 	}, time.Second, 10*time.Millisecond)
 }
 
@@ -248,7 +248,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 
 	includeTaskStatus := false
 	descResp := s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
-	s.Equal(0, len(descResp.DescResponse.GetPollers()))
+	s.Empty(descResp.DescResponse.GetPollers())
 	s.Nil(descResp.DescResponse.GetTaskQueueStatus())
 
 	includeTaskStatus = true
@@ -270,14 +270,14 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	}
 
 	descResp = s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
-	s.Equal(1, len(descResp.DescResponse.GetPollers()))
+	s.Len(descResp.DescResponse.GetPollers(), 1)
 	s.Equal(string(pollerIdent), descResp.DescResponse.Pollers[0].GetIdentity())
 	s.NotEmpty(descResp.DescResponse.Pollers[0].GetLastAccessTime())
 
 	rps := 5.0
 	s.tqMgr.pollerHistory.updatePollerInfo(pollerIdent, makePollMetadata(rps))
 	descResp = s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
-	s.Equal(1, len(descResp.DescResponse.GetPollers()))
+	s.Len(descResp.DescResponse.GetPollers(), 1)
 	s.Equal(string(pollerIdent), descResp.DescResponse.Pollers[0].GetIdentity())
 	s.True(descResp.DescResponse.Pollers[0].GetRatePerSecond() > 4.0 && descResp.DescResponse.Pollers[0].GetRatePerSecond() < 6.0)
 
@@ -300,7 +300,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestCheckIdleTaskQueue() {
 	// Active poll-er
 	s.tqMgr.Start()
 	s.tqMgr.pollerHistory.updatePollerInfo("test-poll", &pollMetadata{})
-	s.Equal(1, len(s.tqMgr.GetAllPollerInfo()))
+	s.Len(s.tqMgr.GetAllPollerInfo(), 1)
 	time.Sleep(50 * time.Millisecond) // nolint:forbidigo
 	s.Equal(common.DaemonStatusStarted, atomic.LoadInt32(&s.tqMgr.status))
 	s.tqMgr.Stop(unloadCauseUnspecified)
@@ -310,7 +310,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestCheckIdleTaskQueue() {
 
 	// Active adding task
 	s.tqMgr.Start()
-	s.Equal(0, len(s.tqMgr.GetAllPollerInfo()))
+	s.Empty(s.tqMgr.GetAllPollerInfo())
 	time.Sleep(50 * time.Millisecond) // nolint:forbidigo
 	s.Equal(common.DaemonStatusStarted, atomic.LoadInt32(&s.tqMgr.status))
 	s.tqMgr.Stop(unloadCauseUnspecified)

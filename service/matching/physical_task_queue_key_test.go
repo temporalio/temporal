@@ -18,7 +18,7 @@ func TestVersionSetQueueKey(t *testing.T) {
 	key := VersionSetQueueKey(p, "abc3")
 	a.Equal(p, key.Partition())
 	a.Equal("abc3", key.Version().VersionSet())
-	a.Equal("", key.Version().BuildId())
+	a.Empty(key.Version().BuildId())
 	a.Nil(key.Version().Deployment())
 }
 
@@ -30,7 +30,7 @@ func TestBuildIDQueueKey(t *testing.T) {
 	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(2)
 	key := BuildIdQueueKey(p, "abc3")
 	a.Equal(p, key.Partition())
-	a.Equal("", key.Version().VersionSet())
+	a.Empty(key.Version().VersionSet())
 	a.Equal("abc3", key.Version().BuildId())
 	a.Nil(key.Version().Deployment())
 }
@@ -47,8 +47,8 @@ func TestDeploymentQueueKey(t *testing.T) {
 	}
 	key := DeploymentQueueKey(p, d)
 	a.Equal(p, key.Partition())
-	a.Equal("", key.Version().VersionSet())
-	a.Equal("", key.Version().BuildId())
+	a.Empty(key.Version().VersionSet())
+	a.Empty(key.Version().BuildId())
 	a.True(d.Equal(key.Version().Deployment()))
 }
 
@@ -60,7 +60,7 @@ func TestUnversionedQueueKey(t *testing.T) {
 	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(2)
 	key := UnversionedQueueKey(p)
 	a.Equal(p, key.Partition())
-	a.Equal("", key.Version().VersionSet())
-	a.Equal("", key.Version().BuildId())
+	a.Empty(key.Version().VersionSet())
+	a.Empty(key.Version().BuildId())
 	a.Nil(key.Version().Deployment())
 }

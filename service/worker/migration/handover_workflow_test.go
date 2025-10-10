@@ -1,7 +1,6 @@
 package migration
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -71,7 +70,7 @@ func TestHandoverWorkflow_SetTimeout(t *testing.T) {
 	require.Error(t, workflowErr)
 
 	var applicationErr *temporal.ApplicationError
-	require.True(t, errors.As(workflowErr, &applicationErr))
+	require.ErrorAs(t, workflowErr, &applicationErr)
 	assert.Equal(t, "InvalidTimeout", applicationErr.Type())
 	assert.True(t, applicationErr.NonRetryable())
 }

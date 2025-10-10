@@ -346,5 +346,5 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	s.NoError(err)
 	s.Equal(historyi.TransactionPolicyPassive, policy)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionState.State)
-	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, executionState.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, executionState.Status)
 }

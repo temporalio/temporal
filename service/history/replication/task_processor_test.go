@@ -521,7 +521,7 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_More() {
 
 	tasks, _, err := s.replicationTaskProcessor.paginationFn(nil)
 	s.NoError(err)
-	s.Equal(1, len(tasks))
+	s.Len(tasks, 1)
 	s.Equal(task, tasks[0].(*replicationspb.ReplicationTask))
 	s.Equal(syncShardTask, <-s.replicationTaskProcessor.syncShardChan)
 	s.Equal(lastRetrievedMessageID, s.replicationTaskProcessor.maxRxReceivedTaskID)
@@ -594,7 +594,7 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_NoMore() {
 
 	tasks, _, err := s.replicationTaskProcessor.paginationFn(nil)
 	s.NoError(err)
-	s.Equal(1, len(tasks))
+	s.Len(tasks, 1)
 	s.Equal(task, tasks[0].(*replicationspb.ReplicationTask))
 	s.Equal(syncShardTask, <-s.replicationTaskProcessor.syncShardChan)
 	s.Equal(lastRetrievedMessageID, s.replicationTaskProcessor.maxRxReceivedTaskID)

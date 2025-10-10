@@ -76,7 +76,7 @@ func TestFinalizer(t *testing.T) {
 					}))
 			}
 
-			require.EqualValues(t, 5, f.Run(1*time.Second))
+			require.Equal(t, 5, f.Run(1*time.Second))
 			require.EqualValues(t, 5, completed.Load())
 
 			snap := capture.Snapshot()
@@ -105,7 +105,7 @@ func TestFinalizer(t *testing.T) {
 
 			capture := mh.StartCapture()
 			completed := f.Run(timeout)
-			require.EqualValues(t, 1, completed, "expected only one callback to complete")
+			require.Equal(t, 1, completed, "expected only one callback to complete")
 
 			snap := capture.Snapshot()
 			require.Equal(t, int64(1), snap[metrics.FinalizerItemsCompleted.Name()][0].Value)
@@ -142,7 +142,7 @@ func TestFinalizer(t *testing.T) {
 				func(ctx context.Context) error {
 					return nil
 				}))
-			require.EqualValues(t, 1, f.Run(1*time.Second))
+			require.Equal(t, 1, f.Run(1*time.Second))
 
 			// 2nd call
 			require.Zero(t, f.Run(1*time.Second), "expected no callbacks to complete")

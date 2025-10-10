@@ -58,6 +58,6 @@ func TestServiceErrorInterceptorSer(t *testing.T) {
 			func(_ context.Context, _ any) (any, error) {
 				return nil, inErr
 			})
-		assert.Equal(t, serviceerror.ToStatus(err).Code(), codes.DataLoss)
+		assert.Equal(t, codes.DataLoss, serviceerror.ToStatus(err).Code())
 	}
 }

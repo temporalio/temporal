@@ -271,7 +271,7 @@ func TestStreamBatcher_AddTimeout(t *testing.T) {
 		defer cancel()
 		r, err := sb.Add(ctx, 123)
 		assert.NoError(t, err)
-		assert.Equal(t, r, 123)
+		assert.Equal(t, 123, r)
 	}()
 	time.Sleep(time.Millisecond) // wait for it to block in Add
 	clk.AdvanceNext()

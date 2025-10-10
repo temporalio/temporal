@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	commonclock "go.temporal.io/server/common/clock"
@@ -126,7 +127,7 @@ func TestIsReachableAssignmentRuleTarget(t *testing.T) {
 
 func TestGetDefaultBuildId(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "", getDefaultBuildId([]*persistencespb.AssignmentRule{}))
+	assert.Empty(t, getDefaultBuildId([]*persistencespb.AssignmentRule{}))
 
 	createTs := hlc.Zero(1)
 	deleteTs := hlc.Next(createTs, commonclock.NewRealTimeSource())
@@ -303,17 +304,17 @@ func checkReachability(ctx context.Context,
 	metricsCapture := metricsHandler.StartCapture()
 	logger := log.NewTestLogger()
 	reachability, err := getBuildIdTaskReachability(ctx, rc, metricsHandler, logger, buildId)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, expectedReachability, reachability)
 	snapshot := metricsCapture.Snapshot()
 	counterRecordings := snapshot[metrics.ReachabilityExitPointCounter.Name()]
-	assert.Equal(t, len(counterRecordings), 1)
+	assert.Len(t, counterRecordings, 1)
 	assert.Equal(t, int64(1), counterRecordings[0].Value.(int64))
 	assert.Equal(t, reachabilityExitPoint2TagValue[expectedExitPoint], counterRecordings[0].Tags[reachabilityExitPointTagName])
 
 	// check that rc.run works (don't check exit point this time because cache will be warm)
 	reachability, _, err = rc.run(ctx, buildId)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, expectedReachability, reachability)
 }
 

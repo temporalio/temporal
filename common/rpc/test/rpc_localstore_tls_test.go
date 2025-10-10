@@ -563,7 +563,7 @@ func (s *localStoreRPCSuite) testCertExpiration(factory *TestFactory, timeWindow
 	s.NotNil(expiring)
 	s.Empty(expired)
 	s.NoError(err)
-	s.Equal(nExpiring, len(expiring))
+	s.Len(expiring, nExpiring)
 }
 
 func (s *localStoreRPCSuite) testDynamicRootCA(host string, frontend bool) {

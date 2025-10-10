@@ -57,9 +57,9 @@ func (s *HeadersSuite) TestPropagate_CreateNewOutgoingContext_SomeMissing() {
 	s.True(ok)
 
 	s.Equal("22.08.78", md.Get(ClientVersionHeaderName)[0])
-	s.Equal(0, len(md.Get(SupportedServerVersionsHeaderName)))
+	s.Empty(md.Get(SupportedServerVersionsHeaderName))
 	s.Equal("28.08.14", md.Get(ClientNameHeaderName)[0])
-	s.Equal(0, len(md.Get(SupportedFeaturesHeaderName)))
+	s.Empty(md.Get(SupportedFeaturesHeaderName))
 }
 
 func (s *HeadersSuite) TestPropagate_UpdateExistingEmptyOutgoingContext() {

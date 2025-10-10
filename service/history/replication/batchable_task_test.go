@@ -139,10 +139,10 @@ func (s *batchedTaskSuite) TestAddTask_TasksAreBatchableAndCanBatch_ReturnTrue()
 	s.True(result)
 
 	// verify individual tasks
-	s.True(batchResult == batchedTestTask.batchedTask)
+	s.Equal(batchResult, batchedTestTask.batchedTask)
 	s.Len(batchedTestTask.individualTasks, 2)
-	s.True(existing == batchedTestTask.individualTasks[0])
-	s.True(incoming == batchedTestTask.individualTasks[1])
+	s.Equal(existing, batchedTestTask.individualTasks[0])
+	s.Equal(incoming, batchedTestTask.individualTasks[1])
 }
 
 func (s *batchedTaskSuite) TestExecute_SetBatchStateToClose_ReturnResult() {
@@ -287,7 +287,7 @@ func (s *batchedTaskSuite) TestMarkPoisonPill_SingleItem_MarkTheTask() {
 	existing.EXPECT().MarkPoisonPill().Return(nil).Times(1)
 
 	result := batchedTestTask.MarkPoisonPill()
-	s.Nil(result)
+	s.NoError(result)
 }
 
 func (s *batchedTaskSuite) TestReschedule_SingleItem_RescheduleTheTask() {
@@ -337,5 +337,5 @@ func (s *batchedTaskSuite) TestMarkPoisonPill_MultipleItems_CallIndividualHandle
 	add2.EXPECT().MarkUnbatchable().Times(1)
 
 	result := batchedTestTask.MarkPoisonPill()
-	s.Nil(result)
+	s.NoError(result)
 }

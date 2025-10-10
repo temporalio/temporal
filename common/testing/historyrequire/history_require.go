@@ -52,7 +52,7 @@ func (h HistoryRequire) EqualHistoryEvents(expectedHistory string, actualHistory
 
 	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistory)
 
-	require.Equalf(h.t, len(expectedHistoryEvents), len(actualHistoryEvents),
+	require.Lenf(h.t, actualHistoryEvents, len(expectedHistoryEvents),
 		"Length of expected(%d) and actual(%d) histories is not equal - actual history: \n%v",
 		len(expectedHistoryEvents), len(actualHistoryEvents), h.formatHistoryEvents(actualHistoryEvents, true))
 
@@ -113,7 +113,7 @@ func (h HistoryRequire) WaitForHistoryEvents(expectedHistory string, actualHisto
 	var actualHistoryEvents []*historypb.HistoryEvent
 	require.EventuallyWithT(h.t, func(t *assert.CollectT) {
 		actualHistoryEvents = actualHistoryEventsReader()
-		require.Equalf(t, len(expectedHistoryEvents), len(actualHistoryEvents),
+		require.Lenf(t, actualHistoryEvents, len(expectedHistoryEvents),
 			"Length of expected(%d) and actual(%d) histories is not equal - actual history: \n%v",
 			len(expectedHistoryEvents), len(actualHistoryEvents), h.formatHistoryEvents(actualHistoryEvents, true))
 	}, waitFor, tick)
@@ -255,7 +255,7 @@ func (h HistoryRequire) containsHistoryEvents(
 	actualCompactHistory := h.formatHistoryEvents(actualHistoryEvents, true)
 
 	startPos := strings.Index(actualCompactHistory, expectedCompactHistory)
-	require.True(h.t, startPos >= 0, "Expected history is not found in actual history. Expected:\n%s\nActual:\n%s", expectedCompactHistory, actualCompactHistory)
+	require.GreaterOrEqual(h.t, startPos, 0, "Expected history is not found in actual history. Expected:\n%s\nActual:\n%s", expectedCompactHistory, actualCompactHistory)
 	actualHistoryEventsFirstIndex := strings.Count(actualCompactHistory[:startPos], "\n")
 
 	h.equalHistoryEventsAttributes(expectedEventsAttributes, actualHistoryEvents[actualHistoryEventsFirstIndex:])

@@ -478,7 +478,7 @@ func (s *readerSuite) validateSlicesOrdered(
 	}
 
 	for idx := range scopes[:len(scopes)-1] {
-		s.True(scopes[idx].Range.ExclusiveMax.CompareTo(scopes[idx+1].Range.InclusiveMin) <= 0)
+		s.LessOrEqual(scopes[idx].Range.ExclusiveMax.CompareTo(scopes[idx+1].Range.InclusiveMin), 0)
 	}
 }
 

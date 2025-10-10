@@ -48,7 +48,7 @@ func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRelp
 		assert.Equal(t, expectedMessage, errorMessage.Error())
 	} else {
 		if err == nil {
-			assert.Equal(t, errorMessage, nil)
+			assert.NoError(t, errorMessage)
 		} else {
 			assert.Equal(t, errorMessage.Error(), st.Message())
 		}

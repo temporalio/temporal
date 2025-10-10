@@ -65,7 +65,7 @@ func (s *historyNodeMetadataSuite) TestIndexNodeIDToNode() {
 	for nodeID := common.FirstEventID; nodeID < int64(numNodeIDs+1); nodeID++ {
 		nodes := nodeIDToNode[int64(nodeID)]
 		for i := 1; i < nodePerNodeID; i++ {
-			s.True(nodes[i-1].transactionID >= nodes[i].transactionID)
+			s.GreaterOrEqual(nodes[i-1].transactionID, nodes[i].transactionID)
 		}
 	}
 }

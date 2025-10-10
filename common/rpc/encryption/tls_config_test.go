@@ -103,11 +103,11 @@ func (s *tlsConfigTest) testGroupTLS(f func(*config.RootTLS, *config.GroupTLS)) 
 func (s *tlsConfigTest) testCertFileAndData(cfg *config.RootTLS, group *config.GroupTLS) {
 
 	group.Server = config.ServerTLS{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{CertFile: "foo"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{CertData: "bar"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{CertFile: "foo", CertData: "bar"}
 	s.Error(validateRootTLS(cfg))
 }
@@ -115,11 +115,11 @@ func (s *tlsConfigTest) testCertFileAndData(cfg *config.RootTLS, group *config.G
 func (s *tlsConfigTest) testKeyFileAndData(cfg *config.RootTLS, group *config.GroupTLS) {
 
 	group.Server = config.ServerTLS{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{KeyFile: "foo"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{KeyData: "bar"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{KeyFile: "foo", KeyData: "bar"}
 	s.Error(validateRootTLS(cfg))
 }
@@ -127,13 +127,13 @@ func (s *tlsConfigTest) testKeyFileAndData(cfg *config.RootTLS, group *config.Gr
 func (s *tlsConfigTest) testClientCAData(cfg *config.RootTLS, group *config.GroupTLS) {
 
 	group.Server = config.ServerTLS{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAData: []string{}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAData: []string{"foo"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAData: []string{"foo", "bar"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAData: []string{"foo", " "}}
 	s.Error(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAData: []string{""}}
@@ -143,13 +143,13 @@ func (s *tlsConfigTest) testClientCAData(cfg *config.RootTLS, group *config.Grou
 func (s *tlsConfigTest) testClientCAFiles(cfg *config.RootTLS, group *config.GroupTLS) {
 
 	group.Server = config.ServerTLS{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAFiles: []string{}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAFiles: []string{"foo"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAFiles: []string{"foo", "bar"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAFiles: []string{"foo", " "}}
 	s.Error(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAFiles: []string{""}}
@@ -159,13 +159,13 @@ func (s *tlsConfigTest) testClientCAFiles(cfg *config.RootTLS, group *config.Gro
 func (s *tlsConfigTest) testRootCAData(cfg *config.RootTLS, group *config.GroupTLS) {
 
 	group.Client = config.ClientTLS{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAData: []string{}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAData: []string{"foo"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAData: []string{"foo", "bar"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAData: []string{"foo", " "}}
 	s.Error(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAData: []string{""}}
@@ -175,13 +175,13 @@ func (s *tlsConfigTest) testRootCAData(cfg *config.RootTLS, group *config.GroupT
 func (s *tlsConfigTest) testRootCAFiles(cfg *config.RootTLS, group *config.GroupTLS) {
 
 	group.Client = config.ClientTLS{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAFiles: []string{}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAFiles: []string{"foo"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAFiles: []string{"foo", "bar"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAFiles: []string{"foo", " "}}
 	s.Error(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAFiles: []string{""}}
@@ -191,28 +191,28 @@ func (s *tlsConfigTest) testRootCAFiles(cfg *config.RootTLS, group *config.Group
 func (s *tlsConfigTest) TestSystemWorkerTLSConfig() {
 	cfg := &config.RootTLS{}
 	cfg.SystemWorker = config.WorkerTLS{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	cfg.SystemWorker = config.WorkerTLS{CertFile: "foo"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	cfg.SystemWorker = config.WorkerTLS{CertData: "bar"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	cfg.SystemWorker = config.WorkerTLS{CertFile: "foo", CertData: "bar"}
 	s.Error(validateRootTLS(cfg))
 	cfg.SystemWorker = config.WorkerTLS{KeyFile: "foo"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	cfg.SystemWorker = config.WorkerTLS{KeyData: "bar"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	cfg.SystemWorker = config.WorkerTLS{KeyFile: "foo", KeyData: "bar"}
 	s.Error(validateRootTLS(cfg))
 
 	cfg.SystemWorker = config.WorkerTLS{Client: config.ClientTLS{}}
 	client := &cfg.SystemWorker.Client
 	client.RootCAData = []string{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	client.RootCAData = []string{"foo"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	client.RootCAData = []string{"foo", "bar"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	client.RootCAData = []string{"foo", " "}
 	s.Error(validateRootTLS(cfg))
 	client.RootCAData = []string{""}

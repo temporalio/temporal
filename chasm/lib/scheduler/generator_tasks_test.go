@@ -73,7 +73,7 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 	// We expect 5 buffered starts.
 	invoker, err := sched.Invoker.Get(ctx)
 	s.NoError(err)
-	s.Equal(5, len(invoker.BufferedStarts))
+	s.Len(invoker.BufferedStarts, 5)
 
 	// Generator's high water mark should have advanced.
 	newHighWatermark := generator.LastProcessedTime.AsTime()

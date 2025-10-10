@@ -351,34 +351,34 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 		go func(idx int) {
 			defer wg.Done()
 			bi, err := s.newHistoryBranch(treeID)
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 			historyW := &historypb.History{}
 			m.Store(idx, bi)
 
 			events := s.genRandomEvents([]int64{1, 2, 3}, 1)
 			err = s.appendNewBranchAndFirstNode(bi, events, 1, "branchInfo")
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 			historyW.Events = events
 
 			events = s.genRandomEvents([]int64{4}, 1)
 			err = s.appendNewNode(bi, events, 2)
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 			historyW.Events = append(historyW.Events, events...)
 
 			events = s.genRandomEvents([]int64{5, 6, 7, 8}, 1)
 			err = s.appendNewNode(bi, events, 3)
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 			historyW.Events = append(historyW.Events, events...)
 
 			events = s.genRandomEvents([]int64{9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, 1)
 			err = s.appendNewNode(bi, events, 4000)
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 			historyW.Events = append(historyW.Events, events...)
 
 			// read branch to verify
 			historyR := &historypb.History{}
 			events = s.read(bi, 1, 21)
-			s.Len(events, 20)
+			assert.Len(s.T(), events, 20)
 			historyR.Events = events
 
 			protoassert.New(s.T()).ProtoEqual(historyW, historyR)
@@ -387,7 +387,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 	wg.Wait()
 	branches := s.descTree(treeID)
-	s.Len(branches, concurrency)
+	assert.Len(s.T(), branches, concurrency)
 
 	wg = sync.WaitGroup{}
 	// test appending nodes(override and new nodes) on each branch concurrently
@@ -401,48 +401,48 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 			// override with smaller txn_id
 			events := s.genRandomEvents([]int64{5}, 1)
 			err := s.appendNewNode(branch, events, 0)
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 			// it shouldn't change anything
 			events = s.read(branch, 1, 25)
-			s.Len(events, 20)
+			assert.Len(s.T(), events, 20)
 
 			// override with greatest txn_id
 			events = s.genRandomEvents([]int64{5}, 1)
 			err = s.appendNewNode(branch, events, 3000)
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 
 			// read to verify override success, at this point history is corrupted, missing 6/7/8, so we should only see 5 events
 			events = s.read(branch, 1, 6)
-			s.Len(events, 5)
+			assert.Len(s.T(), events, 5)
 			_, err = s.readWithError(branch, 1, 25)
 			_, ok := err.(*serviceerror.DataLoss)
-			s.True(ok)
+			assert.True(s.T(), ok)
 
 			// override with even larger txn_id and same version
 			events = s.genRandomEvents([]int64{5, 6}, 1)
 			err = s.appendNewNode(branch, events, 3001)
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 
 			// read to verify override success, at this point history is corrupted, missing 7/8, so we should only see 6 events
 			events = s.read(branch, 1, 7)
-			s.Len(events, 6)
+			assert.Len(s.T(), events, 6)
 			_, err = s.readWithError(branch, 1, 25)
 			_, ok = err.(*serviceerror.DataLoss)
-			s.True(ok)
+			assert.True(s.T(), ok)
 
 			// override more with larger txn_id, this would fix the corrupted hole so that we cna get 20 events again
 			events = s.genRandomEvents([]int64{7, 8}, 1)
 			err = s.appendNewNode(branch, events, 3002)
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 
 			// read to verify override
 			events = s.read(branch, 1, 25)
-			s.Len(events, 20)
+			assert.Len(s.T(), events, 20)
 			events = s.genRandomEvents([]int64{9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23}, 1)
 			err = s.appendNewNode(branch, events, 4001)
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 			events = s.read(branch, 1, 25)
-			s.Len(events, 23)
+			assert.Len(s.T(), events, 23)
 		}(i)
 	}
 
@@ -452,7 +452,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 		br := v.([]byte)
 		// delete old branches along with create new branches
 		err := s.deleteHistoryBranch(br)
-		s.NoError(err)
+		assert.NoError(s.T(), err)
 		return true
 	})
 
@@ -466,7 +466,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	wg := sync.WaitGroup{}
 	concurrency := 10
 	masterBr, err := s.newHistoryBranch(treeID)
-	s.NoError(err)
+	assert.NoError(s.T(), err)
 	branches := s.descTree(treeID)
 	s.Empty(branches)
 
@@ -477,14 +477,14 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	}
 	events := s.genRandomEvents(eids, 1)
 	err = s.appendNewBranchAndFirstNode(masterBr, events[0:1], 1, "masterbr")
-	s.NoError(err)
+	assert.NoError(s.T(), err)
 
 	readEvents := s.read(masterBr, 1, int64(concurrency)+2)
-	s.NoError(err)
-	s.Len(readEvents, 1)
+	assert.NoError(s.T(), err)
+	assert.Len(s.T(), readEvents, 1)
 
 	branches = s.descTree(treeID)
-	s.Len(branches, 1)
+	assert.Len(s.T(), branches, 1)
 	mbrID := branches[0].BranchId
 
 	txn := int64(1)
@@ -499,10 +499,10 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	}
 
 	err = s.appendOneByOne(masterBr, events[1:], reserveTxn(len(events[1:])))
-	s.NoError(err)
+	assert.NoError(s.T(), err)
 	events = s.read(masterBr, 1, int64(concurrency)+2)
-	s.NoError(err)
-	s.Len(events, (concurrency)+1)
+	assert.NoError(s.T(), err)
+	assert.Len(s.T(), events, (concurrency)+1)
 
 	level1ID := new(sync.Map)
 	level1Br := new(sync.Map)
@@ -516,14 +516,14 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			level1ID.Store(idx, forkNodeID)
 
 			bi, err := s.fork(masterBr, forkNodeID)
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 			level1Br.Store(idx, bi)
 
 			// cannot append to ancestors
 			events := s.genRandomEvents([]int64{forkNodeID - 1}, 1)
 			err = s.appendNewNode(bi, events, reserveTxn(1))
 			_, ok := err.(*p.InvalidPersistenceRequestError)
-			s.True(ok)
+			assert.True(s.T(), ok)
 
 			// append second batch to first level
 			eids := make([]int64, 0)
@@ -533,18 +533,18 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			events = s.genRandomEvents(eids, 1)
 
 			err = s.appendNewNode(bi, events[0:1], reserveTxn(1))
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 
 			err = s.appendOneByOne(bi, events[1:], reserveTxn(len(events[1:])))
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 
 			events = s.read(bi, 1, int64(concurrency)*2+2)
-			s.NoError(err)
-			s.Len(events, (concurrency)*2+1)
+			assert.NoError(s.T(), err)
+			assert.Len(s.T(), events, (concurrency)*2+1)
 
 			if idx == 0 {
 				err = s.deleteHistoryBranch(bi)
-				s.NoError(err)
+				assert.NoError(s.T(), err)
 			}
 
 		}(i)
@@ -552,7 +552,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 	wg.Wait()
 	branches = s.descTree(treeID)
-	s.Len(branches, concurrency)
+	assert.Len(s.T(), branches, concurrency)
 	forkOnLevel1 := int32(0)
 	level2Br := new(sync.Map)
 	wg = sync.WaitGroup{}
@@ -573,7 +573,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			}
 
 			bi, err := s.fork(forkBr, forkNodeID)
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 			level2Br.Store(idx, bi)
 
 			// append second batch to second level
@@ -583,29 +583,29 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			}
 			events := s.genRandomEvents(eids, 1)
 			err = s.appendNewNode(bi, events[0:1], reserveTxn(1))
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 			err = s.appendOneByOne(bi, events[1:], reserveTxn(len(events[1:])))
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 			events = s.read(bi, 1, int64(concurrency)*3+2)
-			s.NoError(err)
-			s.Len(events, (concurrency)*3+1)
+			assert.NoError(s.T(), err)
+			assert.Len(s.T(), events, (concurrency)*3+1)
 
 			// try override last event
 			events = s.genRandomEvents([]int64{int64(concurrency)*3 + 1}, 1)
 			err = s.appendNewNode(bi, events, reserveTxn(1))
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 			events = s.read(bi, 1, int64(concurrency)*3+2)
-			s.NoError(err)
-			s.Len(events, (concurrency)*3+1)
+			assert.NoError(s.T(), err)
+			assert.Len(s.T(), events, (concurrency)*3+1)
 
 			// test fork and newBranch concurrently
 			bi, err = s.newHistoryBranch(treeID)
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 			level2Br.Store(concurrency+idx, bi)
 
 			events = s.genRandomEvents([]int64{1}, 1)
 			err = s.appendNewBranchAndFirstNode(bi, events, reserveTxn(1), "newbr")
-			s.NoError(err)
+			assert.NoError(s.T(), err)
 
 		}(i)
 	}

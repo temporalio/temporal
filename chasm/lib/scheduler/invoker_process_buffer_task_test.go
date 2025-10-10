@@ -86,9 +86,9 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_AllowAll() {
 		ExpectedBufferedStarts: 3,
 		ExpectedOverlapSkipped: 0,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
-			s.Equal(3, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
+			s.Len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 				return start.Attempt > 0
-			})))
+			}), 3)
 		},
 	})
 }
@@ -156,9 +156,9 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BufferOne() {
 		ExpectedOverlapSkipped: 1,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
 			// Only one start should be set for execution (Attempt > 0)
-			s.Equal(1, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
+			s.Len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 				return start.Attempt > 0
-			})))
+			}), 1)
 		},
 	})
 }
@@ -225,9 +225,9 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BackingOffReady() 
 		ExpectedBufferedStarts: 1,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
 			// The start should be ready for execution (Attempt > 0)
-			s.Equal(1, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
+			s.Len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 				return start.Attempt > 0
-			})))
+			}), 1)
 		},
 	})
 }
@@ -318,10 +318,10 @@ func (s *invokerProcessBufferTaskSuite) runProcessBufferTestCase(c *processBuffe
 	s.NoError(err)
 
 	// Validate the results
-	s.Equal(c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))
-	s.Equal(c.ExpectedRunningWorkflows, len(s.scheduler.Info.RunningWorkflows))
-	s.Equal(c.ExpectedTerminateWorkflows, len(invoker.TerminateWorkflows))
-	s.Equal(c.ExpectedCancelWorkflows, len(invoker.CancelWorkflows))
+	s.Len(invoker.GetBufferedStarts(), c.ExpectedBufferedStarts)
+	s.Len(s.scheduler.Info.RunningWorkflows, c.ExpectedRunningWorkflows)
+	s.Len(invoker.TerminateWorkflows, c.ExpectedTerminateWorkflows)
+	s.Len(invoker.CancelWorkflows, c.ExpectedCancelWorkflows)
 	s.Equal(c.ExpectedOverlapSkipped, s.scheduler.Info.OverlapSkipped)
 	s.Equal(c.ExpectedMissedCatchupWindow, s.scheduler.Info.MissedCatchupWindow)
 

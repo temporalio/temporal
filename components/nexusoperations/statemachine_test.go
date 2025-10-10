@@ -29,7 +29,7 @@ func TestAddChild(t *testing.T) {
 			name:    "with timeout",
 			timeout: time.Hour,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
-				require.Equal(t, 2, len(tasks))
+				require.Len(t, tasks, 2)
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
 				require.Equal(t, nexusoperations.TaskTypeTimeout, tasks[1].Type())
 			},
@@ -38,7 +38,7 @@ func TestAddChild(t *testing.T) {
 			name:    "without timeout",
 			timeout: 0,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
-				require.Equal(t, 1, len(tasks))
+				require.Len(t, tasks, 1)
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
 			},
 		},
@@ -65,7 +65,7 @@ func TestAddChild(t *testing.T) {
 			require.NoError(t, err)
 			opLog, err := root.OpLog()
 			require.NoError(t, err)
-			require.Equal(t, 1, len(opLog))
+			require.Len(t, opLog, 1)
 			transitionOp, ok := opLog[0].(hsm.TransitionOperation)
 			require.True(t, ok)
 			tc.assertTasks(t, transitionOp.Output.Tasks)
@@ -98,9 +98,9 @@ func TestRegenerateTasks(t *testing.T) {
 			timeout: time.Hour,
 			state:   enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
-				require.Equal(t, 2, len(tasks))
+				require.Len(t, tasks, 2)
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
-				require.Equal(t, tasks[0].(nexusoperations.InvocationTask).EndpointName, "endpoint")
+				require.Equal(t, "endpoint", tasks[0].(nexusoperations.InvocationTask).EndpointName)
 				require.Equal(t, nexusoperations.TaskTypeTimeout, tasks[1].Type())
 			},
 		},
@@ -109,7 +109,7 @@ func TestRegenerateTasks(t *testing.T) {
 			timeout: 0,
 			state:   enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
-				require.Equal(t, 1, len(tasks))
+				require.Len(t, tasks, 1)
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
 			},
 		},
@@ -118,7 +118,7 @@ func TestRegenerateTasks(t *testing.T) {
 			timeout: time.Hour,
 			state:   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
-				require.Equal(t, 2, len(tasks))
+				require.Len(t, tasks, 2)
 				require.Equal(t, nexusoperations.TaskTypeBackoff, tasks[0].Type())
 				require.Equal(t, nexusoperations.TaskTypeTimeout, tasks[1].Type())
 			},
@@ -128,7 +128,7 @@ func TestRegenerateTasks(t *testing.T) {
 			timeout: 0,
 			state:   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
-				require.Equal(t, 1, len(tasks))
+				require.Len(t, tasks, 1)
 				require.Equal(t, nexusoperations.TaskTypeBackoff, tasks[0].Type())
 			},
 		},
@@ -172,10 +172,10 @@ func TestRetry(t *testing.T) {
 	}))
 	opLog, err := node.Parent.OpLog()
 	require.NoError(t, err)
-	require.Equal(t, 1, len(opLog))
+	require.Len(t, opLog, 1)
 	transitionOp, ok := opLog[0].(hsm.TransitionOperation)
 	require.True(t, ok)
-	require.Equal(t, 1, len(transitionOp.Output.Tasks))
+	require.Len(t, transitionOp.Output.Tasks, 1)
 	boTask := transitionOp.Output.Tasks[0].(nexusoperations.BackoffTask) // nolint:revive
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
@@ -192,10 +192,10 @@ func TestRetry(t *testing.T) {
 	}))
 	opLog, err = node.Parent.OpLog()
 	require.NoError(t, err)
-	require.Equal(t, 1, len(opLog))
+	require.Len(t, opLog, 1)
 	transitionOp, ok = opLog[0].(hsm.TransitionOperation)
 	require.True(t, ok)
-	require.Equal(t, 1, len(transitionOp.Output.Tasks))
+	require.Len(t, transitionOp.Output.Tasks, 1)
 	invocationTask := transitionOp.Output.Tasks[0].(nexusoperations.InvocationTask) // nolint:revive
 	require.Equal(t, "endpoint", invocationTask.EndpointName)
 	op, err = hsm.MachineData[nexusoperations.Operation](node)
@@ -291,7 +291,7 @@ func TestCompleteFromAttempt(t *testing.T) {
 			}))
 			opLog, err := node.Parent.OpLog()
 			require.NoError(t, err)
-			require.Equal(t, 1, len(opLog))
+			require.Len(t, opLog, 1)
 			transitionOp, ok := opLog[0].(hsm.TransitionOperation)
 			require.True(t, ok, "expected TransitionOperation")
 			require.Empty(t, transitionOp.Output.Tasks)
@@ -406,7 +406,7 @@ func TestCompleteExternally(t *testing.T) {
 				}))
 				opLog, err := node.Parent.OpLog()
 				require.NoError(t, err)
-				require.Equal(t, 1, len(opLog))
+				require.Len(t, opLog, 1)
 				transitionOp, ok := opLog[0].(hsm.TransitionOperation)
 				require.True(t, ok)
 				require.Empty(t, transitionOp.Output.Tasks)
@@ -479,10 +479,10 @@ func TestCancelationValidTransitions(t *testing.T) {
 	require.Equal(t, "test", cancelation.LastAttemptFailure.Message)
 	require.Equal(t, currentTime, cancelation.LastAttemptCompleteTime.AsTime())
 	dt := currentTime.Add(time.Second).Sub(cancelation.NextAttemptScheduleTime.AsTime())
-	require.True(t, dt < time.Millisecond*200)
+	require.Less(t, dt, time.Millisecond*200)
 
 	// Assert backoff task is generated
-	require.Equal(t, 1, len(out.Tasks))
+	require.Len(t, out.Tasks, 1)
 	boTask := out.Tasks[0].(nexusoperations.CancelationBackoffTask) // nolint:revive
 	require.Equal(t, cancelation.NextAttemptScheduleTime.AsTime(), boTask.Deadline())
 
@@ -501,7 +501,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	require.Nil(t, cancelation.NextAttemptScheduleTime)
 
 	// Assert cancelation task is generated
-	require.Equal(t, 1, len(out.Tasks))
+	require.Len(t, out.Tasks, 1)
 	cbTask := out.Tasks[0].(nexusoperations.CancelationTask) // nolint:revive
 	require.Equal(t, "endpoint", cbTask.EndpointName)
 
@@ -524,7 +524,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	require.Nil(t, cancelation.NextAttemptScheduleTime)
 
 	// Assert no additional tasks are generated
-	require.Equal(t, 0, len(out.Tasks))
+	require.Empty(t, out.Tasks)
 
 	// Reset back to scheduled
 	cancelation = dup
@@ -547,7 +547,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	require.Nil(t, cancelation.NextAttemptScheduleTime)
 
 	// Assert no additional tasks are generated
-	require.Equal(t, 0, len(out.Tasks))
+	require.Empty(t, out.Tasks)
 }
 
 func TestCancelationBeforeStarted(t *testing.T) {
@@ -677,9 +677,9 @@ func TestOperationCompareState(t *testing.T) {
 			if tc.sign == 0 {
 				require.Equal(t, 0, res)
 			} else if tc.sign > 0 {
-				require.Greater(t, res, 0)
+				require.Positive(t, res)
 			} else {
-				require.Greater(t, 0, res)
+				require.Negative(t, res)
 			}
 		})
 	}
@@ -755,9 +755,9 @@ func TestCancelationCompareState(t *testing.T) {
 			if tc.sign == 0 {
 				require.Equal(t, 0, res)
 			} else if tc.sign > 0 {
-				require.Greater(t, res, 0)
+				require.Positive(t, res)
 			} else {
-				require.Greater(t, 0, res)
+				require.Negative(t, res)
 			}
 		})
 	}

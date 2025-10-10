@@ -243,7 +243,7 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 			require.NoError(t, j2.read(), "Should be able to re-read the written XML")
 
 			// Validate that the structure is reasonable
-			require.Greater(t, len(parsed.Suites), 0, "Should have at least one test suite")
+			require.NotEmpty(t, parsed.Suites, "Should have at least one test suite")
 		})
 	}
 }

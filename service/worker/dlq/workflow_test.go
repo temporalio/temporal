@@ -572,7 +572,7 @@ func (p *testParams) setDefaultParams(t *testing.T) {
 		require.Equal(t, p.expectedQueryResp.LastProcessedMessageID, response.LastProcessedMessageID)
 		require.Equal(t, p.expectedQueryResp.WorkflowType, response.WorkflowType)
 		require.Equal(t, p.expectedQueryResp.NumberOfMessagesProcessed, response.NumberOfMessagesProcessed)
-		require.EqualValues(t, p.expectedQueryResp.DlqKey, response.DlqKey)
+		require.Equal(t, p.expectedQueryResp.DlqKey, response.DlqKey)
 	}
 	p.taskClientDialer = dlq.TaskClientDialerFn(func(ctx context.Context, address string) (dlq.TaskClient, error) {
 		return dlq.AddTasksFn(func(ctx context.Context, req *adminservice.AddTasksRequest) (*adminservice.AddTasksResponse, error) {

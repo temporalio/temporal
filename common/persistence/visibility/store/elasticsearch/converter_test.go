@@ -2,7 +2,6 @@ package elasticsearch
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -135,7 +134,7 @@ func TestSupportedSelectWhere(t *testing.T) {
 		actualMap, _ := queryParams.Query.Source()
 		actualJson, _ := json.Marshal(actualMap)
 
-		assert.Equal(t, expectedJson, string(actualJson), fmt.Sprintf("sql: %s", sql))
+		assert.JSONEq(t, expectedJson, string(actualJson), "sql: %s", sql)
 	}
 }
 
@@ -153,7 +152,7 @@ func TestEmptySelectWhere(t *testing.T) {
 	assert.Len(t, queryParams.Sorter, 1)
 	actualSorterMap, _ := queryParams.Sorter[0].Source()
 	actualSorterJson, _ := json.Marshal([]interface{}{actualSorterMap})
-	assert.Equal(t, `[{"Id":{"order":"desc"}}]`, string(actualSorterJson))
+	assert.JSONEq(t, `[{"Id":{"order":"desc"}}]`, string(actualSorterJson))
 }
 
 func TestSupportedSelectWhereOrder(t *testing.T) {
@@ -165,7 +164,7 @@ func TestSupportedSelectWhereOrder(t *testing.T) {
 
 		actualQueryMap, _ := queryParams.Query.Source()
 		actualQueryJson, _ := json.Marshal(actualQueryMap)
-		assert.Equal(t, expectedJson.query, string(actualQueryJson), fmt.Sprintf("sql: %s", sql))
+		assert.JSONEq(t, expectedJson.query, string(actualQueryJson), "sql: %s", sql)
 
 		var actualSorterMaps []interface{}
 		for _, sorter := range queryParams.Sorter {
@@ -173,7 +172,7 @@ func TestSupportedSelectWhereOrder(t *testing.T) {
 			actualSorterMaps = append(actualSorterMaps, actualSorterMap)
 		}
 		actualSorterJson, _ := json.Marshal(actualSorterMaps)
-		assert.Equal(t, expectedJson.sorter, string(actualSorterJson), fmt.Sprintf("sql: %s", sql))
+		assert.JSONEq(t, expectedJson.sorter, string(actualSorterJson), "sql: %s", sql)
 	}
 }
 
@@ -187,7 +186,7 @@ func TestSupportedSelectWhereGroupBy(t *testing.T) {
 		if expectedJson.query != "" {
 			actualQueryMap, _ := queryParams.Query.Source()
 			actualQueryJson, _ := json.Marshal(actualQueryMap)
-			assert.Equal(t, expectedJson.query, string(actualQueryJson), fmt.Sprintf("sql: %s", sql))
+			assert.JSONEq(t, expectedJson.query, string(actualQueryJson), "sql: %s", sql)
 		} else {
 			assert.Nil(t, queryParams.Query)
 		}

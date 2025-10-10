@@ -92,10 +92,10 @@ func (s *utilSuite) TestSerializeDeserializeGetHistoryToken() {
 	}
 
 	serializedToken, err := serializeToken(token)
-	s.Nil(err)
+	s.NoError(err)
 
 	deserializedToken, err := deserializeGetHistoryToken(serializedToken)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(token, deserializedToken)
 }
 
@@ -144,7 +144,7 @@ func (s *utilSuite) TestWorkflowIdPrecondition() {
 	}
 
 	for _, testCase := range testCases {
-		s.Equal(newWorkflowIDPrecondition(testCase.workflowID)(testCase.fileName), testCase.expectedResult)
+		s.Equal(testCase.expectedResult, newWorkflowIDPrecondition(testCase.workflowID)(testCase.fileName))
 	}
 
 }
@@ -177,7 +177,7 @@ func (s *utilSuite) TestRunIdPrecondition() {
 	}
 
 	for _, testCase := range testCases {
-		s.Equal(newRunIDPrecondition(testCase.runID)(testCase.fileName), testCase.expectedResult)
+		s.Equal(testCase.expectedResult, newRunIDPrecondition(testCase.runID)(testCase.fileName))
 	}
 
 }
@@ -214,7 +214,7 @@ func (s *utilSuite) TestWorkflowTypeNamePrecondition() {
 	}
 
 	for _, testCase := range testCases {
-		s.Equal(newWorkflowTypeNamePrecondition(testCase.workflowTypeName)(testCase.fileName), testCase.expectedResult)
+		s.Equal(testCase.expectedResult, newWorkflowTypeNamePrecondition(testCase.workflowTypeName)(testCase.fileName))
 	}
 
 }

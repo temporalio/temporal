@@ -38,7 +38,7 @@ func TestToString(t *testing.T) {
 	})
 	s.NoError(err)
 	result = ToString(p)
-	s.Equal(`{"Int":10,"String":"str","Bytes":"MzQ1"}`, result)
+	s.JSONEq(`{"Int":10,"String":"str","Bytes":"MzQ1"}`, result)
 
 	p, err = Encode(nil)
 	s.NoError(err)
@@ -46,7 +46,7 @@ func TestToString(t *testing.T) {
 	s.Equal("nil", result)
 
 	result = ToString(nil)
-	s.Equal("", result)
+	s.Empty(result)
 }
 
 func TestEncodeDecode(t *testing.T) {
@@ -122,13 +122,13 @@ func TestMergeMapOfPayload(t *testing.T) {
 	newValue, _ := Encode(nil)
 	newMap = map[string]*commonpb.Payload{"number": newValue}
 	resultMap = MergeMapOfPayload(currentMap, newMap)
-	s.Equal(0, len(resultMap))
+	s.Empty(resultMap)
 
 	newValue, _ = Encode([]int{})
 	newValue.Metadata["key"] = []byte("foo")
 	newMap = map[string]*commonpb.Payload{"number": newValue}
 	resultMap = MergeMapOfPayload(currentMap, newMap)
-	s.Equal(0, len(resultMap))
+	s.Empty(resultMap)
 }
 
 func TestIsEqual(t *testing.T) {

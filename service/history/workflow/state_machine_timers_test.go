@@ -39,18 +39,18 @@ func TestTrackStateMachineTimer_MaintainsSortedSlice(t *testing.T) {
 	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: "2"})
 	workflow.TrackStateMachineTimer(ms, now.Add(-time.Hour), &persistencespb.StateMachineTaskInfo{Type: "3"})
 
-	require.Equal(t, 3, len(execInfo.StateMachineTimers))
+	require.Len(t, execInfo.StateMachineTimers, 3)
 
-	require.Equal(t, 1, len(execInfo.StateMachineTimers[0].Infos))
+	require.Len(t, execInfo.StateMachineTimers[0].Infos, 1)
 	require.Equal(t, "3", execInfo.StateMachineTimers[0].Infos[0].Type)
 
-	require.Equal(t, 2, len(execInfo.StateMachineTimers[1].Infos))
+	require.Len(t, execInfo.StateMachineTimers[1].Infos, 2)
 	require.Equal(t, "0", execInfo.StateMachineTimers[1].Infos[0].Type)
 	protorequire.ProtoSliceEqual(t, []*persistencespb.StateMachineKey{{Type: "t", Id: "a"}}, execInfo.StateMachineTimers[1].Infos[0].Ref.Path)
 	require.Equal(t, "0", execInfo.StateMachineTimers[1].Infos[1].Type)
 	protorequire.ProtoSliceEqual(t, []*persistencespb.StateMachineKey{{Type: "t", Id: "b"}}, execInfo.StateMachineTimers[1].Infos[1].Ref.Path)
 
-	require.Equal(t, 2, len(execInfo.StateMachineTimers[2].Infos))
+	require.Len(t, execInfo.StateMachineTimers[2].Infos, 2)
 	require.Equal(t, "1", execInfo.StateMachineTimers[2].Infos[0].Type)
 	require.Equal(t, "2", execInfo.StateMachineTimers[2].Infos[1].Type)
 }
@@ -77,7 +77,7 @@ func TestAddNextStateMachineTimerTask(t *testing.T) {
 
 	workflow.AddNextStateMachineTimerTask(ms)
 
-	require.Equal(t, 1, len(scheduledTasks))
+	require.Len(t, scheduledTasks, 1)
 	task, ok := scheduledTasks[0].(*tasks.StateMachineTimerTask)
 	require.True(t, ok)
 	require.Equal(t, "ns-id", task.GetNamespaceID())
@@ -88,5 +88,5 @@ func TestAddNextStateMachineTimerTask(t *testing.T) {
 
 	// First timer already scheduled should not generate any tasks.
 	workflow.AddNextStateMachineTimerTask(ms)
-	require.Equal(t, 1, len(scheduledTasks))
+	require.Len(t, scheduledTasks, 1)
 }

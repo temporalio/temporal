@@ -110,7 +110,7 @@ func (s *RingpopSuite) TearDownSuite() {
 func (s *RingpopSuite) TestHostsMode() {
 	var cfg config.Membership
 	err := yaml.Unmarshal([]byte(getHostsConfig()), &cfg)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal("1.2.3.4", cfg.BroadcastAddress)
 	s.Equal(time.Second*30, cfg.MaxJoinDuration)
 
@@ -120,7 +120,7 @@ func (s *RingpopSuite) TestHostsMode() {
 		Logger:      log.Logger(log.NewNoopLogger()),
 	}
 	f, err := newFactory(params)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(f)
 }
 

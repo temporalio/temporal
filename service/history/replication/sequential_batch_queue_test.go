@@ -55,7 +55,7 @@ func (s *sequentialBatchQueueSuite) TestAdd_EmptyQueue_AddNewBatchedTask() {
 
 	// check task
 	batchTask, _ := taskRemoved.(*batchedTask)
-	s.True(batchTask.batchedTask == newTask)
+	s.Equal(batchTask.batchedTask, newTask)
 }
 
 func (s *sequentialBatchQueueSuite) TestAdd_NewTaskBatched() {

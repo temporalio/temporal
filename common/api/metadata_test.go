@@ -105,6 +105,6 @@ func getMethodNames(tp reflect.Type) []string {
 func TestServiceName(t *testing.T) {
 	assert.Equal(t, WorkflowServicePrefix, ServiceName(WorkflowServicePrefix+"SomeAPI"))
 	assert.Equal(t, AdminServicePrefix, ServiceName(AdminServicePrefix+"SomeAPI"))
-	assert.Equal(t, "", ServiceName("SomeAPI"))
-	assert.Equal(t, "", ServiceName(""))
+	assert.Empty(t, ServiceName("SomeAPI"))
+	assert.Empty(t, ServiceName(""))
 }

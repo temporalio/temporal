@@ -70,7 +70,7 @@ func TestDeepCopy_Map(t *testing.T) {
 	b := deepCopyForMapstructure(a)
 	a[3] = 7
 	a[8] = 9
-	assert.Equal(t, b[3], 5)
+	assert.Equal(t, 5, b[3])
 	assert.Zero(t, b[8])
 }
 
@@ -81,7 +81,7 @@ func TestDeepCopy_MapMap(t *testing.T) {
 	}
 	b := deepCopyForMapstructure(a)
 	a[5]["five"] = 3
-	assert.Equal(t, b[5]["five"], 5)
+	assert.Equal(t, 5, b[5]["five"])
 }
 
 func TestDeepCopy_OtherReferenceTypes_Nil(t *testing.T) {

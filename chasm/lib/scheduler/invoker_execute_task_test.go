@@ -347,10 +347,10 @@ func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 	s.NoError(err)
 
 	// Validate the results
-	s.Equal(c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))
-	s.Equal(c.ExpectedRunningWorkflows, len(s.scheduler.Info.RunningWorkflows))
-	s.Equal(c.ExpectedTerminateWorkflows, len(invoker.TerminateWorkflows))
-	s.Equal(c.ExpectedCancelWorkflows, len(invoker.CancelWorkflows))
+	s.Len(invoker.GetBufferedStarts(), c.ExpectedBufferedStarts)
+	s.Len(s.scheduler.Info.RunningWorkflows, c.ExpectedRunningWorkflows)
+	s.Len(invoker.TerminateWorkflows, c.ExpectedTerminateWorkflows)
+	s.Len(invoker.CancelWorkflows, c.ExpectedCancelWorkflows)
 	s.Equal(c.ExpectedActionCount, s.scheduler.Info.ActionCount)
 	s.Equal(c.ExpectedOverlapSkipped, s.scheduler.Info.OverlapSkipped)
 	s.Equal(c.ExpectedMissedCatchupWindow, s.scheduler.Info.MissedCatchupWindow)

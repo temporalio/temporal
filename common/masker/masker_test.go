@@ -2,7 +2,6 @@ package masker
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -68,9 +67,9 @@ func TestMaskYaml(t *testing.T) {
 
 	maskedYaml, err := MaskYaml(yaml, DefaultYAMLFieldNames)
 	assert.NoError(err)
-	assert.True(strings.Contains(yaml, "secret"))
-	assert.False(strings.Contains(maskedYaml, "secret"))
-	assert.True(strings.Contains(maskedYaml, "******"))
+	assert.Contains(yaml, "secret")
+	assert.NotContains(maskedYaml, "secret")
+	assert.Contains(maskedYaml, "******")
 
 	fmt.Println(maskedYaml)
 }

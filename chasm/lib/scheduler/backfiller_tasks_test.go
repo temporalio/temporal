@@ -212,7 +212,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_PartialFill() {
 	s.NoError(err)
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
-	s.Equal(5, len(invoker.GetBufferedStarts()))
+	s.Len(invoker.GetBufferedStarts(), 5)
 
 	// Verify the backfiller is deleted
 	res, err := s.scheduler.Backfillers[backfiller.BackfillId].Get(ctx)
@@ -266,7 +266,7 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 	}
 
 	// Validate BufferedStarts. More detailed validation must be done in the callbacks.
-	s.Equal(c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))
+	s.Len(invoker.GetBufferedStarts(), c.ExpectedBufferedStarts)
 
 	// Callbacks.
 	if c.ValidateInvoker != nil {

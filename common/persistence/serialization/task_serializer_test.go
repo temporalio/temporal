@@ -434,8 +434,8 @@ func (s *taskSerializerSuite) TestArchiveExecutionTask() {
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
 	}
-	s.Assert().Equal(tasks.CategoryArchival, task.GetCategory())
-	s.Assert().Equal(enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION, task.GetType())
+	s.Equal(tasks.CategoryArchival, task.GetCategory())
+	s.Equal(enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION, task.GetType())
 
 	s.assertEqualTasks(task)
 }
@@ -492,8 +492,8 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 		Destination: "foo",
 	}
 
-	s.Assert().Equal(tasks.CategoryOutbound, task.GetCategory())
-	s.Assert().Equal(enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND, task.GetType())
+	s.Equal(tasks.CategoryOutbound, task.GetCategory())
+	s.Equal(enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND, task.GetType())
 
 	blob, err := s.taskSerializer.SerializeTask(task)
 	s.NoError(err)
@@ -542,8 +542,8 @@ func (s *taskSerializerSuite) TestStateMachineTimerTask() {
 		Version:             rand.Int63(),
 	}
 
-	s.Assert().Equal(tasks.CategoryTimer, task.GetCategory())
-	s.Assert().Equal(enumsspb.TASK_TYPE_STATE_MACHINE_TIMER, task.GetType())
+	s.Equal(tasks.CategoryTimer, task.GetCategory())
+	s.Equal(enumsspb.TASK_TYPE_STATE_MACHINE_TIMER, task.GetType())
 
 	blob, err := s.taskSerializer.SerializeTask(task)
 	s.NoError(err)

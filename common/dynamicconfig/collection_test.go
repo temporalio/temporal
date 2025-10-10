@@ -127,20 +127,20 @@ func (s *collectionSuite) TestGetFloat64Property() {
 func (s *collectionSuite) TestGetBoolProperty() {
 	setting := dynamicconfig.NewGlobalBoolSetting(testGetBoolPropertyKey, true, "")
 	value := setting.Get(s.cln)
-	s.Equal(true, value())
+	s.True(value())
 	s.client.SetValue(testGetBoolPropertyKey, false)
-	s.Equal(false, value())
+	s.False(value())
 	s.client.SetValue(testGetBoolPropertyKey, "false")
-	s.Equal(false, value())
+	s.False(value())
 }
 
 func (s *collectionSuite) TestGetBoolPropertyFilteredByNamespaceID() {
 	setting := dynamicconfig.NewNamespaceIDBoolSetting(testGetBoolPropertyFilteredByNamespaceIDKey, true, "")
 	namespaceID := namespace.ID("testNamespaceID")
 	value := setting.Get(s.cln)
-	s.Equal(true, value(namespaceID))
+	s.True(value(namespaceID))
 	s.client.SetValue(testGetBoolPropertyFilteredByNamespaceIDKey, false)
-	s.Equal(false, value(namespaceID))
+	s.False(value(namespaceID))
 }
 
 func (s *collectionSuite) TestGetBoolPropertyFilteredByTaskQueueInfo() {
@@ -148,9 +148,9 @@ func (s *collectionSuite) TestGetBoolPropertyFilteredByTaskQueueInfo() {
 	namespace := "testNamespace"
 	taskQueue := "testTaskQueue"
 	value := setting.Get(s.cln)
-	s.Equal(false, value(namespace, taskQueue, 0))
+	s.False(value(namespace, taskQueue, 0))
 	s.client.SetValue(testGetBoolPropertyFilteredByTaskQueueInfoKey, true)
-	s.Equal(true, value(namespace, taskQueue, 0))
+	s.True(value(namespace, taskQueue, 0))
 }
 
 func (s *collectionSuite) TestGetDurationProperty() {

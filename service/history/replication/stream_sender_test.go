@@ -691,8 +691,8 @@ func (s *streamSenderSuite) TestSendLive() {
 		channel,
 		watermark0,
 	)
-	s.Nil(err)
-	s.True(!s.streamSender.IsValid())
+	s.NoError(err)
+	s.False(s.streamSender.IsValid())
 }
 
 func (s *streamSenderSuite) TestSendTasks_Noop() {

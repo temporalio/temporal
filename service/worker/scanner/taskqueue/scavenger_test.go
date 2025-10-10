@@ -62,7 +62,7 @@ func (s *ScavengerTestSuite) TestAllExpiredTasks() {
 	s.runScavenger()
 	for tl, tbl := range s.taskTables {
 		tasks := tbl.get(100)
-		s.Equal(0, len(tasks), "failed to delete all expired tasks")
+		s.Empty(tasks, "failed to delete all expired tasks")
 		s.Nil(s.taskQueueTable.get(tl), "failed to delete expired executorTask queue")
 	}
 }
@@ -81,7 +81,7 @@ func (s *ScavengerTestSuite) TestAllAliveTasks() {
 	s.runScavenger()
 	for tl, tbl := range s.taskTables {
 		tasks := tbl.get(100)
-		s.Equal(nTasks, len(tasks), "scavenger deleted a non-expired executorTask")
+		s.Len(tasks, nTasks, "scavenger deleted a non-expired executorTask")
 		s.NotNil(s.taskQueueTable.get(tl), "scavenger deleted a non-expired executorTask queue")
 	}
 }
@@ -101,7 +101,7 @@ func (s *ScavengerTestSuite) TestExpiredTasksFollowedByAlive() {
 	s.runScavenger()
 	for tl, tbl := range s.taskTables {
 		tasks := tbl.get(100)
-		s.Equal(nTasks/2, len(tasks), "scavenger deleted non-expired tasks")
+		s.Len(tasks, nTasks/2, "scavenger deleted non-expired tasks")
 		s.Equal(int64(nTasks/2), tasks[0].GetTaskId(), "scavenger deleted wrong set of tasks")
 		s.NotNil(s.taskQueueTable.get(tl), "scavenger deleted a non-expired executorTask queue")
 	}
@@ -122,7 +122,7 @@ func (s *ScavengerTestSuite) TestAliveTasksFollowedByExpired() {
 	s.runScavenger()
 	for tl, tbl := range s.taskTables {
 		tasks := tbl.get(100)
-		s.Equal(nTasks, len(tasks), "scavenger deleted non-expired tasks")
+		s.Len(tasks, nTasks, "scavenger deleted non-expired tasks")
 		s.NotNil(s.taskQueueTable.get(tl), "scavenger deleted a non-expired executorTask queue")
 	}
 }
@@ -141,10 +141,10 @@ func (s *ScavengerTestSuite) TestAllExpiredTasksWithErrors() {
 	s.runScavenger()
 	for _, tbl := range s.taskTables {
 		tasks := tbl.get(100)
-		s.Equal(0, len(tasks), "failed to delete all expired tasks")
+		s.Empty(tasks, "failed to delete all expired tasks")
 	}
 	result, _ := s.taskQueueTable.list(nil, 10)
-	s.Equal(1, len(result), "expected partial deletion due to transient errors")
+	s.Len(result, 1, "expected partial deletion due to transient errors")
 }
 
 func (s *ScavengerTestSuite) runScavenger() {

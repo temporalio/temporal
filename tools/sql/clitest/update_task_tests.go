@@ -61,7 +61,7 @@ func (s *UpdateSchemaTestSuite) TearDownSuite() {
 // TestUpdateSchema test
 func (s *UpdateSchemaTestSuite) TestUpdateSchema() {
 	conn, err := newTestConn(s.DBName, s.host, s.port, s.pluginName)
-	s.Nil(err)
+	s.NoError(err)
 	defer conn.Close()
 	s.RunUpdateSchemaTest(sql.BuildCLIOptions(), conn, "--db", s.sqlQuery, []string{"executions", "current_executions"})
 }
