@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/api/activity/v1"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
@@ -72,29 +73,62 @@ func GetActivity(ctx context.Context, key chasm.EntityKey) (*Activity, error) {
 	}, nil
 }
 
-func UpdateActivityStarted(ctx context.Context, activityRef chasm.ComponentRef) error {
+// TODO(dan): Let's collect here the heuristics we use to classify different types of requests as
+// being for chasm (i.e. standalone) activities.
+func ShouldHandle(req any) bool {
+	switch req := req.(type) {
+	case *historyservice.RecordActivityTaskStartedRequest:
+		return req.GetComponentRef() != nil
+	}
+	return false
+}
+
+// TODO(dan): This one takes token to avoid deserializing it twice.
+func ShouldHandleRespondActivityTaskCompleted(req any, token *tokenspb.Task) bool {
+	switch req.(type) {
+	case *historyservice.RespondActivityTaskCompletedRequest:
+		return token.WorkflowId == ""
+	}
+	return false
+
+}
+
+// An alternative design would be to allow the Handle* functions below to return a nil response to
+// indicate that something else should handle it.
+
+func HandleRecordActivityTaskStarted(
+	ctx context.Context,
+	req *historyservice.RecordActivityTaskStartedRequest,
+) (*historyservice.RecordActivityTaskStartedResponse, error) {
+	componentRefProto := req.GetComponentRef()
+	if componentRefProto == nil {
+		return nil, fmt.Errorf("component ref is required")
+	}
+	componentRef := chasm.ProtoRefToComponentRef(componentRefProto)
+
 	_, _, err := chasm.UpdateComponent(
 		ctx,
-		activityRef,
+		componentRef,
 		func(a *Activity, ctx chasm.MutableContext, _ any) (struct{}, error) {
 			a.ActivityExecutionInfo.Status = enums.ACTIVITY_EXECUTION_STATUS_RUNNING
-
 			return struct{}{}, nil
 		},
 		nil,
 	)
-
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
-}
-
-// TODO(dan): Perhaps we should collect here all the heuristics we use to classify different types
-// of objects as being chasm (i.e. standalone) activities.
-func IsChasmActivityTaskToken(token *tokenspb.Task) bool {
-	return token.WorkflowId == ""
+	return &historyservice.RecordActivityTaskStartedResponse{
+		ScheduledEvent: &history.HistoryEvent{
+			EventType: enums.EVENT_TYPE_ACTIVITY_TASK_STARTED,
+			Attributes: &history.HistoryEvent_ActivityTaskScheduledEventAttributes{
+				ActivityTaskScheduledEventAttributes: &history.ActivityTaskScheduledEventAttributes{
+					ActivityId: componentRef.BusinessID,
+				},
+			},
+		},
+	}, nil
 }
 
 // This is a handler for a workflowservice method (as opposed to a method in the service owned by
@@ -116,5 +150,6 @@ func HandleRespondActivityTaskCompleted(
 			return struct{}{}, nil
 		}, nil)
 
+	// TODO(dan): any response struct fields?
 	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
 }

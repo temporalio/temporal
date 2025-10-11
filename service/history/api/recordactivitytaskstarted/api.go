@@ -7,14 +7,12 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/activity"
+	chasmactivity "go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -46,26 +44,8 @@ func Invoke(
 	matchingClient matchingservice.MatchingServiceClient,
 ) (resp *historyservice.RecordActivityTaskStartedResponse, retError error) {
 
-	// Check if this has a workflow ID associated. Need to reroute this to Activity component if no WF ID.
-	componentRefProto := request.GetComponentRef()
-	if componentRefProto != nil {
-		componentRef := chasm.ProtoRefToComponentRef(componentRefProto)
-
-		err := activity.UpdateActivityStarted(ctx, componentRef)
-		if err != nil {
-			return nil, err
-		}
-
-		return &historyservice.RecordActivityTaskStartedResponse{
-			ScheduledEvent: &history.HistoryEvent{
-				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
-				Attributes: &history.HistoryEvent_ActivityTaskScheduledEventAttributes{
-					ActivityTaskScheduledEventAttributes: &history.ActivityTaskScheduledEventAttributes{
-						ActivityId: componentRef.BusinessID,
-					},
-				},
-			},
-		}, nil
+	if chasmactivity.ShouldHandle(request) {
+		return chasmactivity.HandleRecordActivityTaskStarted(ctx, request)
 	}
 
 	var err error
