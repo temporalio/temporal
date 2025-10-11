@@ -14,6 +14,7 @@ func Register(
 
 var Module = fx.Module(
 	"chasm.lib.scheduler",
+	fx.Provide(newHandler),
 	fx.Provide(NewGeneratorTaskExecutor),
 	fx.Provide(NewInvokerExecuteTaskExecutor),
 	fx.Provide(NewInvokerProcessBufferTaskExecutor),
