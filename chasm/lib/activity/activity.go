@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/activity/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -106,11 +107,14 @@ func HandleRecordActivityTaskStarted(
 	}
 	componentRef := chasm.ProtoRefToComponentRef(componentRefProto)
 
+	var activityType *commonpb.ActivityType
+
 	_, _, err := chasm.UpdateComponent(
 		ctx,
 		componentRef,
 		func(a *Activity, ctx chasm.MutableContext, _ any) (struct{}, error) {
 			a.ActivityExecutionInfo.Status = enums.ACTIVITY_EXECUTION_STATUS_RUNNING
+			activityType = a.ActivityExecutionInfo.ActivityType
 			return struct{}{}, nil
 		},
 		nil,
@@ -124,7 +128,8 @@ func HandleRecordActivityTaskStarted(
 			EventType: enums.EVENT_TYPE_ACTIVITY_TASK_STARTED,
 			Attributes: &history.HistoryEvent_ActivityTaskScheduledEventAttributes{
 				ActivityTaskScheduledEventAttributes: &history.ActivityTaskScheduledEventAttributes{
-					ActivityId: componentRef.BusinessID,
+					ActivityId:   componentRef.BusinessID,
+					ActivityType: activityType,
 				},
 			},
 		},

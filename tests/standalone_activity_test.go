@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -41,9 +42,10 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 	taskQueue := uuid.New().String()
 
 	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-		Namespace:  s.Namespace().String(),
-		Identity:   "test-identity",
-		ActivityId: activityId,
+		Namespace:    s.Namespace().String(),
+		Identity:     "test-identity",
+		ActivityId:   activityId,
+		ActivityType: &commonpb.ActivityType{Name: "TestActivity"},
 		Options: &activitypb.ActivityOptions{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
