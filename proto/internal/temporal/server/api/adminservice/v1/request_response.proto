@@ -5,6 +5,7 @@ option go_package = "go.temporal.io/server/api/adminservice/v1;adminservice";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
 
 import "temporal/api/enums/v1/common.proto";
 import "temporal/api/enums/v1/task_queue.proto";
@@ -602,4 +603,38 @@ message ForceUnloadTaskQueuePartitionRequest {
 
 message ForceUnloadTaskQueuePartitionResponse {
   bool was_loaded = 1;
+}
+
+message Constraints {
+	string namespace = 1;
+	string namespace_id = 2;
+	string task_queue_name = 3;
+	int32 task_queue_type = 4;
+	int32 shard_id = 5;
+	int32 task_type = 6;
+	string destination = 7;
+}
+
+message ConstrainedValue {
+  Constraints constraints = 1;
+  google.protobuf.Struct value = 2;
+}
+
+message ConstrainedValues {
+  repeated ConstrainedValue items = 1;
+}
+
+message HostConfig {
+  // The host that this configuration was loaded from.
+  string hostname = 1;
+  // The raw dynamic config loaded with all constraints.
+  map<string, ConstrainedValues> dynamic_config = 2;
+}
+
+message GetDynamicConfigurationsRequest {
+  repeated string dynamic_config_keys = 1;
+}
+
+message GetDynamicConfigurationsResponse {
+  repeated HostConfig host_config = 1;
 }
