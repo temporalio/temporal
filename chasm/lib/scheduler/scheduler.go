@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -39,6 +41,8 @@ const (
 	recentActionCount = 10
 )
 
+var ErrConflictTokenMismatch = errors.New("conflict token mismatch")
+
 // NewScheduler returns an initialized CHASM scheduler root component.
 func NewScheduler(
 	ctx chasm.MutableContext,
@@ -52,10 +56,8 @@ func NewScheduler(
 		SchedulerState: &schedulerpb.SchedulerState{
 			Schedule: input,
 			Info: &schedulepb.ScheduleInfo{
-				CreateTime: timestamppb.Now(),
 				UpdateTime: timestamppb.New(zero),
 			},
-			InitialPatch:  patch,
 			Namespace:     namespace,
 			NamespaceId:   namespaceID,
 			ScheduleId:    scheduleID,
@@ -64,13 +66,49 @@ func NewScheduler(
 		cacheConflictToken: scheduler.InitialConflictToken,
 		Backfillers:        make(chasm.Map[string, *Backfiller]),
 	}
+	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
 
 	invoker := NewInvoker(ctx, sched)
 	generator := NewGenerator(ctx, sched, invoker)
 	sched.Invoker = chasm.NewComponentField(ctx, invoker)
 	sched.Generator = chasm.NewComponentField(ctx, generator)
 
+	// Create backfillers to fulfill initialPatch.
+	sched.handlePatch(ctx, patch)
+
 	return sched
+}
+
+// handlePatch creates backfillers to fulfill the given patch request.
+func (s *Scheduler) handlePatch(ctx chasm.MutableContext, patch *schedulepb.SchedulePatch) {
+	if patch != nil {
+		if patch.TriggerImmediately != nil {
+			s.NewImmediateBackfiller(ctx, patch.TriggerImmediately)
+		}
+
+		for _, backfill := range patch.BackfillRequest {
+			s.NewRangeBackfiller(ctx, backfill)
+		}
+	}
+}
+
+// Create initializes a new Scheduler for CreateSchedule requests.
+func Create(
+	ctx chasm.MutableContext,
+	req *schedulerpb.CreateScheduleRequest,
+) (*Scheduler, *schedulerpb.CreateScheduleResponse, error) {
+	// TODO: namespace name should be resolved from namespace_id via namespace registry
+	sched := NewScheduler(
+		ctx,
+		"", // TODO: should be namespace name
+		req.NamespaceId,
+		req.ScheduleId,
+		req.Schedule,
+		req.InitialPatch,
+	)
+	return sched, &schedulerpb.CreateScheduleResponse{
+		ConflictToken: sched.ConflictToken,
+	}, nil
 }
 
 func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
@@ -289,4 +327,76 @@ func (s *Scheduler) recordActionResult(result *schedulerActionResult) {
 			s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, start.StartWorkflowResult)
 		}
 	}
+}
+
+// Describe returns the current state of the Scheduler for DescribeSchedule requests.
+func (s *Scheduler) Describe(
+	ctx chasm.Context,
+	req *schedulerpb.DescribeScheduleRequest,
+) (*schedulerpb.DescribeScheduleResponse, error) {
+	return &schedulerpb.DescribeScheduleResponse{
+		Schedule:      common.CloneProto(s.Schedule),
+		Info:          common.CloneProto(s.Info),
+		ConflictToken: s.ConflictToken,
+		// TODO - memo and search_attributes are handled by visibility (separate PR)
+	}, nil
+}
+
+// Delete marks the Scheduler as closed without an idle timer.
+func (s *Scheduler) Delete(
+	ctx chasm.MutableContext,
+	req *schedulerpb.DeleteScheduleRequest,
+) (*schedulerpb.DeleteScheduleResponse, error) {
+	s.Closed = true
+	return &schedulerpb.DeleteScheduleResponse{}, nil
+}
+
+// Update replaces the schedule with a new one for UpdateSchedule requests.
+func (s *Scheduler) Update(
+	ctx chasm.MutableContext,
+	req *schedulerpb.UpdateScheduleRequest,
+) (*schedulerpb.UpdateScheduleResponse, error) {
+	if req.ConflictToken != s.ConflictToken {
+		return nil, ErrConflictTokenMismatch
+	}
+
+	s.Schedule = common.CloneProto(req.Schedule)
+	// TODO - also merge custom search attributes here
+
+	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
+	s.updateConflictToken()
+
+	return &schedulerpb.UpdateScheduleResponse{
+		ConflictToken: s.ConflictToken,
+	}, nil
+}
+
+// Patch applies a patch to the schedule for PatchSchedule requests.
+func (s *Scheduler) Patch(
+	ctx chasm.MutableContext,
+	req *schedulerpb.PatchScheduleRequest,
+) (*schedulerpb.PatchScheduleResponse, error) {
+	if req.ConflictToken != s.ConflictToken {
+		return nil, ErrConflictTokenMismatch
+	}
+
+	// Handle paused status.
+	// TODO - use SetPaused from visibility for this
+	if req.Patch.Pause != "" {
+		s.Schedule.State.Paused = true
+		s.Schedule.State.Notes = req.Patch.Pause
+	}
+	if req.Patch.Unpause != "" {
+		s.Schedule.State.Paused = false
+		s.Schedule.State.Notes = req.Patch.Unpause
+	}
+
+	s.handlePatch(ctx, req.Patch)
+
+	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
+	s.updateConflictToken()
+
+	return &schedulerpb.PatchScheduleResponse{
+		ConflictToken: s.ConflictToken,
+	}, nil
 }

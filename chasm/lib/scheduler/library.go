@@ -2,7 +2,9 @@ package scheduler
 
 import (
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.uber.org/fx"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -10,6 +12,8 @@ type (
 		fx.In
 
 		chasm.UnimplementedLibrary
+
+		handler *handler
 
 		SchedulerIdleTaskExecutor        *SchedulerIdleTaskExecutor
 		GeneratorTaskExecutor            *GeneratorTaskExecutor
@@ -20,6 +24,7 @@ type (
 )
 
 func NewLibrary(
+	handler *handler,
 	SchedulerIdleTaskExecutor *SchedulerIdleTaskExecutor,
 	GeneratorTaskExecutor *GeneratorTaskExecutor,
 	InvokerExecuteTaskExecutor *InvokerExecuteTaskExecutor,
@@ -27,6 +32,7 @@ func NewLibrary(
 	BackfillerTaskExecutor *BackfillerTaskExecutor,
 ) *Library {
 	return &Library{
+		handler:                          handler,
 		SchedulerIdleTaskExecutor:        SchedulerIdleTaskExecutor,
 		GeneratorTaskExecutor:            GeneratorTaskExecutor,
 		InvokerExecuteTaskExecutor:       InvokerExecuteTaskExecutor,
@@ -76,4 +82,8 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 			l.BackfillerTaskExecutor,
 		),
 	}
+}
+
+func (l *Library) RegisterServices(server *grpc.Server) {
+	server.RegisterService(&schedulerpb.SchedulerService_ServiceDesc, l.handler)
 }
