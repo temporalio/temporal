@@ -20,6 +20,10 @@ type DelayedRequestRateLimiter struct {
 	timer clock.Timer
 }
 
+func (DelayedRequestRateLimiter) GetFairnessPriority(req Request) int64 {
+	return 0
+}
+
 var ErrNegativeDelay = errors.New("delay cannot be negative")
 
 // NewDelayedRequestRateLimiter returns a DelayedRequestRateLimiter that delegates to the given rate limiter after a

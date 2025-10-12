@@ -9,7 +9,14 @@ type (
 	RequestRateLimiterAdapterImpl struct {
 		rateLimiter RateLimiter
 	}
+	FairnessRequestRateLimiterAdapter struct {
+		RequestRateLimiter
+	}
 )
+
+func (FairnessRequestRateLimiterAdapter) GetFairnessPriority(req Request) int64 {
+	return 0
+}
 
 var _ RequestRateLimiter = (*RequestRateLimiterAdapterImpl)(nil)
 
