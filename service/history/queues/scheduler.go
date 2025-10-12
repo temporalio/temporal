@@ -257,3 +257,8 @@ func (s *rateLimitedSchedulerImpl) Stop() {
 func (s *rateLimitedSchedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
 	return s.baseScheduler.TaskChannelKeyFn()
 }
+
+// Less implements comparison for TaskChannelKey for btree
+func (t TaskChannelKey) Less(other TaskChannelKey) bool {
+	return t.Priority < other.Priority
+}
