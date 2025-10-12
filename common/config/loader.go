@@ -56,6 +56,12 @@ const (
 //	    env.yaml   -- environment is one of the input params ex-development
 //	      env_az.yaml -- zone is another input param
 func Load(env string, configDir string, zone string, config interface{}) error {
+	return LoadWithEnvMap(env, configDir, zone, config, getEnvMap())
+}
+
+// LoadWithEnvMap loads configuration with a specific environment variable map.
+// This is useful for testing with controlled environment variables.
+func LoadWithEnvMap(env string, configDir string, zone string, config interface{}, envMap map[string]string) error {
 	if len(env) == 0 {
 		env = envDevelopment
 	}
@@ -74,8 +80,6 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 	// TODO: remove log dependency.
 	stdlog.Printf("Loading config files=%v\n", files)
 
-	templateFuncs := sprig.FuncMap()
-
 	for _, f := range files {
 		// This is tagged nosec because the file names being read are for config files that are not user supplied
 		// #nosec
@@ -84,28 +88,13 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 			return err
 		}
 
-		// If the config file contains "enable-template" in a comment within the first 1KB, then
-		// we will treat the file as a template and render it.
-		templating, err := checkTemplatingEnabled(data)
+		// Process the file (with optional template rendering)
+		processedData, err := processConfigFile(data, filepath.Base(f), envMap)
 		if err != nil {
 			return err
 		}
 
-		if templating {
-			tpl, err := template.New(filepath.Base(f)).Funcs(templateFuncs).Parse(string(data))
-			if err != nil {
-				return err
-			}
-
-			var rendered bytes.Buffer
-			err = tpl.Execute(&rendered, nil)
-			if err != nil {
-				return err
-			}
-			data = rendered.Bytes()
-		}
-
-		err = yaml.Unmarshal(data, config)
+		err = yaml.Unmarshal(processedData, config)
 		if err != nil {
 			return err
 		}
@@ -113,6 +102,44 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 
 	validate := newValidator()
 	return validate.Validate(config)
+}
+
+// processConfigFile processes a config file, rendering it as a template if enabled
+func processConfigFile(data []byte, filename string, envMap map[string]string) ([]byte, error) {
+	// If the config file contains "enable-template" in a comment within the first 1KB, then
+	// we will treat the file as a template and render it.
+	templating, err := checkTemplatingEnabled(data)
+	if err != nil {
+		return nil, err
+	}
+
+	if !templating {
+		return data, nil
+	}
+
+	stdlog.Printf("using templating")
+	return renderTemplate(data, filename, envMap)
+}
+
+// renderTemplate renders a config file as a Go template with environment variables
+func renderTemplate(data []byte, filename string, envMap map[string]string) ([]byte, error) {
+	templateFuncs := sprig.FuncMap()
+	templateData := map[string]interface{}{
+		"Env": envMap,
+	}
+
+	tpl, err := template.New(filename).Funcs(templateFuncs).Parse(string(data))
+	if err != nil {
+		return nil, err
+	}
+
+	var rendered bytes.Buffer
+	err = tpl.Execute(&rendered, templateData)
+	if err != nil {
+		return nil, err
+	}
+
+	return rendered.Bytes(), nil
 }
 
 // Helper function for loading configuration
@@ -178,4 +205,16 @@ func file(name string, suffix string) string {
 
 func path(dir string, file string) string {
 	return dir + "/" + file
+}
+
+// getEnvMap returns all environment variables as a map for template access
+func getEnvMap() map[string]string {
+	envMap := make(map[string]string)
+	for _, env := range os.Environ() {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			envMap[parts[0]] = parts[1]
+		}
+	}
+	return envMap
 }

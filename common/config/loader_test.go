@@ -116,3 +116,171 @@ func buildConfig(template bool, env, zone string) string {
       item1: ` + item1 + `
       item2: ` + item2
 }
+
+// TestRenderTemplateWithEnvVars tests that environment variable substitution works in templates
+func TestRenderTemplateWithEnvVars(t *testing.T) {
+	// Test with correct sprig default syntax: default <default_value> <given_value>
+	templateContent := []byte(`# enable-template
+log:
+  level: {{ default "info" (index .Env "LOG_LEVEL") }}
+persistence:
+  numHistoryShards: {{ default "4" (index .Env "NUM_HISTORY_SHARDS") }}`)
+
+	testCases := []struct {
+		name              string
+		envMap            map[string]string
+		expectedLogLevel  string
+		expectedNumShards string
+	}{
+		{
+			name: "with environment variables set",
+			envMap: map[string]string{
+				"LOG_LEVEL":          "debug",
+				"NUM_HISTORY_SHARDS": "8",
+			},
+			expectedLogLevel:  "debug",
+			expectedNumShards: "8",
+		},
+		{
+			name:              "with no environment variables - uses defaults",
+			envMap:            map[string]string{},
+			expectedLogLevel:  "info",
+			expectedNumShards: "4",
+		},
+		{
+			name: "with partial environment variables",
+			envMap: map[string]string{
+				"LOG_LEVEL": "warn",
+			},
+			expectedLogLevel:  "warn",
+			expectedNumShards: "4",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			rendered, err := renderTemplate(templateContent, "test.yaml", tc.envMap)
+			require.NoError(t, err)
+
+			renderedStr := string(rendered)
+			require.Contains(t, renderedStr, "level: "+tc.expectedLogLevel)
+			require.Contains(t, renderedStr, "numHistoryShards: "+tc.expectedNumShards)
+		})
+	}
+}
+
+// TestProcessConfigFile tests the config file processing with and without templates
+func TestProcessConfigFile(t *testing.T) {
+	t.Run("without template enabled", func(t *testing.T) {
+		content := []byte(`log:
+  level: info`)
+
+		envMap := map[string]string{"LOG_LEVEL": "debug"}
+		processed, err := processConfigFile(content, "test.yaml", envMap)
+		require.NoError(t, err)
+		require.Equal(t, content, processed) // Should be unchanged
+	})
+
+	t.Run("with template enabled", func(t *testing.T) {
+		content := []byte(`# enable-template
+log:
+  level: {{ .Env.LOG_LEVEL }}`)
+
+		envMap := map[string]string{"LOG_LEVEL": "debug"}
+		processed, err := processConfigFile(content, "test.yaml", envMap)
+		require.NoError(t, err)
+		require.Contains(t, string(processed), "level: debug")
+	})
+}
+
+// TestLoadWithDockerConfigTemplateStyleSyntax tests config loading with docker-style template syntax
+// This test demonstrates that the docker/config_template.yaml uses INCORRECT sprig default syntax
+func TestLoadWithDockerConfigTemplateStyleSyntax(t *testing.T) {
+	tempDir := testutils.MkdirTemp(t, "", "docker_config_syntax_test")
+
+	// Create a test config that mimics docker/config_template.yaml syntax but corrected
+	correctedConfig := `# enable-template
+log:
+  stdout: true
+  level: {{ default "info" (index .Env "LOG_LEVEL") }}
+
+persistence:
+  numHistoryShards: {{ default "4" (index .Env "NUM_HISTORY_SHARDS") }}
+  defaultStore: default
+  datastores:
+    {{- $db := default "postgres12" (index .Env "DB") | lower }}
+    {{- if eq $db "postgres12" }}
+    default:
+      sql:
+        pluginName: "{{ $db }}"
+        databaseName: "{{ default "temporal" (index .Env "DBNAME") }}"
+        connectAddr: "{{ default "" (index .Env "POSTGRES_SEEDS") }}:{{ default "5432" (index .Env "DB_PORT") }}"
+        connectProtocol: "tcp"
+    {{- end }}
+
+{{- $grpcPort := default "7233" (index .Env "FRONTEND_GRPC_PORT") }}
+services:
+  frontend:
+    rpc:
+      grpcPort: {{ $grpcPort }}
+      bindOnIP: "127.0.0.1"
+`
+
+	err := os.WriteFile(path(tempDir, "base.yaml"), []byte(correctedConfig), fileMode)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name              string
+		envMap            map[string]string
+		expectedLogLevel  string
+		expectedNumShards int32
+		expectedGRPCPort  int
+		expectedDB        string
+	}{
+		{
+			name: "postgres with custom values",
+			envMap: map[string]string{
+				"LOG_LEVEL":          "debug",
+				"NUM_HISTORY_SHARDS": "8",
+				"FRONTEND_GRPC_PORT": "8233",
+				"DB":                 "postgres12",
+				"POSTGRES_SEEDS":     "localhost",
+				"DBNAME":             "temporal_test",
+			},
+			expectedLogLevel:  "debug",
+			expectedNumShards: 8,
+			expectedGRPCPort:  8233,
+			expectedDB:        "postgres12",
+		},
+		{
+			name: "default values when env vars not set",
+			envMap: map[string]string{
+				"DB":             "postgres12",
+				"POSTGRES_SEEDS": "localhost",
+			},
+			expectedLogLevel:  "info",
+			expectedNumShards: 4,
+			expectedGRPCPort:  7233,
+			expectedDB:        "postgres12",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var cfg Config
+			err := LoadWithEnvMap("development", tempDir, "", &cfg, tc.envMap)
+			require.NoError(t, err)
+
+			// Verify environment variable substitution works with correct syntax
+			require.Equal(t, tc.expectedLogLevel, cfg.Log.Level, "log level should match")
+			require.Equal(t, tc.expectedNumShards, cfg.Persistence.NumHistoryShards, "num history shards should match")
+			require.NotNil(t, cfg.Services["frontend"])
+			require.Equal(t, tc.expectedGRPCPort, cfg.Services["frontend"].RPC.GRPCPort, "GRPC port should match")
+
+			// Verify database config
+			require.NotNil(t, cfg.Persistence.DataStores["default"])
+			require.NotNil(t, cfg.Persistence.DataStores["default"].SQL)
+			require.Equal(t, tc.expectedDB, cfg.Persistence.DataStores["default"].SQL.PluginName)
+		})
+	}
+}
