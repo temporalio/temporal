@@ -282,6 +282,13 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 		`How many extra goroutines can be created per root.`,
 	)
 
+	NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute = NewNamespaceIntSetting(
+		"system.numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute",
+		0,
+		`NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute is the number of consecutive workflow task problems to trigger the TemporalReportedProblems search attribute.
+Setting this to 0 (the default) prevents the search attribute from being set when a problem is detected, and unset when the problem is resolved.`,
+	)
+
 	// keys for size limit
 
 	BlobSizeLimitError = NewNamespaceIntSetting(
