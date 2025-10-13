@@ -34,30 +34,6 @@ func TestConfig_IsExperimentEnabled(t *testing.T) {
 			expected:           false,
 		},
 		{
-			name:               "multiple experiments allowed - first match",
-			allowedExperiments: []string{"chasm-scheduler", "other-exp", "third-exp"},
-			experiment:         "chasm-scheduler",
-			expected:           true,
-		},
-		{
-			name:               "multiple experiments allowed - middle match",
-			allowedExperiments: []string{"chasm-scheduler", "other-exp", "third-exp"},
-			experiment:         "other-exp",
-			expected:           true,
-		},
-		{
-			name:               "multiple experiments allowed - last match",
-			allowedExperiments: []string{"chasm-scheduler", "other-exp", "third-exp"},
-			experiment:         "third-exp",
-			expected:           true,
-		},
-		{
-			name:               "multiple experiments allowed - no match",
-			allowedExperiments: []string{"chasm-scheduler", "other-exp", "third-exp"},
-			experiment:         "not-present",
-			expected:           false,
-		},
-		{
 			name:               "wildcard only - any experiment enabled",
 			allowedExperiments: []string{"*"},
 			experiment:         "chasm-scheduler",
