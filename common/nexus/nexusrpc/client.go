@@ -34,7 +34,7 @@ type HTTPClientOptions struct {
 }
 
 // User-Agent header set on HTTP requests.
-const userAgent = "Nexus-go-sdk/" + version
+const userAgent = "temporalio/server"
 
 const headerUserAgent = "User-Agent"
 
@@ -124,9 +124,9 @@ func NewHTTPClient(options HTTPClientOptions) (*HTTPClient, error) {
 	}, nil
 }
 
-// ClientStartOperationResult is the return type of [HTTPClient.StartOperation].
+// ClientStartOperationResponse is the return type of [HTTPClient.StartOperation].
 // One and only one of Successful or Pending will be non-nil.
-type ClientStartOperationResult[T any] struct {
+type ClientStartOperationResponse[T any] struct {
 	// Set when start completes synchronously and successfully.
 	//
 	// If T is a [LazyValue], ensure that your consume it or read the underlying content in its entirety and close it to
@@ -159,7 +159,7 @@ func (c *HTTPClient) StartOperation(
 	operation string,
 	input any,
 	options nexus.StartOperationOptions,
-) (*ClientStartOperationResult[*nexus.LazyValue], error) {
+) (*ClientStartOperationResponse[*nexus.LazyValue], error) {
 	var reader *nexus.Reader
 	var contentLength *int64
 	if r, ok := input.(*nexus.Reader); ok {
@@ -242,7 +242,7 @@ func (c *HTTPClient) StartOperation(
 
 	// Do not close response body here to allow successful result to read it.
 	if response.StatusCode == http.StatusOK {
-		return &ClientStartOperationResult[*nexus.LazyValue]{
+		return &ClientStartOperationResponse[*nexus.LazyValue]{
 			Successful: nexus.NewLazyValue(
 				c.options.Serializer,
 				&nexus.Reader{
@@ -276,7 +276,7 @@ func (c *HTTPClient) StartOperation(
 		if err != nil {
 			return nil, newUnexpectedResponseError("empty operation token in response", response, body)
 		}
-		return &ClientStartOperationResult[*nexus.LazyValue]{
+		return &ClientStartOperationResponse[*nexus.LazyValue]{
 			Pending: handle,
 			Links:   links,
 		}, nil
@@ -465,9 +465,9 @@ func getUnsuccessfulStateFromHeader(response *http.Response, body []byte) (nexus
 }
 
 // StartOperation is the type safe version of [HTTPClient.StartOperation].
-// It accepts input of type I and returns a [ClientStartOperationResult] of type O, removing the need to consume the
+// It accepts input of type I and returns a [ClientStartOperationResponse] of type O, removing the need to consume the
 // [LazyValue] returned by the client method.
-func StartOperation[I, O any](ctx context.Context, client *HTTPClient, operation nexus.OperationReference[I, O], input I, request nexus.StartOperationOptions) (*ClientStartOperationResult[O], error) {
+func StartOperation[I, O any](ctx context.Context, client *HTTPClient, operation nexus.OperationReference[I, O], input I, request nexus.StartOperationOptions) (*ClientStartOperationResponse[O], error) {
 	result, err := client.StartOperation(ctx, operation.Name(), input, request)
 	if err != nil {
 		return nil, err
@@ -477,7 +477,7 @@ func StartOperation[I, O any](ctx context.Context, client *HTTPClient, operation
 		if err := result.Successful.Consume(&o); err != nil {
 			return nil, err
 		}
-		return &ClientStartOperationResult[O]{
+		return &ClientStartOperationResponse[O]{
 			Successful: o,
 			Links:      result.Links,
 		}, nil
@@ -488,7 +488,7 @@ func StartOperation[I, O any](ctx context.Context, client *HTTPClient, operation
 		ID:        result.Pending.ID,
 		Token:     result.Pending.Token,
 	}
-	return &ClientStartOperationResult[O]{
+	return &ClientStartOperationResponse[O]{
 		Pending: &handle,
 		Links:   result.Links,
 	}, nil

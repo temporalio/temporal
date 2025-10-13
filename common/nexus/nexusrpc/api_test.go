@@ -443,21 +443,21 @@ func TestDecodeLink(t *testing.T) {
 }
 
 func TestParseDuration(t *testing.T) {
-	_, err := parseDuration("invalid")
+	_, err := ParseDuration("invalid")
 	require.ErrorContains(t, err, "invalid duration:")
-	d, err := parseDuration("10ms")
+	d, err := ParseDuration("10ms")
 	require.NoError(t, err)
 	require.Equal(t, 10*time.Millisecond, d)
-	d, err = parseDuration("10.1ms")
+	d, err = ParseDuration("10.1ms")
 	require.NoError(t, err)
 	require.Equal(t, 10*time.Millisecond, d)
-	d, err = parseDuration("1s")
+	d, err = ParseDuration("1s")
 	require.NoError(t, err)
 	require.Equal(t, 1*time.Second, d)
-	d, err = parseDuration("999m")
+	d, err = ParseDuration("999m")
 	require.NoError(t, err)
 	require.Equal(t, 999*time.Minute, d)
-	d, err = parseDuration("1.3s")
+	d, err = ParseDuration("1.3s")
 	require.NoError(t, err)
 	require.Equal(t, 1300*time.Millisecond, d)
 }

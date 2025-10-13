@@ -94,7 +94,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 		endpoint  *nexuspb.Endpoint
 		timeout   time.Duration
 		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
-		assertion func(*testing.T, *nexusrpc.ClientStartOperationResult[string], error, http.Header)
+		assertion func(*testing.T, *nexusrpc.ClientStartOperationResponse[string], error, http.Header)
 	}
 
 	testCases := []testcase{
@@ -103,7 +103,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			outcome:  "sync_success",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
 			handler:  nexusEchoHandler,
-			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResult[string], err error, headers http.Header) {
+			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResponse[string], err error, headers http.Header) {
 				require.NoError(t, err)
 				require.Equal(t, "input", res.Successful)
 			},
@@ -139,7 +139,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 					},
 				}, nil
 			},
-			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResult[string], err error, headers http.Header) {
+			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResponse[string], err error, headers http.Header) {
 				require.NoError(t, err)
 				require.Equal(t, "test-token", res.Pending.Token)
 				require.Len(t, res.Links, 1)
@@ -169,7 +169,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 					},
 				}, nil
 			},
-			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResult[string], err error, headers http.Header) {
+			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResponse[string], err error, headers http.Header) {
 				var operationError *nexus.OperationError
 				require.ErrorAs(t, err, &operationError)
 				require.Equal(t, nexus.OperationStateFailed, operationError.State)
@@ -193,7 +193,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
 				}
 			},
-			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResult[string], err error, headers http.Header) {
+			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResponse[string], err error, headers http.Header) {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
@@ -213,7 +213,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 					RetryBehavior: enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE,
 				}
 			},
-			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResult[string], err error, headers http.Header) {
+			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResponse[string], err error, headers http.Header) {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
@@ -240,7 +240,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				time.Sleep(timeout) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return nil, nil
 			},
-			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResult[string], err error, header http.Header) {
+			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResponse[string], err error, header http.Header) {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, handlerErr.Type)
@@ -272,7 +272,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			header[nexus.HeaderRequestTimeout] = tc.timeout.String()
 		}
 
-		var result *nexusrpc.ClientStartOperationResult[string]
+		var result *nexusrpc.ClientStartOperationResponse[string]
 
 		// Wait until the endpoint is loaded into the registry.
 		s.Eventually(func() bool {
@@ -521,12 +521,12 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims() {
 		name      string
 		header    nexus.Header
 		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
-		assertion func(*testing.T, *nexusrpc.ClientStartOperationResult[string], error, map[string][]*metricstest.CapturedRecording)
+		assertion func(*testing.T, *nexusrpc.ClientStartOperationResponse[string], error, map[string][]*metricstest.CapturedRecording)
 	}
 	testCases := []testcase{
 		{
 			name: "no header",
-			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
+			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResponse[string], err error, snap map[string][]*metricstest.CapturedRecording) {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUnauthorized, handlerErr.Type)
@@ -539,7 +539,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims() {
 			header: nexus.Header{
 				"authorization": "Bearer invalid",
 			},
-			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
+			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResponse[string], err error, snap map[string][]*metricstest.CapturedRecording) {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUnauthenticated, handlerErr.Type)
@@ -553,7 +553,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims() {
 				"authorization": "Bearer test",
 			},
 			handler: nexusEchoHandler,
-			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
+			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResponse[string], err error, snap map[string][]*metricstest.CapturedRecording) {
 				require.NoError(t, err)
 				require.Equal(t, "input", res.Successful)
 				require.Equal(t, 0, len(snap["nexus_request_preprocess_errors"]))
@@ -592,7 +592,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims() {
 			go s.nexusTaskPoller(ctx, taskQueue, tc.handler)
 		}
 
-		var result *nexusrpc.ClientStartOperationResult[string]
+		var result *nexusrpc.ClientStartOperationResponse[string]
 		var snap map[string][]*metricstest.CapturedRecording
 
 		// Wait until the endpoint is loaded into the registry.
@@ -640,7 +640,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_PayloadSizeLimit() {
 		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 		defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
-		var result *nexusrpc.ClientStartOperationResult[string]
+		var result *nexusrpc.ClientStartOperationResponse[string]
 
 		// Wait until the endpoint is loaded into the registry.
 		s.Eventually(func() bool {

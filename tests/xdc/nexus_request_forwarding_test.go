@@ -115,7 +115,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 		taskQueue string
 		header    nexus.Header
 		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
-		assertion func(*testing.T, *nexusrpc.ClientStartOperationResult[string], error, map[string][]*metricstest.CapturedRecording, map[string][]*metricstest.CapturedRecording)
+		assertion func(*testing.T, *nexusrpc.ClientStartOperationResponse[string], error, map[string][]*metricstest.CapturedRecording, map[string][]*metricstest.CapturedRecording)
 	}{
 		{
 			name:      "success",
@@ -132,7 +132,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 									Payload: res.Request.GetStartOperation().GetPayload()}}}},
 				}, nil
 			},
-			assertion: func(t *testing.T, result *nexusrpc.ClientStartOperationResult[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+			assertion: func(t *testing.T, result *nexusrpc.ClientStartOperationResponse[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				require.NoError(t, retErr)
 				require.Equal(t, "input", result.Successful)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "sync_success")
@@ -159,7 +159,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 									}}}}},
 				}, nil
 			},
-			assertion: func(t *testing.T, result *nexusrpc.ClientStartOperationResult[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+			assertion: func(t *testing.T, result *nexusrpc.ClientStartOperationResponse[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				var operationError *nexus.OperationError
 				require.ErrorAs(t, retErr, &operationError)
 				require.Equal(t, nexus.OperationStateFailed, operationError.State)
@@ -187,7 +187,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
 				}
 			},
-			assertion: func(t *testing.T, result *nexusrpc.ClientStartOperationResult[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+			assertion: func(t *testing.T, result *nexusrpc.ClientStartOperationResponse[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
@@ -207,7 +207,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 					Failure:   &nexuspb.Failure{Message: "redirection not allowed"},
 				}
 			},
-			assertion: func(t *testing.T, result *nexusrpc.ClientStartOperationResult[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
+			assertion: func(t *testing.T, result *nexusrpc.ClientStartOperationResponse[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)

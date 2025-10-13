@@ -250,7 +250,7 @@ func (h *httpHandler) cancelOperation(service, operation, token string, writer h
 func (h *httpHandler) parseRequestTimeoutHeader(writer http.ResponseWriter, request *http.Request) (time.Duration, bool) {
 	timeoutStr := request.Header.Get(nexus.HeaderRequestTimeout)
 	if timeoutStr != "" {
-		timeoutDuration, err := parseDuration(timeoutStr)
+		timeoutDuration, err := ParseDuration(timeoutStr)
 		if err != nil {
 			h.logger.Warn("invalid request timeout header", "timeout", timeoutStr)
 			h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid request timeout header"))

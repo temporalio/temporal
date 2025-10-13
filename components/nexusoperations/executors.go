@@ -230,7 +230,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 
 	startTime := time.Now()
-	var rawResult *nexusrpc.ClientStartOperationResult[*nexus.LazyValue]
+	var rawResult *nexusrpc.ClientStartOperationResponse[*nexus.LazyValue]
 	var callErr error
 	if callTimeout < e.Config.MinRequestTimeout(ns.Name().String()) {
 		callErr = ErrOperationTimeoutBelowMin
@@ -254,14 +254,14 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 
-	var result *nexusrpc.ClientStartOperationResult[*commonpb.Payload]
+	var result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload]
 	if callErr == nil {
 		if rawResult.Pending != nil {
 			tokenLimit := e.Config.MaxOperationTokenLength(ns.Name().String())
 			if len(rawResult.Pending.Token) > tokenLimit {
 				callErr = fmt.Errorf("%w: length exceeds allowed limit (%d/%d)", ErrInvalidOperationToken, len(rawResult.Pending.Token), tokenLimit)
 			} else {
-				result = &nexusrpc.ClientStartOperationResult[*commonpb.Payload]{
+				result = &nexusrpc.ClientStartOperationResponse[*commonpb.Payload]{
 					Pending: &nexusrpc.OperationHandle[*commonpb.Payload]{
 						Operation: rawResult.Pending.Operation,
 						Token:     rawResult.Pending.Token,
@@ -277,7 +277,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 			} else if payload.Size() > e.Config.PayloadSizeLimit(ns.Name().String()) {
 				callErr = ErrResponseBodyTooLarge
 			} else {
-				result = &nexusrpc.ClientStartOperationResult[*commonpb.Payload]{
+				result = &nexusrpc.ClientStartOperationResponse[*commonpb.Payload]{
 					Successful: payload,
 					Links:      rawResult.Links,
 				}
@@ -361,7 +361,7 @@ func (e taskExecutor) loadOperationArgs(
 	return
 }
 
-func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexusrpc.ClientStartOperationResult[*commonpb.Payload], callErr error) error {
+func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload], callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		operation, err := hsm.MachineData[Operation](node)
 		if err != nil {
@@ -792,7 +792,7 @@ func nexusOperationFailure(operation Operation, scheduledEventID int64, cause *f
 	}
 }
 
-func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOperationResult[*nexus.LazyValue], callErr error) string {
+func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOperationResponse[*nexus.LazyValue], callErr error) string {
 	var handlerError *nexus.HandlerError
 	var opFailedError *nexus.OperationError
 

@@ -17,9 +17,6 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 )
 
-// Package version.
-const version = "v0.4.0"
-
 const (
 	// Nexus specific headers.
 	headerOperationState     = "nexus-operation-state"
@@ -127,7 +124,7 @@ func addContextTimeoutToHTTPHeader(ctx context.Context, httpHeader http.Header) 
 	if !ok {
 		return httpHeader
 	}
-	httpHeader.Set(nexus.HeaderRequestTimeout, formatDuration(time.Until(deadline)))
+	httpHeader.Set(nexus.HeaderRequestTimeout, FormatDuration(time.Until(deadline)))
 	return httpHeader
 }
 
@@ -240,7 +237,7 @@ func validateLinkType(value string) error {
 		return fmt.Errorf("link type is empty")
 	}
 	for _, c := range value {
-		if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9') && c != '_' && c != '.' && c != '/' {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '_' && c != '.' && c != '/' {
 			return fmt.Errorf("link type contains invalid char (valid chars: alphanumeric, '_', '.', '/')")
 		}
 	}
@@ -249,7 +246,7 @@ func validateLinkType(value string) error {
 
 var durationRegexp = regexp.MustCompile(`^(\d+(?:\.\d+)?)(ms|s|m)$`)
 
-func parseDuration(value string) (time.Duration, error) {
+func ParseDuration(value string) (time.Duration, error) {
 	m := durationRegexp.FindStringSubmatch(value)
 	if len(m) == 0 {
 		return 0, fmt.Errorf("invalid duration: %q", value)
@@ -270,7 +267,7 @@ func parseDuration(value string) (time.Duration, error) {
 	panic("unreachable")
 }
 
-// formatDuration converts a duration into a string representation in millisecond resolution.
-func formatDuration(d time.Duration) string {
+// FormatDuration converts a duration into a string representation in millisecond resolution.
+func FormatDuration(d time.Duration) string {
 	return strconv.FormatInt(d.Milliseconds(), 10) + "ms"
 }
