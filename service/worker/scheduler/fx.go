@@ -26,7 +26,7 @@ const (
 	NamespaceDivision = "TemporalScheduler"
 
 	// ChasmSchedulerExperiment is the experiment name for enabling CHASM (V2) scheduler
-	ChasmSchedulerExperiment = "chasm-sch"
+	ChasmSchedulerExperiment = "chasm-scheduler"
 )
 
 var (

@@ -20,7 +20,7 @@ const (
 	CallerTypeHeaderName = "caller-type"
 	CallOriginHeaderName = "call-initiation"
 
-	ExperimentalHeaderName = "temporal-experimental"
+	ExperimentHeaderName = "temporal-experiment"
 )
 
 var (
@@ -94,18 +94,30 @@ func (h GRPCHeaderGetter) Get(key string) string {
 	return ""
 }
 
-// IsExperimentEnabled checks if a specific experiment is present in the x-temporal-experimental header.
+const (
+	// maxExperiments limits the number of experiments that can be specified in the header
+	// to prevent resource exhaustion from parsing arbitrarily large comma-separated lists.
+	maxExperiments = 10
+)
+
+// IsExperimentEnabled checks if a specific experiment is present in the temporal-experiment header.
 // Returns true if the experiment is explicitly listed or if "*" (wildcard) is present.
+// The header can contain a comma-separated list of up to maxExperiments experiment names.
 func IsExperimentEnabled(ctx context.Context, experiment string) bool {
-	experimentalValues := metadata.ValueFromIncomingContext(ctx, ExperimentalHeaderName)
+	experimentalValues := metadata.ValueFromIncomingContext(ctx, ExperimentHeaderName)
 
 	for _, headerValue := range experimentalValues {
 		if headerValue == "" {
 			continue
 		}
-		// Split by comma in case multiple experiments are sent
-		requestedExperiments := strings.Split(headerValue, ",")
-		for _, requested := range requestedExperiments {
+		// Use SplitN to limit the number of parts we process, preventing
+		// resource exhaustion from maliciously crafted headers with excessive commas.
+		requestedExperiments := strings.SplitN(headerValue, ",", maxExperiments+1)
+		for i, requested := range requestedExperiments {
+			// Stop processing after maxExperiments to prevent DoS
+			if i >= maxExperiments {
+				break
+			}
 			requested = strings.TrimSpace(requested)
 			// Check for wildcard or exact match
 			if requested == "*" || strings.EqualFold(requested, experiment) {
