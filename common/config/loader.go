@@ -3,6 +3,7 @@ package config
 import (
 	"bufio"
 	"bytes"
+	_ "embed"
 	"fmt"
 	"io"
 	stdlog "log"
@@ -14,6 +15,9 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	"gopkg.in/yaml.v3"
 )
+
+//go:embed config_template_embedded.yaml
+var embeddedConfigTemplate []byte
 
 const (
 	// EnvKeyRoot the environment variable key for runtime root dir
@@ -74,7 +78,22 @@ func LoadWithEnvMap(env string, configDir string, zone string, config interface{
 
 	files, err := getConfigFiles(env, configDir, zone)
 	if err != nil {
-		return err
+		// If no config files found, try to use embedded template
+		stdlog.Printf("No config files found, attempting to use embedded template\n")
+
+		// Process the embedded template
+		processedData, procErr := processConfigFile(embeddedConfigTemplate, "config_template_embedded.yaml", envMap)
+		if procErr != nil {
+			return fmt.Errorf("failed to process embedded config template: %w", procErr)
+		}
+
+		err = yaml.Unmarshal(processedData, config)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal embedded config template: %w", err)
+		}
+
+		validate := newValidator()
+		return validate.Validate(config)
 	}
 
 	// TODO: remove log dependency.

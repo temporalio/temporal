@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -91,9 +92,17 @@ func (s *LoaderSuite) TestHierarchy() {
 }
 
 func (s *LoaderSuite) TestInvalidPath() {
+	// Create an empty directory to test that when no config files exist,
+	// the embedded template is used as a fallback
+	dir := testutils.MkdirTemp(s.T(), "", "loader.testInvalidPath")
+
+	// Test with testConfig - should succeed with embedded template fallback
+	// but fields won't match since the structures are different
 	var cfg testConfig
-	err := Load("prod", "", "", &cfg)
-	s.NotNil(err)
+	err := Load("prod", dir, "", &cfg)
+	// The embedded template loads successfully but testConfig structure
+	// won't have the fields populated, so we just verify no error
+	s.Nil(err)
 }
 
 func (s *LoaderSuite) createFile(dir string, file string, template bool, env string, zone string) {
@@ -193,94 +202,67 @@ log:
 	})
 }
 
-// TestLoadWithDockerConfigTemplateStyleSyntax tests config loading with docker-style template syntax
-// This test demonstrates that the docker/config_template.yaml uses INCORRECT sprig default syntax
-func TestLoadWithDockerConfigTemplateStyleSyntax(t *testing.T) {
-	tempDir := testutils.MkdirTemp(t, "", "docker_config_syntax_test")
+// TestLoadWithEmbeddedTemplate tests that the embedded template is used when no config files exist
+func TestLoadWithEmbeddedTemplate(t *testing.T) {
+	// Use a non-existent directory to force fallback to embedded template
+	tempDir := testutils.MkdirTemp(t, "", "embedded_template_test")
+	nonExistentDir := filepath.Join(tempDir, "does_not_exist")
 
-	// Create a test config that mimics docker/config_template.yaml syntax but corrected
-	correctedConfig := `# enable-template
+	envMap := map[string]string{
+		"DB":             "postgres12",
+		"POSTGRES_SEEDS": "localhost",
+	}
+
+	var cfg Config
+	err := LoadWithEnvMap("development", nonExistentDir, "", &cfg, envMap)
+	require.NoError(t, err)
+
+	// Verify embedded template loaded with defaults
+	require.Equal(t, "info", cfg.Log.Level)
+	require.Equal(t, int32(4), cfg.Persistence.NumHistoryShards)
+	require.NotNil(t, cfg.Services["frontend"])
+	require.Equal(t, 7233, cfg.Services["frontend"].RPC.GRPCPort)
+}
+
+// TestLoadWithEnvVarSubstitution tests config loading with environment variable substitution
+func TestLoadWithEnvVarSubstitution(t *testing.T) {
+	tempDir := testutils.MkdirTemp(t, "", "env_var_substitution_test")
+
+	configWithEnvVars := `# enable-template
 log:
-  stdout: true
   level: {{ default "info" (index .Env "LOG_LEVEL") }}
-
 persistence:
   numHistoryShards: {{ default "4" (index .Env "NUM_HISTORY_SHARDS") }}
   defaultStore: default
   datastores:
-    {{- $db := default "postgres12" (index .Env "DB") | lower }}
-    {{- if eq $db "postgres12" }}
     default:
       sql:
-        pluginName: "{{ $db }}"
-        databaseName: "{{ default "temporal" (index .Env "DBNAME") }}"
-        connectAddr: "{{ default "" (index .Env "POSTGRES_SEEDS") }}:{{ default "5432" (index .Env "DB_PORT") }}"
+        pluginName: "postgres12"
+        databaseName: "temporal"
+        connectAddr: "localhost:5432"
         connectProtocol: "tcp"
-    {{- end }}
-
-{{- $grpcPort := default "7233" (index .Env "FRONTEND_GRPC_PORT") }}
 services:
   frontend:
     rpc:
-      grpcPort: {{ $grpcPort }}
+      grpcPort: {{ default "7233" (index .Env "FRONTEND_GRPC_PORT") }}
       bindOnIP: "127.0.0.1"
 `
 
-	err := os.WriteFile(path(tempDir, "base.yaml"), []byte(correctedConfig), fileMode)
+	err := os.WriteFile(path(tempDir, "base.yaml"), []byte(configWithEnvVars), fileMode)
 	require.NoError(t, err)
 
-	testCases := []struct {
-		name              string
-		envMap            map[string]string
-		expectedLogLevel  string
-		expectedNumShards int32
-		expectedGRPCPort  int
-		expectedDB        string
-	}{
-		{
-			name: "postgres with custom values",
-			envMap: map[string]string{
-				"LOG_LEVEL":          "debug",
-				"NUM_HISTORY_SHARDS": "8",
-				"FRONTEND_GRPC_PORT": "8233",
-				"DB":                 "postgres12",
-				"POSTGRES_SEEDS":     "localhost",
-				"DBNAME":             "temporal_test",
-			},
-			expectedLogLevel:  "debug",
-			expectedNumShards: 8,
-			expectedGRPCPort:  8233,
-			expectedDB:        "postgres12",
-		},
-		{
-			name: "default values when env vars not set",
-			envMap: map[string]string{
-				"DB":             "postgres12",
-				"POSTGRES_SEEDS": "localhost",
-			},
-			expectedLogLevel:  "info",
-			expectedNumShards: 4,
-			expectedGRPCPort:  7233,
-			expectedDB:        "postgres12",
-		},
+	// Test with custom env vars
+	envMap := map[string]string{
+		"LOG_LEVEL":          "debug",
+		"NUM_HISTORY_SHARDS": "8",
+		"FRONTEND_GRPC_PORT": "8233",
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			var cfg Config
-			err := LoadWithEnvMap("development", tempDir, "", &cfg, tc.envMap)
-			require.NoError(t, err)
+	var cfg Config
+	err = LoadWithEnvMap("development", tempDir, "", &cfg, envMap)
+	require.NoError(t, err)
 
-			// Verify environment variable substitution works with correct syntax
-			require.Equal(t, tc.expectedLogLevel, cfg.Log.Level, "log level should match")
-			require.Equal(t, tc.expectedNumShards, cfg.Persistence.NumHistoryShards, "num history shards should match")
-			require.NotNil(t, cfg.Services["frontend"])
-			require.Equal(t, tc.expectedGRPCPort, cfg.Services["frontend"].RPC.GRPCPort, "GRPC port should match")
-
-			// Verify database config
-			require.NotNil(t, cfg.Persistence.DataStores["default"])
-			require.NotNil(t, cfg.Persistence.DataStores["default"].SQL)
-			require.Equal(t, tc.expectedDB, cfg.Persistence.DataStores["default"].SQL.PluginName)
-		})
-	}
+	require.Equal(t, "debug", cfg.Log.Level)
+	require.Equal(t, int32(8), cfg.Persistence.NumHistoryShards)
+	require.Equal(t, 8233, cfg.Services["frontend"].RPC.GRPCPort)
 }
