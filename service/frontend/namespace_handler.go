@@ -860,6 +860,7 @@ func (d *namespaceHandler) createResponse(
 			SyncUpdate:                      d.config.EnableUpdateWorkflowExecution(info.Name),
 			AsyncUpdate:                     d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
 			ReportedProblemsSearchAttribute: numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0,
+			WorkerHeartbeats:                d.config.WorkerHeartbeatsEnabled(info.Name),
 		},
 		SupportsSchedules: d.config.EnableSchedules(info.Name),
 	}
