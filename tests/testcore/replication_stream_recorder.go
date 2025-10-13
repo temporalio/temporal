@@ -56,7 +56,7 @@ func (r *ReplicationStreamRecorder) SetOutputFile(filePath string) error {
 
 	// Close existing file if any
 	if r.outputFile != nil {
-		r.outputFile.Close()
+		_ = r.outputFile.Close()
 	}
 
 	// Create or truncate the output file
@@ -119,8 +119,8 @@ func (r *ReplicationStreamRecorder) recordMessage(method string, msg proto.Messa
 	if r.outputFile != nil {
 		formattedMsg := r.formatCapturedMessage(captured)
 		completeOutput := "\n" + formattedMsg + "\n"
-		r.outputFile.WriteString(completeOutput)
-		r.outputFile.Sync() // Flush to disk immediately
+		_, _ = r.outputFile.WriteString(completeOutput)
+		_ = r.outputFile.Sync() // Flush to disk immediately
 	}
 }
 

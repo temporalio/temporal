@@ -1048,7 +1048,7 @@ func (s *syncWorkflowStateSuite) TestIsCloseTransferTaskAcked_TaskNotAcked_Conta
 	// Reader scope that contains the close task
 	scopeMin := int64(10000)
 	scopeMax := int64(15000)
-	taskId := int64(12000)
+	taskID := int64(12000)
 
 	// Create a new mock shard with queue state where:
 	// - exclusive reader high watermark is past the task
@@ -1081,7 +1081,7 @@ func (s *syncWorkflowStateSuite) TestIsCloseTransferTaskAcked_TaskNotAcked_Conta
 						},
 					},
 					ExclusiveReaderHighWatermark: shard.ConvertToPersistenceTaskKey(
-						tasks.NewImmediateKey(taskId),
+						tasks.NewImmediateKey(taskID),
 					),
 				},
 			},

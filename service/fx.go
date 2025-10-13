@@ -39,7 +39,7 @@ type (
 		fx.In
 
 		Logger                       log.Logger
-		RpcFactory                   common.RPCFactory
+		RPCFactory                   common.RPCFactory
 		RetryableInterceptor         *interceptor.RetryableInterceptor
 		TelemetryInterceptor         *interceptor.TelemetryInterceptor
 		RateLimitInterceptor         *interceptor.RateLimitInterceptor
@@ -122,7 +122,7 @@ func GrpcServerOptionsProvider(
 	params GrpcServerOptionsParams,
 ) []grpc.ServerOption {
 
-	grpcServerOptions, err := params.RpcFactory.GetInternodeGRPCServerOptions()
+	grpcServerOptions, err := params.RPCFactory.GetInternodeGRPCServerOptions()
 	if err != nil {
 		params.Logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}

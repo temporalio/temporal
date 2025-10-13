@@ -108,12 +108,12 @@ type (
 		captureMetricsHandler            *metricstest.CaptureHandler
 		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
 
-		onGetClaims           func(*authorization.AuthInfo) (*authorization.Claims, error)
-		onAuthorize           func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
-		callbackLock          sync.RWMutex // Must be used for above callbacks
-		serviceFxOptions      map[primitives.ServiceName][]fx.Option
-		taskCategoryRegistry  tasks.TaskCategoryRegistry
-		chasmRegistry         *chasm.Registry
+		onGetClaims               func(*authorization.AuthInfo) (*authorization.Claims, error)
+		onAuthorize               func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
+		callbackLock              sync.RWMutex // Must be used for above callbacks
+		serviceFxOptions          map[primitives.ServiceName][]fx.Option
+		taskCategoryRegistry      tasks.TaskCategoryRegistry
+		chasmRegistry             *chasm.Registry
 		grpcClientInterceptor     *grpcinject.Interceptor
 		replicationStreamRecorder *ReplicationStreamRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
@@ -210,11 +210,11 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
 		// If this doesn't build, make sure you're building with tags 'test_dep':
-		testHooks:                testhooks.NewTestHooksImpl(),
-		serviceFxOptions:         params.ServiceFxOptions,
-		taskCategoryRegistry:     params.TaskCategoryRegistry,
-		chasmRegistry:            params.ChasmRegistry,
-		hostsByProtocolByService: params.HostsByProtocolByService,
+		testHooks:                 testhooks.NewTestHooksImpl(),
+		serviceFxOptions:          params.ServiceFxOptions,
+		taskCategoryRegistry:      params.TaskCategoryRegistry,
+		chasmRegistry:             params.ChasmRegistry,
+		hostsByProtocolByService:  params.HostsByProtocolByService,
 		grpcClientInterceptor:     grpcinject.NewInterceptor(),
 		replicationStreamRecorder: NewReplicationStreamRecorder(),
 		spanExporters:             params.SpanExporters,
@@ -368,21 +368,21 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(sdkClientFactoryProvider),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() []grpc.UnaryServerInterceptor {
-			if c.replicationStreamRecorder != nil {
-				return []grpc.UnaryServerInterceptor{
-					c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
+				if c.replicationStreamRecorder != nil {
+					return []grpc.UnaryServerInterceptor{
+						c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
+					}
 				}
-			}
-			return nil
-		}),
-		fx.Provide(func() []grpc.StreamServerInterceptor {
-			if c.replicationStreamRecorder != nil {
-				return []grpc.StreamServerInterceptor{
-					c.replicationStreamRecorder.StreamServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
+				return nil
+			}),
+			fx.Provide(func() []grpc.StreamServerInterceptor {
+				if c.replicationStreamRecorder != nil {
+					return []grpc.StreamServerInterceptor{
+						c.replicationStreamRecorder.StreamServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
+					}
 				}
-			}
-			return nil
-		}),
+				return nil
+			}),
 			fx.Provide(func() authorization.Authorizer { return c }),
 			fx.Provide(func() authorization.ClaimMapper { return c }),
 			fx.Provide(func() authorization.JWTAudienceMapper { return nil }),

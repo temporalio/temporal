@@ -249,15 +249,15 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 	versionedTransitionArtifact.IsCloseTransferTaskAcked = s.isCloseTransferTaskAcked(mutableState)
 
 	executionInfo := mutableState.GetExecutionInfo()
-	newRunId := executionInfo.SuccessorRunId
+	newRunID := executionInfo.SuccessorRunId
 	sourceVersionHistories := versionhistory.CopyVersionHistories(executionInfo.VersionHistories)
 	sourceTransitionHistory := transitionhistory.CopyVersionedTransitions(executionInfo.TransitionHistory)
 	if cacheReleaseFunc != nil {
 		cacheReleaseFunc(nil)
 	}
 
-	if len(newRunId) > 0 {
-		newRunInfo, err := s.getNewRunInfo(ctx, namespace.ID(namespaceID), execution, newRunId)
+	if len(newRunID) > 0 {
+		newRunInfo, err := s.getNewRunInfo(ctx, namespace.ID(namespaceID), execution, newRunID)
 		if err != nil {
 			return nil, err
 		}
@@ -623,9 +623,9 @@ func (s *SyncStateRetrieverImpl) getUpdatedSubStateMachine(n *hsm.Node, versione
 func (s *SyncStateRetrieverImpl) isCloseTransferTaskAcked(
 	mutableState historyi.MutableState,
 ) bool {
-	closeTransferTaskId := mutableState.GetExecutionInfo().CloseTransferTaskId
+	closeTransferTaskID := mutableState.GetExecutionInfo().CloseTransferTaskId
 
-	if closeTransferTaskId == 0 {
+	if closeTransferTaskID == 0 {
 		return false
 	}
 
@@ -636,7 +636,7 @@ func (s *SyncStateRetrieverImpl) isCloseTransferTaskAcked(
 
 	closeTransferTask := &tasks.CloseExecutionTask{
 		WorkflowKey: mutableState.GetWorkflowKey(),
-		TaskID:      closeTransferTaskId,
+		TaskID:      closeTransferTaskID,
 	}
 
 	return queues.IsTaskAcked(closeTransferTask, transferQueueState)
