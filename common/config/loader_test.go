@@ -40,7 +40,7 @@ func (s *LoaderSuite) TestBaseYaml() {
 	dir := testutils.MkdirTemp(s.T(), "", "loader.testBaseYaml")
 
 	data := buildConfig(false, "", "")
-	err := os.WriteFile(path(dir, "base.yaml"), []byte(data), fileMode)
+	err := os.WriteFile(filepath.Join(dir, "base.yaml"), []byte(data), fileMode)
 	s.Nil(err)
 
 	envs := []string{"", "prod"}
@@ -93,20 +93,18 @@ func (s *LoaderSuite) TestHierarchy() {
 
 func (s *LoaderSuite) TestInvalidPath() {
 	// Create an empty directory to test that when no config files exist,
-	// the embedded template is used as a fallback
+	// Load returns an error (no longer falls back to embedded template)
 	dir := testutils.MkdirTemp(s.T(), "", "loader.testInvalidPath")
 
-	// Test with testConfig - should succeed with embedded template fallback
-	// but fields won't match since the structures are different
 	var cfg testConfig
 	err := Load("prod", dir, "", &cfg)
-	// The embedded template loads successfully but testConfig structure
-	// won't have the fields populated, so we just verify no error
-	s.Nil(err)
+	// Should return an error since no config files exist
+	s.Error(err)
+	s.Contains(err.Error(), "no config files found")
 }
 
 func (s *LoaderSuite) createFile(dir string, file string, template bool, env string, zone string) {
-	err := os.WriteFile(path(dir, file), []byte(buildConfig(template, env, zone)), fileMode)
+	err := os.WriteFile(filepath.Join(dir, file), []byte(buildConfig(template, env, zone)), fileMode)
 	s.Nil(err)
 }
 
@@ -202,19 +200,16 @@ log:
 	})
 }
 
-// TestLoadWithEmbeddedTemplate tests that the embedded template is used when no config files exist
+// TestLoadWithEmbeddedTemplate tests that the embedded template can be loaded explicitly
 func TestLoadWithEmbeddedTemplate(t *testing.T) {
-	// Use a non-existent directory to force fallback to embedded template
-	tempDir := testutils.MkdirTemp(t, "", "embedded_template_test")
-	nonExistentDir := filepath.Join(tempDir, "does_not_exist")
-
 	envMap := map[string]string{
 		"DB":             "postgres12",
 		"POSTGRES_SEEDS": "localhost",
 	}
 
 	var cfg Config
-	err := LoadWithEnvMap("development", nonExistentDir, "", &cfg, envMap)
+	// Use the useEmbeddedOnly flag to load embedded template
+	err := LoadWithEnvMap("", "", "", &cfg, envMap, true)
 	require.NoError(t, err)
 
 	// Verify embedded template loaded with defaults
@@ -248,7 +243,7 @@ services:
       bindOnIP: "127.0.0.1"
 `
 
-	err := os.WriteFile(path(tempDir, "base.yaml"), []byte(configWithEnvVars), fileMode)
+	err := os.WriteFile(filepath.Join(tempDir, "base.yaml"), []byte(configWithEnvVars), fileMode)
 	require.NoError(t, err)
 
 	// Test with custom env vars
@@ -259,7 +254,7 @@ services:
 	}
 
 	var cfg Config
-	err = LoadWithEnvMap("development", tempDir, "", &cfg, envMap)
+	err = LoadWithEnvMap("development", tempDir, "", &cfg, envMap, false)
 	require.NoError(t, err)
 
 	require.Equal(t, "debug", cfg.Log.Level)

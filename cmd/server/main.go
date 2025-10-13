@@ -134,19 +134,38 @@ func buildCLI() *cli.App {
 					Value:   cli.NewStringSlice(temporal.DefaultServices...),
 					Usage:   "service(s) to start",
 				},
+				&cli.BoolFlag{
+					Name:  "config-from-env",
+					Usage: "load configuration from environment variables only (ignores config files)",
+				},
 			},
 			Before: func(c *cli.Context) error {
 				if c.Args().Len() > 0 {
 					return cli.Exit("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
 				}
+
+				// Validate that --config-from-env is not used with conflicting flags
+				if c.Bool("config-from-env") {
+					// Check if user explicitly set --config (not just using the default value)
+					if c.IsSet("config") {
+						return cli.Exit("ERROR: --config-from-env cannot be used with --config flag", 1)
+					}
+					// Check if user explicitly set --env
+					if c.IsSet("env") {
+						return cli.Exit("ERROR: --config-from-env cannot be used with --env flag", 1)
+					}
+					// Check if user explicitly set --zone
+					if c.IsSet("zone") {
+						return cli.Exit("ERROR: --config-from-env cannot be used with --zone flag", 1)
+					}
+				}
+
 				return nil
 			},
 			Action: func(c *cli.Context) error {
-				env := c.String("env")
-				zone := c.String("zone")
-				configDir := path.Join(c.String("root"), c.String("config"))
 				services := c.StringSlice("service")
 				allowNoAuth := c.Bool("allow-no-auth")
+				configFromEnv := c.Bool("config-from-env")
 
 				// For backward compatibility to support old flag format (i.e. `--services=frontend,history,matching`).
 				if c.IsSet("services") {
@@ -154,9 +173,31 @@ func buildCLI() *cli.App {
 					services = strings.Split(c.String("services"), ",")
 				}
 
-				cfg, err := config.LoadConfig(env, configDir, zone)
-				if err != nil {
-					return cli.Exit(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
+				var cfg *config.Config
+				var err error
+
+				// Determine whether to use file-based or embedded config
+				useFileConfig := c.IsSet("config") || c.IsSet("env") || c.IsSet("zone")
+
+				if configFromEnv || !useFileConfig {
+					// Load config from embedded template with environment variables only
+					// This happens when:
+					// 1. --config-from-env flag is explicitly set, OR
+					// 2. None of --config, --env, or --zone flags are set (default behavior)
+					cfg = &config.Config{}
+					err = config.LoadFromEnv(cfg)
+					if err != nil {
+						return cli.Exit(fmt.Sprintf("Unable to load configuration from environment: %v.", err), 1)
+					}
+				} else {
+					// Load config from files (user explicitly specified config/env/zone)
+					env := c.String("env")
+					zone := c.String("zone")
+					configDir := path.Join(c.String("root"), c.String("config"))
+					cfg, err = config.LoadConfig(env, configDir, zone)
+					if err != nil {
+						return cli.Exit(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
+					}
 				}
 
 				logger := log.NewZapLogger(log.BuildZapLogger(cfg.Log))

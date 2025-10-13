@@ -4,20 +4,71 @@ import (
 	"bufio"
 	"bytes"
 	_ "embed"
+	"errors"
 	"fmt"
 	"io"
-	stdlog "log"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v3"
 )
 
 //go:embed config_template_embedded.yaml
 var embeddedConfigTemplate []byte
+
+var (
+	// ErrConfigFilesNotFound is returned when no config files are found in the specified directory
+	ErrConfigFilesNotFound = errors.New("no config files found")
+
+	// logger is a structured logger used during config loading (bootstrap phase).
+	// Uses zap with console encoding to match Temporal's standard logging format.
+	logger = newBootstrapLogger()
+)
+
+// newBootstrapLogger creates a zap logger for config loading with console encoding
+// that matches Temporal's standard log format.
+func newBootstrapLogger() *zap.Logger {
+	encoderConfig := zapcore.EncoderConfig{
+		TimeKey:        "ts",
+		LevelKey:       "level",
+		NameKey:        "logger",
+		CallerKey:      zapcore.OmitKey, // we add logging-call-at manually
+		FunctionKey:    zapcore.OmitKey,
+		MessageKey:     "msg",
+		StacktraceKey:  "stacktrace",
+		LineEnding:     zapcore.DefaultLineEnding,
+		EncodeLevel:    zapcore.LowercaseLevelEncoder,
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeDuration: zapcore.SecondsDurationEncoder,
+	}
+
+	config := zap.Config{
+		Level:         zap.NewAtomicLevelAt(zap.InfoLevel),
+		Development:   false,
+		Encoding:      "console",
+		EncoderConfig: encoderConfig,
+		OutputPaths:   []string{"stderr"},
+	}
+
+	logger, _ := config.Build()
+	return logger
+}
+
+// getCaller returns the file:line of the caller for logging-call-at field
+func getCaller(skip int) string {
+	_, path, line, ok := runtime.Caller(skip)
+	if !ok {
+		return ""
+	}
+	return path + ":" + strconv.Itoa(line)
+}
 
 const (
 	// EnvKeyRoot the environment variable key for runtime root dir
@@ -60,26 +111,24 @@ const (
 //	    env.yaml   -- environment is one of the input params ex-development
 //	      env_az.yaml -- zone is another input param
 func Load(env string, configDir string, zone string, config interface{}) error {
-	return LoadWithEnvMap(env, configDir, zone, config, getEnvMap())
+	return LoadWithEnvMap(env, configDir, zone, config, getEnvMap(), false)
+}
+
+// LoadFromEnv loads the configuration using only the embedded template and environment variables.
+// This ignores any config files on disk and relies entirely on environment variable substitution.
+func LoadFromEnv(config interface{}) error {
+	return LoadWithEnvMap("", "", "", config, getEnvMap(), true)
 }
 
 // LoadWithEnvMap loads configuration with a specific environment variable map.
 // This is useful for testing with controlled environment variables.
-func LoadWithEnvMap(env string, configDir string, zone string, config interface{}, envMap map[string]string) error {
-	if len(env) == 0 {
-		env = envDevelopment
-	}
-	if len(configDir) == 0 {
-		configDir = defaultConfigDir
-	}
-
-	// TODO: remove log dependency.
-	stdlog.Printf("Loading config; env=%v,zone=%v,configDir=%v\n", env, zone, configDir)
-
-	files, err := getConfigFiles(env, configDir, zone)
-	if err != nil {
-		// If no config files found, try to use embedded template
-		stdlog.Printf("No config files found, attempting to use embedded template\n")
+// If useEmbeddedOnly is true, it will skip config file loading and use only the embedded template.
+func LoadWithEnvMap(env string, configDir string, zone string, config interface{}, envMap map[string]string, useEmbeddedOnly bool) error {
+	// If using embedded template only, skip file loading
+	if useEmbeddedOnly {
+		logger.Info("Loading configuration from environment variables only",
+			zap.String("logging-call-at", getCaller(2)),
+		)
 
 		// Process the embedded template
 		processedData, procErr := processConfigFile(embeddedConfigTemplate, "config_template_embedded.yaml", envMap)
@@ -87,7 +136,7 @@ func LoadWithEnvMap(env string, configDir string, zone string, config interface{
 			return fmt.Errorf("failed to process embedded config template: %w", procErr)
 		}
 
-		err = yaml.Unmarshal(processedData, config)
+		err := yaml.Unmarshal(processedData, config)
 		if err != nil {
 			return fmt.Errorf("failed to unmarshal embedded config template: %w", err)
 		}
@@ -96,8 +145,31 @@ func LoadWithEnvMap(env string, configDir string, zone string, config interface{
 		return validate.Validate(config)
 	}
 
-	// TODO: remove log dependency.
-	stdlog.Printf("Loading config files=%v\n", files)
+	if env == "" {
+		env = envDevelopment
+	}
+	if configDir == "" {
+		configDir = defaultConfigDir
+	}
+
+	logger.Info("Loading configuration",
+		zap.String("env", env),
+		zap.String("zone", zone),
+		zap.String("configDir", configDir),
+		zap.String("logging-call-at", getCaller(2)),
+	)
+
+	files, err := getConfigFiles(env, configDir, zone)
+	if err != nil {
+		// Return error immediately - no fallback to embedded template
+		return fmt.Errorf("failed to get config files: %w", err)
+	}
+
+	logger.Info("Config files found",
+		zap.Strings("files", files),
+		zap.Int("count", len(files)),
+		zap.String("logging-call-at", getCaller(2)),
+	)
 
 	for _, f := range files {
 		// This is tagged nosec because the file names being read are for config files that are not user supplied
@@ -136,7 +208,10 @@ func processConfigFile(data []byte, filename string, envMap map[string]string) (
 		return data, nil
 	}
 
-	stdlog.Printf("using templating")
+	logger.Debug("Processing config file as template",
+		zap.String("filename", filename),
+		zap.String("logging-call-at", getCaller(2)),
+	)
 	return renderTemplate(data, filename, envMap)
 }
 
@@ -185,30 +260,47 @@ func checkTemplatingEnabled(content []byte) (bool, error) {
 }
 
 // getConfigFiles returns the list of config files to
-// process in the hierarchy order
+// process in the hierarchy order.
+// Returns ErrConfigFilesNotFound if no config files are found.
+// Returns other errors if there are permission or I/O issues accessing the files.
 func getConfigFiles(env string, configDir string, zone string) ([]string, error) {
 
-	candidates := []string{
-		path(configDir, baseFile),
-		path(configDir, file(env, "yaml")),
-	}
+	// Pre-allocate candidates slice with maximum possible size (3)
+	candidates := make([]string, 2, 3)
+	candidates[0] = filepath.Join(configDir, baseFile)
+	candidates[1] = filepath.Join(configDir, file(env, "yaml"))
 
-	if len(zone) > 0 {
+	if zone != "" {
 		f := file(concat(env, zone), "yaml")
-		candidates = append(candidates, path(configDir, f))
+		candidates = append(candidates, filepath.Join(configDir, f))
 	}
 
-	var result []string
+	// Pre-allocate result with capacity matching candidates
+	result := make([]string, 0, len(candidates))
+	var firstNonNotExistError error
 
 	for _, c := range candidates {
-		if _, err := os.Stat(c); err != nil {
+		_, err := os.Stat(c)
+		if err == nil {
+			// File exists, add it to results
+			result = append(result, c)
 			continue
 		}
-		result = append(result, c)
+
+		// If the error is NOT "file not found", it could be a permission issue,
+		// I/O error, or other problem that we should report
+		if !os.IsNotExist(err) && firstNonNotExistError == nil {
+			firstNonNotExistError = fmt.Errorf("error accessing config file %s: %w", c, err)
+		}
+	}
+
+	// If we encountered a non-NotExist error (like permission denied), return it
+	if firstNonNotExistError != nil {
+		return nil, firstNonNotExistError
 	}
 
 	if len(result) == 0 {
-		return nil, fmt.Errorf("no config files found within %v", configDir)
+		return nil, fmt.Errorf("%w in directory: %s", ErrConfigFilesNotFound, configDir)
 	}
 
 	return result, nil
@@ -222,17 +314,16 @@ func file(name string, suffix string) string {
 	return name + "." + suffix
 }
 
-func path(dir string, file string) string {
-	return dir + "/" + file
-}
-
-// getEnvMap returns all environment variables as a map for template access
+// getEnvMap returns all environment variables as a map for template access.
+// Environment variables are expected to be in KEY=value format.
 func getEnvMap() map[string]string {
-	envMap := make(map[string]string)
-	for _, env := range os.Environ() {
-		parts := strings.SplitN(env, "=", 2)
-		if len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
+	environ := os.Environ()
+	envMap := make(map[string]string, len(environ))
+
+	for _, env := range environ {
+		key, value, found := strings.Cut(env, "=")
+		if found {
+			envMap[key] = value
 		}
 	}
 	return envMap
