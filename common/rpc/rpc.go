@@ -42,10 +42,11 @@ type RPCFactory struct {
 	frontendHTTPPort  int
 	frontendTLSConfig *tls.Config
 
-	grpcListener func() net.Listener
-	tlsFactory   encryption.TLSConfigProvider
-	dialOptions  []grpc.DialOption
-	monitor      membership.Monitor
+	grpcListener          func() net.Listener
+	tlsFactory            encryption.TLSConfigProvider
+	commonDialOptions     []grpc.DialOption
+	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption
+	monitor               membership.Monitor
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
 	localFrontendClient      func() (*common.FrontendHTTPClient, error)
 	interNodeGrpcConnections cache.Cache
@@ -67,21 +68,23 @@ func NewFactory(
 	frontendHTTPURL string,
 	frontendHTTPPort int,
 	frontendTLSConfig *tls.Config,
-	dialOptions []grpc.DialOption,
+	commonDialOptions []grpc.DialOption,
+	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption,
 	monitor membership.Monitor,
 ) *RPCFactory {
 	f := &RPCFactory{
-		config:            cfg,
-		serviceName:       sName,
-		logger:            logger,
-		metricsHandler:    metricsHandler,
-		frontendURL:       frontendURL,
-		frontendHTTPURL:   frontendHTTPURL,
-		frontendHTTPPort:  frontendHTTPPort,
-		frontendTLSConfig: frontendTLSConfig,
-		tlsFactory:        tlsProvider,
-		dialOptions:       dialOptions,
-		monitor:           monitor,
+		config:                cfg,
+		serviceName:           sName,
+		logger:                logger,
+		metricsHandler:        metricsHandler,
+		frontendURL:           frontendURL,
+		frontendHTTPURL:       frontendHTTPURL,
+		frontendHTTPPort:      frontendHTTPPort,
+		frontendTLSConfig:     frontendTLSConfig,
+		tlsFactory:            tlsProvider,
+		commonDialOptions:     commonDialOptions,
+		perServiceDialOptions: perServiceDialOptions,
+		monitor:               monitor,
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
@@ -214,13 +217,16 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 		}
 	}
 	keepAliveOption := d.getClientKeepAliveConfig(primitives.FrontendService)
+	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[primitives.FrontendService]...)
 
-	return d.dial(rpcAddress, tlsClientConfig, keepAliveOption)
+	return d.dial(rpcAddress, tlsClientConfig, append(additionalDialOptions, keepAliveOption)...)
 }
 
 // CreateLocalFrontendGRPCConnection creates connection for internal frontend calls
 func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
-	return d.dial(d.frontendURL, d.frontendTLSConfig)
+	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[primitives.InternalFrontendService]...)
+
+	return d.dial(d.frontendURL, d.frontendTLSConfig, additionalDialOptions...)
 }
 
 // createInternodeGRPCConnection creates connection for gRPC calls
@@ -237,7 +243,8 @@ func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName 
 			return nil
 		}
 	}
-	c := d.dial(hostName, tlsClientConfig, d.getClientKeepAliveConfig(serviceName))
+	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[serviceName]...)
+	c := d.dial(hostName, tlsClientConfig, append(additionalDialOptions, d.getClientKeepAliveConfig(serviceName))...)
 	d.interNodeGrpcConnections.Put(hostName, c)
 	return c
 }
@@ -251,7 +258,7 @@ func (d *RPCFactory) CreateMatchingGRPCConnection(rpcAddress string) *grpc.Clien
 }
 
 func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOptions ...grpc.DialOption) *grpc.ClientConn {
-	dialOptions = append(d.dialOptions, dialOptions...)
+	dialOptions = append(d.commonDialOptions, dialOptions...)
 	connection, err := Dial(hostName, tlsClientConfig, d.logger, d.metricsHandler, dialOptions...)
 	if err != nil {
 		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))

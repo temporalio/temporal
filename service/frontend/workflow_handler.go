@@ -4585,7 +4585,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.Namespace,
 		WorkflowId:               request.GetJobId(),
-		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeProtobufName},
+		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    inputPayload,
 		Identity:                 identity,
