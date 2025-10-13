@@ -43,7 +43,7 @@ var _ sqlparser.Expr = (*castExpr)(nil)
 var _ sqlparser.Expr = (*memberOfExpr)(nil)
 var _ sqlparser.Expr = (*jsonOverlapsExpr)(nil)
 
-var _ pluginQueryConverter = (*mysqlQueryConverter)(nil)
+var _ pluginQueryConverterLegacy = (*mysqlQueryConverter)(nil)
 
 func (node *castExpr) Format(buf *sqlparser.TrackedBuffer) {
 	buf.Myprintf("cast(%v as %v)", node.Value, node.Type)
@@ -63,7 +63,7 @@ func newMySQLQueryConverter(
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
 	queryString string,
-) *QueryConverter {
+) *QueryConverterLegacy {
 	return newQueryConverterInternal(
 		&mysqlQueryConverter{},
 		namespaceName,
@@ -189,7 +189,7 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 	namespaceID namespace.ID,
 	queryString string,
 	pageSize int,
-	token *pageToken,
+	token *pageTokenLegacy,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
