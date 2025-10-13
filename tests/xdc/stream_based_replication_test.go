@@ -779,7 +779,6 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 }
 
 func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication() {
-
 	if !s.enableTransitionHistory {
 		s.T().Skip("Skip when transition history is disabled")
 	}
@@ -787,11 +786,13 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	defer cancel()
 
 	ns := s.createNamespaceInCluster0(false)
+	s.T().Logf("Created local namespace '%s' on cluster 0 (active)", ns)
 
 	for _, cluster := range s.clusters {
 		recorder := cluster.GetReplicationStreamRecorder()
 		recorder.Clear()
 	}
+	s.T().Log("Cleared replication stream recorders on all clusters")
 
 	workflowID := "test-replication-" + uuid.New()
 	sourceClient := s.clusters[0].FrontendClient()
@@ -805,6 +806,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 	})
 	s.Require().NoError(err, "Failed to start workflow execution")
+	s.T().Logf("Started workflow '%s' (RunID: %s) on cluster 0", workflowID, startResp.GetRunId())
 
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		return []*commandpb.Command{{
@@ -830,6 +832,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.Require().NoError(err, "Failed to poll and process workflow task")
+	s.T().Log("Completed workflow execution via worker poll")
 
 	s.Eventually(func() bool {
 		resp, err := sourceClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
@@ -844,6 +847,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 		}
 		return resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	}, 10*time.Second, 100*time.Millisecond)
+	s.T().Log("Verified workflow reached COMPLETED status")
 
 	namespaceResp, err := sourceClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 		Namespace: ns,
@@ -861,9 +865,11 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	})
 	s.Require().NoError(err, "Failed to describe mutable state")
 	s.Require().NotNil(mutableStateResp.GetDatabaseMutableState(), "Database mutable state is nil")
+	s.T().Logf("Retrieved mutable state for workflow (NamespaceID: %s)", namespaceID)
 
 	//nolint:forbidigo // waiting for close transfer task to be acked - no alternative available
 	time.Sleep(5 * time.Second)
+	s.T().Log("Waited 5 seconds for close transfer task to be acknowledged internally")
 
 	targetClient := s.clusters[1].FrontendClient()
 	_, err = targetClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
@@ -879,6 +885,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 		},
 	})
 	s.Require().Error(err, "Workflow should not exist on target cluster before promotion")
+	s.T().Log("Verified namespace and workflow do NOT exist on cluster 1 (standby) before promotion")
 
 	_, err = sourceClient.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace:        ns,
@@ -891,6 +898,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 		},
 	})
 	s.Require().NoError(err, "Failed to promote namespace to global")
+	s.T().Logf("Promoted namespace '%s' from local to global (added cluster 1)", ns)
 
 	s.Eventually(func() bool {
 		_, err := targetClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
@@ -898,6 +906,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 		})
 		return err == nil
 	}, 60*time.Second, time.Second)
+	s.T().Log("Verified namespace replicated to cluster 1")
 
 	sourceAdminClient := s.clusters[0].AdminClient()
 	_, err = sourceAdminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
@@ -908,8 +917,10 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 		},
 	})
 	s.Require().NoError(err, "Failed to generate last history replication tasks")
+	s.T().Log("Generated last history replication tasks to force replication of completed workflow")
 
 	recorder := s.clusters[0].GetReplicationStreamRecorder()
+	s.T().Log("Checking replication stream for close transfer task acknowledgment in versioned transition artifact...")
 	s.Eventually(func() bool {
 		for _, msg := range recorder.GetMessages() {
 			if msg.Direction != testcore.DirectionServerSend {
@@ -939,8 +950,6 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 		recorder := cluster.GetReplicationStreamRecorder()
 		if err := recorder.WriteToLog(); err != nil {
 			s.T().Logf("Failed to write replication stream log for cluster %s: %v", cluster.ClusterName(), err)
-		} else {
-			s.T().Logf("Successfully wrote replication stream log for cluster %s", cluster.ClusterName())
 		}
 	}
 }
