@@ -14,6 +14,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -36,6 +37,20 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
+)
+
+const (
+	workflowIDPrefix             = "test-replication-"
+	testWorkflowType             = "test-workflow-type"
+	testTaskQueue                = "test-task-queue"
+	testWorkerIdentity           = "worker-identity"
+	workflowCompletionTimeout    = 10 * time.Second
+	workflowCompletionInterval   = 100 * time.Millisecond
+	namespaceReplicationTimeout  = 60 * time.Second
+	namespaceReplicationInterval = 1 * time.Second
+	closeTransferTaskWaitTime    = 5 * time.Second
+	replicationAckTimeout        = 10 * time.Second
+	replicationAckInterval       = 100 * time.Millisecond
 )
 
 type (
@@ -775,4 +790,155 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	},
 		time.Second*10,
 		time.Second)
+}
+
+func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication() {
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
+	namespace := s.createNamespaceInCluster0(false)
+
+	for _, cluster := range s.clusters {
+		recorder := cluster.GetReplicationStreamRecorder()
+		recorder.Clear()
+	}
+
+	workflowID := workflowIDPrefix + uuid.New()
+	sourceClient := s.clusters[0].FrontendClient()
+	startResp, err := sourceClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           namespace,
+		WorkflowId:          workflowID,
+		WorkflowType:        &commonpb.WorkflowType{Name: testWorkflowType},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: testTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowRunTimeout:  durationpb.New(time.Minute),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+	})
+	s.Require().NoError(err, "Failed to start workflow execution")
+
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Done"),
+				},
+			},
+		}}, nil
+	}
+
+	poller := &testcore.TaskPoller{
+		Client:              sourceClient,
+		Namespace:           namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: testTaskQueue},
+		Identity:            testWorkerIdentity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
+	}
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	s.Require().NoError(err, "Failed to poll and process workflow task")
+
+	s.Eventually(func() bool {
+		resp, err := sourceClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: namespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      startResp.GetRunId(),
+			},
+		})
+		if err != nil {
+			return false
+		}
+		return resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, workflowCompletionTimeout, workflowCompletionInterval)
+
+	namespaceResp, err := sourceClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespace,
+	})
+	s.Require().NoError(err, "Failed to describe namespace")
+	namespaceID := namespaceResp.NamespaceInfo.GetId()
+
+	historyClient := s.clusters[0].HistoryClient()
+	mutableStateResp, err := historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+		NamespaceId: namespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      startResp.GetRunId(),
+		},
+	})
+	s.Require().NoError(err, "Failed to describe mutable state")
+	s.Require().NotNil(mutableStateResp.GetDatabaseMutableState(), "Database mutable state is nil")
+
+	time.Sleep(closeTransferTaskWaitTime)
+
+	targetClient := s.clusters[1].FrontendClient()
+	_, err = targetClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespace,
+	})
+	s.Require().Error(err, "Namespace should not exist on target cluster before promotion")
+
+	_, err = targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      startResp.GetRunId(),
+		},
+	})
+	s.Require().Error(err, "Workflow should not exist on target cluster before promotion")
+
+	_, err = sourceClient.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace:        namespace,
+		PromoteNamespace: true,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: s.clusters[0].ClusterName()},
+				{ClusterName: s.clusters[1].ClusterName()},
+			},
+		},
+	})
+	s.Require().NoError(err, "Failed to promote namespace to global")
+
+	s.Eventually(func() bool {
+		_, err := targetClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Namespace: namespace,
+		})
+		return err == nil
+	}, namespaceReplicationTimeout, namespaceReplicationInterval)
+
+	sourceAdminClient := s.clusters[0].AdminClient()
+	_, err = sourceAdminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
+		Namespace: namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      startResp.GetRunId(),
+		},
+	})
+	s.Require().NoError(err, "Failed to generate last history replication tasks")
+
+	recorder := s.clusters[0].GetReplicationStreamRecorder()
+	s.Eventually(func() bool {
+		for _, msg := range recorder.GetMessages() {
+			if msg.Direction != testcore.DirectionServerSend {
+				continue
+			}
+
+			resp := testcore.ExtractReplicationMessages(msg.Request)
+			if resp == nil {
+				continue
+			}
+
+			for _, task := range resp.GetReplicationTasks() {
+				if syncAttrs := task.GetSyncVersionedTransitionTaskAttributes(); syncAttrs != nil {
+					if artifact := syncAttrs.GetVersionedTransitionArtifact(); artifact != nil {
+						if artifact.GetIsCloseTransferTaskAcked() {
+							return true
+						}
+					}
+				}
+			}
+		}
+		return false
+	}, replicationAckTimeout, replicationAckInterval)
 }

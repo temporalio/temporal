@@ -26,6 +26,8 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -244,10 +246,12 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 		}
 	}
 	versionedTransitionArtifact.IsFirstSync = isNewWorkflow
+	versionedTransitionArtifact.IsCloseTransferTaskAcked = s.isCloseTransferTaskAcked(mutableState)
 
-	newRunId := mutableState.GetExecutionInfo().SuccessorRunId
-	sourceVersionHistories := versionhistory.CopyVersionHistories(mutableState.GetExecutionInfo().VersionHistories)
-	sourceTransitionHistory := transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory)
+	executionInfo := mutableState.GetExecutionInfo()
+	newRunId := executionInfo.SuccessorRunId
+	sourceVersionHistories := versionhistory.CopyVersionHistories(executionInfo.VersionHistories)
+	sourceTransitionHistory := transitionhistory.CopyVersionedTransitions(executionInfo.TransitionHistory)
 	if cacheReleaseFunc != nil {
 		cacheReleaseFunc(nil)
 	}
@@ -604,4 +608,36 @@ func (s *SyncStateRetrieverImpl) getUpdatedSubStateMachine(n *hsm.Node, versione
 		return nil, err
 	}
 	return updatedStateMachines, nil
+}
+
+// isCloseTransferTaskAcked checks if the close transfer task has been fully acknowledged by all readers.
+// Returns true if:
+//   - The workflow has a valid CloseTransferTaskId (non-zero)
+//   - The transfer queue state is available
+//   - All readers have acknowledged the close transfer task
+//
+// Returns false if:
+//   - CloseTransferTaskId is 0 (workflow closed before v1.17)
+//   - Transfer queue state is not available
+//   - At least one reader has not yet acknowledged the task
+func (s *SyncStateRetrieverImpl) isCloseTransferTaskAcked(
+	mutableState historyi.MutableState,
+) bool {
+	closeTransferTaskId := mutableState.GetExecutionInfo().CloseTransferTaskId
+
+	if closeTransferTaskId == 0 {
+		return false
+	}
+
+	transferQueueState, ok := s.shardContext.GetQueueState(tasks.CategoryTransfer)
+	if !ok {
+		return false
+	}
+
+	closeTransferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: mutableState.GetWorkflowKey(),
+		TaskID:      closeTransferTaskId,
+	}
+
+	return queues.IsTaskAcked(closeTransferTask, transferQueueState)
 }
