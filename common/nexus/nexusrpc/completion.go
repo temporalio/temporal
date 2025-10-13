@@ -198,9 +198,6 @@ type OperationCompletionUnsuccessful struct {
 type OperationCompletionUnsuccessfulOptions struct {
 	// A [FailureConverter] to convert a [Failure] instance to and from an [error]. Defaults to
 	// [DefaultFailureConverter].
-	//
-	// NOTE: To call server versions <= 0.4.0, use a FailureConverter that unwraps the error cause if message is not
-	// present.
 	FailureConverter nexus.FailureConverter
 	// OperationID is the unique ID for this operation. Used when a completion callback is received before a started response.
 	//
@@ -220,18 +217,15 @@ type OperationCompletionUnsuccessfulOptions struct {
 // NewOperationCompletionUnsuccessful constructs an [OperationCompletionUnsuccessful] from a given error.
 //
 // NOTE: Experimental
-func NewOperationCompletionUnsuccessful(error *nexus.OperationError, options OperationCompletionUnsuccessfulOptions) (*OperationCompletionUnsuccessful, error) {
+func NewOperationCompletionUnsuccessful(opErr *nexus.OperationError, options OperationCompletionUnsuccessfulOptions) (*OperationCompletionUnsuccessful, error) {
 	if options.FailureConverter == nil {
 		options.FailureConverter = nexus.DefaultFailureConverter()
 	}
-	failure, err := options.FailureConverter.ErrorToFailure(error)
-	if err != nil {
-		return nil, err
-	}
+	failure := options.FailureConverter.ErrorToFailure(opErr.Cause)
 
 	return &OperationCompletionUnsuccessful{
 		Header:         make(nexus.Header),
-		State:          error.State,
+		State:          opErr.State,
 		Failure:        failure,
 		OperationID:    options.OperationID,
 		OperationToken: options.OperationToken,
@@ -248,7 +242,6 @@ func (c *OperationCompletionUnsuccessful) applyToHTTPRequest(request *http.Reque
 	if c.Header != nil {
 		addNexusHeaderToHTTPHeader(c.Header, request.Header)
 	}
-	// Set the operation state header for backwards compatibility.
 	request.Header.Set(headerOperationState, string(c.State))
 	request.Header.Set("Content-Type", contentTypeJSON)
 
@@ -389,17 +382,13 @@ func (h *completionHTTPHandler) ServeHTTP(writer http.ResponseWriter, request *h
 			h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to read Failure from request body"))
 			return
 		}
-		completion.Error, err = h.failureConverter.FailureToError(failure)
-		if err != nil {
-			h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to decode failure from request body"))
-			return
-		}
+		completion.Error = h.failureConverter.FailureToError(failure)
 	case nexus.OperationStateSucceeded:
 		completion.Result = nexus.NewLazyValue(
 			h.options.Serializer,
 			&nexus.Reader{
 				ReadCloser: request.Body,
-				Header: prefixStrippedHTTPHeaderToNexusHeader(request.Header, "content-"),
+				Header:     prefixStrippedHTTPHeaderToNexusHeader(request.Header, "content-"),
 			},
 		)
 	default:

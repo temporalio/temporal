@@ -281,29 +281,21 @@ func (c *HTTPClient) StartOperation(
 			Links:   links,
 		}, nil
 	case statusOperationFailed:
+		state, err := getUnsuccessfulStateFromHeader(response, body)
+		if err != nil {
+			return nil, err
+		}
+
 		failure, err := c.failureFromResponse(response, body)
 		if err != nil {
 			return nil, err
 		}
 
-		opErr, err := c.options.FailureConverter.FailureToError(failure)
-		if err != nil {
-			return nil, err
+		failureErr := c.options.FailureConverter.FailureToError(failure)
+		return nil, &nexus.OperationError{
+			State: state,
+			Cause: failureErr,
 		}
-
-		// For compatibility with older servers.
-		if _, ok := opErr.(*nexus.OperationError); !ok {
-			state, err := getUnsuccessfulStateFromHeader(response, body)
-			if err != nil {
-				return nil, err
-			}
-			opErr = &nexus.OperationError{
-				State: state,
-				Cause: opErr,
-			}
-		}
-
-		return nil, opErr
 	default:
 		return nil, c.bestEffortHandlerErrorFromResponse(response, body)
 	}
@@ -362,66 +354,91 @@ func (c *HTTPClient) failureFromResponse(response *http.Response, body []byte) (
 	return failure, err
 }
 
-func httpStatusCodeToHandlerErrorType(response *http.Response) (nexus.HandlerErrorType, error) {
-	switch response.StatusCode {
-	case http.StatusBadRequest:
-		return nexus.HandlerErrorTypeBadRequest, nil
-	case http.StatusRequestTimeout:
-		return nexus.HandlerErrorTypeRequestTimeout, nil
-	case http.StatusConflict:
-		return nexus.HandlerErrorTypeConflict, nil
-	case http.StatusUnauthorized:
-		return nexus.HandlerErrorTypeUnauthenticated, nil
-	case http.StatusForbidden:
-		return nexus.HandlerErrorTypeUnauthorized, nil
-	case http.StatusNotFound:
-		return nexus.HandlerErrorTypeNotFound, nil
-	case http.StatusTooManyRequests:
-		return nexus.HandlerErrorTypeResourceExhausted, nil
-	case http.StatusInternalServerError:
-		return nexus.HandlerErrorTypeInternal, nil
-	case http.StatusNotImplemented:
-		return nexus.HandlerErrorTypeNotImplemented, nil
-	case http.StatusServiceUnavailable:
-		return nexus.HandlerErrorTypeUnavailable, nil
-	case nexus.StatusUpstreamTimeout:
-		return nexus.HandlerErrorTypeUpstreamTimeout, nil
-	default:
-		return nexus.HandlerErrorType(""), fmt.Errorf("unexpected response status: %q", response.Status)
+func (c *HTTPClient) failureFromResponseOrDefault(response *http.Response, body []byte, defaultMessage string) nexus.Failure {
+	failure, err := c.failureFromResponse(response, body)
+	if err != nil {
+		failure.Message = defaultMessage
 	}
+	return failure
 }
 
-func (c *HTTPClient) defaultErrorFromResponse(response *http.Response, body []byte, cause error) error {
-	errorType, err := httpStatusCodeToHandlerErrorType(response)
-	if err != nil {
-		// TODO: wrap in transport error.
-		// TODO: use the provided cause, it's already a deserialized failure.
-		return newUnexpectedResponseError(err.Error(), response, body)
-	}
-	return &nexus.HandlerError{
-		Type:    errorType,
-		Message: response.Status,
-		// For compatibility with older servers.
-		RetryBehavior: retryBehaviorFromHeader(response.Header),
-		Cause:         cause,
-	}
+func (c *HTTPClient) failureErrorFromResponseOrDefault(response *http.Response, body []byte, defaultMessage string) error {
+	failure := c.failureFromResponseOrDefault(response, body, defaultMessage)
+	failureErr := c.options.FailureConverter.FailureToError(failure)
+	return failureErr
 }
 
 func (c *HTTPClient) bestEffortHandlerErrorFromResponse(response *http.Response, body []byte) error {
-	// TODO: support old servers
-	failure, err := c.failureFromResponse(response, body)
-	if err != nil {
-		return c.defaultErrorFromResponse(response, body, nil)
+	switch response.StatusCode {
+	case http.StatusBadRequest:
+		return &nexus.HandlerError{
+			Type:          nexus.HandlerErrorTypeBadRequest,
+			Cause:         c.failureErrorFromResponseOrDefault(response, body, "bad request"),
+			RetryBehavior: retryBehaviorFromHeader(response.Header),
+		}
+	case http.StatusUnauthorized:
+		return &nexus.HandlerError{
+			Type:          nexus.HandlerErrorTypeUnauthenticated,
+			Cause:         c.failureErrorFromResponseOrDefault(response, body, "unauthenticated"),
+			RetryBehavior: retryBehaviorFromHeader(response.Header),
+		}
+	case http.StatusRequestTimeout:
+		return &nexus.HandlerError{
+			Type:          nexus.HandlerErrorTypeRequestTimeout,
+			Cause:         c.failureErrorFromResponseOrDefault(response, body, "request timeout"),
+			RetryBehavior: retryBehaviorFromHeader(response.Header),
+		}
+	case http.StatusConflict:
+		return &nexus.HandlerError{
+			Type:          nexus.HandlerErrorTypeConflict,
+			Cause:         c.failureErrorFromResponseOrDefault(response, body, "conflict"),
+			RetryBehavior: retryBehaviorFromHeader(response.Header),
+		}
+	case http.StatusForbidden:
+		return &nexus.HandlerError{
+			Type:          nexus.HandlerErrorTypeUnauthorized,
+			Cause:         c.failureErrorFromResponseOrDefault(response, body, "unauthorized"),
+			RetryBehavior: retryBehaviorFromHeader(response.Header),
+		}
+	case http.StatusNotFound:
+		return &nexus.HandlerError{
+			Type:          nexus.HandlerErrorTypeNotFound,
+			Cause:         c.failureErrorFromResponseOrDefault(response, body, "not found"),
+			RetryBehavior: retryBehaviorFromHeader(response.Header),
+		}
+	case http.StatusTooManyRequests:
+		return &nexus.HandlerError{
+			Type:          nexus.HandlerErrorTypeResourceExhausted,
+			Cause:         c.failureErrorFromResponseOrDefault(response, body, "resource exhausted"),
+			RetryBehavior: retryBehaviorFromHeader(response.Header),
+		}
+	case http.StatusInternalServerError:
+		return &nexus.HandlerError{
+			Type:          nexus.HandlerErrorTypeInternal,
+			Cause:         c.failureErrorFromResponseOrDefault(response, body, "internal error"),
+			RetryBehavior: retryBehaviorFromHeader(response.Header),
+		}
+	case http.StatusNotImplemented:
+		return &nexus.HandlerError{
+			Type:          nexus.HandlerErrorTypeNotImplemented,
+			Cause:         c.failureErrorFromResponseOrDefault(response, body, "not implemented"),
+			RetryBehavior: retryBehaviorFromHeader(response.Header),
+		}
+	case http.StatusServiceUnavailable:
+		return &nexus.HandlerError{
+			Type:          nexus.HandlerErrorTypeUnavailable,
+			Cause:         c.failureErrorFromResponseOrDefault(response, body, "unavailable"),
+			RetryBehavior: retryBehaviorFromHeader(response.Header),
+		}
+	case nexus.StatusUpstreamTimeout:
+		return &nexus.HandlerError{
+			Type:          nexus.HandlerErrorTypeUpstreamTimeout,
+			Cause:         c.failureErrorFromResponseOrDefault(response, body, "upstream timeout"),
+			RetryBehavior: retryBehaviorFromHeader(response.Header),
+		}
+	default:
+		return newUnexpectedResponseError(fmt.Sprintf("unexpected response status: %q", response.Status), response, body)
 	}
-	convErr, err := c.options.FailureConverter.FailureToError(failure)
-	if err != nil {
-		// TODO: wrap in transport error.
-		return fmt.Errorf("failed to convert Failure to error: %w", err)
-	}
-	if _, ok := convErr.(*nexus.HandlerError); !ok {
-		convErr = c.defaultErrorFromResponse(response, body, convErr)
-	}
-	return convErr
 }
 
 func retryBehaviorFromHeader(header http.Header) nexus.HandlerErrorRetryBehavior {

@@ -461,9 +461,10 @@ func (h *nexusHandler) StartOperation(
 		switch t := t.Response.GetStartOperation().GetVariant().(type) {
 		case *nexuspb.StartOperationResponse_SyncSuccess:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("sync_success"))
+			links := parseLinks(t.SyncSuccess.GetLinks(), oc.logger)
+			nexus.AddHandlerLinks(ctx, links...)
 			return &nexus.HandlerStartOperationResultSync[any]{
 				Value: t.SyncSuccess.GetPayload(),
-				Links: parseLinks(t.SyncSuccess.GetLinks(), oc.logger),
 			}, nil
 
 		case *nexuspb.StartOperationResponse_AsyncSuccess:
@@ -473,9 +474,10 @@ func (h *nexusHandler) StartOperation(
 			if token == "" {
 				token = t.AsyncSuccess.GetOperationId()
 			}
+			links := parseLinks(t.AsyncSuccess.GetLinks(), oc.logger)
+			nexus.AddHandlerLinks(ctx, links...)
 			return &nexus.HandlerStartOperationResultAsync{
 				OperationToken: token,
-				Links:          parseLinks(t.AsyncSuccess.GetLinks(), oc.logger),
 			}, nil
 
 		case *nexuspb.StartOperationResponse_OperationError:

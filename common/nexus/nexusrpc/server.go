@@ -104,12 +104,7 @@ func (h *baseHTTPHandler) writeFailure(writer http.ResponseWriter, err error) {
 
 	if errors.As(err, &opError) {
 		operationState = opError.State
-		var convErr error
-		failure, convErr = h.failureConverter.ErrorToFailure(opError)
-		if convErr != nil {
-			h.logger.Error("failed to convert error to failure", "error", convErr)
-			writer.WriteHeader(http.StatusInternalServerError)
-		}
+		failure = h.failureConverter.ErrorToFailure(opError.Cause)
 		statusCode = statusOperationFailed
 
 		if operationState == nexus.OperationStateFailed || operationState == nexus.OperationStateCanceled {
@@ -120,12 +115,7 @@ func (h *baseHTTPHandler) writeFailure(writer http.ResponseWriter, err error) {
 			return
 		}
 	} else if errors.As(err, &handlerError) {
-		var convErr error
-		failure, convErr = h.failureConverter.ErrorToFailure(handlerError)
-		if convErr != nil {
-			h.logger.Error("failed to convert error to failure", "error", convErr)
-			writer.WriteHeader(http.StatusInternalServerError)
-		}
+		failure = h.failureConverter.ErrorToFailure(handlerError.Cause)
 		switch handlerError.Type {
 		case nexus.HandlerErrorTypeBadRequest:
 			statusCode = http.StatusBadRequest
