@@ -106,8 +106,6 @@ func buildDSNAttr(cfg *config.SQL) url.Values {
 			parameters.Set(sslKey, cfg.TLS.KeyFile)
 			parameters.Set(sslCert, cfg.TLS.CertFile)
 		}
-	} else {
-		parameters.Set(sslMode, sslModeNoop)
 	}
 
 	for k, v := range cfg.ConnectAttributes {
@@ -122,5 +120,10 @@ func buildDSNAttr(cfg *config.SQL) url.Values {
 		}
 		parameters.Set(key, value)
 	}
+
+	if parameters.Get(sslMode) == "" {
+		parameters.Set(sslMode, sslModeNoop)
+	}
+
 	return parameters
 }
