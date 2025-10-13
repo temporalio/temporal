@@ -126,10 +126,10 @@
         "scaling_factor": 10000
       },
       "TemporalInt01": {
-        "type": "int"
+        "type": "long"
       },
       "TemporalInt02": {
-        "type": "int"
+        "type": "long"
       },
       "TemporalKeyword01": {
         "type": "keyword"

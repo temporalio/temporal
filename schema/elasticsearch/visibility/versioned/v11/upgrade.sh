@@ -44,16 +44,18 @@ new_mapping='
       "type": "date_nanos"
     },
     "TemporalDouble01": {
-      "type": "double"
+      "type": "scaled_float",
+      "scaling_factor": 10000
     },
     "TemporalDouble02": {
-      "type": "double"
+      "type": "scaled_float",
+      "scaling_factor": 10000
     },
     "TemporalInt01": {
-      "type": "int"
+      "type": "long"
     },
     "TemporalInt02": {
-      "type": "int"
+      "type": "long"
     },
     "TemporalKeyword01": {
       "type": "keyword"
