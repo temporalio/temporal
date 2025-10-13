@@ -39,20 +39,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-const (
-	workflowIDPrefix             = "test-replication-"
-	testWorkflowType             = "test-workflow-type"
-	testTaskQueue                = "test-task-queue"
-	testWorkerIdentity           = "worker-identity"
-	workflowCompletionTimeout    = 10 * time.Second
-	workflowCompletionInterval   = 100 * time.Millisecond
-	namespaceReplicationTimeout  = 60 * time.Second
-	namespaceReplicationInterval = 1 * time.Second
-	closeTransferTaskWaitTime    = 5 * time.Second
-	replicationAckTimeout        = 10 * time.Second
-	replicationAckInterval       = 100 * time.Millisecond
-)
-
 type (
 	streamBasedReplicationTestSuite struct {
 		xdcBaseSuite
@@ -807,14 +793,14 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 		recorder.Clear()
 	}
 
-	workflowID := workflowIDPrefix + uuid.New()
+	workflowID := "test-replication-" + uuid.New()
 	sourceClient := s.clusters[0].FrontendClient()
 	startResp, err := sourceClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
 		Namespace:           ns,
 		WorkflowId:          workflowID,
-		WorkflowType:        &commonpb.WorkflowType{Name: testWorkflowType},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: testTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        &commonpb.WorkflowType{Name: "test-workflow-type"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-task-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		WorkflowRunTimeout:  durationpb.New(time.Minute),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 	})
@@ -835,8 +821,8 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	poller := &testcore.TaskPoller{
 		Client:              sourceClient,
 		Namespace:           ns,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: testTaskQueue},
-		Identity:            testWorkerIdentity,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+		Identity:            "worker-identity",
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.logger,
 		T:                   s.T(),
@@ -857,7 +843,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 			return false
 		}
 		return resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-	}, workflowCompletionTimeout, workflowCompletionInterval)
+	}, 10*time.Second, 100*time.Millisecond)
 
 	namespaceResp, err := sourceClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 		Namespace: ns,
@@ -877,7 +863,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	s.Require().NotNil(mutableStateResp.GetDatabaseMutableState(), "Database mutable state is nil")
 
 	//nolint:forbidigo // waiting for close transfer task to be acked - no alternative available
-	time.Sleep(closeTransferTaskWaitTime)
+	time.Sleep(5 * time.Second)
 
 	targetClient := s.clusters[1].FrontendClient()
 	_, err = targetClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
@@ -911,7 +897,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 			Namespace: ns,
 		})
 		return err == nil
-	}, namespaceReplicationTimeout, namespaceReplicationInterval)
+	}, 60*time.Second, time.Second)
 
 	sourceAdminClient := s.clusters[0].AdminClient()
 	_, err = sourceAdminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
@@ -946,5 +932,15 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 			}
 		}
 		return false
-	}, replicationAckTimeout, replicationAckInterval)
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Write captured replication messages to log files for both clusters
+	for _, cluster := range s.clusters {
+		recorder := cluster.GetReplicationStreamRecorder()
+		if err := recorder.WriteToLog(); err != nil {
+			s.T().Logf("Failed to write replication stream log for cluster %s: %v", cluster.ClusterName(), err)
+		} else {
+			s.T().Logf("Successfully wrote replication stream log for cluster %s", cluster.ClusterName())
+		}
+	}
 }

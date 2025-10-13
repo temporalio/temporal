@@ -3,6 +3,7 @@ package testcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -62,7 +63,7 @@ func (r *ReplicationStreamRecorder) WriteToLog() error {
 	defer r.mu.RUnlock()
 
 	if r.outputFilePath == "" {
-		return fmt.Errorf("output file path not set")
+		return errors.New("output file path not set")
 	}
 
 	// Create or truncate the output file
@@ -70,7 +71,9 @@ func (r *ReplicationStreamRecorder) WriteToLog() error {
 	if err != nil {
 		return fmt.Errorf("failed to create output file %s: %w", r.outputFilePath, err)
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
 	// Write all captured messages
 	for _, captured := range r.capturedMessages {
