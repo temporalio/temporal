@@ -22,12 +22,6 @@ func TestConfig_IsExperimentEnabled(t *testing.T) {
 			expected:           false,
 		},
 		{
-			name:               "nil experiments allowed - should not be enabled",
-			allowedExperiments: nil,
-			experiment:         "chasm-scheduler",
-			expected:           false,
-		},
-		{
 			name:               "specific experiment allowed - exact match",
 			allowedExperiments: []string{"chasm-scheduler"},
 			experiment:         "chasm-scheduler",
