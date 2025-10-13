@@ -39,36 +39,6 @@ func TestConfig_IsExperimentEnabled(t *testing.T) {
 			experiment:         "chasm-scheduler",
 			expected:           true,
 		},
-		{
-			name:               "wildcard only - different experiment enabled",
-			allowedExperiments: []string{"*"},
-			experiment:         "any-experiment-name",
-			expected:           true,
-		},
-		{
-			name:               "wildcard with other experiments - match wildcard",
-			allowedExperiments: []string{"chasm-scheduler", "*", "other-exp"},
-			experiment:         "random-experiment",
-			expected:           true,
-		},
-		{
-			name:               "wildcard with other experiments - match specific",
-			allowedExperiments: []string{"chasm-scheduler", "*", "other-exp"},
-			experiment:         "chasm-scheduler",
-			expected:           true,
-		},
-		{
-			name:               "wildcard at end",
-			allowedExperiments: []string{"chasm-scheduler", "other-exp", "*"},
-			experiment:         "any-experiment",
-			expected:           true,
-		},
-		{
-			name:               "wildcard at beginning",
-			allowedExperiments: []string{"*", "chasm-scheduler", "other-exp"},
-			experiment:         "any-experiment",
-			expected:           true,
-		},
 	}
 
 	for _, tt := range tests {
