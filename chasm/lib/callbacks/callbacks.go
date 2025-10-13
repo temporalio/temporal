@@ -18,14 +18,14 @@ type Callback struct {
 }
 
 func NewCallback(
-	requestId string,
+	requestID string,
 	registrationTime *timestamppb.Timestamp,
 	trigger *callbackspb.CallbackState_Trigger,
 	cb *callbackspb.Callback,
 ) *Callback {
 	return &Callback{
 		CallbackState: &callbackspb.CallbackState{
-			RequestId:        requestId,
+			RequestId:        requestID,
 			RegistrationTime: registrationTime,
 			Trigger:          trigger,
 			Callback:         cb,

@@ -32,7 +32,7 @@ func MachineCollection(tree *hsm.Node) hsm.Collection[Callback] {
 }
 
 // Callback state machine.
-// 
+//
 // Deprecated: HSM Callback is no longer supported.
 type Callback struct {
 	*persistencespb.CallbackInfo
