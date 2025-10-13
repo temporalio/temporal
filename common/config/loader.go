@@ -70,7 +70,8 @@ func newBootstrapLogger() *zap.Logger {
 
 	logger, err := config.Build()
 	if err != nil {
-		panic(fmt.Sprintf("failed to create bootstrap logger: %v", err))
+		fmt.Println("ERROR: unable to create config logger. using no op logger instead")
+		return zap.NewNop()
 	}
 	return logger
 }
