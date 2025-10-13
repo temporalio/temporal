@@ -27,7 +27,7 @@ type InvocationTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The base URL for nexus callbacks.
 	// Will have other meanings as more callback use cases are added.
-	Destination   string `protobuf:"bytes,1,opt,name=destination,proto3" json:"destination,omitempty"`
+	Url           string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -62,15 +62,18 @@ func (*InvocationTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_callbacks_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *InvocationTask) GetDestination() string {
+func (x *InvocationTask) GetUrl() string {
 	if x != nil {
-		return x.Destination
+		return x.Url
 	}
 	return ""
 }
 
 type BackoffTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// NOTE (seankane): to simply specify the task's scheduled time, can use
+	// TaskAttributes.ScheduledTime
+	// https://github.com/temporalio/temporal/pull/8473#discussion_r2427357534
 	Deadline      *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=deadline,proto3" json:"deadline,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -117,9 +120,9 @@ var File_temporal_server_chasm_lib_callbacks_proto_v1_tasks_proto protoreflect.F
 
 const file_temporal_server_chasm_lib_callbacks_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	"8temporal/server/chasm/lib/callbacks/proto/v1/tasks.proto\x12,temporal.server.chasm.lib.callbacks.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"2\n" +
-	"\x0eInvocationTask\x12 \n" +
-	"\vdestination\x18\x01 \x01(\tR\vdestination\"E\n" +
+	"8temporal/server/chasm/lib/callbacks/proto/v1/tasks.proto\x12,temporal.server.chasm.lib.callbacks.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\"\n" +
+	"\x0eInvocationTask\x12\x10\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\"E\n" +
 	"\vBackoffTask\x126\n" +
 	"\bdeadline\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\bdeadlineBGZEgo.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspbb\x06proto3"
 

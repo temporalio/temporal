@@ -10,7 +10,7 @@ import "temporal/api/failure/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
 
 message CallbackState {
-    // Trigger for when the workflow is closed.
+    // Trigger for when the workflow is closed. 
     message WorkflowClosed {}
 
     message Trigger {
@@ -36,6 +36,8 @@ message CallbackState {
     // The last attempt's failure, if any.
     temporal.api.failure.v1.Failure last_attempt_failure = 7;
     // The time when the next attempt is scheduled.
+    // NOTE (seankane): this field might go away in the future, discussion:
+    // https://github.com/temporalio/temporal/pull/8473#discussion_r2427348436
     google.protobuf.Timestamp next_attempt_schedule_time = 8;
 
     // Request ID that added the callback.
@@ -53,7 +55,7 @@ message Callback {
         map<string, string> header = 2;
     }
 
-    message CHASM {
+    message Chasm {
         // namespace id of the target state machine.
         string namespace_id = 1;
         // ID of the workflow that the target state machine is attached to.
@@ -69,7 +71,7 @@ message Callback {
     reserved 1; // For a generic callback mechanism to be added later.
     oneof variant {
         Nexus nexus = 2;
-        CHASM chasm = 3;
+        Chasm chasm = 3;
     }
 
     repeated temporal.api.common.v1.Link links = 100;

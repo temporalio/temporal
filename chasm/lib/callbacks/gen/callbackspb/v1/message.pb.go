@@ -43,6 +43,8 @@ type CallbackState struct {
 	// The last attempt's failure, if any.
 	LastAttemptFailure *v11.Failure `protobuf:"bytes,7,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3" json:"last_attempt_failure,omitempty"`
 	// The time when the next attempt is scheduled.
+	// NOTE (seankane): this field might go away in the future, discussion:
+	// https://github.com/temporalio/temporal/pull/8473#discussion_r2427348436
 	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
 	// Request ID that added the callback.
 	RequestId     string `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -148,7 +150,7 @@ type Callback struct {
 	// Types that are valid to be assigned to Variant:
 	//
 	//	*Callback_Nexus_
-	//	*Callback_Chasm
+	//	*Callback_Chasm_
 	Variant       isCallback_Variant `protobuf_oneof:"variant"`
 	Links         []*v12.Link        `protobuf:"bytes,100,rep,name=links,proto3" json:"links,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -201,9 +203,9 @@ func (x *Callback) GetNexus() *Callback_Nexus {
 	return nil
 }
 
-func (x *Callback) GetChasm() *Callback_CHASM {
+func (x *Callback) GetChasm() *Callback_Chasm {
 	if x != nil {
-		if x, ok := x.Variant.(*Callback_Chasm); ok {
+		if x, ok := x.Variant.(*Callback_Chasm_); ok {
 			return x.Chasm
 		}
 	}
@@ -225,13 +227,13 @@ type Callback_Nexus_ struct {
 	Nexus *Callback_Nexus `protobuf:"bytes,2,opt,name=nexus,proto3,oneof"`
 }
 
-type Callback_Chasm struct {
-	Chasm *Callback_CHASM `protobuf:"bytes,3,opt,name=chasm,proto3,oneof"`
+type Callback_Chasm_ struct {
+	Chasm *Callback_Chasm `protobuf:"bytes,3,opt,name=chasm,proto3,oneof"`
 }
 
 func (*Callback_Nexus_) isCallback_Variant() {}
 
-func (*Callback_Chasm) isCallback_Variant() {}
+func (*Callback_Chasm_) isCallback_Variant() {}
 
 // Trigger for when the workflow is closed.
 type CallbackState_WorkflowClosed struct {
@@ -393,7 +395,7 @@ func (x *Callback_Nexus) GetHeader() map[string]string {
 	return nil
 }
 
-type Callback_CHASM struct {
+type Callback_Chasm struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// namespace id of the target state machine.
 	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
@@ -409,20 +411,20 @@ type Callback_CHASM struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Callback_CHASM) Reset() {
-	*x = Callback_CHASM{}
+func (x *Callback_Chasm) Reset() {
+	*x = Callback_Chasm{}
 	mi := &file_temporal_server_chasm_lib_callbacks_proto_v1_message_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Callback_CHASM) String() string {
+func (x *Callback_Chasm) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Callback_CHASM) ProtoMessage() {}
+func (*Callback_Chasm) ProtoMessage() {}
 
-func (x *Callback_CHASM) ProtoReflect() protoreflect.Message {
+func (x *Callback_Chasm) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_callbacks_proto_v1_message_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -434,40 +436,40 @@ func (x *Callback_CHASM) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Callback_CHASM.ProtoReflect.Descriptor instead.
-func (*Callback_CHASM) Descriptor() ([]byte, []int) {
+// Deprecated: Use Callback_Chasm.ProtoReflect.Descriptor instead.
+func (*Callback_Chasm) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_callbacks_proto_v1_message_proto_rawDescGZIP(), []int{1, 1}
 }
 
-func (x *Callback_CHASM) GetNamespaceId() string {
+func (x *Callback_Chasm) GetNamespaceId() string {
 	if x != nil {
 		return x.NamespaceId
 	}
 	return ""
 }
 
-func (x *Callback_CHASM) GetWorkflowId() string {
+func (x *Callback_Chasm) GetWorkflowId() string {
 	if x != nil {
 		return x.WorkflowId
 	}
 	return ""
 }
 
-func (x *Callback_CHASM) GetRunId() string {
+func (x *Callback_Chasm) GetRunId() string {
 	if x != nil {
 		return x.RunId
 	}
 	return ""
 }
 
-func (x *Callback_CHASM) GetComponentPath() []string {
+func (x *Callback_Chasm) GetComponentPath() []string {
 	if x != nil {
 		return x.ComponentPath
 	}
 	return nil
 }
 
-func (x *Callback_CHASM) GetMethod() string {
+func (x *Callback_Chasm) GetMethod() string {
 	if x != nil {
 		return x.Method
 	}
@@ -496,7 +498,7 @@ const file_temporal_server_chasm_lib_callbacks_proto_v1_message_proto_rawDesc = 
 	"\avariant\"\xd8\x04\n" +
 	"\bCallback\x12T\n" +
 	"\x05nexus\x18\x02 \x01(\v2<.temporal.server.chasm.lib.callbacks.proto.v1.Callback.NexusH\x00R\x05nexus\x12T\n" +
-	"\x05chasm\x18\x03 \x01(\v2<.temporal.server.chasm.lib.callbacks.proto.v1.Callback.CHASMH\x00R\x05chasm\x122\n" +
+	"\x05chasm\x18\x03 \x01(\v2<.temporal.server.chasm.lib.callbacks.proto.v1.Callback.ChasmH\x00R\x05chasm\x122\n" +
 	"\x05links\x18d \x03(\v2\x1c.temporal.api.common.v1.LinkR\x05links\x1a\xb6\x01\n" +
 	"\x05Nexus\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12`\n" +
@@ -504,7 +506,7 @@ const file_temporal_server_chasm_lib_callbacks_proto_v1_message_proto_rawDesc = 
 	"\vHeaderEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a\xa1\x01\n" +
-	"\x05CHASM\x12!\n" +
+	"\x05Chasm\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
@@ -532,7 +534,7 @@ var file_temporal_server_chasm_lib_callbacks_proto_v1_message_proto_goTypes = []
 	(*CallbackState_WorkflowClosed)(nil), // 2: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.WorkflowClosed
 	(*CallbackState_Trigger)(nil),        // 3: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.Trigger
 	(*Callback_Nexus)(nil),               // 4: temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus
-	(*Callback_CHASM)(nil),               // 5: temporal.server.chasm.lib.callbacks.proto.v1.Callback.CHASM
+	(*Callback_Chasm)(nil),               // 5: temporal.server.chasm.lib.callbacks.proto.v1.Callback.Chasm
 	nil,                                  // 6: temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus.HeaderEntry
 	(*timestamppb.Timestamp)(nil),        // 7: google.protobuf.Timestamp
 	(v1.CallbackState)(0),                // 8: temporal.server.api.enums.v1.CallbackState
@@ -548,7 +550,7 @@ var file_temporal_server_chasm_lib_callbacks_proto_v1_message_proto_depIdxs = []
 	9,  // 5: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
 	7,  // 6: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
 	4,  // 7: temporal.server.chasm.lib.callbacks.proto.v1.Callback.nexus:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus
-	5,  // 8: temporal.server.chasm.lib.callbacks.proto.v1.Callback.chasm:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.Callback.CHASM
+	5,  // 8: temporal.server.chasm.lib.callbacks.proto.v1.Callback.chasm:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.Callback.Chasm
 	10, // 9: temporal.server.chasm.lib.callbacks.proto.v1.Callback.links:type_name -> temporal.api.common.v1.Link
 	2,  // 10: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.Trigger.workflow_closed:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.WorkflowClosed
 	6,  // 11: temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus.header:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus.HeaderEntry
@@ -566,7 +568,7 @@ func file_temporal_server_chasm_lib_callbacks_proto_v1_message_proto_init() {
 	}
 	file_temporal_server_chasm_lib_callbacks_proto_v1_message_proto_msgTypes[1].OneofWrappers = []any{
 		(*Callback_Nexus_)(nil),
-		(*Callback_Chasm)(nil),
+		(*Callback_Chasm_)(nil),
 	}
 	file_temporal_server_chasm_lib_callbacks_proto_v1_message_proto_msgTypes[3].OneofWrappers = []any{
 		(*CallbackState_Trigger_WorkflowClosed)(nil),
