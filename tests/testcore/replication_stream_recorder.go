@@ -49,25 +49,38 @@ func NewReplicationStreamRecorder() *ReplicationStreamRecorder {
 	}
 }
 
-// SetOutputFile sets the file path for real-time writing of captured messages
-func (r *ReplicationStreamRecorder) SetOutputFile(filePath string) error {
+// SetOutputFile sets the file path for writing captured messages on-demand
+func (r *ReplicationStreamRecorder) SetOutputFile(filePath string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.outputFilePath = filePath
+}
 
-	// Close existing file if any
-	if r.outputFile != nil {
-		_ = r.outputFile.Close()
+// WriteToLog writes all captured messages to the configured output file
+func (r *ReplicationStreamRecorder) WriteToLog() error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if r.outputFilePath == "" {
+		return fmt.Errorf("output file path not set")
 	}
 
 	// Create or truncate the output file
-	f, err := os.Create(filePath)
+	f, err := os.Create(r.outputFilePath)
 	if err != nil {
-		return fmt.Errorf("failed to create output file %s: %w", filePath, err)
+		return fmt.Errorf("failed to create output file %s: %w", r.outputFilePath, err)
+	}
+	defer f.Close()
+
+	// Write all captured messages
+	for _, captured := range r.capturedMessages {
+		formattedMsg := r.formatCapturedMessage(captured)
+		if _, err := f.WriteString(formattedMsg + "\n"); err != nil {
+			return fmt.Errorf("failed to write message: %w", err)
+		}
 	}
 
-	r.outputFile = f
-	r.outputFilePath = filePath
-	return nil
+	return f.Sync()
 }
 
 func (r *ReplicationStreamRecorder) Clear() {
@@ -98,30 +111,14 @@ func (r *ReplicationStreamRecorder) recordMessage(method string, msg proto.Messa
 		IsStreamCall:  isStreamCall,
 	}
 
+	// Store the message reference directly without cloning for performance
 	if direction == DirectionSend || direction == DirectionServerSend {
-		captured.Request = proto.Clone(msg)
+		captured.Request = msg
 	} else {
-		captured.Response = proto.Clone(msg)
-	}
-
-	// Marshal the proto message to JSON for the Message field
-	marshaler := protojson.MarshalOptions{
-		Multiline: false,
-		Indent:    "",
-	}
-	if jsonBytes, err := marshaler.Marshal(msg); err == nil {
-		captured.Message = jsonBytes
+		captured.Response = msg
 	}
 
 	r.capturedMessages = append(r.capturedMessages, captured)
-
-	// Write to file in real-time if configured
-	if r.outputFile != nil {
-		formattedMsg := r.formatCapturedMessage(captured)
-		completeOutput := "\n" + formattedMsg + "\n"
-		_, _ = r.outputFile.WriteString(completeOutput)
-		_ = r.outputFile.Sync() // Flush to disk immediately
-	}
 }
 
 // formatCapturedMessage formats a single captured message as JSON for output

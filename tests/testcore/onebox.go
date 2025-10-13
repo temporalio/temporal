@@ -220,12 +220,10 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		spanExporters:             params.SpanExporters,
 	}
 
-	// Configure replication stream recorder to write to cluster-specific file
+	// Configure output file path for on-demand logging (call WriteToLog() to write)
 	clusterName := params.ClusterMetadataConfig.CurrentClusterName
 	outputFile := fmt.Sprintf("/tmp/replication_stream_messages_%s.txt", clusterName)
-	if err := impl.replicationStreamRecorder.SetOutputFile(outputFile); err != nil {
-		t.Fatalf("Failed to configure replication stream recorder: %v", err)
-	}
+	impl.replicationStreamRecorder.SetOutputFile(outputFile)
 
 	for k, v := range dynamicConfigOverrides {
 		impl.overrideDynamicConfig(t, k, v)
