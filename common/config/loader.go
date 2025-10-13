@@ -9,9 +9,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
-	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
@@ -29,17 +28,28 @@ var (
 
 	// logger is a structured logger used during config loading (bootstrap phase).
 	// Uses zap with console encoding to match Temporal's standard logging format.
-	logger = newBootstrapLogger()
+	// Initialized lazily using sync.Once for thread-safety.
+	logger     *zap.Logger
+	loggerOnce sync.Once
 )
+
+// getLogger returns the bootstrap logger, initializing it lazily for thread-safety.
+func getLogger() *zap.Logger {
+	loggerOnce.Do(func() {
+		logger = newBootstrapLogger()
+	})
+	return logger
+}
 
 // newBootstrapLogger creates a zap logger for config loading with console encoding
 // that matches Temporal's standard log format.
+// Panics if the logger cannot be created, as logging is essential for bootstrap.
 func newBootstrapLogger() *zap.Logger {
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:        "ts",
 		LevelKey:       "level",
 		NameKey:        "logger",
-		CallerKey:      zapcore.OmitKey, // we add logging-call-at manually
+		CallerKey:      "logging-call-at",
 		FunctionKey:    zapcore.OmitKey,
 		MessageKey:     "msg",
 		StacktraceKey:  "stacktrace",
@@ -47,6 +57,7 @@ func newBootstrapLogger() *zap.Logger {
 		EncodeLevel:    zapcore.LowercaseLevelEncoder,
 		EncodeTime:     zapcore.ISO8601TimeEncoder,
 		EncodeDuration: zapcore.SecondsDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
 
 	config := zap.Config{
@@ -57,17 +68,11 @@ func newBootstrapLogger() *zap.Logger {
 		OutputPaths:   []string{"stderr"},
 	}
 
-	logger, _ := config.Build()
-	return logger
-}
-
-// getCaller returns the file:line of the caller for logging-call-at field
-func getCaller(skip int) string {
-	_, path, line, ok := runtime.Caller(skip)
-	if !ok {
-		return ""
+	logger, err := config.Build()
+	if err != nil {
+		panic(fmt.Sprintf("failed to create bootstrap logger: %v", err))
 	}
-	return path + ":" + strconv.Itoa(line)
+	return logger
 }
 
 const (
@@ -126,9 +131,7 @@ func LoadFromEnv(config interface{}) error {
 func LoadWithEnvMap(env string, configDir string, zone string, config interface{}, envMap map[string]string, useEmbeddedOnly bool) error {
 	// If using embedded template only, skip file loading
 	if useEmbeddedOnly {
-		logger.Info("Loading configuration from environment variables only",
-			zap.String("logging-call-at", getCaller(2)),
-		)
+		getLogger().Info("Loading configuration from environment variables only")
 
 		// Process the embedded template
 		processedData, procErr := processConfigFile(embeddedConfigTemplate, "config_template_embedded.yaml", envMap)
@@ -152,11 +155,10 @@ func LoadWithEnvMap(env string, configDir string, zone string, config interface{
 		configDir = defaultConfigDir
 	}
 
-	logger.Info("Loading configuration",
+	getLogger().Info("Loading configuration",
 		zap.String("env", env),
 		zap.String("zone", zone),
 		zap.String("configDir", configDir),
-		zap.String("logging-call-at", getCaller(2)),
 	)
 
 	files, err := getConfigFiles(env, configDir, zone)
@@ -165,10 +167,9 @@ func LoadWithEnvMap(env string, configDir string, zone string, config interface{
 		return fmt.Errorf("failed to get config files: %w", err)
 	}
 
-	logger.Info("Config files found",
+	getLogger().Info("Config files found",
 		zap.Strings("files", files),
 		zap.Int("count", len(files)),
-		zap.String("logging-call-at", getCaller(2)),
 	)
 
 	for _, f := range files {
@@ -208,9 +209,8 @@ func processConfigFile(data []byte, filename string, envMap map[string]string) (
 		return data, nil
 	}
 
-	logger.Debug("Processing config file as template",
+	getLogger().Debug("Processing config file as template",
 		zap.String("filename", filename),
-		zap.String("logging-call-at", getCaller(2)),
 	)
 	return renderTemplate(data, filename, envMap)
 }
@@ -316,13 +316,14 @@ func file(name string, suffix string) string {
 
 // getEnvMap returns all environment variables as a map for template access.
 // Environment variables are expected to be in KEY=value format.
+// Empty keys are skipped for safety.
 func getEnvMap() map[string]string {
 	environ := os.Environ()
 	envMap := make(map[string]string, len(environ))
 
 	for _, env := range environ {
 		key, value, found := strings.Cut(env, "=")
-		if found {
+		if found && key != "" {
 			envMap[key] = value
 		}
 	}
