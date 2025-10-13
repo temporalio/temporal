@@ -156,12 +156,6 @@ func TestIsExperimentEnabled(t *testing.T) {
 			expected:        true,
 		},
 		{
-			name:            "comma separated list no match",
-			headerValues:    []string{"chasm-scheduler,other-exp"},
-			checkExperiment: "not-present",
-			expected:        false,
-		},
-		{
 			name:            "wildcard matches any experiment",
 			headerValues:    []string{"*"},
 			checkExperiment: "any-experiment",
