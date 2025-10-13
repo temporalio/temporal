@@ -36,11 +36,3 @@ func NewCallback(
 func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
-
-func (c *Callback) State() *callbackspb.CallbackState {
-	return c.CallbackState
-}
-
-func (c *Callback) SetState(state *callbackspb.CallbackState) {
-	c.CallbackState = state
-}

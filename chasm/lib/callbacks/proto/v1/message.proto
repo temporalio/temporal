@@ -10,7 +10,7 @@ import "temporal/api/failure/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
 
 message CallbackState {
-    // Trigger for when the workflow is clsoed
+    // Trigger for when the workflow is closed.
     message WorkflowClosed {}
 
     message Trigger {

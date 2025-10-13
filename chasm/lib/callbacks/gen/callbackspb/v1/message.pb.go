@@ -233,7 +233,7 @@ func (*Callback_Nexus_) isCallback_Variant() {}
 
 func (*Callback_Chasm) isCallback_Variant() {}
 
-// Trigger for when the workflow is clsoed
+// Trigger for when the workflow is closed.
 type CallbackState_WorkflowClosed struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
