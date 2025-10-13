@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -71,8 +70,6 @@ type (
 		tqCtx       context.Context
 		tqCtxCancel context.CancelFunc
 
-		cancelMatcherSub  func()
-		cancelFairnessSub func()
 		backlogMgr        backlogManager
 		liveness          *liveness
 		oldMatcher        *TaskMatcher // TODO(pri): old matcher cleanup
@@ -175,18 +172,8 @@ func newPhysicalTaskQueueManager(
 		pqMgr.partitionMgr.engine.historyClient,
 	)
 
-	isSticky := queue.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY
-	isChild := !isSticky && !queue.Partition().IsRoot()
-
-	var fairness, newMatcher bool
-	// Fairness is disabled for sticky queues for now so that we can still use TTLs.
-	if !isSticky {
-		fairness, pqMgr.cancelFairnessSub = config.EnableFairness(func(bool) {
-			// unload on change so that we can reload with the new setting:
-			pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
-		})
-	}
-	if fairness {
+	switch {
+	case config.EnableFairness:
 		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagFairness)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagFairness)
 
@@ -208,7 +195,7 @@ func newPhysicalTaskQueueManager(
 		)
 		var fwdr *priForwarder
 		var err error
-		if isChild {
+		if queue.Partition().IsChild() {
 			// Every DB Queue needs its own forwarder so that the throttles do not interfere
 			fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
 			if err != nil {
@@ -228,14 +215,8 @@ func newPhysicalTaskQueueManager(
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
-	}
 
-	newMatcher, pqMgr.cancelMatcherSub = config.NewMatcher(func(bool) {
-		// unload on change to NewMatcher so that we can reload with the new setting:
-		pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
-	})
-
-	if newMatcher {
+	case config.NewMatcher:
 		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagPriority)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagPriority)
 
@@ -251,7 +232,7 @@ func newPhysicalTaskQueueManager(
 		)
 		var fwdr *priForwarder
 		var err error
-		if isChild {
+		if queue.Partition().IsChild() {
 			// Every DB Queue needs its own forwarder so that the throttles do not interfere
 			fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
 			if err != nil {
@@ -271,33 +252,33 @@ func newPhysicalTaskQueueManager(
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
-	}
+	default:
+		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagClassic)
+		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagClassic)
 
-	pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagClassic)
-	pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagClassic)
-
-	pqMgr.backlogMgr = newBacklogManager(
-		tqCtx,
-		pqMgr,
-		config,
-		e.taskManager,
-		pqMgr.logger,
-		pqMgr.throttledLogger,
-		e.matchingRawClient,
-		taggedMetricsHandler,
-	)
-	var fwdr *Forwarder
-	var err error
-	if isChild {
-		// Every DB Queue needs its own forwarder so that the throttles do not interfere
-		fwdr, err = newForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
-		if err != nil {
-			return nil, err
+		pqMgr.backlogMgr = newBacklogManager(
+			tqCtx,
+			pqMgr,
+			config,
+			e.taskManager,
+			pqMgr.logger,
+			pqMgr.throttledLogger,
+			e.matchingRawClient,
+			taggedMetricsHandler,
+		)
+		var fwdr *Forwarder
+		var err error
+		if queue.Partition().IsChild() {
+			// Every DB Queue needs its own forwarder so that the throttles do not interfere
+			fwdr, err = newForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
+			if err != nil {
+				return nil, err
+			}
 		}
+		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.GetRateLimitManager().GetRateLimiter())
+		pqMgr.matcher = pqMgr.oldMatcher
+		return pqMgr, nil
 	}
-	pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.GetRateLimitManager().GetRateLimiter())
-	pqMgr.matcher = pqMgr.oldMatcher
-	return pqMgr, nil
 }
 
 func (c *physicalTaskQueueManagerImpl) Start() {
@@ -325,12 +306,6 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 		common.DaemonStatusStopped,
 	) {
 		return
-	}
-	if c.cancelMatcherSub != nil {
-		c.cancelMatcherSub()
-	}
-	if c.cancelFairnessSub != nil {
-		c.cancelFairnessSub()
 	}
 	// this may attempt to write one final ack update, do this before canceling tqCtx
 	c.backlogMgr.Stop()

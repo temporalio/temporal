@@ -38,8 +38,8 @@ type (
 		// task queue configuration
 
 		RangeSize                                int64
-		NewMatcher                               dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
-		EnableFairness                           dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
+		NewMatcherSub                            dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
+		EnableFairnessSub                        dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -134,8 +134,10 @@ type (
 		LongPollExpirationInterval func() time.Duration
 		BacklogTaskForwardTimeout  func() time.Duration
 		RangeSize                  int64
-		NewMatcher                 func(func(bool)) (bool, func())
-		EnableFairness             func(func(bool)) (bool, func())
+		NewMatcher                 bool
+		NewMatcherSub              func(func(bool)) (bool, func())
+		EnableFairness             bool
+		EnableFairnessSub          func(func(bool)) (bool, func())
 		GetTasksBatchSize          func() int
 		GetTasksReloadAt           func() int
 		UpdateAckInterval          func() time.Duration
@@ -240,8 +242,8 @@ func NewConfig(
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		RangeSize:                                100000,
-		NewMatcher:                               dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
-		EnableFairness:                           dynamicconfig.MatchingEnableFairness.Subscribe(dc),
+		NewMatcherSub:                            dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
+		EnableFairnessSub:                        dynamicconfig.MatchingEnableFairness.Subscribe(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
@@ -323,11 +325,11 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 
 	return &taskQueueConfig{
 		RangeSize: config.RangeSize,
-		NewMatcher: func(cb func(bool)) (bool, func()) {
-			return config.NewMatcher(ns.String(), taskQueueName, taskType, cb)
+		NewMatcherSub: func(cb func(bool)) (bool, func()) {
+			return config.NewMatcherSub(ns.String(), taskQueueName, taskType, cb)
 		},
-		EnableFairness: func(cb func(bool)) (bool, func()) {
-			return config.EnableFairness(ns.String(), taskQueueName, taskType, cb)
+		EnableFairnessSub: func(cb func(bool)) (bool, func()) {
+			return config.EnableFairnessSub(ns.String(), taskQueueName, taskType, cb)
 		},
 		GetTasksBatchSize: func() int {
 			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)
