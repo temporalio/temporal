@@ -181,3 +181,5 @@ require (
 	modernc.org/strutil v1.2.1 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
+
+replace github.com/nexus-rpc/sdk-go => ../nexus-sdk-go

@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/components/nexusoperations"
 	"google.golang.org/grpc/metadata"
@@ -645,7 +646,7 @@ func (h *nexusHandler) forwardCancelOperation(
 		return err
 	}
 
-	handle, err := client.NewHandle(operation, id)
+	handle, err := client.NewOperationHandle(operation, id)
 	if err != nil {
 		oc.logger.Warn("invalid Nexus cancel operation.", tag.Error(err))
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation")
@@ -676,7 +677,7 @@ func (h *nexusHandler) forwardCancelOperation(
 	return nil
 }
 
-func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service string) (*nexus.HTTPClient, error) {
+func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service string) (*nexusrpc.HTTPClient, error) {
 	httpClient, err := h.forwardingClients.Get(oc.namespace.ActiveClusterName())
 	if err != nil {
 		oc.logger.Error("failed to forward Nexus request. error creating HTTP client", tag.Error(err), tag.SourceCluster(oc.namespace.ActiveClusterName()), tag.TargetCluster(oc.namespace.ActiveClusterName()))
@@ -715,7 +716,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed")
 	}
 
-	return nexus.NewHTTPClient(nexus.HTTPClientOptions{
+	return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 		HTTPCaller: httpCaller.Do,
 		BaseURL:    baseURL,
 		Service:    service,
