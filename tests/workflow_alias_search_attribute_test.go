@@ -86,7 +86,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, 1, len(resp.GetExecutions()))
+			require.Len(t, resp.GetExecutions(), 1)
 
 			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
@@ -94,7 +94,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, 1, len(queriedResp.GetExecutions()))
+			require.Len(t, queriedResp.GetExecutions(), 1)
 
 			queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
@@ -102,7 +102,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, 1, len(queriedResp.GetExecutions()))
+			require.Len(t, queriedResp.GetExecutions(), 1)
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
@@ -142,7 +142,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, 1, len(resp.GetExecutions()))
+			require.Len(t, resp.GetExecutions(), 1)
 
 			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
@@ -150,7 +150,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, 1, len(queriedResp.GetExecutions()))
+			require.Len(t, queriedResp.GetExecutions(), 1)
 
 			queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
@@ -158,7 +158,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, 1, len(queriedResp.GetExecutions()))
+			require.Len(t, queriedResp.GetExecutions(), 1)
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,

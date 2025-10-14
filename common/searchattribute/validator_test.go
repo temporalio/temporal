@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -210,7 +209,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 
 	err = saValidator.Validate(attr, "error-namespace")
 	s.Error(err)
-	require.EqualError(s.T(), err, "Namespace error-namespace has no mapping defined for field name InvalidKey")
+	s.Require().EqualError(err, "Namespace error-namespace has no mapping defined for field name InvalidKey")
 
 	fields = map[string]*commonpb.Payload{
 		"CustomTextField": payload.EncodeString("1"),
