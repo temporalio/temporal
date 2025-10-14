@@ -615,6 +615,15 @@ func (ms *MutableStateImpl) ChasmTree() historyi.ChasmTree {
 	return ms.chasmTree
 }
 
+// chasmEnabled returns true is the mutable state has a real chasm tree.
+// The chasmTree is initialized with a noopChasmTree which is then overwritten with an actual chasm tree if chasm is
+// enabled when the mutable state is created. Once the EnableChasm dynamic config is removed and the tree is always
+// initialized, this helper can be removed.
+func (ms *MutableStateImpl) chasmEnabled() bool {
+	_, isNoop := ms.chasmTree.(*noopChasmTree)
+	return !isNoop
+}
+
 // GetNexusCompletion converts a workflow completion event into a [nexus.OperationCompletion].
 // Completions may be sent to arbitrary third parties, we intentionally do not include any termination reasons, and
 // expose only failure messages.
@@ -2565,6 +2574,12 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	if ms.executionState.RunId != execution.GetRunId() {
 		return serviceerror.NewInternalf("applying conflicting run ID: %v != %v",
 			ms.executionState.RunId, execution.GetRunId())
+	}
+
+	if ms.chasmEnabled() {
+		// Initialize chasm tree once for new workflows.
+		mutableContext := chasm.NewMutableContext(context.TODO(), ms.chasmTree.(*chasm.Node))
+		ms.chasmTree.(*chasm.Node).SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, ms))
 	}
 
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
