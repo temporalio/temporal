@@ -234,6 +234,7 @@ func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerp
 	newEntries := b.upsertHeartbeats(nsID, heartbeats)
 	m.total.Add(newEntries)
 	m.recordUtilizationMetric()
+	m.recordPluginMetric(nsID, heartbeats)
 }
 
 // recordUtilizationMetric records the overall capacity utilization ratio.
@@ -251,6 +252,28 @@ func (m *registryImpl) recordEvictionMetric() {
 	} else {
 		// Back under capacity - clear the issue
 		metrics.WorkerRegistryEvictionBlockedByAgeMetric.With(m.metricsHandler).Record(0)
+	}
+}
+
+// recordPluginMetric sets a value of 1 for each unique plugin name present in the heartbeats.
+func (m *registryImpl) recordPluginMetric(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) {
+	// Track which plugins we've already recorded
+	recordedPlugins := make(map[string]bool)
+
+	for _, hb := range heartbeats {
+		for _, pluginInfo := range hb.Plugins {
+			pluginName := pluginInfo.Name
+			if !recordedPlugins[pluginName] {
+				metrics.WorkerPluginNameMetric.
+					With(m.metricsHandler).
+					Record(
+						1,
+						metrics.NamespaceIDTag(nsID.String()),
+						metrics.WorkerPluginNameTag(pluginName),
+					)
+				recordedPlugins[pluginName] = true
+			}
+		}
 	}
 }
 
