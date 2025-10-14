@@ -6029,7 +6029,8 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	// Validate Fairness Weight Updates
 	setFairnessWeightOverrides := request.GetSetFairnessWeightOverrides()
 	unsetFairnessWeightOverrides := request.GetUnsetFairnessWeightOverrides()
-	if err := validateFairnessWeightUpdate(setFairnessWeightOverrides, unsetFairnessWeightOverrides, wh.config.MaxFairnessWeightOverrideConfigLimit()); err != nil {
+	limit := wh.config.MaxFairnessWeightOverrideConfigLimit(request.GetNamespace(), request.TaskQueue, request.TaskQueueType)
+	if err := validateFairnessWeightUpdate(setFairnessWeightOverrides, unsetFairnessWeightOverrides, limit); err != nil {
 		return nil, err
 	}
 
