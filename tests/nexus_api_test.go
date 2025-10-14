@@ -24,6 +24,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	cnexus "go.temporal.io/server/common/nexus"
@@ -224,11 +225,16 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			name:     "handler_timeout",
 			outcome:  "handler_timeout",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-service"), testcore.RandomizeStr("task-queue")),
-			timeout:  1 * time.Second,
+			timeout:  2 * time.Second,
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				timeoutStr, set := res.Request.Header[nexus.HeaderRequestTimeout]
 				s.True(set)
 				timeout, err := time.ParseDuration(timeoutStr)
+
+				var dispatchTimeoutBuffer = nexusoperations.MinDispatchTaskTimeout.Get(dynamicconfig.NewNoopCollection())("test")
+				expectedMaxTimeout := 2*time.Second - dispatchTimeoutBuffer
+				s.LessOrEqual(timeout, expectedMaxTimeout, "timeout should be buffered")
+
 				s.NoError(err)
 				time.Sleep(timeout) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return nil, nil
@@ -370,9 +376,11 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Forbidden() {
 	testEndpoint := s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), taskQueue)
 
 	type testcase struct {
-		name           string
-		onAuthorize    func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
-		failureMessage string
+		name                   string
+		onAuthorize            func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
+		checkFailure           func(t *testing.T, handlerErr *nexus.HandlerError)
+		exposeAuthorizerErrors bool
+		expectedOutcomeMetric  string
 	}
 	testCases := []testcase{
 		{
@@ -389,7 +397,12 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Forbidden() {
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
 			},
-			failureMessage: `permission denied: unauthorized in test`,
+			checkFailure: func(t *testing.T, handlerErr *nexus.HandlerError) {
+				require.Equal(t, nexus.HandlerErrorTypeUnauthorized, handlerErr.Type)
+				require.Equal(t, "permission denied: unauthorized in test", handlerErr.Cause.Error())
+			},
+			expectedOutcomeMetric:  "unauthorized",
+			exposeAuthorizerErrors: false,
 		},
 		{
 			name: "deny without reason",
@@ -405,7 +418,12 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Forbidden() {
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
 			},
-			failureMessage: "permission denied",
+			checkFailure: func(t *testing.T, handlerErr *nexus.HandlerError) {
+				require.Equal(t, nexus.HandlerErrorTypeUnauthorized, handlerErr.Type)
+				require.Equal(t, "permission denied", handlerErr.Cause.Error())
+			},
+			expectedOutcomeMetric:  "unauthorized",
+			exposeAuthorizerErrors: false,
 		},
 		{
 			name: "deny with generic error",
@@ -421,7 +439,33 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Forbidden() {
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
 			},
-			failureMessage: "permission denied",
+			checkFailure: func(t *testing.T, handlerErr *nexus.HandlerError) {
+				require.Equal(t, nexus.HandlerErrorTypeUnauthorized, handlerErr.Type)
+				require.Equal(t, "permission denied", handlerErr.Cause.Error())
+			},
+			expectedOutcomeMetric:  "unauthorized",
+			exposeAuthorizerErrors: false,
+		},
+		{
+			name: "deny with exposed error",
+			onAuthorize: func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
+				if ct.APIName == configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName {
+					return authorization.Result{}, nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "exposed error")
+				}
+				if ct.APIName == configs.DispatchNexusTaskByEndpointAPIName {
+					if ct.NexusEndpointName != testEndpoint.Spec.Name {
+						panic("expected nexus endpoint name")
+					}
+					return authorization.Result{}, nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "exposed error")
+				}
+				return authorization.Result{Decision: authorization.DecisionAllow}, nil
+			},
+			checkFailure: func(t *testing.T, handlerErr *nexus.HandlerError) {
+				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
+				require.Equal(t, "exposed error", handlerErr.Cause.Error())
+			},
+			expectedOutcomeMetric:  "internal_auth_error",
+			exposeAuthorizerErrors: true,
 		},
 	}
 
@@ -433,6 +477,8 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Forbidden() {
 		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 		defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
+		s.OverrideDynamicConfig(dynamicconfig.ExposeAuthorizerErrors, tc.exposeAuthorizerErrors)
+
 		// Wait until the endpoint is loaded into the registry.
 		s.Eventually(func() bool {
 			_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
@@ -442,13 +488,12 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Forbidden() {
 
 		var handlerErr *nexus.HandlerError
 		require.ErrorAs(t, err, &handlerErr)
-		require.Equal(t, nexus.HandlerErrorTypeUnauthorized, handlerErr.Type)
-		require.Equal(t, tc.failureMessage, handlerErr.Cause.Error())
+		tc.checkFailure(t, handlerErr)
 
 		snap := capture.Snapshot()
 
 		require.Equal(t, 1, len(snap["nexus_requests"]))
-		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "StartNexusOperation", "outcome": "unauthorized"})
+		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "StartNexusOperation", "outcome": tc.expectedOutcomeMetric})
 		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 	}
 
@@ -671,7 +716,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 		{
 			outcome:  "handler_timeout",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-service"), testcore.RandomizeStr("task-queue")),
-			timeout:  1 * time.Second,
+			timeout:  2 * time.Second,
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				timeoutStr, set := res.Request.Header[nexus.HeaderRequestTimeout]
 				s.True(set)
@@ -812,7 +857,7 @@ func (s *NexusApiTestSuite) TestNexus_RespondNexusTaskMethods_VerifiesTaskTokenM
 	s.NoError(err)
 
 	_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-		Namespace: s.ForeignNamespace().String(),
+		Namespace: s.ExternalNamespace().String(),
 		Identity:  uuid.NewString(),
 		TaskToken: ttBytes,
 		Response:  &nexuspb.Response{},
@@ -820,7 +865,7 @@ func (s *NexusApiTestSuite) TestNexus_RespondNexusTaskMethods_VerifiesTaskTokenM
 	s.ErrorContains(err, "Operation requested with a token from a different namespace.")
 
 	_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
-		Namespace: s.ForeignNamespace().String(),
+		Namespace: s.ExternalNamespace().String(),
 		Identity:  uuid.NewString(),
 		TaskToken: ttBytes,
 		Error:     &nexuspb.HandlerError{},
@@ -950,6 +995,10 @@ func (s *NexusApiTestSuite) versionedNexusTaskPoller(ctx context.Context, taskQu
 	if err != nil {
 		panic(err)
 	}
+	// Got an empty response, just return.
+	if res.TaskToken == nil {
+		return
+	}
 	if res.Request.GetStartOperation().GetService() != "test-service" && res.Request.GetCancelOperation().GetService() != "test-service" {
 		panic("expected service to be test-service")
 	}
@@ -962,7 +1011,8 @@ func (s *NexusApiTestSuite) versionedNexusTaskPoller(ctx context.Context, taskQu
 			Error:     handlerError,
 		})
 		// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
-		if err != nil && ctx.Err() == nil {
+		// NotFound is possible if the task got timed out/canceled while we were processing it.
+		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
 			panic(err)
 		}
 	} else if response != nil {
@@ -973,7 +1023,8 @@ func (s *NexusApiTestSuite) versionedNexusTaskPoller(ctx context.Context, taskQu
 			Response:  response,
 		})
 		// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
-		if err != nil && ctx.Err() == nil {
+		// NotFound is possible if the task got timed out/canceled while we were processing it.
+		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
 			panic(err)
 		}
 	}

@@ -177,7 +177,7 @@ func initSystemNamespaces(
 	}
 	defer metadataManager.Close()
 	ctx, cancel := context.WithTimeout(
-		headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo),
+		headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo),
 		30*time.Second,
 	)
 	defer cancel()

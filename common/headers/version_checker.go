@@ -2,7 +2,6 @@ package headers
 
 import (
 	"context"
-	"slices"
 	"strings"
 
 	"github.com/blang/semver/v4"
@@ -24,7 +23,7 @@ const (
 
 	// ServerVersion value can be changed by the create-tag Github workflow.
 	// If you change the var name or move it, be sure to update the workflow.
-	ServerVersion = "1.27.0"
+	ServerVersion = "1.29.0"
 
 	// SupportedServerVersions is used by CLI and inter role communication.
 	SupportedServerVersions = ">=1.0.0 <2.0.0"
@@ -152,8 +151,15 @@ func (vc *versionChecker) ClientSupported(ctx context.Context) error {
 // given feature (which should be one of the Feature... constants above).
 func (vc *versionChecker) ClientSupportsFeature(ctx context.Context, feature string) bool {
 	headers := GetValues(ctx, SupportedFeaturesHeaderName)
-	clientFeatures := strings.Split(headers[0], SupportedFeaturesHeaderDelim)
-	return slices.Contains(clientFeatures, feature)
+	if len(headers) == 0 {
+		return false
+	}
+	for clientFeature := range strings.SplitSeq(headers[0], SupportedFeaturesHeaderDelim) {
+		if clientFeature == feature {
+			return true
+		}
+	}
+	return false
 }
 
 func mustParseRanges(ranges map[string]string) map[string]semver.Range {

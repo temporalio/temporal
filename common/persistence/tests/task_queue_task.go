@@ -41,13 +41,13 @@ type (
 
 func NewTaskQueueTaskSuite(
 	t *testing.T,
-	taskManager p.TaskStore,
+	taskStore p.TaskStore,
 	logger log.Logger,
 ) *TaskQueueTaskSuite {
 	return &TaskQueueTaskSuite{
 		Assertions: require.New(t),
 		taskManager: p.NewTaskManager(
-			taskManager,
+			taskStore,
 			serialization.NewSerializer(),
 		),
 		logger: logger,

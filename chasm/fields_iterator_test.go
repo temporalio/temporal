@@ -52,9 +52,9 @@ func (s *fieldsIteratorSuite) TestGenericTypePrefix() {
 			expected: chasmFieldTypePrefix,
 		},
 		{
-			name:     "Collection type",
-			input:    Collection[string, int]{},
-			expected: chasmCollectionTypePrefix,
+			name:     "Map type",
+			input:    Map[string, int]{},
+			expected: chasmMapTypePrefix,
 		},
 		{
 			name:     "Non-generic type",
@@ -83,10 +83,10 @@ func (s *fieldsIteratorSuite) TestChasmFieldTypePrefix() {
 	s.True(strings.HasPrefix(fT.String(), chasmFieldTypePrefix))
 }
 
-func (s *fieldsIteratorSuite) TestChasmCollectionTypePrefix() {
-	c := Collection[string, any]{}
+func (s *fieldsIteratorSuite) TestChasmMapTypePrefix() {
+	c := Map[string, any]{}
 	cT := reflect.TypeOf(c)
-	s.True(strings.HasPrefix(cT.String(), chasmCollectionTypePrefix))
+	s.True(strings.HasPrefix(cT.String(), chasmMapTypePrefix))
 }
 
 func (s *fieldsIteratorSuite) TestFieldsOf() {
@@ -96,8 +96,8 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 	}
 
 	type noDataField struct {
-		SubField      Field[string]
-		SubCollection Collection[string, int]
+		SubField Field[string]
+		SubMap   Map[string, int]
 	}
 
 	type twoDataFields struct {
@@ -121,21 +121,22 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 			name: "Valid component with one data field",
 			input: &struct {
 				UnimplementedComponent
-				DataField     *protoMessageType
-				SubField      Field[string]
-				SubCollection Collection[string, int]
+				DataField *protoMessageType
+				SubField  Field[string]
+				SubMap    Map[string, int]
+				ignored   *struct{}
 			}{},
-			expectedKinds:  []fieldKind{fieldKindData, fieldKindSubField, fieldKindSubCollection},
-			expectedNames:  []string{"DataField", "SubField", "SubCollection"},
-			expectedTypes:  []string{"*persistence.WorkflowExecutionState", "chasm.Field[string]", "chasm.Collection[string,int]"},
+			expectedKinds:  []fieldKind{fieldKindData, fieldKindSubField, fieldKindSubMap},
+			expectedNames:  []string{"DataField", "SubField", "SubMap"},
+			expectedTypes:  []string{"*persistence.WorkflowExecutionState", "chasm.Field[string]", "chasm.Map[string,int]"},
 			expectedErrors: []string{"", "", ""},
 		},
 		{
 			name:           "Component with no data field",
 			input:          &noDataField{},
-			expectedKinds:  []fieldKind{fieldKindSubField, fieldKindSubCollection, fieldKindUnspecified},
-			expectedNames:  []string{"SubField", "SubCollection", ""},
-			expectedTypes:  []string{"chasm.Field[string]", "chasm.Collection[string,int]", ""},
+			expectedKinds:  []fieldKind{fieldKindSubField, fieldKindSubMap, fieldKindUnspecified},
+			expectedNames:  []string{"SubField", "SubMap", ""},
+			expectedTypes:  []string{"chasm.Field[string]", "chasm.Map[string,int]", ""},
 			expectedErrors: []string{"", "", "*chasm.noDataField: no data field (implements proto.Message) found"},
 		},
 		{
@@ -144,7 +145,7 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 			expectedKinds:  []fieldKind{fieldKindData, fieldKindUnspecified},
 			expectedNames:  []string{"DataField", "InvalidField"},
 			expectedTypes:  []string{"*persistence.WorkflowExecutionState", "*chasm.Field[string]"},
-			expectedErrors: []string{"", "*chasm.fieldPointer.InvalidField: chasm field type *chasm.Field[string] must not be a pointer"},
+			expectedErrors: []string{"", "*chasm.fieldPointer.InvalidField: CHASM fields must not be pointers"},
 		},
 		{
 			name:           "Component with multiple data fields",
@@ -194,4 +195,22 @@ func (s *fieldsIteratorSuite) TestFieldsOf() {
 			s.Equal(tt.expectedErrors, actualErrors)
 		})
 	}
+}
+
+func (s *fieldsIteratorSuite) TestUnmanagedFieldsOf() {
+	type unmanagedFields struct {
+		UnimplementedComponent
+
+		DataField  *protoMessageType
+		SomeField  Field[string]
+		unmanaged  struct{}
+		anotherPtr *struct{}
+	}
+
+	var result []string
+	for r := range unmanagedFieldsOf(reflect.TypeFor[unmanagedFields]()) {
+		result = append(result, r.name)
+	}
+	s.Equal(2, len(result))
+	s.ElementsMatch([]string{"unmanaged", "anotherPtr"}, result)
 }

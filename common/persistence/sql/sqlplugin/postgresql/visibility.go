@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
@@ -166,6 +167,14 @@ func (pdb *db) prepareRowForDB(row *sqlplugin.VisibilityRow) *sqlplugin.Visibili
 	finalRow.ExecutionTime = pdb.converter.ToPostgreSQLDateTime(finalRow.ExecutionTime)
 	if finalRow.CloseTime != nil {
 		*finalRow.CloseTime = pdb.converter.ToPostgreSQLDateTime(*finalRow.CloseTime)
+	}
+	if finalRow.SearchAttributes != nil {
+		saMap := *finalRow.SearchAttributes
+		for name, value := range saMap {
+			if dt, ok := value.(time.Time); ok {
+				saMap[name] = dt.Format(time.RFC3339Nano)
+			}
+		}
 	}
 	return &finalRow
 }

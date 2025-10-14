@@ -147,9 +147,9 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	foreignRequest := &workflowservice.StartWorkflowExecutionRequest{
+	externalRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.ForeignNamespace().String(),
+		Namespace:           s.ExternalNamespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -158,9 +158,9 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we2, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), foreignRequest)
+	we2, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), externalRequest)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution on foreign namespace", tag.WorkflowNamespace(s.ForeignNamespace().String()), tag.WorkflowRunID(we2.RunId))
+	s.Logger.Info("StartWorkflowExecution on external namespace", tag.WorkflowNamespace(s.ExternalNamespace().String()), tag.WorkflowRunID(we2.RunId))
 
 	cancellationSent := false
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -170,7 +170,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_RequestCancelExternalWorkflowExecutionCommandAttributes{RequestCancelExternalWorkflowExecutionCommandAttributes: &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
-					Namespace:  s.ForeignNamespace().String(),
+					Namespace:  s.ExternalNamespace().String(),
 					WorkflowId: id,
 					RunId:      we2.RunId,
 				}},
@@ -204,7 +204,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 		T:                   s.T(),
 	}
 
-	foreignwtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	externalWTFHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		// Find cancel requested event and verify it.
 		var cancelRequestEvent *historypb.HistoryEvent
@@ -228,17 +228,18 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 		}}, nil
 	}
 
-	foreignPoller := &testcore.TaskPoller{
+	//nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
+	externalPoller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.ForeignNamespace().String(),
+		Namespace:           s.ExternalNamespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
-		WorkflowTaskHandler: foreignwtHandler,
+		WorkflowTaskHandler: externalWTFHandler,
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
 
-	// Cancel the foreign workflow with this workflow task request.
+	// Cancel the external workflow with this workflow task request.
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
@@ -251,8 +252,8 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 	s.NoError(err)
 
 	// Accept cancellation.
-	_, err = foreignPoller.PollAndProcessWorkflowTask()
-	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
+	_, err = externalPoller.PollAndProcessWorkflowTask()
+	s.Logger.Info("external PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 }
 
@@ -281,9 +282,9 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	foreignRequest := &workflowservice.StartWorkflowExecutionRequest{
+	externalRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.ForeignNamespace().String(),
+		Namespace:           s.ExternalNamespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -292,9 +293,9 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we2, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), foreignRequest)
+	we2, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), externalRequest)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution on foreign namespace", tag.WorkflowNamespace(s.ForeignNamespace().String()), tag.WorkflowRunID(we2.RunId))
+	s.Logger.Info("StartWorkflowExecution on external namespace", tag.WorkflowNamespace(s.ExternalNamespace().String()), tag.WorkflowRunID(we2.RunId))
 
 	cancellationSent := false
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -304,7 +305,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_RequestCancelExternalWorkflowExecutionCommandAttributes{RequestCancelExternalWorkflowExecutionCommandAttributes: &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
-					Namespace:  s.ForeignNamespace().String(),
+					Namespace:  s.ExternalNamespace().String(),
 					WorkflowId: id,
 					RunId:      we2.RunId,
 				}},
@@ -338,7 +339,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 		T:                   s.T(),
 	}
 
-	foreignwtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	externalWTFHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		// Find cancel requested event not present
 		var cancelRequestEvent *historypb.HistoryEvent
@@ -358,19 +359,20 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 		}}, nil
 	}
 
-	foreignPoller := &testcore.TaskPoller{
+	//nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
+	externalPoller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.ForeignNamespace().String(),
+		Namespace:           s.ExternalNamespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
-		WorkflowTaskHandler: foreignwtHandler,
+		WorkflowTaskHandler: externalWTFHandler,
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
 
 	// Complete target workflow
-	_, err := foreignPoller.PollAndProcessWorkflowTask()
-	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
+	_, err := externalPoller.PollAndProcessWorkflowTask()
+	s.Logger.Info("external PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Cancel the target workflow with this workflow task request.
@@ -419,7 +421,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetNo
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_RequestCancelExternalWorkflowExecutionCommandAttributes{RequestCancelExternalWorkflowExecutionCommandAttributes: &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
-					Namespace:  s.ForeignNamespace().String(),
+					Namespace:  s.ExternalNamespace().String(),
 					WorkflowId: "some-random-non-existence-workflow-id",
 				}},
 			}}, nil

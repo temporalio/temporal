@@ -54,57 +54,100 @@ func TestFindMatch(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		_, err := findMatch[struct{}](tc.v, nil, tc.filters)
+		_, err := findMatch(tc.v, tc.filters)
 		assert.Equal(t, tc.matched, err == nil)
 	}
 }
 
 func TestFindMatchWithTyped(t *testing.T) {
 	testCases := []struct {
-		tv      []TypedConstrainedValue[struct{}]
-		filters []Constraints
-		matched bool
+		val      []ConstrainedValue
+		tv       []TypedConstrainedValue[struct{}]
+		filters  []Constraints
+		valOrder int
+		defOrder int
 	}{
 		{
+			val: nil,
 			tv: []TypedConstrainedValue[struct{}]{
 				{Constraints: Constraints{}},
 			},
 			filters: []Constraints{
 				{Namespace: "some random namespace"},
 			},
-			matched: false,
+			valOrder: 0,
+			defOrder: 0,
 		},
 		{
+			val: nil,
 			tv: []TypedConstrainedValue[struct{}]{
 				{Constraints: Constraints{Namespace: "samples-namespace"}},
 			},
 			filters: []Constraints{
 				{Namespace: "some random namespace"},
 			},
-			matched: false,
+			valOrder: 0,
+			defOrder: 0,
 		},
 		{
+			val: nil,
 			tv: []TypedConstrainedValue[struct{}]{
 				{Constraints: Constraints{Namespace: "samples-namespace", TaskQueueName: "sample-task-queue"}},
 			},
 			filters: []Constraints{
 				{Namespace: "samples-namespace", TaskQueueName: "sample-task-queue"},
 			},
-			matched: true,
+			valOrder: 0,
+			defOrder: 1,
 		},
 		{
+			val: nil,
 			tv: []TypedConstrainedValue[struct{}]{
 				{Constraints: Constraints{Namespace: "samples-namespace"}},
 			},
 			filters: []Constraints{
 				{TaskQueueName: "sample-task-queue"},
 			},
-			matched: false,
+			valOrder: 0,
+			defOrder: 0,
+		},
+		{
+			val: []ConstrainedValue{
+				{Constraints: Constraints{Namespace: "ns"}},
+			},
+			tv: []TypedConstrainedValue[struct{}]{
+				{Constraints: Constraints{Namespace: "ns", TaskQueueName: "othertq"}},
+				{},
+			},
+			filters: []Constraints{
+				{Namespace: "ns", TaskQueueName: "tq"},
+				{Namespace: "ns"},
+				{},
+			},
+			valOrder: 4,
+			defOrder: 9,
+		},
+		{
+			val: []ConstrainedValue{
+				{Constraints: Constraints{Namespace: "ns"}},
+			},
+			tv: []TypedConstrainedValue[struct{}]{
+				{Constraints: Constraints{Namespace: "ns", TaskQueueName: "tq"}},
+				{},
+			},
+			filters: []Constraints{
+				{Namespace: "ns", TaskQueueName: "tq"},
+				{Namespace: "ns"},
+				{},
+			},
+			valOrder: 4,
+			defOrder: 2,
 		},
 	}
 
 	for _, tc := range testCases {
-		_, err := findMatch(nil, tc.tv, tc.filters)
-		assert.Equal(t, tc.matched, err == nil)
+		_, _, valOrder, defOrder := findMatchWithConstrainedDefaults(tc.val, tc.tv, tc.filters)
+		assert.Equal(t, tc.valOrder, valOrder)
+		assert.Equal(t, tc.defOrder, defOrder)
 	}
 }

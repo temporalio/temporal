@@ -56,13 +56,15 @@ type (
 
 		// WithoutUnitSuffix controls the additional of unit suffixes to metric names.
 		// This config only takes effect when using opentelemetry framework.
+		// Note: this config only takes effect when using prometheus via opentelemetry framework
 		WithoutUnitSuffix bool `yaml:"withoutUnitSuffix"`
 		// WithoutCounterSuffix controls the additional of _total suffixes to counter metric names.
 		// This config only takes effect when using opentelemetry framework.
+		// Note: this config only takes effect when using prometheus via opentelemetry framework
 		WithoutCounterSuffix bool `yaml:"withoutCounterSuffix"`
 		// RecordTimerInSeconds controls if Timer metric should be emitted as number of seconds
 		// (instead of milliseconds).
-		// This config only takes effect when using opentelemetry framework.
+		// This config only takes effect when using prometheus via opentelemetry framework
 		RecordTimerInSeconds bool `yaml:"recordTimerInSeconds"`
 	}
 
@@ -81,6 +83,8 @@ type (
 		FlushBytes int `yaml:"flushBytes"`
 		// Reporter allows additional configuration of the stats reporter, e.g. with custom tagging options.
 		Reporter StatsdReporterConfig `yaml:"reporter"`
+		// Metric framework: tally/opentelemetry. If not specified, it defaults to tally.
+		Framework string `yaml:"framework"`
 	}
 
 	StatsdReporterConfig struct {
@@ -459,16 +463,26 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 
 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
 
-	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
-		fatalOnListenerError := true
-		otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig, fatalOnListenerError)
+	fatalOnListenerError := true
+	if c.Statsd != nil && c.Statsd.Framework == FrameworkOpentelemetry {
+		// create opentelemetry provider with just statsd
+		otelProvider, err := NewOpenTelemetryProviderWithStatsd(logger, c.Statsd, &c.ClientConfig)
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
-
-		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
+		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig, false)
 	}
 
+	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
+		// create opentelemetry provider with just prometheus
+		otelProvider, err := NewOpenTelemetryProviderWithPrometheus(logger, c.Prometheus, &c.ClientConfig, fatalOnListenerError)
+		if err != nil {
+			logger.Fatal(err.Error())
+		}
+		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig, c.ClientConfig.RecordTimerInSeconds)
+	}
+
+	// fallback to tally if no framework is specified
 	return NewTallyMetricsHandler(
 		c.ClientConfig,
 		NewScope(logger, c),

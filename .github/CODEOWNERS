@@ -1,4 +1,4 @@
 # Syntax is here:
 # https://docs.github.com/en/github/creating-cloning-and-archiving-repositories/about-code-owners#codeowners-syntax
 
-*                @temporalio/server
+*                @temporalio/server @temporalio/cgs

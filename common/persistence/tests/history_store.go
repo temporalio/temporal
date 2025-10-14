@@ -9,7 +9,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -66,6 +65,7 @@ func NewHistoryEventsSuite(
 			nil,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
+			dynamicconfig.GetBoolPropertyFn(false),
 		),
 		serializer: eventSerializer,
 		logger:     logger,
@@ -748,7 +748,7 @@ func (s *HistoryEventsSuite) appendRawHistoryBatches(
 	branchToken []byte,
 	packet HistoryEventsPacket,
 ) {
-	blob, err := s.serializer.SerializeEvents(packet.events, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := s.serializer.SerializeEvents(packet.events)
 	s.NoError(err)
 	_, err = s.store.AppendRawHistoryNodes(s.Ctx, &p.AppendRawHistoryNodesRequest{
 		ShardID:           shardID,

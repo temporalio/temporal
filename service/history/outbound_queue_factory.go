@@ -17,7 +17,6 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
-	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/fx"
 )
 
@@ -192,7 +191,6 @@ func (f *outboundQueueFactory) Stop() {
 
 func (f *outboundQueueFactory) CreateQueue(
 	shardContext historyi.ShardContext,
-	workflowCache wcache.Cache,
 ) queues.Queue {
 	logger := log.With(shardContext.GetLogger(), tag.ComponentOutboundQueue)
 	metricsHandler := getOutbountQueueProcessorMetricsHandler(f.MetricsHandler)
@@ -208,18 +206,19 @@ func (f *outboundQueueFactory) CreateQueue(
 
 	activeExecutor := newOutboundQueueActiveTaskExecutor(
 		shardContext,
-		workflowCache,
+		f.WorkflowCache,
 		logger,
 		metricsHandler,
+		f.ChasmEngine,
 	)
 
-	// not implemented yet
 	standbyExecutor := newOutboundQueueStandbyTaskExecutor(
 		shardContext,
-		workflowCache,
+		f.WorkflowCache,
 		currentClusterName,
 		logger,
 		metricsHandler,
+		f.ChasmEngine,
 	)
 
 	executor := queues.NewActiveStandbyExecutor(
@@ -275,6 +274,8 @@ func (f *outboundQueueFactory) CreateQueue(
 			CheckpointInterval:                  f.Config.OutboundProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.OutboundProcessorUpdateAckIntervalJitterCoefficient,
 			MaxReaderCount:                      f.Config.OutboundQueueMaxReaderCount,
+			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
+			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
 		},
 		f.hostReaderRateLimiter,
 		queues.GrouperStateMachineNamespaceIDAndDestination{},

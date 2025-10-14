@@ -369,6 +369,7 @@ func (r *workflowResetterImpl) persistToDB(
 			workflow.MutableStateFailoverVersion(resetWorkflow.GetMutableState()),
 			resetWorkflowSnapshot,
 			resetWorkflowEventsSeq,
+			currentWorkflow.GetMutableState().IsWorkflow(),
 		); err != nil {
 			return err
 		}
@@ -409,6 +410,7 @@ func (r *workflowResetterImpl) persistToDB(
 		&currentRunVerson,
 		currentWorkflowMutation,
 		currentWorkflowEventsSeq,
+		currentWorkflow.GetMutableState().IsWorkflow(),
 	); err != nil {
 		return err
 	}
@@ -930,11 +932,22 @@ func reapplyEvents(
 				continue
 			}
 			attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+			callbacks := attr.GetAttachedCompletionCallbacks()
+			requestID := attr.GetAttachedRequestId()
+			if len(callbacks) > 0 && requestID != "" {
+				if mutableState.HasRequestID(requestID) {
+					if attr.GetVersioningOverride() == nil && !attr.GetUnsetVersioningOverride() {
+						// if completion callbacks exist, and no other updates in the event, we should skip the event
+						continue
+					}
+					return reappliedEvents, serviceerror.NewInternalf("unable to reapply WorkflowExecutionOptionsUpdated event: %d completion callbacks are already attached but the event contains additional workflow option updates", len(callbacks))
+				}
+			}
 			if _, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
 				attr.GetVersioningOverride(),
 				attr.GetUnsetVersioningOverride(),
-				attr.GetAttachedRequestId(),
-				attr.GetAttachedCompletionCallbacks(),
+				requestID,
+				callbacks,
 				event.Links,
 			); err != nil {
 				return reappliedEvents, err
@@ -967,7 +980,7 @@ func reapplyEvents(
 			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
 			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
 			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
-			if !isReset {
+			if isDuplicate(event) {
 				continue
 			}
 			err := reapplyChildEvents(mutableState, event)
@@ -1023,7 +1036,7 @@ func reapplyChildEvents(mutableState historyi.MutableState, event *historypb.His
 	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
 		childEventAttributes := event.GetChildWorkflowExecutionStartedEventAttributes()
 		ci, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
-		if !childExists {
+		if !childExists || ci.StartedEventId != common.EmptyEventID {
 			return nil
 		}
 		childClock := ci.Clock

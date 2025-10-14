@@ -77,31 +77,21 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			// serialize event
 
-			nilEvent, err := serializer.SerializeEvent(nil, enumspb.ENCODING_TYPE_PROTO3)
+			nilEvent, err := serializer.SerializeEvent(nil)
 			s.Nil(err)
 			s.Nil(nilEvent)
 
-			_, err = serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_UNSPECIFIED)
-			s.NotNil(err)
-			_, ok := err.(*serialization.UnknownEncodingTypeError)
-			s.True(ok)
-
-			dProto, err := serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_PROTO3)
+			dProto, err := serializer.SerializeEvent(event0)
 			s.Nil(err)
 			s.NotNil(dProto)
 
 			// serialize batch events
 
-			nilEvents, err := serializer.SerializeEvents(nil, enumspb.ENCODING_TYPE_PROTO3)
+			nilEvents, err := serializer.SerializeEvents(nil)
 			s.Nil(err)
 			s.NotNil(nilEvents)
 
-			_, err = serializer.SerializeEvents(history0.Events, enumspb.ENCODING_TYPE_UNSPECIFIED)
-			s.NotNil(err)
-			_, ok = err.(*serialization.UnknownEncodingTypeError)
-			s.True(ok)
-
-			dsProto, err := serializer.SerializeEvents(history0.Events, enumspb.ENCODING_TYPE_PROTO3)
+			dsProto, err := serializer.SerializeEvents(history0.Events)
 			s.Nil(err)
 			s.NotNil(dsProto)
 

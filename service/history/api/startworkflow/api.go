@@ -49,16 +49,15 @@ const (
 
 // Starter starts a new workflow execution.
 type Starter struct {
-	metricsHandler                                metrics.Handler
-	shardContext                                  historyi.ShardContext
-	workflowConsistencyChecker                    api.WorkflowConsistencyChecker
-	tokenSerializer                               *tasktoken.Serializer
-	visibilityManager                             manager.VisibilityManager
-	request                                       *historyservice.StartWorkflowExecutionRequest
-	namespace                                     *namespace.Namespace
-	createOrUpdateLeaseFn                         api.CreateOrUpdateLeaseFunc
-	followReusePolicyAfterConflictPolicyTerminate dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	enableRequestIdRefLinks                       dynamicconfig.BoolPropertyFn
+	metricsHandler             metrics.Handler
+	shardContext               historyi.ShardContext
+	workflowConsistencyChecker api.WorkflowConsistencyChecker
+	tokenSerializer            *tasktoken.Serializer
+	visibilityManager          manager.VisibilityManager
+	request                    *historyservice.StartWorkflowExecutionRequest
+	namespace                  *namespace.Namespace
+	createOrUpdateLeaseFn      api.CreateOrUpdateLeaseFunc
+	enableRequestIdRefLinks    dynamicconfig.BoolPropertyFn
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -104,8 +103,7 @@ func NewStarter(
 		request:                    request,
 		namespace:                  namespaceEntry,
 		createOrUpdateLeaseFn:      createLeaseFn,
-		followReusePolicyAfterConflictPolicyTerminate: shardContext.GetConfig().FollowReusePolicyAfterConflictPolicyTerminate,
-		enableRequestIdRefLinks:                       shardContext.GetConfig().EnableRequestIdRefLinks,
+		enableRequestIdRefLinks:    shardContext.GetConfig().EnableRequestIdRefLinks,
 	}, nil
 }
 
@@ -423,7 +421,12 @@ func (s *Starter) resolveDuplicateWorkflowID(
 
 	switch {
 	case errors.Is(err, api.ErrUseCurrentExecution):
-		return s.handleUseExistingWorkflowOnConflictOptions(ctx, workflowKey, currentWorkflowConditionFailed)
+		return s.handleUseExistingWorkflowOnConflictOptions(
+			ctx,
+			workflowKey,
+			currentWorkflowConditionFailed,
+			currentWorkflowStartTime,
+		)
 	case err != nil:
 		return nil, StartErr, err
 	case currentExecutionUpdateAction == nil:
@@ -491,14 +494,10 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		resp, err := s.generateResponse(newRunID, mutableStateInfo.workflowTask, events)
 		return resp, StartNew, err
 	case consts.ErrWorkflowCompleted:
-		if s.followReusePolicyAfterConflictPolicyTerminate(s.namespace.Name().String()) {
-			// Exit and retry again from the top.
-			// By returning an Unavailable service error, the entire Start request will be retried.
-			// NOTE: This WorkflowIDReusePolicy cannot be RejectDuplicate as the frontend will reject that.
-			return nil, StartErr, serviceerror.NewUnavailablef("Termination failed: %v", err)
-		}
-		// Fallthough to the logic for only creating the new workflow below.
-		return nil, StartNew, nil
+		// Exit and retry again from the top.
+		// By returning an Unavailable service error, the entire Start request will be retried.
+		// NOTE: This WorkflowIDReusePolicy cannot be RejectDuplicate as the frontend will reject that.
+		return nil, StartErr, serviceerror.NewUnavailablef("Termination failed: %v", err)
 	default:
 		return nil, StartErr, err
 	}
@@ -626,6 +625,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
+	currentWorkflowStartTime time.Time,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
 	// Default response link is for the started event. If there is OnConflictOptions set, and it's
 	// attaching the request ID, then the response link will be a request ID reference.
@@ -686,10 +686,13 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 		// execution. So it's possible the workflow completed after the first call of
 		// api.ResolveDuplicateWorkflowID and before being able to update the existing workflow.
 		err := api.ResolveWorkflowIDReusePolicy(
+			s.shardContext,
 			workflowKey,
+			s.namespace,
 			currentWorkflowConditionFailed.Status,
 			currentWorkflowConditionFailed.RequestIDs,
 			s.request.StartRequest.GetWorkflowIdReusePolicy(),
+			currentWorkflowStartTime,
 		)
 		if err != nil {
 			return nil, StartErr, err

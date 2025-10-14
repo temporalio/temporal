@@ -1127,7 +1127,7 @@ func (m *sqlExecutionStore) createExecution(
 	}
 	result, err := tx.InsertIntoExecutions(ctx, row)
 	if err != nil {
-		if m.Db.IsDupEntryError(err) {
+		if m.DB.IsDupEntryError(err) {
 			return &p.WorkflowConditionFailedError{
 				Msg:             fmt.Sprintf("Workflow execution already running. WorkflowId: %v", workflowID),
 				NextEventID:     0,
@@ -1191,7 +1191,7 @@ func workflowExecutionStateFromCurrentExecutionsRow(
 	row *sqlplugin.CurrentExecutionsRow,
 ) (*persistencespb.WorkflowExecutionState, error) {
 	if len(row.Data) > 0 && row.DataEncoding != "" {
-		return serialization.WorkflowExecutionStateFromBlob(row.Data, row.DataEncoding)
+		return serialization.WorkflowExecutionStateFromBlob(p.NewDataBlob(row.Data, row.DataEncoding))
 	}
 
 	// Old records don't have the serialized WorkflowExecutionState stored in DB.

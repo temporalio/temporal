@@ -76,10 +76,8 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	passiveClusterConfig := clusterConfigs[1]
 	passiveClusterConfig.WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
 	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.EnableReplicationStream.Key():             true,
-		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
-		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
-		dynamicconfig.NamespaceCacheRefreshInterval.Key():       dynamicconfig.NamespaceCacheRefreshInterval,
+		dynamicconfig.EnableReplicationStream.Key():       true,
+		dynamicconfig.NamespaceCacheRefreshInterval.Key(): dynamicconfig.NamespaceCacheRefreshInterval,
 	}
 	s.controller = gomock.NewController(s.T())
 	mockActiveStreamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)
@@ -363,14 +361,14 @@ func (s *ReplicationMigrationBackTestSuite) assertHistoryEvents(
 		s.NoError(err)
 		inputEvents := expectedEvents[index]
 		index++
-		inputBatch, _ := s.serializer.SerializeEvents(inputEvents, enumspb.ENCODING_TYPE_PROTO3)
+		inputBatch, _ := s.serializer.SerializeEvents(inputEvents)
 		s.Equal(inputBatch, passiveBatch.RawEventBatch)
 	}
 	s.Equal(len(expectedEvents), index)
 }
 
 func (s *ReplicationMigrationBackTestSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {
-	blob, err := s.serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := s.serializer.SerializeEvents(events)
 	s.NoError(err)
 	return blob
 }
@@ -581,10 +579,10 @@ func (s *ReplicationMigrationBackTestSuite) createHistoryEventReplicationTaskFro
 	newRunEvents []*historypb.HistoryEvent,
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 ) *replicationspb.ReplicationTask {
-	eventBlob, err := s.serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	eventBlob, err := s.serializer.SerializeEvents(events)
 	var newRunEventBlob *commonpb.DataBlob
 	if newRunEvents != nil {
-		newRunEventBlob, err = s.serializer.SerializeEvents(newRunEvents, enumspb.ENCODING_TYPE_PROTO3)
+		newRunEventBlob, err = s.serializer.SerializeEvents(newRunEvents)
 		s.NoError(err)
 	}
 	s.NoError(err)

@@ -1,9 +1,11 @@
 package client
 
 import (
+	"errors"
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -31,25 +33,30 @@ type (
 
 	DynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 
+	EnableDataLossMetrics                       dynamicconfig.BoolPropertyFn
+	EnableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
+
 	ClusterName string
 
 	NewFactoryParams struct {
 		fx.In
 
-		DataStoreFactory                   persistence.DataStoreFactory
-		EventBlobCache                     persistence.XDCCache
-		Cfg                                *config.Persistence
-		PersistenceMaxQPS                  PersistenceMaxQps
-		PersistenceNamespaceMaxQPS         PersistenceNamespaceMaxQps
-		PersistencePerShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS
-		OperatorRPSRatio                   OperatorRPSRatio
-		PersistenceBurstRatio              PersistenceBurstRatio
-		ClusterName                        ClusterName
-		ServiceName                        primitives.ServiceName
-		MetricsHandler                     metrics.Handler
-		Logger                             log.Logger
-		HealthSignals                      persistence.HealthSignalAggregator
-		DynamicRateLimitingParams          DynamicRateLimitingParams
+		DataStoreFactory                            persistence.DataStoreFactory
+		EventBlobCache                              persistence.XDCCache
+		Cfg                                         *config.Persistence
+		PersistenceMaxQPS                           PersistenceMaxQps
+		PersistenceNamespaceMaxQPS                  PersistenceNamespaceMaxQps
+		PersistencePerShardNamespaceMaxQPS          PersistencePerShardNamespaceMaxQPS
+		OperatorRPSRatio                            OperatorRPSRatio
+		PersistenceBurstRatio                       PersistenceBurstRatio
+		ClusterName                                 ClusterName
+		ServiceName                                 primitives.ServiceName
+		MetricsHandler                              metrics.Handler
+		Logger                                      log.Logger
+		HealthSignals                               persistence.HealthSignalAggregator
+		DynamicRateLimitingParams                   DynamicRateLimitingParams
+		EnableDataLossMetrics                       EnableDataLossMetrics
+		EnableBestEffortDeleteTasksOnWorkflowUpdate EnableBestEffortDeleteTasksOnWorkflowUpdate
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -61,6 +68,7 @@ var Module = fx.Options(
 	fx.Provide(managerProvider(Factory.NewClusterMetadataManager)),
 	fx.Provide(managerProvider(Factory.NewMetadataManager)),
 	fx.Provide(managerProvider(Factory.NewTaskManager)),
+	fx.Provide(managerProvider(Factory.NewFairTaskManager)),
 	fx.Provide(managerProvider(Factory.NewNamespaceReplicationQueue)),
 	fx.Provide(managerProvider(Factory.NewShardManager)),
 	fx.Provide(managerProvider(Factory.NewExecutionManager)),
@@ -71,6 +79,8 @@ var Module = fx.Options(
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(persistence.NewDLQMetricsEmitter),
 	fx.Provide(EventBlobCacheProvider),
+	fx.Provide(EnableDataLossMetricsProvider),
+	fx.Provide(EnableBestEffortDeleteTasksOnWorkflowUpdateProvider),
 )
 
 func ClusterNameProvider(config *cluster.Config) ClusterName {
@@ -86,6 +96,18 @@ func EventBlobCacheProvider(
 		20*time.Second,
 		logger,
 	)
+}
+
+func EnableDataLossMetricsProvider(
+	dc *dynamicconfig.Collection,
+) EnableDataLossMetrics {
+	return EnableDataLossMetrics(dynamicconfig.EnableDataLossMetrics.Get(dc))
+}
+
+func EnableBestEffortDeleteTasksOnWorkflowUpdateProvider(
+	dc *dynamicconfig.Collection,
+) EnableBestEffortDeleteTasksOnWorkflowUpdate {
+	return EnableBestEffortDeleteTasksOnWorkflowUpdate(dynamicconfig.EnableBestEffortDeleteTasksOnWorkflowUpdate.Get(dc))
 }
 
 func FactoryProvider(
@@ -131,6 +153,8 @@ func FactoryProvider(
 		params.MetricsHandler,
 		params.Logger,
 		params.HealthSignals,
+		params.EnableDataLossMetrics,
+		params.EnableBestEffortDeleteTasksOnWorkflowUpdate,
 	)
 }
 
@@ -140,13 +164,11 @@ func HealthSignalAggregatorProvider(
 	logger log.ThrottledLogger,
 ) persistence.HealthSignalAggregator {
 	if dynamicconfig.PersistenceHealthSignalMetricsEnabled.Get(dynamicCollection)() {
-		return persistence.NewHealthSignalAggregatorImpl(
+		return persistence.NewHealthSignalAggregator(
 			dynamicconfig.PersistenceHealthSignalAggregationEnabled.Get(dynamicCollection)(),
 			dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
 			dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
 			metricsHandler,
-			dynamicconfig.ShardRPSWarnLimit.Get(dynamicCollection),
-			dynamicconfig.ShardPerNsRPSWarnPercent.Get(dynamicCollection),
 			logger,
 		)
 	}
@@ -163,7 +185,6 @@ func DataStoreFactoryProvider(
 	metricsHandler metrics.Handler,
 	tracerProvider trace.TracerProvider,
 ) persistence.DataStoreFactory {
-
 	var dataStoreFactory persistence.DataStoreFactory
 	defaultStoreCfg := cfg.DataStores[cfg.DefaultStore]
 	switch {
@@ -197,6 +218,11 @@ func managerProvider[T persistence.Closeable](newManagerFn func(Factory) (T, err
 	return func(f Factory, lc fx.Lifecycle) (T, error) {
 		manager, err := newManagerFn(f) // passing receiver (Factory) as first argument.
 		if err != nil {
+			var unimpl *serviceerror.Unimplemented
+			if errors.As(err, &unimpl) {
+				// allow factories to return Unimplemented, and turn into nil so that fx init doesn't fail.
+				err = nil
+			}
 			var nilT T
 			return nilT, err
 		}

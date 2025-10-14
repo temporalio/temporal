@@ -127,7 +127,7 @@ func (m *HistoryTaskQueueManagerImpl) ReadRawTasks(
 	responseTasks := make([]RawHistoryTask, len(response.Messages))
 	for i, message := range response.Messages {
 		var task persistencespb.HistoryTask
-		err := serialization.Proto3Decode(message.Data.Data, message.Data.EncodingType, &task)
+		err := serialization.Decode(message.Data, &task)
 		if err != nil {
 			return nil, fmt.Errorf("%v: %w", ErrMsgDeserializeRawHistoryTask, err)
 		}
@@ -248,7 +248,7 @@ func GetHistoryTaskQueueName(
 }
 
 func GetHistoryTaskQueueCategoryID(queueName string) (int, error) {
-	fields := strings.Split(queueName, "_")
+	fields := strings.SplitN(queueName, "_", 4)
 	if len(fields) != 4 {
 		return 0, fmt.Errorf("%w: %s", ErrInvalidQueueName, queueName)
 	}

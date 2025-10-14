@@ -67,6 +67,9 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		InheritedBuildId:                request.InheritedBuildId,
 		VersioningOverride:              worker_versioning.ConvertOverrideToV32(request.VersioningOverride),
 		Priority:                        req.GetPriority(),
+		InheritedPinnedVersion:          request.InheritedPinnedVersion,
+		// We expect the API handler to unset RequestEagerExecution if eager execution cannot be accepted.
+		EagerExecutionAccepted: req.GetRequestEagerExecution(),
 	}
 
 	parentInfo := request.ParentExecutionInfo
@@ -76,7 +79,6 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		attributes.ParentWorkflowExecution = parentInfo.Execution
 		attributes.ParentInitiatedEventId = parentInfo.InitiatedId
 		attributes.ParentInitiatedEventVersion = parentInfo.InitiatedVersion
-		attributes.ParentPinnedDeploymentVersion = parentInfo.GetPinnedDeploymentVersion()
 	}
 
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{

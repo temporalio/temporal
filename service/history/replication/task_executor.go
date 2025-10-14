@@ -18,9 +18,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/deletemanager"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -32,7 +32,7 @@ type (
 	TaskExecutorParams struct {
 		RemoteCluster   string // TODO: Remove this remote cluster from executor then it can use singleton.
 		Shard           historyi.ShardContext
-		HistoryResender xdc.NDCHistoryResender
+		HistoryResender eventhandler.ResendHandler
 		DeleteManager   deletemanager.DeleteManager
 		WorkflowCache   wcache.Cache
 	}
@@ -40,15 +40,15 @@ type (
 	TaskExecutorProvider func(params TaskExecutorParams) TaskExecutor
 
 	taskExecutorImpl struct {
-		currentCluster     string
-		remoteCluster      string
-		shardContext       historyi.ShardContext
-		namespaceRegistry  namespace.Registry
-		nDCHistoryResender xdc.NDCHistoryResender
-		deleteManager      deletemanager.DeleteManager
-		workflowCache      wcache.Cache
-		metricsHandler     metrics.Handler
-		logger             log.Logger
+		currentCluster    string
+		remoteCluster     string
+		shardContext      historyi.ShardContext
+		namespaceRegistry namespace.Registry
+		resendHandler     eventhandler.ResendHandler
+		deleteManager     deletemanager.DeleteManager
+		workflowCache     wcache.Cache
+		metricsHandler    metrics.Handler
+		logger            log.Logger
 	}
 )
 
@@ -57,20 +57,20 @@ type (
 func NewTaskExecutor(
 	remoteCluster string,
 	shardContext historyi.ShardContext,
-	nDCHistoryResender xdc.NDCHistoryResender,
+	resendHandler eventhandler.ResendHandler,
 	deleteManager deletemanager.DeleteManager,
 	workflowCache wcache.Cache,
 ) TaskExecutor {
 	return &taskExecutorImpl{
-		currentCluster:     shardContext.GetClusterMetadata().GetCurrentClusterName(),
-		remoteCluster:      remoteCluster,
-		shardContext:       shardContext,
-		namespaceRegistry:  shardContext.GetNamespaceRegistry(),
-		nDCHistoryResender: nDCHistoryResender,
-		deleteManager:      deleteManager,
-		workflowCache:      workflowCache,
-		metricsHandler:     shardContext.GetMetricsHandler(),
-		logger:             shardContext.GetLogger(),
+		currentCluster:    shardContext.GetClusterMetadata().GetCurrentClusterName(),
+		remoteCluster:     remoteCluster,
+		shardContext:      shardContext,
+		namespaceRegistry: shardContext.GetNamespaceRegistry(),
+		resendHandler:     resendHandler,
+		deleteManager:     deleteManager,
+		workflowCache:     workflowCache,
+		metricsHandler:    shardContext.GetMetricsHandler(),
+		logger:            shardContext.GetLogger(),
 	}
 }
 
@@ -129,6 +129,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 		ScheduledEventId:           attr.ScheduledEventId,
 		ScheduledTime:              attr.ScheduledTime,
 		StartedEventId:             attr.StartedEventId,
+		StartVersion:               attr.StartVersion,
 		StartedTime:                attr.StartedTime,
 		LastHeartbeatTime:          attr.LastHeartbeatTime,
 		Details:                    attr.Details,
@@ -167,7 +168,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 			)
 		}()
 
-		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+		resendErr := e.resendHandler.ResendHistoryEvents(
 			ctx,
 			e.remoteCluster,
 			namespace.ID(retryErr.NamespaceId),
@@ -259,7 +260,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 			)
 		}()
 
-		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+		resendErr := e.resendHandler.ResendHistoryEvents(
 			ctx,
 			e.remoteCluster,
 			namespace.ID(retryErr.NamespaceId),
@@ -322,7 +323,7 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 	case nil:
 		return nil
 	case *serviceerrors.RetryReplication:
-		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+		resendErr := e.resendHandler.ResendHistoryEvents(
 			ctx,
 			e.remoteCluster,
 			namespace.ID(retryErr.NamespaceId),
@@ -384,6 +385,8 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
+	// CHASM runs only uses state based replication logic and should never reach here.
+	// Can continue to use GetOrCreateWorkflowExecution.
 	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, e.shardContext, nsID, &ex, locks.PriorityLow)
 	if err != nil {
 		return err

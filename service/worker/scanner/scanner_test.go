@@ -136,7 +136,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			HistoryScannerEnabled:    false,
 			BuildIdScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeSQL,
-			ExpectedScanners:         []expectedScanner{executionScanner},
+			ExpectedScanners:         []expectedScanner{}, // ExecutionsScanner is not supported for SQL store
 		},
 		{
 			Name:                     "BuildIdScavengerNoSQL",
@@ -163,7 +163,16 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			HistoryScannerEnabled:    true,
 			BuildIdScavengerEnabled:  true,
 			DefaultStore:             config.StoreTypeSQL,
-			ExpectedScanners:         []expectedScanner{historyScanner, taskQueueScanner, executionScanner, buildIdScavenger},
+			ExpectedScanners:         []expectedScanner{historyScanner, taskQueueScanner, buildIdScavenger}, // ExecutionsScanner is not supported for SQL store
+		},
+		{
+			Name:                     "AllScannersNoSQL",
+			ExecutionsScannerEnabled: true,
+			TaskQueueScannerEnabled:  true,
+			HistoryScannerEnabled:    true,
+			BuildIdScavengerEnabled:  true,
+			DefaultStore:             config.StoreTypeNoSQL,
+			ExpectedScanners:         []expectedScanner{historyScanner, executionScanner, buildIdScavenger}, // TaskQueueScanner is only supported for SQL store
 		},
 	} {
 		s.Run(c.Name, func() {

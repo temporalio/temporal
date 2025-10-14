@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -446,11 +447,12 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					p.LoadMutableStateError,
 				).AnyTimes()
 			}
-			workflowCache.EXPECT().GetOrCreateWorkflowExecution(
+			workflowCache.EXPECT().GetOrCreateChasmEntity(
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
+				chasmworkflow.Archetype,
 				gomock.Any(),
 			).Return(
 				workflowContext,

@@ -13,6 +13,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	repication "go.temporal.io/server/api/replication/v1"
 	backoff "go.temporal.io/server/common/backoff"
 	tasks "go.temporal.io/server/common/tasks"
 	gomock "go.uber.org/mock/gomock"
@@ -158,6 +159,20 @@ func (m *MockTrackableExecutableTask) QueueID() any {
 func (mr *MockTrackableExecutableTaskMockRecorder) QueueID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueID", reflect.TypeOf((*MockTrackableExecutableTask)(nil).QueueID))
+}
+
+// ReplicationTask mocks base method.
+func (m *MockTrackableExecutableTask) ReplicationTask() *repication.ReplicationTask {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplicationTask")
+	ret0, _ := ret[0].(*repication.ReplicationTask)
+	return ret0
+}
+
+// ReplicationTask indicates an expected call of ReplicationTask.
+func (mr *MockTrackableExecutableTaskMockRecorder) ReplicationTask() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicationTask", reflect.TypeOf((*MockTrackableExecutableTask)(nil).ReplicationTask))
 }
 
 // Reschedule mocks base method.
@@ -307,10 +322,10 @@ func (mr *MockExecutableTaskTrackerMockRecorder) Size() *gomock.Call {
 }
 
 // TrackTasks mocks base method.
-func (m *MockExecutableTaskTracker) TrackTasks(exclusiveHighWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
+func (m *MockExecutableTaskTracker) TrackTasks(exclusiveHighWatermarkInfo WatermarkInfo, arg1 ...TrackableExecutableTask) []TrackableExecutableTask {
 	m.ctrl.T.Helper()
 	varargs := []any{exclusiveHighWatermarkInfo}
-	for _, a := range tasks {
+	for _, a := range arg1 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "TrackTasks", varargs...)
@@ -319,8 +334,8 @@ func (m *MockExecutableTaskTracker) TrackTasks(exclusiveHighWatermarkInfo Waterm
 }
 
 // TrackTasks indicates an expected call of TrackTasks.
-func (mr *MockExecutableTaskTrackerMockRecorder) TrackTasks(exclusiveHighWatermarkInfo any, tasks ...any) *gomock.Call {
+func (mr *MockExecutableTaskTrackerMockRecorder) TrackTasks(exclusiveHighWatermarkInfo any, arg1 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{exclusiveHighWatermarkInfo}, tasks...)
+	varargs := append([]any{exclusiveHighWatermarkInfo}, arg1...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrackTasks", reflect.TypeOf((*MockExecutableTaskTracker)(nil).TrackTasks), varargs...)
 }

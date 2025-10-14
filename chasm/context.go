@@ -1,3 +1,5 @@
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination context_mock.go
+
 package chasm
 
 import (
@@ -11,7 +13,7 @@ type Context interface {
 
 	// NOTE: component created in the current transaction won't have a ref
 	// this is a Ref to the component state at the start of the transition
-	Ref(Component) (ComponentRef, bool)
+	Ref(Component) ([]byte, error)
 	Now(Component) time.Time
 
 	// Intent() OperationIntent
@@ -23,7 +25,7 @@ type Context interface {
 type MutableContext interface {
 	Context
 
-	AddTask(Component, TaskAttributes, any) error
+	AddTask(Component, TaskAttributes, any)
 
 	// Add more methods here for other storage commands/primitives.
 	// e.g. HistoryEvent
@@ -39,6 +41,9 @@ type MutableContext interface {
 }
 
 type ContextImpl struct {
+	// The context here is not really used today.
+	// But it will be when we support partial loading later,
+	// and the framework potentially needs to go to persistence to load some fields.
 	ctx context.Context
 
 	// Not embedding the Node here to avoid exposing AddTask() method on Node,
@@ -52,15 +57,15 @@ type MutableContextImpl struct {
 
 func NewContext(
 	ctx context.Context,
-	root *Node,
+	node *Node,
 ) *ContextImpl {
 	return &ContextImpl{
 		ctx:  ctx,
-		root: root,
+		root: node.root(),
 	}
 }
 
-func (c *ContextImpl) Ref(component Component) (ComponentRef, bool) {
+func (c *ContextImpl) Ref(component Component) ([]byte, error) {
 	return c.root.Ref(component)
 }
 
@@ -85,6 +90,6 @@ func (c *MutableContextImpl) AddTask(
 	component Component,
 	attributes TaskAttributes,
 	payload any,
-) error {
-	return c.root.AddTask(component, attributes, payload)
+) {
+	c.root.AddTask(component, attributes, payload)
 }

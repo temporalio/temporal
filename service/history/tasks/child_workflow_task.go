@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"fmt"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -14,10 +15,12 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		TargetNamespaceID   string
-		TargetWorkflowID    string
-		InitiatedEventID    int64
-		Version             int64
+		// Deprecated: Get TargetNamespaceID from mutable state.
+		TargetNamespaceID string
+		// Deprecated: Get TargetWorkflowID from mutable state.
+		TargetWorkflowID string
+		InitiatedEventID int64
+		Version          int64
 	}
 )
 
@@ -55,4 +58,16 @@ func (u *StartChildExecutionTask) GetCategory() Category {
 
 func (u *StartChildExecutionTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION
+}
+
+func (u *StartChildExecutionTask) String() string {
+	return fmt.Sprintf("StartChildExecutionTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, TargetNamespaceID: %v, TargetWorkflowID: %v, InitiatedEventID: %v, Version: %v}",
+		u.WorkflowKey.String(),
+		u.VisibilityTimestamp,
+		u.TaskID,
+		u.TargetNamespaceID,
+		u.TargetWorkflowID,
+		u.InitiatedEventID,
+		u.Version,
+	)
 }

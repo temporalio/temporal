@@ -31,6 +31,7 @@ import (
 type (
 	ContextImpl struct {
 		workflowKey     definition.WorkflowKey
+		archetype       chasm.Archetype
 		logger          log.Logger
 		throttledLogger log.ThrottledLogger
 		metricsHandler  metrics.Handler
@@ -60,6 +61,7 @@ func NewContext(
 	}
 	return &ContextImpl{
 		workflowKey:     workflowKey,
+		archetype:       chasm.ArchetypeAny,
 		logger:          log.NewLazyLogger(logger, tags),
 		throttledLogger: log.NewLazyLogger(throttledLogger, tags),
 		metricsHandler:  metricsHandler.WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
@@ -113,6 +115,10 @@ func (c *ContextImpl) GetNamespace(shardContext historyi.ShardContext) namespace
 	return namespaceEntry.Name()
 }
 
+func (c *ContextImpl) SetArchetype(archetype chasm.Archetype) {
+	c.archetype = archetype
+}
+
 func (c *ContextImpl) LoadExecutionStats(ctx context.Context, shardContext historyi.ShardContext) (*persistencespb.ExecutionStats, error) {
 	_, err := c.LoadMutableState(ctx, shardContext)
 	if err != nil {
@@ -158,6 +164,19 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 		// returned by NewMutableStateFromDB().
 		// Thus causing NPE (e.g. when calling c.Clear()) or other unexpected behavior.
 		c.MutableState = mutableState
+	}
+
+	if actualArchetype := c.MutableState.ChasmTree().Archetype(); actualArchetype != "" && c.archetype != chasm.ArchetypeAny && c.archetype != actualArchetype {
+		c.logger.Warn("Potential ID conflict across different archetypes",
+			tag.Archetype(c.archetype.String()),
+			tag.NewStringTag("actual-archetype", actualArchetype.String()),
+		)
+		return nil, serviceerror.NewNotFoundf(
+			"CHASM Archetype missmatch for %v, expected: %s, actual: %s",
+			c.workflowKey,
+			c.archetype,
+			actualArchetype,
+		)
 	}
 
 	flushBeforeReady, err := c.MutableState.StartTransaction(namespaceEntry)
@@ -227,6 +246,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		shardContext,
 		newMutableState.GetCurrentVersion(),
 		createRequest,
+		newMutableState.IsWorkflow(),
 	)
 	if err != nil {
 		return err
@@ -344,6 +364,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		MutableStateFailoverVersion(currentMutableState),
 		currentWorkflow,
 		currentWorkflowEventsSeq,
+		resetMutableState.IsWorkflow(),
 	); err != nil {
 		return err
 	}
@@ -487,6 +508,10 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}
 	}()
 
+	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
+		c.MutableState.SetSuccessorRunID(newMutableState.GetExecutionState().RunId)
+	}
+
 	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
 		updateWorkflowTransactionPolicy,
 	)
@@ -547,13 +572,13 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	if _, _, err := NewTransaction(shardContext).UpdateWorkflowExecution(
 		ctx,
 		updateMode,
-
 		c.MutableState.GetCurrentVersion(),
 		updateWorkflow,
 		updateWorkflowEventsSeq,
 		MutableStateFailoverVersion(newMutableState),
 		newWorkflow,
 		newWorkflowEventsSeq,
+		c.MutableState.IsWorkflow(),
 	); err != nil {
 		return err
 	}
@@ -765,24 +790,22 @@ func (c *ContextImpl) conflictResolveEventReapply(
 }
 
 func (c *ContextImpl) updateWorkflowMode() (persistence.UpdateWorkflowMode, error) {
-	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
 	if !c.config.EnableUpdateWorkflowModeIgnoreCurrent() {
 		return persistence.UpdateWorkflowModeUpdateCurrent, nil
 	}
 
-	updateMode = persistence.UpdateWorkflowModeIgnoreCurrent
 	if c.MutableState.IsCurrentWorkflowGuaranteed() {
-		updateMode = persistence.UpdateWorkflowModeUpdateCurrent
+		return persistence.UpdateWorkflowModeUpdateCurrent, nil
 	}
 
 	guaranteed, err := c.MutableState.IsNonCurrentWorkflowGuaranteed()
 	if err != nil {
-		return updateMode, err
+		return 0, err
 	}
 	if guaranteed {
-		updateMode = persistence.UpdateWorkflowModeBypassCurrent
+		return persistence.UpdateWorkflowModeBypassCurrent, nil
 	}
-	return updateMode, nil
+	return persistence.UpdateWorkflowModeIgnoreCurrent, nil
 }
 
 func (c *ContextImpl) ReapplyEvents(
@@ -849,7 +872,7 @@ func (c *ContextImpl) ReapplyEvents(
 
 	// The active cluster of the namespace is the same as current cluster.
 	// Use the history from the same cluster to reapply events
-	reapplyEventsDataBlob, err := serializer.SerializeEvents(reapplyEvents, enumspb.ENCODING_TYPE_PROTO3)
+	reapplyEventsDataBlob, err := serializer.SerializeEvents(reapplyEvents)
 	if err != nil {
 		return err
 	}
@@ -1129,33 +1152,27 @@ func emitStateTransitionCount(
 	)
 }
 
-const (
-	namespaceStateActive  = "active"
-	namespaceStatePassive = "passive"
-	namespaceStateUnknown = "_unknown_"
-)
-
 func namespaceState(
 	clusterMetadata cluster.Metadata,
 	mutableStateCurrentVersion *int64,
 ) string {
 
 	if mutableStateCurrentVersion == nil {
-		return namespaceStateUnknown
+		return metrics.UnknownNamespaceStateTagValue
 	}
 
 	// default value, need to special handle
 	if *mutableStateCurrentVersion == 0 {
-		return namespaceStateActive
+		return metrics.ActiveNamespaceStateTagValue
 	}
 
 	if clusterMetadata.IsVersionFromSameCluster(
 		clusterMetadata.GetClusterID(),
 		*mutableStateCurrentVersion,
 	) {
-		return namespaceStateActive
+		return metrics.ActiveNamespaceStateTagValue
 	}
-	return namespaceStatePassive
+	return metrics.PassiveNamespaceStateTagValue
 }
 
 func MutableStateFailoverVersion(

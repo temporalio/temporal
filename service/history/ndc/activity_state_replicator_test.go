@@ -14,6 +14,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -641,6 +642,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
 	weContext.EXPECT().Clear().AnyTimes()
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
+	weContext.EXPECT().SetArchetype(chasmworkflow.Archetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -721,6 +723,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowClosed() {
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
 	weContext.EXPECT().Clear().AnyTimes()
+	weContext.EXPECT().SetArchetype(chasmworkflow.Archetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -805,6 +808,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
 	weContext.EXPECT().Clear().AnyTimes()
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
+	weContext.EXPECT().SetArchetype(chasmworkflow.Archetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -885,6 +889,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityNotFound() {
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
+	weContext.EXPECT().SetArchetype(chasmworkflow.Archetype).Times(1)
 	weContext.EXPECT().Clear().AnyTimes()
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
@@ -970,6 +975,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
+	weContext.EXPECT().SetArchetype(chasmworkflow.Archetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -1072,6 +1078,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
+	weContext.EXPECT().SetArchetype(chasmworkflow.Archetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -1177,6 +1184,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
+	weContext.EXPECT().SetArchetype(chasmworkflow.Archetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -1278,6 +1286,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
+	weContext.EXPECT().SetArchetype(chasmworkflow.Archetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)

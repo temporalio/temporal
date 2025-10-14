@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -24,6 +25,7 @@ type (
 		TaskCreationTime() time.Time
 		MarkPoisonPill() error
 		SourceClusterName() string
+		ReplicationTask() *replicationspb.ReplicationTask
 	}
 	WatermarkInfo struct {
 		Watermark int64

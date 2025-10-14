@@ -34,6 +34,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -54,6 +55,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
@@ -212,7 +214,17 @@ type (
 
 		InsertTasks map[tasks.Category][]tasks.Task
 
+		// BestEffortDeleteTasks holds keys of history tasks to be deleted after a successful
+		// persistence update. This deletion is done on best effort basis. Persistence layer can ignore it without
+		// any errors.
+		BestEffortDeleteTasks map[tasks.Category][]tasks.Key
+
 		speculativeWorkflowTaskTimeoutTask *tasks.WorkflowTaskTimeoutTask
+
+		// In-memory storage for workflow task timeout tasks. These are set when timeout tasks are
+		// generated and used to delete them when the workflow task completes. Not persisted to storage.
+		wftScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
+		wftStartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
 
 		// Do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
@@ -298,6 +310,7 @@ func NewMutableState(
 		namespaceEntry:               namespaceEntry,
 		appliedEvents:                make(map[string]struct{}),
 		InsertTasks:                  make(map[tasks.Category][]tasks.Task),
+		BestEffortDeleteTasks:        make(map[tasks.Category][]tasks.Key),
 		transitionHistoryEnabled:     shard.GetConfig().EnableTransitionHistory(),
 		visibilityUpdated:            false,
 		executionStateUpdated:        false,
@@ -332,6 +345,7 @@ func NewMutableState(
 		LastCompletedWorkflowTaskStartedEventId: common.EmptyEventID,
 
 		StartTime:              timestamppb.New(startTime),
+		ExecutionTime:          timestamppb.New(startTime),
 		VersionHistories:       versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 		ExecutionStats:         &persistencespb.ExecutionStats{HistorySize: 0},
 		SubStateMachinesByType: make(map[string]*persistencespb.StateMachineMap),
@@ -589,8 +603,8 @@ func (ms *MutableStateImpl) mustInitHSM() {
 }
 
 func (ms *MutableStateImpl) IsWorkflow() bool {
-	// TODO: Check if Archetype is workflow archetype when we move part of workflow to CHASM framework as well.
-	return ms.chasmTree.Archetype() == "" // || ms.chasmTree.Archetype() == "Workflow archetype name"
+	archetype := ms.chasmTree.Archetype()
+	return archetype == chasmworkflow.Archetype || archetype == ""
 }
 
 func (ms *MutableStateImpl) HSM() *hsm.Node {
@@ -1815,6 +1829,13 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}
 	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
+
+	if payloadSize := request.Details.Size(); payloadSize > 0 {
+		ms.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
+			int64(payloadSize),
+			metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope),
+			metrics.NamespaceTag(ms.namespaceEntry.Name().String()))
+	}
 }
 
 // UpdateActivityInfo applies the necessary activity information
@@ -1838,6 +1859,7 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	ai.ScheduledTime = incomingActivityInfo.GetScheduledTime()
 	// we don't need to update FirstScheduledTime
 	ai.StartedEventId = incomingActivityInfo.GetStartedEventId()
+	ai.StartVersion = incomingActivityInfo.GetStartVersion()
 	ai.LastHeartbeatUpdateTime = incomingActivityInfo.GetLastHeartbeatTime()
 	if ai.StartedEventId == common.EmptyEventID {
 		ai.StartedTime = nil
@@ -2233,7 +2255,7 @@ func (ms *MutableStateImpl) DeleteSignalRequested(
 	ms.approximateSize -= len(requestID)
 }
 
-func (ms *MutableStateImpl) attachRequestID(
+func (ms *MutableStateImpl) AttachRequestID(
 	requestID string,
 	eventType enumspb.EventType,
 	eventID int64,
@@ -2246,7 +2268,20 @@ func (ms *MutableStateImpl) attachRequestID(
 		EventType: eventType,
 		EventId:   eventID,
 	}
+	if eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+		ms.executionState.CreateRequestId = requestID
+	}
 	ms.approximateSize += ms.executionState.Size()
+}
+
+func (ms *MutableStateImpl) HasRequestID(
+	requestID string,
+) bool {
+	if ms.executionState.RequestIds == nil {
+		return false
+	}
+	_, ok := ms.executionState.RequestIds[requestID]
+	return ok
 }
 
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
@@ -2257,6 +2292,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	firstRunID string,
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
 	links []*commonpb.Link,
+	IsWFTaskQueueInVersionDetector worker_versioning.IsWFTaskQueueInVersionDetector,
 ) (*historypb.HistoryEvent, error) {
 	previousExecutionInfo := previousExecutionState.GetExecutionInfo()
 	taskQueue := previousExecutionInfo.TaskQueue
@@ -2294,6 +2330,38 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		return nil, err
 	}
 
+	// If there is a pinned override, then the effective version will be the same as the pinned override version.
+	// If this is a cross-TQ child, we don't want to ask matching the same question twice, so we re-use the result from
+	// the first matching task-queue-in-version check.
+	newTQInPinnedVersion := false
+
+	// New run initiated by workflow ContinueAsNew of pinned run, will inherit the previous run's version if the
+	// new run's Task Queue belongs to that version.
+	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
+	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
+		newTQ := command.GetTaskQueue().GetName()
+		if newTQ != previousExecutionInfo.GetTaskQueue() {
+			newTQInPinnedVersion, err = IsWFTaskQueueInVersionDetector(context.Background(), ms.GetNamespaceEntry().ID().String(), newTQ, inheritedPinnedVersion)
+			if err != nil {
+				return nil, errors.New(fmt.Sprintf("error determining child task queue presence in inherited version: %s", err.Error()))
+			}
+			if !newTQInPinnedVersion {
+				inheritedPinnedVersion = nil
+			}
+		}
+	}
+
+	// Pinned override is inherited if Task Queue of new run is compatible with the override version.
+	var pinnedOverride *workflowpb.VersioningOverride
+	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
+		pinnedOverride = o
+		newTQ := command.GetTaskQueue().GetName()
+		if newTQ != previousExecutionInfo.GetTaskQueue() && !newTQInPinnedVersion {
+			pinnedOverride = nil
+		}
+	}
+
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.New(),
 		Namespace:                ms.namespaceEntry.Name().String(),
@@ -2314,6 +2382,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		CompletionCallbacks:   completionCallbacks,
 		Links:                 links,
 		Priority:              previousExecutionInfo.Priority,
+		VersioningOverride:    pinnedOverride,
 	}
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
@@ -2345,6 +2414,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		SourceVersionStamp:       sourceVersionStamp,
 		RootExecutionInfo:        rootExecutionInfo,
 		InheritedBuildId:         inheritedBuildId,
+		InheritedPinnedVersion:   inheritedPinnedVersion,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -2463,6 +2533,18 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	); err != nil {
 		return nil, err
 	}
+
+	// Versioning Override set on StartWorkflowExecutionRequest
+	if startRequest.GetStartRequest().GetVersioningOverride() != nil {
+		metrics.WorkerDeploymentVersioningOverrideCounter.With(
+			ms.metricsHandler.WithTags(
+				metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+				metrics.VersioningBehaviorBeforeOverrideTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
+				metrics.VersioningBehaviorAfterOverrideTag(worker_versioning.ExtractVersioningBehaviorFromOverride(startRequest.GetStartRequest().GetVersioningOverride())),
+				metrics.RunInitiatorTag(prevRunID, event.GetWorkflowExecutionStartedEventAttributes()),
+			),
+		).Record(1)
+	}
 	return event, nil
 }
 
@@ -2485,15 +2567,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 			ms.executionState.RunId, execution.GetRunId())
 	}
 
-	ms.approximateSize -= ms.executionInfo.Size()
-	ms.approximateSize -= ms.executionState.Size()
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	ms.executionState.CreateRequestId = requestID
-	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
-		EventType: startEvent.EventType,
-		EventId:   startEvent.EventId,
-	}
+	ms.AttachRequestID(requestID, startEvent.EventType, startEvent.EventId)
 
+	ms.approximateSize -= ms.executionInfo.Size()
 	ms.executionInfo.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	ms.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	ms.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
@@ -2502,6 +2579,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 	ms.executionInfo.OriginalExecutionRunId = event.GetOriginalExecutionRunId()
 
+	ms.approximateSize -= ms.executionState.Size()
 	if err := ms.addCompletionCallbacks(
 		startEvent,
 		requestID,
@@ -2509,7 +2587,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	); err != nil {
 		return err
 	}
-	if err := ms.UpdateWorkflowStateStatus(
+	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	); err != nil {
@@ -2543,18 +2621,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.ParentInitiatedVersion = event.GetParentInitiatedEventVersion()
 	} else {
 		ms.executionInfo.ParentInitiatedVersion = common.EmptyVersion
-	}
-
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if event.ParentPinnedWorkerDeploymentVersion != "" || event.ParentPinnedDeploymentVersion != nil {
-		parentPinned := event.ParentPinnedDeploymentVersion
-		if parentPinned == nil {
-			parentPinned = worker_versioning.ExternalWorkerDeploymentVersionFromString(event.ParentPinnedWorkerDeploymentVersion) //nolint:staticcheck // SA1019: worker versioning v0.31
-		}
-		ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{
-			Behavior:          enumspb.VERSIONING_BEHAVIOR_PINNED,
-			DeploymentVersion: parentPinned,
-		}
 	}
 
 	if event.RootWorkflowExecution != nil {
@@ -2636,7 +2702,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 			ms.executionInfo.VersioningInfo.VersioningOverride.Override = &workflowpb.VersioningOverride_Pinned{
 				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromString(vs),
+					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(vs),
 				},
 			}
 			//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -2652,6 +2718,14 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		}
 	}
 
+	if event.GetInheritedPinnedVersion() != nil {
+		if ms.executionInfo.VersioningInfo == nil {
+			ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+		}
+		ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetInheritedPinnedVersion()
+		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+	}
+
 	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
 		ms.executionInfo.InheritedBuildId = inheritedBuildId
 		if err := ms.UpdateBuildIdAssignment(inheritedBuildId); err != nil {
@@ -2665,6 +2739,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 			return err
 		}
 	}
+
+	// This will include override and inheritance, but not transition, because WF never starts with a transition
+	ms.executionInfo.WorkerDeploymentName = ms.GetEffectiveDeployment().GetSeriesName()
 
 	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
 		ms.executionInfo.InheritedBuildId = inheritedBuildId
@@ -3353,7 +3430,7 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 		return nil, nil, ms.createCallerError(opTag, "ActivityID: "+command.GetActivityId())
 	}
 
-	event := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
+	event := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command, ms.namespaceEntry.Name())
 	ai, err := ms.ApplyActivityTaskScheduledEvent(workflowTaskCompletedEventID, event)
 	// TODO merge active & passive task generation
 	if !bypassTaskGeneration {
@@ -3384,6 +3461,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		ScheduledTime:           event.GetEventTime(),
 		FirstScheduledTime:      event.GetEventTime(),
 		StartedEventId:          common.EmptyEventID,
+		StartVersion:            common.EmptyVersion,
 		StartedTime:             nil,
 		ActivityId:              attributes.ActivityId,
 		ScheduleToStartTimeout:  attributes.GetScheduleToStartTimeout(),
@@ -3517,7 +3595,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	}
 
 	if deployment != nil {
-		ai.LastWorkerDeploymentVersion = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment))
+		ai.LastWorkerDeploymentVersion = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment))
 		ai.LastDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment)
 	}
 
@@ -3548,6 +3626,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		// instead update mutable state and will record started event when activity task is closed
 		activityInfo.Version = ms.GetCurrentVersion()
 		activityInfo.StartedEventId = common.TransientEventID
+		activityInfo.StartVersion = ms.GetCurrentVersion()
 		activityInfo.RequestId = requestID
 		activityInfo.StartedTime = timestamppb.New(ms.timeSource.Now())
 		activityInfo.StartedIdentity = identity
@@ -3577,6 +3656,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskStartedEvent(
 
 	ai.Version = event.GetVersion()
 	ai.StartedEventId = event.GetEventId()
+	ai.StartVersion = event.GetVersion()
 	ai.RequestId = attributes.GetRequestId()
 	ai.StartedTime = event.GetEventTime()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
@@ -3635,6 +3715,7 @@ func (ms *MutableStateImpl) AddActivityTaskCompletedEvent(
 		startedEventID,
 		request.Identity,
 		request.Result,
+		ms.namespaceEntry.Name(),
 	)
 	if err := ms.ApplyActivityTaskCompletedEvent(event); err != nil {
 		return nil, err
@@ -3684,6 +3765,7 @@ func (ms *MutableStateImpl) AddActivityTaskFailedEvent(
 		failure,
 		retryState,
 		identity,
+		ms.namespaceEntry.Name(),
 	)
 	if err := ms.ApplyActivityTaskFailedEvent(event); err != nil {
 		return nil, err
@@ -3914,7 +3996,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionCompletedEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 ) error {
-	if err := ms.UpdateWorkflowStateStatus(
+	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	); err != nil {
@@ -3957,7 +4039,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionFailedEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 ) error {
-	if err := ms.UpdateWorkflowStateStatus(
+	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 	); err != nil {
@@ -4004,7 +4086,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimedoutEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 ) error {
-	if err := ms.UpdateWorkflowStateStatus(
+	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	); err != nil {
@@ -4086,7 +4168,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionCanceledEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 ) error {
-	if err := ms.UpdateWorkflowStateStatus(
+	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
 	); err != nil {
@@ -4804,9 +4886,25 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 		attachCompletionCallbacks,
 		links,
 	)
+	prevEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
+	prevEffectiveDeployment := ms.GetEffectiveDeployment()
+
 	if err := ms.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
 		return nil, err
 	}
+
+	if !proto.Equal(ms.GetEffectiveDeployment(), prevEffectiveDeployment) ||
+		ms.GetEffectiveVersioningBehavior() != prevEffectiveVersioningBehavior {
+		metrics.WorkerDeploymentVersioningOverrideCounter.With(
+			ms.metricsHandler.WithTags(
+				metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+				metrics.VersioningBehaviorBeforeOverrideTag(prevEffectiveVersioningBehavior),
+				metrics.VersioningBehaviorAfterOverrideTag(ms.GetEffectiveVersioningBehavior()),
+				metrics.RunInitiatorTag("", event.GetWorkflowExecutionStartedEventAttributes()),
+			),
+		).Record(1)
+	}
+
 	return event, nil
 }
 
@@ -4822,7 +4920,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		return err
 	}
 	if attributes.GetAttachedRequestId() != "" {
-		ms.attachRequestID(attributes.GetAttachedRequestId(), event.EventType, event.EventId)
+		ms.AttachRequestID(attributes.GetAttachedRequestId(), event.EventType, event.EventId)
 	}
 	if len(attributes.GetAttachedCompletionCallbacks()) > 0 {
 		if err := ms.addCompletionCallbacks(
@@ -4833,6 +4931,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -4855,7 +4954,7 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 			ms.GetExecutionInfo().VersioningInfo.VersioningOverride.Override = &workflowpb.VersioningOverride_Pinned{
 				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					//nolint:staticcheck // SA1019: worker versioning v0.31
-					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromString(override.GetPinnedVersion()),
+					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()),
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
 				},
 			}
@@ -4887,13 +4986,20 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 			ms.GetExecutionInfo().VersioningInfo.VersioningOverride.Override = &workflowpb.VersioningOverride_Pinned{
 				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromString(vs),
+					Version:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(vs),
 				},
 			}
 		}
 
-	} else if ms.GetExecutionInfo().GetVersioningInfo() != nil {
+		if o := ms.GetExecutionInfo().VersioningInfo.VersioningOverride; worker_versioning.OverrideIsPinned(o) {
+			ms.GetExecutionInfo().WorkerDeploymentName = o.GetPinned().GetVersion().GetDeploymentName()
+		}
+
+	} else if vi := ms.GetExecutionInfo().GetVersioningInfo(); vi != nil {
 		ms.GetExecutionInfo().VersioningInfo.VersioningOverride = nil
+		ms.GetExecutionInfo().WorkerDeploymentName = vi.GetDeploymentVersion().GetDeploymentName()
+	} else {
+		ms.GetExecutionInfo().WorkerDeploymentName = ""
 	}
 
 	if !proto.Equal(ms.GetEffectiveDeployment(), previousEffectiveDeployment) ||
@@ -4959,7 +5065,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 ) error {
-	if err := ms.UpdateWorkflowStateStatus(
+	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 	); err != nil {
@@ -5032,6 +5138,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	workflowTaskCompletedEventID int64,
 	parentNamespace namespace.Name,
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
+	IsWFTaskQueueInVersionDetector worker_versioning.IsWFTaskQueueInVersionDetector,
 ) (*historypb.HistoryEvent, historyi.MutableState, error) {
 	opTag := tag.WorkflowActionWorkflowContinueAsNew
 	if err := ms.checkMutability(opTag); err != nil {
@@ -5106,6 +5213,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		firstRunID,
 		rootInfo,
 		startEvent.Links,
+		IsWFTaskQueueInVersionDetector,
 	); err != nil {
 		return nil, nil, err
 	}
@@ -5164,7 +5272,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionContinuedAsNewEvent(
 	firstEventID int64,
 	continueAsNewEvent *historypb.HistoryEvent,
 ) error {
-	if err := ms.UpdateWorkflowStateStatus(
+	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 	); err != nil {
@@ -5180,7 +5288,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionContinuedAsNewEvent(
 
 func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
-	createRequestID string,
 	command *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	targetNamespaceID namespace.ID,
 ) (*historypb.HistoryEvent, *persistencespb.ChildExecutionInfo, error) {
@@ -5189,24 +5296,32 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 		return nil, nil, err
 	}
 
-	event := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command, targetNamespaceID)
-	ci, err := ms.ApplyStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event, createRequestID)
+	event := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletedEventID,
+		command,
+		targetNamespaceID,
+	)
+	ci, err := ms.ApplyStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event)
 	if err != nil {
 		return nil, nil, err
 	}
 	// TODO merge active & passive task generation
 	if err := ms.taskGenerator.GenerateChildWorkflowTasks(
-		event,
+		event.GetEventId(),
 	); err != nil {
 		return nil, nil, err
 	}
 	return event, ci, nil
 }
 
+// generateChildWorkflowRequestID generates a unique request ID for child workflow execution
+func (ms *MutableStateImpl) generateChildWorkflowRequestID(event *historypb.HistoryEvent) string {
+	return fmt.Sprintf("%s:%d:%d", ms.executionState.RunId, event.GetEventId(), event.GetVersion())
+}
+
 func (ms *MutableStateImpl) ApplyStartChildWorkflowExecutionInitiatedEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
-	createRequestID string,
 ) (*persistencespb.ChildExecutionInfo, error) {
 	initiatedEventID := event.GetEventId()
 	attributes := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
@@ -5216,7 +5331,7 @@ func (ms *MutableStateImpl) ApplyStartChildWorkflowExecutionInitiatedEvent(
 		InitiatedEventBatchId: firstEventID,
 		StartedEventId:        common.EmptyEventID,
 		StartedWorkflowId:     attributes.GetWorkflowId(),
-		CreateRequestId:       createRequestID,
+		CreateRequestId:       ms.generateChildWorkflowRequestID(event),
 		Namespace:             attributes.GetNamespace(),
 		NamespaceId:           attributes.GetNamespaceId(),
 		WorkflowTypeName:      attributes.GetWorkflowType().GetName(),
@@ -5609,9 +5724,11 @@ func (ms *MutableStateImpl) RetryActivity(
 		// need to update activity
 		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
 			activityInfo.StartedEventId = common.EmptyEventID
+			activityInfo.StartVersion = common.EmptyVersion
 			activityInfo.StartedTime = nil
 			activityInfo.RequestId = ""
 			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
+			activityInfo.Attempt++
 			return nil
 		}); err != nil {
 			return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
@@ -5781,6 +5898,130 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
+func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
+	var reportedProblems []string
+	switch wftFailure := ms.executionInfo.LastWorkflowTaskFailure.(type) {
+	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause:
+		reportedProblems = []string{
+			"category=WorkflowTaskFailed",
+			fmt.Sprintf("cause=WorkflowTaskFailedCause%s", wftFailure.LastWorkflowTaskFailureCause.String()),
+		}
+	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType:
+		reportedProblems = []string{
+			"category=WorkflowTaskTimedOut",
+			fmt.Sprintf("cause=WorkflowTaskTimedOutCause%s", wftFailure.LastWorkflowTaskTimedOutType.String()),
+		}
+	}
+
+	reportedProblemsPayload, err := searchattribute.EncodeValue(reportedProblems, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	if err != nil {
+		return err
+	}
+
+	exeInfo := ms.executionInfo
+	if exeInfo.SearchAttributes == nil {
+		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
+	}
+
+	decodedA, err := searchattribute.DecodeValue(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	if err != nil {
+		return err
+	}
+
+	existingProblems, ok := decodedA.([]string)
+	if !ok && decodedA != nil {
+		softassert.Fail(ms.logger, "TemporalReportedProblems payload decoded to unexpected type for logging")
+		return errors.New("TemporalReportedProblems payload decoded to unexpected type for logging")
+	}
+
+	if slices.Equal(existingProblems, reportedProblems) {
+		return nil
+	}
+
+	// Log the search attribute change
+	ms.logReportedProblemsChange(existingProblems, reportedProblems)
+
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: reportedProblemsPayload})
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+}
+
+func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
+	if ms.executionInfo.SearchAttributes == nil {
+		return nil
+	}
+
+	temporalReportedProblems := ms.executionInfo.SearchAttributes[searchattribute.TemporalReportedProblems]
+	if temporalReportedProblems == nil {
+		return nil
+	}
+
+	// Log the removal of the search attribute
+	ms.logReportedProblemsChange(ms.decodeReportedProblems(temporalReportedProblems), nil)
+
+	ms.executionInfo.LastWorkflowTaskFailure = nil
+
+	// Just remove the search attribute entirely for now
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: nil})
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+}
+
+// logReportedProblemsChange logs changes to the TemporalReportedProblems search attribute
+func (ms *MutableStateImpl) logReportedProblemsChange(oldPayload, newPayload []string) {
+	if oldPayload == nil && newPayload != nil {
+		// Adding search attribute
+		ms.logger.Info("TemporalReportedProblems search attribute added",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.NewStringsTag("reported-problems", newPayload))
+	} else if oldPayload != nil && newPayload == nil {
+		// Removing search attribute
+		ms.logger.Info("TemporalReportedProblems search attribute removed",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.NewStringsTag("previous-reported-problems", oldPayload))
+	} else if oldPayload != nil && newPayload != nil {
+		// Updating search attribute
+		ms.logger.Info("TemporalReportedProblems search attribute updated",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.NewStringsTag("previous-reported-problems", oldPayload),
+			tag.NewStringsTag("reported-problems", newPayload))
+	}
+}
+
+// decodeReportedProblems safely decodes a keyword list payload to []string
+func (ms *MutableStateImpl) decodeReportedProblems(p *commonpb.Payload) []string {
+	if p == nil {
+		return nil
+	}
+
+	decoded, err := searchattribute.DecodeValue(p, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	if err != nil {
+		ms.logger.Error("Failed to decode TemporalReportedProblems payload for logging",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.Error(err))
+		softassert.Fail(ms.logger, "Failed to decode TemporalReportedProblems payload for logging")
+		return []string{}
+	}
+
+	problems, ok := decoded.([]string)
+	if !ok {
+		ms.logger.Error("TemporalReportedProblems payload decoded to unexpected type for logging",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId))
+		softassert.Fail(ms.logger, "TemporalReportedProblems payload decoded to unexpected type for logging")
+		return []string{}
+	}
+
+	return problems
+}
+
 func (ms *MutableStateImpl) truncateRetryableActivityFailure(
 	activityFailure *failurepb.Failure,
 ) *failurepb.Failure {
@@ -5791,22 +6032,10 @@ func (ms *MutableStateImpl) truncateRetryableActivityFailure(
 		return activityFailure
 	}
 
-	throttledLogger := log.With(
-		ms.shard.GetThrottledLogger(),
-		tag.WorkflowNamespace(namespaceName),
-		tag.WorkflowID(ms.executionInfo.WorkflowId),
-		tag.WorkflowRunID(ms.executionState.RunId),
-		tag.BlobSize(int64(failureSize)),
-		tag.BlobSizeViolationOperation("RetryActivity"),
-	)
-
 	sizeLimitError := ms.config.MutableStateActivityFailureSizeLimitError(namespaceName)
 	if failureSize <= sizeLimitError {
-		throttledLogger.Warn("Activity failure size exceeds warning limit for mutable state.")
 		return activityFailure
 	}
-
-	throttledLogger.Warn("Activity failure size exceeds error limit for mutable state, truncated.")
 
 	// nonRetryable is set to false here as only retryable failures are recorded in mutable state.
 	// also when this method is called, the check for isRetryable is already done, so the value
@@ -5827,7 +6056,8 @@ func (ms *MutableStateImpl) AddHistorySize(size int64) {
 // processCloseCallbacks triggers "WorkflowClosed" callbacks, applying the state machine transition that schedules
 // callback tasks.
 func (ms *MutableStateImpl) processCloseCallbacks() error {
-	if ms.GetExecutionInfo().GetWorkflowWasReset() {
+	resetRunID := ms.GetExecutionInfo().GetResetRunId()
+	if ms.GetExecutionInfo().GetWorkflowWasReset() && resetRunID != "" && resetRunID != ms.executionState.RunId {
 		return nil
 	}
 
@@ -5913,6 +6143,22 @@ func (ms *MutableStateImpl) RemoveSpeculativeWorkflowTaskTimeoutTask() {
 	}
 }
 
+func (ms *MutableStateImpl) SetWorkflowTaskScheduleToStartTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) {
+	ms.wftScheduleToStartTimeoutTask = task
+}
+
+func (ms *MutableStateImpl) SetWorkflowTaskStartToCloseTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) {
+	ms.wftStartToCloseTimeoutTask = task
+}
+
+func (ms *MutableStateImpl) GetWorkflowTaskScheduleToStartTimeoutTask() *tasks.WorkflowTaskTimeoutTask {
+	return ms.wftScheduleToStartTimeoutTask
+}
+
+func (ms *MutableStateImpl) GetWorkflowTaskStartToCloseTimeoutTask() *tasks.WorkflowTaskTimeoutTask {
+	return ms.wftStartToCloseTimeoutTask
+}
+
 func (ms *MutableStateImpl) GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {
 	return ms.executionState.State, ms.executionState.Status
 }
@@ -5920,9 +6166,9 @@ func (ms *MutableStateImpl) GetWorkflowStateStatus() (enumsspb.WorkflowExecution
 func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
-) error {
+) (bool, error) {
 	if state == ms.executionState.State && status == ms.executionState.Status {
-		return nil
+		return false, nil
 	}
 	if state != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE &&
 		ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
@@ -5930,7 +6176,7 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 		ms.executionStateUpdated = true
 		ms.visibilityUpdated = true // workflow status & state change triggers visibility change as well
 	}
-	return setStateStatus(ms.executionState, state, status)
+	return true, setStateStatus(ms.executionState, state, status)
 }
 
 // IsDirty is used for sanity check that mutable state is "clean" after mutable state lock is released.
@@ -5967,7 +6213,7 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		ms.executionStateUpdated ||
 		ms.workflowTaskUpdated ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
-		ms.chasmTree.IsDirty() ||
+		ms.chasmTree.IsStateDirty() ||
 		ms.isResetStateUpdated
 }
 
@@ -6038,7 +6284,8 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		NewBufferedEvents:         result.bufferEvents,
 		ClearBufferedEvents:       result.clearBuffer,
 
-		Tasks: ms.InsertTasks,
+		Tasks:                 ms.InsertTasks,
+		BestEffortDeleteTasks: ms.BestEffortDeleteTasks,
 
 		Condition:       ms.nextEventIDInDB,
 		DBRecordVersion: ms.dbRecordVersion,
@@ -6801,6 +7048,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	)
 
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
+	ms.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)
 
 	// Clear outputs for the next transaction.
 	ms.stateMachineNode.ClearTransactionState()
@@ -7993,7 +8241,7 @@ func (ms *MutableStateImpl) GetWorkerDeploymentSA() string {
 		}
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		if vs := override.GetPinnedVersion(); vs != "" {
-			v, _ := worker_versioning.WorkerDeploymentVersionFromString(vs)
+			v, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(vs)
 			return v.GetDeploymentName()
 		}
 		//nolint:staticcheck // SA1019: worker versioning v0.30
@@ -8011,16 +8259,16 @@ func (ms *MutableStateImpl) GetWorkerDeploymentVersionSA() string {
 		}
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		if vs := override.GetPinnedVersion(); vs != "" {
-			return vs
+			return worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(vs))
 		}
 		//nolint:staticcheck // SA1019: worker versioning v0.30
-		return worker_versioning.DeploymentToString(override.GetDeployment())
+		return worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment()))
 	}
 	if v := versioningInfo.GetDeploymentVersion(); v != nil {
 		return worker_versioning.ExternalWorkerDeploymentVersionToString(v)
 	}
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	return versioningInfo.GetVersion()
+	return worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(versioningInfo.GetVersion()))
 }
 
 func (ms *MutableStateImpl) GetWorkflowVersioningBehaviorSA() enumspb.VersioningBehavior {
@@ -8045,7 +8293,7 @@ func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTran
 			ret.Deployment = worker_versioning.DeploymentFromExternalDeploymentVersion(dv)
 		} else {
 			//nolint:staticcheck // SA1019: worker versioning v0.31
-			v, _ := worker_versioning.WorkerDeploymentVersionFromString(t.GetVersion())
+			v, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(t.GetVersion())
 			ret.Deployment = worker_versioning.DeploymentFromDeploymentVersion(v)
 		}
 		return ret
@@ -8087,7 +8335,8 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 		ms.GetExecutionInfo().VersioningInfo = versioningInfo
 	}
 
-	if ms.GetEffectiveDeployment().Equal(deployment) {
+	preTransitionEffectiveDeployment := ms.GetEffectiveDeployment()
+	if preTransitionEffectiveDeployment.Equal(deployment) {
 		return serviceerror.NewInternal("start transition should receive a version different from effective version")
 	}
 
@@ -8125,6 +8374,16 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 			ms.logInfo("start transition did not reschedule pending speculative task")
 		}
 	}
+
+	// DeploymentTransition has taken place, so we increment the DeploymentTransition metric
+	metrics.StartDeploymentTransitionCounter.With(
+		ms.metricsHandler.WithTags(
+			metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+			metrics.FromUnversionedTag(worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(preTransitionEffectiveDeployment))),
+			metrics.ToUnversionedTag(worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))),
+		),
+	).Record(1)
+
 	return nil
 }
 
@@ -8159,6 +8418,10 @@ func (ms *MutableStateImpl) GetReapplyCandidateEvents() []*historypb.HistoryEven
 
 func (ms *MutableStateImpl) IsSubStateMachineDeleted() bool {
 	return ms.subStateMachineDeleted
+}
+
+func (ms *MutableStateImpl) SetSuccessorRunID(runID string) {
+	ms.executionInfo.SuccessorRunId = runID
 }
 
 // ActivityMatchWorkflowRules checks if the activity matches any of the workflow rules

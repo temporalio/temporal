@@ -25,7 +25,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -44,7 +43,6 @@ type (
 		clientBean              *client.MockBean
 		shardController         *shard.MockController
 		namespaceCache          *namespace.MockRegistry
-		ndcHistoryResender      *xdc.MockNDCHistoryResender
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		executableTask          *MockExecutableTask
@@ -80,7 +78,6 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 	s.clientBean = client.NewMockBean(s.controller)
 	s.shardController = shard.NewMockController(s.controller)
 	s.namespaceCache = namespace.NewMockRegistry(s.controller)
-	s.ndcHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
 	s.executableTask = NewMockExecutableTask(s.controller)
@@ -112,27 +109,28 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.task = NewExecutableActivityStateTask(
 		ProcessToolBox{
-			ClusterMetadata:    s.clusterMetadata,
-			ClientBean:         s.clientBean,
-			ShardController:    s.shardController,
-			NamespaceCache:     s.namespaceCache,
-			NDCHistoryResender: s.ndcHistoryResender,
-			MetricsHandler:     s.metricsHandler,
-			Logger:             s.logger,
-			DLQWriter:          NewExecutionManagerDLQWriter(s.mockExecutionManager),
-			Config:             s.config,
+			ClusterMetadata: s.clusterMetadata,
+			ClientBean:      s.clientBean,
+			ShardController: s.shardController,
+			NamespaceCache:  s.namespaceCache,
+			MetricsHandler:  s.metricsHandler,
+			Logger:          s.logger,
+			DLQWriter:       NewExecutionManagerDLQWriter(s.mockExecutionManager),
+			Config:          s.config,
 		},
 		s.taskID,
 		time.Unix(0, rand.Int63()),
 		s.replicationTask,
 		s.sourceClusterName,
 		s.sourceShardKey,
-		enumsspb.TASK_PRIORITY_HIGH,
-		nil,
+		&replicationspb.ReplicationTask{
+			Priority: enumsspb.TASK_PRIORITY_HIGH,
+		},
 	)
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
 	s.executableTask.EXPECT().SourceClusterName().Return(s.sourceClusterName).AnyTimes()
+	s.executableTask.EXPECT().GetPriority().Return(enumsspb.TASK_PRIORITY_HIGH).AnyTimes()
 }
 
 func (s *executableActivityStateTaskSuite) TearDownTest() {
@@ -160,6 +158,7 @@ func (s *executableActivityStateTaskSuite) TestExecute_Process() {
 		ScheduledEventId:   s.replicationTask.ScheduledEventId,
 		ScheduledTime:      s.replicationTask.ScheduledTime,
 		StartedEventId:     s.replicationTask.StartedEventId,
+		StartVersion:       s.replicationTask.StartVersion,
 		StartedTime:        s.replicationTask.StartedTime,
 		LastHeartbeatTime:  s.replicationTask.LastHeartbeatTime,
 		Details:            s.replicationTask.Details,
@@ -221,6 +220,7 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Success() {
 		ScheduledEventId:   s.replicationTask.ScheduledEventId,
 		ScheduledTime:      s.replicationTask.ScheduledTime,
 		StartedEventId:     s.replicationTask.StartedEventId,
+		StartVersion:       s.replicationTask.StartVersion,
 		StartedTime:        s.replicationTask.StartedTime,
 		LastHeartbeatTime:  s.replicationTask.LastHeartbeatTime,
 		Details:            s.replicationTask.Details,
@@ -313,46 +313,46 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 	}
 	task1 := NewExecutableActivityStateTask(
 		ProcessToolBox{
-			ClusterMetadata:    s.clusterMetadata,
-			ClientBean:         s.clientBean,
-			ShardController:    s.shardController,
-			NamespaceCache:     s.namespaceCache,
-			NDCHistoryResender: s.ndcHistoryResender,
-			MetricsHandler:     s.metricsHandler,
-			Logger:             s.logger,
-			DLQWriter:          NewExecutionManagerDLQWriter(s.mockExecutionManager),
-			Config:             config,
+			ClusterMetadata: s.clusterMetadata,
+			ClientBean:      s.clientBean,
+			ShardController: s.shardController,
+			NamespaceCache:  s.namespaceCache,
+			MetricsHandler:  s.metricsHandler,
+			Logger:          s.logger,
+			DLQWriter:       NewExecutionManagerDLQWriter(s.mockExecutionManager),
+			Config:          config,
 		},
 		1,
 		time.Unix(0, rand.Int63()),
 		replicationAttribute1,
 		s.sourceClusterName,
 		s.sourceShardKey,
-		enumsspb.TASK_PRIORITY_HIGH,
-		nil,
+		&replicationspb.ReplicationTask{
+			Priority: enumsspb.TASK_PRIORITY_HIGH,
+		},
 	)
 	task1.ExecutableTask = s.executableTask
 
 	replicationAttribute2 := s.generateReplicationAttribute(namespaceId, workflowId, runId)
 	task2 := NewExecutableActivityStateTask(
 		ProcessToolBox{
-			ClusterMetadata:    s.clusterMetadata,
-			ClientBean:         s.clientBean,
-			ShardController:    s.shardController,
-			NamespaceCache:     s.namespaceCache,
-			NDCHistoryResender: s.ndcHistoryResender,
-			MetricsHandler:     s.metricsHandler,
-			Logger:             s.logger,
-			DLQWriter:          NewExecutionManagerDLQWriter(s.mockExecutionManager),
-			Config:             s.config,
+			ClusterMetadata: s.clusterMetadata,
+			ClientBean:      s.clientBean,
+			ShardController: s.shardController,
+			NamespaceCache:  s.namespaceCache,
+			MetricsHandler:  s.metricsHandler,
+			Logger:          s.logger,
+			DLQWriter:       NewExecutionManagerDLQWriter(s.mockExecutionManager),
+			Config:          s.config,
 		},
 		2,
 		time.Unix(0, rand.Int63()),
 		replicationAttribute2,
 		s.sourceClusterName,
 		s.sourceShardKey,
-		enumsspb.TASK_PRIORITY_HIGH,
-		nil,
+		&replicationspb.ReplicationTask{
+			Priority: enumsspb.TASK_PRIORITY_HIGH,
+		},
 	)
 	task2.ExecutableTask = s.executableTask
 
@@ -391,45 +391,45 @@ func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_Should
 	replicationAttribute1 := s.generateReplicationAttribute(namespaceId, "wf_1", runId)
 	task1 := NewExecutableActivityStateTask(
 		ProcessToolBox{
-			ClusterMetadata:    s.clusterMetadata,
-			ClientBean:         s.clientBean,
-			ShardController:    s.shardController,
-			NamespaceCache:     s.namespaceCache,
-			NDCHistoryResender: s.ndcHistoryResender,
-			MetricsHandler:     s.metricsHandler,
-			Logger:             s.logger,
-			DLQWriter:          NewExecutionManagerDLQWriter(s.mockExecutionManager),
-			Config:             s.config,
+			ClusterMetadata: s.clusterMetadata,
+			ClientBean:      s.clientBean,
+			ShardController: s.shardController,
+			NamespaceCache:  s.namespaceCache,
+			MetricsHandler:  s.metricsHandler,
+			Logger:          s.logger,
+			DLQWriter:       NewExecutionManagerDLQWriter(s.mockExecutionManager),
+			Config:          s.config,
 		},
 		1,
 		time.Unix(0, rand.Int63()),
 		replicationAttribute1,
 		s.sourceClusterName,
 		s.sourceShardKey,
-		enumsspb.TASK_PRIORITY_HIGH,
-		nil,
+		&replicationspb.ReplicationTask{
+			Priority: enumsspb.TASK_PRIORITY_HIGH,
+		},
 	)
 
 	replicationAttribute2 := s.generateReplicationAttribute(namespaceId, "wf_2", runId) //
 	task2 := NewExecutableActivityStateTask(
 		ProcessToolBox{
-			ClusterMetadata:    s.clusterMetadata,
-			ClientBean:         s.clientBean,
-			ShardController:    s.shardController,
-			NamespaceCache:     s.namespaceCache,
-			NDCHistoryResender: s.ndcHistoryResender,
-			MetricsHandler:     s.metricsHandler,
-			Logger:             s.logger,
-			DLQWriter:          NewExecutionManagerDLQWriter(s.mockExecutionManager),
-			Config:             s.config,
+			ClusterMetadata: s.clusterMetadata,
+			ClientBean:      s.clientBean,
+			ShardController: s.shardController,
+			NamespaceCache:  s.namespaceCache,
+			MetricsHandler:  s.metricsHandler,
+			Logger:          s.logger,
+			DLQWriter:       NewExecutionManagerDLQWriter(s.mockExecutionManager),
+			Config:          s.config,
 		},
 		2,
 		time.Unix(0, rand.Int63()),
 		replicationAttribute2,
 		s.sourceClusterName,
 		s.sourceShardKey,
-		enumsspb.TASK_PRIORITY_HIGH,
-		nil,
+		&replicationspb.ReplicationTask{
+			Priority: enumsspb.TASK_PRIORITY_HIGH,
+		},
 	)
 	batchResult, batched := task1.BatchWith(task2)
 	s.False(batched)

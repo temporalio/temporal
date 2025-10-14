@@ -2,19 +2,15 @@ package replication
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	historypb "go.temporal.io/api/history/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -22,11 +18,10 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -47,7 +42,7 @@ type (
 		status                        int32
 		replicationTaskFetcherFactory TaskFetcherFactory
 		workflowCache                 wcache.Cache
-		resender                      xdc.NDCHistoryResender
+		resender                      eventhandler.ResendHandler
 		taskExecutorProvider          TaskExecutorProvider
 		taskPollerManager             pollerManager
 		metricsHandler                metrics.Handler
@@ -74,7 +69,10 @@ func NewTaskProcessorManager(
 	taskExecutorProvider TaskExecutorProvider,
 	dlqWriter DLQWriter,
 ) *taskProcessorManagerImpl {
-
+	historyFetcher := eventhandler.NewHistoryPaginatedFetcher(shardContext.GetNamespaceRegistry(), clientBean, eventSerializer, shardContext.GetLogger())
+	engineProvider := func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error) {
+		return engine, nil
+	}
 	return &taskProcessorManagerImpl{
 		config:                        config,
 		deleteMgr:                     workflowDeleteManager,
@@ -84,38 +82,14 @@ func NewTaskProcessorManager(
 		status:                        common.DaemonStatusInitialized,
 		replicationTaskFetcherFactory: replicationTaskFetcherFactory,
 		workflowCache:                 workflowCache,
-		resender: xdc.NewNDCHistoryResender(
+		resender: eventhandler.NewResendHandler(
 			shardContext.GetNamespaceRegistry(),
 			clientBean,
-			func(
-				ctx context.Context,
-				sourceClusterName string,
-				namespaceId namespace.ID,
-				workflowId string,
-				runId string,
-				events [][]*historypb.HistoryEvent,
-				versionHistory []*historyspb.VersionHistoryItem,
-			) error {
-				err := engine.ReplicateHistoryEvents(
-					ctx,
-					definition.WorkflowKey{
-						NamespaceID: namespaceId.String(),
-						WorkflowID:  workflowId,
-						RunID:       runId,
-					},
-					nil,
-					versionHistory,
-					events,
-					nil,
-					"",
-				)
-				if errors.Is(err, consts.ErrDuplicate) {
-					return nil
-				}
-				return err
-			},
-			shardContext.GetPayloadSerializer(),
-			shardContext.GetConfig().StandbyTaskReReplicationContextTimeout,
+			eventSerializer,
+			shardContext.GetClusterMetadata(),
+			engineProvider,
+			historyFetcher,
+			eventhandler.NewEventImporter(historyFetcher, engineProvider, eventSerializer, shardContext.GetLogger()),
 			shardContext.GetLogger(),
 			config,
 		),

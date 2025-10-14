@@ -70,15 +70,15 @@ func (mr *MockClientFactoryMockRecorder) NewClient(options any) *gomock.Call {
 }
 
 // NewWorker mocks base method.
-func (m *MockClientFactory) NewWorker(client client.Client, taskQueue string, options worker.Options) worker.Worker {
+func (m *MockClientFactory) NewWorker(arg0 client.Client, taskQueue string, options worker.Options) worker.Worker {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewWorker", client, taskQueue, options)
+	ret := m.ctrl.Call(m, "NewWorker", arg0, taskQueue, options)
 	ret0, _ := ret[0].(worker.Worker)
 	return ret0
 }
 
 // NewWorker indicates an expected call of NewWorker.
-func (mr *MockClientFactoryMockRecorder) NewWorker(client, taskQueue, options any) *gomock.Call {
+func (mr *MockClientFactoryMockRecorder) NewWorker(arg0, taskQueue, options any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewWorker", reflect.TypeOf((*MockClientFactory)(nil).NewWorker), client, taskQueue, options)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewWorker", reflect.TypeOf((*MockClientFactory)(nil).NewWorker), arg0, taskQueue, options)
 }

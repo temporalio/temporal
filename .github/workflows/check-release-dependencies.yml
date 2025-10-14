@@ -1,0 +1,51 @@
+name: Check Release Dependencies
+on:
+  pull_request:
+    branches:
+      - release/*
+      - cloud/*
+jobs:
+  check-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Check temporal dependencies use tagged versions
+        run: |
+          echo "Checking that temporal dependencies use tagged versions..."
+
+          # Semantic version regex pattern (e.g., v1.2.3)
+          SEMVER_PATTERN="^v[0-9]+\.[0-9]+\.[0-9]+$"
+
+          DEPENDENCIES=(
+            "go.temporal.io/api"
+            "go.temporal.io/sdk"
+          )
+
+          ERRORS=""
+
+          for DEPENDENCY in "${DEPENDENCIES[@]}"; do
+            VERSION=$(grep "^[[:space:]]*$DEPENDENCY" go.mod | awk '{print $2}')
+
+            if [ -z "$VERSION" ]; then
+              echo "Error: $DEPENDENCY dependency not found in go.mod"
+              exit 1
+            fi
+
+            if ! echo "$VERSION" | grep -qE "$SEMVER_PATTERN"; then
+              ERRORS="${ERRORS} $DEPENDENCY version '$VERSION' is not using a tagged version\n"
+            fi
+          done
+
+          if [ -n "$ERRORS" ]; then
+            echo "Dependency version check failed:"
+            echo -e "$ERRORS"
+            echo ""
+            echo "For release branches, temporal dependencies must point to tagged"
+            echo "versions (e.g., v1.2.3) rather than specific commits."
+            echo ""
+            echo "Please update your go.mod file to use proper semantic version tags."
+            exit 1
+          fi
+
+          echo "All temporal dependencies are using tagged versions"

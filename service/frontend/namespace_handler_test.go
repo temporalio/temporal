@@ -373,28 +373,34 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 		}, nil,
 	).AnyTimes()
 
-	// First call: dynamic configs disabled.
+	// First call: Use default value of dynamic configs.
 	resp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
 	})
 	s.NoError(err)
 
-	s.False(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
+	s.True(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
 	s.True(resp.NamespaceInfo.Capabilities.SyncUpdate)
 	s.True(resp.NamespaceInfo.Capabilities.AsyncUpdate)
+	s.False(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
+	s.False(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 
-	s.config.EnableEagerWorkflowStart = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	// Second call: Override the default value of dynamic configs.
+	s.config.EnableEagerWorkflowStart = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.EnableUpdateWorkflowExecution = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.EnableUpdateWorkflowExecutionAsyncAccepted = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	s.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute = dc.GetIntPropertyFnFilteredByNamespace(5)
+	s.config.WorkerHeartbeatsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 
-	// Second call: dynamic configs enabled.
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
 	})
 	s.NoError(err)
-	s.True(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
+	s.False(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
 	s.False(resp.NamespaceInfo.Capabilities.SyncUpdate)
 	s.False(resp.NamespaceInfo.Capabilities.AsyncUpdate)
+	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
+	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 }
 
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithOneCluster() {
@@ -1915,7 +1921,7 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 
 	for _, tt := range tests {
 		oldLens := len(tt.rules)
-		s.handler.removeOldestExpiredWorkflowRule(tt.rules)
+		s.handler.removeOldestExpiredWorkflowRule("", tt.rules)
 		if len(tt.deletedRule) == 0 {
 			s.Equal(oldLens, len(tt.rules))
 		} else {

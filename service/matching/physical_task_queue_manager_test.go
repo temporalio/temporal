@@ -44,6 +44,7 @@ type PhysicalTaskQueueManagerTestSuite struct {
 	suite.Suite
 
 	newMatcher           bool
+	fairness             bool
 	config               *Config
 	controller           *gomock.Controller
 	physicalTaskQueueKey *PhysicalTaskQueueKey
@@ -52,17 +53,23 @@ type PhysicalTaskQueueManagerTestSuite struct {
 }
 
 // TODO(pri): cleanup; delete this
-func TestPhysicalTaskQueueManagerTestSuite(t *testing.T) {
+func TestPhysicalTaskQueueManager_Classic_Suite(t *testing.T) {
 	suite.Run(t, &PhysicalTaskQueueManagerTestSuite{newMatcher: false})
 }
 
-func TestPhysicalTaskQueueManagerWithNewMatcherTestSuite(t *testing.T) {
+func TestPhysicalTaskQueueManager_Pri_Suite(t *testing.T) {
 	suite.Run(t, &PhysicalTaskQueueManagerTestSuite{newMatcher: true})
+}
+
+func TestPhysicalTaskQueueManager_Fair_TestSuite(t *testing.T) {
+	suite.Run(t, &PhysicalTaskQueueManagerTestSuite{newMatcher: true, fairness: true})
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	s.config = defaultTestConfig()
-	if s.newMatcher {
+	if s.fairness {
+		useFairness(s.config)
+	} else if s.newMatcher {
 		useNewMatcher(s.config)
 	}
 	s.controller = gomock.NewController(s.T())
@@ -80,19 +87,10 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	onFatalErr := func(unloadCause) { s.T().Fatal("user data manager called onFatalErr") }
 	udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
 
-	prtnMgr := &taskQueuePartitionManagerImpl{
-		engine:          engine,
-		partition:       prtn,
-		config:          tqConfig,
-		ns:              ns,
-		logger:          engine.logger,
-		matchingClient:  engine.matchingRawClient,
-		metricsHandler:  metrics.NoopMetricsHandler,
-		userDataManager: udMgr,
-	}
+	prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
+	s.NoError(err)
 	engine.partitions[prtn.Key()] = prtnMgr
 
-	var err error
 	s.tqMgr, err = newPhysicalTaskQueueManager(prtnMgr, s.physicalTaskQueueKey)
 	s.NoError(err)
 	prtnMgr.defaultQueue = s.tqMgr
@@ -366,17 +364,22 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnershipLost() {
 	// TODO: use mocks instead of testTaskManager so we can do synchronization better instead of sleeps
-	s.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(200 * time.Millisecond)
+	s.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 	s.tqMgr.Start()
 
 	// wait for goroutines to start and to acquire rangeid lock
 	time.Sleep(10 * time.Millisecond) // nolint:forbidigo
 
-	tm, _ := s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
+	var tm *testTaskManager
+	if s.fairness {
+		tm = s.tqMgr.partitionMgr.engine.fairTaskManager.(*testTaskManager) // nolint:revive
+	} else {
+		tm = s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager) // nolint:revive
+	}
 	s.Equal(0, tm.getUpdateCount(s.physicalTaskQueueKey))
 
 	// simulate stolen lock
-	ptm := tm.getQueueManagerByKey(s.physicalTaskQueueKey)
+	ptm := tm.getQueueDataByKey(s.physicalTaskQueueKey)
 	ptm.Lock()
 	ptm.rangeID++
 	ptm.Unlock()
@@ -387,7 +390,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 	// on the next periodic write, it'll fail due to conflict and unload the task queue
 	s.Eventually(func() bool {
 		return s.tqMgr.tqCtx.Err() != nil
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 5*time.Second, 20*time.Millisecond)
 
 	// no additional updates (the failed periodic update counts as "1")
 	s.Equal(1, tm.getUpdateCount(s.physicalTaskQueueKey))

@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/workflow/update"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/multierr"
 )
@@ -574,7 +575,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 	s.Error(updateErr)
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(updateErr, &notFound)
-	s.Equal("workflow execution already completed", updateErr.Error())
+	s.ErrorContains(updateErr, update.AbortedByWorkflowClosingErr.Error())
 	updateHandle := <-updateHandleCh
 	s.Nil(updateHandle)
 	// Uncomment the following when durable admitted is implemented.

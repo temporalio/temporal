@@ -173,6 +173,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"DescribeWorkerDeploymentVersion":       {},
 		"SetWorkerDeploymentCurrentVersion":     {},
 		"SetWorkerDeploymentRampingVersion":     {},
+		"SetWorkerDeploymentManager":            {},
 		"DescribeWorkerDeployment":              {},
 		"ListWorkerDeployments":                 {},
 		"DeleteWorkerDeployment":                {},
@@ -183,6 +184,12 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"DeleteWorkflowRule":                    {},
 		"ListWorkflowRules":                     {},
 		"TriggerWorkflowRule":                   {},
+		"RecordWorkerHeartbeat":                 {},
+		"ListWorkers":                           {},
+		"DescribeWorker":                        {},
+		"UpdateTaskQueueConfig":                 {},
+		"FetchWorkerConfig":                     {},
+		"UpdateWorkerConfig":                    {},
 	}, apis)
 }
 

@@ -22,12 +22,14 @@ func WildCardStringsToRegexp(patterns []string) (*regexp.Regexp, error) {
 	result.WriteRune('^')
 	for i, pattern := range patterns {
 		result.WriteRune('(')
-		for i, literal := range strings.Split(pattern, "*") {
-			if i > 0 {
+		first := true
+		for literal := range strings.SplitSeq(pattern, "*") {
+			if !first {
 				// Replace * with .*
 				result.WriteString(".*")
 			}
 			result.WriteString(regexp.QuoteMeta(literal))
+			first = false
 		}
 		result.WriteRune(')')
 		if i < len(patterns)-1 {

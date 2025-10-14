@@ -428,7 +428,7 @@ func (s *localStoreTlsProvider) checkCertExpiration() {
 	if window != 0 {
 		expiring, expired, err := s.GetExpiringCerts(window)
 		if err != nil {
-			s.logger.Error(fmt.Sprintf("error while checking for certificate expiration: %v", err))
+			s.logger.Error("error while checking for certificate expiration", tag.Error(err))
 			return
 		}
 		if s.metricsHandler != nil {

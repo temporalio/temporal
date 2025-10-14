@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/worker_versioning"
@@ -130,6 +131,15 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
+
+	metrics.WorkflowResetCount.With(
+		shardContext.GetMetricsHandler().WithTags(
+			metrics.NamespaceTag(namespaceEntry.Name().String()),
+			metrics.OperationTag(metrics.HistoryResetWorkflowScope),
+			metrics.VersioningBehaviorTag(baseMutableState.GetEffectiveVersioningBehavior()),
+		),
+	).Record(1)
+
 	allowResetWithPendingChildren := shardContext.GetConfig().AllowResetWithPendingChildren(namespaceEntry.Name().String())
 	if err := ndc.NewWorkflowResetter(
 		shardContext,

@@ -116,7 +116,7 @@ func NewNamespaceConfig(
 	global bool,
 	customSearchAttributes map[string]enumspb.IndexedValueType,
 ) (*NamespaceConfig, error) {
-	dbCustomSearchAttributes := searchattribute.GetSqlDbIndexSearchAttributes().CustomSearchAttributes
+	dbCustomSearchAttributes := searchattribute.GetDBIndexSearchAttributes(nil).CustomSearchAttributes
 	fieldToAliasMap := map[string]string{}
 	for saName, saType := range customSearchAttributes {
 		var targetFieldName string
@@ -180,7 +180,7 @@ func createNamespaceIfNotExists(db sqlplugin.DB, namespace *NamespaceConfig) err
 		return nil
 	}
 
-	blob, err := serialization.NewSerializer().NamespaceDetailToBlob(namespace.Detail, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := serialization.NewSerializer().NamespaceDetailToBlob(namespace.Detail)
 	if err != nil {
 		return err
 	}

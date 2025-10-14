@@ -239,7 +239,7 @@ func (r *HistoryReplicatorImpl) doApplyBackfillEvents(
 		r.shardContext,
 		task.getNamespaceID(),
 		task.getExecution(),
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err

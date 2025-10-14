@@ -15,7 +15,8 @@ import (
 func GetActiveTransferTaskTypeTagValue(
 	task tasks.Task,
 ) string {
-	switch task.(type) {
+	prefix := "TransferActive"
+	switch t := task.(type) {
 	case *tasks.ActivityTask:
 		return metrics.TaskTypeTransferActiveTaskActivity
 	case *tasks.WorkflowTask:
@@ -32,15 +33,18 @@ func GetActiveTransferTaskTypeTagValue(
 		return metrics.TaskTypeTransferActiveTaskResetWorkflow
 	case *tasks.DeleteExecutionTask:
 		return metrics.TaskTypeTransferActiveTaskDeleteExecution
+	case *tasks.ChasmTask:
+		return prefix + "." + t.Info.Type
 	default:
-		return "TransferActive" + task.GetType().String()
+		return prefix + task.GetType().String()
 	}
 }
 
 func GetStandbyTransferTaskTypeTagValue(
 	task tasks.Task,
 ) string {
-	switch task.(type) {
+	prefix := "TransferStandby"
+	switch t := task.(type) {
 	case *tasks.ActivityTask:
 		return metrics.TaskTypeTransferStandbyTaskActivity
 	case *tasks.WorkflowTask:
@@ -57,14 +61,17 @@ func GetStandbyTransferTaskTypeTagValue(
 		return metrics.TaskTypeTransferStandbyTaskResetWorkflow
 	case *tasks.DeleteExecutionTask:
 		return metrics.TaskTypeTransferStandbyTaskDeleteExecution
+	case *tasks.ChasmTask:
+		return prefix + "." + t.Info.Type
 	default:
-		return "TransferStandby" + task.GetType().String()
+		return prefix + task.GetType().String()
 	}
 }
 
 func GetActiveTimerTaskTypeTagValue(
 	task tasks.Task,
 ) string {
+	prefix := "TimerActive"
 	switch t := task.(type) {
 	case *tasks.WorkflowTaskTimeoutTask:
 		if t.InMemory {
@@ -85,15 +92,18 @@ func GetActiveTimerTaskTypeTagValue(
 		return metrics.TaskTypeTimerActiveTaskActivityRetryTimer
 	case *tasks.WorkflowBackoffTimerTask:
 		return metrics.TaskTypeTimerActiveTaskWorkflowBackoffTimer
+	case *tasks.ChasmTask:
+		return prefix + "." + t.Info.Type
 	default:
-		return "TimerActive" + task.GetType().String()
+		return prefix + task.GetType().String()
 	}
 }
 
 func GetStandbyTimerTaskTypeTagValue(
 	task tasks.Task,
 ) string {
-	switch task.(type) {
+	prefix := "TimerStandby"
+	switch t := task.(type) {
 	case *tasks.WorkflowTaskTimeoutTask:
 		return metrics.TaskTypeTimerStandbyTaskWorkflowTaskTimeout
 	case *tasks.ActivityTimeoutTask:
@@ -110,8 +120,10 @@ func GetStandbyTimerTaskTypeTagValue(
 		return metrics.TaskTypeTimerStandbyTaskActivityRetryTimer
 	case *tasks.WorkflowBackoffTimerTask:
 		return metrics.TaskTypeTimerStandbyTaskWorkflowBackoffTimer
+	case *tasks.ChasmTask:
+		return prefix + "." + t.Info.Type
 	default:
-		return "TimerStandby" + task.GetType().String()
+		return prefix + task.GetType().String()
 	}
 }
 
@@ -127,6 +139,8 @@ func GetVisibilityTaskTypeTagValue(
 		return metrics.TaskTypeVisibilityTaskCloseExecution
 	case *tasks.DeleteExecutionVisibilityTask:
 		return metrics.TaskTypeVisibilityTaskDeleteExecution
+	case *tasks.ChasmTask:
+		return metrics.TaskTypeVisibilityTaskUpsertChasmExecution
 	default:
 		return task.GetType().String()
 	}
@@ -151,11 +165,14 @@ func GetOutboundTaskTypeTagValue(task tasks.Task, isActive bool) string {
 		prefix = "OutboundStandby"
 	}
 
-	outbound, ok := task.(*tasks.StateMachineOutboundTask)
-	if !ok {
+	switch task := task.(type) {
+	case *tasks.StateMachineOutboundTask:
+		return prefix + "." + task.StateMachineTaskType()
+	case *tasks.ChasmTask:
+		return prefix + "." + task.Info.Type
+	default:
 		return prefix + "Unknown"
 	}
-	return prefix + "." + outbound.StateMachineTaskType()
 }
 
 func GetTimerStateMachineTaskTypeTagValue(taskType string, isActive bool) string {

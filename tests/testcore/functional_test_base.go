@@ -5,8 +5,10 @@ import (
 	"cmp"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"maps"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -35,14 +38,18 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.uber.org/fx"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 type (
@@ -60,16 +67,16 @@ type (
 		historyrequire.HistoryRequire
 		updateutils.UpdateUtils
 
-		Logger log.Logger
+		Logger       log.Logger
+		otelExporter *testtelemetry.MemoryExporter
 
 		testCluster *TestCluster
 		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
 		testClusterConfig *TestClusterConfig
 
-		namespace   namespace.Name
-		namespaceID namespace.ID
-		// TODO (alex): rename to externalNamespace
-		foreignNamespace namespace.Name
+		namespace         namespace.Name
+		namespaceID       namespace.ID
+		externalNamespace namespace.Name
 
 		// Fields used by SDK based tests.
 		sdkClient sdkclient.Client
@@ -181,8 +188,8 @@ func (s *FunctionalTestBase) NamespaceID() namespace.ID {
 	return s.namespaceID
 }
 
-func (s *FunctionalTestBase) ForeignNamespace() namespace.Name {
-	return s.foreignNamespace
+func (s *FunctionalTestBase) ExternalNamespace() namespace.Name {
+	return s.externalNamespace
 }
 
 func (s *FunctionalTestBase) FrontendGRPCAddress() string {
@@ -229,7 +236,7 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 		// Instead of panic'ing immediately, TearDownTest will check if the test logger failed
 		// after each test completed. This is better since otherwise is would fail inside
 		// the server and not the test, creating a lot of noise and possibly stuck tests.
-		testlogger.DontPanicOnError(tl)
+		testlogger.DontFailOnError(tl)
 		// Fail test when an assertion fails (see `softassert` package).
 		tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
 		s.Logger = tl
@@ -247,6 +254,18 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 		EnableMTLS:             params.EnableMTLS,
 	}
 
+	// Initialize the OTEL collector if OTEL is enabled.
+	// Must be done before the test cluster is created, so that the collector can be used by the test cluster.
+	if otelOutputDir := os.Getenv("TEMPORAL_TEST_OTEL_OUTPUT"); otelOutputDir != "" {
+		// Create an OTEL exporter.
+		s.otelExporter = testtelemetry.NewFileExporter(otelOutputDir)
+
+		// Direct the OTEL exporter to the collector.
+		s.testClusterConfig.SpanExporters = map[telemetry.SpanExporterType]sdktrace.SpanExporter{
+			telemetry.OtelTracesOtlpExporterType: s.otelExporter,
+		}
+	}
+
 	var err error
 	testClusterFactory := NewTestClusterFactory()
 	s.testCluster, err = testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
@@ -257,8 +276,8 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 	s.namespaceID, err = s.RegisterNamespace(s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
-	s.foreignNamespace = namespace.Name(RandomizeStr("foreign-namespace"))
-	_, err = s.RegisterNamespace(s.ForeignNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	s.externalNamespace = namespace.Name(RandomizeStr("external-namespace"))
+	_, err = s.RegisterNamespace(s.ExternalNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 }
 
@@ -271,10 +290,14 @@ func (s *FunctionalTestBase) SetupTest() {
 	s.initAssertions()
 	s.setupSdk()
 	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+
+	// Annotate gRPC requests with the test name for OTEL tracing.
+	s.testCluster.host.grpcClientInterceptor.Set(func(ctx context.Context) context.Context {
+		return metadata.AppendToOutgoingContext(ctx, "temporal-test-name", s.T().Name())
+	})
 }
 
 func (s *FunctionalTestBase) SetupSubTest() {
-	s.checkNoUnexpectedErrorLogs() // make sure the previous sub test was cleaned up properly
 	s.initAssertions()
 }
 
@@ -341,9 +364,15 @@ func (s *FunctionalTestBase) setupSdk() {
 		Namespace: s.Namespace().String(),
 		Logger:    log.NewSdkLogger(s.Logger),
 	}
-	if s.GetTestCluster().Host().TlsConfigProvider() != nil {
-		clientOptions.ConnectionOptions = sdkclient.ConnectionOptions{
-			TLS: s.GetTestCluster().Host().TlsConfigProvider().FrontendClientConfig,
+
+	if provider := s.testCluster.host.tlsConfigProvider; provider != nil {
+		clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
+	}
+
+	if interceptor := s.testCluster.host.grpcClientInterceptor; interceptor != nil {
+		clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
+			grpc.WithUnaryInterceptor(interceptor.Unary()),
+			grpc.WithStreamInterceptor(interceptor.Stream()),
 		}
 	}
 
@@ -359,9 +388,27 @@ func (s *FunctionalTestBase) setupSdk() {
 	s.NoError(err)
 }
 
+func (s *FunctionalTestBase) exportOTELTraces() {
+	if s.otelExporter == nil {
+		return
+	}
+	if s.T().Failed() {
+		var validFilenameChars = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+		fileName := s.T().Name()
+		fileName = validFilenameChars.ReplaceAllString(fileName, "-") // remove invalid characters
+		fileName = fmt.Sprintf("traces.%s_%d.json", fileName, time.Now().Unix())
+		if filePath, err := s.otelExporter.Write(fileName); err != nil {
+			s.T().Logf("unable to write OTEL traces: %v", err)
+		} else {
+			s.T().Logf("wrote OTEL traces to %s", filePath)
+		}
+	}
+	_ = s.otelExporter.Shutdown(NewContext())
+}
+
 func (s *FunctionalTestBase) TearDownCluster() {
 	s.Require().NoError(s.MarkNamespaceAsDeleted(s.Namespace()))
-	s.Require().NoError(s.MarkNamespaceAsDeleted(s.ForeignNamespace()))
+	s.Require().NoError(s.MarkNamespaceAsDeleted(s.ExternalNamespace()))
 
 	if s.testCluster != nil {
 		s.Require().NoError(s.testCluster.TearDownCluster())
@@ -370,22 +417,14 @@ func (s *FunctionalTestBase) TearDownCluster() {
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
 func (s *FunctionalTestBase) TearDownTest() {
-	s.checkNoUnexpectedErrorLogs()
+	s.exportOTELTraces()
 	s.tearDownSdk()
+	s.testCluster.host.grpcClientInterceptor.Set(nil)
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
 func (s *FunctionalTestBase) TearDownSubTest() {
-	s.checkNoUnexpectedErrorLogs()
-}
-
-func (s *FunctionalTestBase) checkNoUnexpectedErrorLogs() {
-	if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
-		if tl.ResetFailureStatus() {
-			s.Fail(`Failing test as unexpected error logs were found.
-Look for 'Unexpected Error log encountered'.`)
-		}
-	}
+	s.exportOTELTraces()
 }
 
 func (s *FunctionalTestBase) tearDownSdk() {

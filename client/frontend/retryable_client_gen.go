@@ -221,6 +221,21 @@ func (c *retryableClient) DescribeTaskQueue(
 	return resp, err
 }
 
+func (c *retryableClient) DescribeWorker(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkerRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeWorkerResponse, error) {
+	var resp *workflowservice.DescribeWorkerResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeWorker(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DescribeWorkerDeployment(
 	ctx context.Context,
 	request *workflowservice.DescribeWorkerDeploymentRequest,
@@ -290,6 +305,21 @@ func (c *retryableClient) ExecuteMultiOperation(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.ExecuteMultiOperation(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) FetchWorkerConfig(
+	ctx context.Context,
+	request *workflowservice.FetchWorkerConfigRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.FetchWorkerConfigResponse, error) {
+	var resp *workflowservice.FetchWorkerConfigResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.FetchWorkerConfig(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -596,6 +626,21 @@ func (c *retryableClient) ListWorkerDeployments(
 	return resp, err
 }
 
+func (c *retryableClient) ListWorkers(
+	ctx context.Context,
+	request *workflowservice.ListWorkersRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListWorkersResponse, error) {
+	var resp *workflowservice.ListWorkersResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ListWorkers(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ListWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListWorkflowExecutionsRequest,
@@ -755,6 +800,21 @@ func (c *retryableClient) RecordActivityTaskHeartbeatById(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.RecordActivityTaskHeartbeatById(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) RecordWorkerHeartbeat(
+	ctx context.Context,
+	request *workflowservice.RecordWorkerHeartbeatRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RecordWorkerHeartbeatResponse, error) {
+	var resp *workflowservice.RecordWorkerHeartbeatResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.RecordWorkerHeartbeat(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -1046,6 +1106,21 @@ func (c *retryableClient) SetWorkerDeploymentCurrentVersion(
 	return resp, err
 }
 
+func (c *retryableClient) SetWorkerDeploymentManager(
+	ctx context.Context,
+	request *workflowservice.SetWorkerDeploymentManagerRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.SetWorkerDeploymentManagerResponse, error) {
+	var resp *workflowservice.SetWorkerDeploymentManagerResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.SetWorkerDeploymentManager(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) SetWorkerDeploymentRampingVersion(
 	ctx context.Context,
 	request *workflowservice.SetWorkerDeploymentRampingVersionRequest,
@@ -1241,6 +1316,21 @@ func (c *retryableClient) UpdateSchedule(
 	return resp, err
 }
 
+func (c *retryableClient) UpdateTaskQueueConfig(
+	ctx context.Context,
+	request *workflowservice.UpdateTaskQueueConfigRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateTaskQueueConfigResponse, error) {
+	var resp *workflowservice.UpdateTaskQueueConfigResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateTaskQueueConfig(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkerBuildIdCompatibilityRequest,
@@ -1250,6 +1340,21 @@ func (c *retryableClient) UpdateWorkerBuildIdCompatibility(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateWorkerConfig(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerConfigRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerConfigResponse, error) {
+	var resp *workflowservice.UpdateWorkerConfigResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateWorkerConfig(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

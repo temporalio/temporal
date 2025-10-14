@@ -78,10 +78,8 @@ func TestStreamBasedReplicationTestSuite(t *testing.T) {
 func (s *streamBasedReplicationTestSuite) SetupSuite() {
 	s.controller = gomock.NewController(s.T())
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.EnableReplicationStream.Key():             true,
-		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
-		dynamicconfig.EnableReplicationTaskBatching.Key():       true,
-		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
+		dynamicconfig.EnableReplicationStream.Key():       true,
+		dynamicconfig.EnableReplicationTaskBatching.Key(): true,
 	}
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
@@ -327,7 +325,7 @@ func (s *streamBasedReplicationTestSuite) importEvents(
 	)
 	var token []byte
 	for _, batch := range eventBatches {
-		blob, err := s.serializer.SerializeEvents(batch.Events, enumspb.ENCODING_TYPE_PROTO3)
+		blob, err := s.serializer.SerializeEvents(batch.Events)
 		s.NoError(err)
 		req := &historyservice.ImportWorkflowExecutionRequest{
 			NamespaceId: s.namespaceID,

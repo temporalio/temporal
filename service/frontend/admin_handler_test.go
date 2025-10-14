@@ -153,6 +153,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockVisibilityMgr,
 		s.mockResource.GetLogger(),
 		s.mockResource.GetTaskManager(),
+		s.mockResource.GetTaskManager(),
 		s.mockResource.GetExecutionManager(),
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetMetadataManager(),
@@ -1848,7 +1849,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_NoSearchAttributes() {
 			historyEvent := event.GetData().(*historypb.HistoryEvent)
 			historyEvents = append(historyEvents, historyEvent)
 		}
-		historyBatch, err := serializer.SerializeEvents(historyEvents, enumspb.ENCODING_TYPE_PROTO3)
+		historyBatch, err := serializer.SerializeEvents(historyEvents)
 		s.NoError(err)
 		historyBatches = append(historyBatches, historyBatch)
 	}
@@ -1918,7 +1919,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithAliasedSearchAttribu
 					}
 					historyEvents = append(historyEvents, historyEvent)
 				}
-				historyBatch, err := serializer.SerializeEvents(historyEvents, enumspb.ENCODING_TYPE_PROTO3)
+				historyBatch, err := serializer.SerializeEvents(historyEvents)
 				s.NoError(err)
 				historyBatches = append(historyBatches, historyBatch)
 			}
@@ -2020,7 +2021,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 					}
 					historyEvents = append(historyEvents, historyEvent)
 				}
-				historyBatch, err := serializer.SerializeEvents(historyEvents, enumspb.ENCODING_TYPE_PROTO3)
+				historyBatch, err := serializer.SerializeEvents(historyEvents)
 				s.NoError(err)
 				historyBatches = append(historyBatches, historyBatch)
 			}

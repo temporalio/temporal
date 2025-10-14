@@ -110,7 +110,7 @@ func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicat
 				"namespace replication encountered UUID collision processing namespace replication task",
 				tag.WorkflowNamespaceID(resp.Namespace.Info.Id),
 				tag.NewStringTag("Task Namespace Id", task.GetId()),
-				tag.NewStringTag("Task Namepsace Info Id", task.Info.GetId()))
+				tag.NewStringTag("Task Namespace Info Id", task.Info.GetId()))
 			return false, ErrNameUUIDCollision
 		}
 
@@ -155,6 +155,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
 				Clusters:          ConvertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters),
+				FailoverHistory:   ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory()),
 			},
 			ConfigVersion:   task.GetConfigVersion(),
 			FailoverVersion: task.GetFailoverVersion(),
@@ -178,7 +179,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 				h.logger.Error("namespace replication encountered UUID collision during NamespaceCreationReplicationTask",
 					tag.WorkflowNamespaceID(resp.Namespace.Info.Id),
 					tag.NewStringTag("Task Namespace Id", task.GetId()),
-					tag.NewStringTag("Task Namepsace Info Id", task.Info.GetId()),
+					tag.NewStringTag("Task Namespace Info Id", task.Info.GetId()),
 					tag.Error(err))
 				return ErrNameUUIDCollision
 			}

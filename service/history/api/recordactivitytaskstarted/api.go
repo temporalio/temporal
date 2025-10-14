@@ -176,7 +176,10 @@ func recordActivityTaskStarted(
 	wfBehavior := mutableState.GetEffectiveVersioningBehavior()
 	wfDeployment := mutableState.GetEffectiveDeployment()
 	//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
-	pollerDeployment := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities, request.PollRequest.DeploymentOptions)
+	pollerDeployment, err := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities, request.PollRequest.DeploymentOptions)
+	if err != nil {
+		return nil, rejectCodeUndefined, err
+	}
 	err = worker_versioning.ValidateTaskVersionDirective(request.GetVersionDirective(), wfBehavior, wfDeployment, request.ScheduledDeployment)
 	if err != nil {
 		return nil, rejectCodeUndefined, err
@@ -249,6 +252,7 @@ func recordActivityTaskStarted(
 	response.Attempt = ai.Attempt
 	response.HeartbeatDetails = ai.LastHeartbeatDetails
 	response.Version = ai.Version
+	response.StartVersion = ai.StartVersion
 
 	response.WorkflowType = mutableState.GetWorkflowType()
 	response.WorkflowNamespace = namespaceName
@@ -327,6 +331,7 @@ func processActivityWorkflowRules(
 	// activity was paused, need to update activity
 	if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
 		activityInfo.StartedEventId = common.EmptyEventID
+		activityInfo.StartVersion = common.EmptyVersion
 		activityInfo.StartedTime = nil
 		activityInfo.RequestId = ""
 		return nil

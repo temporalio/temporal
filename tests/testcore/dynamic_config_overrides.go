@@ -5,7 +5,6 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility"
-	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 )
 
@@ -53,9 +52,7 @@ var (
 		dynamicconfig.SendRawHistoryBetweenInternalServices.Key(): true,
 
 		dynamicconfig.RetentionTimerJitterDuration.Key():        time.Second,
-		dynamicconfig.EnableEagerWorkflowStart.Key():            true,
 		dynamicconfig.FrontendEnableExecuteMultiOperation.Key(): true,
-		dynamicconfig.ActivityAPIsEnabled.Key():                 true,
 		dynamicconfig.EnableTransitionHistory.Key():             true,
 
 		dynamicconfig.NumPendingChildExecutionsLimitError.Key():             ClientSuiteLimit,
@@ -67,6 +64,6 @@ var (
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 		nexusoperations.RecordCancelRequestCompletionEvents.Key():           true,
-		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+		nexusoperations.UseSystemCallbackURL.Key():                          true,
 	}
 )

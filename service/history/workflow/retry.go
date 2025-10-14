@@ -8,11 +8,13 @@ import (
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -241,6 +243,25 @@ func SetupNewWorkflowForRetryOrCron(
 		}
 	}
 
+	var pinnedOverride *workflowpb.VersioningOverride
+	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
+		pinnedOverride = o
+		// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
+	}
+
+	// New run initiated by workflow Cron will never inherit.
+	//
+	// New run initiated by workflow Retry will only inherit if the retried run is effectively pinned at the time
+	// of retry, and the retried run inherited a pinned version when it started (ie. it is a child of a pinned
+	// parent, or a CaN of a pinned run, and is running on a Task Queue in the inherited version).
+	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY &&
+		GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+		startAttr.GetInheritedPinnedVersion() != nil {
+		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(GetEffectiveDeployment(previousExecutionInfo.GetVersioningInfo()))
+		// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
+	}
+
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.New(),
 		Namespace:                newMutableState.GetNamespaceEntry().Name().String(),
@@ -259,6 +280,7 @@ func SetupNewWorkflowForRetryOrCron(
 		CompletionCallbacks:      completionCallbacks,
 		Links:                    startLinks,
 		Priority:                 startAttr.Priority,
+		VersioningOverride:       pinnedOverride,
 	}
 
 	attempt := int32(1)
@@ -290,6 +312,7 @@ func SetupNewWorkflowForRetryOrCron(
 		SourceVersionStamp:       sourceVersionStamp,
 		RootExecutionInfo:        rootInfo,
 		InheritedBuildId:         startAttr.InheritedBuildId,
+		InheritedPinnedVersion:   inheritedPinnedVersion,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {

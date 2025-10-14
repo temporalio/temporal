@@ -5,6 +5,7 @@ type fieldType int
 const (
 	fieldTypeUnspecified fieldType = iota
 	fieldTypeComponent
-	fieldTypeComponentPointer
+	fieldTypePointer
+	fieldTypeDeferredPointer
 	fieldTypeData
 )

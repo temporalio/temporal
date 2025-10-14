@@ -25,7 +25,7 @@ func TestLookupLocalhostIPMissingHostname(t *testing.T) {
 	ip := net.ParseIP(ipString)
 	a.True(ip.IsLoopback())
 	// if host can't be found, use ipv4 loopback
-	a.Equal(ip.String(), LocalhostIPDefault)
+	a.Equal(ip.String(), localhostIPDefault)
 }
 
 func TestLookupLocalhostIPWithIPv6(t *testing.T) {

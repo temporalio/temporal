@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -51,6 +52,16 @@ func TestMatcherSuite(t *testing.T) {
 	suite.Run(t, new(MatcherTestSuite))
 }
 
+func (t *MatcherTestSuite) newDefaultRateLimiter() quotas.RateLimiter {
+	return quotas.NewDynamicRateLimiter(
+		quotas.NewMutableRateBurst(
+			defaultTaskDispatchRPS,
+			int(defaultTaskDispatchRPS),
+		),
+		defaultTaskDispatchRPSTTL,
+	)
+}
+
 func (t *MatcherTestSuite) SetupTest() {
 	t.controller = gomock.NewController(t.T())
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
@@ -72,11 +83,11 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.childConfig = tlCfg
 	t.fwdr, err = newForwarder(&t.childConfig.forwarderConfig, t.queue, t.client)
 	t.Assert().NoError(err)
-	t.childMatcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler)
+	t.childMatcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler, t.newDefaultRateLimiter())
 	t.childMatcher.Start()
 
 	t.rootConfig = newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
-	t.rootMatcher = newTaskMatcher(t.rootConfig, nil, metrics.NoopMetricsHandler)
+	t.rootMatcher = newTaskMatcher(t.rootConfig, nil, metrics.NoopMetricsHandler, t.newDefaultRateLimiter())
 	t.rootMatcher.Start()
 }
 
@@ -466,10 +477,10 @@ func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
 	).Return(emptyPollWorkflowTaskQueueResponse, nil).AnyTimes()
 
 	// make a poll that expires
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
-	t.Assert().Empty(task.started.workflowTaskInfo)
 	t.Assert().NoError(err)
+	t.Assert().Zero(task.started.workflowTaskInfo.StartedEventId)
 	cancel()
 
 	// send query and expect generic DeadlineExceeded error
@@ -498,10 +509,10 @@ func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 	).Return(emptyPollWorkflowTaskQueueResponse, nil).AnyTimes()
 
 	// make a poll that expires
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
-	t.Assert().Empty(task.started.workflowTaskInfo)
 	t.Assert().NoError(err)
+	t.Assert().Zero(task.started.workflowTaskInfo.StartedEventId)
 	cancel()
 
 	// wait 10ms after the poll

@@ -46,14 +46,14 @@ func (a *slicePredicateAction) Name() string {
 	return "slice-predicate"
 }
 
-func (a *slicePredicateAction) Run(readerGroup *ReaderGroup) {
+func (a *slicePredicateAction) Run(readerGroup *ReaderGroup) bool {
 	reader, ok := readerGroup.ReaderByID(DefaultReaderId)
 	if !ok {
-		return
+		return false
 	}
 
 	if int64(a.maxReaderCount) <= DefaultReaderId+1 {
-		return
+		return false
 	}
 
 	sliceCount := a.monitor.GetSliceCount(DefaultReaderId)
@@ -72,7 +72,7 @@ func (a *slicePredicateAction) Run(readerGroup *ReaderGroup) {
 	if !hasNonUniversalPredicate ||
 		(pendingTasks < moveSliceDefaultReaderMinPendingTaskCount &&
 			sliceCount < moveSliceDefaultReaderMinSliceCount) {
-		return
+		return false
 	}
 
 	var moveSlices []Slice
@@ -86,9 +86,10 @@ func (a *slicePredicateAction) Run(readerGroup *ReaderGroup) {
 	})
 
 	if len(moveSlices) == 0 {
-		return
+		return false
 	}
 
 	nextReader := readerGroup.GetOrCreateReader(DefaultReaderId + 1)
 	nextReader.MergeSlices(moveSlices...)
+	return true
 }

@@ -94,7 +94,6 @@ func (s *mitigatorSuite) TestMitigate_ActionMatchAlert() {
 		action Action,
 		_ *ReaderGroup,
 		_ metrics.Handler,
-		_ log.Logger,
 	) {
 		actualAction = action
 	}
@@ -110,7 +109,6 @@ func (s *mitigatorSuite) TestMitigate_ResolveAlert() {
 		_ Action,
 		_ *ReaderGroup,
 		_ metrics.Handler,
-		_ log.Logger,
 	) {
 	}
 

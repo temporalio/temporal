@@ -366,6 +366,19 @@ func (s *specSuite) TestSpecExclude() {
 	)
 }
 
+func (s *specSuite) TestExcludeAll() {
+	cs, err := s.specBuilder.NewCompiledSpec(&schedulepb.ScheduleSpec{
+		Interval: []*schedulepb.IntervalSpec{
+			{Interval: durationpb.New(7 * 24 * time.Hour)},
+		},
+		ExcludeCalendar: []*schedulepb.CalendarSpec{
+			&schedulepb.CalendarSpec{Second: "*", Minute: "*", Hour: "*"},
+		},
+	})
+	s.NoError(err)
+	s.Zero(cs.GetNextTime("", time.Date(2022, 3, 23, 12, 53, 2, 9, time.UTC)))
+}
+
 func (s *specSuite) TestSpecStartTime() {
 	s.checkSequenceFull(
 		"",

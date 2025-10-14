@@ -61,7 +61,6 @@ type (
 var Module = fx.Options(
 	resource.Module,
 	scheduler.Module,
-	dynamicconfig.Module,
 	deployment.Module,
 	workerdeployment.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
@@ -76,6 +75,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(NamespaceHandoverInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),
+	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
@@ -153,6 +153,7 @@ type GrpcServerOptions struct {
 
 func AuthorizationInterceptorProvider(
 	cfg *config.Config,
+	serviceConfig *Config,
 	logger log.Logger,
 	namespaceChecker authorization.NamespaceChecker,
 	metricsHandler metrics.Handler,
@@ -169,6 +170,7 @@ func AuthorizationInterceptorProvider(
 		audienceGetter,
 		cfg.Global.Authorization.AuthHeaderName,
 		cfg.Global.Authorization.AuthExtraHeaderName,
+		serviceConfig.ExposeAuthorizerErrors,
 	)
 }
 
@@ -202,6 +204,7 @@ func GrpcServerOptionsProvider(
 	healthInterceptor *interceptor.HealthInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	traceStatsHandler telemetry.ServerStatsHandler,
+	metricsStatsHandler metrics.ServerStatsHandler,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
@@ -240,7 +243,7 @@ func GrpcServerOptionsProvider(
 		// Service Error Interceptor should be the next most outer interceptor on error handling
 		maskInternalErrorDetailsInterceptor.Intercept,
 		interceptor.ServiceErrorInterceptor,
-		rpc.NewFrontendServiceErrorInterceptor(logger),
+		interceptor.NewFrontendServiceErrorInterceptor(logger),
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		metrics.NewServerMetricsContextInjectorInterceptor(),
@@ -249,6 +252,7 @@ func GrpcServerOptionsProvider(
 		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
+		// Telemetry interceptor must be after redirection to ensure metrics are recorded in the correct cluster
 		telemetryInterceptor.UnaryIntercept,
 		healthInterceptor.Intercept,
 		namespaceValidatorInterceptor.StateValidationIntercept,
@@ -277,8 +281,16 @@ func GrpcServerOptionsProvider(
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),
 		grpc.ChainStreamInterceptor(streamInterceptor...),
 	)
+
+	multiStats := rpc.MultiStatsHandler{}
 	if traceStatsHandler != nil {
-		grpcServerOptions = append(grpcServerOptions, grpc.StatsHandler(traceStatsHandler))
+		multiStats = append(multiStats, traceStatsHandler)
+	}
+	if metricsStatsHandler != nil {
+		multiStats = append(multiStats, metricsStatsHandler)
+	}
+	if len(multiStats) > 0 {
+		grpcServerOptions = append(grpcServerOptions, grpc.StatsHandler(multiStats))
 	}
 	return GrpcServerOptions{Options: grpcServerOptions, UnaryInterceptors: unaryInterceptors}
 }
@@ -341,6 +353,7 @@ func NamespaceHandoverInterceptorProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 ) *interceptor.NamespaceHandoverInterceptor {
 	return interceptor.NewNamespaceHandoverInterceptor(
 		dc,
@@ -348,6 +361,17 @@ func NamespaceHandoverInterceptorProvider(
 		metricsHandler,
 		logger,
 		timeSource,
+		requestErrorHandler,
+	)
+}
+
+func ErrorHandlerProvider(
+	logger log.Logger,
+	serviceConfig *Config,
+) *interceptor.RequestErrorHandler {
+	return interceptor.NewRequestErrorHandler(
+		logger,
+		serviceConfig.LogAllReqErrors,
 	)
 }
 
@@ -356,12 +380,14 @@ func TelemetryInterceptorProvider(
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	serviceConfig *Config,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
 		serviceConfig.LogAllReqErrors,
+		requestErrorHandler,
 	)
 }
 
@@ -474,7 +500,7 @@ func NamespaceRateLimitInterceptorProvider(
 			)
 		},
 	)
-	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{}, serviceConfig.ReducePollWorkflowHistoryRequestPriority)
+	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{})
 }
 
 func NamespaceCountLimitInterceptorProvider(
@@ -602,6 +628,7 @@ func AdminHandlerProvider(
 	logger log.SnTaggedLogger,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	taskManager persistence.TaskManager,
+	fairTaskManager persistence.FairTaskManager,
 	persistenceExecutionManager persistence.ExecutionManager,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	persistenceMetadataManager persistence.MetadataManager,
@@ -631,6 +658,7 @@ func AdminHandlerProvider(
 		visibilityMgr,
 		logger,
 		taskManager,
+		fairTaskManager,
 		persistenceExecutionManager,
 		clusterMetadataManager,
 		persistenceMetadataManager,
@@ -761,6 +789,7 @@ func RegisterNexusHTTPHandler(
 	endpointRegistry nexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceRateLimiterInterceptor interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
@@ -780,6 +809,7 @@ func RegisterNexusHTTPHandler(
 		endpointRegistry,
 		authInterceptor,
 		telemetryInterceptor,
+		requestErrorHandler,
 		redirectionInterceptor,
 		namespaceValidatorInterceptor,
 		namespaceRateLimiterInterceptor,
@@ -811,7 +841,7 @@ func MuxRouterProvider() *mux.Router {
 
 func httpEnabled(cfg *config.Config, serviceName primitives.ServiceName) bool {
 	// If the service is not the frontend service, HTTP API is disabled
-	if serviceName != primitives.FrontendService {
+	if serviceName != primitives.FrontendService && serviceName != primitives.InternalFrontendService {
 		return false
 	}
 	// If HTTP API port is 0, it is disabled

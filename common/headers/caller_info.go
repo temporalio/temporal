@@ -7,27 +7,37 @@ import (
 )
 
 const (
-	CallerTypeOperator    = "operator"
-	CallerTypeAPI         = "api"
-	CallerTypeBackground  = "background"
-	CallerTypePreemptable = "preemptable"
+	CallerTypeOperator       = "operator"
+	CallerTypeAPI            = "api"
+	CallerTypeBackgroundHigh = "background_high"
+	CallerTypeBackgroundLow  = "background_low"
+	CallerTypePreemptable    = "preemptable"
 
 	CallerNameSystem = "system"
 )
 
 var (
 	ValidCallerTypes = map[string]struct{}{
-		CallerTypeOperator:    {},
-		CallerTypeAPI:         {},
-		CallerTypeBackground:  {},
-		CallerTypePreemptable: {},
+		CallerTypeOperator:       {},
+		CallerTypeAPI:            {},
+		CallerTypeBackgroundHigh: {},
+		CallerTypeBackgroundLow:  {},
+		CallerTypePreemptable:    {},
 	}
 )
 
 var (
-	SystemBackgroundCallerInfo = CallerInfo{
+	SystemOperatorCallerInfo = CallerInfo{
 		CallerName: CallerNameSystem,
-		CallerType: CallerTypeBackground,
+		CallerType: CallerTypeOperator,
+	}
+	SystemBackgroundHighCallerInfo = CallerInfo{
+		CallerName: CallerNameSystem,
+		CallerType: CallerTypeBackgroundHigh,
+	}
+	SystemBackgroundLowCallerInfo = CallerInfo{
+		CallerName: CallerNameSystem,
+		CallerType: CallerTypeBackgroundLow,
 	}
 	SystemPreemptableCallerInfo = CallerInfo{
 		CallerName: CallerNameSystem,
@@ -65,15 +75,27 @@ func NewCallerInfo(
 	}
 }
 
-// NewBackgroundCallerInfo creates a new CallerInfo with Background callerType
+// NewBackgroundHighCallerInfo creates a new CallerInfo with BackgroundHigh callerType
 // and empty callOrigin.
-// This is equivalent to NewCallerInfo(callerName, CallerTypeBackground, "")
-func NewBackgroundCallerInfo(
+// This is equivalent to NewCallerInfo(callerName, CallerTypeBackgroundHigh, "")
+func NewBackgroundHighCallerInfo(
 	callerName string,
 ) CallerInfo {
 	return CallerInfo{
 		CallerName: callerName,
-		CallerType: CallerTypeBackground,
+		CallerType: CallerTypeBackgroundHigh,
+	}
+}
+
+// NewBackgroundLowCallerInfo creates a new CallerInfo with BackgroundLow callerType
+// and empty callOrigin.
+// This is equivalent to NewCallerInfo(callerName, CallerTypeBackgroundLow, "")
+func NewBackgroundLowCallerInfo(
+	callerName string,
+) CallerInfo {
+	return CallerInfo{
+		CallerName: callerName,
+		CallerType: CallerTypeBackgroundLow,
 	}
 }
 

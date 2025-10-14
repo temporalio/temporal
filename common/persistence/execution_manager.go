@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -18,6 +17,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -25,12 +25,13 @@ import (
 type (
 	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and Serializer
 	executionManagerImpl struct {
-		serializer            serialization.Serializer
-		eventBlobCache        XDCCache
-		persistence           ExecutionStore
-		logger                log.Logger
-		pagingTokenSerializer *jsonHistoryTokenSerializer
-		transactionSizeLimit  dynamicconfig.IntPropertyFn
+		serializer                                  serialization.Serializer
+		eventBlobCache                              XDCCache
+		persistence                                 ExecutionStore
+		logger                                      log.Logger
+		pagingTokenSerializer                       *jsonHistoryTokenSerializer
+		transactionSizeLimit                        dynamicconfig.IntPropertyFn
+		enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -43,6 +44,7 @@ func NewExecutionManager(
 	eventBlobCache XDCCache,
 	logger log.Logger,
 	transactionSizeLimit dynamicconfig.IntPropertyFn,
+	enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn,
 ) ExecutionManager {
 	return &executionManagerImpl{
 		serializer:            serializer,
@@ -51,6 +53,7 @@ func NewExecutionManager(
 		logger:                logger,
 		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
 		transactionSizeLimit:  transactionSizeLimit,
+		enableBestEffortDeleteTasksOnWorkflowUpdate: enableBestEffortDeleteTasksOnWorkflowUpdate,
 	}
 }
 
@@ -198,6 +201,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	err = m.persistence.UpdateWorkflowExecution(ctx, newRequest)
 	switch err.(type) {
 	case nil:
+		m.deleteHistoryTasks(ctx, request.ShardID, updateMutation.BestEffortDeleteTasks, updateMutation.ExecutionInfo.WorkflowId)
 		m.addXDCCacheKV(updateWorkflowXDCKVs)
 		m.addXDCCacheKV(newWorkflowXDCKVs)
 		return &UpdateWorkflowExecutionResponse{
@@ -223,6 +227,38 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		return nil, err
 	default:
 		return nil, err
+	}
+}
+
+// deleteHistoryTasks iterates over provided task keys and completes them when the dynamic config
+// history.enableDeleteTasksOnWorkflowUpdate is enabled. Completion is best-effort and failures are logged.
+func (m *executionManagerImpl) deleteHistoryTasks(
+	ctx context.Context,
+	shardID int32,
+	toDelete map[tasks.Category][]tasks.Key,
+	workflowID string,
+) {
+	if !m.enableBestEffortDeleteTasksOnWorkflowUpdate() || len(toDelete) == 0 {
+		return
+	}
+	for category, keys := range toDelete {
+		for _, key := range keys {
+			if err := m.persistence.CompleteHistoryTask(ctx, &CompleteHistoryTaskRequest{
+				ShardID:      shardID,
+				TaskCategory: category,
+				TaskKey:      key,
+				BestEffort:   true,
+			}); err != nil {
+				m.logger.Warn("Failed to delete history task after workflow update",
+					tag.ShardID(shardID),
+					tag.WorkflowID(workflowID),
+					tag.TaskCategoryID(category.ID()),
+					tag.Timestamp(key.FireTime),
+					tag.TaskID(key.TaskID),
+					tag.Error(err),
+				)
+			}
+		}
 	}
 }
 
@@ -572,17 +608,17 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		NextEventID:     input.NextEventID,
 	}
 
-	result.ExecutionInfoBlob, err = m.serializer.WorkflowExecutionInfoToBlob(input.ExecutionInfo, enumspb.ENCODING_TYPE_PROTO3)
+	result.ExecutionInfoBlob, err = m.serializer.WorkflowExecutionInfoToBlob(input.ExecutionInfo)
 	if err != nil {
 		return nil, err
 	}
-	result.ExecutionStateBlob, err = m.serializer.WorkflowExecutionStateToBlob(input.ExecutionState, enumspb.ENCODING_TYPE_PROTO3)
+	result.ExecutionStateBlob, err = m.serializer.WorkflowExecutionStateToBlob(input.ExecutionState)
 	if err != nil {
 		return nil, err
 	}
 
 	for key, info := range input.UpsertActivityInfos {
-		blob, err := m.serializer.ActivityInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		blob, err := m.serializer.ActivityInfoToBlob(info)
 		if err != nil {
 			return nil, err
 		}
@@ -590,7 +626,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 	}
 
 	for key, info := range input.UpsertTimerInfos {
-		blob, err := m.serializer.TimerInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		blob, err := m.serializer.TimerInfoToBlob(info)
 		if err != nil {
 			return nil, err
 		}
@@ -598,7 +634,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 	}
 
 	for key, info := range input.UpsertChildExecutionInfos {
-		blob, err := m.serializer.ChildExecutionInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		blob, err := m.serializer.ChildExecutionInfoToBlob(info)
 		if err != nil {
 			return nil, err
 		}
@@ -606,7 +642,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 	}
 
 	for key, info := range input.UpsertRequestCancelInfos {
-		blob, err := m.serializer.RequestCancelInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		blob, err := m.serializer.RequestCancelInfoToBlob(info)
 		if err != nil {
 			return nil, err
 		}
@@ -614,7 +650,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 	}
 
 	for key, info := range input.UpsertSignalInfos {
-		blob, err := m.serializer.SignalInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		blob, err := m.serializer.SignalInfoToBlob(info)
 		if err != nil {
 			return nil, err
 		}
@@ -628,17 +664,17 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 	result.UpsertChasmNodes = nodeMap
 
 	if len(input.NewBufferedEvents) > 0 {
-		result.NewBufferedEvents, err = m.serializer.SerializeEvents(input.NewBufferedEvents, enumspb.ENCODING_TYPE_PROTO3)
+		result.NewBufferedEvents, err = m.serializer.SerializeEvents(input.NewBufferedEvents)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	result.LastWriteVersion, err = getCurrentBranchLastWriteVersion(input.ExecutionInfo.VersionHistories)
+	result.LastWriteVersion, err = getCurrentBranchLastWriteVersion(input.ExecutionInfo.VersionHistories, input.ExecutionInfo.TransitionHistory)
 	if err != nil {
 		return nil, err
 	}
-	result.Checksum, err = m.serializer.ChecksumToBlob(input.Checksum, enumspb.ENCODING_TYPE_PROTO3)
+	result.Checksum, err = m.serializer.ChecksumToBlob(input.Checksum)
 	if err != nil {
 		return nil, err
 	}
@@ -678,49 +714,49 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 		NextEventID:     input.NextEventID,
 	}
 
-	result.ExecutionInfoBlob, err = m.serializer.WorkflowExecutionInfoToBlob(input.ExecutionInfo, enumspb.ENCODING_TYPE_PROTO3)
+	result.ExecutionInfoBlob, err = m.serializer.WorkflowExecutionInfoToBlob(input.ExecutionInfo)
 	if err != nil {
 		return nil, err
 	}
-	result.ExecutionStateBlob, err = m.serializer.WorkflowExecutionStateToBlob(input.ExecutionState, enumspb.ENCODING_TYPE_PROTO3)
+	result.ExecutionStateBlob, err = m.serializer.WorkflowExecutionStateToBlob(input.ExecutionState)
 	if err != nil {
 		return nil, err
 	}
-	result.LastWriteVersion, err = getCurrentBranchLastWriteVersion(input.ExecutionInfo.VersionHistories)
+	result.LastWriteVersion, err = getCurrentBranchLastWriteVersion(input.ExecutionInfo.VersionHistories, input.ExecutionInfo.TransitionHistory)
 	if err != nil {
 		return nil, err
 	}
 
 	for key, info := range input.ActivityInfos {
-		blob, err := m.serializer.ActivityInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		blob, err := m.serializer.ActivityInfoToBlob(info)
 		if err != nil {
 			return nil, err
 		}
 		result.ActivityInfos[key] = blob
 	}
 	for key, info := range input.TimerInfos {
-		blob, err := m.serializer.TimerInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		blob, err := m.serializer.TimerInfoToBlob(info)
 		if err != nil {
 			return nil, err
 		}
 		result.TimerInfos[key] = blob
 	}
 	for key, info := range input.ChildExecutionInfos {
-		blob, err := m.serializer.ChildExecutionInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		blob, err := m.serializer.ChildExecutionInfoToBlob(info)
 		if err != nil {
 			return nil, err
 		}
 		result.ChildExecutionInfos[key] = blob
 	}
 	for key, info := range input.RequestCancelInfos {
-		blob, err := m.serializer.RequestCancelInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		blob, err := m.serializer.RequestCancelInfoToBlob(info)
 		if err != nil {
 			return nil, err
 		}
 		result.RequestCancelInfos[key] = blob
 	}
 	for key, info := range input.SignalInfos {
-		blob, err := m.serializer.SignalInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		blob, err := m.serializer.SignalInfoToBlob(info)
 		if err != nil {
 			return nil, err
 		}
@@ -735,7 +771,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 	}
 	result.ChasmNodes = nodeMap
 
-	result.Checksum, err = m.serializer.ChecksumToBlob(input.Checksum, enumspb.ENCODING_TYPE_PROTO3)
+	result.Checksum, err = m.serializer.ChecksumToBlob(input.Checksum)
 	if err != nil {
 		return nil, err
 	}
@@ -1099,6 +1135,7 @@ func getCurrentBranchToken(
 
 func getCurrentBranchLastWriteVersion(
 	versionHistories *historyspb.VersionHistories,
+	transitions []*persistencespb.VersionedTransition,
 ) (int64, error) {
 	// TODO remove this if check once legacy execution tests are removed
 	if versionHistories == nil {
@@ -1108,11 +1145,33 @@ func getCurrentBranchLastWriteVersion(
 	if err != nil {
 		return 0, err
 	}
-	versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
-	if err != nil {
-		return 0, err
+
+	if !versionhistory.IsEmptyVersionHistory(versionHistory) {
+		versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
+		if err != nil {
+			return 0, err
+		}
+		return versionHistoryItem.GetVersion(), nil
 	}
-	return versionHistoryItem.GetVersion(), nil
+
+	// No version history for the run, this only happens for CHASM run and we need to check the transition history.
+	//
+	// TODO: The logic should ignore version history and always use transition history, even for Workflows.
+	// We are still checking version history first here since it's the old logic and we want to minimize the risk for now
+	// and to account for the fact that transition history is not fully enabled.
+	//
+	// Theoritically, using version history here is wrong because there can be transitions (even on Workflows) that have no
+	// events (e.g. Activity Heartbeat).
+	//
+	// Although using version history has the benefit of ensuring the returned version don't change after the run is closed, using
+	// transition history is also correct here because the returned version is only used for updating mutable state current record
+	// and that record won't be updated after the run is closed.
+	//
+	// Using transition history also suits the function name LastWriteVersion better.
+	if len(transitions) != 0 {
+		return transitionhistory.LastVersionedTransition(transitions).NamespaceFailoverVersion, nil
+	}
+	return common.EmptyVersion, serviceerror.NewInternal("both version history and transition history are empty")
 }
 
 func serializeTasks(
@@ -1180,7 +1239,7 @@ func (m *executionManagerImpl) makeInternalChasmNodeMap(
 
 		// If we're running on Cassandra, set a single blob since that's how we store it.
 		if isCassandra {
-			blob, err := m.serializer.ChasmNodeToBlob(node, enumspb.ENCODING_TYPE_PROTO3)
+			blob, err := m.serializer.ChasmNodeToBlob(node)
 			if err != nil {
 				return nil, err
 			}
@@ -1189,7 +1248,7 @@ func (m *executionManagerImpl) makeInternalChasmNodeMap(
 			}
 		} else {
 			// Otherwise, split the node into separate blobs.
-			metadata, data, err := m.serializer.ChasmNodeToBlobs(node, enumspb.ENCODING_TYPE_PROTO3)
+			metadata, data, err := m.serializer.ChasmNodeToBlobs(node)
 			if err != nil {
 				return nil, err
 			}

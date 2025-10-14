@@ -2,6 +2,7 @@ package persistencetests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -1138,18 +1140,18 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 	m.NoError(err3)
 
 	// May need to loop here to avoid potential inconsistent read-after-write in cassandra
-	var err4 error
-	var resp4 *p.GetNamespaceResponse
-	for i := 0; i < 3; i++ {
-		resp4, err4 = m.GetNamespace("", name)
-		if err4 != nil {
-			break
-		}
-		time.Sleep(time.Second * time.Duration(i))
-	}
-	m.Error(err4)
-	m.IsType(&serviceerror.NamespaceNotFound{}, err4)
-	m.Nil(resp4)
+	m.Eventually(
+		func() bool {
+			resp, err := m.GetNamespace("", name)
+			if errors.As(err, new(*serviceerror.NamespaceNotFound)) {
+				m.Nil(resp)
+				return true
+			}
+			return false
+		},
+		10*time.Second,
+		100*time.Millisecond,
+	)
 
 	resp5, err5 := m.GetNamespace(id, "")
 	m.Error(err5)
@@ -1498,4 +1500,861 @@ func (m *MetadataPersistenceSuiteV2) ListNamespaces(pageSize int, pageToken []by
 		PageSize:      pageSize,
 		NextPageToken: pageToken,
 	})
+}
+
+// TestCASFailureUpdateNamespace tests CAS failure when trying to update a namespace
+func (m *MetadataPersistenceSuiteV2) TestCASFailureUpdateNamespace() {
+	id := uuid.New()
+	name := "cas-update-namespace-test-name"
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "cas-update-namespace-test-description"
+	owner := "cas-update-namespace-test-owner"
+	data := map[string]string{"k1": "v1"}
+	retention := int32(10)
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "test://history/uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "test://visibility/uri"
+	badBinaries := &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}}
+
+	clusterActive := "some random active cluster name"
+	clusterStandby := "some random standby cluster name"
+	configVersion := int64(10)
+	failoverVersion := int64(59)
+	isGlobalNamespace := true
+	clusters := []string{clusterActive, clusterStandby}
+
+	resp1, err1 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id,
+			Name:        name,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention),
+			HistoryArchivalState:    historyArchivalState,
+			HistoryArchivalUri:      historyArchivalURI,
+			VisibilityArchivalState: visibilityArchivalState,
+			VisibilityArchivalUri:   visibilityArchivalURI,
+			BadBinaries:             badBinaries,
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          clusters,
+		},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.NoError(err1)
+	m.EqualValues(id, resp1.ID)
+
+	resp2, err2 := m.GetNamespace(id, "")
+	m.NoError(err2)
+	metadata, err := m.MetadataManager.GetMetadata(m.ctx)
+	m.NoError(err)
+	notificationVersion := metadata.NotificationVersion
+
+	updatedDescription := "description-updated"
+
+	// Try to update with wrong notification version (stale version)
+	err3 := m.UpdateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          resp2.Namespace.Info.Id,
+			Name:        resp2.Namespace.Info.Name,
+			State:       resp2.Namespace.Info.State,
+			Description: updatedDescription,
+			Owner:       resp2.Namespace.Info.Owner,
+			Data:        resp2.Namespace.Info.Data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               resp2.Namespace.Config.Retention,
+			HistoryArchivalState:    resp2.Namespace.Config.HistoryArchivalState,
+			HistoryArchivalUri:      resp2.Namespace.Config.HistoryArchivalUri,
+			VisibilityArchivalState: resp2.Namespace.Config.VisibilityArchivalState,
+			VisibilityArchivalUri:   resp2.Namespace.Config.VisibilityArchivalUri,
+			BadBinaries:             badBinaries,
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: resp2.Namespace.ReplicationConfig.ActiveClusterName,
+			Clusters:          resp2.Namespace.ReplicationConfig.Clusters,
+		},
+		resp2.Namespace.ConfigVersion,
+		resp2.Namespace.FailoverVersion,
+		resp2.Namespace.FailoverNotificationVersion,
+		time.Time{},
+		notificationVersion-1, // Use stale notification version to trigger CAS failure
+		isGlobalNamespace,
+	)
+	m.ErrorAs(err3, new(*serviceerror.Unavailable))
+
+	// Verify that the namespace was not updated
+	resp4, err4 := m.GetNamespace(id, "")
+	m.NoError(err4)
+	m.Equal(description, resp4.Namespace.Info.Description) // Should still have old description
+}
+
+// TestRenameNamespaceWithNameConflict tests name conflict when trying to rename a namespace
+func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceWithNameConflict() {
+	id1 := uuid.New()
+	name1 := "rename-conflict-namespace-1"
+	id2 := uuid.New()
+	name2 := "rename-conflict-namespace-2"
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "rename-conflict-test-description"
+	owner := "rename-conflict-test-owner"
+	data := map[string]string{"k1": "v1"}
+	retention := int32(10)
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "test://history/uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "test://visibility/uri"
+
+	clusterActive := "some random active cluster name"
+	clusterStandby := "some random standby cluster name"
+	configVersion := int64(10)
+	failoverVersion := int64(59)
+	isGlobalNamespace := true
+	clusters := []string{clusterActive, clusterStandby}
+
+	// Create first namespace
+	resp1, err1 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id1,
+			Name:        name1,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention),
+			HistoryArchivalState:    historyArchivalState,
+			HistoryArchivalUri:      historyArchivalURI,
+			VisibilityArchivalState: visibilityArchivalState,
+			VisibilityArchivalUri:   visibilityArchivalURI,
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          clusters,
+		},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.NoError(err1)
+	m.EqualValues(id1, resp1.ID)
+
+	// Create second namespace
+	resp2, err2 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id2,
+			Name:        name2,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention),
+			HistoryArchivalState:    historyArchivalState,
+			HistoryArchivalUri:      historyArchivalURI,
+			VisibilityArchivalState: visibilityArchivalState,
+			VisibilityArchivalUri:   visibilityArchivalURI,
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          clusters,
+		},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.NoError(err2)
+	m.EqualValues(id2, resp2.ID)
+
+	// Try to rename namespace1 to the same name as namespace2 (should fail)
+	err3 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
+		PreviousName: name1,
+		NewName:      name2,
+	})
+	// The error should be a conflict/unavailable error due to CAS failure
+	m.ErrorAs(err3, new(*serviceerror.Unavailable))
+
+	// Verify that we can still query namespace2 by name, proving the rename didn't affect it
+	resp5, err5 := m.GetNamespace("", name2)
+	m.NoError(err5)
+	m.Equal(name2, resp5.Namespace.Info.Name)
+	m.Equal(id2, resp5.Namespace.Info.Id)
+
+	// Verify that namespace1 can still be queried by its original name
+	resp6, err6 := m.GetNamespace("", name1)
+	m.NoError(err6)
+	m.Equal(name1, resp6.Namespace.Info.Name)
+	m.Equal(id1, resp6.Namespace.Info.Id)
+}
+
+// TestGetMetadataVersionIncrement tests that GetMetadata correctly increments the version after a namespace is created
+func (m *MetadataPersistenceSuiteV2) TestGetMetadataVersionIncrement() {
+	// Get initial metadata version
+	metadata1, err1 := m.MetadataManager.GetMetadata(m.ctx)
+	m.NoError(err1)
+	initialVersion := metadata1.NotificationVersion
+
+	// Create a namespace
+	id := uuid.New()
+	name := "metadata-version-test-namespace"
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "metadata-version-test-description"
+	owner := "metadata-version-test-owner"
+	data := map[string]string{"k1": "v1"}
+	retention := int32(10)
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "test://history/uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "test://visibility/uri"
+
+	clusterActive := "some random active cluster name"
+	clusterStandby := "some random standby cluster name"
+	configVersion := int64(10)
+	failoverVersion := int64(59)
+	isGlobalNamespace := true
+	clusters := []string{clusterActive, clusterStandby}
+
+	resp1, err2 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id,
+			Name:        name,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention),
+			HistoryArchivalState:    historyArchivalState,
+			HistoryArchivalUri:      historyArchivalURI,
+			VisibilityArchivalState: visibilityArchivalState,
+			VisibilityArchivalUri:   visibilityArchivalURI,
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          clusters,
+		},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.NoError(err2)
+	m.NotNil(resp1)
+
+	// Get metadata version after creation
+	metadata2, err3 := m.MetadataManager.GetMetadata(m.ctx)
+	m.NoError(err3)
+	afterCreationVersion := metadata2.NotificationVersion
+
+	// Verify that the version was incremented
+	m.Equal(initialVersion+1, afterCreationVersion, "NotificationVersion should be incremented by exactly 1")
+}
+
+// TestCreateNamespaceWithDuplicateName tests creating a namespace with a name that already exists
+func (m *MetadataPersistenceSuiteV2) TestCreateNamespaceWithDuplicateName() {
+	id1 := uuid.New()
+	name := "duplicate-name-test-namespace"
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "duplicate-name-test-description"
+	owner := "duplicate-name-test-owner"
+	data := map[string]string{"k1": "v1"}
+	retention := int32(10)
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "test://history/uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "test://visibility/uri"
+
+	clusterActive := "some random active cluster name"
+	clusterStandby := "some random standby cluster name"
+	configVersion := int64(10)
+	failoverVersion := int64(59)
+	isGlobalNamespace := true
+	clusters := []string{clusterActive, clusterStandby}
+
+	// Create first namespace
+	resp1, err1 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id1,
+			Name:        name,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention),
+			HistoryArchivalState:    historyArchivalState,
+			HistoryArchivalUri:      historyArchivalURI,
+			VisibilityArchivalState: visibilityArchivalState,
+			VisibilityArchivalUri:   visibilityArchivalURI,
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          clusters,
+		},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.NoError(err1)
+	m.NotNil(resp1)
+
+	// Verify the namespace was created
+	getResp1, err2 := m.GetNamespace(id1, "")
+	m.NoError(err2)
+	m.NotNil(getResp1)
+	m.Equal(name, getResp1.Namespace.Info.Name)
+
+	// Try to create another namespace with the same name but different ID
+	id2 := uuid.New()
+	_, err3 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id2,
+			Name:        name, // Same name as the first namespace
+			State:       state,
+			Description: "different description",
+			Owner:       "different owner",
+			Data:        map[string]string{"k2": "v2"},
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention * 2),
+			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
+			HistoryArchivalUri:      "",
+			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
+			VisibilityArchivalUri:   "",
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          clusters,
+		},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.ErrorAs(err3, new(*serviceerror.NamespaceAlreadyExists))
+
+	// Verify that the original namespace still exists and was not modified
+	getResp2, err4 := m.GetNamespace(id1, "")
+	m.NoError(err4)
+	m.NotNil(getResp2)
+	m.Equal(name, getResp2.Namespace.Info.Name)
+	m.Equal(description, getResp2.Namespace.Info.Description)
+	m.Equal(owner, getResp2.Namespace.Info.Owner)
+
+	// Verify that the second namespace ID does not exist
+	_, err5 := m.GetNamespace(id2, "")
+	m.ErrorAs(err5, new(*serviceerror.NamespaceNotFound))
+}
+
+// TestCreateNamespaceWithDuplicateID tests creating a namespace with an ID that already exists
+func (m *MetadataPersistenceSuiteV2) TestCreateNamespaceWithDuplicateID() {
+	id := uuid.New()
+	name1 := "duplicate-id-test-namespace-1"
+	name2 := "duplicate-id-test-namespace-2"
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "duplicate-id-test-description"
+	owner := "duplicate-id-test-owner"
+	data := map[string]string{"k1": "v1"}
+	retention := int32(10)
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "test://history/uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "test://visibility/uri"
+
+	clusterActive := "some random active cluster name"
+	clusterStandby := "some random standby cluster name"
+	configVersion := int64(10)
+	failoverVersion := int64(59)
+	isGlobalNamespace := true
+	clusters := []string{clusterActive, clusterStandby}
+
+	// Create first namespace
+	resp1, err1 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id,
+			Name:        name1,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention),
+			HistoryArchivalState:    historyArchivalState,
+			HistoryArchivalUri:      historyArchivalURI,
+			VisibilityArchivalState: visibilityArchivalState,
+			VisibilityArchivalUri:   visibilityArchivalURI,
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          clusters,
+		},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.NoError(err1)
+	m.NotNil(resp1)
+
+	// Verify the namespace was created
+	getResp1, err2 := m.GetNamespace(id, "")
+	m.NoError(err2)
+	m.NotNil(getResp1)
+	m.Equal(name1, getResp1.Namespace.Info.Name)
+	m.Equal(id, getResp1.Namespace.Info.Id)
+
+	// Try to create another namespace with the same ID but different name
+	_, err3 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id, // Same ID as the first namespace
+			Name:        name2,
+			State:       state,
+			Description: "different description",
+			Owner:       "different owner",
+			Data:        map[string]string{"k2": "v2"},
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention * 2),
+			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
+			HistoryArchivalUri:      "",
+			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
+			VisibilityArchivalUri:   "",
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          clusters,
+		},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.ErrorAs(err3, new(*serviceerror.NamespaceAlreadyExists))
+
+	// Verify that the original namespace still exists and was not modified
+	getResp2, err4 := m.GetNamespace(id, "")
+	m.NoError(err4)
+	m.NotNil(getResp2)
+	m.Equal(name1, getResp2.Namespace.Info.Name) // Should still have the original name
+	m.Equal(description, getResp2.Namespace.Info.Description)
+	m.Equal(owner, getResp2.Namespace.Info.Owner)
+	m.Equal(id, getResp2.Namespace.Info.Id)
+
+	// Verify that the second name doesn't exist in the system
+	_, err5 := m.GetNamespace("", name2)
+	m.ErrorAs(err5, new(*serviceerror.NamespaceNotFound))
+}
+
+// TestInitializeSystemNamespaces tests the initialization of system namespaces
+func (m *MetadataPersistenceSuiteV2) TestInitializeSystemNamespaces() {
+	clusterName := "test-cluster"
+
+	// First initialization should succeed
+	err1 := m.MetadataManager.InitializeSystemNamespaces(m.ctx, clusterName)
+	m.NoError(err1)
+
+	// Verify the system namespace was created with correct properties
+	resp, err2 := m.GetNamespace("", "temporal-system")
+	m.NoError(err2)
+	m.NotNil(resp)
+	m.Equal("temporal-system", resp.Namespace.Info.Name)
+	m.Equal("32049b68-7872-4094-8e63-d0dd59896a83", resp.Namespace.Info.Id)
+	m.Equal(enumspb.NAMESPACE_STATE_REGISTERED, resp.Namespace.Info.State)
+	m.Equal("Temporal internal system namespace", resp.Namespace.Info.Description)
+	m.Equal("temporal-core@temporal.io", resp.Namespace.Info.Owner)
+	m.Equal(clusterName, resp.Namespace.ReplicationConfig.ActiveClusterName)
+	m.Equal([]string{clusterName}, resp.Namespace.ReplicationConfig.Clusters)
+	m.False(resp.IsGlobalNamespace)
+
+	// Second initialization should be idempotent
+	err3 := m.MetadataManager.InitializeSystemNamespaces(m.ctx, clusterName)
+	m.NoError(err3, "InitializeSystemNamespaces should be idempotent")
+}
+
+// TestDeleteNamespaceIdempotency tests that delete operations are idempotent
+func (m *MetadataPersistenceSuiteV2) TestDeleteNamespaceIdempotency() {
+	id := uuid.New()
+	name := "delete-idempotent-test-namespace"
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "delete-idempotent-test-description"
+	owner := "delete-idempotent-test-owner"
+	retention := int32(10)
+
+	clusterActive := "some random active cluster name"
+	configVersion := int64(10)
+	failoverVersion := int64(59)
+	isGlobalNamespace := false
+
+	// Create namespace
+	resp1, err1 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id,
+			Name:        name,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention: timestamp.DurationFromDays(retention),
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          []string{clusterActive},
+		},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.NoError(err1)
+	m.NotNil(resp1)
+
+	// Verify it exists
+	resp2, err2 := m.GetNamespace(id, "")
+	m.NoError(err2)
+	m.NotNil(resp2)
+	m.Equal(name, resp2.Namespace.Info.Name)
+
+	// Delete by ID - first delete should succeed
+	err3 := m.DeleteNamespace(id, "")
+	m.NoError(err3)
+
+	// May need to loop here to avoid potential inconsistent read-after-write in cassandra
+	m.Eventually(
+		func() bool {
+			resp, err := m.GetNamespace(id, "")
+			if errors.As(err, new(*serviceerror.NamespaceNotFound)) {
+				m.Nil(resp)
+				return true
+			}
+			return false
+		},
+		10*time.Second,
+		100*time.Millisecond,
+	)
+
+	// Delete again - This should NOT error (deleting a non-existent namespace is a no-op)
+	err5 := m.DeleteNamespace(id, "")
+	m.NoError(err5, "Delete should be idempotent")
+
+	// Delete by name should also be idempotent
+	err6 := m.DeleteNamespace("", name)
+	m.NoError(err6, "Delete by name should be idempotent")
+}
+
+// TestUpdateNamespaceNotFound tests updating a non-existent namespace
+func (m *MetadataPersistenceSuiteV2) TestUpdateNamespaceNotFound() {
+	nonExistentID := uuid.New()
+	name := "non-existent-namespace"
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "test-description"
+	owner := "test-owner"
+	data := map[string]string{"k1": "v1"}
+	retention := int32(10)
+
+	clusterActive := "some random active cluster name"
+	configVersion := int64(10)
+	failoverVersion := int64(59)
+	isGlobalNamespace := false
+
+	// Get current notification version
+	metadata, err := m.MetadataManager.GetMetadata(m.ctx)
+	m.NoError(err)
+	notificationVersion := metadata.NotificationVersion
+
+	// Try to update a non-existent namespace
+	_ = m.UpdateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          nonExistentID,
+			Name:        name,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention: timestamp.DurationFromDays(retention),
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          []string{clusterActive},
+		},
+		configVersion,
+		failoverVersion,
+		0,
+		time.Time{},
+		notificationVersion,
+		isGlobalNamespace,
+	)
+
+	// Update operations may silently succeed on non-existent namespaces (no-op)
+	// or may fail depending on implementation. For now, we just verify the operation completes.
+	// The key test is that after the update, the namespace still doesn't exist.
+	_, err3 := m.GetNamespace(nonExistentID, "")
+	m.ErrorAs(err3, new(*serviceerror.NamespaceNotFound))
+}
+
+// TestRenameNamespaceNotFound tests renaming a non-existent namespace
+func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceNotFound() {
+	nonExistentName := "non-existent-namespace-" + uuid.New()
+	newName := "new-name-for-non-existent"
+
+	err := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
+		PreviousName: nonExistentName,
+		NewName:      newName,
+	})
+	m.ErrorAs(err, new(*serviceerror.NamespaceNotFound))
+}
+
+// TestRenameNamespaceCassandra tests Cassandra-specific RenameNamespace behavior
+// This test verifies the two-step non-atomic rename operation in Cassandra
+func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceCassandra() {
+	// This test is for Cassandra
+	switch m.DefaultTestCluster.(type) {
+	case *sql.TestCluster:
+		m.T().Skip()
+	default:
+	}
+
+	id := uuid.New()
+	name := "cassandra-rename-test-name"
+	newName := "cassandra-rename-test-new-name"
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "cassandra-rename-test-description"
+	owner := "cassandra-rename-test-owner"
+	data := map[string]string{"k1": "v1"}
+	retention := int32(10)
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "test://history/uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "test://visibility/uri"
+
+	clusterActive := "some random active cluster name"
+	clusterStandby := "some random standby cluster name"
+	configVersion := int64(10)
+	failoverVersion := int64(59)
+	isGlobalNamespace := true
+	clusters := []string{clusterActive, clusterStandby}
+
+	// Create namespace
+	resp1, err1 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id,
+			Name:        name,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention),
+			HistoryArchivalState:    historyArchivalState,
+			HistoryArchivalUri:      historyArchivalURI,
+			VisibilityArchivalState: visibilityArchivalState,
+			VisibilityArchivalUri:   visibilityArchivalURI,
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          clusters,
+		},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.NoError(err1)
+	m.EqualValues(id, resp1.ID)
+
+	// Verify namespace exists with original name
+	resp2, err2 := m.GetNamespace(id, "")
+	m.NoError(err2)
+	m.Equal(name, resp2.Namespace.Info.Name)
+
+	// Test 1: Rename to a new name
+	err3 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
+		PreviousName: name,
+		NewName:      newName,
+	})
+	m.NoError(err3)
+
+	// Verify namespace can be retrieved by new name
+	resp4, err4 := m.GetNamespace("", newName)
+	m.NoError(err4)
+	m.NotNil(resp4)
+	m.EqualValues(id, resp4.Namespace.Info.Id)
+	m.Equal(newName, resp4.Namespace.Info.Name)
+	m.Equal(description, resp4.Namespace.Info.Description)
+	m.Equal(owner, resp4.Namespace.Info.Owner)
+	m.Equal(data, resp4.Namespace.Info.Data)
+
+	// Verify namespace can be retrieved by ID and has new name
+	resp5, err5 := m.GetNamespace(id, "")
+	m.NoError(err5)
+	m.Equal(newName, resp5.Namespace.Info.Name)
+
+	// Verify old name no longer exists (may need eventual consistency check for Cassandra)
+	m.Eventually(
+		func() bool {
+			_, err := m.GetNamespace("", name)
+			return errors.As(err, new(*serviceerror.NamespaceNotFound))
+		},
+		10*time.Second,
+		100*time.Millisecond,
+	)
+
+	// Fetch metadata version before renaming
+	metadataBeforeRename, err9 := m.MetadataManager.GetMetadata(m.ctx)
+	m.NoError(err9)
+
+	// Test 2: Rename to the same name
+	// In Cassandra, this will fail because it tries to INSERT a row that already exists
+	// with IF NOT EXISTS, which is expected behavior for Cassandra's two-step process
+	err6 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
+		PreviousName: newName,
+		NewName:      newName,
+	})
+	m.ErrorAs(err6, new(*serviceerror.Unavailable), "Renaming to the same name fails in Cassandra due to IF NOT EXISTS")
+
+	// Test 3: Verify namespace still exists with same name (unchanged)
+	resp7, err7 := m.GetNamespace(id, "")
+	m.NoError(err7)
+	m.Equal(newName, resp7.Namespace.Info.Name)
+
+	// Test 4: Verify namespace can still be fetched by ID
+	resp8, err8 := m.GetNamespace(id, "")
+	m.NoError(err8)
+	m.Equal(newName, resp8.Namespace.Info.Name)
+
+	// Test 5: Verify metadata version was not incremented
+	metadataAfterRename, err10 := m.MetadataManager.GetMetadata(m.ctx)
+	m.NoError(err10)
+	m.Equal(metadataBeforeRename.NotificationVersion, metadataAfterRename.NotificationVersion, "Notification version should not have been incremented")
+}
+
+// TestRenameNamespaceSQL tests SQL RenameNamespace behavior
+// This test verifies the atomic transaction-based rename operation in SQL databases
+func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceSQL() {
+	// This test is for SQL databases
+	switch m.DefaultTestCluster.(type) {
+	case *sql.TestCluster:
+	default:
+		m.T().Skip()
+	}
+
+	id := uuid.New()
+	name := "sql-rename-test-name"
+	newName := "sql-rename-test-new-name"
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "sql-rename-test-description"
+	owner := "sql-rename-test-owner"
+	data := map[string]string{"k1": "v1"}
+	retention := int32(10)
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "test://history/uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "test://visibility/uri"
+
+	clusterActive := "some random active cluster name"
+	clusterStandby := "some random standby cluster name"
+	configVersion := int64(10)
+	failoverVersion := int64(59)
+	isGlobalNamespace := true
+	clusters := []string{clusterActive, clusterStandby}
+
+	// Create namespace
+	resp1, err1 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id,
+			Name:        name,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention),
+			HistoryArchivalState:    historyArchivalState,
+			HistoryArchivalUri:      historyArchivalURI,
+			VisibilityArchivalState: visibilityArchivalState,
+			VisibilityArchivalUri:   visibilityArchivalURI,
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          clusters,
+		},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.NoError(err1)
+	m.EqualValues(id, resp1.ID)
+
+	// Verify namespace exists with original name
+	resp2, err2 := m.GetNamespace(id, "")
+	m.NoError(err2)
+	m.Equal(name, resp2.Namespace.Info.Name)
+
+	// Test 1: Rename to a new name
+	err3 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
+		PreviousName: name,
+		NewName:      newName,
+	})
+	m.NoError(err3)
+
+	// Verify namespace can be retrieved by new name
+	resp4, err4 := m.GetNamespace("", newName)
+	m.NoError(err4)
+	m.NotNil(resp4)
+	m.EqualValues(id, resp4.Namespace.Info.Id)
+	m.Equal(newName, resp4.Namespace.Info.Name)
+	m.Equal(description, resp4.Namespace.Info.Description)
+	m.Equal(owner, resp4.Namespace.Info.Owner)
+	m.Equal(data, resp4.Namespace.Info.Data)
+
+	// Verify namespace can be retrieved by ID and has new name
+	resp5, err5 := m.GetNamespace(id, "")
+	m.NoError(err5)
+	m.Equal(newName, resp5.Namespace.Info.Name)
+
+	// Verify old name no longer exists
+	_, err6 := m.GetNamespace("", name)
+	m.ErrorAs(err6, new(*serviceerror.NamespaceNotFound), "Old name should not exist after rename")
+
+	// Fetch metadata version before renaming
+	metadataBeforeRename, err9 := m.MetadataManager.GetMetadata(m.ctx)
+	m.NoError(err9)
+
+	// Test 2: Rename to the same name (idempotent operation)
+	err7 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
+		PreviousName: newName,
+		NewName:      newName,
+	})
+	m.NoError(err7, "Renaming to the same name should succeed")
+
+	// Verify namespace still exists with same name and data is unchanged
+	resp8, err8 := m.GetNamespace(id, "")
+	m.NoError(err8)
+	m.Equal(newName, resp8.Namespace.Info.Name)
+	m.Equal(description, resp8.Namespace.Info.Description)
+	m.Equal(owner, resp8.Namespace.Info.Owner)
+	m.Equal(data, resp8.Namespace.Info.Data)
+
+	// Test 3: Verify atomicity - query by both ID and name should be consistent
+	resp9, err9 := m.GetNamespace("", newName)
+	m.NoError(err9)
+	m.Equal(resp9.Namespace.Info.Id, resp8.Namespace.Info.Id)
+	m.Equal(resp9.Namespace.Info.Name, resp8.Namespace.Info.Name)
+	m.Equal(resp9.Namespace.Info.Description, resp8.Namespace.Info.Description)
+
+	// Test 4: Verify metadata version was incremented
+	metadataAfterRename, err11 := m.MetadataManager.GetMetadata(m.ctx)
+	m.NoError(err11)
+	m.Greater(metadataAfterRename.NotificationVersion, metadataBeforeRename.NotificationVersion, "Notification version should have been incremented")
 }

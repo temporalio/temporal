@@ -66,6 +66,30 @@ func (mr *MockWorkerMockRecorder) RegisterActivityWithOptions(a, options any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterActivityWithOptions", reflect.TypeOf((*MockWorker)(nil).RegisterActivityWithOptions), a, options)
 }
 
+// RegisterDynamicActivity mocks base method.
+func (m *MockWorker) RegisterDynamicActivity(a any, options activity.DynamicRegisterOptions) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RegisterDynamicActivity", a, options)
+}
+
+// RegisterDynamicActivity indicates an expected call of RegisterDynamicActivity.
+func (mr *MockWorkerMockRecorder) RegisterDynamicActivity(a, options any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterDynamicActivity", reflect.TypeOf((*MockWorker)(nil).RegisterDynamicActivity), a, options)
+}
+
+// RegisterDynamicWorkflow mocks base method.
+func (m *MockWorker) RegisterDynamicWorkflow(w any, options workflow.DynamicRegisterOptions) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RegisterDynamicWorkflow", w, options)
+}
+
+// RegisterDynamicWorkflow indicates an expected call of RegisterDynamicWorkflow.
+func (mr *MockWorkerMockRecorder) RegisterDynamicWorkflow(w, options any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterDynamicWorkflow", reflect.TypeOf((*MockWorker)(nil).RegisterDynamicWorkflow), w, options)
+}
+
 // RegisterNexusService mocks base method.
 func (m *MockWorker) RegisterNexusService(arg0 *nexus.Service) {
 	m.ctrl.T.Helper()

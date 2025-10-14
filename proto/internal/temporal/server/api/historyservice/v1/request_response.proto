@@ -82,12 +82,15 @@ message StartWorkflowExecutionRequest {
     // For top-level workflows (ie., without parent), this field must be nil.
     temporal.server.api.workflow.v1.RootExecutionInfo root_execution_info = 11;
     // inherited build ID from parent/previous execution
+    // Deprecated. Use behavior, version, and task queue fields in `parent_execution_info`.
     string inherited_build_id = 12;
     // If set, takes precedence over the Versioning Behavior sent by the SDK on Workflow Task completion.
     // To unset the override after the workflow is running, use UpdateWorkflowExecutionOptions.
     temporal.api.workflow.v1.VersioningOverride versioning_override = 13;
     // If set, we verify the parent-child relationship before applying ID conflict policy WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
     bool child_workflow_only = 14;
+    // If present, the new workflow should start on this version with pinned base behavior.
+    temporal.api.deployment.v1.WorkerDeploymentVersion inherited_pinned_version = 15;
 }
 
 message StartWorkflowExecutionResponse {
@@ -318,6 +321,7 @@ message RecordActivityTaskStartedResponse {
     int64 version = 9;
     temporal.api.common.v1.Priority priority = 10;
     temporal.api.common.v1.RetryPolicy retry_policy = 11;
+    int64 start_version = 12;
 }
 
 message RespondWorkflowTaskCompletedRequest {
@@ -655,6 +659,7 @@ message SyncActivityRequest {
     google.protobuf.Duration retry_maximum_interval = 23;
     int32 retry_maximum_attempts = 24;
     double retry_backoff_coefficient = 25;
+    int64 start_version = 26;
 }
 
 message SyncActivitiesRequest {
@@ -696,6 +701,7 @@ message ActivitySyncInfo {
     google.protobuf.Duration retry_maximum_interval = 23;
     int32 retry_maximum_attempts = 24;
     double retry_backoff_coefficient = 25;
+    int64 start_version = 26;
 
 }
 
@@ -707,10 +713,14 @@ message DescribeMutableStateRequest {
 
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
+    bool skip_force_reload = 3;
 }
 
 message DescribeMutableStateResponse {
+    // CacheMutableState is only available when mutable state is in cache.
     temporal.server.api.persistence.v1.WorkflowMutableState cache_mutable_state = 1;
+    // DatabaseMutableState is always available, 
+    // but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
     temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 2;
 }
 
@@ -1093,6 +1103,7 @@ message ListQueuesResponse {
     message QueueInfo {
         string queue_name = 1;
         int64 message_count = 2;
+        int64 last_message_id = 3;
     }
     repeated QueueInfo queues = 1;
     bytes next_page_token = 2;

@@ -7,14 +7,16 @@ import (
 	"iter"
 	"log"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/jstemmer/go-junit-report/v2/junit"
 )
 
 type junitReport struct {
-	path string
 	junit.Testsuites
+	path          string
+	reportingErrs []error
 }
 
 func (j *junitReport) read() error {
@@ -31,12 +33,12 @@ func (j *junitReport) read() error {
 	return nil
 }
 
-func generateForTimedoutTests(timedoutTests []string) *junitReport {
+func generateStatic(names []string, suffix string, message string) *junitReport {
 	var testcases []junit.Testcase
-	for _, name := range timedoutTests {
+	for _, name := range names {
 		testcases = append(testcases, junit.Testcase{
-			Name:    name + " (timeout)",
-			Failure: &junit.Result{Message: "Timeout"},
+			Name:    fmt.Sprintf("%s (%s)", name, suffix),
+			Failure: &junit.Result{Message: message},
 		})
 	}
 	return &junitReport{
@@ -67,9 +69,61 @@ func (j *junitReport) write() error {
 	return nil
 }
 
+// appendAlertsSuite adds a synthetic JUnit suite summarizing high-priority alerts
+// (data races, panics, fatals) so that CI surfaces them prominently.
+func (j *junitReport) appendAlertsSuite(alerts []alert) {
+	// Deduplicate by kind+details to avoid noisy repeats across retries.
+	alerts = dedupeAlerts(alerts)
+	if len(alerts) == 0 {
+		return
+	}
+	var cases []junit.Testcase
+	for _, a := range alerts {
+		name := fmt.Sprintf("%s: %s", a.Kind, a.Summary)
+		if p := primaryTestName(a.Tests); p != "" {
+			name = fmt.Sprintf("%s — in %s", name, p)
+		}
+		// Include only test names for context, not the full log details to avoid XML malformation
+		var details string
+		if len(a.Tests) > 0 {
+			details = fmt.Sprintf("Detected in tests:\n\t%s", strings.Join(a.Tests, "\n\t"))
+		}
+		r := &junit.Result{Message: string(a.Kind), Data: details}
+		cases = append(cases, junit.Testcase{
+			Name:    name,
+			Failure: r,
+		})
+	}
+	suite := junit.Testsuite{
+		Name:      "ALERTS",
+		Failures:  len(cases),
+		Tests:     len(cases),
+		Testcases: cases,
+	}
+	j.Suites = append(j.Suites, suite)
+	j.Failures += suite.Failures
+	j.Tests += suite.Tests
+}
+
+// dedupeAlerts removes duplicate alerts (e.g., repeated across retries) based
+// on kind and details while preserving the first-seen order.
+func dedupeAlerts(alerts []alert) []alert {
+	seen := make(map[string]struct{}, len(alerts))
+	var out []alert
+	for _, a := range alerts {
+		key := string(a.Kind) + "\n" + a.Details
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, a)
+	}
+	return out
+}
+
 func (j *junitReport) collectTestCases() map[string]struct{} {
 	cases := make(map[string]struct{})
-	for _, suite := range j.Testsuites.Suites {
+	for _, suite := range j.Suites {
 		for _, tc := range suite.Testcases {
 			cases[tc.Name] = struct{}{}
 		}
@@ -78,38 +132,30 @@ func (j *junitReport) collectTestCases() map[string]struct{} {
 }
 
 func (j *junitReport) collectTestCaseFailures() []string {
-	root := node{children: make(map[string]node)}
-
-	for _, suite := range j.Testsuites.Suites {
+	var failures []string
+	for _, suite := range j.Suites {
 		if suite.Failures == 0 {
 			continue
 		}
 		for _, tc := range suite.Testcases {
-			if tc.Failure == nil {
-				continue
-			}
-			n := root
-			for _, part := range strings.Split(tc.Name, "/") {
-				child, ok := n.children[part]
-				if !ok {
-					child = node{children: make(map[string]node)}
-					n.children[part] = child
-				}
-				n = child
+			if tc.Failure != nil {
+				failures = append(failures, tc.Name)
 			}
 		}
 	}
 
-	leafFailures := make([]string, 0)
+	// Sort lexicographically
+	slices.Sort(failures)
 
-	// Walk the tree and find all leaf failures. The way Go test failures are reported in junit is that there's a
-	// test case per suite and per test in that suite. Filter out any nodes that have children to find the most
-	// specific failures to rerun.
-	for path, n := range root.walk() {
-		if len(n.children) > 0 {
-			continue
+	// Find leaf failures using the simplified algorithm
+	var leafFailures []string
+	for i := 0; i < len(failures)-1; i++ {
+		if !strings.HasPrefix(failures[i+1], failures[i]+"/") {
+			leafFailures = append(leafFailures, failures[i])
 		}
-		leafFailures = append(leafFailures, path)
+	}
+	if len(failures) > 0 {
+		leafFailures = append(leafFailures, failures[len(failures)-1])
 	}
 
 	return leafFailures
@@ -119,14 +165,11 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 	if len(reports) == 0 {
 		return nil, errors.New("no reports to merge")
 	}
-	if len(reports) == 1 {
-		return reports[0], nil
-	}
 
+	var reportingErrs []error
 	var combined junit.Testsuites
 	combined.XMLName = reports[0].Testsuites.XMLName
 	combined.Name = reports[0].Testsuites.Name
-	combined.Suites = reports[0].Testsuites.Suites
 
 	for i, report := range reports {
 		combined.Tests += report.Testsuites.Tests
@@ -137,37 +180,57 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		combined.Time += report.Testsuites.Time
 
 		// If the report is for a retry ...
+		var suffix string
 		if i > 0 {
-			// Run sanity check to make sure we rerun what we expect.
-			casesTested := report.collectTestCases()
-			casesMissing := make([]string, 0)
-			previousReport := reports[i-1]
-			for _, f := range previousReport.collectTestCaseFailures() {
-				if _, ok := casesTested[f]; !ok {
-					casesMissing = append(casesMissing, f)
+			suffix = fmt.Sprintf(" (retry %d)", i)
+			prevFailures := reports[i-1].collectTestCaseFailures()
+			currCases := report.collectTestCases()
+
+			var missing []string
+			for _, f := range prevFailures {
+				if _, ok := currCases[f]; !ok {
+					missing = append(missing, f)
 				}
 			}
-			if len(casesMissing) > 0 {
-				return nil,
-					fmt.Errorf("expected a rerun of all failures from the previous attempt, missing: %v", casesMissing)
+			if len(missing) > 0 {
+				reportingErrs = append(reportingErrs, fmt.Errorf(
+					"expected rerun of all failures from previous attempt, missing: %v", missing))
+			}
+		}
+
+		for _, suite := range report.Testsuites.Suites {
+			if len(suite.Testcases) == 0 {
+				continue
 			}
 
-			// Append the test cases from the retry.
-			for _, suite := range report.Testsuites.Suites {
-				cpy := suite
-				cpy.Name += fmt.Sprintf(" (retry %d)", i)
-				cpy.Testcases = make([]junit.Testcase, 0, len(suite.Testcases))
-				for _, test := range suite.Testcases {
-					tcpy := test
-					tcpy.Name += fmt.Sprintf(" (retry %d)", i)
-					cpy.Testcases = append(cpy.Testcases, tcpy)
+			newSuite := suite // shallow copy
+			newSuite.Name += suffix
+			newSuite.Testcases = make([]junit.Testcase, 0, len(suite.Testcases))
+
+			// Sort test cases by name.
+			slices.SortFunc(suite.Testcases, func(a, b junit.Testcase) int {
+				return strings.Compare(a.Name, b.Name)
+			})
+
+			// Collect test cases.
+			for j := range len(suite.Testcases) {
+				testCase := suite.Testcases[j]
+				// Check if this is a parent test case (ie prefix of next test).
+				if j != len(suite.Testcases)-1 && strings.HasPrefix(suite.Testcases[j+1].Name, testCase.Name) {
+					// Discard test case parents since they provide no value.
+					continue
 				}
-				combined.Suites = append(combined.Suites, cpy)
+				testCase.Name += suffix
+				newSuite.Testcases = append(newSuite.Testcases, testCase)
 			}
+			combined.Suites = append(combined.Suites, newSuite)
 		}
 	}
 
-	return &junitReport{Testsuites: combined}, nil
+	return &junitReport{
+		Testsuites:    combined,
+		reportingErrs: reportingErrs,
+	}, nil
 }
 
 type node struct {

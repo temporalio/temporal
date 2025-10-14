@@ -135,15 +135,15 @@ func (mr *MockAckManagerMockRecorder) GetTasks(ctx, pollingCluster, queryMessage
 }
 
 // NotifyNewTasks mocks base method.
-func (m *MockAckManager) NotifyNewTasks(tasks []tasks.Task) {
+func (m *MockAckManager) NotifyNewTasks(arg0 []tasks.Task) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewTasks", tasks)
+	m.ctrl.Call(m, "NotifyNewTasks", arg0)
 }
 
 // NotifyNewTasks indicates an expected call of NotifyNewTasks.
-func (mr *MockAckManagerMockRecorder) NotifyNewTasks(tasks any) *gomock.Call {
+func (mr *MockAckManagerMockRecorder) NotifyNewTasks(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTasks", reflect.TypeOf((*MockAckManager)(nil).NotifyNewTasks), tasks)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTasks", reflect.TypeOf((*MockAckManager)(nil).NotifyNewTasks), arg0)
 }
 
 // SubscribeNotification mocks base method.

@@ -13,8 +13,10 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -425,6 +427,66 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
 	s.Equal(ReceiverModeTieredStack, s.streamReceiver.receiverMode)
 }
 
+func (s *streamReceiverSuite) TestGetTaskScheduler() {
+	high := &mockScheduler{}
+	low := &mockScheduler{}
+	s.streamReceiver.ProcessToolBox.HighPriorityTaskScheduler = high
+	s.streamReceiver.ProcessToolBox.LowPriorityTaskScheduler = low
+
+	tests := []struct {
+		name         string
+		priority     enumsspb.TaskPriority
+		task         TrackableExecutableTask
+		expected     ctasks.Scheduler[TrackableExecutableTask]
+		expectErr    bool
+		errorMessage string
+	}{
+		{
+			name:     "Unspecified priority with ExecutableWorkflowStateTask",
+			priority: enumsspb.TASK_PRIORITY_UNSPECIFIED,
+			task:     &ExecutableWorkflowStateTask{},
+			expected: low,
+		},
+		{
+			name:     "Unspecified priority with other task",
+			priority: enumsspb.TASK_PRIORITY_UNSPECIFIED,
+			task:     &ExecutableHistoryTask{},
+			expected: high,
+		},
+		{
+			name:     "High priority",
+			priority: enumsspb.TASK_PRIORITY_HIGH,
+			task:     &ExecutableHistoryTask{},
+			expected: high,
+		},
+		{
+			name:     "Low priority",
+			priority: enumsspb.TASK_PRIORITY_LOW,
+			task:     &ExecutableWorkflowStateTask{},
+			expected: low,
+		},
+		{
+			name:         "Invalid priority",
+			priority:     enumsspb.TaskPriority(999),
+			task:         &ExecutableHistoryTask{},
+			expectErr:    true,
+			errorMessage: "InvalidArgument",
+		},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			scheduler, err := s.streamReceiver.getTaskScheduler(tt.priority, tt.task)
+			if tt.expectErr {
+				s.Error(err)
+			} else {
+				s.NoError(err)
+				s.True(scheduler == tt.expected, "Expected scheduler to match")
+			}
+		})
+	}
+}
+
 func (s *streamReceiverSuite) TestProcessMessage_Err() {
 	streamResp := StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
 		Resp: nil,
@@ -443,6 +505,18 @@ func (s *streamReceiverSuite) TestSendEventLoop_Panic_Captured() {
 
 func (s *streamReceiverSuite) TestRecvEventLoop_Panic_Captured() {
 	s.streamReceiver.recvEventLoop() // should not cause panic
+}
+
+func (s *streamReceiverSuite) TestLivenessMonitor() {
+	livenessMonitor(
+		s.streamReceiver.recvSignalChan,
+		dynamicconfig.GetDurationPropertyFn(time.Second),
+		dynamicconfig.GetIntPropertyFn(1),
+		s.streamReceiver.shutdownChan,
+		s.streamReceiver.Stop,
+		s.streamReceiver.logger,
+	)
+	s.False(s.streamReceiver.IsValid())
 }
 
 func (s *mockStream) Send(

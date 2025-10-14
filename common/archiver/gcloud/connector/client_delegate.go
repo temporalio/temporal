@@ -86,7 +86,6 @@ func newDefaultClientDelegate(ctx context.Context) (*clientDelegate, error) {
 }
 
 func newClientDelegateWithCredentials(ctx context.Context, credentialsPath string) (*clientDelegate, error) {
-
 	jsonKey, err := os.ReadFile(credentialsPath)
 	if err != nil {
 		return newDefaultClientDelegate(ctx)

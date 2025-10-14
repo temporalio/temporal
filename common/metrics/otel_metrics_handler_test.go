@@ -81,6 +81,7 @@ func TestMeter(t *testing.T) {
 		log.NewTestLogger(),
 		&testProvider{meter: provider.Meter("test")},
 		defaultConfig,
+		false,
 	)
 	require.NoError(t, err)
 	recordMetrics(p)
@@ -219,12 +220,12 @@ func TestMeter_TimerInSeconds(t *testing.T) {
 		),
 	)
 
-	timerInSecondsConfig := defaultConfig
-	timerInSecondsConfig.RecordTimerInSeconds = true
+	shouldRecordTimerInSeconds := true
 	p, err := NewOtelMetricsHandler(
 		log.NewTestLogger(),
 		&testProvider{meter: provider.Meter("test")},
-		timerInSecondsConfig,
+		defaultConfig,
+		shouldRecordTimerInSeconds,
 	)
 	require.NoError(t, err)
 	recordTimer(p)
@@ -316,7 +317,7 @@ func TestOtelMetricsHandler_Error(t *testing.T) {
 	meter := erroneousMeter{err: testErr}
 	provider := &testProvider{meter: meter}
 	cfg := ClientConfig{}
-	handler, err := NewOtelMetricsHandler(logger, provider, cfg)
+	handler, err := NewOtelMetricsHandler(logger, provider, cfg, false)
 	require.NoError(t, err)
 	msg := "error getting metric"
 	errTag := tag.Error(testErr)

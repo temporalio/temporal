@@ -319,7 +319,7 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
 		func(ctx context.Context, _ queues.Executable) queues.ExecuteResponse {
-			s.Equal(headers.CallerTypeBackground, headers.GetCallerInfo(ctx).CallerType)
+			s.Equal(headers.CallerTypeBackgroundHigh, headers.GetCallerInfo(ctx).CallerType)
 			return queues.ExecuteResponse{
 				ExecutionMetricTags: nil,
 				ExecutedAsActive:    true,
@@ -331,6 +331,21 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 
 	executable = s.newTestExecutable(func(p *params) {
 		p.priorityAssigner = queues.NewStaticPriorityAssigner(ctasks.PriorityLow)
+	})
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
+		func(ctx context.Context, _ queues.Executable) queues.ExecuteResponse {
+			s.Equal(headers.CallerTypeBackgroundLow, headers.GetCallerInfo(ctx).CallerType)
+			return queues.ExecuteResponse{
+				ExecutionMetricTags: nil,
+				ExecutedAsActive:    true,
+				ExecutionErr:        nil,
+			}
+		},
+	)
+	s.NoError(executable.Execute())
+
+	executable = s.newTestExecutable(func(p *params) {
+		p.priorityAssigner = queues.NewStaticPriorityAssigner(ctasks.PriorityPreemptable)
 	})
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
 		func(ctx context.Context, _ queues.Executable) queues.ExecuteResponse {

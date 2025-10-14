@@ -1,6 +1,3 @@
-#frontend.enableClientVersionCheck:
-#- value: true
-#  constraints: {}
 #history.persistenceMaxQPS:
 #- value: 3000
 #  constraints: {}
@@ -30,8 +27,6 @@
 #    constraints: {}
 #system.enableParentClosePolicyWorker:
 #  - value: true
-system.enableEagerWorkflowStart:
-  - value: true
 frontend.workerVersioningDataAPIs:
   - value: true
 frontend.workerVersioningWorkflowAPIs:
@@ -49,4 +44,6 @@ matching.queryWorkflowTaskTimeoutLogRate:
 history.ReplicationEnableUpdateWithNewTaskMerge:
   - value: true
 history.enableTransitionHistory:
+  - value: true
+history.EnableReplicationTaskTieredProcessing:
   - value: true

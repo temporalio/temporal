@@ -121,7 +121,9 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_StartNew() {
 	})
 	task := response.GetEagerWorkflowTask()
 	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
-	kwData := task.History.Events[0].GetWorkflowExecutionStartedEventAttributes().SearchAttributes.IndexedFields["CustomKeywordField"].Data
+	startedEventAttrs := task.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
+	s.Require().True(startedEventAttrs.GetEagerExecutionAccepted(), "Eager execution should be accepted")
+	kwData := startedEventAttrs.SearchAttributes.IndexedFields["CustomKeywordField"].Data
 	s.Require().Equal(`"value"`, string(kwData))
 	s.respondWorkflowTaskCompleted(task, "ok")
 	// Verify workflow completes and client can get the result

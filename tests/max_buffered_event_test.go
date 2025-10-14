@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"crypto/rand"
 	"sync"
 	"testing"
 	"time"
@@ -175,6 +176,10 @@ func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
 
 	// now send 3 signals with 500KB payload each, all of them will be buffered
 	buf := make([]byte, 500*1024)
+	// fill the slice with random data to make sure the
+	// encoder does not zero out the data
+	_, err := rand.Read(buf)
+	s.NoError(err)
 	largePayload := payloads.EncodeBytes(buf)
 	for i := 0; i < 3; i++ {
 		err := s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
@@ -182,7 +187,7 @@ func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
 	}
 
 	// send 4th signal, this will fail the started workflow task and force terminate the workflow
-	err := s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
+	err = s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
 	s.NoError(err)
 
 	// unblock goroutine that runs local activity

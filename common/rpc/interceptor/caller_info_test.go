@@ -65,7 +65,7 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 		{
 			// test context with caller type but no caller name
 			setupIncomingCtx: func() context.Context {
-				return headers.SetCallerType(context.Background(), headers.CallerTypeBackground)
+				return headers.SetCallerType(context.Background(), headers.CallerTypeBackgroundHigh)
 			},
 			request: &workflowservice.StartWorkflowExecutionRequest{
 				Namespace: testNamespaceName,
@@ -151,10 +151,10 @@ func (s *callerInfoSuite) TestIntercept_CallerType() {
 		{
 			// test context with caller type
 			setupIncomingCtx: func() context.Context {
-				return headers.SetCallerType(context.Background(), headers.CallerTypeBackground)
+				return headers.SetCallerType(context.Background(), headers.CallerTypeBackgroundHigh)
 			},
 			request:            &workflowservice.StartWorkflowExecutionRequest{},
-			expectedCallerType: headers.CallerTypeBackground,
+			expectedCallerType: headers.CallerTypeBackgroundHigh,
 		},
 		{
 			// test context with empty caller type
@@ -225,7 +225,7 @@ func (s *callerInfoSuite) TestIntercept_CallOrigin() {
 		{
 			// test context with background caller type but no call origin
 			setupIncomingCtx: func() context.Context {
-				return headers.SetCallerInfo(context.Background(), headers.SystemBackgroundCallerInfo)
+				return headers.SetCallerInfo(context.Background(), headers.SystemBackgroundHighCallerInfo)
 			},
 			request:            &workflowservice.StartWorkflowExecutionRequest{},
 			expectedCallOrigin: "",

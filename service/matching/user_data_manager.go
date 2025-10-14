@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/headers"
@@ -544,7 +545,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 
 	if req.WaitNewData {
 		var cancel context.CancelFunc
-		ctx, cancel = newChildContext(ctx, m.config.GetUserDataLongPollTimeout(), m.config.GetUserDataReturnBudget)
+		ctx, cancel = contextutil.WithDeadlineBuffer(ctx, m.config.GetUserDataLongPollTimeout(), m.config.GetUserDataReturnBudget)
 		defer cancel()
 	}
 
@@ -683,7 +684,7 @@ func (m *userDataManagerImpl) setUserDataForNonOwningPartition(userData *persist
 
 func (m *userDataManagerImpl) callerInfoContext(ctx context.Context) context.Context {
 	ns, _ := m.namespaceRegistry.GetNamespaceName(namespace.ID(m.partition.NamespaceId()))
-	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
+	return headers.SetCallerInfo(ctx, headers.NewBackgroundHighCallerInfo(ns.String()))
 }
 
 func (m *userDataManagerImpl) logNewUserData(message string, data *persistencespb.VersionedTaskQueueUserData, tags ...tag.Tag) {

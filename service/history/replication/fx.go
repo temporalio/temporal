@@ -2,26 +2,24 @@ package replication
 
 import (
 	"context"
-	"errors"
 	"math/rand"
 	"strconv"
 
 	"github.com/dgryski/go-farm"
-	historypb "go.temporal.io/api/history/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/quotas"
 	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication/eventhandler"
@@ -41,6 +39,8 @@ var Module = fx.Provide(
 		return m
 	},
 	NewExecutionManagerDLQWriter,
+	ClientSchedulerRateLimiterProvider,
+	ServerSchedulerRateLimiterProvider,
 	replicationTaskConverterFactoryProvider,
 	replicationTaskExecutorProvider,
 	fx.Annotated{
@@ -53,7 +53,6 @@ var Module = fx.Provide(
 	},
 	executableTaskConverterProvider,
 	streamReceiverMonitorProvider,
-	ndcHistoryResenderProvider,
 	eagerNamespaceRefresherProvider,
 	sequentialTaskQueueFactoryProvider,
 	dlqWriterAdapterProvider,
@@ -156,12 +155,21 @@ func replicationStreamHighPrioritySchedulerProvider(
 }
 
 func replicationStreamLowPrioritySchedulerProvider(
+	rateLimiter ClientSchedulerRateLimiter,
+	timeSource clock.TimeSource,
 	config *configs.Config,
+	nsRegistry namespace.Registry,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 	lc fx.Lifecycle,
 ) ctasks.Scheduler[TrackableExecutableTask] {
 	queueFactory := func(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
-		return NewSequentialTaskQueue(task)
+		item := task.QueueID()
+		workflowKey, ok := item.(definition.WorkflowKey)
+		if !ok {
+			return NewSequentialTaskQueueWithID(item)
+		}
+		return NewSequentialTaskQueueWithID(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID)
 	}
 	taskQueueHashFunc := func(item interface{}) uint32 {
 		workflowKey, ok := item.(definition.WorkflowKey)
@@ -191,6 +199,51 @@ func replicationStreamLowPrioritySchedulerProvider(
 	channelWeightFn := func(key ClusterChannelKey) int {
 		return 1
 	}
+	taskQuotaRequestFn := func(t TrackableExecutableTask) quotas.Request {
+		var taskType string
+		var nsName namespace.Name
+		replicationTask := t.ReplicationTask()
+		if replicationTask != nil {
+			taskType = replicationTask.TaskType.String()
+
+			rawTaskInfo := replicationTask.GetRawTaskInfo()
+			if rawTaskInfo != nil {
+				var err error
+				nsName, err = nsRegistry.GetNamespaceName(namespace.ID(replicationTask.GetRawTaskInfo().NamespaceId))
+				if err != nil {
+					nsName = namespace.EmptyName
+				}
+			}
+		}
+		return quotas.NewRequest(
+			taskType,
+			taskSchedulerToken,
+			nsName.String(),
+			headers.CallerTypePreemptable,
+			0,
+			"")
+	}
+	taskMetricsTagsFn := func(t TrackableExecutableTask) []metrics.Tag {
+		replicationTask := t.ReplicationTask()
+		var taskType string
+		namespaceTag := metrics.NamespaceUnknownTag()
+		if replicationTask != nil {
+			taskType = replicationTask.TaskType.String()
+			rawTaskInfo := replicationTask.GetRawTaskInfo()
+			if rawTaskInfo != nil {
+				nsName, err := nsRegistry.GetNamespaceName(namespace.ID(replicationTask.GetRawTaskInfo().NamespaceId))
+				if err != nil {
+					namespaceTag = metrics.NamespaceTag(nsName.String())
+				}
+			}
+		}
+		return []metrics.Tag{
+			namespaceTag,
+			metrics.TaskTypeTag(taskType),
+			metrics.OperationTag(taskType), // for backward compatibility
+			metrics.TaskPriorityTag(ctasks.PriorityPreemptable.String()),
+		}
+	}
 	// This creates a per cluster channel.
 	// They share the same weight so it just does a round-robin on all clusters' tasks.
 	rrScheduler := ctasks.NewInterleavedWeightedRoundRobinScheduler(
@@ -201,8 +254,20 @@ func replicationStreamLowPrioritySchedulerProvider(
 		scheduler,
 		logger,
 	)
-	lc.Append(fx.StartStopHook(rrScheduler.Start, rrScheduler.Stop))
-	return rrScheduler
+	ts := ctasks.NewRateLimitedScheduler[TrackableExecutableTask](
+		rrScheduler,
+		rateLimiter,
+		timeSource,
+		taskQuotaRequestFn,
+		taskMetricsTagsFn,
+		ctasks.RateLimitedSchedulerOptions{
+			EnableShadowMode: config.ReplicationEnableRateLimit(),
+		},
+		logger,
+		metricsHandler,
+	)
+	lc.Append(fx.StartStopHook(ts.Start, ts.Stop))
+	return ts
 }
 
 func sequentialTaskQueueFactoryProvider(
@@ -232,80 +297,6 @@ func streamReceiverMonitorProvider(
 		processToolBox,
 		taskConverter,
 		processToolBox.Config.EnableReplicationStream(),
-	)
-}
-
-func ndcHistoryResenderProvider(
-	config *configs.Config,
-	namespaceRegistry namespace.Registry,
-	clientBean client.Bean,
-	serializer serialization.Serializer,
-	logger log.Logger,
-	shardController shard.Controller,
-	historyReplicationEventHandler eventhandler.HistoryEventsHandler,
-) xdc.NDCHistoryResender {
-	return xdc.NewNDCHistoryResender(
-		namespaceRegistry,
-		clientBean,
-		func(
-			ctx context.Context,
-			sourceClusterName string,
-			namespaceId namespace.ID,
-			workflowId string,
-			runId string,
-			events [][]*historypb.HistoryEvent,
-			versionHistory []*historyspb.VersionHistoryItem,
-		) error {
-			if config.EnableReplicateLocalGeneratedEvent() {
-				return historyReplicationEventHandler.HandleHistoryEvents(
-					ctx,
-					sourceClusterName,
-					definition.WorkflowKey{
-						NamespaceID: namespaceId.String(),
-						WorkflowID:  workflowId,
-						RunID:       runId,
-					},
-					nil,
-					versionHistory,
-					events,
-					nil,
-					"",
-				)
-			}
-
-			shardContext, err := shardController.GetShardByNamespaceWorkflow(
-				namespaceId,
-				workflowId,
-			)
-			if err != nil {
-				return err
-			}
-			engine, err := shardContext.GetEngine(ctx)
-			if err != nil {
-				return err
-			}
-			err = engine.ReplicateHistoryEvents(
-				ctx,
-				definition.WorkflowKey{
-					NamespaceID: namespaceId.String(),
-					WorkflowID:  workflowId,
-					RunID:       runId,
-				},
-				nil,
-				versionHistory,
-				events,
-				nil,
-				"",
-			)
-			if errors.Is(err, consts.ErrDuplicate) {
-				return nil
-			}
-			return err
-		},
-		serializer,
-		config.StandbyTaskReReplicationContextTimeout,
-		logger,
-		config,
 	)
 }
 

@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"strconv"
-	"sync"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -33,19 +32,14 @@ type priTaskMatcher struct {
 	// Background context used for forwarding tasks. Closed when task queue is closed.
 	tqCtx context.Context
 
-	partition      tqid.Partition
-	fwdr           *priForwarder
-	validator      taskValidator
-	metricsHandler metrics.Handler // namespace metric scope
-	logger         log.Logger
-	numPartitions  func() int // number of task queue partitions
-
-	limiterLock sync.Mutex
-	adminNsRate float64
-	adminTqRate float64
-	dynamicRate float64
-
-	cancel1, cancel2 func()
+	partition        tqid.Partition
+	fwdr             *priForwarder
+	validator        taskValidator
+	rateLimitManager *rateLimitManager
+	metricsHandler   metrics.Handler // namespace metric scope
+	logger           log.Logger
+	numPartitions    func() int // number of task queue partitions
+	markAlive        func()     // function to mark the physical task queue alive
 }
 
 type waitingPoller struct {
@@ -64,16 +58,6 @@ type matchResult struct {
 	ctxErr    error // set if context timed out/canceled or reprocess task
 	ctxErrIdx int   // index of context that closed first
 }
-
-const (
-	// TODO(pri): old matcher cleanup, move to here
-	// defaultTaskDispatchRPS = 100000.0
-
-	// How much rate limit a task queue can use up in an instant. E.g., for a rate of
-	// 100/second and burst duration of 2 seconds, the capacity of a bucket-type limiting
-	// algorithm would be 200.
-	burstDuration = time.Second
-)
 
 var (
 	// TODO(pri): old matcher cleanup, move to here
@@ -97,23 +81,22 @@ func newPriTaskMatcher(
 	validator taskValidator,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	rateLimitManager *rateLimitManager,
+	markAlive func(),
 ) *priTaskMatcher {
 	tm := &priTaskMatcher{
-		config:         config,
-		data:           newMatcherData(config, logger, clock.NewRealTimeSource(), fwdr != nil),
-		tqCtx:          tqCtx,
-		logger:         logger,
-		metricsHandler: metricsHandler,
-		partition:      partition,
-		fwdr:           fwdr,
-		validator:      validator,
-		numPartitions:  config.NumReadPartitions,
-		dynamicRate:    defaultTaskDispatchRPS,
+		config:           config,
+		data:             newMatcherData(config, logger, clock.NewRealTimeSource(), fwdr != nil, rateLimitManager),
+		tqCtx:            tqCtx,
+		logger:           logger,
+		metricsHandler:   metricsHandler,
+		partition:        partition,
+		fwdr:             fwdr,
+		validator:        validator,
+		rateLimitManager: rateLimitManager,
+		numPartitions:    config.NumReadPartitions,
+		markAlive:        markAlive,
 	}
-
-	tm.adminNsRate, tm.cancel1 = config.AdminNamespaceToPartitionRateSub(tm.setAdminNsRate)
-	tm.adminTqRate, tm.cancel2 = config.AdminNamespaceTaskQueueToPartitionRateSub(tm.setAdminTqRate)
-	tm.setLimitLocked()
 
 	return tm
 }
@@ -140,10 +123,7 @@ func (tm *priTaskMatcher) Start() {
 	}
 }
 
-func (tm *priTaskMatcher) Stop() {
-	tm.cancel1()
-	tm.cancel2()
-}
+func (tm *priTaskMatcher) Stop() {}
 
 func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.Retrier) {
 	ctxs := []context.Context{tm.tqCtx}
@@ -187,7 +167,14 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) error {
 		maybeValid := tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.fwdr.partition.TaskType())
 		if !maybeValid {
 			task.finish(nil, false)
-			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
+			var invalidTaskTag = getInvalidTaskTag(task)
+
+			// consider this task expired while processing.
+			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
+
+			// Stay alive as long as we're invalidating tasks
+			tm.markAlive()
+
 			return nil
 		}
 
@@ -243,7 +230,12 @@ func (tm *priTaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier ba
 		if !maybeValid {
 			// We found an invalid one, complete it and go back for another immediately.
 			task.finish(nil, false)
-			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
+			var invalidStageTag = getInvalidTaskTag(task)
+			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidStageTag)
+
+			// Stay alive as long as we're invalidating tasks
+			tm.markAlive()
+
 			retrier.Reset()
 		} else {
 			// Task was valid, put it back and slow down checking.
@@ -256,7 +248,7 @@ func (tm *priTaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier ba
 }
 
 func (tm *priTaskMatcher) forwardPolls() {
-	forwarderTask := &internalTask{isPollForwarder: true}
+	forwarderTask := newPollForwarderTask()
 	ctxs := []context.Context{tm.tqCtx}
 	for {
 		res := tm.data.EnqueueTaskAndWait(ctxs, forwarderTask)
@@ -432,6 +424,9 @@ func (tm *priTaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask
 }
 
 func (tm *priTaskMatcher) AddTask(task *internalTask) {
+	if !task.setRemoveFunc(func() { tm.data.RemoveTask(task) }) {
+		return // handle race where task is evicted from reader before being added
+	}
 	tm.data.EnqueueTaskNoWait(task)
 }
 
@@ -478,52 +473,6 @@ func (tm *priTaskMatcher) ReprocessAllTasks() {
 			task.finish(errReprocessTask, true)
 		}
 	}
-}
-
-// UpdateRatelimit updates the task dispatch rate
-func (tm *priTaskMatcher) UpdateRatelimit(rps float64) {
-	tm.limiterLock.Lock()
-	defer tm.limiterLock.Unlock()
-	tm.dynamicRate = rps
-	tm.setLimitLocked()
-}
-
-func (tm *priTaskMatcher) setAdminNsRate(rps float64) {
-	tm.limiterLock.Lock()
-	defer tm.limiterLock.Unlock()
-	tm.adminNsRate = rps
-	tm.setLimitLocked()
-}
-
-func (tm *priTaskMatcher) setAdminTqRate(rps float64) {
-	tm.limiterLock.Lock()
-	defer tm.limiterLock.Unlock()
-	tm.adminTqRate = rps
-	tm.setLimitLocked()
-}
-
-func (tm *priTaskMatcher) setLimitLocked() {
-	perPartitionDynamicRate := tm.dynamicRate
-
-	if n := tm.numPartitions(); n > 0 {
-		// divide the rate equally across all partitions
-		perPartitionDynamicRate /= float64(n)
-	}
-
-	rate := min(
-		perPartitionDynamicRate,
-		tm.adminNsRate,
-		tm.adminTqRate,
-	)
-
-	tm.data.UpdateRateLimit(rate, burstDuration)
-}
-
-// Rate returns the current dynamic rate setting
-func (tm *priTaskMatcher) Rate() float64 {
-	tm.limiterLock.Lock()
-	defer tm.limiterLock.Unlock()
-	return tm.dynamicRate
 }
 
 func (tm *priTaskMatcher) poll(
@@ -610,4 +559,11 @@ func (tm *priTaskMatcher) emitForwardedSourceStats(
 	default:
 		metrics.LocalToLocalMatchPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 	}
+}
+
+func getInvalidTaskTag(task *internalTask) metrics.Tag {
+	if IsTaskExpired(task.event.AllocatedTaskInfo) {
+		return metrics.TaskExpireStageMemoryTag
+	}
+	return metrics.TaskInvalidTag
 }

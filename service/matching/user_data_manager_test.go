@@ -459,7 +459,7 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	m.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
-		WithMaximumInterval(50 * time.Millisecond) // faster retry on failure
+		WithMaximumInterval(50 * time.Millisecond).WithExpirationInterval(backoff.NoInterval) // faster retry on failure
 
 	m.Start()
 
@@ -545,7 +545,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	m.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
-		WithMaximumInterval(50 * time.Millisecond) // faster retry on failure
+		WithMaximumInterval(50 * time.Millisecond).WithExpirationInterval(backoff.NoInterval) // faster retry on failure
 
 	m.Start()
 
@@ -788,7 +788,7 @@ func TestUserData_Propagation(t *testing.T) {
 		managers[i].config.GetUserDataLongPollTimeout = dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond)
 		managers[i].config.GetUserDataMinWaitTime = 10 * time.Millisecond
 		managers[i].config.GetUserDataReturnBudget = 10 * time.Millisecond
-		managers[i].config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(100 * time.Millisecond).WithMaximumInterval(1 * time.Second)
+		managers[i].config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(100 * time.Millisecond).WithMaximumInterval(1 * time.Second).WithExpirationInterval(backoff.NoInterval)
 		managers[i].logger = log.With(managers[i].logger, tag.HostID(fmt.Sprintf("%d", i)))
 	}
 

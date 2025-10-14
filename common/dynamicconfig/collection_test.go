@@ -1,11 +1,15 @@
 package dynamicconfig_test
 
 import (
+	"errors"
 	"maps"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -51,19 +55,16 @@ func TestCollectionSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *collectionSuite) SetupSuite() {
+func (s *collectionSuite) SetupTest() {
+	dynamicconfig.ResetRegistryForTest()
 	s.client = newTestSubscribableClient()
 	logger := log.NewNoopLogger()
 	s.cln = dynamicconfig.NewCollection(s.client, logger)
 	s.cln.Start()
 }
 
-func (s *collectionSuite) TearDownSuite() {
+func (s *collectionSuite) TearDownTest() {
 	s.cln.Stop()
-}
-
-func (s *collectionSuite) SetupTest() {
-	dynamicconfig.ResetRegistryForTest()
 }
 
 func (s *collectionSuite) TestGetIntProperty() {
@@ -426,6 +427,87 @@ func (s *collectionSuite) TestGetTypedProtoEnum() {
 	})
 }
 
+// someEnum is an example type for DynamicConfigParseHook.
+type someEnum int32
+
+const (
+	someEnumValueUnset someEnum = iota
+	someEnumValueOne
+	someEnumValueTwo
+	someEnumValueThree
+)
+
+func (someEnum) DynamicConfigParseHook(s string) (someEnum, error) {
+	switch strings.ToLower(s) {
+	case "one":
+		return someEnumValueOne, nil
+	case "two":
+		return someEnumValueTwo, nil
+	case "three":
+		return someEnumValueThree, nil
+	default:
+		return 0, errors.New("unknown value")
+	}
+}
+
+func (s *collectionSuite) TestGetGenericParseHook() {
+	def := someEnumValueOne
+	setting := dynamicconfig.NewGlobalTypedSetting(
+		testGetTypedPropertyKey,
+		def,
+		"",
+	)
+	get := setting.Get(s.cln)
+
+	s.Run("Default", func() {
+		s.Equal(def, get())
+	})
+
+	s.Run("Basic", func() {
+		s.client.SetValue(testGetTypedPropertyKey, "THRee")
+		s.Equal(someEnumValueThree, get())
+	})
+
+	s.Run("Missing", func() {
+		s.client.SetValue(testGetTypedPropertyKey, "four")
+		s.Equal(def, get()) // default since there was a parse error
+	})
+}
+
+func (s *collectionSuite) TestGetGenericParseHookValue_Struct() {
+	type myStruct struct {
+		FieldA someEnum
+		FieldB someEnum
+	}
+	def := myStruct{
+		FieldA: someEnumValueTwo,
+		FieldB: someEnumValueThree,
+	}
+	setting := dynamicconfig.NewGlobalTypedSetting(
+		testGetTypedPropertyKey,
+		def,
+		"",
+	)
+	get := setting.Get(s.cln)
+
+	s.Run("Default", func() {
+		s.Equal(def, get())
+	})
+
+	s.Run("Basic", func() {
+		s.client.SetValue(testGetTypedPropertyKey, map[string]any{"fielda": "one"})
+		s.Equal(myStruct{
+			FieldA: someEnumValueOne,
+			FieldB: someEnumValueThree, // from default
+		}, get())
+	})
+
+	s.Run("Missing", func() {
+		s.client.SetValue(testGetTypedPropertyKey, map[string]any{"FieldA": "one", "FieldB": "four"})
+		s.Equal(def, get()) // default since there was a parse error
+	})
+}
+
 func (s *collectionSuite) TestGetIntPropertyFilteredByDestination() {
 	setting := dynamicconfig.NewDestinationIntSetting(testGetIntPropertyFilteredByDestinationKey, 10, "")
 	namespaceName := "testNamespace"
@@ -642,4 +724,61 @@ func (s *subscriptionSuite) TestSubscriptionWithDefault() {
 	v, cancel := setting.Subscribe(s.cln)(nil)
 	s.Equal(100, v)
 	s.Nil(cancel)
+}
+
+func (s *subscriptionSuite) TestSubscriptionConstrainedDefaults() {
+	setting := dynamicconfig.NewNamespaceIntSettingWithConstrainedDefault(
+		testGetIntPropertyKey,
+		[]dynamicconfig.TypedConstrainedValue[int]{
+			{Value: 34, Constraints: dynamicconfig.Constraints{Namespace: "special"}},
+			{Value: 10}, // no constraints = default for all
+		},
+		"",
+	)
+
+	var normal, special atomic.Int64
+	var normalCalls, specialCalls atomic.Int64
+
+	waitFor := func(normalv, specialv, normalc, specialc int) {
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			assert.Equal(c, normalv, int(normal.Load()))
+			assert.Equal(c, specialv, int(special.Load()))
+		}, time.Second, time.Millisecond)
+		s.Equal(normalc, int(normalCalls.Load()))
+		s.Equal(specialc, int(specialCalls.Load()))
+	}
+
+	// normal ns
+	normalInit, normalCancel := setting.Subscribe(s.cln)("normal", func(v int) { normal.Store(int64(v)); normalCalls.Add(1) })
+	normal.Store(int64(normalInit))
+	defer normalCancel()
+	s.Equal(10, normalInit)
+
+	// special ns
+	specialInit, specialCancel := setting.Subscribe(s.cln)("special", func(v int) { special.Store(int64(v)); specialCalls.Add(1) })
+	special.Store(int64(specialInit))
+	defer specialCancel()
+	s.Equal(34, specialInit) // Should get the constrained default for "special"
+
+	// set a value for special
+	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{
+		{Value: 200, Constraints: dynamicconfig.Constraints{Namespace: "special"}},
+	})
+	waitFor(10, 200, 0, 1)
+
+	// set a value for normal
+	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{
+		{Value: 123, Constraints: dynamicconfig.Constraints{Namespace: "normal"}},
+	})
+	waitFor(123, 34, 1, 2)
+
+	// set a default value
+	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{
+		{Value: 19},
+	})
+	waitFor(19, 34, 2, 2)
+
+	// remove values
+	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{})
+	waitFor(10, 34, 3, 2)
 }

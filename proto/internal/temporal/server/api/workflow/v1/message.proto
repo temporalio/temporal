@@ -5,7 +5,6 @@ package temporal.server.api.workflow.v1;
 option go_package = "go.temporal.io/server/api/workflow/v1;workflow";
 
 import "temporal/api/common/v1/message.proto";
-import "temporal/api/deployment/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
 
@@ -21,14 +20,9 @@ message ParentExecutionInfo {
     // first starts the child workflow, and the child workflow is starting on a Task Queue belonging
     // to the same Worker Deployment Version.
     // Not set in the subsequent execution if the child workflow continues-as-new.
-    // Deprecated. Replaced with `pinned_deployment_version`.
+    // Deprecated. Replaced with `inherited_pinned_version` in WorkflowExecutionStartedEventAttributes.
     string pinned_worker_deployment_version = 7;
-    // When present, child workflow starts as Pinned to this Worker Deployment Version.
-    // Set only if the parent execution is effectively Pinned to a Worker Deployment Version when it
-    // first starts the child workflow, and the child workflow is starting on a Task Queue belonging
-    // to the same Worker Deployment Version.
-    // Not set in the subsequent execution if the child workflow continues-as-new.
-    temporal.api.deployment.v1.WorkerDeploymentVersion pinned_deployment_version = 8;
+    reserved 8;
 }
 
 message RootExecutionInfo {

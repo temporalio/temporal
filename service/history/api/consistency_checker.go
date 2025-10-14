@@ -8,6 +8,8 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
+	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -41,6 +43,23 @@ type (
 			reqClock *clockspb.VectorClock,
 			consistencyPredicate MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
+			lockPriority locks.Priority,
+		) (WorkflowLease, error)
+
+		GetChasmLease(
+			ctx context.Context,
+			reqClock *clockspb.VectorClock,
+			workflowKey definition.WorkflowKey,
+			archetype chasm.Archetype,
+			lockPriority locks.Priority,
+		) (WorkflowLease, error)
+
+		GetChasmLeaseWithConsistencyCheck(
+			ctx context.Context,
+			reqClock *clockspb.VectorClock,
+			consistencyPredicate MutableStateConsistencyPredicate,
+			workflowKey definition.WorkflowKey,
+			archetype chasm.Archetype,
 			lockPriority locks.Priority,
 		) (WorkflowLease, error)
 	}
@@ -87,7 +106,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLease(
 	workflowKey definition.WorkflowKey,
 	lockPriority locks.Priority,
 ) (WorkflowLease, error) {
-	return c.getWorkflowLeaseImpl(ctx, reqClock, nil, workflowKey, lockPriority)
+	return c.getWorkflowLeaseImpl(ctx, reqClock, nil, workflowKey, chasmworkflow.Archetype, lockPriority)
 }
 
 // The code below should be used when custom workflow state validation is required.
@@ -100,8 +119,28 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLeaseWithConsistencyCheck(
 	workflowKey definition.WorkflowKey,
 	lockPriority locks.Priority,
 ) (WorkflowLease, error) {
+	return c.getWorkflowLeaseImpl(ctx, reqClock, consistencyPredicate, workflowKey, chasmworkflow.Archetype, lockPriority)
+}
 
-	return c.getWorkflowLeaseImpl(ctx, reqClock, consistencyPredicate, workflowKey, lockPriority)
+func (c *WorkflowConsistencyCheckerImpl) GetChasmLease(
+	ctx context.Context,
+	reqClock *clockspb.VectorClock,
+	workflowKey definition.WorkflowKey,
+	archetype chasm.Archetype,
+	lockPriority locks.Priority,
+) (WorkflowLease, error) {
+	return c.getWorkflowLeaseImpl(ctx, reqClock, nil, workflowKey, archetype, lockPriority)
+}
+
+func (c *WorkflowConsistencyCheckerImpl) GetChasmLeaseWithConsistencyCheck(
+	ctx context.Context,
+	reqClock *clockspb.VectorClock,
+	consistencyPredicate MutableStateConsistencyPredicate,
+	workflowKey definition.WorkflowKey,
+	archetype chasm.Archetype,
+	lockPriority locks.Priority,
+) (WorkflowLease, error) {
+	return c.getWorkflowLeaseImpl(ctx, reqClock, consistencyPredicate, workflowKey, archetype, lockPriority)
 }
 
 func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseImpl(
@@ -109,6 +148,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseImpl(
 	reqClock *clockspb.VectorClock,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
+	archetype chasm.Archetype,
 	lockPriority locks.Priority,
 ) (WorkflowLease, error) {
 	if err := c.clockConsistencyCheck(reqClock); err != nil {
@@ -116,7 +156,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseImpl(
 	}
 
 	if len(workflowKey.RunID) != 0 {
-		return c.getWorkflowLease(ctx, consistencyPredicate, workflowKey, lockPriority)
+		return c.getWorkflowLease(ctx, consistencyPredicate, workflowKey, archetype, lockPriority)
 	}
 
 	return c.getCurrentWorkflowLease(
@@ -124,6 +164,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseImpl(
 		consistencyPredicate,
 		workflowKey.NamespaceID,
 		workflowKey.WorkflowID,
+		archetype,
 		lockPriority,
 	)
 }
@@ -160,6 +201,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowLease(
 	consistencyPredicate MutableStateConsistencyPredicate,
 	namespaceID string,
 	workflowID string,
+	archetype chasm.Archetype,
 	lockPriority locks.Priority,
 ) (WorkflowLease, error) {
 	runID, err := c.GetCurrentRunID(
@@ -175,6 +217,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowLease(
 		ctx,
 		consistencyPredicate,
 		definition.NewWorkflowKey(namespaceID, workflowID, runID),
+		archetype,
 		lockPriority,
 	)
 
@@ -203,10 +246,11 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLease(
 	ctx context.Context,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
+	archetype chasm.Archetype,
 	lockPriority locks.Priority,
 ) (WorkflowLease, error) {
 
-	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
+	wfContext, release, err := c.workflowCache.GetOrCreateChasmEntity(
 		ctx,
 		c.shardContext,
 		namespace.ID(workflowKey.NamespaceID),
@@ -214,6 +258,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLease(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
+		archetype,
 		lockPriority,
 	)
 	if err != nil {

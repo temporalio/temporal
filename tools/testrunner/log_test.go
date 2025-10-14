@@ -21,3 +21,23 @@ func TestParseTestTimeouts(t *testing.T) {
 	}, tests)
 	require.Equal(t, string(logOutput), stacktrace)
 }
+
+func TestParseAlerts_DataRaceAndPanic(t *testing.T) {
+	input, err := os.ReadFile("testdata/alerts-input.log")
+	require.NoError(t, err)
+
+	alerts := parseAlerts(string(input))
+	require.NotEmpty(t, alerts)
+	require.Equal(t, 2, len(alerts))
+
+	require.Contains(t, alerts[0].Details, "WARNING: DATA RACE")
+	require.Contains(t, alerts[0].Tests[0], "test.TestDataRaceExample")
+	require.Contains(t, primaryTestName(alerts[0].Tests), "test.TestDataRaceExample")
+	require.Contains(t, alerts[1].Details, "panic: ")
+	require.Contains(t, alerts[1].Tests[0], "test.TestPanicExample")
+	require.Contains(t, primaryTestName(alerts[1].Tests), "TestPanicExample")
+
+	// Ensure dedupe works
+	deduped := dedupeAlerts(append(alerts, alerts...))
+	require.Equal(t, len(deduped), len(alerts))
+}

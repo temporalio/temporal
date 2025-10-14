@@ -45,18 +45,22 @@ import (
 var Module = fx.Options(
 	resource.Module,
 	fx.Provide(hsm.NewRegistry),
-	fx.Provide(chasm.NewRegistry),
 	workflow.Module,
 	shard.Module,
 	events.Module,
 	cache.Module,
 	archival.Module,
-	dynamicconfig.Module,
+	ChasmEngineModule,
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(RetryableInterceptorProvider),
+	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
+	fx.Provide(HealthSignalAggregatorProvider),
+	fx.Provide(HealthCheckInterceptorProvider),
+	fx.Provide(chasm.ChasmRequestInterceptorProvider),
+	fx.Provide(HistoryAdditionalInterceptorsProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
@@ -99,6 +103,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		persistenceVisibilityManager: args.PersistenceVisibilityManager,
 		persistenceHealthSignal:      args.PersistenceHealthSignal,
 		healthServer:                 args.HealthServer,
+		historyHealthSignal:          args.HistoryHealthSignal,
 		historyServiceResolver:       args.HistoryServiceResolver,
 		metricsHandler:               args.MetricsHandler,
 		payloadSerializer:            args.PayloadSerializer,
@@ -114,14 +119,14 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		taskQueueManager:             args.TaskQueueManager,
 		taskCategoryRegistry:         args.TaskCategoryRegistry,
 		dlqMetricsEmitter:            args.DLQMetricsEmitter,
+		chasmEngine:                  args.ChasmEngine,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
 		streamReceiverMonitor:            args.StreamReceiverMonitor,
+		replicationServerRateLimiter:     args.ReplicationServerRateLimiter,
 	}
 
-	// prevent us from trying to serve requests before shard controller is started and ready
-	handler.startWG.Add(1)
 	return handler
 }
 
@@ -154,18 +159,56 @@ func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
 	)
 }
 
+func ErrorHandlerProvider(
+	logger log.Logger,
+	serviceConfig *configs.Config,
+) *interceptor.RequestErrorHandler {
+	return interceptor.NewRequestErrorHandler(
+		logger,
+		serviceConfig.LogAllReqErrors,
+	)
+}
+
 func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
 	serviceConfig *configs.Config,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
 		serviceConfig.LogAllReqErrors,
+		requestErrorHandler,
 	)
+}
+
+func HealthSignalAggregatorProvider(
+	dynamicCollection *dynamicconfig.Collection,
+	logger log.ThrottledLogger,
+) interceptor.HealthSignalAggregator {
+	return interceptor.NewHealthSignalAggregator(
+		logger,
+		dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection),
+		dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
+		dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
+	)
+}
+
+func HealthCheckInterceptorProvider(
+	healthSignalAggregator interceptor.HealthSignalAggregator,
+) *interceptor.HealthCheckInterceptor {
+	return interceptor.NewHealthCheckInterceptor(
+		healthSignalAggregator,
+	)
+}
+
+func HistoryAdditionalInterceptorsProvider(
+	healthCheckInterceptor *interceptor.HealthCheckInterceptor, chasmRequestInterceptor *chasm.ChasmRequestInterceptor,
+) []grpc.UnaryServerInterceptor {
+	return []grpc.UnaryServerInterceptor{healthCheckInterceptor.UnaryIntercept, chasmRequestInterceptor.Intercept}
 }
 
 func RateLimitInterceptorProvider(

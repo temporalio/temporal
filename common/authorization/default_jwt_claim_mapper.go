@@ -3,6 +3,7 @@ package authorization
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -28,6 +29,9 @@ type defaultJWTClaimMapper struct {
 	keyProvider          TokenKeyProvider
 	logger               log.Logger
 	permissionsClaimName string
+	permissionsRegex     *regexp.Regexp
+	matchNamespaceIndex  int
+	matchRoleIndex       int
 }
 
 func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Authorization, logger log.Logger) ClaimMapper {
@@ -35,7 +39,36 @@ func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Authorizati
 	if claimName == "" {
 		claimName = defaultPermissionsClaimName
 	}
-	return &defaultJWTClaimMapper{keyProvider: provider, logger: logger, permissionsClaimName: claimName}
+	var permissionsRegex *regexp.Regexp
+	var namespaceIndex, roleIndex int
+	if cfg.PermissionsRegex != "" {
+		r, err := regexp.Compile(cfg.PermissionsRegex)
+		if err == nil {
+			for i, name := range r.SubexpNames() {
+				switch name {
+				case "namespace":
+					namespaceIndex = i
+				case "role":
+					roleIndex = i
+				}
+			}
+			if namespaceIndex != 0 && roleIndex != 0 {
+				permissionsRegex = r
+			} else {
+				logger.Warn("permissions regex does not have namespace or role named group")
+			}
+		} else {
+			logger.Warn(fmt.Sprintf("failed to compile permissions regex '%s': %v", cfg.PermissionsRegex, err))
+		}
+	}
+	return &defaultJWTClaimMapper{
+		keyProvider:          provider,
+		logger:               logger,
+		permissionsClaimName: claimName,
+		permissionsRegex:     permissionsRegex,
+		matchNamespaceIndex:  namespaceIndex,
+		matchRoleIndex:       roleIndex,
+	}
 }
 
 var _ ClaimMapper = (*defaultJWTClaimMapper)(nil)
@@ -48,7 +81,9 @@ func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 		return &claims, nil
 	}
 
-	parts := strings.Split(authInfo.AuthToken, " ")
+	// We use strings.SplitN even though we check the length later, to avoid
+	// unnecessary allocations if the format is correct.
+	parts := strings.SplitN(authInfo.AuthToken, " ", 2)
 	if len(parts) != 2 {
 		return nil, serviceerror.NewPermissionDenied("unexpected authorization token format", "")
 	}
@@ -81,10 +116,20 @@ func (a *defaultJWTClaimMapper) extractPermissions(permissions []interface{}, cl
 			a.logger.Warn(fmt.Sprintf("ignoring permission that is not a string: %v", permission))
 			continue
 		}
-		parts := strings.Split(p, ":")
-		if len(parts) != 2 {
-			a.logger.Warn(fmt.Sprintf("ignoring permission in unexpected format: %v", permission))
-			continue
+		var parts []string
+		if a.permissionsRegex != nil {
+			match := a.permissionsRegex.FindStringSubmatch(p)
+			if len(match) == 0 {
+				a.logger.Warn(fmt.Sprintf("ignoring permission not matching pattern: %v", permission))
+				continue
+			}
+			parts = []string{match[a.matchNamespaceIndex], match[a.matchRoleIndex]}
+		} else {
+			parts = strings.SplitN(p, ":", 2)
+			if len(parts) != 2 {
+				a.logger.Warn(fmt.Sprintf("ignoring permission in unexpected format: %v", permission))
+				continue
+			}
 		}
 		namespace := parts[0]
 		if namespace == permissionScopeSystem {

@@ -73,6 +73,7 @@ type (
 // See LifetimeHooksModule for detail
 var Module = fx.Options(
 	persistenceClient.Module,
+	dynamicconfig.Module,
 	fx.Provide(HostNameProvider),
 	fx.Provide(TimeSourceProvider),
 	cluster.MetadataLifetimeHooksModule,
@@ -108,6 +109,7 @@ var Module = fx.Options(
 
 var DefaultOptions = fx.Options(
 	fx.Provide(RPCFactoryProvider),
+	fx.Provide(PerServiceDialOptionsProvider),
 	fx.Provide(ArchivalMetadataProvider),
 	fx.Provide(ArchiverProviderProvider),
 	fx.Provide(ThrottledLoggerProvider),
@@ -152,11 +154,12 @@ func SearchAttributeMapperProviderProvider(
 		saMapper,
 		namespaceRegistry,
 		searchAttributeProvider,
-		persistenceConfig.IsSQLVisibilityStore(),
+		persistenceConfig.IsSQLVisibilityStore() || persistenceConfig.IsCustomVisibilityStore(),
 	)
 }
 
 func SearchAttributeProviderProvider(
+	logger log.SnTaggedLogger,
 	timeSource clock.TimeSource,
 	cmMgr persistence.ClusterMetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
@@ -164,10 +167,12 @@ func SearchAttributeProviderProvider(
 	return searchattribute.NewManager(
 		timeSource,
 		cmMgr,
+		logger,
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection))
 }
 
 func SearchAttributeManagerProvider(
+	logger log.SnTaggedLogger,
 	timeSource clock.TimeSource,
 	cmMgr persistence.ClusterMetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
@@ -175,6 +180,7 @@ func SearchAttributeManagerProvider(
 	return searchattribute.NewManager(
 		timeSource,
 		cmMgr,
+		logger,
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection))
 }
 
@@ -271,6 +277,7 @@ func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient 
 	return matching.NewRetryableClient(
 		matchingRawClient,
 		common.CreateMatchingClientRetryPolicy(),
+		common.CreateMatchingClientLongPollRetryPolicy(),
 		common.IsServiceClientTransientError,
 	)
 }
@@ -331,14 +338,21 @@ func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy 
 	return cfg.DCRedirectionPolicy
 }
 
+func PerServiceDialOptionsProvider() map[primitives.ServiceName][]grpc.DialOption {
+	return map[primitives.ServiceName][]grpc.DialOption{}
+}
+
 func RPCFactoryProvider(
 	cfg *config.Config,
 	svcName primitives.ServiceName,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	resolver *membership.GRPCResolver,
 	tracingStatsHandler telemetry.ClientStatsHandler,
+	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption,
 	monitor membership.Monitor,
+	dc *dynamicconfig.Collection,
 ) (common.RPCFactory, error) {
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
@@ -349,18 +363,26 @@ func RPCFactoryProvider(
 	if tracingStatsHandler != nil {
 		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
 	}
-	return rpc.NewFactory(
+	enableServerKeepalive := dynamicconfig.EnableInternodeServerKeepAlive.Get(dc)()
+	enableClientKeepalive := dynamicconfig.EnableInternodeClientKeepAlive.Get(dc)()
+	factory := rpc.NewFactory(
 		cfg,
 		svcName,
 		logger,
+		metricsHandler,
 		tlsConfigProvider,
 		frontendURL,
 		frontendHTTPURL,
 		frontendHTTPPort,
 		frontendTLSConfig,
 		options,
+		perServiceDialOptions,
 		monitor,
-	), nil
+	)
+	factory.EnableInternodeServerKeepalive = enableServerKeepalive
+	factory.EnableInternodeClientKeepalive = enableClientKeepalive
+	logger.Debug(fmt.Sprintf("RPC factory created. enableServerKeepalive: %v, enableClientKeepalive: %v", enableServerKeepalive, enableClientKeepalive))
+	return factory, nil
 }
 
 func FrontendHTTPClientCacheProvider(

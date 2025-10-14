@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"strings"
+
+	"go.temporal.io/server/common/log"
+	"google.golang.org/grpc"
 )
 
 var (
@@ -14,20 +18,25 @@ var (
 
 type (
 	Registry struct {
+		libraries         map[string]Library                     // library name -> library
 		componentByType   map[string]*RegistrableComponent       // fully qualified type name -> component
 		componentByGoType map[reflect.Type]*RegistrableComponent // component go type -> component
 
 		taskByType   map[string]*RegistrableTask       // fully qualified type name -> task
 		taskByGoType map[reflect.Type]*RegistrableTask // task go type -> task
+
+		logger log.Logger
 	}
 )
 
-func NewRegistry() *Registry {
+func NewRegistry(logger log.Logger) *Registry {
 	return &Registry{
+		libraries:         make(map[string]Library),
 		componentByType:   make(map[string]*RegistrableComponent),
 		componentByGoType: make(map[reflect.Type]*RegistrableComponent),
 		taskByType:        make(map[string]*RegistrableTask),
 		taskByGoType:      make(map[reflect.Type]*RegistrableTask),
+		logger:            logger,
 	}
 }
 
@@ -35,6 +44,11 @@ func (r *Registry) Register(lib Library) error {
 	if err := r.validateName(lib.Name()); err != nil {
 		return err
 	}
+	if _, ok := r.libraries[lib.Name()]; ok {
+		return fmt.Errorf("library %s is already registered", lib.Name())
+	}
+	r.libraries[lib.Name()] = lib
+
 	for _, c := range lib.Components() {
 		if err := r.registerComponent(lib, c); err != nil {
 			return err
@@ -46,6 +60,13 @@ func (r *Registry) Register(lib Library) error {
 		}
 	}
 	return nil
+}
+
+// RegisterServices registers all gRPC services from all registered libraries.
+func (r *Registry) RegisterServices(server *grpc.Server) {
+	for _, lib := range r.libraries {
+		lib.RegisterServices(server)
+	}
 }
 
 func (r *Registry) component(fqn string) (*RegistrableComponent, bool) {
@@ -101,6 +122,7 @@ func (r *Registry) registerComponent(
 	if _, ok := r.componentByGoType[rc.goType]; ok {
 		return fmt.Errorf("component type %s is already registered", rc.goType.String())
 	}
+	r.warnUnmanagedFields(fqn, rc)
 
 	rc.library = lib
 	r.componentByType[fqn] = rc
@@ -149,4 +171,17 @@ func (r *Registry) validateName(n string) error {
 		return fmt.Errorf("name %s is invalid. name must follow golang identifier rules: %s", n, nameValidator.String())
 	}
 	return nil
+}
+
+func (r *Registry) warnUnmanagedFields(fqn string, rc *RegistrableComponent) {
+	var unmanagedFields []string
+	for f := range unmanagedFieldsOf(rc.goType) {
+		unmanagedFields = append(unmanagedFields, fmt.Sprintf("%s %s", f.name, f.typ))
+	}
+	if len(unmanagedFields) > 0 {
+		r.logger.Info(fmt.Sprintf(
+			"Warning: CHASM component %s declares state fields that won't be managed by CHASM:\n\t%s",
+			fqn,
+			strings.Join(unmanagedFields, "\n\t")))
+	}
 }

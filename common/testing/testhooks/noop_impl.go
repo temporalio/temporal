@@ -2,7 +2,11 @@
 
 package testhooks
 
-import "go.uber.org/fx"
+import (
+	"context"
+
+	"go.uber.org/fx"
+)
 
 var Module = fx.Options(
 	fx.Provide(func() (_ TestHooks) { return }),
@@ -27,8 +31,23 @@ func Get[T any](_ TestHooks, key Key) (T, bool) {
 	return zero, false
 }
 
+// GetCtx gets the value of a test hook from the registry embedded in the
+// context chain.
+//
+// TestHooks should be used sparingly, see comment on TestHooks.
+func GetCtx[T any](ctx context.Context, key Key) (T, bool) {
+	var zero T
+	return zero, false
+}
+
 // Call calls a func() hook if present.
 //
 // TestHooks should be used very sparingly, see comment on TestHooks.
 func Call(_ TestHooks, key Key) {
+}
+
+// CallCtx calls a func(context.Context) hook if present.
+//
+// TestHooks should be used very sparingly, see comment on TestHooks.
+func CallCtx(_ context.Context, key Key) {
 }

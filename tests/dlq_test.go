@@ -402,12 +402,14 @@ func (s *DLQSuite) TestListQueues() {
 
 	queueInfos := s.listQueues(ctx)
 	qi0 := adminservice.ListQueuesResponse_QueueInfo{
-		QueueName:    queueKey1.GetQueueName(),
-		MessageCount: 0,
+		QueueName:     queueKey1.GetQueueName(),
+		MessageCount:  0,
+		LastMessageId: -1,
 	}
 	qi1 := adminservice.ListQueuesResponse_QueueInfo{
-		QueueName:    queueKey2.GetQueueName(),
-		MessageCount: 1,
+		QueueName:     queueKey2.GetQueueName(),
+		MessageCount:  1,
+		LastMessageId: 0,
 	}
 	var found0, found1 bool
 	for _, qi := range queueInfos {

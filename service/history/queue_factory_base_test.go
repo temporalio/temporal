@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -26,6 +27,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
 )
@@ -152,4 +154,6 @@ type unusedDependencies struct {
 	archival.Archiver
 	workflow.RelocatableAttributesFetcher
 	persistence.HistoryTaskQueueManager
+	cache.Cache
+	chasm.Engine
 }

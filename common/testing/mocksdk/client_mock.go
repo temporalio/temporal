@@ -173,6 +173,21 @@ func (mr *MockClientMockRecorder) DescribeTaskQueueEnhanced(ctx, options any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueueEnhanced", reflect.TypeOf((*MockClient)(nil).DescribeTaskQueueEnhanced), ctx, options)
 }
 
+// DescribeWorkflow mocks base method.
+func (m *MockClient) DescribeWorkflow(ctx context.Context, workflowID, runID string) (*client.WorkflowExecutionDescription, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeWorkflow", ctx, workflowID, runID)
+	ret0, _ := ret[0].(*client.WorkflowExecutionDescription)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeWorkflow indicates an expected call of DescribeWorkflow.
+func (mr *MockClientMockRecorder) DescribeWorkflow(ctx, workflowID, runID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflow", reflect.TypeOf((*MockClient)(nil).DescribeWorkflow), ctx, workflowID, runID)
+}
+
 // DescribeWorkflowExecution mocks base method.
 func (m *MockClient) DescribeWorkflowExecution(ctx context.Context, workflowID, runID string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()

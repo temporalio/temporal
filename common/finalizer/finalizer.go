@@ -86,7 +86,7 @@ func (f *Finalizer) Run(
 	timeout time.Duration,
 ) int {
 	if timeout == 0 {
-		f.logger.Info("finalizer skipped: zero timeout")
+		f.logger.Debug("finalizer skipped: zero timeout")
 		return 0
 	}
 
@@ -105,7 +105,7 @@ func (f *Finalizer) Run(
 		return 0
 	}
 
-	f.logger.Info("finalizer starting",
+	f.logger.Debug("finalizer starting",
 		tag.NewInt("items", totalCount),
 		tag.NewDurationTag("timeout", timeout))
 
@@ -131,14 +131,17 @@ func (f *Finalizer) Run(
 		// prevent holding on to the callbacks for longer than needed and allow garbage collection
 		// (safe since any calls to Register/Deregister will be aborted now that the finalizer ran)
 		f.callbacks = nil
-
-		f.logger.Info("finalizer loop ended")
 	}()
 
 	var completedCallbacks int
 	defer func() {
+		unfinishedItems := int64(totalCount - completedCallbacks)
+		metrics.FinalizerRuns.With(f.metricsHandler).Record(1)
+		if unfinishedItems > 0 {
+			metrics.FinalizerRunTimeouts.With(f.metricsHandler).Record(1)
+		}
 		metrics.FinalizerItemsCompleted.With(f.metricsHandler).Record(int64(completedCallbacks))
-		metrics.FinalizerItemsUnfinished.With(f.metricsHandler).Record(int64(totalCount - completedCallbacks))
+		metrics.FinalizerItemsUnfinished.With(f.metricsHandler).Record(unfinishedItems)
 	}()
 
 	for {
@@ -146,7 +149,7 @@ func (f *Finalizer) Run(
 		case <-completionChannel:
 			completedCallbacks += 1
 			if completedCallbacks == totalCount {
-				f.logger.Info("finalizer completed",
+				f.logger.Debug("finalizer completed",
 					tag.NewInt("completed", completedCallbacks))
 				return completedCallbacks
 			}
