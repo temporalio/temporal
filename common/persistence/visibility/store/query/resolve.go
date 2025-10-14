@@ -77,12 +77,9 @@ func tryVisibilityMapper(name string, ns namespace.Name, mapper searchattribute.
 	if err != nil {
 		var invalidArgument *serviceerror.InvalidArgument
 		if errors.As(err, &invalidArgument) {
-			// Check if this looks like a mapper that should handle this field
+			// Check if this is a mapper that should handle this field
 			// vs a mapper that doesn't know about this field
-			errMsg := invalidArgument.Error()
-			if strings.Contains(errMsg, "invalid alias") || // From GetFieldName() when alias doesn't exist in mapper
-				strings.Contains(errMsg, "invalid field") || // From GetAlias() when field name doesn't exist in mapper
-				strings.Contains(errMsg, "no mapping defined") { // From test mappers and some implementations when field is unknown
+			if strings.Contains(invalidArgument.Error(), "no mapping defined") {
 				// Mapper doesn't handle this field, allow fallback to direct/prefixed lookup
 				return resolveResult{}, nil
 			}

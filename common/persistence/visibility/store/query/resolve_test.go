@@ -1,6 +1,7 @@
 package query
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -87,12 +88,16 @@ func (m customMapper) GetAlias(fieldName string, ns string) (string, error) {
 	if fn, ok := m.fieldToAlias[fieldName]; ok {
 		return fn, nil
 	}
-	return "", serviceerror.NewInvalidArgument("invalid field name")
+	return "", serviceerror.NewInvalidArgument(
+		fmt.Sprintf("Namespace %s has no mapping defined for field name %s", ns, fieldName),
+	)
 }
 
 func (m customMapper) GetFieldName(alias string, ns string) (string, error) {
 	if fn, ok := m.aliasToField[alias]; ok {
 		return fn, nil
 	}
-	return "", serviceerror.NewInvalidArgument("invalid alias")
+	return "", serviceerror.NewInvalidArgument(
+		fmt.Sprintf("Namespace %s has no mapping defined for search attribute %s", ns, alias),
+	)
 }
