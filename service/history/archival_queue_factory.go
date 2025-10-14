@@ -29,7 +29,7 @@ var (
 	// ArchivalTaskPriorities is the map of task priority to weight for the archival queue.
 	// The archival queue only uses the low task priority, so we only define a weight for that priority.
 	ArchivalTaskPriorities = configs.ConvertWeightsToDynamicConfigValue(map[ctasks.Priority]int{
-		ctasks.PriorityLow: 10,
+		ctasks.PriorityPreemptable: 10,
 	})
 )
 
@@ -100,9 +100,8 @@ func newQueueFactoryBase(params ArchivalQueueFactoryParams) QueueFactoryBase {
 // CreateQueue creates a new archival queue for the given shard.
 func (f *archivalQueueFactory) CreateQueue(
 	shard historyi.ShardContext,
-	workflowCache wcache.Cache,
 ) queues.Queue {
-	executor := f.newArchivalTaskExecutor(shard, workflowCache)
+	executor := f.newArchivalTaskExecutor(shard, f.WorkflowCache)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)
 	}
@@ -191,6 +190,8 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 			CheckpointInterval:                  f.Config.ArchivalProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.ArchivalProcessorUpdateAckIntervalJitterCoefficient,
 			MaxReaderCount:                      f.Config.ArchivalQueueMaxReaderCount,
+			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
+			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
 		},
 		f.HostReaderRateLimiter,
 		logger,

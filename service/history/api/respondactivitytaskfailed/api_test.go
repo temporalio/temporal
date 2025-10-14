@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -107,8 +108,9 @@ func (s *workflowSuite) Test_NormalFlowShouldRescheduleActivity_UpdatesWorkflowE
 	request := s.newRespondActivityTaskFailedRequest(uc)
 	s.setupStubs(uc)
 
-	s.expectTimerMetricsRecorded(uc, s.shardContext)
+	s.expectTransientFailureMetricsRecorded(uc, s.shardContext)
 	s.workflowContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
+	s.currentMutableState.EXPECT().GetEffectiveVersioningBehavior().Return(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
 	_, err := Invoke(ctx, request, s.shardContext, s.workflowConsistencyChecker)
 	s.NoError(err)
@@ -244,8 +246,9 @@ func (s *workflowSuite) Test_LastHeartBeatDetailsExist_UpdatesMutableState() {
 		Identity:  request.FailedRequest.GetIdentity(),
 		Namespace: request.FailedRequest.GetNamespace(),
 	})
+	s.currentMutableState.EXPECT().GetEffectiveVersioningBehavior().Return(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
-	s.expectTimerMetricsRecorded(uc, s.shardContext)
+	s.expectTransientFailureMetricsRecorded(uc, s.shardContext)
 
 	_, err := Invoke(
 		ctx,
@@ -293,7 +296,7 @@ func (s *workflowSuite) Test_NoMoreRetriesAndMutableStateHasNoPendingTasks_WillR
 	})
 	s.setupStubs(uc)
 	request := s.newRespondActivityTaskFailedRequest(uc)
-	s.expectTimerMetricsRecorded(uc, s.shardContext)
+	s.expectTerminalFailureMetricsRecorded(uc, s.shardContext)
 	s.currentMutableState.EXPECT().AddActivityTaskFailedEvent(
 		uc.scheduledEventId,
 		uc.startedEventId,
@@ -303,6 +306,7 @@ func (s *workflowSuite) Test_NoMoreRetriesAndMutableStateHasNoPendingTasks_WillR
 		request.FailedRequest.WorkerVersion,
 	).Return(nil, nil)
 	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.currentMutableState.EXPECT().GetEffectiveVersioningBehavior().Return(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 	s.workflowContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 
 	_, err := Invoke(ctx, request, s.shardContext, s.workflowConsistencyChecker)
@@ -412,7 +416,7 @@ func (s *workflowSuite) setupWorkflowContext(mutableState *historyi.MockMutableS
 
 func (s *workflowSuite) setupCache() *wcache.MockCache {
 	workflowCache := wcache.NewMockCache(s.controller)
-	workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), locks.PriorityHigh).
+	workflowCache.EXPECT().GetOrCreateChasmEntity(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), chasmworkflow.Archetype, locks.PriorityHigh).
 		Return(s.workflowContext, wcache.NoopReleaseFn, nil).AnyTimes()
 	workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), locks.PriorityHigh).Return(wcache.NoopReleaseFn, nil).AnyTimes()
 	return workflowCache
@@ -435,22 +439,53 @@ func (s *workflowSuite) setupShardContext(registry namespace.Registry) *historyi
 	return shardContext
 }
 
-func (s *workflowSuite) expectTimerMetricsRecorded(uc UsecaseConfig, shardContext *historyi.MockShardContext) {
+func (s *workflowSuite) expectTransientFailureMetricsRecorded(uc UsecaseConfig, shardContext *historyi.MockShardContext) {
 	timer := metrics.NewMockTimerIface(s.controller)
+	counter := metrics.NewMockCounterIface(s.controller)
 	tags := []metrics.Tag{
 		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
 		metrics.WorkflowTypeTag(uc.wfType.Name),
 		metrics.ActivityTypeTag(uc.activityType),
+		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
 		metrics.NamespaceTag(uc.namespaceName.String()),
 		metrics.UnsafeTaskQueueTag(uc.taskQueueId),
 	}
 
-	timer.EXPECT().Record(
-		gomock.Any(),
-	)
 	metricsHandler := metrics.NewMockHandler(s.controller)
 	metricsHandler.EXPECT().WithTags(tags).Return(metricsHandler)
+
+	timer.EXPECT().Record(gomock.Any()).Times(2) // ActivityE2ELatency and ActivityStartToCloseLatency
 	metricsHandler.EXPECT().Timer(metrics.ActivityE2ELatency.Name()).Return(timer)
+	metricsHandler.EXPECT().Timer(metrics.ActivityStartToCloseLatency.Name()).Return(timer)
+	// ActivityScheduleToCloseLatency is NOT recorded for retries
+	counter.EXPECT().Record(int64(1))
+	metricsHandler.EXPECT().Counter(metrics.ActivityTaskFail.Name()).Return(counter)
+
+	shardContext.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
+}
+
+func (s *workflowSuite) expectTerminalFailureMetricsRecorded(uc UsecaseConfig, shardContext *historyi.MockShardContext) {
+	timer := metrics.NewMockTimerIface(s.controller)
+	counter := metrics.NewMockCounterIface(s.controller)
+	tags := []metrics.Tag{
+		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
+		metrics.WorkflowTypeTag(uc.wfType.Name),
+		metrics.ActivityTypeTag(uc.activityType),
+		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
+		metrics.NamespaceTag(uc.namespaceName.String()),
+		metrics.UnsafeTaskQueueTag(uc.taskQueueId),
+	}
+
+	metricsHandler := metrics.NewMockHandler(s.controller)
+	metricsHandler.EXPECT().WithTags(tags).Return(metricsHandler)
+
+	timer.EXPECT().Record(gomock.Any()).Times(3) // ActivityE2ELatency, ActivityStartToCloseLatency, and ActivityScheduleToCloseLatency
+	metricsHandler.EXPECT().Timer(metrics.ActivityE2ELatency.Name()).Return(timer)
+	metricsHandler.EXPECT().Timer(metrics.ActivityStartToCloseLatency.Name()).Return(timer)
+	metricsHandler.EXPECT().Timer(metrics.ActivityScheduleToCloseLatency.Name()).Return(timer) // Recorded for terminal failures
+	counter.EXPECT().Record(int64(1)).Times(2)                                                 // ActivityFail and ActivityTaskFail
+	metricsHandler.EXPECT().Counter(metrics.ActivityFail.Name()).Return(counter)
+	metricsHandler.EXPECT().Counter(metrics.ActivityTaskFail.Name()).Return(counter)
 
 	shardContext.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
 }

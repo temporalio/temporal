@@ -300,10 +300,8 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 	return err
 }
 
-func AdaptAuthorizeError(err error) error {
-	// Authorize err is either an explicitly set reason, or a generic "Request unauthorized." message.
-	var permissionDeniedError *serviceerror.PermissionDenied
-	if errors.As(err, &permissionDeniedError) && permissionDeniedError.Reason != "" {
+func AdaptAuthorizeError(permissionDeniedError *serviceerror.PermissionDenied) error {
+	if permissionDeniedError.Reason != "" {
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied: %s", permissionDeniedError.Reason)
 	}
 	return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied")

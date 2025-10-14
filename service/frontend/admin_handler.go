@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -14,7 +15,6 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
@@ -25,7 +25,6 @@ import (
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -57,7 +56,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/dlq"
@@ -88,6 +86,7 @@ type (
 		persistenceExecutionName   string
 		namespaceReplicationQueue  persistence.NamespaceReplicationQueue
 		taskManager                persistence.TaskManager
+		fairTaskManager            persistence.FairTaskManager
 		clusterMetadataManager     persistence.ClusterMetadataManager
 		persistenceMetadataManager persistence.MetadataManager
 		clientFactory              serverClient.Factory
@@ -120,6 +119,7 @@ type (
 		visibilityMgr                       manager.VisibilityManager
 		Logger                              log.Logger
 		TaskManager                         persistence.TaskManager
+		FairTaskManager                     persistence.FairTaskManager
 		PersistenceExecutionManager         persistence.ExecutionManager
 		ClusterMetadataManager              persistence.ClusterMetadataManager
 		PersistenceMetadataManager          persistence.MetadataManager
@@ -192,6 +192,7 @@ func NewAdminHandler(
 		persistenceExecutionName:   args.PersistenceExecutionManager.GetName(),
 		namespaceReplicationQueue:  args.NamespaceReplicationQueue,
 		taskManager:                args.TaskManager,
+		fairTaskManager:            args.FairTaskManager,
 		clusterMetadataManager:     args.ClusterMetadataManager,
 		persistenceMetadataManager: args.PersistenceMetadataManager,
 		clientFactory:              args.ClientFactory,
@@ -379,7 +380,6 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 		return serviceerror.NewUnavailablef(errUnableToGetNamespaceInfoMessage, nsName, err)
 	}
 
-	dbCustomSearchAttributes := searchattribute.GetSqlDbIndexSearchAttributes().CustomSearchAttributes
 	cmCustomSearchAttributes := currentSearchAttributes.Custom()
 	upsertFieldToAliasMap := make(map[string]string)
 	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
@@ -394,12 +394,8 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 		// find the first available field for the given type
 		targetFieldName := ""
 		cntUsed := 0
-		for fieldName, fieldType := range dbCustomSearchAttributes {
-			if fieldType != saType {
-				continue
-			}
-			// make sure the pre-allocated custom search attributes are created in cluster metadata
-			if _, ok := cmCustomSearchAttributes[fieldName]; !ok {
+		for fieldName, fieldType := range cmCustomSearchAttributes {
+			if fieldType != saType || !searchattribute.IsPreallocatedCSAFieldName(fieldName, fieldType) {
 				continue
 			}
 			if _, ok := fieldToAliasMap[fieldName]; ok {
@@ -750,7 +746,7 @@ func (adh *AdminHandler) unaliasAndValidateSearchAttributes(historyBatches []*co
 			continue
 		}
 
-		unaliasedBatch, err := adh.eventSerializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+		unaliasedBatch, err := adh.eventSerializer.SerializeEvents(events)
 		if err != nil {
 			return nil, serviceerror.NewInvalidArgument(err.Error())
 		}
@@ -790,8 +786,9 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 
 	historyAddr := historyHost.GetAddress()
 	historyResponse, err := adh.historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
-		NamespaceId: namespaceID.String(),
-		Execution:   request.Execution,
+		NamespaceId:     namespaceID.String(),
+		Execution:       request.Execution,
+		SkipForceReload: request.GetSkipForceReload(),
 	})
 
 	if err != nil {
@@ -1547,63 +1544,7 @@ func (adh *AdminHandler) ResendReplicationTasks(
 	ctx context.Context,
 	request *adminservice.ResendReplicationTasksRequest,
 ) (_ *adminservice.ResendReplicationTasksResponse, err error) {
-	defer log.CapturePanic(adh.logger, &err)
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-	resender := xdc.NewNDCHistoryResender(
-		adh.namespaceRegistry,
-		adh.clientBean,
-		func(
-			ctx context.Context,
-			sourceClusterName string,
-			namespaceId namespace.ID,
-			workflowId string,
-			runId string,
-			events [][]*historypb.HistoryEvent,
-			versionHistory []*historyspb.VersionHistoryItem,
-		) error {
-			for _, event := range events {
-				historyBlob, err1 := adh.eventSerializer.SerializeEvents(event, enumspb.ENCODING_TYPE_PROTO3)
-				if err1 != nil {
-					return err1
-				}
-				replicateRequest := &historyservice.ReplicateEventsV2Request{
-					NamespaceId: namespaceId.String(),
-					WorkflowExecution: &commonpb.WorkflowExecution{
-						WorkflowId: workflowId,
-						RunId:      runId,
-					},
-					Events:              historyBlob,
-					VersionHistoryItems: versionHistory,
-				}
-				_, err1 = adh.historyClient.ReplicateEventsV2(ctx, replicateRequest)
-				if err1 != nil {
-					return err1
-				}
-			}
-			return nil
-		},
-		adh.eventSerializer,
-		nil,
-		adh.logger,
-		nil,
-	)
-	if err := resender.SendSingleWorkflowHistory(
-		ctx,
-		request.GetRemoteCluster(),
-		namespace.ID(request.GetNamespaceId()),
-		request.GetWorkflowId(),
-		request.GetRunId(),
-		resendStartEventID,
-		request.StartVersion,
-		common.EmptyEventID,
-		common.EmptyVersion,
-	); err != nil {
-		return nil, err
-	}
-	return &adminservice.ResendReplicationTasksResponse{}, nil
+	return nil, serviceerror.NewUnimplemented("ResendReplicationTasks is not implemented in AdminHandler")
 }
 
 // GetTaskQueueTasks returns tasks from task queue
@@ -1622,12 +1563,24 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 		return nil, err
 	}
 
-	resp, err := adh.taskManager.GetTasks(ctx, &persistence.GetTasksRequest{
+	var taskManager persistence.TaskManager
+	if request.GetMinPass() != 0 {
+		if adh.fairTaskManager == nil {
+			return nil, serviceerror.NewInvalidArgument("Fairness table is not available on this cluster")
+		}
+		taskManager = adh.fairTaskManager
+		request.MaxTaskId = math.MaxInt64 // required for fairness GetTasks call
+	} else {
+		taskManager = adh.taskManager
+	}
+
+	resp, err := taskManager.GetTasks(ctx, &persistence.GetTasksRequest{
 		NamespaceID:        namespaceID.String(),
 		TaskQueue:          request.GetTaskQueue(),
 		TaskType:           request.GetTaskQueueType(),
 		InclusiveMinTaskID: request.GetMinTaskId(),
 		ExclusiveMaxTaskID: request.GetMaxTaskId(),
+		InclusiveMinPass:   request.GetMinPass(),
 		Subqueue:           int(request.GetSubqueue()),
 		PageSize:           int(request.GetBatchSize()),
 		NextPageToken:      request.NextPageToken,
@@ -2136,8 +2089,9 @@ func (adh *AdminHandler) ListQueues(
 	queues := make([]*adminservice.ListQueuesResponse_QueueInfo, len(resp.Queues))
 	for i, queue := range resp.Queues {
 		queues[i] = &adminservice.ListQueuesResponse_QueueInfo{
-			QueueName:    queue.QueueName,
-			MessageCount: queue.MessageCount,
+			QueueName:     queue.QueueName,
+			MessageCount:  queue.MessageCount,
+			LastMessageId: queue.LastMessageId,
 		}
 	}
 	return &adminservice.ListQueuesResponse{
@@ -2194,8 +2148,9 @@ func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(
 	resp, err := adh.historyClient.GenerateLastHistoryReplicationTasks(
 		ctx,
 		&historyservice.GenerateLastHistoryReplicationTasksRequest{
-			NamespaceId: namespaceEntry.ID().String(),
-			Execution:   request.Execution,
+			NamespaceId:    namespaceEntry.ID().String(),
+			Execution:      request.Execution,
+			TargetClusters: request.TargetClusters,
 		},
 	)
 	if err != nil {

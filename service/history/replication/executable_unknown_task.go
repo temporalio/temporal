@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -47,7 +46,6 @@ func NewExecutableUnknownTask(
 				ClusterID: 0,
 				ShardID:   0,
 			},
-			enumsspb.TASK_PRIORITY_UNSPECIFIED,
 			nil,
 		),
 		task: task,

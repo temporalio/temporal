@@ -8,7 +8,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
@@ -26,7 +25,6 @@ type (
 		ShardController           shard.Controller
 		NamespaceCache            namespace.Registry
 		EagerNamespaceRefresher   EagerNamespaceRefresher
-		NDCHistoryResender        xdc.NDCHistoryResender
 		ResendHandler             eventhandler.ResendHandler
 		HighPriorityTaskScheduler ctasks.Scheduler[TrackableExecutableTask] `name:"HighPriorityTaskScheduler"`
 		// consider using a single TaskScheduler i.e. InterleavedWeightedRoundRobinScheduler instead of two

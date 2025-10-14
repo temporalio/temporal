@@ -7,6 +7,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -21,6 +22,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/service/matching/workers"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
@@ -40,6 +42,7 @@ type (
 		startWG           sync.WaitGroup
 		throttledLogger   log.Logger
 		namespaceRegistry namespace.Registry
+		workersRegistry   workers.Registry
 	}
 
 	HandlerParams struct {
@@ -49,6 +52,7 @@ type (
 		Logger                        log.Logger
 		ThrottledLogger               log.Logger
 		TaskManager                   persistence.TaskManager
+		FairTaskManager               persistence.FairTaskManager
 		HistoryClient                 resource.HistoryClient
 		MatchingRawClient             resource.MatchingRawClient
 		DeploymentStoreClient         deployment.DeploymentStoreClient
@@ -65,6 +69,7 @@ type (
 		SearchAttributeProvider       searchattribute.Provider
 		SearchAttributeMapperProvider searchattribute.MapperProvider
 		RateLimiter                   TaskDispatchRateLimiter `optional:"true"`
+		WorkersRegistry               workers.Registry
 	}
 )
 
@@ -87,6 +92,7 @@ func NewHandler(
 		throttledLogger: params.ThrottledLogger,
 		engine: NewEngine(
 			params.TaskManager,
+			params.FairTaskManager,
 			params.HistoryClient,
 			params.MatchingRawClient, // Use non retry client inside matching
 			params.DeploymentStoreClient,
@@ -108,6 +114,7 @@ func NewHandler(
 			params.RateLimiter,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
+		workersRegistry:   params.WorkersRegistry,
 	}
 
 	// prevent from serving requests before matching engine is started and ready
@@ -326,6 +333,14 @@ func (h *Handler) DescribeTaskQueue(
 	return resp, nil
 }
 
+func (h *Handler) DescribeVersionedTaskQueues(
+	ctx context.Context,
+	request *matchingservice.DescribeVersionedTaskQueuesRequest,
+) (_ *matchingservice.DescribeVersionedTaskQueuesResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.DescribeVersionedTaskQueues(ctx, request)
+}
+
 // DescribeTaskQueuePartition returns information about the target task queue partition.
 func (h *Handler) DescribeTaskQueuePartition(
 	ctx context.Context,
@@ -532,6 +547,37 @@ func (h *Handler) ListNexusEndpoints(ctx context.Context, request *matchingservi
 	return h.engine.ListNexusEndpoints(ctx, request)
 }
 
+// RecordWorkerHeartbeat receive heartbeat request from the worker.
+func (h *Handler) RecordWorkerHeartbeat(
+	_ context.Context, request *matchingservice.RecordWorkerHeartbeatRequest,
+) (*matchingservice.RecordWorkerHeartbeatResponse, error) {
+	nsID := namespace.ID(request.GetNamespaceId())
+
+	h.workersRegistry.RecordWorkerHeartbeats(nsID, request.GetHeartbeartRequest().GetWorkerHeartbeat())
+	return &matchingservice.RecordWorkerHeartbeatResponse{}, nil
+}
+
+// ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
+func (h *Handler) ListWorkers(
+	_ context.Context, request *matchingservice.ListWorkersRequest,
+) (*matchingservice.ListWorkersResponse, error) {
+	nsID := namespace.ID(request.GetNamespaceId())
+	workersHeartbeats, err := h.workersRegistry.ListWorkers(
+		nsID, request.GetListRequest().GetQuery(), request.GetListRequest().GetNextPageToken())
+	if err != nil {
+		return nil, err
+	}
+	var workersInfo []*workerpb.WorkerInfo
+	for _, heartbeat := range workersHeartbeats {
+		workersInfo = append(workersInfo, &workerpb.WorkerInfo{
+			WorkerHeartbeat: heartbeat,
+		})
+	}
+	return &matchingservice.ListWorkersResponse{
+		WorkersInfo: workersInfo,
+	}, nil
+}
+
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 	entry, err := h.namespaceRegistry.GetNamespaceByID(id)
 	if err != nil {
@@ -548,4 +594,26 @@ func (h *Handler) reportForwardedPerTaskQueueCounter(opMetrics metrics.Handler, 
 			metrics.OperationTag(metrics.MatchingAddWorkflowTaskScope),
 			metrics.NamespaceTag(h.namespaceName(namespaceId).String()),
 			metrics.ServiceRoleTag(metrics.MatchingRoleTagValue))
+}
+
+func (h *Handler) UpdateTaskQueueConfig(
+	ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest,
+) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+	return h.engine.UpdateTaskQueueConfig(ctx, request)
+}
+
+func (h *Handler) DescribeWorker(
+	_ context.Context, request *matchingservice.DescribeWorkerRequest,
+) (*matchingservice.DescribeWorkerResponse, error) {
+	nsID := namespace.ID(request.GetNamespaceId())
+	hb, err := h.workersRegistry.DescribeWorker(
+		nsID, request.Request.GetWorkerInstanceKey())
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.DescribeWorkerResponse{
+		WorkerInfo: &workerpb.WorkerInfo{
+			WorkerHeartbeat: hb,
+		},
+	}, nil
 }

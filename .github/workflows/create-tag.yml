@@ -160,9 +160,9 @@ jobs:
           [Helm Chart](https://github.com/temporalio/helm-charts)
 
           ### Docker images for this release (use the tag \`${TAG#v}\`)
-          [Server](https://hub.docker.com/repository/docker/temporalio/server)
-          [Server With Auto Setup](https://hub.docker.com/repository/docker/temporalio/auto-setup) ([what is Auto-Setup?](https://docs.temporal.io/blog/auto-setup))
-          [Admin-Tools](https://hub.docker.com/repository/docker/temporalio/admin-tools)
+          [Server](https://hub.docker.com/r/temporalio/server)
+          [Server With Auto Setup](https://hub.docker.com/r/temporalio/auto-setup) ([what is Auto-Setup?](https://docs.temporal.io/blog/auto-setup))
+          [Admin-Tools](https://hub.docker.com/r/temporalio/admin-tools)
 
           **Full Changelog**: https://github.com/temporalio/temporal/compare/${BASE_TAG}...${TAG}
           EOF
@@ -170,13 +170,43 @@ jobs:
           gh repo set-default ${{ github.repository }}
           gh release create "$TAG" --verify-tag --draft --title "$TAG" -F "$TEMPFILE"
 
+  update-deps:
+    name: "Update dependencies in main branch"
+    runs-on: ubuntu-latest
+    needs: [create-tag]
+    if: ${{ github.event.inputs.update_deps == 'true' }}
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          token: ${{ steps.generate_token.outputs.token }}
+          ref: main
+
+      - name: Set up Github credentials
+        run: |
+          git config --local user.name 'Temporal Data'
+          git config --local user.email 'commander-data@temporal.io'
+
       - name: Create PR updating dependencies
-        if: ${{ github.event.inputs.update_deps == 'true' }}
         run: |
           make update-dependencies
           make go-generate
           BRANCH="temporal-data/update-dependencies-$(git rev-parse --short HEAD)"
-          git checkout -b "${BRANCH}" main
+          git checkout -b "${BRANCH}"
           git add .
           git commit -m "Update dependencies" --author ${{ github.actor }}
           git push origin "${BRANCH}"

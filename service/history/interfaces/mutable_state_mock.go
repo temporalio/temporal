@@ -34,6 +34,7 @@ import (
 	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence0 "go.temporal.io/server/common/persistence"
+	worker_versioning "go.temporal.io/server/common/worker_versioning"
 	historybuilder "go.temporal.io/server/service/history/historybuilder"
 	hsm "go.temporal.io/server/service/history/hsm"
 	tasks "go.temporal.io/server/service/history/tasks"
@@ -280,9 +281,9 @@ func (mr *MockMutableStateMockRecorder) AddCompletedWorkflowEvent(arg0, arg1, ar
 }
 
 // AddContinueAsNewEvent mocks base method.
-func (m *MockMutableState) AddContinueAsNewEvent(arg0 context.Context, arg1, arg2 int64, arg3 namespace.Name, arg4 *command.ContinueAsNewWorkflowExecutionCommandAttributes) (*history.HistoryEvent, MutableState, error) {
+func (m *MockMutableState) AddContinueAsNewEvent(arg0 context.Context, arg1, arg2 int64, arg3 namespace.Name, arg4 *command.ContinueAsNewWorkflowExecutionCommandAttributes, arg5 worker_versioning.IsWFTaskQueueInVersionDetector) (*history.HistoryEvent, MutableState, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddContinueAsNewEvent", arg0, arg1, arg2, arg3, arg4)
+	ret := m.ctrl.Call(m, "AddContinueAsNewEvent", arg0, arg1, arg2, arg3, arg4, arg5)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(MutableState)
 	ret2, _ := ret[2].(error)
@@ -290,9 +291,9 @@ func (m *MockMutableState) AddContinueAsNewEvent(arg0 context.Context, arg1, arg
 }
 
 // AddContinueAsNewEvent indicates an expected call of AddContinueAsNewEvent.
-func (mr *MockMutableStateMockRecorder) AddContinueAsNewEvent(arg0, arg1, arg2, arg3, arg4 any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddContinueAsNewEvent(arg0, arg1, arg2, arg3, arg4, arg5 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddContinueAsNewEvent", reflect.TypeOf((*MockMutableState)(nil).AddContinueAsNewEvent), arg0, arg1, arg2, arg3, arg4)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddContinueAsNewEvent", reflect.TypeOf((*MockMutableState)(nil).AddContinueAsNewEvent), arg0, arg1, arg2, arg3, arg4, arg5)
 }
 
 // AddExternalWorkflowExecutionCancelRequested mocks base method.
@@ -498,9 +499,9 @@ func (mr *MockMutableStateMockRecorder) AddStartChildWorkflowExecutionFailedEven
 }
 
 // AddStartChildWorkflowExecutionInitiatedEvent mocks base method.
-func (m *MockMutableState) AddStartChildWorkflowExecutionInitiatedEvent(arg0 int64, arg1 string, arg2 *command.StartChildWorkflowExecutionCommandAttributes, arg3 namespace.ID) (*history.HistoryEvent, *persistence.ChildExecutionInfo, error) {
+func (m *MockMutableState) AddStartChildWorkflowExecutionInitiatedEvent(arg0 int64, arg1 *command.StartChildWorkflowExecutionCommandAttributes, arg2 namespace.ID) (*history.HistoryEvent, *persistence.ChildExecutionInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddStartChildWorkflowExecutionInitiatedEvent", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "AddStartChildWorkflowExecutionInitiatedEvent", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(*persistence.ChildExecutionInfo)
 	ret2, _ := ret[2].(error)
@@ -508,25 +509,25 @@ func (m *MockMutableState) AddStartChildWorkflowExecutionInitiatedEvent(arg0 int
 }
 
 // AddStartChildWorkflowExecutionInitiatedEvent indicates an expected call of AddStartChildWorkflowExecutionInitiatedEvent.
-func (mr *MockMutableStateMockRecorder) AddStartChildWorkflowExecutionInitiatedEvent(arg0, arg1, arg2, arg3 any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddStartChildWorkflowExecutionInitiatedEvent(arg0, arg1, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddStartChildWorkflowExecutionInitiatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddStartChildWorkflowExecutionInitiatedEvent), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddStartChildWorkflowExecutionInitiatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddStartChildWorkflowExecutionInitiatedEvent), arg0, arg1, arg2)
 }
 
 // AddTasks mocks base method.
-func (m *MockMutableState) AddTasks(tasks ...tasks.Task) {
+func (m *MockMutableState) AddTasks(arg0 ...tasks.Task) {
 	m.ctrl.T.Helper()
 	varargs := []any{}
-	for _, a := range tasks {
+	for _, a := range arg0 {
 		varargs = append(varargs, a)
 	}
 	m.ctrl.Call(m, "AddTasks", varargs...)
 }
 
 // AddTasks indicates an expected call of AddTasks.
-func (mr *MockMutableStateMockRecorder) AddTasks(tasks ...any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddTasks(arg0 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockMutableState)(nil).AddTasks), tasks...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockMutableState)(nil).AddTasks), arg0...)
 }
 
 // AddTimeoutWorkflowEvent mocks base method.
@@ -801,18 +802,18 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowTaskCompletedEvent(arg0, arg1
 }
 
 // AddWorkflowTaskFailedEvent mocks base method.
-func (m *MockMutableState) AddWorkflowTaskFailedEvent(workflowTask *WorkflowTaskInfo, cause enums.WorkflowTaskFailedCause, failure *failure.Failure, identity string, versioningStamp *common.WorkerVersionStamp, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*history.HistoryEvent, error) {
+func (m *MockMutableState) AddWorkflowTaskFailedEvent(workflowTask *WorkflowTaskInfo, cause enums.WorkflowTaskFailedCause, arg2 *failure.Failure, identity string, versioningStamp *common.WorkerVersionStamp, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowTaskFailedEvent", workflowTask, cause, failure, identity, versioningStamp, binChecksum, baseRunID, newRunID, forkEventVersion)
+	ret := m.ctrl.Call(m, "AddWorkflowTaskFailedEvent", workflowTask, cause, arg2, identity, versioningStamp, binChecksum, baseRunID, newRunID, forkEventVersion)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddWorkflowTaskFailedEvent indicates an expected call of AddWorkflowTaskFailedEvent.
-func (mr *MockMutableStateMockRecorder) AddWorkflowTaskFailedEvent(workflowTask, cause, failure, identity, versioningStamp, binChecksum, baseRunID, newRunID, forkEventVersion any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddWorkflowTaskFailedEvent(workflowTask, cause, arg2, identity, versioningStamp, binChecksum, baseRunID, newRunID, forkEventVersion any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskFailedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskFailedEvent), workflowTask, cause, failure, identity, versioningStamp, binChecksum, baseRunID, newRunID, forkEventVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskFailedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskFailedEvent), workflowTask, cause, arg2, identity, versioningStamp, binChecksum, baseRunID, newRunID, forkEventVersion)
 }
 
 // AddWorkflowTaskScheduleToStartTimeoutEvent mocks base method.
@@ -1217,18 +1218,18 @@ func (mr *MockMutableStateMockRecorder) ApplyStartChildWorkflowExecutionFailedEv
 }
 
 // ApplyStartChildWorkflowExecutionInitiatedEvent mocks base method.
-func (m *MockMutableState) ApplyStartChildWorkflowExecutionInitiatedEvent(arg0 int64, arg1 *history.HistoryEvent, arg2 string) (*persistence.ChildExecutionInfo, error) {
+func (m *MockMutableState) ApplyStartChildWorkflowExecutionInitiatedEvent(arg0 int64, arg1 *history.HistoryEvent) (*persistence.ChildExecutionInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ApplyStartChildWorkflowExecutionInitiatedEvent", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "ApplyStartChildWorkflowExecutionInitiatedEvent", arg0, arg1)
 	ret0, _ := ret[0].(*persistence.ChildExecutionInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ApplyStartChildWorkflowExecutionInitiatedEvent indicates an expected call of ApplyStartChildWorkflowExecutionInitiatedEvent.
-func (mr *MockMutableStateMockRecorder) ApplyStartChildWorkflowExecutionInitiatedEvent(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) ApplyStartChildWorkflowExecutionInitiatedEvent(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyStartChildWorkflowExecutionInitiatedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyStartChildWorkflowExecutionInitiatedEvent), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyStartChildWorkflowExecutionInitiatedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyStartChildWorkflowExecutionInitiatedEvent), arg0, arg1)
 }
 
 // ApplyTimerCanceledEvent mocks base method.
@@ -1565,6 +1566,18 @@ func (m *MockMutableState) ApplyWorkflowTaskTimedOutEvent(arg0 enums.TimeoutType
 func (mr *MockMutableStateMockRecorder) ApplyWorkflowTaskTimedOutEvent(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowTaskTimedOutEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowTaskTimedOutEvent), arg0)
+}
+
+// AttachRequestID mocks base method.
+func (m *MockMutableState) AttachRequestID(requestID string, eventType enums.EventType, eventID int64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AttachRequestID", requestID, eventType, eventID)
+}
+
+// AttachRequestID indicates an expected call of AttachRequestID.
+func (mr *MockMutableStateMockRecorder) AttachRequestID(requestID, eventType, eventID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttachRequestID", reflect.TypeOf((*MockMutableState)(nil).AttachRequestID), requestID, eventType, eventID)
 }
 
 // ChasmTree mocks base method.
@@ -2397,18 +2410,18 @@ func (mr *MockMutableStateMockRecorder) GetRequesteCancelExternalInitiatedEvent(
 }
 
 // GetRetryBackoffDuration mocks base method.
-func (m *MockMutableState) GetRetryBackoffDuration(failure *failure.Failure) (time.Duration, enums.RetryState) {
+func (m *MockMutableState) GetRetryBackoffDuration(arg0 *failure.Failure) (time.Duration, enums.RetryState) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRetryBackoffDuration", failure)
+	ret := m.ctrl.Call(m, "GetRetryBackoffDuration", arg0)
 	ret0, _ := ret[0].(time.Duration)
 	ret1, _ := ret[1].(enums.RetryState)
 	return ret0, ret1
 }
 
 // GetRetryBackoffDuration indicates an expected call of GetRetryBackoffDuration.
-func (mr *MockMutableStateMockRecorder) GetRetryBackoffDuration(failure any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) GetRetryBackoffDuration(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRetryBackoffDuration", reflect.TypeOf((*MockMutableState)(nil).GetRetryBackoffDuration), failure)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRetryBackoffDuration", reflect.TypeOf((*MockMutableState)(nil).GetRetryBackoffDuration), arg0)
 }
 
 // GetSignalExternalInitiatedEvent mocks base method.
@@ -2632,6 +2645,34 @@ func (mr *MockMutableStateMockRecorder) GetWorkflowTaskByID(scheduledEventID any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowTaskByID", reflect.TypeOf((*MockMutableState)(nil).GetWorkflowTaskByID), scheduledEventID)
 }
 
+// GetWorkflowTaskScheduleToStartTimeoutTask mocks base method.
+func (m *MockMutableState) GetWorkflowTaskScheduleToStartTimeoutTask() *tasks.WorkflowTaskTimeoutTask {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowTaskScheduleToStartTimeoutTask")
+	ret0, _ := ret[0].(*tasks.WorkflowTaskTimeoutTask)
+	return ret0
+}
+
+// GetWorkflowTaskScheduleToStartTimeoutTask indicates an expected call of GetWorkflowTaskScheduleToStartTimeoutTask.
+func (mr *MockMutableStateMockRecorder) GetWorkflowTaskScheduleToStartTimeoutTask() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowTaskScheduleToStartTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).GetWorkflowTaskScheduleToStartTimeoutTask))
+}
+
+// GetWorkflowTaskStartToCloseTimeoutTask mocks base method.
+func (m *MockMutableState) GetWorkflowTaskStartToCloseTimeoutTask() *tasks.WorkflowTaskTimeoutTask {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowTaskStartToCloseTimeoutTask")
+	ret0, _ := ret[0].(*tasks.WorkflowTaskTimeoutTask)
+	return ret0
+}
+
+// GetWorkflowTaskStartToCloseTimeoutTask indicates an expected call of GetWorkflowTaskStartToCloseTimeoutTask.
+func (mr *MockMutableStateMockRecorder) GetWorkflowTaskStartToCloseTimeoutTask() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowTaskStartToCloseTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).GetWorkflowTaskStartToCloseTimeoutTask))
+}
+
 // GetWorkflowType mocks base method.
 func (m *MockMutableState) GetWorkflowType() *common.WorkflowType {
 	m.ctrl.T.Helper()
@@ -2742,6 +2783,20 @@ func (m *MockMutableState) HasPendingWorkflowTask() bool {
 func (mr *MockMutableStateMockRecorder) HasPendingWorkflowTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPendingWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasPendingWorkflowTask))
+}
+
+// HasRequestID mocks base method.
+func (m *MockMutableState) HasRequestID(requestID string) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasRequestID", requestID)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasRequestID indicates an expected call of HasRequestID.
+func (mr *MockMutableStateMockRecorder) HasRequestID(requestID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasRequestID", reflect.TypeOf((*MockMutableState)(nil).HasRequestID), requestID)
 }
 
 // HasStartedWorkflowTask mocks base method.
@@ -3091,18 +3146,18 @@ func (mr *MockMutableStateMockRecorder) RemoveSpeculativeWorkflowTaskTimeoutTask
 }
 
 // RetryActivity mocks base method.
-func (m *MockMutableState) RetryActivity(ai *persistence.ActivityInfo, failure *failure.Failure) (enums.RetryState, error) {
+func (m *MockMutableState) RetryActivity(ai *persistence.ActivityInfo, arg1 *failure.Failure) (enums.RetryState, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RetryActivity", ai, failure)
+	ret := m.ctrl.Call(m, "RetryActivity", ai, arg1)
 	ret0, _ := ret[0].(enums.RetryState)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RetryActivity indicates an expected call of RetryActivity.
-func (mr *MockMutableStateMockRecorder) RetryActivity(ai, failure any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) RetryActivity(ai, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryActivity", reflect.TypeOf((*MockMutableState)(nil).RetryActivity), ai, failure)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryActivity", reflect.TypeOf((*MockMutableState)(nil).RetryActivity), ai, arg1)
 }
 
 // SetBaseWorkflow mocks base method.
@@ -3195,6 +3250,18 @@ func (mr *MockMutableStateMockRecorder) SetStickyTaskQueue(name, scheduleToStart
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetStickyTaskQueue", reflect.TypeOf((*MockMutableState)(nil).SetStickyTaskQueue), name, scheduleToStartTimeout)
 }
 
+// SetSuccessorRunID mocks base method.
+func (m *MockMutableState) SetSuccessorRunID(runID string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetSuccessorRunID", runID)
+}
+
+// SetSuccessorRunID indicates an expected call of SetSuccessorRunID.
+func (mr *MockMutableStateMockRecorder) SetSuccessorRunID(runID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSuccessorRunID", reflect.TypeOf((*MockMutableState)(nil).SetSuccessorRunID), runID)
+}
+
 // SetUpdateCondition mocks base method.
 func (m *MockMutableState) SetUpdateCondition(arg0, arg1 int64) {
 	m.ctrl.T.Helper()
@@ -3205,6 +3272,30 @@ func (m *MockMutableState) SetUpdateCondition(arg0, arg1 int64) {
 func (mr *MockMutableStateMockRecorder) SetUpdateCondition(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUpdateCondition", reflect.TypeOf((*MockMutableState)(nil).SetUpdateCondition), arg0, arg1)
+}
+
+// SetWorkflowTaskScheduleToStartTimeoutTask mocks base method.
+func (m *MockMutableState) SetWorkflowTaskScheduleToStartTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetWorkflowTaskScheduleToStartTimeoutTask", task)
+}
+
+// SetWorkflowTaskScheduleToStartTimeoutTask indicates an expected call of SetWorkflowTaskScheduleToStartTimeoutTask.
+func (mr *MockMutableStateMockRecorder) SetWorkflowTaskScheduleToStartTimeoutTask(task any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowTaskScheduleToStartTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).SetWorkflowTaskScheduleToStartTimeoutTask), task)
+}
+
+// SetWorkflowTaskStartToCloseTimeoutTask mocks base method.
+func (m *MockMutableState) SetWorkflowTaskStartToCloseTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetWorkflowTaskStartToCloseTimeoutTask", task)
+}
+
+// SetWorkflowTaskStartToCloseTimeoutTask indicates an expected call of SetWorkflowTaskStartToCloseTimeoutTask.
+func (mr *MockMutableStateMockRecorder) SetWorkflowTaskStartToCloseTimeoutTask(task any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowTaskStartToCloseTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).SetWorkflowTaskStartToCloseTimeoutTask), task)
 }
 
 // ShouldResetActivityTimerTaskMask mocks base method.
@@ -3222,17 +3313,17 @@ func (mr *MockMutableStateMockRecorder) ShouldResetActivityTimerTaskMask(current
 }
 
 // StartDeploymentTransition mocks base method.
-func (m *MockMutableState) StartDeploymentTransition(deployment *deployment.Deployment) error {
+func (m *MockMutableState) StartDeploymentTransition(arg0 *deployment.Deployment) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StartDeploymentTransition", deployment)
+	ret := m.ctrl.Call(m, "StartDeploymentTransition", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // StartDeploymentTransition indicates an expected call of StartDeploymentTransition.
-func (mr *MockMutableStateMockRecorder) StartDeploymentTransition(deployment any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) StartDeploymentTransition(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartDeploymentTransition", reflect.TypeOf((*MockMutableState)(nil).StartDeploymentTransition), deployment)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartDeploymentTransition", reflect.TypeOf((*MockMutableState)(nil).StartDeploymentTransition), arg0)
 }
 
 // StartTransaction mocks base method.
@@ -3400,11 +3491,12 @@ func (mr *MockMutableStateMockRecorder) UpdateUserTimerTaskStatus(timerId, statu
 }
 
 // UpdateWorkflowStateStatus mocks base method.
-func (m *MockMutableState) UpdateWorkflowStateStatus(state enums0.WorkflowExecutionState, status enums.WorkflowExecutionStatus) error {
+func (m *MockMutableState) UpdateWorkflowStateStatus(state enums0.WorkflowExecutionState, status enums.WorkflowExecutionStatus) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateWorkflowStateStatus", state, status)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // UpdateWorkflowStateStatus indicates an expected call of UpdateWorkflowStateStatus.

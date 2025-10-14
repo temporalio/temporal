@@ -7,10 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/blang/semver/v4"
 	"github.com/olivere/elastic/v7"
 	"github.com/olivere/elastic/v7/uritemplates"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -23,18 +21,7 @@ type (
 	clientImpl struct {
 		esClient *elastic.Client
 		url      url.URL
-
-		initIsPointInTimeSupported sync.Once
-		isPointInTimeSupported     bool
 	}
-)
-
-const (
-	pointInTimeSupportedFlavor = "default" // the other flavor is "oss"
-)
-
-var (
-	pointInTimeSupportedIn = semver.MustParseRange(">=7.10.0")
 )
 
 var _ Client = (*clientImpl)(nil)
@@ -65,7 +52,10 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 	options = append(options, getLoggerOptions(cfg.LogLevel, logger)...)
 
 	if httpClient == nil {
-		if cfg.TLS != nil && cfg.TLS.Enabled {
+		// Check if httpClient is set in config (e.g., AWS HTTP client)
+		if configHTTPClient := cfg.GetHttpClient(); configHTTPClient != nil {
+			httpClient = configHTTPClient
+		} else if cfg.TLS != nil && cfg.TLS.Enabled {
 			tlsHttpClient, err := buildTLSHTTPClient(cfg.TLS)
 			if err != nil {
 				return nil, fmt.Errorf("unable to create TLS HTTP client: %w", err)
@@ -138,10 +128,6 @@ func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.
 		SortBy(p.Sorter...).
 		TrackTotalHits(false)
 
-	if p.PointInTime != nil {
-		searchSource.PointInTime(p.PointInTime)
-	}
-
 	if p.PageSize != 0 {
 		searchSource.Size(p.PageSize)
 	}
@@ -150,79 +136,7 @@ func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.
 		searchSource.SearchAfter(p.SearchAfter...)
 	}
 
-	searchService := c.esClient.Search().SearchSource(searchSource)
-	// If pit is specified, index must not be used.
-	if p.PointInTime == nil {
-		searchService.Index(p.Index)
-	}
-
-	return searchService.Do(ctx)
-}
-
-func (c *clientImpl) OpenScroll(
-	ctx context.Context,
-	p *SearchParameters,
-	keepAliveInterval string,
-) (*elastic.SearchResult, error) {
-	scrollService := elastic.NewScrollService(c.esClient).
-		Index(p.Index).
-		Query(p.Query).
-		SortBy(p.Sorter...).
-		KeepAlive(keepAliveInterval)
-	if p.PageSize != 0 {
-		scrollService.Size(p.PageSize)
-	}
-	return scrollService.Do(ctx)
-}
-
-func (c *clientImpl) Scroll(
-	ctx context.Context,
-	id string,
-	keepAliveInterval string,
-) (*elastic.SearchResult, error) {
-	return elastic.NewScrollService(c.esClient).ScrollId(id).KeepAlive(keepAliveInterval).Do(ctx)
-}
-
-func (c *clientImpl) CloseScroll(ctx context.Context, id string) error {
-	return elastic.NewScrollService(c.esClient).ScrollId(id).Clear(ctx)
-}
-
-func (c *clientImpl) IsPointInTimeSupported(ctx context.Context) bool {
-	c.initIsPointInTimeSupported.Do(func() {
-		c.isPointInTimeSupported = c.queryPointInTimeSupported(ctx)
-	})
-	return c.isPointInTimeSupported
-}
-
-func (c *clientImpl) queryPointInTimeSupported(ctx context.Context) bool {
-	result, _, err := c.esClient.Ping(c.url.String()).Do(ctx)
-	if err != nil {
-		return false
-	}
-	if result == nil || result.Version.BuildFlavor != pointInTimeSupportedFlavor {
-		return false
-	}
-	esVersion, err := semver.ParseTolerant(result.Version.Number)
-	if err != nil {
-		return false
-	}
-	return pointInTimeSupportedIn(esVersion)
-}
-
-func (c *clientImpl) OpenPointInTime(ctx context.Context, index string, keepAliveInterval string) (string, error) {
-	resp, err := c.esClient.OpenPointInTime(index).KeepAlive(keepAliveInterval).Do(ctx)
-	if err != nil {
-		return "", err
-	}
-	return resp.Id, nil
-}
-
-func (c *clientImpl) ClosePointInTime(ctx context.Context, id string) (bool, error) {
-	resp, err := c.esClient.ClosePointInTime(id).Do(ctx)
-	if err != nil {
-		return false, err
-	}
-	return resp.Succeeded, nil
+	return c.esClient.Search(p.Index).SearchSource(searchSource).Do(ctx)
 }
 
 func (c *clientImpl) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
@@ -340,6 +254,53 @@ func (c *clientImpl) IndexPutTemplate(ctx context.Context, templateName string, 
 		return false, err
 	}
 	return resp.Acknowledged, nil
+}
+
+func (c *clientImpl) IndexPutMapping(ctx context.Context, indexName string, bodyString string) (bool, error) {
+	// Use raw HTTP request to update index mappings
+	path := fmt.Sprintf("/%s/_mapping", indexName)
+	resp, err := c.esClient.PerformRequest(ctx, elastic.PerformRequestOptions{
+		Method:      "PUT",
+		Path:        path,
+		Body:        bodyString,
+		ContentType: "application/json",
+	})
+	if err != nil {
+		return false, err
+	}
+
+	// Parse the response to check if it was acknowledged
+	var result struct {
+		Acknowledged bool `json:"acknowledged"`
+	}
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
+		return false, err
+	}
+
+	return result.Acknowledged, nil
+}
+
+func (c *clientImpl) ClusterPutSettings(ctx context.Context, bodyString string) (bool, error) {
+	// Use raw HTTP request since ClusterPutSettings is not available in olivere/elastic v7
+	resp, err := c.esClient.PerformRequest(ctx, elastic.PerformRequestOptions{
+		Method:      "PUT",
+		Path:        "/_cluster/settings",
+		Body:        bodyString,
+		ContentType: "application/json",
+	})
+	if err != nil {
+		return false, err
+	}
+
+	// Parse the response to check if it was acknowledged
+	var result struct {
+		Acknowledged bool `json:"acknowledged"`
+	}
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
+		return false, err
+	}
+
+	return result.Acknowledged, nil
 }
 
 func (c *clientImpl) IndexExists(ctx context.Context, indexName string) (bool, error) {

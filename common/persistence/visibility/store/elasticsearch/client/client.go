@@ -32,19 +32,15 @@ type (
 		CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error)
 		DeleteIndex(ctx context.Context, indexName string) (bool, error)
 		CatIndices(ctx context.Context, target string) (elastic.CatIndicesResponse, error)
-
-		OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error)
-		Scroll(ctx context.Context, id string, keepAliveInterval string) (*elastic.SearchResult, error)
-		CloseScroll(ctx context.Context, id string) error
-
-		IsPointInTimeSupported(ctx context.Context) bool
-		OpenPointInTime(ctx context.Context, index string, keepAliveInterval string) (string, error)
-		ClosePointInTime(ctx context.Context, id string) (bool, error)
 	}
 
 	CLIClient interface {
 		Client
 		Delete(ctx context.Context, indexName string, docID string, version int64) error
+		IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error)
+		IndexPutMapping(ctx context.Context, indexName string, bodyString string) (bool, error)
+		ClusterPutSettings(ctx context.Context, bodyString string) (bool, error)
+		Ping(ctx context.Context) error
 	}
 
 	IntegrationTestsClient interface {
@@ -57,13 +53,10 @@ type (
 
 	// SearchParameters holds all required and optional parameters for executing a search.
 	SearchParameters struct {
-		Index    string
-		Query    elastic.Query
-		PageSize int
-		Sorter   []elastic.Sorter
-
+		Index       string
+		Query       elastic.Query
+		PageSize    int
+		Sorter      []elastic.Sorter
 		SearchAfter []interface{}
-		ScrollID    string
-		PointInTime *elastic.PointInTime
 	}
 )

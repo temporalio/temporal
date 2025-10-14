@@ -3,11 +3,14 @@ package migration
 import (
 	"context"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -33,6 +36,8 @@ type (
 		TaskManager               persistence.TaskManager
 		Logger                    log.Logger
 		MetricsHandler            metrics.Handler
+		DynamicCollection         *dynamicconfig.Collection
+		WorkflowVerifier          WorkflowVerifier
 	}
 
 	fxResult struct {
@@ -47,6 +52,7 @@ type (
 
 var Module = fx.Options(
 	fx.Provide(NewResult),
+	fx.Provide(workflowVerifierProvider),
 )
 
 func NewResult(params initParams) fxResult {
@@ -61,7 +67,9 @@ func NewResult(params initParams) fxResult {
 func (wc *replicationWorkerComponent) RegisterWorkflow(registry sdkworker.Registry) {
 	registry.RegisterWorkflowWithOptions(CatchupWorkflow, workflow.RegisterOptions{Name: catchupWorkflowName})
 	registry.RegisterWorkflowWithOptions(ForceReplicationWorkflow, workflow.RegisterOptions{Name: forceReplicationWorkflowName})
+	registry.RegisterWorkflowWithOptions(ForceReplicationWorkflowV2, workflow.RegisterOptions{Name: forceReplicationWorkflowV2Name})
 	registry.RegisterWorkflowWithOptions(NamespaceHandoverWorkflow, workflow.RegisterOptions{Name: namespaceHandoverWorkflowName})
+	registry.RegisterWorkflowWithOptions(NamespaceHandoverWorkflowV2, workflow.RegisterOptions{Name: namespaceHandoverWorkflowV2Name})
 	registry.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
 }
 
@@ -83,19 +91,38 @@ func (wc *replicationWorkerComponent) DedicatedActivityWorkerOptions() *workerco
 	}
 }
 
+func workflowVerifierProvider() WorkflowVerifier {
+	return func(
+		ctx context.Context,
+		request *verifyReplicationTasksRequest,
+		remoteAdminClient adminservice.AdminServiceClient,
+		localAdminClient adminservice.AdminServiceClient,
+		ns *namespace.Namespace,
+		we *commonpb.WorkflowExecution,
+		mu *adminservice.DescribeMutableStateResponse,
+	) (verifyResult, error) {
+		return verifyResult{
+			status: verified,
+		}, nil
+	}
+}
+
 func (wc *replicationWorkerComponent) activities() *activities {
 	return &activities{
-		historyShardCount:              wc.PersistenceConfig.NumHistoryShards,
-		executionManager:               wc.ExecutionManager,
-		namespaceRegistry:              wc.NamespaceRegistry,
-		historyClient:                  wc.HistoryClient,
-		frontendClient:                 wc.FrontendClient,
-		clientFactory:                  wc.ClientFactory,
-		clientBean:                     wc.ClientBean,
-		namespaceReplicationQueue:      wc.NamespaceReplicationQueue,
-		taskManager:                    wc.TaskManager,
-		logger:                         wc.Logger,
-		metricsHandler:                 wc.MetricsHandler,
-		forceReplicationMetricsHandler: wc.MetricsHandler.WithTags(metrics.WorkflowTypeTag(forceReplicationWorkflowName)),
+		historyShardCount:                wc.PersistenceConfig.NumHistoryShards,
+		executionManager:                 wc.ExecutionManager,
+		namespaceRegistry:                wc.NamespaceRegistry,
+		historyClient:                    wc.HistoryClient,
+		frontendClient:                   wc.FrontendClient,
+		clientFactory:                    wc.ClientFactory,
+		clientBean:                       wc.ClientBean,
+		namespaceReplicationQueue:        wc.NamespaceReplicationQueue,
+		taskManager:                      wc.TaskManager,
+		logger:                           wc.Logger,
+		metricsHandler:                   wc.MetricsHandler,
+		forceReplicationMetricsHandler:   wc.MetricsHandler.WithTags(metrics.WorkflowTypeTag(forceReplicationWorkflowName)),
+		generateMigrationTaskViaFrontend: dynamicconfig.WorkerGenerateMigrationTaskViaFrontend.Get(wc.DynamicCollection),
+		enableHistoryRateLimiter:         dynamicconfig.WorkerEnableHistoryRateLimiter.Get(wc.DynamicCollection),
+		workflowVerifier:                 wc.WorkflowVerifier,
 	}
 }

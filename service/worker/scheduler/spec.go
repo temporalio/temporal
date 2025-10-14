@@ -276,7 +276,7 @@ func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) GetNextT
 	after = util.MaxTime(after, cs.spec.StartTime.AsTime().Add(-time.Second))
 
 	pastEndTime := func(t time.Time) bool {
-		return cs.spec.EndTime != nil && t.After(cs.spec.EndTime.AsTime())
+		return cs.spec.EndTime != nil && t.After(cs.spec.EndTime.AsTime()) || t.Year() > maxCalendarYear
 	}
 	var nominal time.Time
 	for nominal.IsZero() || cs.excluded(nominal) {

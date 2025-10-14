@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	common "go.temporal.io/api/common/v1"
+	chasm "go.temporal.io/server/chasm"
 	locks "go.temporal.io/server/common/locks"
 	namespace "go.temporal.io/server/common/namespace"
 	interfaces "go.temporal.io/server/service/history/interfaces"
@@ -42,6 +43,22 @@ func NewMockCache(ctrl *gomock.Controller) *MockCache {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockCache) EXPECT() *MockCacheMockRecorder {
 	return m.recorder
+}
+
+// GetOrCreateChasmEntity mocks base method.
+func (m *MockCache) GetOrCreateChasmEntity(ctx context.Context, shardContext interfaces.ShardContext, namespaceID namespace.ID, execution *common.WorkflowExecution, archetype chasm.Archetype, lockPriority locks.Priority) (interfaces.WorkflowContext, interfaces.ReleaseWorkflowContextFunc, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOrCreateChasmEntity", ctx, shardContext, namespaceID, execution, archetype, lockPriority)
+	ret0, _ := ret[0].(interfaces.WorkflowContext)
+	ret1, _ := ret[1].(interfaces.ReleaseWorkflowContextFunc)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetOrCreateChasmEntity indicates an expected call of GetOrCreateChasmEntity.
+func (mr *MockCacheMockRecorder) GetOrCreateChasmEntity(ctx, shardContext, namespaceID, execution, archetype, lockPriority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateChasmEntity", reflect.TypeOf((*MockCache)(nil).GetOrCreateChasmEntity), ctx, shardContext, namespaceID, execution, archetype, lockPriority)
 }
 
 // GetOrCreateCurrentWorkflowExecution mocks base method.

@@ -82,7 +82,16 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
-	registry.RegisterWorkflowWithOptions(VersionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
+	versionWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentVersionWorkflowArgs) error {
+		refreshIntervalGetter := func() any {
+			return dynamicconfig.VersionDrainageStatusRefreshInterval.Get(s.dynamicConfig)(ns.Name().String())
+		}
+		visibilityGracePeriodGetter := func() any {
+			return dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Get(s.dynamicConfig)(ns.Name().String())
+		}
+		return VersionWorkflow(ctx, refreshIntervalGetter, visibilityGracePeriodGetter, args)
+	}
+	registry.RegisterWorkflowWithOptions(versionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
 
 	deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
 		maxVersionsGetter := func() int {
@@ -91,21 +100,6 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 		return Workflow(ctx, maxVersionsGetter, args)
 	}
 	registry.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
-
-	drainageWorkflow := func(ctx workflow.Context, args *deploymentspb.DrainageWorkflowArgs) error {
-		refreshIntervalGetter := func() any {
-			return dynamicconfig.VersionDrainageStatusRefreshInterval.Get(s.dynamicConfig)(ns.Name().String())
-		}
-		visibilityGracePeriodGetter := func() any {
-			return dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Get(s.dynamicConfig)(ns.Name().String())
-		}
-		return DrainageWorkflow(ctx, refreshIntervalGetter, visibilityGracePeriodGetter, args)
-	}
-
-	registry.RegisterWorkflowWithOptions(
-		drainageWorkflow,
-		workflow.RegisterOptions{Name: WorkerDeploymentDrainageWorkflowType},
-	)
 
 	versionActivities := &VersionActivities{
 		namespace:        ns,
@@ -120,12 +114,5 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 		matchingClient:   s.activityDeps.MatchingClient,
 	}
 	registry.RegisterActivity(activities)
-
-	drainageActivities := &DrainageActivities{
-		namespace:        ns,
-		deploymentClient: s.activityDeps.WorkerDeploymentClient,
-	}
-	registry.RegisterActivity(drainageActivities)
-
 	return nil
 }

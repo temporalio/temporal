@@ -50,8 +50,10 @@ func Invoke(
 
 			for _, activityId := range activityIDs {
 				if err := workflow.ResetActivity(
+					ctx,
 					shardContext, mutableState, activityId,
-					request.ResetHeartbeat, request.KeepPaused, request.Jitter.AsDuration(),
+					request.ResetHeartbeat, request.KeepPaused, request.RestoreOriginalOptions,
+					request.Jitter.AsDuration(),
 				); err != nil {
 					return nil, err
 				}

@@ -125,7 +125,8 @@ func (s *WorkflowTaskCompletedHandlerSuite) SetupSubTest() {
 		nil,
 		nil,
 		nil,
-		api.NewWorkflowConsistencyChecker(s.mockShard, s.workflowCache))
+		api.NewWorkflowConsistencyChecker(s.mockShard, s.workflowCache),
+		nil)
 }
 
 func (s *WorkflowTaskCompletedHandlerSuite) TearDownTest() {
@@ -279,6 +280,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		tv := testvars.New(s.T())
 		tv = tv.WithRunID(tv.Any().RunID())
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.mockNamespaceCache.EXPECT().GetNamespaceName(tv.NamespaceID()).Return(tv.NamespaceName(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
 		writtenHistoryCh := createWrittenHistoryCh(1)
 

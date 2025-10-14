@@ -3,6 +3,7 @@ package refreshworkflow
 import (
 	"context"
 
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -21,16 +22,17 @@ func Invoke(
 		return err
 	}
 
-	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
+	chasmLease, err := workflowConsistencyChecker.GetChasmLease(
 		ctx,
 		nil,
 		workflowKey,
+		chasm.ArchetypeAny, // RefreshWorkflow works for all Archetypes.
 		locks.PriorityLow,
 	)
 	if err != nil {
 		return err
 	}
-	defer func() { workflowLease.GetReleaseFn()(retError) }()
+	defer func() { chasmLease.GetReleaseFn()(retError) }()
 
-	return workflowLease.GetContext().RefreshTasks(ctx, shardContext)
+	return chasmLease.GetContext().RefreshTasks(ctx, shardContext)
 }

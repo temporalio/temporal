@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
@@ -101,6 +102,270 @@ func TestOverwriteCurrentClusterMetadataWithDBRecord(t *testing.T) {
 	require.Equal(t, int64(10000), cfg.ClusterMetadata.FailoverVersionIncrement)
 	require.True(t, cfg.ClusterMetadata.EnableGlobalNamespace)
 	require.Equal(t, int32(1024), cfg.Persistence.NumHistoryShards)
+}
+
+func TestUpdateIndexSearchAttributes(t *testing.T) {
+	testCases := []struct {
+		name        string
+		initialISA  map[string]*persistencespb.IndexSearchAttributes
+		cmISA       map[string]*persistencespb.IndexSearchAttributes
+		expectedISA map[string]*persistencespb.IndexSearchAttributes
+		out         bool
+	}{
+		{
+			name:        "noop nil initial isa",
+			initialISA:  nil,
+			cmISA:       nil,
+			expectedISA: nil,
+			out:         false,
+		},
+		{
+			name:        "noop empty initial isa",
+			initialISA:  map[string]*persistencespb.IndexSearchAttributes{},
+			cmISA:       nil,
+			expectedISA: nil,
+			out:         false,
+		},
+		{
+			name: "noop no changes",
+			initialISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Keyword02": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+				"my-index-2": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+			},
+			cmISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Keyword02": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+				"my-index-2": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+			},
+			expectedISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Keyword02": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+				"my-index-2": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+			},
+			out: false,
+		},
+		{
+			name: "noop initial is subset",
+			initialISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Keyword02": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+				"my-index-2": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+			},
+			cmISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Keyword02": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+						"Int02":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+				"my-index-2": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+						"Int02":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+			},
+			expectedISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Keyword02": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+						"Int02":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+				"my-index-2": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+						"Int02":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+			},
+			out: false,
+		},
+		{
+			name: "cm is empty",
+			initialISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Keyword02": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+				"my-index-2": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+			},
+			cmISA: nil,
+			expectedISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Keyword02": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+				"my-index-2": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+			},
+			out: true,
+		},
+		{
+			name: "initial is superset",
+			initialISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Keyword02": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+				"my-index-2": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+			},
+			cmISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					},
+				},
+				"my-index-2": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					},
+				},
+			},
+			expectedISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Keyword02": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+				"my-index-2": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+			},
+			out: true,
+		},
+		{
+			name: "index is missing",
+			initialISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Keyword02": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+				"my-index-2": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+			},
+			cmISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Keyword02": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+			},
+			expectedISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Keyword02": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+				"my-index-2": &persistencespb.IndexSearchAttributes{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+					},
+				},
+			},
+			out: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			cm := &persistence.GetClusterMetadataResponse{
+				ClusterMetadata: &persistencespb.ClusterMetadata{
+					IndexSearchAttributes: tc.cmISA,
+				},
+			}
+			out := updateIndexSearchAttributes(tc.initialISA, cm)
+			require.Equal(t, tc.out, out)
+			require.Equal(t, tc.expectedISA, cm.IndexSearchAttributes)
+		})
+	}
 }
 
 func TestTaskCategoryRegistryProvider(t *testing.T) {

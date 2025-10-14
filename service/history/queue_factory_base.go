@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -34,14 +35,8 @@ type (
 		Start()
 		Stop()
 
-		// TODO:
-		// 1. Remove the cache parameter after workflow cache become a host level component
-		// and it can be provided as a parameter when creating a QueueFactory instance.
-		// Currently, workflow cache is shard level, but we can't get it from shard or engine interface,
-		// as that will lead to a cycle dependency issue between shard and workflow package.
-		// 2. Move this interface to queues package after 1 is done so that there's no cycle dependency
-		// between workflow and queues package.
-		CreateQueue(shardContext historyi.ShardContext, cache wcache.Cache) queues.Queue
+		// TODO: Move this interface to queues package
+		CreateQueue(shardContext historyi.ShardContext) queues.Queue
 	}
 
 	QueueFactoryBaseParams struct {
@@ -49,6 +44,7 @@ type (
 
 		NamespaceRegistry    namespace.Registry
 		ClusterMetadata      cluster.Metadata
+		WorkflowCache        wcache.Cache
 		Config               *configs.Config
 		TimeSource           clock.TimeSource
 		MetricsHandler       metrics.Handler
@@ -59,6 +55,7 @@ type (
 		ExecutorWrapper      queues.ExecutorWrapper `optional:"true"`
 		Serializer           serialization.Serializer
 		RemoteHistoryFetcher eventhandler.HistoryPaginatedFetcher
+		ChasmEngine          chasm.Engine
 	}
 
 	QueueFactoryBase struct {

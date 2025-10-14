@@ -165,7 +165,7 @@ func (r *registry) Start() {
 	// initialize the namespace registry by initial scan
 	ctx := headers.SetCallerInfo(
 		context.Background(),
-		headers.SystemBackgroundCallerInfo,
+		headers.SystemBackgroundHighCallerInfo,
 	)
 
 	err := r.refreshNamespaces(ctx)

@@ -17,7 +17,7 @@ type (
 		Mitigate(Alert)
 	}
 
-	actionRunner func(Action, *ReaderGroup, metrics.Handler, log.Logger)
+	actionRunner func(Action, *ReaderGroup, metrics.Handler)
 
 	mitigatorImpl struct {
 		sync.Mutex
@@ -87,7 +87,6 @@ func (m *mitigatorImpl) Mitigate(alert Alert) {
 		action,
 		m.readerGroup,
 		m.metricsHandler,
-		log.With(m.logger, tag.QueueAlert(alert)),
 	)
 
 	m.monitor.ResolveAlert(alert.AlertType)
@@ -97,10 +96,11 @@ func runAction(
 	action Action,
 	readerGroup *ReaderGroup,
 	metricsHandler metrics.Handler,
-	logger log.Logger,
 ) {
+	if action.Run(readerGroup) {
+		return
+	}
+
 	metricsHandler = metricsHandler.WithTags(metrics.QueueActionTag(action.Name()))
 	metrics.QueueActionCounter.With(metricsHandler).Record(1)
-
-	action.Run(readerGroup)
 }

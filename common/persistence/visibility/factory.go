@@ -130,8 +130,8 @@ func newVisibilityManager(
 	}
 	logger.Info(
 		"creating new visibility manager",
-		tag.NewStringTag(visibilityPluginNameTag.Key(), visibilityPluginNameTag.Value()),
-		tag.NewStringTag(visibilityIndexNameTag.Key(), visibilityIndexNameTag.Value()),
+		tag.NewStringTag(visibilityPluginNameTag.Key, visibilityPluginNameTag.Value),
+		tag.NewStringTag(visibilityIndexNameTag.Key, visibilityIndexNameTag.Value),
 	)
 	var visManager manager.VisibilityManager = newVisibilityManagerImpl(visStore, logger)
 

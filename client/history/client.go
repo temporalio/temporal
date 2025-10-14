@@ -34,10 +34,10 @@ const (
 )
 
 type clientImpl struct {
-	connections     connectionPool
+	connections     connectionPool[historyservice.HistoryServiceClient]
 	logger          log.Logger
 	numberOfShards  int32
-	redirector      redirector
+	redirector      Redirector[historyservice.HistoryServiceClient]
 	timeout         time.Duration
 	tokenSerializer *tasktoken.Serializer
 }
@@ -51,12 +51,12 @@ func NewClient(
 	rpcFactory RPCFactory,
 	timeout time.Duration,
 ) historyservice.HistoryServiceClient {
-	connections := newConnectionPool(historyServiceResolver, rpcFactory)
+	connections := NewConnectionPool(historyServiceResolver, rpcFactory, historyservice.NewHistoryServiceClient)
 
-	var redirector redirector
+	var redirector Redirector[historyservice.HistoryServiceClient]
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
 		logger.Info("historyClient: ownership caching enabled")
-		redirector = newCachingRedirector(
+		redirector = NewCachingRedirector(
 			connections,
 			historyServiceResolver,
 			logger,
@@ -64,7 +64,7 @@ func NewClient(
 		)
 	} else {
 		logger.Info("historyClient: ownership caching disabled")
-		redirector = newBasicRedirector(connections, historyServiceResolver)
+		redirector = NewBasicRedirector(connections, historyServiceResolver)
 	}
 
 	return &clientImpl{
@@ -78,7 +78,7 @@ func NewClient(
 }
 
 func (c *clientImpl) DeepHealthCheck(ctx context.Context, request *historyservice.DeepHealthCheckRequest, opts ...grpc.CallOption) (*historyservice.DeepHealthCheckResponse, error) {
-	return c.connections.getOrCreateClientConn(rpcAddress(request.GetHostAddress())).historyClient.DeepHealthCheck(ctx, request, opts...)
+	return c.connections.getOrCreateClientConn(rpcAddress(request.GetHostAddress())).grpcClient.DeepHealthCheck(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeHistoryHost(
@@ -93,7 +93,7 @@ func (c *clientImpl) DescribeHistoryHost(
 		shardID = c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
 	} else {
 		clientConn := c.connections.getOrCreateClientConn(rpcAddress(request.GetHostAddress()))
-		return clientConn.historyClient.DescribeHistoryHost(ctx, request, opts...)
+		return clientConn.grpcClient.DescribeHistoryHost(ctx, request, opts...)
 	}
 
 	var response *historyservice.DescribeHistoryHostResponse
@@ -187,7 +187,7 @@ func (c *clientImpl) GetReplicationStatus(
 	var wg sync.WaitGroup
 	wg.Add(len(clientConns))
 	for _, client := range clientConns {
-		historyClient := client.historyClient
+		historyClient := client.grpcClient
 		go func(client historyservice.HistoryServiceClient) {
 			defer wg.Done()
 			resp, err := historyClient.GetReplicationStatus(ctx, request, opts...)
@@ -269,7 +269,7 @@ func checkShardID(shardID int32) error {
 func (c *clientImpl) executeWithRedirect(
 	ctx context.Context,
 	shardID int32,
-	op clientOperation,
+	op ClientOperation[historyservice.HistoryServiceClient],
 ) error {
-	return c.redirector.execute(ctx, shardID, op)
+	return c.redirector.Execute(ctx, shardID, op)
 }

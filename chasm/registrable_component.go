@@ -50,7 +50,9 @@ func WithShardingFn(
 	shardingFn func(EntityKey) string,
 ) RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
-		rc.shardingFn = shardingFn
+		if shardingFn != nil {
+			rc.shardingFn = shardingFn
+		}
 	}
 }
 

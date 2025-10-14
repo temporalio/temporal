@@ -4,25 +4,20 @@ package replication
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/xdc"
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -57,7 +52,7 @@ type (
 		shard                historyi.ShardContext
 		deleteManager        deletemanager.DeleteManager
 		workflowCache        wcache.Cache
-		resender             xdc.NDCHistoryResender
+		resender             eventhandler.ResendHandler
 		taskExecutorProvider TaskExecutorProvider
 		logger               log.Logger
 	}
@@ -92,50 +87,24 @@ func newDLQHandler(
 	if taskExecutors == nil {
 		panic("Failed to initialize replication DLQ handler due to nil task executors")
 	}
-
+	historyFetcher := eventhandler.NewHistoryPaginatedFetcher(shard.GetNamespaceRegistry(), clientBean, shard.GetPayloadSerializer(), shard.GetLogger())
+	engineProvider := func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error) {
+		return shard.GetEngine(ctx)
+	}
 	return &dlqHandlerImpl{
 		shard:         shard,
 		deleteManager: deleteManager,
 		workflowCache: workflowCache,
-		resender: xdc.NewNDCHistoryResender(
+		resender: eventhandler.NewResendHandler(
 			shard.GetNamespaceRegistry(),
 			clientBean,
-			func(
-				ctx context.Context,
-				sourceClusterName string,
-				namespaceId namespace.ID,
-				workflowId string,
-				runId string,
-				events [][]*historypb.HistoryEvent,
-				versionHistory []*historyspb.VersionHistoryItem,
-			) error {
-				engine, err := shard.GetEngine(ctx)
-				if err != nil {
-					return err
-				}
-				err = engine.ReplicateHistoryEvents(
-					ctx,
-					definition.WorkflowKey{
-						NamespaceID: namespaceId.String(),
-						WorkflowID:  workflowId,
-						RunID:       runId,
-					},
-					nil,
-					versionHistory,
-					events,
-					nil,
-					"",
-				)
-				if errors.Is(err, consts.ErrDuplicate) {
-					return nil
-				}
-				return err
-
-			},
 			shard.GetPayloadSerializer(),
-			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
+			shard.GetClusterMetadata(),
+			engineProvider,
+			historyFetcher,
+			eventhandler.NewEventImporter(historyFetcher, engineProvider, shard.GetPayloadSerializer(), shard.GetLogger()),
 			shard.GetLogger(),
-			nil,
+			shard.GetConfig(),
 		),
 		taskExecutors:        taskExecutors,
 		taskExecutorProvider: taskExecutorProvider,

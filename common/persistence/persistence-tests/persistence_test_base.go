@@ -71,6 +71,7 @@ type (
 		Factory                   client.Factory
 		ExecutionManager          persistence.ExecutionManager
 		TaskMgr                   persistence.TaskManager
+		FairTaskMgr               persistence.FairTaskManager
 		ClusterMetadataManager    persistence.ClusterMetadataManager
 		MetadataManager           persistence.MetadataManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
@@ -211,16 +212,28 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		metrics.NoopMetricsHandler,
 		s.Logger,
 		s.PersistenceHealthSignals,
+		func() bool { return false },
+		func() bool { return false },
 	)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
 
+	s.FairTaskMgr, err = factory.NewFairTaskManager()
+	// TODO: re-enable error check after FairTaskManager is implemented for sql
+	// s.fatalOnError("NewFairTaskManager", err)
+	_ = err
+
 	s.ClusterMetadataManager, err = factory.NewClusterMetadataManager()
 	s.fatalOnError("NewClusterMetadataManager", err)
 
 	s.ClusterMetadata = cluster.NewMetadataFromConfig(clusterMetadataConfig, s.ClusterMetadataManager, dynamicconfig.NewNoopCollection(), s.Logger)
-	s.SearchAttributesManager = searchattribute.NewManager(clock.NewRealTimeSource(), s.ClusterMetadataManager, dynamicconfig.GetBoolPropertyFn(true))
+	s.SearchAttributesManager = searchattribute.NewManager(
+		clock.NewRealTimeSource(),
+		s.ClusterMetadataManager,
+		s.Logger,
+		dynamicconfig.GetBoolPropertyFn(true),
+	)
 
 	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)

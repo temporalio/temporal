@@ -6,6 +6,7 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -105,6 +106,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 		namespaceID,
 		workflowID,
 		currentRunID,
+		chasm.ArchetypeAny,
 	)
 	if err != nil {
 		return err

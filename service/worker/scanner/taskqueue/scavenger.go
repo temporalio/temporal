@@ -84,7 +84,7 @@ func NewScavenger(db p.TaskManager, metricsHandler metrics.Handler, logger log.L
 	lifecycleCtx, lifecycleCancel := context.WithCancel(
 		headers.SetCallerInfo(
 			context.Background(),
-			headers.SystemBackgroundCallerInfo,
+			headers.SystemBackgroundHighCallerInfo,
 		),
 	)
 	return &Scavenger{

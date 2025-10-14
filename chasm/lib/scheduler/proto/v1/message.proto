@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.scheduler.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpb";
+
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/schedule/v1/message.proto";
+import "temporal/server/api/schedule/v1/message.proto";
+
+import "google/protobuf/timestamp.proto";
+
+// CHASM scheduler top-level state.
+message SchedulerState {
+    // Scheduler request parameters and metadata. 
+    temporal.api.schedule.v1.Schedule schedule = 2;
+    temporal.api.schedule.v1.ScheduleInfo info = 3;
+    temporal.api.schedule.v1.SchedulePatch initial_patch = 4;
+
+    // State common to all generators is stored in the top-level machine.
+    string namespace = 5;
+    string namespace_id = 6;
+    string schedule_id = 7;
+
+    // Implemented as a sequence number. Used for optimistic locking against
+    // update requests.
+    int64 conflict_token = 8;
+
+    // The closed flag is set true after a schedule completes, and the idle timer
+    // expires.
+    bool closed = 9;
+}
+
+// CHASM scheduler's Generator internal state.
+message GeneratorState {
+    // High water mark.
+    google.protobuf.Timestamp last_processed_time = 3;
+}
+
+// CHASM scheduler's Invoker internal state.
+message InvokerState {
+    // Buffered starts that will be started by the Invoker.
+    repeated temporal.server.api.schedule.v1.BufferedStart buffered_starts = 2;
+
+    // Workflow executions that will be cancelled due to overlap policy.
+    repeated temporal.api.common.v1.WorkflowExecution cancel_workflows = 3;
+
+    // Workflow executions that will be terminated due to overlap policy.
+    repeated temporal.api.common.v1.WorkflowExecution terminate_workflows = 4;
+
+    // High water mark, used for evaluating when to fire tasks that are backing
+    // off from a retry. LastProcessedTime is stored as state so that task
+    // generation will be consistent, regardless of when generation occurs, such
+    // as after applying a replicated state (as opposed to evaluating based on
+    // present time).
+    google.protobuf.Timestamp last_processed_time = 5;
+}
+
+// CHASM scheduler's Backfiller internal state. Backfill requests are 1:1
+// with Backfiller nodes. Backfiller nodes also handle immediate trigger requests.
+message BackfillerState {
+    oneof request {
+        temporal.api.schedule.v1.BackfillRequest backfill_request = 1;
+
+        // When set, immediately buffer a single manual action.
+        temporal.api.schedule.v1.TriggerImmediatelyRequest trigger_request = 2;
+    }
+
+    // Every Backfiller should be assigned a unique ID upon creation, used
+    // for deduplication.
+    string backfill_id = 6;
+
+    // High water mark.
+    google.protobuf.Timestamp last_processed_time = 7;
+
+    // Attempt count, incremented when the buffer is full and the Backfiller
+    // needs to back off before retrying to fill.
+    int64 attempt = 8;
+}

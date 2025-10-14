@@ -9,7 +9,6 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
-	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/fx"
 )
 
@@ -65,7 +64,6 @@ func NewVisibilityQueueFactory(
 
 func (f *visibilityQueueFactory) CreateQueue(
 	shard historyi.ShardContext,
-	workflowCache wcache.Cache,
 ) queues.Queue {
 	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope))
@@ -96,7 +94,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 
 	executor := newVisibilityQueueTaskExecutor(
 		shard,
-		workflowCache,
+		f.WorkflowCache,
 		f.VisibilityMgr,
 		logger,
 		f.MetricsHandler,
@@ -148,6 +146,8 @@ func (f *visibilityQueueFactory) CreateQueue(
 			CheckpointInterval:                  f.Config.VisibilityProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
 			MaxReaderCount:                      f.Config.VisibilityQueueMaxReaderCount,
+			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
+			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
 		},
 		f.HostReaderRateLimiter,
 		queues.GrouperNamespaceID{},

@@ -4,15 +4,10 @@ import (
 	"context"
 	"errors"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/serialization"
-)
-
-const (
-	clusterMetadataEncoding = enumspb.ENCODING_TYPE_PROTO3
 )
 
 var (
@@ -153,7 +148,7 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(
 	ctx context.Context,
 	request *SaveClusterMetadataRequest,
 ) (bool, error) {
-	mcm, err := m.serializer.SerializeClusterMetadata(request.ClusterMetadata, clusterMetadataEncoding)
+	mcm, err := m.serializer.SerializeClusterMetadata(request.ClusterMetadata)
 	if err != nil {
 		return false, err
 	}

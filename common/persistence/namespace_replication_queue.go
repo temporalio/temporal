@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
@@ -33,7 +32,7 @@ func NewNamespaceReplicationQueue(
 	blob, err := serializer.QueueMetadataToBlob(
 		&persistencespb.QueueMetadata{
 			ClusterAckLevels: make(map[string]int64),
-		}, enumspb.ENCODING_TYPE_PROTO3)
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +93,7 @@ func (q *namespaceReplicationQueueImpl) Close() {
 }
 
 func (q *namespaceReplicationQueueImpl) Publish(ctx context.Context, task *replicationspb.ReplicationTask) error {
-	blob, err := q.serializer.ReplicationTaskToBlob(task, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := q.serializer.ReplicationTaskToBlob(task)
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)
 	}
@@ -102,7 +101,7 @@ func (q *namespaceReplicationQueueImpl) Publish(ctx context.Context, task *repli
 }
 
 func (q *namespaceReplicationQueueImpl) PublishToDLQ(ctx context.Context, task *replicationspb.ReplicationTask) error {
-	blob, err := q.serializer.ReplicationTaskToBlob(task, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := q.serializer.ReplicationTaskToBlob(task)
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)
 	}
@@ -212,7 +211,7 @@ func (q *namespaceReplicationQueueImpl) updateAckLevel(
 	ackLevels[clusterName] = lastProcessedMessageID
 	blob, err := q.serializer.QueueMetadataToBlob(&persistencespb.QueueMetadata{
 		ClusterAckLevels: ackLevels,
-	}, enumspb.ENCODING_TYPE_PROTO3)
+	})
 	if err != nil {
 		return err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -38,9 +39,11 @@ func Invoke(
 		return nil, err
 	}
 
-	var activityStartedTime time.Time
+	var attemptStartedTime time.Time
+	var firstScheduledTime time.Time
 	var taskQueue string
 	var workflowTypeName string
+	var versioningBehavior enumspb.VersioningBehavior
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
@@ -74,10 +77,7 @@ func Invoke(
 				return nil, consts.ErrStaleState
 			}
 
-			if !isRunning ||
-				ai.StartedEventId == common.EmptyEventID ||
-				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) ||
-				(token.GetVersion() != common.EmptyVersion && token.Version != ai.Version) {
+			if !isRunning || api.IsActivityTaskNotFoundForToken(token, ai, nil) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
@@ -96,8 +96,10 @@ func Invoke(
 				return nil, err
 			}
 
-			activityStartedTime = ai.StartedTime.AsTime()
+			attemptStartedTime = ai.StartedTime.AsTime()
+			firstScheduledTime = ai.FirstScheduledTime.AsTime()
 			taskQueue = ai.TaskQueue
+			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
 				CreateWorkflowTask: true,
@@ -108,15 +110,21 @@ func Invoke(
 		workflowConsistencyChecker,
 	)
 
-	if err == nil && !activityStartedTime.IsZero() {
-		metrics.ActivityE2ELatency.With(
-			workflow.GetPerTaskQueueFamilyScope(
-				shard.GetMetricsHandler(), namespace, taskQueue, shard.GetConfig(),
-				metrics.OperationTag(metrics.HistoryRespondActivityTaskCanceledScope),
-				metrics.WorkflowTypeTag(workflowTypeName),
-				metrics.ActivityTypeTag(token.ActivityType),
-			),
-		).Record(time.Since(activityStartedTime))
+	if err == nil {
+		workflow.RecordActivityCompletionMetrics(
+			shard,
+			namespace,
+			taskQueue,
+			workflow.ActivityCompletionMetrics{
+				Status:             workflow.ActivityStatusCanceled,
+				AttemptStartedTime: attemptStartedTime,
+				FirstScheduledTime: firstScheduledTime,
+				Closed:             true,
+			},
+			metrics.OperationTag(metrics.HistoryRespondActivityTaskCanceledScope),
+			metrics.WorkflowTypeTag(workflowTypeName),
+			metrics.ActivityTypeTag(token.ActivityType),
+			metrics.VersioningBehaviorTag(versioningBehavior))
 	}
 	return &historyservice.RespondActivityTaskCanceledResponse{}, err
 }

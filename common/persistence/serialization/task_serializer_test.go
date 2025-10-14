@@ -308,6 +308,22 @@ func (s *taskSerializerSuite) TestVisibilityDeleteTask() {
 	s.assertEqualTasks(visibilityDelete)
 }
 
+func (s *taskSerializerSuite) TestVisibilityChasmTask() {
+	visibilityChasmTask := &tasks.ChasmTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Category:            tasks.CategoryVisibility,
+		Info: &persistencespb.ChasmTaskInfo{
+			Data: &commonpb.DataBlob{
+				Data: []byte("some-data"),
+			},
+		},
+	}
+
+	s.assertEqualTasks(visibilityChasmTask)
+}
+
 func (s *taskSerializerSuite) TestSyncActivityTask() {
 	syncActivityTask := &tasks.SyncActivityTask{
 		WorkflowKey:         s.workflowKey,

@@ -23,6 +23,7 @@ import "temporal/server/api/taskqueue/v1/message.proto";
 
 import "temporal/api/workflowservice/v1/request_response.proto";
 import "temporal/api/nexus/v1/message.proto";
+import "temporal/api/worker/v1/message.proto";
 
 message PollWorkflowTaskQueueRequest {
     string namespace_id = 1;
@@ -176,11 +177,43 @@ message CancelOutstandingPollResponse {
 message DescribeTaskQueueRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.DescribeTaskQueueRequest desc_request = 2;
+    temporal.server.api.deployment.v1.WorkerDeploymentVersion version = 3;
 }
 
 message DescribeTaskQueueResponse {
     reserved 1 to 2;
     temporal.api.workflowservice.v1.DescribeTaskQueueResponse desc_response = 3;
+}
+
+message DescribeVersionedTaskQueuesRequest {
+    string namespace_id = 1;
+
+    // This task queue is for routing purposes.
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 3;
+
+    temporal.server.api.deployment.v1.WorkerDeploymentVersion version = 4;
+
+    // List of task queues to describe.
+    repeated VersionTaskQueue version_task_queues = 5;
+    // (-- api-linter: core::0123::resource-annotation=disabled --)
+    message VersionTaskQueue {
+        string name = 1;
+        temporal.api.enums.v1.TaskQueueType type = 2;
+    }
+}
+
+message DescribeVersionedTaskQueuesResponse {
+    repeated VersionTaskQueue version_task_queues = 1;
+    // (-- api-linter: core::0123::resource-annotation=disabled --)
+    message VersionTaskQueue {
+        string name = 1;
+        temporal.api.enums.v1.TaskQueueType type = 2;
+        temporal.api.taskqueue.v1.TaskQueueStats stats = 3;
+        // (-- api-linter: core::0140::prepositions=disabled
+        //     aip.dev/not-precedent: "by" is used to clarify the key. --)
+        map<int32, temporal.api.taskqueue.v1.TaskQueueStats> stats_by_priority_key = 4;
+    }
 }
 
 message DescribeTaskQueuePartitionRequest {
@@ -428,11 +461,14 @@ message DispatchNexusTaskRequest {
 }
 
 message DispatchNexusTaskResponse {
+    message Timeout {}
+
     oneof outcome {
         // Set if the worker's handler failed the nexus task.
         temporal.api.nexus.v1.HandlerError handler_error = 1;
         // Set if the worker's handler responded successfully to the nexus task.
         temporal.api.nexus.v1.Response response = 2;
+        Timeout request_timeout = 3;
     }
 }
 
@@ -541,4 +577,47 @@ message ListNexusEndpointsResponse {
     bytes next_page_token = 1;
     int64 table_version = 2;
     repeated temporal.server.api.persistence.v1.NexusEndpointEntry entries = 3;
+}
+
+message RecordWorkerHeartbeatRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequest heartbeart_request = 2;
+}
+
+message RecordWorkerHeartbeatResponse {
+
+}
+
+message ListWorkersRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.ListWorkersRequest list_request = 2;
+}
+
+message ListWorkersResponse {
+    repeated temporal.api.worker.v1.WorkerInfo workers_info = 1;
+    bytes next_page_token = 2;
+}
+
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateTaskQueueConfigRequest RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateTaskQueueConfigRequest RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0134::method-signature=disabled
+//     aip.dev/not-precedent: UpdateTaskQueueConfigRequest RPC doesn't follow Google API format. --)
+message UpdateTaskQueueConfigRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest update_taskqueue_config = 3;
+}
+
+message UpdateTaskQueueConfigResponse {
+    temporal.api.taskqueue.v1.TaskQueueConfig updated_taskqueue_config = 1;
+}
+
+message DescribeWorkerRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.DescribeWorkerRequest request = 2;
+}
+
+message DescribeWorkerResponse {
+    temporal.api.worker.v1.WorkerInfo worker_info = 1;
 }

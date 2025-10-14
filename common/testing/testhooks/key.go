@@ -7,5 +7,6 @@ const (
 	MatchingLBForceReadPartition
 	MatchingLBForceWritePartition
 	UpdateWithStartInBetweenLockAndStart
+	UpdateWithStartOnClosingWorkflowRetry
 	TaskQueuesInDeploymentSyncBatchSize
 )

@@ -8,8 +8,10 @@ import (
 )
 
 var (
-	registryClearedErr  = errors.New("update registry was cleared")
-	workflowTaskFailErr = serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to unexpected workflow task failure.")
+	registryClearedErr          = errors.New("update registry was cleared")
+	AbortedByServerErr          = serviceerror.NewUnavailable("workflow update was aborted")
+	AbortedByWorkflowClosingErr = serviceerror.NewNotFound("workflow update was aborted by closing workflow")
+	workflowTaskFailErr         = serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to unexpected workflow task failure.")
 )
 
 var (

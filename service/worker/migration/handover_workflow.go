@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	namespaceHandoverWorkflowName = "namespace-handover"
+	namespaceHandoverWorkflowName   = "namespace-handover"
+	namespaceHandoverWorkflowV2Name = "namespace-handover-v2"
 
 	minimumAllowedLaggingSeconds  = 5
 	maximumAllowedLaggingSeconds  = 120
@@ -58,11 +59,22 @@ type (
 	}
 )
 
+func NamespaceHandoverWorkflowV2(ctx workflow.Context, params NamespaceHandoverParams) (retErr error) {
+	workflowInfo := workflow.GetInfo(ctx)
+	if workflowInfo.WorkflowRunTimeout > 0 {
+		return temporal.NewNonRetryableApplicationError(
+			"Workflow run timeout should not be set for handover workflow",
+			"InvalidTimeout",
+			nil,
+		)
+	}
+	return NamespaceHandoverWorkflow(ctx, params)
+}
+
 func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverParams) (retErr error) {
 	if err := validateAndSetNamespaceHandoverParams(&params); err != nil {
 		return err
 	}
-
 	retryPolicy := &temporal.RetryPolicy{
 		InitialInterval:    time.Second,
 		MaximumInterval:    time.Second,
@@ -127,7 +139,16 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 			Namespace: params.Namespace,
 			NewState:  enumspb.REPLICATION_STATE_NORMAL,
 		}
-		err := workflow.ExecuteActivity(ctx, a.UpdateNamespaceState, resetStateRequest).Get(ctx, nil)
+		var err error
+		if workflow.GetVersion(ctx, "detach-handover-ctx-20250829", workflow.DefaultVersion, 1) > workflow.DefaultVersion {
+			infiniteRetryOption := workflow.ActivityOptions{StartToCloseTimeout: time.Second * 10}
+			detachCtx, cancel := workflow.NewDisconnectedContext(ctx)
+			resetStateCtx := workflow.WithActivityOptions(detachCtx, infiniteRetryOption)
+			err = workflow.ExecuteActivity(resetStateCtx, a.UpdateNamespaceState, resetStateRequest).Get(resetStateCtx, nil)
+			cancel()
+		} else {
+			err = workflow.ExecuteActivity(ctx, a.UpdateNamespaceState, resetStateRequest).Get(ctx, nil)
+		}
 		if err != nil {
 			retErr = err
 			return
@@ -142,7 +163,6 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 			MaximumAttempts: 1,
 		},
 	}
-
 	ctx3 := workflow.WithActivityOptions(ctx, ao3)
 	waitHandover := waitHandoverRequest{
 		ShardCount:    metadataResp.ShardCount,

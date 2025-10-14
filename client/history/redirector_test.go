@@ -23,10 +23,24 @@ type (
 		*require.Assertions
 
 		controller  *gomock.Controller
-		connections *MockconnectionPool
+		connections *mockConnectionPool[historyservice.HistoryServiceClient]
 		resolver    *membership.MockServiceResolver
 	}
 )
+
+type mockConnectionPool[C any] struct {
+	connectionPool[C]
+	client     C
+	resetCalls int
+}
+
+func (m *mockConnectionPool[C]) getOrCreateClientConn(testAddr rpcAddress) clientConnection[C] {
+	return clientConnection[C]{grpcClient: m.client}
+}
+
+func (m *mockConnectionPool[C]) resetConnectBackoff(clientConnection[C]) {
+	m.resetCalls++
+}
 
 func TestBasicRedirectorSuite(t *testing.T) {
 	s := new(basicRedirectorSuite)
@@ -36,20 +50,15 @@ func TestBasicRedirectorSuite(t *testing.T) {
 func (s *basicRedirectorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
-
-	s.connections = NewMockconnectionPool(s.controller)
 	s.resolver = membership.NewMockServiceResolver(s.controller)
-}
-
-func (s *basicRedirectorSuite) TearDownTest() {
-	s.controller.Finish()
+	s.connections = &mockConnectionPool[historyservice.HistoryServiceClient]{}
 }
 
 func (s *basicRedirectorSuite) TestShardCheck() {
-	r := newBasicRedirector(s.connections, s.resolver)
+	r := NewBasicRedirector(s.connections, s.resolver)
 
 	invalErr := &serviceerror.InvalidArgument{}
-	err := r.execute(
+	err := r.Execute(
 		context.Background(),
 		-1,
 		func(_ context.Context, _ historyservice.HistoryServiceClient) error {
@@ -61,7 +70,7 @@ func (s *basicRedirectorSuite) TestShardCheck() {
 	s.ErrorAs(err, &invalErr)
 }
 
-func opErrorTest(s *basicRedirectorSuite, clientOp clientOperation, verify func(err error)) {
+func opErrorTest(s *basicRedirectorSuite, clientOp ClientOperation[historyservice.HistoryServiceClient], verify func(err error)) {
 	testAddr := rpcAddress("testaddr")
 	shardID := int32(1)
 
@@ -71,20 +80,14 @@ func opErrorTest(s *basicRedirectorSuite, clientOp clientOperation, verify func(
 		Times(1)
 
 	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
-	clientConn := clientConnection{
-		historyClient: mockClient,
-	}
-	s.connections.EXPECT().
-		getOrCreateClientConn(testAddr).
-		Return(clientConn).
-		Times(1)
+	s.connections.client = mockClient
 
-	r := newBasicRedirector(s.connections, s.resolver)
+	r := NewBasicRedirector(s.connections, s.resolver)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	err := r.execute(ctx, shardID, clientOp)
+	err := r.Execute(ctx, shardID, clientOp)
 	verify(err)
 }
 
@@ -120,47 +123,24 @@ func (s *basicRedirectorSuite) TestShardOwnershipLostErrors() {
 		Return(membership.NewHostInfoFromAddress(string(testAddr1)), nil).
 		Times(2)
 
-	mockClient1 := historyservicemock.NewMockHistoryServiceClient(s.controller)
-	mockClient2 := historyservicemock.NewMockHistoryServiceClient(s.controller)
-	clientConn1 := clientConnection{
-		historyClient: mockClient1,
-	}
-	clientConn2 := clientConnection{
-		historyClient: mockClient2,
-	}
-	s.connections.EXPECT().
-		getOrCreateClientConn(testAddr1).
-		Return(clientConn1).
-		Times(2)
+	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
+	s.connections.client = mockClient
 
-	r := newBasicRedirector(s.connections, s.resolver)
+	r := NewBasicRedirector(s.connections, s.resolver)
 	attempt := 1
 	doExecute := func() error {
-		return r.execute(
+		return r.Execute(
 			context.Background(),
 			shardID,
 			func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 				switch attempt {
 				case 1:
-					if client != mockClient1 {
-						return errors.New("wrong client")
-					}
 					attempt++
 					return serviceerrors.NewShardOwnershipLost("", "current")
 				case 2:
-					if client != mockClient1 {
-						return errors.New("wrong client")
-					}
 					attempt++
-					s.connections.EXPECT().
-						getOrCreateClientConn(testAddr2).
-						Return(clientConn2).
-						Times(1)
 					return serviceerrors.NewShardOwnershipLost(string(testAddr2), "current")
 				case 3:
-					if client != mockClient2 {
-						return errors.New("wrong client")
-					}
 					attempt++
 					return nil
 				}
@@ -188,14 +168,8 @@ func (s *basicRedirectorSuite) TestClientForTargetByShard() {
 		Times(1)
 
 	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
-	clientConn := clientConnection{
-		historyClient: mockClient,
-	}
-	s.connections.EXPECT().
-		getOrCreateClientConn(testAddr).
-		Return(clientConn)
-
-	r := newBasicRedirector(s.connections, s.resolver)
+	s.connections.client = mockClient
+	r := NewBasicRedirector(s.connections, s.resolver)
 	cli, err := r.clientForShardID(shardID)
 	s.NoError(err)
 	s.Equal(mockClient, cli)

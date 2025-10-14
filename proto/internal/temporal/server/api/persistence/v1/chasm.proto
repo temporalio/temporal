@@ -67,9 +67,9 @@ message ChasmPointerAttributes {
     repeated string node_path = 1;
 }
 
-// ChasmComponentRef references a specific component within a CHASM tree
-// (assuming you already have a reference to the tree/entity).
-message ChasmComponentRef {
+
+// ChasmTaskInfo includes component-facing task metadata
+message ChasmTaskInfo {
     // Initial versioned transition of the entity being referenced.
     VersionedTransition component_initial_versioned_transition = 1;
 
@@ -77,19 +77,27 @@ message ChasmComponentRef {
     // reference was created. Can be used to invalidate this reference.
     VersionedTransition component_last_update_versioned_transition = 2;
 
-    // Encoded full path to the component.
-    string path = 3;
-}
-
-// ChasmTaskInfo includes component-facing task metadata
-message ChasmTaskInfo {
-    // Reference to the component responsible for this task.
-    ChasmComponentRef ref = 1;
+    // Path to the component.
+    repeated string path = 3;
 
     // Task type (registered by components).
-    string type = 2;
+    string type = 4;
 
     // Opaque attached task data. May be nil. Usable by components, not the CHASM
     // framework itself.
-    temporal.api.common.v1.DataBlob data = 3;
+    temporal.api.common.v1.DataBlob data = 5;
+}
+
+// ChasmComponentRef references a specific chasm component.
+message ChasmComponentRef {
+    string namespace_id = 1;
+    string business_id = 2;
+    string entity_id = 3;
+
+    string archetype = 4;
+    
+    VersionedTransition entity_versioned_transition = 5;
+
+    repeated string component_path = 6;
+    VersionedTransition component_initial_versioned_transition = 7;
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -24,7 +25,7 @@ func Invoke(
 		return nil, err
 	}
 
-	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
+	chasmLease, err := workflowConsistencyChecker.GetChasmLease(
 		ctx,
 		nil,
 		definition.NewWorkflowKey(
@@ -32,22 +33,26 @@ func Invoke(
 			req.Execution.WorkflowId,
 			req.Execution.RunId,
 		),
+		chasm.ArchetypeAny, // DescribeMutableState works for all Archetypes.
 		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { workflowLease.GetReleaseFn()(retError) }()
+	defer func() { chasmLease.GetReleaseFn()(retError) }()
 
 	response := &historyservice.DescribeMutableStateResponse{}
-	if workflowLease.GetContext().(*workflow.ContextImpl).MutableState != nil {
-		msb := workflowLease.GetContext().(*workflow.ContextImpl).MutableState
+	if chasmLease.GetContext().(*workflow.ContextImpl).MutableState != nil {
+		msb := chasmLease.GetContext().(*workflow.ContextImpl).MutableState
 		response.CacheMutableState = msb.CloneToProto()
 	}
 
-	// clear mutable state to force reload from persistence. This API returns both cached and persisted version.
-	workflowLease.GetContext().Clear()
-	mutableState, err := workflowLease.GetContext().LoadMutableState(ctx, shardContext)
+	if !req.GetSkipForceReload() {
+		// Clear mutable state to force reload from persistence.
+		chasmLease.GetContext().Clear()
+	}
+
+	mutableState, err := chasmLease.GetContext().LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, err
 	}

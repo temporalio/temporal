@@ -33,7 +33,9 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
 	rulespb "go.temporal.io/api/rules/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -77,6 +79,7 @@ func UpdateActivityInfoForRetries(
 	ai.Version = version
 	ai.ScheduledTime = nextScheduledTime
 	ai.StartedEventId = common.EmptyEventID
+	ai.StartVersion = common.EmptyVersion
 	ai.RequestId = ""
 	ai.StartedTime = nil
 	ai.TimerTaskStatus = TimerTaskStatusNone
@@ -283,11 +286,13 @@ func PauseActivity(
 }
 
 func ResetActivity(
+	ctx context.Context,
 	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	activityId string,
 	resetHeartbeats bool,
 	keepPaused bool,
+	resetOptions bool,
 	jitter time.Duration,
 ) error {
 	if !mutableState.IsWorkflowExecutionRunning() {
@@ -299,12 +304,48 @@ func ResetActivity(
 		return consts.ErrActivityNotFound
 	}
 
+	var originalOptions *historypb.ActivityTaskScheduledEventAttributes
+	if resetOptions {
+		event, err := mutableState.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
+		if err != nil {
+			return serviceerror.NewInvalidArgumentf("ActivityTaskScheduledEvent not found, %v", err)
+		}
+		attrs, ok := event.Attributes.(*historypb.HistoryEvent_ActivityTaskScheduledEventAttributes)
+		if !ok {
+			return serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is invalid")
+		}
+		if attrs == nil || attrs.ActivityTaskScheduledEventAttributes == nil {
+			return serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is incomplete")
+		}
+
+		originalOptions = attrs.ActivityTaskScheduledEventAttributes
+	}
+
 	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
 		// reset the number of attempts
-		ai.Attempt = 1
-		ai.ActivityReset = true
+		activityInfo.Attempt = 1
+		activityInfo.ActivityReset = true
 		if resetHeartbeats {
-			ai.ResetHeartbeats = true
+			activityInfo.ResetHeartbeats = true
+		}
+
+		if resetOptions {
+			// update activity info with new options
+			activityInfo.TaskQueue = originalOptions.TaskQueue.Name
+			activityInfo.ScheduleToCloseTimeout = originalOptions.ScheduleToCloseTimeout
+			activityInfo.ScheduleToStartTimeout = originalOptions.ScheduleToStartTimeout
+			activityInfo.StartToCloseTimeout = originalOptions.StartToCloseTimeout
+			activityInfo.HeartbeatTimeout = originalOptions.HeartbeatTimeout
+			activityInfo.RetryMaximumInterval = originalOptions.RetryPolicy.MaximumInterval
+			activityInfo.RetryBackoffCoefficient = originalOptions.RetryPolicy.BackoffCoefficient
+			activityInfo.RetryInitialInterval = originalOptions.RetryPolicy.InitialInterval
+			activityInfo.RetryMaximumAttempts = originalOptions.RetryPolicy.MaximumAttempts
+
+			// move forward activity version
+			activityInfo.Stamp++
+
+			// invalidate timers
+			activityInfo.TimerTaskStatus = TimerTaskStatusNone
 		}
 
 		// if activity is running, or it is paused and we don't want to unpause - we don't need to do anything
@@ -312,13 +353,13 @@ func ResetActivity(
 			return nil
 		}
 
-		ai.Stamp++
-		if ai.Paused && !keepPaused {
-			ai.Paused = false
+		activityInfo.Stamp++
+		if activityInfo.Paused && !keepPaused {
+			activityInfo.Paused = false
 		}
 
 		// if activity is not running - we need to regenerate the retry task as schedule activity immediately
-		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+		if GetActivityState(activityInfo) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
 			// we reset heartbeat was requested we also should reset heartbeat details and timer
 			if resetHeartbeats {
 				ai.LastHeartbeatDetails = nil

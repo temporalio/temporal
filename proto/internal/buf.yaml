@@ -13,7 +13,7 @@ breaking:
   ignore:
     # example: - temporal/server/api/.../message.proto
     - temporal/server/api/persistence/v1/chasm.proto
-
+    - temporal/server/api/routing/v1/extension.proto
 lint:
   use:
     - DEFAULT

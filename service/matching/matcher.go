@@ -34,12 +34,6 @@ type TaskMatcher struct {
 	// channel closed when task queue is closed, to interrupt pollers
 	closeC chan struct{}
 
-	// dynamicRate is the dynamic rate & burst for rate limiter
-	dynamicRateBurst quotas.MutableRateBurst
-	// dynamicRateLimiter is the dynamic rate limiter that can be used to force refresh on new rates.
-	dynamicRateLimiter *quotas.DynamicRateLimiterImpl
-	// forceRefreshRateOnce is used to force refresh rate limit for first time
-	forceRefreshRateOnce sync.Once
 	// rateLimiter that limits the rate at which tasks can be dispatched to consumers
 	rateLimiter quotas.RateLimiter
 
@@ -51,11 +45,6 @@ type TaskMatcher struct {
 	lastPoller             atomic.Int64 // unix nanos of most recent poll start time
 }
 
-const (
-	defaultTaskDispatchRPS    = 100000.0
-	defaultTaskDispatchRPSTTL = time.Minute
-)
-
 var (
 	// Sentinel error to redirect while blocked in matcher.
 	errInterrupted    = errors.New("interrupted offer")
@@ -64,29 +53,10 @@ var (
 
 // newTaskMatcher returns a task matcher instance. The returned instance can be used by task producers and consumers to
 // find a match. Both sync matches and non-sync matches should use this implementation
-func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler metrics.Handler) *TaskMatcher {
-	dynamicRateBurst := quotas.NewMutableRateBurst(
-		defaultTaskDispatchRPS,
-		int(defaultTaskDispatchRPS),
-	)
-	dynamicRateLimiter := quotas.NewDynamicRateLimiter(
-		dynamicRateBurst,
-		defaultTaskDispatchRPSTTL,
-	)
-	limiter := quotas.NewMultiRateLimiter([]quotas.RateLimiter{
-		dynamicRateLimiter,
-		quotas.NewDefaultOutgoingRateLimiter(
-			config.AdminNamespaceTaskQueueToPartitionDispatchRate,
-		),
-		quotas.NewDefaultOutgoingRateLimiter(
-			config.AdminNamespaceToPartitionDispatchRate,
-		),
-	})
+func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler metrics.Handler, rateLimiter quotas.RateLimiter) *TaskMatcher {
 	return &TaskMatcher{
 		config:                 config,
-		dynamicRateBurst:       dynamicRateBurst,
-		dynamicRateLimiter:     dynamicRateLimiter,
-		rateLimiter:            limiter,
+		rateLimiter:            rateLimiter,
 		metricsHandler:         metricsHandler,
 		fwdr:                   fwdr,
 		taskC:                  make(chan *internalTask),
@@ -180,7 +150,10 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			if err := tm.fwdr.ForwardTask(ctx, task); err == nil {
 				// task was remotely sync matched on the parent partition
 				token.release()
-				tm.emitDispatchLatency(task, true)
+				if !task.isForwarded() {
+					// if there are multiple forwarding hops, only the initial source partition emits this metric
+					tm.emitDispatchLatency(task, true)
+				}
 				return true, nil
 			}
 			token.release()
@@ -431,35 +404,6 @@ func (tm *TaskMatcher) PollForQuery(ctx context.Context, pollMetadata *pollMetad
 
 func (tm *TaskMatcher) ReprocessAllTasks() {
 	// unused in old matcher
-}
-
-// UpdateRatelimit updates the task dispatch rate
-func (tm *TaskMatcher) UpdateRatelimit(rps float64) {
-	nPartitions := float64(tm.numPartitions())
-	if nPartitions > 0 {
-		// divide the rate equally across all partitions
-		rps = rps / nPartitions
-	}
-	burst := int(math.Ceil(rps))
-
-	minTaskThrottlingBurstSize := tm.config.MinTaskThrottlingBurstSize()
-	if burst < minTaskThrottlingBurstSize {
-		burst = minTaskThrottlingBurstSize
-	}
-
-	tm.dynamicRateBurst.SetRPS(rps)
-	tm.dynamicRateBurst.SetBurst(burst)
-	tm.forceRefreshRateOnce.Do(func() {
-		// Dynamic rate limiter only refresh its rate every 1m. Before that initial 1m interval, it uses default rate
-		// which is 10K and is too large in most cases. We need to force refresh for the first time this rate is set
-		// by poller. Only need to do that once. If the rate change later, it will be refresh in 1m.
-		tm.dynamicRateLimiter.Refresh()
-	})
-}
-
-// Rate returns the current rate at which tasks are dispatched
-func (tm *TaskMatcher) Rate() float64 {
-	return tm.rateLimiter.Rate()
 }
 
 func (tm *TaskMatcher) poll(

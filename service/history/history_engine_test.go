@@ -97,6 +97,7 @@ type (
 		mockClusterMetadata      *cluster.MockMetadata
 		mockEventsReapplier      *ndc.MockEventsReapplier
 		mockWorkflowResetter     *ndc.MockWorkflowResetter
+		mockErrorHandler         *interceptor.MockErrorHandler
 
 		workflowCache     wcache.Cache
 		historyEngine     *historyEngineImpl
@@ -131,6 +132,7 @@ func (s *engineSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockEventsReapplier = ndc.NewMockEventsReapplier(s.controller)
 	s.mockWorkflowResetter = ndc.NewMockWorkflowResetter(s.controller)
+	s.mockErrorHandler = interceptor.NewMockErrorHandler(s.controller)
 	s.mockTxProcessor = queues.NewMockQueue(s.controller)
 	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
 	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
@@ -1740,7 +1742,6 @@ func (s *engineSuite) testRespondWorkflowTaskCompletedSignalGeneration() *histor
 
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: []*historypb.HistoryEvent{}}, nil)
 
@@ -1928,7 +1929,6 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_Ca
 
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: []*historypb.HistoryEvent{}}, nil)
 
@@ -5318,7 +5318,8 @@ func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(),
 		s.mockShard.GetMetricsHandler(),
 		s.mockShard.Resource.Logger,
-		s.config.LogAllReqErrors)
+		s.config.LogAllReqErrors,
+		s.mockErrorHandler)
 	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
 		response, err := s.historyEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: tests.NamespaceID.String(),
@@ -5355,7 +5356,8 @@ func (s *engineSuite) TestEagerWorkflowStart_FromCron_SkipsEager() {
 	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(),
 		s.mockShard.GetMetricsHandler(),
 		s.mockShard.Resource.Logger,
-		s.config.LogAllReqErrors)
+		s.config.LogAllReqErrors,
+		s.mockErrorHandler)
 	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
 		firstWorkflowTaskBackoff := time.Second
 		response, err := s.historyEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
@@ -5425,12 +5427,12 @@ func (s *engineSuite) TestGetHistory() {
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 
 	history, token, err := api.GetHistory(
 		context.Background(),
 		s.mockShard,
+		tests.Namespace,
 		tests.NamespaceID,
 		&commonpb.WorkflowExecution{
 			WorkflowId: we.WorkflowId,
@@ -5725,7 +5727,6 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 			},
 		},
-		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
 	historyBlob2, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
@@ -5735,7 +5736,6 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
 			},
 		},
-		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
@@ -6550,14 +6550,22 @@ func addTimerFiredEvent(ms historyi.MutableState, timerID string) *historypb.His
 	return event
 }
 
-func addRequestCancelInitiatedEvent(ms historyi.MutableState, workflowTaskCompletedEventID int64,
-	cancelRequestID string, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID string) (*historypb.HistoryEvent, *persistencespb.RequestCancelInfo) {
+func addRequestCancelInitiatedEvent(
+	ms historyi.MutableState,
+	workflowTaskCompletedEventID int64,
+	cancelRequestID string,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	workflowID, runID string,
+	childWorkflowOnly bool,
+) (*historypb.HistoryEvent, *persistencespb.RequestCancelInfo) {
 	event, rci, _ := ms.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID,
 		cancelRequestID, &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
-			Namespace:  namespace.String(),
-			WorkflowId: workflowID,
-			RunId:      runID,
-			Reason:     "cancellation reason",
+			Namespace:         namespaceName.String(),
+			WorkflowId:        workflowID,
+			RunId:             runID,
+			ChildWorkflowOnly: childWorkflowOnly,
+			Reason:            "cancellation reason",
 		},
 		namespaceID)
 
@@ -6576,20 +6584,31 @@ func addCancelRequestedEvent(
 	return event
 }
 
-func addRequestSignalInitiatedEvent(ms historyi.MutableState, workflowTaskCompletedEventID int64,
-	signalRequestID string, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID, signalName string, input *commonpb.Payloads,
-	control string, header *commonpb.Header) (*historypb.HistoryEvent, *persistencespb.SignalInfo) {
+func addRequestSignalInitiatedEvent(
+	ms historyi.MutableState,
+	workflowTaskCompletedEventID int64,
+	signalRequestID string,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	workflowID, runID string,
+	childWorkflowOnly bool,
+	signalName string,
+	input *commonpb.Payloads,
+	control string,
+	header *commonpb.Header,
+) (*historypb.HistoryEvent, *persistencespb.SignalInfo) {
 	event, si, _ := ms.AddSignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, signalRequestID,
 		&commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-			Namespace: namespace.String(),
+			Namespace: namespaceName.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
-			SignalName: signalName,
-			Input:      input,
-			Control:    control,
-			Header:     header,
+			ChildWorkflowOnly: childWorkflowOnly,
+			SignalName:        signalName,
+			Input:             input,
+			Control:           control,
+			Header:            header,
 		}, namespaceID)
 
 	return event, si
@@ -6611,7 +6630,6 @@ func addSignaledEvent(
 func addStartChildWorkflowExecutionInitiatedEvent(
 	ms historyi.MutableState,
 	workflowTaskCompletedID int64,
-	createRequestID string,
 	namespace namespace.Name,
 	namespaceID namespace.ID,
 	workflowID, workflowType, taskQueue string,
@@ -6620,7 +6638,7 @@ func addStartChildWorkflowExecutionInitiatedEvent(
 	parentClosePolicy enumspb.ParentClosePolicy,
 ) (*historypb.HistoryEvent, *persistencespb.ChildExecutionInfo) {
 
-	event, cei, _ := ms.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedID, createRequestID,
+	event, cei, _ := ms.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedID,
 		&commandpb.StartChildWorkflowExecutionCommandAttributes{
 			Namespace:                namespace.String(),
 			WorkflowId:               workflowID,

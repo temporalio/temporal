@@ -1,9 +1,12 @@
 package respondworkflowtaskcompleted
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -16,6 +19,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
@@ -31,6 +35,7 @@ import (
 	"go.temporal.io/server/common/protocol"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -73,6 +78,7 @@ type (
 		shard                  historyi.ShardContext
 		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
+		matchingClient         matchingservice.MatchingServiceClient
 	}
 
 	workflowTaskFailedCause struct {
@@ -111,6 +117,7 @@ func newWorkflowTaskCompletedHandler(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
+	matchingClient matchingservice.MatchingServiceClient,
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
 		identity:                identity,
@@ -142,6 +149,7 @@ func newWorkflowTaskCompletedHandler(
 		shard:                  shard,
 		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
+		matchingClient:         matchingClient,
 	}
 }
 
@@ -418,6 +426,22 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
 
+	// TODO(fairness): remove this again once the SDK allows setting the fairness key
+	const fairnessKeyPrefix = "x-temporal-internal-fairness-key["
+	if after, ok := strings.CutPrefix(attr.GetActivityId(), fairnessKeyPrefix); ok {
+		if endIndex := strings.Index(after, "]"); endIndex != -1 {
+			keyAndWeight := after[:endIndex]
+			if colonIndex := strings.Index(keyAndWeight, ":"); colonIndex != -1 {
+				key := keyAndWeight[:colonIndex]
+				if weight, err := strconv.ParseFloat(keyAndWeight[colonIndex+1:], 32); err == nil {
+					attr.Priority = cmp.Or(attr.Priority, &commonpb.Priority{})
+					attr.Priority.FairnessKey = key
+					attr.Priority.FairnessWeight = float32(weight)
+				}
+			}
+		}
+	}
+
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.ValidateActivityScheduleAttributes(
@@ -545,6 +569,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		ai.Attempt,
 		shardClock,
 		ai.Version,
+		ai.StartVersion,
 	)
 	serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -927,7 +952,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 	}
 
 	if handler.mutableState.GetAssignedBuildId() == "" {
-		// TODO: this is supported in new versioning [cleanup-old-wv]
+		// TODO(carlydf): this is supported in new versioning [cleanup-old-wv]
 		if attr.InheritBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
 			err := serviceerror.NewInvalidArgument("ContinueAsNew with UseCompatibleVersion cannot run on different task queue.")
 			return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
@@ -986,6 +1011,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		handler.workflowTaskCompletedID,
 		parentNamespace,
 		attr,
+		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient),
 	)
 	if err != nil {
 		return nil, err
@@ -1093,9 +1119,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 
 	enums.SetDefaultWorkflowIdReusePolicy(&attr.WorkflowIdReusePolicy)
 
-	requestID := uuid.New()
 	event, _, err := handler.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
-		handler.workflowTaskCompletedID, requestID, attr, targetNamespaceID,
+		handler.workflowTaskCompletedID, attr, targetNamespaceID,
 	)
 	if err == nil {
 		// Keep track of all child initiated commands in this workflow task to validate request cancel commands

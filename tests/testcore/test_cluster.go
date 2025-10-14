@@ -13,12 +13,14 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
@@ -42,6 +44,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/temporal/environment"
@@ -86,6 +89,7 @@ type (
 		DynamicConfigOverrides map[dynamicconfig.Key]any
 		EnableMTLS             bool
 		EnableMetricsCapture   bool
+		SpanExporters          map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
 		ServiceFxOptions map[primitives.ServiceName][]fx.Option
 	}
@@ -318,7 +322,10 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		}
 	}
 
-	taskCategoryRegistry := temporal.TaskCategoryRegistryProvider(archiverBase.metadata)
+	chasmRegistry := chasm.NewRegistry(logger)
+	if err := chasmRegistry.Register(&chasm.CoreLibrary{}); err != nil {
+		return nil, err
+	}
 
 	temporalParams := &TemporalParams{
 		ClusterMetadataConfig:            clusterMetadataConfig,
@@ -345,8 +352,10 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		DynamicConfigOverrides:           clusterConfig.DynamicConfigOverrides,
 		TLSConfigProvider:                tlsConfigProvider,
 		ServiceFxOptions:                 clusterConfig.ServiceFxOptions,
-		TaskCategoryRegistry:             taskCategoryRegistry,
+		TaskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverBase.metadata),
+		ChasmRegistry:                    chasmRegistry,
 		HostsByProtocolByService:         hostsByProtocolByService,
+		SpanExporters:                    clusterConfig.SpanExporters,
 	}
 
 	if clusterConfig.EnableMetricsCapture {

@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 )
 
 func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {
@@ -34,12 +35,14 @@ func TestCreateLocalFrontendHTTPClient_UsingMembership(t *testing.T) {
 		nil,
 		primitives.HistoryService,
 		nil, // No logger
+		nil, // No metrics handler
 		nil,
 		membership.GRPCResolverURLForTesting(monitor, primitives.FrontendService),
 		membership.GRPCResolverURLForTesting(monitor, primitives.FrontendService),
 		int(port),
 		nil, // No TLS
 		nil,
+		map[primitives.ServiceName][]grpc.DialOption{},
 		monitor,
 	)
 
@@ -64,12 +67,14 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort(t *testing.T) {
 		nil, // unused
 		primitives.HistoryService,
 		nil, // No logger
+		nil, // No metrics handler
 		nil,
 		membership.GRPCResolverURLForTesting(nil, primitives.FrontendService),
 		addr.String(),
 		0,   // Port is unused
 		nil, // No TLS
 		nil,
+		map[primitives.ServiceName][]grpc.DialOption{},
 		nil, // monitor should not be used
 	)
 
@@ -95,12 +100,14 @@ func TestCreateLocalFrontendHTTPClient_UsingFixedHostPort_AndTLS(t *testing.T) {
 		nil, // unused
 		primitives.HistoryService,
 		nil, // No logger
+		nil, // No metrics handler
 		nil,
 		membership.GRPCResolverURLForTesting(nil, primitives.FrontendService),
 		addr.String(),
 		0, // Port is unused
 		tlsConfig,
 		nil,
+		map[primitives.ServiceName][]grpc.DialOption{},
 		nil, // monitor should not be used
 	)
 

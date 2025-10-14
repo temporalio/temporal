@@ -83,7 +83,7 @@ func NewHandler(logger log.Logger, clientConfig metrics.ClientConfig) (*Handler,
 	)
 	meter := provider.Meter("temporal")
 
-	otelHandler, err := metrics.NewOtelMetricsHandler(logger, &otelProvider{meter: meter}, clientConfig)
+	otelHandler, err := metrics.NewOtelMetricsHandler(logger, &otelProvider{meter: meter}, clientConfig, false)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +177,7 @@ func (m *otelProvider) Stop(log.Logger) {}
 func (s Snapshot) getValue(name string, metricType dto.MetricType, tags ...metrics.Tag) (float64, error) {
 	labelValues := map[string]string{}
 	for _, tag := range tags {
-		labelValues[tag.Key()] = tag.Value()
+		labelValues[tag.Key] = tag.Value
 	}
 	sample, ok := s.samples[name]
 	if !ok {
@@ -203,7 +203,7 @@ func (s Snapshot) Gauge(name string, tags ...metrics.Tag) (float64, error) {
 func (s Snapshot) Histogram(name string, tags ...metrics.Tag) ([]HistogramBucket, error) {
 	labelValues := map[string]string{}
 	for _, tag := range tags {
-		labelValues[tag.Key()] = tag.Value()
+		labelValues[tag.Key] = tag.Value
 	}
 
 	sample, ok := s.histogramSamples[name]

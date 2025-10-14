@@ -28,14 +28,24 @@ func (fi fieldInternal) isEmpty() bool {
 }
 
 func (fi fieldInternal) value() any {
-	if fi.node == nil {
+	// Deferred pointers are special-cased, since their serialized nodes are
+	// initialized as regular persistable pointers.
+	//
+	// Deferred pointers may have a non-nil node after syncSubComponents, but before
+	// resolution.
+	if fi.node == nil || fi.ft == fieldTypeDeferredPointer {
 		return fi.v
 	}
 	return fi.node.value
 }
 
 func (fi fieldInternal) fieldType() fieldType {
-	if fi.node == nil {
+	// Deferred pointers are special-cased, since their serialized nodes are
+	// initialized as regular persistable pointers.
+	//
+	// Deferred pointers may have a non-nil node after syncSubComponents, but before
+	// resolution.
+	if fi.node == nil || fi.ft == fieldTypeDeferredPointer {
 		return fi.ft
 	}
 	return fi.node.fieldType()

@@ -165,16 +165,16 @@ func TestUpdateState(t *testing.T) {
 					}()
 
 					err := admit(t, readonlyStore, upd) // NOTE the store!
-					require.ErrorIs(t, consts.ErrWorkflowCompleted, err)
+					require.ErrorIs(t, update.AbortedByWorkflowClosingErr, err)
 					effects.Apply(context.Background())
 
 					// ensure waiter received response
 					waiterRes := <-ch
-					require.EqualExportedValues(t, consts.ErrWorkflowCompleted, waiterRes)
+					require.EqualExportedValues(t, update.AbortedByWorkflowClosingErr, waiterRes)
 
 					// new waiter receives same response
 					_, err = upd.WaitLifecycleStage(immediateCtx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, immediateTimeout)
-					require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
+					require.ErrorIs(t, err, update.AbortedByWorkflowClosingErr)
 				},
 			}, {
 				title:        "fail to transition to stateSent",
@@ -208,14 +208,14 @@ func TestUpdateState(t *testing.T) {
 				apply: func() {
 					abort(t, store, upd, update.AbortReasonRegistryCleared)
 					effects.Apply(context.Background())
-					assertAborted(t, upd, update.WorkflowUpdateAbortedErr)
+					assertAborted(t, upd, update.AbortedByServerErr)
 				},
 			}, {
 				title: "aborted because Workflow completed",
 				apply: func() {
 					abort(t, store, upd, update.AbortReasonWorkflowCompleted)
 					effects.Apply(context.Background())
-					assertAborted(t, upd, consts.ErrWorkflowCompleted)
+					assertAborted(t, upd, update.AbortedByWorkflowClosingErr)
 				},
 			}, {
 				title: "aborted because Workflow completing",
@@ -308,14 +308,14 @@ func TestUpdateState(t *testing.T) {
 				apply: func() {
 					abort(t, store, upd, update.AbortReasonRegistryCleared)
 					effects.Apply(context.Background())
-					assertAborted(t, upd, update.WorkflowUpdateAbortedErr)
+					assertAborted(t, upd, update.AbortedByServerErr)
 				},
 			}, {
 				title: "aborted because Workflow completed",
 				apply: func() {
 					abort(t, store, upd, update.AbortReasonWorkflowCompleted)
 					effects.Apply(context.Background())
-					assertAborted(t, upd, consts.ErrWorkflowCompleted)
+					assertAborted(t, upd, update.AbortedByWorkflowClosingErr)
 				},
 			}, {
 				title: "aborted because Workflow completing",
@@ -441,16 +441,16 @@ func TestUpdateState(t *testing.T) {
 					effects.Apply(context.Background())
 
 					status, err := upd.WaitLifecycleStage(immediateCtx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, immediateTimeout)
-					require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
+					require.ErrorIs(t, err, update.AbortedByWorkflowClosingErr)
 					require.Nil(t, status)
 
 					// ensure waiter received response
 					waiterRes := <-ch
-					require.EqualExportedValues(t, consts.ErrWorkflowCompleted, waiterRes)
+					require.EqualExportedValues(t, update.AbortedByWorkflowClosingErr, waiterRes)
 
 					// new waiter still sees same result
 					_, err = upd.WaitLifecycleStage(immediateCtx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, immediateTimeout)
-					require.EqualExportedValues(t, consts.ErrWorkflowCompleted, err)
+					require.EqualExportedValues(t, update.AbortedByWorkflowClosingErr, err)
 				},
 			}, {
 				title: "transition to stateRejected",
@@ -635,14 +635,14 @@ func TestUpdateState(t *testing.T) {
 				apply: func() {
 					abort(t, store, upd, update.AbortReasonRegistryCleared)
 					effects.Apply(context.Background())
-					assertAborted(t, upd, update.WorkflowUpdateAbortedErr)
+					assertAborted(t, upd, update.AbortedByServerErr)
 				},
 			}, {
 				title: "aborted because Workflow completed",
 				apply: func() {
 					abort(t, store, upd, update.AbortReasonWorkflowCompleted)
 					effects.Apply(context.Background())
-					assertAborted(t, upd, consts.ErrWorkflowCompleted)
+					assertAborted(t, upd, update.AbortedByWorkflowClosingErr)
 				},
 			}, {
 				title: "aborted because Workflow completing",

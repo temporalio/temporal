@@ -124,7 +124,7 @@ func (d *DLQWriterAdapter) WriteTaskToDLQ(
 	if err != nil {
 		return err
 	}
-	return d.dlqWriter.WriteTaskToDLQ(ctx, request.SourceCluster, d.currentClusterName, int(request.SourceShardID), task)
+	return d.dlqWriter.WriteTaskToDLQ(ctx, request.SourceCluster, d.currentClusterName, int(request.SourceShardID), task, false)
 }
 
 // This is a helper function to make it easier to change the DLQWriteRequest format in the future.

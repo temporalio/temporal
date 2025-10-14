@@ -9,6 +9,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -120,6 +121,7 @@ type (
 			namespaceID namespace.ID,
 			workflowID string,
 			runID string,
+			archetype chasm.Archetype,
 		) (Workflow, error)
 	}
 
@@ -416,9 +418,10 @@ func (r *transactionMgrImpl) LoadWorkflow(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
+	archetype chasm.Archetype,
 ) (Workflow, error) {
 
-	weContext, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
+	weContext, release, err := r.workflowCache.GetOrCreateChasmEntity(
 		ctx,
 		r.shardContext,
 		namespaceID,
@@ -426,6 +429,7 @@ func (r *transactionMgrImpl) LoadWorkflow(
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
+		archetype,
 		locks.PriorityHigh,
 	)
 	if err != nil {

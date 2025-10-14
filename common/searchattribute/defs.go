@@ -2,6 +2,7 @@ package searchattribute
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -92,6 +93,13 @@ const (
 	// execution. It is updated at workflow task completion when the server gets the
 	// behavior (`auto_upgrade` or `pinned`) from the SDK. Empty for unversioned workflows.
 	TemporalWorkflowVersioningBehavior = "TemporalWorkflowVersioningBehavior"
+
+	// TemporalReportedProblems is a search attribute that stores the information about problems
+	// the workflow has encountered in making progress. It is updated after successive workflow task
+	// failures with the last workflow task failure cause. After the workflow task is completed
+	// successfully, the search attribute is removed. Format of a single problem:
+	// "category=<category> cause=<cause>".
+	TemporalReportedProblems = "TemporalReportedProblems"
 )
 
 var (
@@ -135,6 +143,7 @@ var (
 		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
 		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalPauseInfo:          enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalReportedProblems:   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
@@ -150,6 +159,7 @@ var (
 		TemporalSchedulePaused:             enumspb.INDEXED_VALUE_TYPE_BOOL,
 		TemporalNamespaceDivision:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalPauseInfo:                  enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalReportedProblems:           enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		TemporalWorkerDeploymentVersion:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalWorkflowVersioningBehavior: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalWorkerDeployment:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -186,36 +196,23 @@ var (
 		RootRunID:            "root_run_id",
 	}
 
-	sqlDbCustomSearchAttributes = map[string]enumspb.IndexedValueType{
-		"Bool01":        enumspb.INDEXED_VALUE_TYPE_BOOL,
-		"Bool02":        enumspb.INDEXED_VALUE_TYPE_BOOL,
-		"Bool03":        enumspb.INDEXED_VALUE_TYPE_BOOL,
-		"Datetime01":    enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		"Datetime02":    enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		"Datetime03":    enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		"Double01":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-		"Double02":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-		"Double03":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-		"Int01":         enumspb.INDEXED_VALUE_TYPE_INT,
-		"Int02":         enumspb.INDEXED_VALUE_TYPE_INT,
-		"Int03":         enumspb.INDEXED_VALUE_TYPE_INT,
-		"Keyword01":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"Keyword02":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"Keyword03":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"Keyword04":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"Keyword05":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"Keyword06":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"Keyword07":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"Keyword08":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"Keyword09":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"Keyword10":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"Text01":        enumspb.INDEXED_VALUE_TYPE_TEXT,
-		"Text02":        enumspb.INDEXED_VALUE_TYPE_TEXT,
-		"Text03":        enumspb.INDEXED_VALUE_TYPE_TEXT,
-		"KeywordList01": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		"KeywordList02": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		"KeywordList03": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+	defaultNumDBCustomSearchAttributes = map[enumspb.IndexedValueType]int{
+		enumspb.INDEXED_VALUE_TYPE_BOOL:         3,
+		enumspb.INDEXED_VALUE_TYPE_INT:          3,
+		enumspb.INDEXED_VALUE_TYPE_DOUBLE:       3,
+		enumspb.INDEXED_VALUE_TYPE_DATETIME:     3,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD:      10,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST: 3,
+		enumspb.INDEXED_VALUE_TYPE_TEXT:         3,
 	}
+
+	dbCustomSearchAttributeFieldNameRE = func() map[enumspb.IndexedValueType]*regexp.Regexp {
+		res := map[enumspb.IndexedValueType]*regexp.Regexp{}
+		for t := range defaultNumDBCustomSearchAttributes {
+			res[t] = regexp.MustCompile(fmt.Sprintf(`^%s(0[1-9]|[1-9][0-9])$`, t.String()))
+		}
+		return res
+	}()
 )
 
 // IsSystem returns true if name is system search attribute
@@ -258,10 +255,27 @@ func GetSqlDbColName(name string) string {
 	return name
 }
 
-func GetSqlDbIndexSearchAttributes() *persistencespb.IndexSearchAttributes {
-	return &persistencespb.IndexSearchAttributes{
-		CustomSearchAttributes: sqlDbCustomSearchAttributes,
+func GetDBIndexSearchAttributes(
+	override map[enumspb.IndexedValueType]int,
+) *persistencespb.IndexSearchAttributes {
+	csa := map[string]enumspb.IndexedValueType{}
+	for saType, defaultNumAttrs := range defaultNumDBCustomSearchAttributes {
+		numAttrs := defaultNumAttrs
+		if value, ok := override[saType]; ok {
+			numAttrs = value
+		}
+		for i := range numAttrs {
+			csa[fmt.Sprintf("%s%02d", saType.String(), i+1)] = saType
+		}
 	}
+	return &persistencespb.IndexSearchAttributes{
+		CustomSearchAttributes: csa,
+	}
+}
+
+func IsPreallocatedCSAFieldName(name string, valueType enumspb.IndexedValueType) bool {
+	re := dbCustomSearchAttributeFieldNameRE[valueType]
+	return re != nil && re.MatchString(name)
 }
 
 // QueryWithAnyNamespaceDivision returns a modified workflow visibility query that disables

@@ -25,6 +25,19 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
 > Note: it is possible to run Temporal server without a `docker`. If for some reason (for example, performance on macOS)
 > you want to run dependencies on the host OS, please follow the [doc](./docs/development/run-dependencies-host.md).
 
+- Runtime dependencies are optional support services that can be helpful during development and testing, providing
+databases, UI, and metrics services via `docker compose`. By default, the server utilizes SQLite as an in-memory 
+database, so the runtime dependencies are optional. To start dependencies, open new terminal window and run:
+
+```bash
+make start-dependencies
+```
+
+To stop the dependencies:
+```bash
+make stop-dependencies
+```
+
 ### For Windows developers
 
 For developing on Windows, install [Windows Subsystem for Linux 2 (WSL2)](https://aka.ms/wsl) and [Ubuntu](https://docs.microsoft.com/en-us/windows/wsl/install-win10#step-6---install-your-linux-distribution-of-choice). After that, follow the guidance for installing prerequisites, building, and testing on Ubuntu.
@@ -63,17 +76,8 @@ We defined three categories of tests.
 - Integration test: Those tests cover the integration between the server and the dependencies (Cassandra, SQL, ES etc.).
 - Functional test: Those tests cover the E2E functionality of Temporal server. They are all under ./tests directory.
 
-Integration and functional tests require runtime dependencies. They can be run with `start-dependencies` target (uses `docker compose` internally). Open new terminal window and run:
-
-```bash
-make start-dependencies
-```
-
-Before testing on macOS, make sure you increase the file handle limit:
-
-```bash
-ulimit -n 8192
-```
+Integration and functional tests require [runtime dependencies](#runtime-server-and-tests-prerequisites), 
+when running with a persistence option that is not SQLite. If running unit tests, no need to start the dependencies.
 
 Run unit tests:
 
@@ -119,23 +123,39 @@ make stop-dependencies
 
 ## Run Temporal Server locally
 
-First start runtime dependencies. They can be run with `start-dependencies` target (uses `docker compose` internally). Open new terminal window and run:
+First, start the optional [runtime dependencies](#runtime-server-and-tests-prerequisites) if needed for the desired persistence option.
 
-```bash
-make start-dependencies
-```
-
-then run the server:
+Then run the server:
 
 ```bash
 make start
 ```
 
-This will start the server using SQLite as database. If you want to run with Cassandra and Elasticsearch, then run these commands:
+This will start the server using SQLite as an in-memory database. You can choose other databases as well.
+
+If you want to run with Cassandra and Elasticsearch, then run these commands:
 
 ```bash
 make install-schema-cass-es
 make start-cass-es
+```
+
+To run with SQLite with a persisted file:
+
+```bash
+make start-sqlite-file
+```
+
+To run with Postgres:
+```bash
+make install-schema-postgresql
+make start-postgresql
+```
+
+To run with MySQL:
+```bash
+make install-schema-mysql
+make start-mysql
 ```
 
 Now you can create default namespace with Temporal CLI:
@@ -146,13 +166,38 @@ temporal operator namespace create default
 
 and run samples from [Go](https://github.com/temporalio/samples-go) and [Java](https://github.com/temporalio/samples-java) samples repos. Also, you can access web UI at `localhost:8080`.
 
-When you are done, press `Ctrl+C` to stop the server. Don't forget to stop dependencies (with `Ctrl+C`) and clean up resources:
+When you are done, press `Ctrl+C` to stop the server. 
+
+If you started [runtime dependencies](#runtime-server-and-tests-prerequisites), don't forget to stop dependencies 
+(with `Ctrl+C`) and clean up resources:
 
 ```bash
 make stop-dependencies
 ```
 
 See the [developer documentation on testing](./docs/development/testing.md) to learn more about writing tests.
+
+## Debugging with the IDE
+
+### GoLand
+
+For general instructions, see [GoLand Debugging](https://www.jetbrains.com/help/go/debugging-code.html).
+
+First, start the optional [runtime dependencies](#runtime-server-and-tests-prerequisites) if needed for the desired persistence option.
+
+To run the server, ensure the Run Type is package. In "Package path", enter `go.temporal.io/server/cmd/server`. 
+In the "Program arguments" field, add the following:
+
+```
+--env <database dev environment> --allow-no-auth start
+```
+
+For example, to run with Postgres:
+```
+--env development-postgres12 --allow-no-auth start
+```
+
+See Makefile for other environments.
 
 ## Working with merged API changes
 

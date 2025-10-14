@@ -43,25 +43,6 @@ func ChecksumFlavorFromString(s string) (ChecksumFlavor, error) {
 }
 
 var (
-	SchedulerInvokerState_shorthandValue = map[string]int32{
-		"Unspecified": 0,
-		"Waiting":     1,
-		"Processing":  2,
-	}
-)
-
-// SchedulerInvokerStateFromString parses a SchedulerInvokerState value from  either the protojson
-// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to SchedulerInvokerState
-func SchedulerInvokerStateFromString(s string) (SchedulerInvokerState, error) {
-	if v, ok := SchedulerInvokerState_value[s]; ok {
-		return SchedulerInvokerState(v), nil
-	} else if v, ok := SchedulerInvokerState_shorthandValue[s]; ok {
-		return SchedulerInvokerState(v), nil
-	}
-	return SchedulerInvokerState(0), fmt.Errorf("%s is not a valid SchedulerInvokerState", s)
-}
-
-var (
 	CallbackState_shorthandValue = map[string]int32{
 		"Unspecified": 0,
 		"Standby":     1,

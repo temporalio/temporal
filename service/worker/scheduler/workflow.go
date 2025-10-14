@@ -62,6 +62,8 @@ const (
 	ActionResultIncludesStatus = 10
 	// limit the ScheduleSpec specs and exclusions to only 10 entries
 	LimitMemoSpecSize = 11
+	// trigger immediately timestamp is added to the PatchRequest
+	TriggerImmediatelyTimestamp = 12
 )
 
 const (
@@ -201,7 +203,7 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		Version:                           ActionResultIncludesStatus,
+		Version:                           TriggerImmediatelyTimestamp,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -251,6 +253,8 @@ func (s *scheduler) run() error {
 		s.State.LastProcessedTime = timestamppb.New(s.now())
 		s.State.ConflictToken = InitialConflictToken
 		s.Info.CreateTime = s.State.LastProcessedTime
+
+		s.recordActionPayloadMetrics()
 	}
 
 	// A schedule may be created with an initial Patch, e.g. start one immediately. Put that in
@@ -410,6 +414,12 @@ func (s *scheduler) processPatch(patch *schedulepb.SchedulePatch) {
 
 	if trigger := patch.TriggerImmediately; trigger != nil {
 		now := s.now()
+		if s.hasMinVersion(TriggerImmediatelyTimestamp) {
+			now = timestamp.TimeValue(trigger.ScheduledTime)
+			if now.IsZero() {
+				now = s.now()
+			}
+		}
 		s.addStart(now, now, trigger.OverlapPolicy, true)
 	}
 
@@ -844,13 +854,21 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 		s.incSeqNo()
 	}
 
-	// handle last completion/failure
+	// handle last completion/failure and record resulting payload sizes
 	if res.GetResult() != nil {
 		s.State.LastCompletionResult = res.GetResult()
 		s.State.ContinuedFailure = nil
+
+		if resultPayload, err := res.GetResult().Marshal(); err == nil {
+			s.metrics.Counter(metrics.SchedulePayloadSize.Name()).Inc(int64(len(resultPayload)))
+		}
 	} else if res.GetFailure() != nil {
 		// leave LastCompletionResult from previous run
 		s.State.ContinuedFailure = res.GetFailure()
+
+		if failurePayload, err := res.GetFailure().Marshal(); err == nil {
+			s.metrics.Counter(metrics.SchedulePayloadSize.Name()).Inc(int64(len(failurePayload)))
+		}
 	}
 
 	// Update desired time of next start if it's buffered. This is used for metrics only.
@@ -859,6 +877,31 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 	}
 
 	s.logger.Debug("started workflow finished", "workflow", id, "status", res.Status, "pause-after-failure", pauseOnFailure, "long", long)
+}
+
+// recordPayloadMetrics should be called after the customer's action is updated
+// (or when the schedule is created) to record the size of their payloads.
+//
+// Payloads for workflow completions and failures are recorded as part of the
+// same metric.
+func (s *scheduler) recordActionPayloadMetrics() {
+	startWf := s.Schedule.Action.GetStartWorkflow()
+	if startWf == nil {
+		return
+	}
+
+	inputPayload, err := startWf.Input.Marshal()
+	if err != nil {
+		return
+	}
+
+	memoPayload, err := startWf.Memo.Marshal()
+	if err != nil {
+		return
+	}
+
+	payloadSize := int64(len(memoPayload) + len(inputPayload))
+	s.metrics.Counter(metrics.SchedulePayloadSize.Name()).Inc(payloadSize)
 }
 
 func (s *scheduler) processUpdate(req *schedulespb.FullUpdateRequest) {
@@ -879,6 +922,9 @@ func (s *scheduler) processUpdate(req *schedulespb.FullUpdateRequest) {
 	s.compileSpec()
 
 	s.updateCustomSearchAttributes(req.SearchAttributes)
+
+	// Record customer start workflow memo payload size on each update.
+	s.recordActionPayloadMetrics()
 
 	if s.hasMinVersion(UpdateFromPrevious) && !s.hasMinVersion(UseLastAction) {
 		// We need to start re-processing from the last event, so that we catch actions whose
@@ -1307,6 +1353,13 @@ func (s *scheduler) startWorkflow(
 		continuedFailure = nil
 	}
 
+	// Reject duplicates as part of WFID reuse policy when possible, as a measure
+	// against WFT timeouts/failures that lead to non-determinism.
+	reusePolicy := enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
+	if start.Manual {
+		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+	}
+
 	req := &schedulespb.StartWorkflowRequest{
 		Request: &workflowservice.StartWorkflowExecutionRequest{
 			WorkflowId:               workflowID,
@@ -1318,7 +1371,7 @@ func (s *scheduler) startWorkflow(
 			WorkflowTaskTimeout:      newWorkflow.WorkflowTaskTimeout,
 			Identity:                 s.identity(),
 			RequestId:                s.newUUIDString(),
-			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			WorkflowIdReusePolicy:    reusePolicy,
 			RetryPolicy:              newWorkflow.RetryPolicy,
 			Memo:                     newWorkflow.Memo,
 			SearchAttributes:         s.addSearchAttributes(newWorkflow.SearchAttributes, nominalTimeSec),

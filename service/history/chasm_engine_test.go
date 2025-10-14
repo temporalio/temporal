@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -19,7 +20,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/configs"
@@ -67,7 +67,6 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.mockEngine = historyi.NewMockEngine(s.controller)
 
 	s.config = tests.NewDynamicConfig()
-	s.config.EnableTransitionHistory = dynamicconfig.GetBoolPropertyFn(true)
 	s.config.EnableChasm = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.mockShard = shard.NewTestContext(
@@ -103,7 +102,7 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.NoError(err)
 	s.mockShard.SetStateMachineRegistry(reg)
 
-	s.registry = chasm.NewRegistry()
+	s.registry = chasm.NewRegistry(s.mockShard.GetLogger())
 	err = s.registry.Register(&testChasmLibrary{})
 	s.NoError(err)
 	s.mockShard.SetChasmRegistry(s.registry)
@@ -112,12 +111,12 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
 
-	s.engine = NewChasmEngine(
+	s.engine = newChasmEngine(
 		s.entityCache,
-		s.mockShardController,
 		s.registry,
 		s.config,
 	)
+	s.engine.SetShardController(s.mockShardController)
 }
 
 func (s *chasmEngineSuite) SetupSubTest() {
@@ -129,9 +128,335 @@ func (s *chasmEngineSuite) initAssertions() {
 	s.ProtoAssertions = protorequire.New(s.T())
 }
 
+func (s *chasmEngineSuite) TestNewEntity_BrandNew() {
+	tv := testvars.New(s.T())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.EntityKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			EntityID:    "",
+		},
+	)
+	newActivityID := tv.ActivityID()
+
+	var runID string
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.CreateWorkflowExecutionRequest,
+		) (*persistence.CreateWorkflowExecutionResponse, error) {
+			s.validateCreateRequest(request, newActivityID, "", 0)
+			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
+			return tests.CreateWorkflowExecutionResponse, nil
+		},
+	).Times(1)
+
+	entityKey, serializedRef, err := s.engine.NewEntity(
+		context.Background(),
+		ref,
+		s.newTestEntityFn(newActivityID),
+		chasm.WithBusinessIDPolicy(
+			chasm.BusinessIDReusePolicyRejectDuplicate,
+			chasm.BusinessIDConflictPolicyFail,
+		),
+	)
+	s.NoError(err)
+	expectedEntityKey := chasm.EntityKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		EntityID:    runID,
+	}
+	s.Equal(expectedEntityKey, entityKey)
+	s.validateNewEntityResponseRef(serializedRef, expectedEntityKey)
+}
+
+func (s *chasmEngineSuite) TestNewEntity_RequestIDDedup() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.EntityKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			EntityID:    "",
+		},
+	)
+	newActivityID := tv.ActivityID()
+
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil,
+		s.currentRunConditionFailedErr(
+			tv,
+			enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		),
+	).Times(1)
+
+	entityKey, serializedRef, err := s.engine.NewEntity(
+		context.Background(),
+		ref,
+		s.newTestEntityFn(newActivityID),
+		chasm.WithRequestID(tv.RequestID()),
+	)
+	s.NoError(err)
+
+	expectedEntityKey := chasm.EntityKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		EntityID:    tv.RunID(),
+	}
+	s.Equal(expectedEntityKey, entityKey)
+	s.validateNewEntityResponseRef(serializedRef, expectedEntityKey)
+}
+
+func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_AllowDuplicate() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.EntityKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			EntityID:    "",
+		},
+	)
+	newActivityID := tv.ActivityID()
+	currentRunConditionFailedErr := s.currentRunConditionFailedErr(
+		tv,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+	)
+
+	var runID string
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil,
+		currentRunConditionFailedErr,
+	).Times(1)
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.CreateWorkflowExecutionRequest,
+		) (*persistence.CreateWorkflowExecutionResponse, error) {
+			s.validateCreateRequest(request, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
+			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
+			return tests.CreateWorkflowExecutionResponse, nil
+		},
+	).Times(1)
+
+	entityKey, serializedRef, err := s.engine.NewEntity(
+		context.Background(),
+		ref,
+		s.newTestEntityFn(newActivityID),
+		chasm.WithBusinessIDPolicy(
+			chasm.BusinessIDReusePolicyAllowDuplicate,
+			chasm.BusinessIDConflictPolicyFail,
+		),
+	)
+	s.NoError(err)
+
+	expectedEntityKey := chasm.EntityKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		EntityID:    runID,
+	}
+	s.Equal(expectedEntityKey, entityKey)
+	s.validateNewEntityResponseRef(serializedRef, expectedEntityKey)
+}
+
+func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Success() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.EntityKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			EntityID:    "",
+		},
+	)
+	newActivityID := tv.ActivityID()
+	currentRunConditionFailedErr := s.currentRunConditionFailedErr(
+		tv,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+	)
+
+	var runID string
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil,
+		currentRunConditionFailedErr,
+	).Times(1)
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.CreateWorkflowExecutionRequest,
+		) (*persistence.CreateWorkflowExecutionResponse, error) {
+			s.validateCreateRequest(request, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
+			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
+			return tests.CreateWorkflowExecutionResponse, nil
+		},
+	).Times(1)
+
+	entityKey, serializedRef, err := s.engine.NewEntity(
+		context.Background(),
+		ref,
+		s.newTestEntityFn(newActivityID),
+		chasm.WithBusinessIDPolicy(
+			chasm.BusinessIDReusePolicyAllowDuplicateFailedOnly,
+			chasm.BusinessIDConflictPolicyFail,
+		),
+	)
+	s.NoError(err)
+
+	expectedEntityKey := chasm.EntityKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		EntityID:    runID,
+	}
+	s.Equal(expectedEntityKey, entityKey)
+	s.validateNewEntityResponseRef(serializedRef, expectedEntityKey)
+}
+
+func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Fail() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.EntityKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			EntityID:    "",
+		},
+	)
+	newActivityID := tv.ActivityID()
+
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil,
+		s.currentRunConditionFailedErr(
+			tv,
+			enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		),
+	).Times(1)
+
+	_, _, err := s.engine.NewEntity(
+		context.Background(),
+		ref,
+		s.newTestEntityFn(newActivityID),
+		chasm.WithBusinessIDPolicy(
+			chasm.BusinessIDReusePolicyAllowDuplicateFailedOnly,
+			chasm.BusinessIDConflictPolicyFail,
+		),
+	)
+	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
+}
+
+func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_RejectDuplicate() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.EntityKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			EntityID:    "",
+		},
+	)
+	newActivityID := tv.ActivityID()
+
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil,
+		s.currentRunConditionFailedErr(
+			tv,
+			enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		),
+	).Times(1)
+
+	_, _, err := s.engine.NewEntity(
+		context.Background(),
+		ref,
+		s.newTestEntityFn(newActivityID),
+		chasm.WithBusinessIDPolicy(
+			chasm.BusinessIDReusePolicyRejectDuplicate,
+			chasm.BusinessIDConflictPolicyFail,
+		),
+	)
+	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
+}
+
+func (s *chasmEngineSuite) newTestEntityFn(
+	activityID string,
+) func(ctx chasm.MutableContext) (chasm.Component, error) {
+	return func(ctx chasm.MutableContext) (chasm.Component, error) {
+		return &testComponent{
+			ActivityInfo: &persistencespb.ActivityInfo{
+				ActivityId: activityID,
+			},
+		}, nil
+	}
+}
+
+func (s *chasmEngineSuite) validateCreateRequest(
+	request *persistence.CreateWorkflowExecutionRequest,
+	expectedActivityID string,
+	expectedPreviousRunID string,
+	expectedPreviousLastWriteVersion int64,
+) {
+	if expectedPreviousRunID == "" && expectedPreviousLastWriteVersion == 0 {
+		s.Equal(persistence.CreateWorkflowModeBrandNew, request.Mode)
+	} else {
+		s.Equal(persistence.CreateWorkflowModeUpdateCurrent, request.Mode)
+		s.Equal(expectedPreviousRunID, request.PreviousRunID)
+		s.Equal(expectedPreviousLastWriteVersion, request.PreviousLastWriteVersion)
+	}
+
+	s.Len(request.NewWorkflowSnapshot.ChasmNodes, 1)
+	updatedNode, ok := request.NewWorkflowSnapshot.ChasmNodes[""]
+	s.True(ok)
+
+	activityInfo := &persistencespb.ActivityInfo{}
+	err := serialization.Decode(updatedNode.Data, activityInfo)
+	s.NoError(err)
+	s.Equal(expectedActivityID, activityInfo.ActivityId)
+}
+
+func (s *chasmEngineSuite) validateNewEntityResponseRef(
+	serializedRef []byte,
+	expectedEntityKey chasm.EntityKey,
+) {
+	deserializedRef, err := chasm.DeserializeComponentRef(serializedRef)
+	s.NoError(err)
+	s.Equal(expectedEntityKey, deserializedRef.EntityKey)
+
+	archetype, err := deserializedRef.Archetype(s.registry)
+	s.NoError(err)
+	s.Equal("TestLibrary.test_component", archetype.String())
+}
+
+func (s *chasmEngineSuite) currentRunConditionFailedErr(
+	tv *testvars.TestVars,
+	state enumsspb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
+) *persistence.CurrentWorkflowConditionFailedError {
+	return &persistence.CurrentWorkflowConditionFailedError{
+		RequestIDs: map[string]*persistencespb.RequestIDInfo{
+			tv.RequestID(): {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				EventId:   0,
+			},
+		},
+		RunID:            tv.RunID(),
+		State:            state,
+		Status:           status,
+		LastWriteVersion: s.namespaceEntry.FailoverVersion() - 1,
+	}
+}
+
 func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 	tv := testvars.New(s.T())
-	tv = tv.WithRunID(primitives.NewUUID().String())
+	tv = tv.WithRunID(tv.Any().RunID())
 
 	ref := chasm.NewComponentRef[*testComponent](
 		chasm.EntityKey{
@@ -158,7 +483,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 			s.True(ok)
 
 			activityInfo := &persistencespb.ActivityInfo{}
-			err := serialization.Proto3Decode(updatedNode.Data.Data, updatedNode.Data.EncodingType, activityInfo)
+			err := serialization.Decode(updatedNode.Data, activityInfo)
 			s.NoError(err)
 			s.Equal(newActivityID, activityInfo.ActivityId)
 			return tests.UpdateWorkflowExecutionResponse, nil
@@ -184,7 +509,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 
 func (s *chasmEngineSuite) TestReadComponent_Success() {
 	tv := testvars.New(s.T())
-	tv = tv.WithRunID(primitives.NewUUID().String())
+	tv = tv.WithRunID(tv.Any().RunID())
 
 	ref := chasm.NewComponentRef[*testComponent](
 		chasm.EntityKey{
@@ -272,10 +597,20 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 func (s *chasmEngineSuite) serializeComponentState(
 	state proto.Message,
 ) *commonpb.DataBlob {
-	blob, err := serialization.ProtoEncodeBlob(state, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := serialization.ProtoEncode(state)
 	s.NoError(err)
 	return blob
 }
+
+const (
+	testComponentPausedSAName   = "PausedSA"
+	testComponentPausedMemoName = "PausedMemo"
+)
+
+var (
+	_ chasm.VisibilitySearchAttributesProvider = (*testComponent)(nil)
+	_ chasm.VisibilityMemoProvider             = (*testComponent)(nil)
+)
 
 type testComponent struct {
 	chasm.UnimplementedComponent
@@ -285,6 +620,26 @@ type testComponent struct {
 
 func (l *testComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
+}
+
+func (l *testComponent) SearchAttributes(_ chasm.Context) map[string]chasm.VisibilityValue {
+	return map[string]chasm.VisibilityValue{
+		testComponentPausedSAName: chasm.VisibilityValueBool(l.ActivityInfo.Paused),
+	}
+}
+
+func (l *testComponent) Memo(_ chasm.Context) map[string]chasm.VisibilityValue {
+	return map[string]chasm.VisibilityValue{
+		testComponentPausedMemoName: chasm.VisibilityValueBool(l.ActivityInfo.Paused),
+	}
+}
+
+func newTestComponentStateBlob(info *persistencespb.ActivityInfo) *commonpb.DataBlob {
+	data, _ := info.Marshal()
+	return &commonpb.DataBlob{
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		Data:         data,
+	}
 }
 
 type testChasmLibrary struct {

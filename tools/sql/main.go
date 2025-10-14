@@ -5,13 +5,13 @@ import (
 	"os"
 
 	"github.com/urfave/cli"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	dbschemas "go.temporal.io/server/schema"
+	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tools/common/schema"
 )
-
-const defaultSQLPort = 3306
 
 // RunTool runs the temporal-sql-tool command line tool
 func RunTool(args []string) error {
@@ -34,20 +34,20 @@ func BuildCLIOptions() *cli.App {
 	app := cli.NewApp()
 	app.Name = "temporal-sql-tool"
 	app.Usage = "Command line tool for temporal sql operations"
-	app.Version = "0.0.1"
+	app.Version = headers.ServerVersion
 
 	logger := log.NewCLILogger()
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:   schema.CLIFlagEndpoint,
-			Value:  "127.0.0.1",
+			Value:  environment.GetMySQLAddress(),
 			Usage:  "hostname or ip address of sql host to connect to",
 			EnvVar: "SQL_HOST",
 		},
 		cli.IntFlag{
 			Name:   schema.CLIFlagPort,
-			Value:  defaultSQLPort,
+			Value:  environment.GetMySQLPort(),
 			Usage:  "port of sql host to connect to",
 			EnvVar: "SQL_PORT",
 		},

@@ -6,8 +6,9 @@ on:
   push:
     branches:
       - main
-      - release/**
-      - cloud/**
+      - cloud/*
+      - feature/*
+      - release/*
 
   workflow_dispatch:
     inputs:
@@ -61,6 +62,7 @@ env:
   PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
+  MAX_TEST_ATTEMPTS: 3
 
 jobs:
   set-up-single-test:
@@ -135,8 +137,6 @@ jobs:
 
   pre-build:
     name: Pre-build for cache
-    strategy:
-      fail-fast: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -149,7 +149,7 @@ jobs:
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: "go.mod"
-          cache: false  # do our own caching
+          cache: false # do our own caching
 
       - name: Restore dependencies
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -157,7 +157,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - run: make pre-build-functional-test-coverage
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -179,8 +179,6 @@ jobs:
   misc-checks:
     name: Misc checks
     needs: pre-build
-    strategy:
-      fail-fast: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -195,14 +193,14 @@ jobs:
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: "go.mod"
-          cache: false  # do our own caching
+          cache: false # do our own caching
 
       - name: Restore dependencies
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -229,8 +227,6 @@ jobs:
     if: ${{ inputs.run_single_functional_test != true }}
     name: Unit test
     needs: [pre-build, set-up-single-test]
-    strategy:
-      fail-fast: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -241,13 +237,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-          cache: false  # do our own caching
+          cache: false # do our own caching
 
       - name: Restore dependencies
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
         uses: actions/cache/restore@v4
@@ -256,12 +252,19 @@ jobs:
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - name: Run unit tests
-        timeout-minutes: 15
+        timeout-minutes: 20
         run: make unit-test-coverage
         env:
           UNIT_TEST_DIRS: ${{ inputs.unit_test_directory }}
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
           TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
+
+      - name: Generate crash report
+        if: failure()
+        run:
+          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
+            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -294,7 +297,7 @@ jobs:
         if: ${{ !cancelled() && !inputs.run_single_unit_test }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--unit-test
-          path: .testoutput
+          path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
 
@@ -306,8 +309,7 @@ jobs:
           echo "Detecting flaky unit tests: ${{ needs.set-up-single-test.outputs.modified_unit_test_suites }}"
           make unit-test
         env:
-          # Not retrying failed tests intentionally here since we're trying to detect flakes.
-          FAILED_TEST_RETRIES: "0"
+          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_unit_test_suites }} -count=10"
           TEST_TIMEOUT: 35
 
@@ -315,8 +317,6 @@ jobs:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
     name: Integration test
     needs: [pre-build, set-up-single-test]
-    strategy:
-      fail-fast: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -337,13 +337,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-          cache: false  # do our own caching
+          cache: false # do our own caching
 
       - name: Restore dependencies
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
         uses: actions/cache/restore@v4
@@ -354,6 +354,13 @@ jobs:
       - name: Run integration test
         timeout-minutes: 15
         run: make integration-test-coverage
+
+      - name: Generate crash report
+        if: failure()
+        run:
+          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
+            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -386,7 +393,7 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--integration-test
-          path: .testoutput
+          path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
 
@@ -398,8 +405,7 @@ jobs:
           echo "Detecting flaky integration tests: ${{ needs.set-up-single-test.outputs.modified_integration_test_suites }}"
           make integration-test-coverage
         env:
-          # Not retrying failed tests intentionally here since we're trying to detect flakes.
-          FAILED_TEST_RETRIES: "0"
+          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_integration_test_suites }} -count=5"
 
       - name: Tear down docker compose
@@ -407,33 +413,45 @@ jobs:
         run: |
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
+  # Root job name includes matrix details so it is unique per shard.
+  # This MUST stay in sync with the `job_name` passed to the job-id action below.
   functional-test:
     if: ${{ inputs.run_single_unit_test != true }}
-    name: Functional test
+    # Display name shown in the UI. The job-id lookup uses this exact value.
+    name: Functional test (${{ matrix.name }}, shard ${{ matrix.shard_index }})
     needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
       matrix:
-        runs-on: ${{ fromJson(needs.set-up-single-test.outputs.runs_on) }}
-        shard_index: ${{ fromJson(needs.set-up-single-test.outputs.shard_indices) }}
         name:
           - cass_es
           - cass_es8
+          - cass_os2
           - sqlite
           - mysql8
           - postgres12
           - postgres12_pgx
+        shard_index: ${{ fromJson(needs.set-up-single-test.outputs.shard_indices) }}
+        runs-on: ${{ fromJson(needs.set-up-single-test.outputs.runs_on) }}
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch]
             es_version: v7
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch8]
             es_version: v8
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
+          - name: cass_os2
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch2]
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
@@ -450,7 +468,7 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ${{ matrix.runs-on }}
+    runs-on: ${{ matrix.runs_on_override || matrix.runs-on }}
     env:
       TEST_TOTAL_SHARDS: ${{ needs.set-up-single-test.outputs.total_shards }}
       TEST_SHARD_INDEX: ${{ matrix.shard_index }}
@@ -481,13 +499,13 @@ jobs:
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           go-version-file: "go.mod"
-          cache: false  # do our own caching
+          cache: false # do our own caching
 
       - name: Restore dependencies
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
         uses: actions/cache/restore@v4
@@ -495,22 +513,13 @@ jobs:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
-      - name: Get job ID from workflow run
+      - name: Get job ID
+        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         id: get_job_id
-        run: |
-          set -eu
-          test_job_name="Functional test (${{matrix.runs-on}}, ${{matrix.shard_index}}, ${{matrix.name}})"
-          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
-          # curl or jq might silently fail, but we are okay with that.
-          # We don't want to fail the job if we can't get the job id.          
-          job_id=$(curl -L \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-             "$job_url" \
-            | jq "first(.jobs[] | select(.name == \"$test_job_name\") | .id)")
-          echo "Job id is $job_id"
-          echo "JOB_ID=${job_id:-unknown}" >> "$GITHUB_OUTPUT"
+        uses: ./.github/actions/get-job-id
+        with:
+          job_name: Functional test (${{ matrix.name }}, shard ${{ matrix.shard_index }})
+          run_id: ${{ github.run_id }}
 
       - name: Run functional test
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -518,6 +527,15 @@ jobs:
         run: make functional-test-coverage
         env:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
+          TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
+          TEMPORAL_OTEL_DEBUG: true
+
+      - name: Generate crash report
+        if: failure()
+        run:
+          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
+            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -549,8 +567,8 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
         with:
-          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
-          path: .testoutput
+          name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
+          path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
 
@@ -562,29 +580,50 @@ jobs:
           echo "Detecting flaky functional tests: ${{ needs.set-up-single-test.outputs.modified_integration_test_suites }}"
           make functional-test-coverage
         env:
-          # Not retrying failed tests intentionally here since we're trying to detect flakes.
-          FAILED_TEST_RETRIES: "0"
+          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_test_suites }} -count=5"
 
+      # Upload OpenTelemetry traces.
+      - name: Upload OpenTelemetry traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-json--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{matrix.shard_index}}--${{github.run_attempt}}--${{matrix.name}}--functional-test
+          path: ./.testoutput/traces.*.json
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 28
+
+  # XDC matrix job. Include `${{ matrix.name }}` in the display name so each
+  # matrix variant has a unique name for the job-id lookup.
   functional-test-xdc:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
-    name: Functional test xdc
+    # Display name shown in the UI. The job-id lookup uses this exact value.
+    name: Functional test xdc (${{ matrix.name }})
     needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
       matrix:
-        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
+        name: [cass_es, cass_es8, cass_os2, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: elasticsearch
             parallel_flags: ""
             containers: [cassandra, elasticsearch]
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: elasticsearch
             parallel_flags: ""
             containers: [cassandra, elasticsearch8]
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
+          - name: cass_os2
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch2]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -600,7 +639,7 @@ jobs:
             persistence_driver: postgres12_pgx
             parallel_flags: "-parallel=2" # reduce parallelism for postgres
             containers: [postgresql]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs_on_override || 'ubuntu-latest' }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
@@ -610,9 +649,16 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
+      # Resolve the numeric job ID for this job instance.
+      # IMPORTANT: `job_name` must exactly match the job's display name above.
+      - name: Get job ID
+        id: get_job_id
+        uses: ./.github/actions/get-job-id
+        with:
+          job_name: Functional test xdc (${{ matrix.name }})
+          run_id: ${{ github.run_id }}
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' }}
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
@@ -622,13 +668,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-          cache: false  # do our own caching
+          cache: false # do our own caching
 
       - name: Restore dependencies
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
         uses: actions/cache/restore@v4
@@ -636,26 +682,19 @@ jobs:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
-      - name: Get job ID from workflow run
-        id: get_job_id
-        run: |
-          set -eu
-          test_job_name="Functional test xdc (${{matrix.name}})"
-          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
-          # curl or jq might silently fail, but we are okay with that.
-          # We don't want to fail the job if we can't get the job id.
-          job_id=$(curl -L \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-             "$job_url" \
-            | jq "first(.jobs[] | select(.name == \"$test_job_name\") | .id)")
-          echo "Job id is $job_id"
-          echo "JOB_ID=${job_id-unknown}" >> "$GITHUB_OUTPUT"
-
       - name: Run functional test xdc
-        timeout-minutes: 35   # update this to TEST_TIMEOUT+5 if you update the Makefile
+        timeout-minutes: 35 # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: make functional-test-xdc-coverage
+        env:
+          TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
+          TEMPORAL_OTEL_DEBUG: true
+
+      - name: Generate crash report
+        if: failure()
+        run:
+          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
+            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -687,8 +726,8 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
-          path: .testoutput
+          name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
+          path: ./.testoutput
           include-hidden-files: true
           retention-days: 28
 
@@ -700,13 +739,25 @@ jobs:
           echo "Detecting flaky functional xdc tests: ${{ needs.set-up-single-test.outputs.modified_functional_xdc_test_suites }}"
           make functional-test-xdc-coverage
         env:
-          # Not retrying failed tests intentionally here since we're trying to detect flakes.
-          FAILED_TEST_RETRIES: "0"
+          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_xdc_test_suites }} -count=5"
 
+      # Upload OpenTelemetry traces.
+      - name: Upload OpenTelemetry traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-json--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
+          path: ./.testoutput/traces.*.json
+          if-no-files-found: ignore
+          retention-days: 28
+
+  # NDC matrix job. Include `${{ matrix.name }}` in the display name so each
+  # matrix variant has a unique name for the job-id lookup.
   functional-test-ndc:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
-    name: Functional test ndc
+    # Display name shown in the UI. The job-id lookup uses this exact value.
+    name: Functional test ndc (${{ matrix.name }})
     needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
@@ -714,6 +765,7 @@ jobs:
         name:
           - cass_es
           - cass_es8
+          - cass_os2
           - mysql8
           - postgres12
           - postgres12_pgx
@@ -723,11 +775,19 @@ jobs:
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch]
             es_version: v7
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch8]
             es_version: v8
+            # Cassandra tests need a larger instance
+            runs_on_override: ubuntu-latest-8-cores
+          - name: cass_os2
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch2]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -740,7 +800,7 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs_on_override || 'ubuntu-latest' }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
@@ -750,9 +810,16 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
+      # Resolve the numeric job ID for this job instance.
+      # IMPORTANT: `job_name` must exactly match the job's display name above.
+      - name: Get job ID
+        id: get_job_id
+        uses: ./.github/actions/get-job-id
+        with:
+          job_name: Functional test ndc (${{ matrix.name }})
+          run_id: ${{ github.run_id }}
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' }}
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
@@ -762,13 +829,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-          cache: false  # do our own caching
+          cache: false # do our own caching
 
       - name: Restore dependencies
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
         uses: actions/cache/restore@v4
@@ -776,26 +843,19 @@ jobs:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
-      - name: Get job ID from workflow run
-        id: get_job_id
-        run: |
-          set -eu
-          test_job_name="Functional test ndc (${{matrix.name}})"
-          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
-          # curl or jq might silently fail, but we are okay with that.
-          # We don't want to fail the job if we can't get the job id.
-          job_id=$(curl -L \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-             "$job_url" \
-            | jq "first(.jobs[] | select(.name == \"$test_job_name\") | .id)")
-          echo "Job id is $job_id"
-          echo "JOB_ID=${job_id:-unknown}" >> "$GITHUB_OUTPUT"
-
       - name: Run functional test ndc
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
+        env:
+          TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
+          TEMPORAL_OTEL_DEBUG: true
+
+      - name: Generate crash report
+        if: failure()
+        run:
+          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
+            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
       - name: Upload code coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -817,8 +877,8 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
-          path: .testoutput
+          name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
+          path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
 
@@ -830,9 +890,18 @@ jobs:
           echo "Detecting flaky functional ndc tests: ${{ needs.set-up-single-test.outputs.modified_functional_ndc_test_suites }}"
           make functional-test-ndc-coverage
         env:
-          # Not retrying failed tests intentionally here since we're trying to detect flakes.
-          FAILED_TEST_RETRIES: "0"
+          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_ndc_test_suites }} -count=5"
+
+      # Upload OpenTelemetry traces.
+      - name: Upload OpenTelemetry traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-json--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
+          path: ./.testoutput/traces.*.json
+          if-no-files-found: ignore
+          retention-days: 28
 
   test-status:
     if: always()

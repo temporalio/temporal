@@ -14,11 +14,14 @@ import (
 	"testing"
 	"time"
 
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/chasm"
+	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
@@ -47,6 +50,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/grpcinject"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
@@ -68,6 +72,7 @@ type (
 		namespaceRegistries []namespace.Registry
 		// Address for SDK to connect to, using membership grpc resolver.
 		frontendMembershipAddress string
+		chasmEngine               chasm.Engine
 
 		// These are routing/load balancing clients but do not do retries:
 		adminClient    adminservice.AdminServiceClient
@@ -103,11 +108,14 @@ type (
 		captureMetricsHandler            *metricstest.CaptureHandler
 		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
 
-		onGetClaims          func(*authorization.AuthInfo) (*authorization.Claims, error)
-		onAuthorize          func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
-		callbackLock         sync.RWMutex // Must be used for above callbacks
-		serviceFxOptions     map[primitives.ServiceName][]fx.Option
-		taskCategoryRegistry tasks.TaskCategoryRegistry
+		onGetClaims           func(*authorization.AuthInfo) (*authorization.Claims, error)
+		onAuthorize           func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
+		callbackLock          sync.RWMutex // Must be used for above callbacks
+		serviceFxOptions      map[primitives.ServiceName][]fx.Option
+		taskCategoryRegistry  tasks.TaskCategoryRegistry
+		chasmRegistry         *chasm.Registry
+		grpcClientInterceptor *grpcinject.Interceptor
+		spanExporters         map[telemetry.SpanExporterType]sdktrace.SpanExporter
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -162,7 +170,9 @@ type (
 		// ServiceFxOptions is populated by WithFxOptionsForService.
 		ServiceFxOptions         map[primitives.ServiceName][]fx.Option
 		TaskCategoryRegistry     tasks.TaskCategoryRegistry
+		ChasmRegistry            *chasm.Registry
 		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
+		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
 	}
 
 	listenHostPort string
@@ -202,7 +212,10 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		testHooks:                testhooks.NewTestHooksImpl(),
 		serviceFxOptions:         params.ServiceFxOptions,
 		taskCategoryRegistry:     params.TaskCategoryRegistry,
+		chasmRegistry:            params.ChasmRegistry,
 		hostsByProtocolByService: params.HostsByProtocolByService,
+		grpcClientInterceptor:    grpcinject.NewInterceptor(),
+		spanExporters:            params.SpanExporters,
 	}
 
 	for k, v := range dynamicConfigOverrides {
@@ -293,6 +306,13 @@ func (c *TemporalImpl) NamespaceRegistries() []namespace.Registry {
 	return c.namespaceRegistries
 }
 
+func (c *TemporalImpl) ChasmEngine() (chasm.Engine, error) {
+	if numHistoryHosts := len(c.hostsByProtocolByService[grpcProtocol][primitives.HistoryService].All); numHistoryHosts != 1 {
+		return nil, fmt.Errorf("expected exactly one host for chasm engine, got %d", numHistoryHosts)
+	}
+	return c.chasmEngine, nil
+}
+
 func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
 	persistenceConfig := copyPersistenceConfig(c.persistenceConfig)
 	if c.esConfig != nil {
@@ -331,6 +351,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(func() resource.NamespaceLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
+			fx.Provide(c.GetGrpcClientInterceptor),
 			static.MembershipModule(c.makeHostMap(serviceName, host)),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -355,6 +376,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Provide(c.GetCHASMRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
@@ -409,6 +431,7 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
+			fx.Provide(c.GetGrpcClientInterceptor),
 			static.MembershipModule(c.makeHostMap(serviceName, host)),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -428,6 +451,7 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Provide(c.GetCHASMRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			history.QueueModule,
@@ -436,6 +460,8 @@ func (c *TemporalImpl) startHistory() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
 			fx.Populate(&namespaceRegistry),
+			fx.Populate(&c.chasmEngine),
+			chasmtests.Module,
 		)
 		err := app.Err()
 		if err != nil {
@@ -469,6 +495,7 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
+			fx.Provide(c.GetGrpcClientInterceptor),
 			static.MembershipModule(c.makeHostMap(serviceName, host)),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -485,6 +512,7 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Provide(c.GetCHASMRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			matching.Module,
@@ -533,6 +561,7 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
+			fx.Provide(c.GetGrpcClientInterceptor),
 			static.MembershipModule(c.makeHostMap(serviceName, host)),
 			fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -550,6 +579,7 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Provide(c.GetCHASMRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			worker.Module,
@@ -595,8 +625,16 @@ func (c *TemporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
 	return nil
 }
 
+func (c *TemporalImpl) GetGrpcClientInterceptor() *grpcinject.Interceptor {
+	return c.grpcClientInterceptor
+}
+
 func (c *TemporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {
 	return c.taskCategoryRegistry
+}
+
+func (c *TemporalImpl) GetCHASMRegistry() *chasm.Registry {
+	return c.chasmRegistry
 }
 
 func (c *TemporalImpl) TlsConfigProvider() *encryption.FixedTLSConfigProvider {
@@ -628,6 +666,9 @@ func (c *TemporalImpl) frontendConfigProvider() *config.Config {
 				},
 			},
 		},
+		ExporterConfig: telemetry.ExportConfig{
+			CustomExporters: c.spanExporters,
+		},
 	}
 }
 
@@ -637,6 +678,9 @@ func (c *TemporalImpl) configProvider(serviceName primitives.ServiceName) *confi
 			string(serviceName): {
 				RPC: config.RPC{},
 			},
+		},
+		ExporterConfig: telemetry.ExportConfig{
+			CustomExporters: c.spanExporters,
 		},
 	}
 }
@@ -649,7 +693,9 @@ func (c *TemporalImpl) newRPCFactory(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	monitor membership.Monitor,
 	tracingStatsHandler telemetry.ClientStatsHandler,
+	grpcClientInterceptor *grpcinject.Interceptor,
 	httpPort httpPort,
+	metricsHandler metrics.Handler,
 ) (common.RPCFactory, error) {
 	host, portStr, err := net.SplitHostPort(string(grpcHostPort))
 	if err != nil {
@@ -669,6 +715,12 @@ func (c *TemporalImpl) newRPCFactory(
 	if tracingStatsHandler != nil {
 		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
 	}
+	if grpcClientInterceptor != nil {
+		options = append(options,
+			grpc.WithChainUnaryInterceptor(grpcClientInterceptor.Unary()),
+			grpc.WithChainStreamInterceptor(grpcClientInterceptor.Stream()),
+		)
+	}
 	rpcConfig := config.RPC{BindOnIP: host, GRPCPort: port, HTTPPort: int(httpPort)}
 	cfg := &config.Config{
 		Services: map[string]config.Service{
@@ -681,12 +733,14 @@ func (c *TemporalImpl) newRPCFactory(
 		cfg,
 		sn,
 		logger,
+		metricsHandler,
 		tlsConfigProvider,
 		grpcResolver.MakeURL(primitives.FrontendService),
 		grpcResolver.MakeURL(primitives.FrontendService),
 		int(httpPort),
 		frontendTLSConfig,
 		options,
+		map[primitives.ServiceName][]grpc.DialOption{},
 		monitor,
 	), nil
 }

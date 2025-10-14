@@ -15,16 +15,6 @@ enum ChecksumFlavor {
     CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY = 1;
 }
 
-// State for the state machine scheduler's Invoker.
-enum SchedulerInvokerState {
-    // Default value, unspecified state.
-    SCHEDULER_INVOKER_STATE_UNSPECIFIED = 0;
-    // Invoker is awaiting backoff, or for actions to be buffered and eligible for execution.
-    SCHEDULER_INVOKER_STATE_WAITING = 1;
-    // Invoker is starting actions.
-    SCHEDULER_INVOKER_STATE_PROCESSING = 2;
-}
-
 // State of a callback.
 enum CallbackState {
     // Default value, unspecified state.

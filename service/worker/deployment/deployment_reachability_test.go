@@ -23,11 +23,11 @@ func TestMakeDeploymentQuery(t *testing.T) {
 	buildId := "A"
 
 	query := makeDeploymentQuery(seriesName, buildId, true)
-	expectedQuery := "BuildIds = 'pinned:test-deployment.A' AND ExecutionStatus = 'Running'"
+	expectedQuery := "BuildIds = 'pinned:test-deployment:A' AND ExecutionStatus = 'Running'"
 	assert.Equal(t, expectedQuery, query)
 
 	query = makeDeploymentQuery(seriesName, buildId, false)
-	expectedQuery = "BuildIds = 'pinned:test-deployment.A' AND ExecutionStatus != 'Running'"
+	expectedQuery = "BuildIds = 'pinned:test-deployment:A' AND ExecutionStatus != 'Running'"
 	assert.Equal(t, expectedQuery, query)
 }
 

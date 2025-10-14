@@ -7,7 +7,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/client"
@@ -98,16 +98,17 @@ func isWorkflowExistOnSource(
 	if err != nil {
 		return true
 	}
-	_, remoteFrontend, err := clientBean.GetRemoteFrontendClient(remoteClusterName)
+	remoteAdminClient, err := clientBean.GetRemoteAdminClient(remoteClusterName)
 	if err != nil {
 		return true
 	}
-	_, err = remoteFrontend.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	_, err = remoteAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: namespaceEntry.Name().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.GetWorkflowID(),
 			RunId:      workflowKey.GetRunID(),
 		},
+		SkipForceReload: true,
 	})
 	if err != nil {
 		if common.IsNotFoundError(err) {

@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -48,11 +49,6 @@ const (
 )
 
 var (
-	TaskRetryPolicy = backoff.NewExponentialRetryPolicy(1 * time.Second).
-			WithBackoffCoefficient(1.2).
-			WithMaximumInterval(5 * time.Second).
-			WithMaximumAttempts(80).
-			WithExpirationInterval(10 * time.Minute)
 	ErrResendAttemptExceeded = serviceerror.NewInternal("resend history attempts exceeded")
 )
 
@@ -103,6 +99,7 @@ type (
 			newRunId string,
 		) error
 		MarkTaskDuplicated()
+		GetPriority() enumsspb.TaskPriority
 	}
 	ExecutableTaskImpl struct {
 		ProcessToolBox
@@ -134,7 +131,6 @@ func NewExecutableTask(
 	taskReceivedTime time.Time,
 	sourceClusterName string,
 	sourceShardKey ClusterShardKey,
-	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableTaskImpl {
 	return &ExecutableTaskImpl{
@@ -145,7 +141,7 @@ func NewExecutableTask(
 		taskReceivedTime:       taskReceivedTime,
 		sourceClusterName:      sourceClusterName,
 		sourceShardKey:         sourceShardKey,
-		taskPriority:           priority,
+		taskPriority:           replicationTask.GetPriority(),
 		replicationTask:        replicationTask,
 		taskState:              taskStatePending,
 		attempt:                1,
@@ -261,7 +257,11 @@ func (e *ExecutableTaskImpl) IsRetryableError(err error) bool {
 }
 
 func (e *ExecutableTaskImpl) RetryPolicy() backoff.RetryPolicy {
-	return TaskRetryPolicy
+	return backoff.NewExponentialRetryPolicy(e.Config.ReplicationExecutableTaskErrorRetryWait()).
+		WithBackoffCoefficient(e.Config.ReplicationExecutableTaskErrorRetryBackoffCoefficient()).
+		WithMaximumInterval(e.Config.ReplicationExecutableTaskErrorRetryMaxInterval()).
+		WithMaximumAttempts(e.Config.ReplicationExecutableTaskErrorRetryMaxAttempts()).
+		WithExpirationInterval(e.Config.ReplicationExecutableTaskErrorRetryExpiration())
 }
 
 func (e *ExecutableTaskImpl) State() ctasks.State {
@@ -281,13 +281,19 @@ func (e *ExecutableTaskImpl) MarkTaskDuplicated() {
 	e.isDuplicated = true
 }
 
+func (e *ExecutableTaskImpl) GetPriority() enumsspb.TaskPriority {
+	return e.taskPriority
+}
+
 func (e *ExecutableTaskImpl) emitFinishMetrics(
 	now time.Time,
 ) {
 	if e.isDuplicated {
-		metrics.ReplicationDuplicatedTaskCount.With(e.MetricsHandler).Record(1,
-			metrics.OperationTag(e.metricsTag),
-			metrics.NamespaceTag(e.replicationTask.RawTaskInfo.NamespaceId))
+		if e.replicationTask.RawTaskInfo != nil {
+			metrics.ReplicationDuplicatedTaskCount.With(e.MetricsHandler).Record(1,
+				metrics.OperationTag(e.metricsTag),
+				metrics.NamespaceTag(e.replicationTask.RawTaskInfo.NamespaceId))
+		}
 		return
 	}
 	nsTag := metrics.NamespaceUnknownTag()
@@ -295,11 +301,20 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 	if item != nil {
 		nsTag = metrics.NamespaceTag(item.(namespace.Name).String())
 	}
+	processingLatency := now.Sub(e.taskReceivedTime)
 	metrics.ReplicationTaskProcessingLatency.With(e.MetricsHandler).Record(
-		now.Sub(e.taskReceivedTime),
+		processingLatency,
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 	)
+	if processingLatency > 30*time.Second {
+		e.Logger.Warn("replication task processing latency is too long",
+			tag.WorkflowNamespaceID(e.replicationTask.RawTaskInfo.NamespaceId),
+			tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
+			tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
+			tag.ReplicationTask(e.replicationTask.GetRawTaskInfo()),
+		)
+	}
 
 	metrics.ReplicationLatency.With(e.MetricsHandler).Record(
 		now.Sub(e.taskCreationTime),
@@ -355,32 +370,17 @@ func (e *ExecutableTaskImpl) Resend(
 			metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 		)
 	}()
-	var resendErr error
-	if e.Config.EnableReplicateLocalGeneratedEvent() {
-		resendErr = e.ProcessToolBox.ResendHandler.ResendHistoryEvents(
-			ctx,
-			remoteCluster,
-			namespace.ID(retryErr.NamespaceId),
-			retryErr.WorkflowId,
-			retryErr.RunId,
-			retryErr.StartEventId,
-			retryErr.StartEventVersion,
-			retryErr.EndEventId,
-			retryErr.EndEventVersion,
-		)
-	} else {
-		resendErr = e.ProcessToolBox.NDCHistoryResender.SendSingleWorkflowHistory(
-			ctx,
-			remoteCluster,
-			namespace.ID(retryErr.NamespaceId),
-			retryErr.WorkflowId,
-			retryErr.RunId,
-			retryErr.StartEventId,
-			retryErr.StartEventVersion,
-			retryErr.EndEventId,
-			retryErr.EndEventVersion,
-		)
-	}
+	resendErr := e.ProcessToolBox.ResendHandler.ResendHistoryEvents(
+		ctx,
+		remoteCluster,
+		namespace.ID(retryErr.NamespaceId),
+		retryErr.WorkflowId,
+		retryErr.RunId,
+		retryErr.StartEventId,
+		retryErr.StartEventVersion,
+		retryErr.EndEventId,
+		retryErr.EndEventVersion,
+	)
 	switch resendErr := resendErr.(type) {
 	case nil:
 		// no-op
@@ -413,14 +413,14 @@ func (e *ExecutableTaskImpl) Resend(
 		//  d. return error to resend new workflow before the branching point
 
 		if resendErr.Equal(retryErr) {
-			e.Logger.Error("error resend history on the same workflow run",
+			return false, softassert.UnexpectedDataLoss(e.Logger,
+				"failed to get requested data while resending history", nil,
 				tag.WorkflowNamespaceID(retryErr.NamespaceId),
 				tag.WorkflowID(retryErr.WorkflowId),
 				tag.WorkflowRunID(retryErr.RunId),
 				tag.NewStringTag("first-resend-error", retryErr.Error()),
 				tag.NewStringTag("second-resend-error", resendErr.Error()),
 			)
-			return false, serviceerror.NewDataLoss("failed to get requested data while resending history")
 		}
 		// handle 2nd resend error, then 1st resend error
 		_, err := e.Resend(ctx, remoteCluster, resendErr, remainingAttempt)
@@ -726,18 +726,12 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	switch err.(type) {
 	case nil:
 		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion() {
-			if !e.ProcessToolBox.Config.EnableReplicationEagerRefreshNamespace() {
-				return "", false, serviceerror.NewInternalf("cannot process task because namespace failover version is not up to date, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion())
-			}
 			_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 			if err != nil {
 				return "", false, err
 			}
 		}
 	case *serviceerror.NamespaceNotFound:
-		if !e.ProcessToolBox.Config.EnableReplicationEagerRefreshNamespace() {
-			return "", false, nil
-		}
 		_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 		if err != nil {
 			e.Logger.Info("Failed to SyncNamespaceFromSourceCluster", tag.Error(err))
@@ -801,7 +795,11 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 		tag.ReplicationTask(taskInfo),
 	)
 
-	ctx, cancel := newTaskContext(e.replicationTask.RawTaskInfo.NamespaceId, e.Config.ReplicationTaskApplyTimeout())
+	ctx, cancel := newTaskContext(
+		e.replicationTask.RawTaskInfo.NamespaceId,
+		e.Config.ReplicationTaskApplyTimeout(),
+		headers.SystemPreemptableCallerInfo,
+	)
 	defer cancel()
 
 	return writeTaskToDLQ(ctx, e.DLQWriter, e.sourceShardKey.ShardID, e.SourceClusterName(), shardContext.GetShardID(), taskInfo)
@@ -810,11 +808,21 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 func newTaskContext(
 	namespaceName string,
 	timeout time.Duration,
+	callerInfo headers.CallerInfo,
 ) (context.Context, context.CancelFunc) {
 	ctx := headers.SetCallerInfo(
 		context.Background(),
-		headers.SystemPreemptableCallerInfo,
+		callerInfo,
 	)
 	ctx = headers.SetCallerName(ctx, namespaceName)
 	return context.WithTimeout(ctx, timeout)
+}
+
+func getReplicaitonCallerInfo(priority enumsspb.TaskPriority) headers.CallerInfo {
+	switch priority {
+	case enumsspb.TASK_PRIORITY_LOW:
+		return headers.SystemPreemptableCallerInfo
+	default:
+		return headers.SystemBackgroundLowCallerInfo
+	}
 }

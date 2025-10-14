@@ -41,20 +41,26 @@ type PartitionManagerTestSuite struct {
 	protorequire.ProtoAssertions
 
 	newMatcher   bool
+	fairness     bool
 	controller   *gomock.Controller
 	userDataMgr  *mockUserDataManager
 	partitionMgr *taskQueuePartitionManagerImpl
 }
 
 // TODO(pri): cleanup; delete this
-func TestTaskQueuePartitionManagerSuite(t *testing.T) {
+func TestTaskQueuePartitionManager_Classic_Suite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &PartitionManagerTestSuite{newMatcher: false})
 }
 
-func TestTaskQueuePartitionManagerWithNewMatcherSuite(t *testing.T) {
+func TestTaskQueuePartitionManager_Pri_Suite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &PartitionManagerTestSuite{newMatcher: true})
+}
+
+func TestTaskQueuePartitionManager_Fair_Suite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &PartitionManagerTestSuite{newMatcher: true, fairness: true})
 }
 
 func (s *PartitionManagerTestSuite) SetupTest() {
@@ -64,7 +70,9 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 
 	ns, registry := createMockNamespaceCache(s.controller, namespace.Name(namespaceName))
 	config := NewConfig(dynamicconfig.NewNoopCollection())
-	if s.newMatcher {
+	if s.fairness {
+		useFairness(config)
+	} else if s.newMatcher {
 		useNewMatcher(config)
 	}
 
@@ -143,13 +151,21 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	s.Greater(info2.TaskQueueStats.TasksAddRate, float32(0))
 	// reset so we can compare the rest exactly
 	info1.TaskQueueStats.TasksAddRate = 0
+	info1.TaskQueueStatsByPriorityKey[3].TasksAddRate = 0
 	info2.TaskQueueStats.TasksAddRate = 0
+	info2.TaskQueueStatsByPriorityKey[3].TasksAddRate = 0
 
 	expectedPhysicalTQInfo := &taskqueuespb.PhysicalTaskQueueInfo{
 		Pollers: nil, // no pollers polling
 		TaskQueueStats: &taskqueuepb.TaskQueueStats{
 			ApproximateBacklogAge:   durationpb.New(0),
 			ApproximateBacklogCount: 1,
+		},
+		TaskQueueStatsByPriorityKey: map[int32]*taskqueuepb.TaskQueueStats{
+			3: &taskqueuepb.TaskQueueStats{
+				ApproximateBacklogAge:   durationpb.New(0),
+				ApproximateBacklogCount: 1,
+			},
 		},
 	}
 	s.ProtoEqual(expectedPhysicalTQInfo, resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo)
@@ -164,26 +180,33 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	s.NoError(err)
 
 	// validate TQ internal statistics (not exposed via public API)
-	expectedInternalStatsInfo := []*taskqueuespb.InternalTaskQueueStatus{
-		&taskqueuespb.InternalTaskQueueStatus{
-			ReadLevel: 1,
-			AckLevel:  0,
-			TaskIdBlock: &taskqueuepb.TaskIdBlock{
-				StartId: 2,
-				EndId:   100000,
-			},
+	var status0 *taskqueuespb.InternalTaskQueueStatus
+	if s.fairness {
+		status0 = &taskqueuespb.InternalTaskQueueStatus{
+			FairReadLevel:           fairLevel{pass: 1000, id: 1}.toProto(),
+			FairAckLevel:            fairLevel{}.toProto(),
+			TaskIdBlock:             &taskqueuepb.TaskIdBlock{StartId: 2, EndId: 100000},
+			LoadedTasks:             1,
+			FairMaxReadLevel:        fairLevel{pass: 1000, id: 1}.toProto(),
+			ApproximateBacklogCount: 1,
+		}
+	} else {
+		status0 = &taskqueuespb.InternalTaskQueueStatus{
+			ReadLevel:               1,
+			AckLevel:                0,
+			TaskIdBlock:             &taskqueuepb.TaskIdBlock{StartId: 2, EndId: 100000},
 			LoadedTasks:             1,
 			MaxReadLevel:            1,
 			ApproximateBacklogCount: 1,
-		},
+		}
 	}
 
 	status1 := resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
 	s.Equal(1, len(status1))
-	s.ProtoEqual(expectedInternalStatsInfo[0], status1[0])
+	s.ProtoEqual(status0, status1[0])
 	status2 := resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
 	s.Equal(1, len(status2))
-	s.ProtoEqual(expectedInternalStatsInfo[0], status2[0])
+	s.ProtoEqual(status0, status2[0])
 }
 
 func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersionedQueues() {
@@ -603,11 +626,11 @@ func (m *mockUserDataManager) GetUserData() (*persistencespb.VersionedTaskQueueU
 func (m *mockUserDataManager) UpdateUserData(_ context.Context, _ UserDataUpdateOptions, updateFn UserDataUpdateFunc) (int64, error) {
 	m.Lock()
 	defer m.Unlock()
-	data, _, err := updateFn(m.data.Data)
+	data, _, err := updateFn(m.data.GetData())
 	if err != nil {
 		return 0, err
 	}
-	m.data = &persistencespb.VersionedTaskQueueUserData{Data: data, Version: m.data.Version + 1}
+	m.data = &persistencespb.VersionedTaskQueueUserData{Data: data, Version: m.data.GetVersion() + 1}
 	return m.data.Version, nil
 }
 

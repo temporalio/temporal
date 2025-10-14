@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -55,6 +56,7 @@ func newTransferQueueStandbyTaskExecutor(
 	historyRawClient resource.HistoryRawClient,
 	matchingRawClient resource.MatchingRawClient,
 	visibilityManager manager.VisibilityManager,
+	chasmEngine chasm.Engine,
 	clientBean client.Bean,
 ) queues.Executor {
 	return &transferQueueStandbyTaskExecutor{
@@ -66,6 +68,7 @@ func newTransferQueueStandbyTaskExecutor(
 			historyRawClient,
 			matchingRawClient,
 			visibilityManager,
+			chasmEngine,
 		),
 		clusterName: clusterName,
 		clientBean:  clientBean,
@@ -104,6 +107,8 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 		err = t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionTask:
 		err = t.processDeleteExecutionTask(ctx, task, false)
+	case *tasks.ChasmTask:
+		err = t.executeChasmSideEffectTransferTask(ctx, task)
 	default:
 		err = errUnknownTransferTask
 	}
@@ -115,6 +120,37 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	}
 }
 
+func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
+	ctx context.Context,
+	task *tasks.ChasmTask,
+) error {
+	actionFn := func(
+		ctx context.Context,
+		wfContext historyi.WorkflowContext,
+		ms historyi.MutableState,
+	) (any, error) {
+		return validateChasmSideEffectTask(
+			ctx,
+			ms,
+			task,
+		)
+	}
+
+	return t.processTransfer(
+		ctx,
+		true,
+		task,
+		actionFn,
+		getStandbyPostActionFn(
+			task,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
+			// TODO - replace this with a method for CHASM components
+			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+		),
+	)
+}
+
 func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 	ctx context.Context,
 	transferTask *tasks.ActivityTask,
@@ -124,6 +160,10 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 		activityInfo, ok := mutableState.GetActivityInfo(transferTask.ScheduledEventID)
 		if !ok {
 			return nil, nil
+		}
+
+		if activityInfo.Stamp != transferTask.Stamp || activityInfo.Paused {
+			return nil, nil // drop the task
 		}
 
 		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, transferTask.Version, transferTask)
@@ -241,7 +281,8 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			now := t.getCurrentTime()
 			taskTime := transferTask.GetVisibilityTime()
 			localVerificationTime := taskTime.Add(t.config.MaxLocalParentWorkflowVerificationDuration())
-			resendParent := now.After(localVerificationTime) && t.config.EnableTransitionHistory()
+
+			resendParent := now.After(localVerificationTime) && mutableState.IsTransitionHistoryEnabled() && mutableState.CurrentVersionedTransition() != nil
 
 			_, err := t.historyRawClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 				NamespaceId: executionInfo.ParentNamespaceId,
@@ -400,8 +441,20 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			return &struct{}{}, nil
 		}
 
+		targetNamespaceID := childWorkflowInfo.NamespaceId
+		if targetNamespaceID == "" {
+			// This is for backward compatibility.
+			// Old mutable state may not have the target namespace ID set in childWorkflowInfo.
+
+			targetNamespaceEntry, err := t.registry.GetNamespace(namespace.Name(childWorkflowInfo.Namespace))
+			if err != nil {
+				return nil, err
+			}
+			targetNamespaceID = targetNamespaceEntry.ID().String()
+		}
+
 		_, err = t.historyRawClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
-			NamespaceId: transferTask.TargetNamespaceID,
+			NamespaceId: targetNamespaceID,
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: childWorkflowInfo.StartedWorkflowId,
 				RunId:      childWorkflowInfo.StartedRunId,
@@ -480,7 +533,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		return err
 	}
 
-	if !mutableState.IsWorkflowExecutionRunning() && !processTaskIfClosed {
+	if !processTaskIfClosed && !mutableState.IsWorkflowExecutionRunning() {
 		// workflow already finished, no need to process transfer task.
 		return nil
 	}

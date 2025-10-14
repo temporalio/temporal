@@ -145,7 +145,7 @@ func New(
 // Start starts the scanner
 func (s *Scanner) Start() error {
 	ctx := context.WithValue(context.Background(), scannerContextKey, s.context)
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
 	ctx, s.lifecycleCancel = context.WithCancel(ctx)
 
 	workerOpts := worker.Options{
@@ -159,10 +159,12 @@ func (s *Scanner) Start() error {
 	}
 
 	var workerTaskQueueNames []string
-	if s.context.cfg.ExecutionsScannerEnabled() {
+	if s.context.cfg.Persistence.DefaultStoreType() != config.StoreTypeSQL && s.context.cfg.ExecutionsScannerEnabled() {
 		s.wg.Add(1)
 		go s.startWorkflowWithRetry(ctx, executionsScannerWFStartOptions, executionsScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, executionsScannerTaskQueueName)
+	} else if s.context.cfg.ExecutionsScannerEnabled() {
+		s.context.logger.Info("ExecutionsScanner is not supported for SQL store")
 	}
 
 	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL && s.context.cfg.TaskQueueScannerEnabled() {
@@ -265,9 +267,9 @@ func (s *Scanner) startWorkflow(
 		if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); ok {
 			return nil
 		}
-		s.context.logger.Error("error starting "+workflowType+" workflow", tag.Error(err))
+		s.context.logger.Error("error starting workflow", tag.WorkflowType(workflowType), tag.Error(err))
 		return err
 	}
-	s.context.logger.Info(workflowType + " workflow successfully started")
+	s.context.logger.Info("workflow successfully started", tag.WorkflowType(workflowType))
 	return nil
 }

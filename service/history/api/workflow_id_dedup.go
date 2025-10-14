@@ -62,7 +62,15 @@ func ResolveDuplicateWorkflowID(
 	// *completed* workflow: apply WorkflowIdReusePolicy
 	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		// no action for the existing workflow
-		return nil, ResolveWorkflowIDReusePolicy(workflowKey, currentStatus, currentRequestIDs, wfIDReusePolicy)
+		return nil, ResolveWorkflowIDReusePolicy(
+			shardContext,
+			workflowKey,
+			namespaceEntry,
+			currentStatus,
+			currentRequestIDs,
+			wfIDReusePolicy,
+			currentWorkflowStartTime,
+		)
 
 	default:
 		// persistence.WorkflowStateZombie or unknown type
@@ -99,10 +107,13 @@ func ResolveWorkflowIDConflictPolicy(
 }
 
 func ResolveWorkflowIDReusePolicy(
+	shardContext historyi.ShardContext,
 	workflowKey definition.WorkflowKey,
+	namespaceEntry *namespace.Namespace,
 	currentStatus enumspb.WorkflowExecutionStatus,
 	currentRequestIDs map[string]*persistencespb.RequestIDInfo,
 	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
+	currentWorkflowStartTime time.Time,
 ) error {
 	switch wfIDReusePolicy { //nolint:exhaustive
 	case enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE:
@@ -120,8 +131,30 @@ func ResolveWorkflowIDReusePolicy(
 			fmt.Sprintf("Failed to process start workflow id reuse policy: %v.", wfIDReusePolicy),
 		)
 	}
-	// ie "allow" starting a new workflow
-	return nil
+
+	nsName := namespaceEntry.Name().String()
+	minimalReuseInterval := shardContext.GetConfig().WorkflowIdReuseMinimalInterval(nsName)
+
+	now := shardContext.GetTimeSource().Now()
+	timeSinceStart := now.Sub(currentWorkflowStartTime.UTC())
+
+	if minimalReuseInterval == 0 || minimalReuseInterval < timeSinceStart {
+		// ie "allow" starting a new workflow
+		return nil
+	}
+
+	// Since there is a grace period, and the current workflow's start time is within that period,
+	// abort the entire request.
+	msg := fmt.Sprintf(
+		"Too many starts for workflow %s. Time since last start: %d ms",
+		workflowKey.WorkflowID,
+		timeSinceStart.Milliseconds(),
+	)
+	return &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: msg,
+	}
 }
 
 // A minimal interval between workflow starts is used to prevent multiple starts with the same ID too rapidly.

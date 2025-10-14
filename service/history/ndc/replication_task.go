@@ -1,6 +1,7 @@
 package ndc
 
 import (
+	"cmp"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -519,8 +520,7 @@ func deserializeBlob(
 	if blob == nil {
 		return nil, nil
 	}
-
-	blob.EncodingType = enumspb.ENCODING_TYPE_PROTO3
+	blob.EncodingType = cmp.Or(blob.EncodingType, enumspb.ENCODING_TYPE_PROTO3)
 	return historySerializer.DeserializeEvents(blob)
 }
 
@@ -533,7 +533,7 @@ func DeserializeBlobs(
 		return eventBatches, nil
 	}
 	for _, blob := range blobs {
-		blob.EncodingType = enumspb.ENCODING_TYPE_PROTO3
+		blob.EncodingType = cmp.Or(blob.EncodingType, enumspb.ENCODING_TYPE_PROTO3)
 		events, err := historySerializer.DeserializeEvents(blob)
 		if err != nil {
 			return nil, err

@@ -14,10 +14,8 @@ import (
 	reflect "reflect"
 	time "time"
 
-	enums "go.temporal.io/api/enums/v1"
 	taskqueue "go.temporal.io/api/taskqueue/v1"
 	matchingservice "go.temporal.io/server/api/matchingservice/v1"
-	taskqueue0 "go.temporal.io/server/api/taskqueue/v1"
 	namespace "go.temporal.io/server/common/namespace"
 	tqid "go.temporal.io/server/common/tqid"
 	gomock "go.uber.org/mock/gomock"
@@ -136,18 +134,32 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) GetAllPollerInfo() *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllPollerInfo", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GetAllPollerInfo))
 }
 
-// GetPhysicalTaskQueueInfoFromCache mocks base method.
-func (m *MocktaskQueuePartitionManager) GetPhysicalTaskQueueInfoFromCache() map[string]map[enums.TaskQueueType]*taskqueue0.PhysicalTaskQueueInfo {
+// GetCache mocks base method.
+func (m *MocktaskQueuePartitionManager) GetCache(key any) any {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPhysicalTaskQueueInfoFromCache")
-	ret0, _ := ret[0].(map[string]map[enums.TaskQueueType]*taskqueue0.PhysicalTaskQueueInfo)
+	ret := m.ctrl.Call(m, "GetCache", key)
+	ret0, _ := ret[0].(any)
 	return ret0
 }
 
-// GetPhysicalTaskQueueInfoFromCache indicates an expected call of GetPhysicalTaskQueueInfoFromCache.
-func (mr *MocktaskQueuePartitionManagerMockRecorder) GetPhysicalTaskQueueInfoFromCache() *gomock.Call {
+// GetCache indicates an expected call of GetCache.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) GetCache(key any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPhysicalTaskQueueInfoFromCache", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GetPhysicalTaskQueueInfoFromCache))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCache", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GetCache), key)
+}
+
+// GetRateLimitManager mocks base method.
+func (m *MocktaskQueuePartitionManager) GetRateLimitManager() *rateLimitManager {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRateLimitManager")
+	ret0, _ := ret[0].(*rateLimitManager)
+	return ret0
+}
+
+// GetRateLimitManager indicates an expected call of GetRateLimitManager.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) GetRateLimitManager() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRateLimitManager", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GetRateLimitManager))
 }
 
 // GetUserDataManager mocks base method.
@@ -261,6 +273,20 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) Partition() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Partition", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).Partition))
 }
 
+// PartitionCount mocks base method.
+func (m *MocktaskQueuePartitionManager) PartitionCount() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PartitionCount")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// PartitionCount indicates an expected call of PartitionCount.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) PartitionCount() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartitionCount", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).PartitionCount))
+}
+
 // PollTask mocks base method.
 func (m *MocktaskQueuePartitionManager) PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, bool, error) {
 	m.ctrl.T.Helper()
@@ -291,6 +317,18 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) ProcessSpooledTask(ctx, tas
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessSpooledTask", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).ProcessSpooledTask), ctx, task, backlogQueue)
 }
 
+// PutCache mocks base method.
+func (m *MocktaskQueuePartitionManager) PutCache(key, value any) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "PutCache", key, value)
+}
+
+// PutCache indicates an expected call of PutCache.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) PutCache(key, value any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutCache", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).PutCache), key, value)
+}
+
 // Start mocks base method.
 func (m *MocktaskQueuePartitionManager) Start() {
 	m.ctrl.T.Helper()
@@ -313,32 +351,6 @@ func (m *MocktaskQueuePartitionManager) Stop(arg0 unloadCause) {
 func (mr *MocktaskQueuePartitionManagerMockRecorder) Stop(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).Stop), arg0)
-}
-
-// TimeSinceLastFanOut mocks base method.
-func (m *MocktaskQueuePartitionManager) TimeSinceLastFanOut() time.Duration {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TimeSinceLastFanOut")
-	ret0, _ := ret[0].(time.Duration)
-	return ret0
-}
-
-// TimeSinceLastFanOut indicates an expected call of TimeSinceLastFanOut.
-func (mr *MocktaskQueuePartitionManagerMockRecorder) TimeSinceLastFanOut() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TimeSinceLastFanOut", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).TimeSinceLastFanOut))
-}
-
-// UpdateTimeSinceLastFanOutAndCache mocks base method.
-func (m *MocktaskQueuePartitionManager) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enums.TaskQueueType]*taskqueue0.PhysicalTaskQueueInfo) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateTimeSinceLastFanOutAndCache", physicalInfoByBuildId)
-}
-
-// UpdateTimeSinceLastFanOutAndCache indicates an expected call of UpdateTimeSinceLastFanOutAndCache.
-func (mr *MocktaskQueuePartitionManagerMockRecorder) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTimeSinceLastFanOutAndCache", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).UpdateTimeSinceLastFanOutAndCache), physicalInfoByBuildId)
 }
 
 // WaitUntilInitialized mocks base method.

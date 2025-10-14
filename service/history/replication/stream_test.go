@@ -7,13 +7,15 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/tests"
 )
 
 func TestWrapEventLoopFn_ReturnStreamError_ShouldStopLoop(t *testing.T) {
+	config := tests.NewDynamicConfig()
+
 	assertion := require.New(t)
 
 	done := make(chan bool)
@@ -28,7 +30,7 @@ func TestWrapEventLoopFn_ReturnStreamError_ShouldStopLoop(t *testing.T) {
 		stopFunc := func() {
 			stopFuncCallCount++
 		}
-		WrapEventLoop(context.Background(), originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), backoff.DisabledRetryPolicy)
+		WrapEventLoop(context.Background(), originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), config)
 		assertion.Equal(1, originalEventLoopCallCount)
 		assertion.Equal(1, stopFuncCallCount)
 
@@ -60,7 +62,7 @@ func TestWrapEventLoopFn_ReturnShardOwnershipLostError_ShouldStopLoop(t *testing
 		stopFunc := func() {
 			stopFuncCallCount++
 		}
-		WrapEventLoop(context.Background(), originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), backoff.DisabledRetryPolicy)
+		WrapEventLoop(context.Background(), originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), tests.NewDynamicConfig())
 		assertion.Equal(1, originalEventLoopCallCount)
 		assertion.Equal(1, stopFuncCallCount)
 
@@ -94,7 +96,7 @@ func TestWrapEventLoopFn_ReturnServiceError_ShouldRetryUntilStreamError(t *testi
 		stopFunc := func() {
 			stopFuncCallCount++
 		}
-		WrapEventLoop(context.Background(), originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), streamRetryPolicy)
+		WrapEventLoop(context.Background(), originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), tests.NewDynamicConfig())
 		assertion.Equal(3, originalEventLoopCallCount)
 		assertion.Equal(1, stopFuncCallCount)
 

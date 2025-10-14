@@ -22,7 +22,6 @@ import (
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"     // needed to load sqlite plugin
 	"go.temporal.io/server/temporal"
-	"go.uber.org/automaxprocs/maxprocs"
 )
 
 // main entry point for the temporal server
@@ -140,10 +139,6 @@ func buildCLI() *cli.App {
 				if c.Args().Len() > 0 {
 					return cli.Exit("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
 				}
-
-				if _, err := maxprocs.Set(); err != nil {
-					stdlog.Println(fmt.Sprintf("WARNING: failed to set GOMAXPROCS: %v.", err))
-				}
 				return nil
 			},
 			Action: func(c *cli.Context) error {
@@ -202,10 +197,17 @@ func buildCLI() *cli.App {
 					)
 				}
 
+				// Authorization mappers: claim and audience
 				claimMapper, err := authorization.GetClaimMapperFromConfig(&cfg.Global.Authorization, logger)
 				if err != nil {
 					return cli.Exit(fmt.Sprintf("Unable to instantiate claim mapper: %v.", err), 1)
 				}
+
+				audienceMapper, err := authorization.GetAudienceMapperFromConfig(&cfg.Global.Authorization)
+				if err != nil {
+					return cli.Exit(fmt.Sprintf("Unable to instantiate audience mapper: %v.", err), 1)
+				}
+
 				s, err := temporal.NewServer(
 					temporal.ForServices(services),
 					temporal.WithConfig(cfg),
@@ -215,6 +217,9 @@ func buildCLI() *cli.App {
 					temporal.WithAuthorizer(authorizer),
 					temporal.WithClaimMapper(func(cfg *config.Config) authorization.ClaimMapper {
 						return claimMapper
+					}),
+					temporal.WithAudienceGetter(func(cfg *config.Config) authorization.JWTAudienceMapper {
+						return audienceMapper
 					}),
 				)
 				if err != nil {

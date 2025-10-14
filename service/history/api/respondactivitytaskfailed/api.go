@@ -40,9 +40,12 @@ func Invoke(
 		return nil, err
 	}
 
-	var activityStartedTime time.Time
+	var attemptStartedTime time.Time
+	var firstScheduledTime time.Time
 	var taskQueue string
 	var workflowTypeName string
+	var closed bool
+	var versioningBehavior enumspb.VersioningBehavior
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
@@ -76,10 +79,7 @@ func Invoke(
 				return nil, consts.ErrStaleState
 			}
 
-			if !activityRunning ||
-				ai.StartedEventId == common.EmptyEventID ||
-				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) ||
-				(token.GetVersion() != common.EmptyVersion && token.Version != ai.Version) {
+			if !activityRunning || api.IsActivityTaskNotFoundForToken(token, ai, nil) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
@@ -109,25 +109,37 @@ func Invoke(
 					return nil, err
 				}
 				postActions.CreateWorkflowTask = true
+				closed = true
+			} else {
+				closed = false
 			}
 
-			activityStartedTime = ai.StartedTime.AsTime()
+			attemptStartedTime = ai.StartedTime.AsTime()
+			firstScheduledTime = ai.FirstScheduledTime.AsTime()
 			taskQueue = ai.TaskQueue
+			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return postActions, nil
 		},
 		nil,
 		shard,
 		workflowConsistencyChecker,
 	)
-	if err == nil && !activityStartedTime.IsZero() {
-		metrics.ActivityE2ELatency.With(
-			workflow.GetPerTaskQueueFamilyScope(
-				shard.GetMetricsHandler(), namespace, taskQueue, shard.GetConfig(),
-				metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
-				metrics.WorkflowTypeTag(workflowTypeName),
-				metrics.ActivityTypeTag(token.ActivityType),
-			),
-		).Record(time.Since(activityStartedTime))
+	if err == nil {
+		completionMetrics := workflow.ActivityCompletionMetrics{
+			AttemptStartedTime: attemptStartedTime,
+			FirstScheduledTime: firstScheduledTime,
+			Status:             workflow.ActivityStatusFailed,
+			Closed:             closed,
+		}
+
+		workflow.RecordActivityCompletionMetrics(shard,
+			namespace,
+			taskQueue,
+			completionMetrics,
+			metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
+			metrics.WorkflowTypeTag(workflowTypeName),
+			metrics.ActivityTypeTag(token.ActivityType),
+			metrics.VersioningBehaviorTag(versioningBehavior))
 	}
 	return &historyservice.RespondActivityTaskFailedResponse{}, err
 }

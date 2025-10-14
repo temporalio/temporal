@@ -24,8 +24,9 @@ import (
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
-	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log/tag"
@@ -33,11 +34,15 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests/testcore"
+	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
 	FunctionalClustersTestSuite struct {
+		xdcBaseSuite
+	}
+	FunctionalClustersWithRedirectionTestSuite struct {
 		xdcBaseSuite
 	}
 )
@@ -611,6 +616,101 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	s.logger.Info("PollAndProcessWorkflowTask 2", tag.Error(err))
 	s.NoError(err)
 	s.Equal(2, workflowCompleteTimes)
+}
+
+func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_WorkflowIDConflictPolicy_TerminateExisting() {
+	namespaceName := s.createGlobalNamespace()
+	client0 := s.clusters[0].FrontendClient() // active
+	client1 := s.clusters[1].FrontendClient() // standby
+
+	// start a workflow
+	id := "functional-start-workflow-failover-ID-conflict-policy-test"
+	wt := "functional-start-workflow-failover-ID-conflict-policy-test-type"
+	tl := "functional-start-workflow-failover-ID-conflict-policy-test-taskqueue"
+	identity := "worker1"
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:             uuid.New(),
+		Namespace:             namespaceName,
+		WorkflowId:            id,
+		WorkflowType:          workflowType,
+		TaskQueue:             taskQueue,
+		Input:                 nil,
+		WorkflowRunTimeout:    durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
+		Identity:              identity,
+		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+	}
+	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
+	s.logger.Info("StartWorkflowExecution in cluster0: ", tag.WorkflowRunID(we.GetRunId()))
+
+	workflowCompleteTimes := 0
+	firstCommandMade := false
+	var executions []*commonpb.WorkflowExecution
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		executions = append(executions, task.WorkflowExecution)
+		if !firstCommandMade {
+			firstCommandMade = true
+			return []*commandpb.Command{}, nil
+		}
+
+		workflowCompleteTimes++
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				Result: payloads.EncodeString("Done"),
+			}},
+		}}, nil
+	}
+
+	// nolint
+	poller0 := testcore.TaskPoller{
+		Client:              client0,
+		Namespace:           namespaceName,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.logger,
+		T:                   s.T(),
+	}
+
+	// nolint
+	poller1 := testcore.TaskPoller{
+		Client:              client1,
+		Namespace:           namespaceName,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.logger,
+		T:                   s.T(),
+	}
+
+	// keep the workflow in cluster0 running
+	_, err = poller0.PollAndProcessWorkflowTask()
+	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+
+	// start the same workflow in cluster0 and terminate the existing workflow
+	startReq.RequestId = uuid.New()
+	startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+	we, err = client0.StartWorkflowExecution(testcore.NewContext(), startReq)
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
+	s.logger.Info("StartWorkflowExecution in cluster0: ", tag.WorkflowRunID(we.GetRunId()))
+
+	s.failover(namespaceName, 0, s.clusters[1].ClusterName(), 2)
+
+	_, err = poller1.PollAndProcessWorkflowTask()
+	s.logger.Info("PollAndProcessWorkflowTask 2", tag.Error(err))
+	s.NoError(err)
+	s.Equal(1, workflowCompleteTimes)
+	s.Equal(2, len(executions))
+	s.Equal(executions[1].GetRunId(), we.GetRunId())
 }
 
 func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
@@ -2283,28 +2383,43 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	s.Equal(s.clusters[1].ClusterName(), nsResp2.ReplicationConfig.ActiveClusterName)
 
 	// verify all wf in ns is now available in cluster2
-	client1, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.clusters[1].Host().FrontendGRPCAddress(),
-		Namespace: namespace,
-	})
-	s.NoError(err)
 	feClient1 := s.clusters[1].FrontendClient()
+	adminClient1 := s.clusters[1].AdminClient()
 	verify := func(wfID string, expectedRunID string) {
-		desc1, err := client1.DescribeWorkflowExecution(testCtx, wfID, "")
-		s.NoError(err)
-		s.Equal(expectedRunID, desc1.WorkflowExecutionInfo.Execution.RunId)
-		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc1.WorkflowExecutionInfo.Status)
-		resp, err := feClient1.GetWorkflowExecutionHistoryReverse(testCtx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+		desc1, err := adminClient1.DescribeMutableState(testCtx, &adminservice.DescribeMutableStateRequest{
 			Namespace: namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: wfID,
-				RunId:      expectedRunID,
 			},
-			MaximumPageSize: 1,
-			NextPageToken:   nil,
 		})
 		s.NoError(err)
-		s.True(len(resp.GetHistory().GetEvents()) > 0)
+		s.Equal(expectedRunID, desc1.DatabaseMutableState.ExecutionState.RunId)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc1.DatabaseMutableState.ExecutionState.Status)
+		expectedEventId := desc1.DatabaseMutableState.NextEventId - 1
+		var nextPageToken []byte
+		for {
+			resp, err := feClient1.GetWorkflowExecutionHistoryReverse(testCtx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+				Namespace: namespace,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: wfID,
+					RunId:      expectedRunID,
+				},
+				MaximumPageSize: 256,
+				NextPageToken:   nil,
+			})
+			s.NoError(err)
+			for _, event := range resp.GetHistory().GetEvents() {
+				s.Equal(expectedEventId, event.EventId)
+				expectedEventId--
+			}
+			if len(nextPageToken) <= 0 {
+				break
+			}
+			nextPageToken = resp.NextPageToken
+		}
+		s.Equal(int64(0), expectedEventId)
+		s.NoError(err)
+
 		listWorkflowResp, err := feClient1.ListClosedWorkflowExecutions(
 			testCtx,
 			&workflowservice.ListClosedWorkflowExecutionsRequest{
@@ -2545,16 +2660,159 @@ func (s *FunctionalClustersTestSuite) getHistory(client workflowservice.Workflow
 	return events
 }
 
-func (s *FunctionalClustersTestSuite) newClientAndWorker(hostport, namespace, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  hostport,
-		Namespace: namespace,
-	})
+func TestFuncClustersWithRedirectionTestSuite(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                    string
+		enableTransitionHistory bool
+	}{
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
+		},
+		{
+			name:                    "DisableTransitionHistory",
+			enableTransitionHistory: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &FunctionalClustersWithRedirectionTestSuite{}
+			s.enableTransitionHistory = tc.enableTransitionHistory
+			suite.Run(t, s)
+		})
+	}
+}
+
+func (s *FunctionalClustersWithRedirectionTestSuite) SetupSuite() {
+	s.setupSuite(
+		testcore.WithFxOptionsForService(primitives.FrontendService,
+			fx.Decorate(func(_ config.DCRedirectionPolicy) config.DCRedirectionPolicy {
+				return config.DCRedirectionPolicy{Policy: "all-apis-forwarding"}
+			}),
+		),
+	)
+}
+
+func (s *FunctionalClustersWithRedirectionTestSuite) SetupTest() {
+	s.setupTest()
+}
+
+func (s *FunctionalClustersWithRedirectionTestSuite) TearDownSuite() {
+	s.tearDownSuite()
+}
+
+func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbeatsAcrossFailover() {
+	namespace := s.createGlobalNamespace()
+
+	taskqueue := "functional-activity-multi-heartbeat-failover-test-taskqueue"
+	client0, worker0 := s.newClientAndWorker(s.clusters[0].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker0")
+
+	// Orchestration channels
+	hb1Ch := make(chan struct{}, 1)
+	hb2Ch := make(chan struct{}, 1)
+	hb3Ch := make(chan struct{}, 1)
+	allowFailover := make(chan struct{})
+	allowComplete := make(chan struct{})
+
+	// Values to heartbeat in sequence
+	hb1Val := 1
+	hb2Val := 2
+	hb3Val := 3
+
+	activityWithMultipleHB := func(ctx context.Context) error {
+		// Heartbeat before failover
+		activity.RecordHeartbeat(ctx, hb1Val)
+		select {
+		case hb1Ch <- struct{}{}:
+		default:
+		}
+		// wait for failover
+		<-allowFailover
+
+		// After failover, verify we can still heartbeat and complete
+		if activity.HasHeartbeatDetails(ctx) {
+			var v int
+			_ = activity.GetHeartbeatDetails(ctx, &v)
+		}
+		activity.RecordHeartbeat(ctx, hb2Val)
+		select {
+		case hb2Ch <- struct{}{}:
+		default:
+		}
+		activity.RecordHeartbeat(ctx, hb3Val)
+		select {
+		case hb3Ch <- struct{}{}:
+		default:
+		}
+		<-allowComplete
+		return nil
+	}
+
+	testWorkflowFn := func(ctx workflow.Context) error {
+		ao := workflow.ActivityOptions{
+			StartToCloseTimeout: time.Second * 120,
+			HeartbeatTimeout:    time.Second * 10,
+		}
+		ctx = workflow.WithActivityOptions(ctx, ao)
+		return workflow.ExecuteActivity(ctx, activityWithMultipleHB).Get(ctx, nil)
+	}
+
+	worker0.RegisterWorkflow(testWorkflowFn)
+	worker0.RegisterActivity(activityWithMultipleHB)
+	s.NoError(worker0.Start())
+	defer worker0.Stop()
+
+	// Start a workflow
+	workflowID := "functional-activity-multi-heartbeat-failover-test"
+	run, err := client0.ExecuteWorkflow(testcore.NewContext(), sdkclient.StartWorkflowOptions{
+		ID:                 workflowID,
+		TaskQueue:          taskqueue,
+		WorkflowRunTimeout: time.Second * 300,
+	}, testWorkflowFn)
 	s.NoError(err)
+	s.NotEmpty(run.GetRunID())
 
-	worker := sdkworker.New(sdkClient, taskqueue, sdkworker.Options{
-		Identity: identity,
-	})
+	// Wait for first heartbeat to be sent
+	<-hb1Ch
 
-	return sdkClient, worker
+	// Validate heartbeat1 is visible before failover (eventually)
+	var hbVal int
+	s.Eventually(func() bool {
+		desc0, err := client0.DescribeWorkflowExecution(testcore.NewContext(), workflowID, "")
+		if err != nil || len(desc0.GetPendingActivities()) != 1 {
+			return false
+		}
+		hbVal = 0
+		if err := payloads.Decode(desc0.PendingActivities[0].GetHeartbeatDetails(), &hbVal); err != nil {
+			return false
+		}
+		return hbVal == hb1Val
+	}, 10*time.Second, 200*time.Millisecond)
+
+	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+	// nolint:forbidigo
+	time.Sleep(time.Second * 4)
+
+	close(allowFailover)
+	// Wait for heartbeats from second attempt
+	<-hb2Ch
+	<-hb3Ch
+
+	// Validate latest heartbeat is visible in new active cluster (eventually)
+	s.Eventually(func() bool {
+		desc1, err := client0.DescribeWorkflowExecution(testcore.NewContext(), workflowID, "")
+		if err != nil || len(desc1.GetPendingActivities()) != 1 {
+			return false
+		}
+		hbVal = 0
+		if err := payloads.Decode(desc1.PendingActivities[0].GetHeartbeatDetails(), &hbVal); err != nil {
+			return false
+		}
+		return hbVal == hb3Val
+	}, 10*time.Second, 200*time.Millisecond)
+
+	// Complete the activity and workflow
+	close(allowComplete)
+
+	s.NoError(run.Get(testcore.NewContext(), nil))
 }

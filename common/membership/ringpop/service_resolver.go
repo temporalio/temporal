@@ -48,7 +48,9 @@ const (
 	minRefreshInternal     = time.Second * 4
 	defaultRefreshInterval = time.Second * 10
 	replicaPoints          = 100
+)
 
+const (
 	// refreshModeAlways means always do a refresh right now.
 	refreshModeAlways refreshMode = iota
 	// refreshModeLazy means only do a refresh if it's been minRefreshInternal since the last one.

@@ -962,7 +962,7 @@ func (d *MutableStateStore) GetCurrentExecution(
 	}
 
 	// TODO: fix blob ExecutionState in storage should not be a blob.
-	executionState, err := serialization.WorkflowExecutionStateFromBlob(executionStateBlob.Data, executionStateBlob.EncodingType.String())
+	executionState, err := serialization.WorkflowExecutionStateFromBlob(executionStateBlob)
 	if err != nil {
 		return nil, err
 	}

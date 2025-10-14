@@ -12,7 +12,6 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
-	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/fx"
 )
 
@@ -69,7 +68,6 @@ func NewTimerQueueFactory(
 
 func (f *timerQueueFactory) CreateQueue(
 	shardContext historyi.ShardContext,
-	workflowCache wcache.Cache,
 ) queues.Queue {
 	logger := log.With(shardContext.GetLogger(), tag.ComponentTimerQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope))
@@ -77,7 +75,7 @@ func (f *timerQueueFactory) CreateQueue(
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 	workflowDeleteManager := deletemanager.NewDeleteManager(
 		shardContext,
-		workflowCache,
+		f.WorkflowCache,
 		f.Config,
 		shardContext.GetTimeSource(),
 		f.VisibilityManager,
@@ -109,19 +107,21 @@ func (f *timerQueueFactory) CreateQueue(
 
 	activeExecutor := newTimerQueueActiveTaskExecutor(
 		shardContext,
-		workflowCache,
+		f.WorkflowCache,
 		workflowDeleteManager,
 		logger,
 		f.MetricsHandler,
 		f.Config,
 		f.MatchingRawClient,
+		f.ChasmEngine,
 	)
 
 	standbyExecutor := newTimerQueueStandbyTaskExecutor(
 		shardContext,
-		workflowCache,
+		f.WorkflowCache,
 		workflowDeleteManager,
 		f.MatchingRawClient,
+		f.ChasmEngine,
 		logger,
 		f.MetricsHandler,
 		// note: the cluster name is for calculating time for standby tasks,
@@ -185,6 +185,8 @@ func (f *timerQueueFactory) CreateQueue(
 			CheckpointInterval:                  f.Config.TimerProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.TimerProcessorUpdateAckIntervalJitterCoefficient,
 			MaxReaderCount:                      f.Config.TimerQueueMaxReaderCount,
+			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
+			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
 		},
 		f.HostReaderRateLimiter,
 		logger,

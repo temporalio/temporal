@@ -146,6 +146,36 @@ func (c *retryableClient) DescribeTaskQueuePartition(
 	return resp, err
 }
 
+func (c *retryableClient) DescribeVersionedTaskQueues(
+	ctx context.Context,
+	request *matchingservice.DescribeVersionedTaskQueuesRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.DescribeVersionedTaskQueuesResponse, error) {
+	var resp *matchingservice.DescribeVersionedTaskQueuesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeVersionedTaskQueues(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) DescribeWorker(
+	ctx context.Context,
+	request *matchingservice.DescribeWorkerRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.DescribeWorkerResponse, error) {
+	var resp *matchingservice.DescribeWorkerResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeWorker(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DispatchNexusTask(
 	ctx context.Context,
 	request *matchingservice.DispatchNexusTaskRequest,
@@ -296,6 +326,21 @@ func (c *retryableClient) ListTaskQueuePartitions(
 	return resp, err
 }
 
+func (c *retryableClient) ListWorkers(
+	ctx context.Context,
+	request *matchingservice.ListWorkersRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.ListWorkersResponse, error) {
+	var resp *matchingservice.ListWorkersResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ListWorkers(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) PollActivityTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollActivityTaskQueueRequest,
@@ -307,7 +352,7 @@ func (c *retryableClient) PollActivityTaskQueue(
 		resp, err = c.client.PollActivityTaskQueue(ctx, request, opts...)
 		return err
 	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.pollPolicy, c.isRetryable)
 	return resp, err
 }
 
@@ -322,7 +367,7 @@ func (c *retryableClient) PollNexusTaskQueue(
 		resp, err = c.client.PollNexusTaskQueue(ctx, request, opts...)
 		return err
 	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.pollPolicy, c.isRetryable)
 	return resp, err
 }
 
@@ -337,7 +382,7 @@ func (c *retryableClient) PollWorkflowTaskQueue(
 		resp, err = c.client.PollWorkflowTaskQueue(ctx, request, opts...)
 		return err
 	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.pollPolicy, c.isRetryable)
 	return resp, err
 }
 
@@ -350,6 +395,21 @@ func (c *retryableClient) QueryWorkflow(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.QueryWorkflow(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) RecordWorkerHeartbeat(
+	ctx context.Context,
+	request *matchingservice.RecordWorkerHeartbeatRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.RecordWorkerHeartbeatResponse, error) {
+	var resp *matchingservice.RecordWorkerHeartbeatResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.RecordWorkerHeartbeat(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -440,6 +500,21 @@ func (c *retryableClient) UpdateNexusEndpoint(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.UpdateNexusEndpoint(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateTaskQueueConfig(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueConfigRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+	var resp *matchingservice.UpdateTaskQueueConfigResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateTaskQueueConfig(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

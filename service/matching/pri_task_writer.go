@@ -66,7 +66,7 @@ func (w *priTaskWriter) Start() {
 }
 
 func (w *priTaskWriter) appendTask(
-	subqueue int,
+	subqueue subqueueIndex,
 	taskInfo *persistencespb.TaskInfo,
 ) error {
 	select {
@@ -92,7 +92,7 @@ func (w *priTaskWriter) appendTask(
 			return err
 		case <-w.backlogMgr.tqCtx.Done():
 			// if we are shutting down, this request will never make
-			// it to cassandra, just bail out and fail this request
+			// it to persistence, just bail out and fail this request
 			return errShutdown
 		}
 	default: // channel is full, throttle
@@ -105,28 +105,24 @@ func (w *priTaskWriter) appendTask(
 	}
 }
 
-func (w *priTaskWriter) allocTaskIDs(count int) ([]int64, error) {
-	result := make([]int64, count)
-	for i := range result {
+func (w *priTaskWriter) assignTaskIDs(reqs []*writeTaskRequest) error {
+	for i := range reqs {
 		if w.taskIDBlock.start > w.taskIDBlock.end {
 			// we ran out of current allocation block
 			newBlock, err := w.allocTaskIDBlock(w.taskIDBlock.end)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			w.taskIDBlock = newBlock
 		}
-		result[i] = w.taskIDBlock.start
+		reqs[i].id = w.taskIDBlock.start
 		w.taskIDBlock.start++
 	}
-	return result, nil
+	return nil
 }
 
-func (w *priTaskWriter) appendTasks(
-	taskIDs []int64,
-	reqs []*writeTaskRequest,
-) error {
-	resp, err := w.db.CreateTasks(w.backlogMgr.tqCtx, taskIDs, reqs)
+func (w *priTaskWriter) appendTasks(reqs []*writeTaskRequest) error {
+	resp, err := w.db.CreateTasks(w.backlogMgr.tqCtx, reqs)
 	if err != nil {
 		w.backlogMgr.signalIfFatal(err)
 		w.logger.Error("Persistent store operation failure",
@@ -142,10 +138,7 @@ func (w *priTaskWriter) appendTasks(
 }
 
 func (w *priTaskWriter) initState() error {
-	retryForever := backoff.NewExponentialRetryPolicy(1 * time.Second).
-		WithMaximumInterval(10 * time.Second).
-		WithExpirationInterval(backoff.NoInterval)
-	state, err := w.renewLeaseWithRetry(retryForever, common.IsPersistenceTransientError)
+	state, err := w.renewLeaseWithRetry(foreverRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		w.backlogMgr.initState(taskQueueState{}, err)
 		return err
@@ -172,9 +165,9 @@ func (w *priTaskWriter) taskWriterLoop() {
 			reqs = append(reqs[:0], request)
 			reqs = w.getWriteBatch(reqs)
 
-			taskIDs, err := w.allocTaskIDs(len(reqs))
+			err := w.assignTaskIDs(reqs)
 			if err == nil {
-				err = w.appendTasks(taskIDs, reqs)
+				err = w.appendTasks(reqs)
 			}
 			for _, req := range reqs {
 				req.responseCh <- err

@@ -30,6 +30,9 @@ type (
 		// it will be treated the same as lastUpdateVersionedTransition equals to EmptyVersionedTransition.
 		// The provided minVersionedTransition should NOT be nil, and if equals to EmptyVersionedTransition,
 		// the behavior is equivalent to Refresh().
+		//
+		// PartialRefresh does not refresh tasks for CHASM components as they are smart enough to figure out
+		// what tasks need to be generated when seeing a new version of the component.
 		PartialRefresh(
 			ctx context.Context,
 			mutableState historyi.MutableState,
@@ -67,7 +70,11 @@ func (r *TaskRefresherImpl) Refresh(
 		mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
 	}
 
-	return r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil)
+	if err := r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil); err != nil {
+		return err
+	}
+
+	return mutableState.ChasmTree().RefreshTasks()
 }
 
 func (r *TaskRefresherImpl) PartialRefresh(
@@ -138,7 +145,6 @@ func (r *TaskRefresherImpl) PartialRefresh(
 	}
 
 	if err := r.refreshTasksForChildWorkflow(
-		ctx,
 		mutableState,
 		taskGenerator,
 		minVersionedTransition,
@@ -350,8 +356,6 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 
 	pendingActivityInfos := mutableState.GetPendingActivityInfos()
 
-	refreshActivityTimerTask := false
-
 	for _, activityInfo := range pendingActivityInfos {
 
 		// Skip task generation if this activity has not been updated since minVersionedTransition.
@@ -373,8 +377,6 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 			}
 		}
 
-		refreshActivityTimerTask = true
-
 		if activityInfo.StartedEventId != common.EmptyEventID {
 			continue
 		}
@@ -388,10 +390,6 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 		); err != nil {
 			return err
 		}
-	}
-
-	if !refreshActivityTimerTask {
-		return nil
 	}
 
 	_, err := NewTimerSequence(mutableState).CreateNextActivityTimer()
@@ -408,8 +406,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 		return nil
 	}
 
-	refreshUserTimerTask := false
-
 	pendingTimerInfos := mutableState.GetPendingTimerInfos()
 	for _, timerInfo := range pendingTimerInfos {
 
@@ -421,8 +417,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 			continue
 		}
 
-		refreshUserTimerTask = true
-
 		// need to update user timer task mask for which task is generated
 		if err := mutableState.UpdateUserTimerTaskStatus(
 			timerInfo.TimerId,
@@ -432,16 +426,11 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 		}
 	}
 
-	if !refreshUserTimerTask {
-		return nil
-	}
-
 	_, err := NewTimerSequence(mutableState).CreateNextUserTimer()
 	return err
 }
 
 func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
-	ctx context.Context,
 	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
@@ -470,13 +459,8 @@ func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 			continue
 		}
 
-		scheduleEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, childWorkflowInfo.InitiatedEventId)
-		if err != nil {
-			return err
-		}
-
 		if err := taskGenerator.GenerateChildWorkflowTasks(
-			scheduleEvent,
+			childWorkflowInfo.InitiatedEventId,
 		); err != nil {
 			return err
 		}

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/urfave/cli"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	dbschemas "go.temporal.io/server/schema"
 	"go.temporal.io/server/temporal/environment"
@@ -33,13 +34,13 @@ func buildCLIOptions() *cli.App {
 	app := cli.NewApp()
 	app.Name = "temporal-cassandra-tool"
 	app.Usage = "Command line tool for temporal cassandra operations"
-	app.Version = "0.0.1"
+	app.Version = headers.ServerVersion
 	logger := log.NewCLILogger()
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:   schema.CLIFlagEndpoint,
-			Value:  "127.0.0.1",
+			Value:  environment.GetCassandraAddress(),
 			Usage:  "hostname or ip address of cassandra host to connect to",
 			EnvVar: "CASSANDRA_HOST",
 		},

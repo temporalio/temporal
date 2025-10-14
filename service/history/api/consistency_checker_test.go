@@ -11,6 +11,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	clockspb "go.temporal.io/server/api/clock/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -84,7 +85,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	released := false
 	releaseFn := func(err error) { released = true }
 
-	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
+	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
 		ctx,
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -92,6 +93,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 			WorkflowId: s.workflowID,
 			RunId:      s.currentRunID,
 		}),
+		chasmworkflow.Archetype,
 		locks.PriorityHigh,
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(mutableState, nil)

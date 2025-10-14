@@ -122,9 +122,8 @@ func formatComparisonExprStringForError(expr sqlparser.ComparisonExpr) string {
 // Simple tokenizer by spaces. It's a temporary solution as it doesn't cover tokenizer used by
 // PostgreSQL or SQLite.
 func tokenizeTextQueryString(s string) []string {
-	tokens := strings.Split(s, " ")
-	nonEmptyTokens := make([]string, 0, len(tokens))
-	for _, token := range tokens {
+	nonEmptyTokens := make([]string, 0, strings.Count(s, " ")+1)
+	for token := range strings.SplitSeq(s, " ") {
 		if token != "" {
 			nonEmptyTokens = append(nonEmptyTokens, token)
 		}
