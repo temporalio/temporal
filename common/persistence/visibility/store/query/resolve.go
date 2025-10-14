@@ -36,11 +36,11 @@ func ResolveSearchAttributeAlias(
 
 	if searchattribute.IsMappable(name) {
 		// First check if the visibility mapper can handle this field (e.g., custom search attributes)
-		if result, err := tryVisibilityMapper(name, ns, mapper, saTypeMap); err == nil && result.fieldName != "" {
-			return result.fieldName, result.fieldType, err
-		} else if err != nil {
+		if result, err := tryVisibilityMapper(name, ns, mapper, saTypeMap); err != nil {
 			// If there was an error from the mapper, return it
 			return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, err
+		} else if result.fieldName != "" {
+			return result.fieldName, result.fieldType, nil
 		}
 		// If err == nil but result.fieldName == "", the mapper did not handle the field, allow fallback
 
