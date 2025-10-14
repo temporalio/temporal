@@ -81,12 +81,10 @@ func validateFairnessWeightUpdate(
 		}
 	}
 
-	for k := range set {
-		for _, u := range unset {
-			if k == u {
-				return serviceerror.NewInvalidArgumentf(
-					"fairness weight override key %q present in both set and unset lists", k)
-			}
+	for _, u := range unset {
+		if _, ok := set[u]; ok {
+			return serviceerror.NewInvalidArgumentf(
+				"fairness weight override key %q present in both set and unset lists", u)
 		}
 	}
 
