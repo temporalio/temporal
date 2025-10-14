@@ -37,12 +37,9 @@ func ResolveSearchAttributeAlias(
 		// Handle ScheduleID → WorkflowID transformation, but only if ScheduleID is not defined as a custom search attribute
 		// This fallback only applies when the visibility mapper doesn't handle the field
 		if name == searchattribute.ScheduleID {
-			// First check if ScheduleID exists as a custom search attribute
-			if _, err := saTypeMap.GetType(searchattribute.ScheduleID); err != nil {
-				// ScheduleID is not defined, transform to WorkflowID
-				saType, _ := saTypeMap.GetType(searchattribute.WorkflowID)
-				return searchattribute.WorkflowID, saType, nil
-			}
+			// ScheduleID is not defined, transform to WorkflowID
+			saType, _ := saTypeMap.GetType(searchattribute.WorkflowID)
+			return searchattribute.WorkflowID, saType, nil
 		}
 	}
 

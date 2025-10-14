@@ -137,19 +137,12 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 
 	s.EventuallyWithT(
 		func(t *assert.CollectT) {
-			resp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-			})
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Len(t, resp.GetExecutions(), 1)
-
 			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
 				Query:     fmt.Sprintf("%s = 'Pinned'", searchattribute.TemporalWorkflowVersioningBehavior),
 			})
 			require.NoError(t, err)
-			require.NotNil(t, resp)
+			require.NotNil(t, queriedResp)
 			require.Len(t, queriedResp.GetExecutions(), 1)
 
 			queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
@@ -157,7 +150,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 				Query:     "WorkflowVersioningBehavior = 'user-defined'",
 			})
 			require.NoError(t, err)
-			require.NotNil(t, resp)
+			require.NotNil(t, queriedResp)
 			require.Len(t, queriedResp.GetExecutions(), 1)
 		},
 		testcore.WaitForESToSettle,
