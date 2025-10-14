@@ -49,12 +49,9 @@ func ResolveSearchAttributeAlias(
 		if name == searchattribute.ScheduleID {
 			// First check if ScheduleID exists as a custom search attribute
 			if _, err := saTypeMap.GetType(searchattribute.ScheduleID); err != nil {
-				// ScheduleID is not defined, transform to WorkflowID if WorkflowID exists
-				saType, err := saTypeMap.GetType(searchattribute.WorkflowID)
-				if err == nil {
-					return searchattribute.WorkflowID, saType, nil
-				}
-				// If WorkflowID is not in type map, continue with normal flow
+				// ScheduleID is not defined, transform to WorkflowID
+				saType, _ := saTypeMap.GetType(searchattribute.WorkflowID)
+				return searchattribute.WorkflowID, saType, nil
 			}
 		}
 	}
