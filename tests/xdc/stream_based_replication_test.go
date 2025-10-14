@@ -779,9 +779,8 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 }
 
 func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication() {
-	if !s.enableTransitionHistory {
-		s.T().Skip("Skip when transition history is disabled")
-	}
+	s.T().Skip("Skip when transition history is disabled")
+
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 

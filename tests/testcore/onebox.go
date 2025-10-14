@@ -216,14 +216,9 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		chasmRegistry:             params.ChasmRegistry,
 		hostsByProtocolByService:  params.HostsByProtocolByService,
 		grpcClientInterceptor:     grpcinject.NewInterceptor(),
-		replicationStreamRecorder: NewReplicationStreamRecorder(),
+		replicationStreamRecorder: nil, // Disabled for testing
 		spanExporters:             params.SpanExporters,
 	}
-
-	// Configure output file path for on-demand logging (call WriteToLog() to write)
-	clusterName := params.ClusterMetadataConfig.CurrentClusterName
-	outputFile := fmt.Sprintf("/tmp/replication_stream_messages_%s.txt", clusterName)
-	impl.replicationStreamRecorder.SetOutputFile(outputFile)
 
 	for k, v := range dynamicConfigOverrides {
 		impl.overrideDynamicConfig(t, k, v)
