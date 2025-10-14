@@ -10,6 +10,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/hsm"
@@ -23,6 +24,7 @@ type (
 		Refresh(
 			ctx context.Context,
 			mutableState historyi.MutableState,
+			isCloseTransferAcked bool,
 		) error
 		// PartialRefresh refresh tasks for all sub state machines that have been updated
 		// since the given minVersionedTransition (inclusive).
@@ -38,6 +40,7 @@ type (
 			mutableState historyi.MutableState,
 			minVersionedTransition *persistencespb.VersionedTransition,
 			previousPendingChildIds map[int64]struct{},
+			isCloseTransferAcked bool,
 		) error
 	}
 
@@ -64,13 +67,14 @@ func NewTaskRefresher(
 func (r *TaskRefresherImpl) Refresh(
 	ctx context.Context,
 	mutableState historyi.MutableState,
+	isCloseTransferAcked bool,
 ) error {
 	if r.shard.GetConfig().EnableNexus() {
 		// Invalidate all tasks generated for this mutable state before the refresh.
 		mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
 	}
 
-	if err := r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil); err != nil {
+	if err := r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil, isCloseTransferAcked); err != nil {
 		return err
 	}
 
@@ -82,6 +86,7 @@ func (r *TaskRefresherImpl) PartialRefresh(
 	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 	previousPendingChildIds map[int64]struct{},
+	isCloseTransferAcked bool,
 ) error {
 	// TODO: handle task refresh for non workflow mutable states.
 	if !mutableState.IsWorkflow() {
@@ -102,13 +107,21 @@ func (r *TaskRefresherImpl) PartialRefresh(
 		return err
 	}
 
-	if err := r.refreshTasksForWorkflowClose(
-		ctx,
-		mutableState,
-		taskGenerator,
-		minVersionedTransition,
-	); err != nil {
-		return err
+	if !isCloseTransferAcked {
+		if err := r.refreshTasksForWorkflowClose(
+			ctx,
+			mutableState,
+			taskGenerator,
+			minVersionedTransition,
+		); err != nil {
+			return err
+		}
+	} else {
+		r.shard.GetLogger().Info("Skipping workflow close task generation - close transfer task already acked on active cluster",
+			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
+			tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),
+			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
+		)
 	}
 
 	if err := r.refreshTasksForRecordWorkflowStarted(
