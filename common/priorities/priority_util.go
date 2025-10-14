@@ -14,7 +14,7 @@ const (
 var (
 	ErrInvalidPriority       = serviceerror.NewInvalidArgument("priority key can't be negative")
 	ErrFairnessKeyLength     = serviceerror.NewInvalidArgument("fairness key length exceeds limit")
-	ErrInvalidFairnessWeight = serviceerror.NewInvalidArgument("fairness weight can't be negative")
+	ErrInvalidFairnessWeight = serviceerror.NewInvalidArgument("must be greater than zero")
 )
 
 func Merge(
@@ -37,6 +37,13 @@ func Merge(
 func ValidateFairnessKey(key string) error {
 	if len(key) > fairnessKeyMaxLength {
 		return ErrFairnessKeyLength
+	}
+	return nil
+}
+
+func ValidateFairnessWeight(weight float32) error {
+	if weight <= 0 {
+		return ErrInvalidFairnessWeight
 	}
 	return nil
 }

@@ -8,6 +8,10 @@ import (
 	"go.temporal.io/server/common/priorities"
 )
 
+var (
+	errFairnessKeyEmpty = serviceerror.NewInvalidArgument("fairness weight override key must not be empty")
+)
+
 func validateExecution(w *commonpb.WorkflowExecution) error {
 	if w == nil {
 		return errExecutionNotSet
@@ -56,23 +60,21 @@ func validateFairnessWeightUpdate(
 
 	for k, w := range set {
 		if k == "" {
-			return serviceerror.NewInvalidArgument(
-				"fairness weight override key must not be empty")
+			return errFairnessKeyEmpty
 		}
 		if err := priorities.ValidateFairnessKey(k); err != nil {
 			return err
 		}
-		if w <= 0 {
+		if err := priorities.ValidateFairnessWeight(w); err != nil {
 			return serviceerror.NewInvalidArgumentf(
-				"invalid fairness weight weight for key %q: must be greater than zero", k,
+				"invalid fairness weight weight for key %q: %v", k, err,
 			)
 		}
 	}
 
 	for _, k := range unset {
 		if k == "" {
-			return serviceerror.NewInvalidArgument(
-				"fairness weight override key must not be empty")
+			return errFairnessKeyEmpty
 		}
 		if err := priorities.ValidateFairnessKey(k); err != nil {
 			return err
