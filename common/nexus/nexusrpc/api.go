@@ -5,6 +5,7 @@ package nexusrpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"mime"
 	"net/http"
@@ -148,7 +149,7 @@ func decodeLink(encodedLink string) (nexus.Link, error) {
 	var link nexus.Link
 	encodedLink = strings.TrimSpace(encodedLink)
 	if len(encodedLink) == 0 {
-		return link, fmt.Errorf("failed to parse link header: value is empty")
+		return link, errors.New("failed to parse link header: value is empty")
 	}
 
 	if encodedLink[0] != '<' {
@@ -160,7 +161,7 @@ func decodeLink(encodedLink string) (nexus.Link, error) {
 	}
 	urlStr := strings.TrimSpace(encodedLink[1:urlEnd])
 	if len(urlStr) == 0 {
-		return link, fmt.Errorf("failed to parse link header: url is empty")
+		return link, errors.New("failed to parse link header: url is empty")
 	}
 	u, err := url.Parse(urlStr)
 	if err != nil {
@@ -223,7 +224,7 @@ func decodeLink(encodedLink string) (nexus.Link, error) {
 
 func validateLinkURL(value *url.URL) error {
 	if value == nil || value.String() == "" {
-		return fmt.Errorf("url is empty")
+		return errors.New("url is empty")
 	}
 	_, err := url.ParseQuery(value.RawQuery)
 	if err != nil {
@@ -234,11 +235,11 @@ func validateLinkURL(value *url.URL) error {
 
 func validateLinkType(value string) error {
 	if len(value) == 0 {
-		return fmt.Errorf("link type is empty")
+		return errors.New("link type is empty")
 	}
 	for _, c := range value {
 		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '_' && c != '.' && c != '/' {
-			return fmt.Errorf("link type contains invalid char (valid chars: alphanumeric, '_', '.', '/')")
+			return errors.New("link type contains invalid char (valid chars: alphanumeric, '_', '.', '/')")
 		}
 	}
 	return nil
@@ -264,6 +265,7 @@ func ParseDuration(value string) (time.Duration, error) {
 	case "m":
 		return time.Millisecond * time.Duration(v*1e3*60), nil
 	}
+	// nolint:forbidigo // code is unreachable due to regex validation
 	panic("unreachable")
 }
 

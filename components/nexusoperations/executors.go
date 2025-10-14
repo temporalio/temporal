@@ -361,6 +361,7 @@ func (e taskExecutor) loadOperationArgs(
 	return
 }
 
+// nolint:revive // (cognitive complexity) This function is long but the complexity is justified.
 func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload], callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		operation, err := hsm.MachineData[Operation](node)

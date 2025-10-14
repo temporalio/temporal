@@ -23,18 +23,11 @@ func applyResultToHTTPResponse(r nexus.HandlerStartOperationResult[any], writer 
 	case *nexus.HandlerStartOperationResultSync[any]:
 		handler.writeResult(writer, r.Value)
 	case *nexus.HandlerStartOperationResultAsync:
-		// Ensure both ID and Token are set for compatibility with both old and new clients.
-		if r.OperationToken == "" && r.OperationID != "" {
-			r.OperationToken = r.OperationID
-		} else if r.OperationToken != "" && r.OperationID == "" {
-			r.OperationID = r.OperationToken
-		}
 		info := nexus.OperationInfo{
-			ID:    r.OperationID,
 			Token: r.OperationToken,
 			State: nexus.OperationStateRunning,
 		}
-		bytes, err := json.Marshal(info)
+		b, err := json.Marshal(info)
 		if err != nil {
 			handler.logger.Error("failed to serialize operation info", "error", err)
 			writer.WriteHeader(http.StatusInternalServerError)
@@ -43,7 +36,7 @@ func applyResultToHTTPResponse(r nexus.HandlerStartOperationResult[any], writer 
 
 		writer.Header().Set("Content-Type", contentTypeJSON)
 		writer.WriteHeader(http.StatusCreated)
-		if _, err := writer.Write(bytes); err != nil {
+		if _, err := writer.Write(b); err != nil {
 			handler.logger.Error("failed to write response body", "error", err)
 		}
 	}
@@ -64,6 +57,7 @@ func (h *httpHandler) writeResult(writer http.ResponseWriter, result any) {
 	if r, ok := result.(*nexus.Reader); ok {
 		// Close the request body in case we error before sending the HTTP request (which may double close but
 		// that's fine since we ignore the error).
+		// nolint:errcheck // ignore error on close
 		defer r.Close()
 		reader = r
 	} else {
@@ -107,13 +101,12 @@ func (h *baseHTTPHandler) writeFailure(writer http.ResponseWriter, err error) {
 		failure = h.failureConverter.ErrorToFailure(opError.Cause)
 		statusCode = statusOperationFailed
 
-		if operationState == nexus.OperationStateFailed || operationState == nexus.OperationStateCanceled {
-			writer.Header().Set(headerOperationState, string(operationState))
-		} else {
+		if operationState != nexus.OperationStateFailed && operationState != nexus.OperationStateCanceled {
 			h.logger.Error("unexpected operation state", "state", operationState)
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		writer.Header().Set(headerOperationState, string(operationState))
 	} else if errors.As(err, &handlerError) {
 		failure = h.failureConverter.ErrorToFailure(handlerError.Cause)
 		switch handlerError.Type {
@@ -149,7 +142,7 @@ func (h *baseHTTPHandler) writeFailure(writer http.ResponseWriter, err error) {
 		h.logger.Error("handler failed", "error", err)
 	}
 
-	bytes, err := json.Marshal(failure)
+	b, err := json.Marshal(failure)
 	if err != nil {
 		h.logger.Error("failed to marshal failure", "error", err)
 		writer.WriteHeader(http.StatusInternalServerError)
@@ -165,12 +158,14 @@ func (h *baseHTTPHandler) writeFailure(writer http.ResponseWriter, err error) {
 			writer.Header().Set(headerRetryable, "false")
 		case nexus.HandlerErrorRetryBehaviorRetryable:
 			writer.Header().Set(headerRetryable, "true")
+		default:
+			// don't set the header
 		}
 	}
 
 	writer.WriteHeader(statusCode)
 
-	if _, err := writer.Write(bytes); err != nil {
+	if _, err := writer.Write(b); err != nil {
 		h.logger.Error("failed to write response body", "error", err)
 	}
 }
@@ -296,6 +291,10 @@ type HandlerOptions struct {
 }
 
 func (h *httpHandler) handleRequest(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != "POST" {
+		h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid request method: expected POST, got %q", request.Method))
+		return
+	}
 	parts := strings.Split(request.URL.EscapedPath(), "/")
 	// First part is empty (due to leading /)
 	if len(parts) < 3 {
@@ -314,58 +313,29 @@ func (h *httpHandler) handleRequest(writer http.ResponseWriter, request *http.Re
 	}
 
 	// First handle StartOperation at /{service}/{operation}
-	if len(parts) == 3 && request.Method == "POST" {
+	if len(parts) == 3 {
 		h.startOperation(service, operation, writer, request)
+		return
+	}
+
+	if len(parts) != 4 || parts[3] != "cancel" {
+		h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "not found"))
 		return
 	}
 
 	token := request.Header.Get(nexus.HeaderOperationToken)
 	if token == "" {
 		token = request.URL.Query().Get("token")
+		if token == "" {
+			h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "missing operation token"))
+			return
+		}
 	} else {
 		// Sanitize this header as it is explicitly passed in as an argument.
 		request.Header.Del(nexus.HeaderOperationToken)
 	}
 
-	if token != "" {
-		switch len(parts) {
-		case 4:
-			switch parts[3] {
-			case "cancel": // /{service}/{operation}/cancel
-				if request.Method != "POST" {
-					h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid request method: expected POST, got %q", request.Method))
-					return
-				}
-				h.cancelOperation(service, operation, token, writer, request)
-			default:
-				h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "not found"))
-			}
-		default:
-			h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "not found"))
-		}
-	} else {
-		token, err = url.PathUnescape(parts[3])
-		if err != nil {
-			h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to parse URL path"))
-			return
-		}
-
-		switch len(parts) {
-		case 5:
-			switch parts[4] {
-			case "cancel": // /{service}/{operation}/{operation_id}/cancel
-				if request.Method != "POST" {
-					h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid request method: expected POST, got %q", request.Method))
-					return
-				}
-				h.cancelOperation(service, operation, token, writer, request)
-			default:
-				h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "not found"))
-			}
-		default:
-			h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "not found"))
-		}
-	}
+	h.cancelOperation(service, operation, token, writer, request)
 }
 
 // NewHTTPHandler constructs an [http.Handler] from given options for handling Nexus service requests.

@@ -30,15 +30,11 @@ func NewCompletionHTTPRequest(ctx context.Context, url string, completion Operat
 
 // OperationCompletion is input for [NewCompletionHTTPRequest].
 // It has two implementations: [OperationCompletionSuccessful] and [OperationCompletionUnsuccessful].
-//
-// NOTE: Experimental
 type OperationCompletion interface {
 	applyToHTTPRequest(*http.Request) error
 }
 
 // OperationCompletionSuccessful is input for [NewCompletionHTTPRequest], used to deliver successful operation results.
-//
-// NOTE: Experimental
 type OperationCompletionSuccessful struct {
 	// Header to send in the completion request.
 	// Note that this is a Nexus header, not an HTTP header.
@@ -48,10 +44,6 @@ type OperationCompletionSuccessful struct {
 	// [NewOperationCompletionSuccessful].
 	// Automatically closed when the completion is delivered.
 	Reader *nexus.Reader
-	// OperationID is the unique ID for this operation. Used when a completion callback is received before a started response.
-	//
-	// Deprecated: Use OperatonToken instead.
-	OperationID string
 	// OperationToken is the unique token for this operation. Used when a completion callback is received before a
 	// started response.
 	OperationToken string
@@ -64,16 +56,10 @@ type OperationCompletionSuccessful struct {
 }
 
 // OperationCompletionSuccessfulOptions are options for [NewOperationCompletionSuccessful].
-//
-// NOTE: Experimental
 type OperationCompletionSuccessfulOptions struct {
 	// Optional serializer for the result. Defaults to the SDK's default Serializer, which handles JSONables, byte
 	// slices and nils.
 	Serializer nexus.Serializer
-	// OperationID is the unique ID for this operation. Used when a completion callback is received before a started response.
-	//
-	// Deprecated: Use OperatonToken instead.
-	OperationID string
 	// OperationToken is the unique token for this operation. Used when a completion callback is received before a
 	// started response.
 	OperationToken string
@@ -86,8 +72,6 @@ type OperationCompletionSuccessfulOptions struct {
 }
 
 // NewOperationCompletionSuccessful constructs an [OperationCompletionSuccessful] from a given result.
-//
-// NOTE: Experimental
 func NewOperationCompletionSuccessful(result any, options OperationCompletionSuccessfulOptions) (*OperationCompletionSuccessful, error) {
 	reader, ok := result.(*nexus.Reader)
 	if !ok {
@@ -118,7 +102,6 @@ func NewOperationCompletionSuccessful(result any, options OperationCompletionSuc
 	return &OperationCompletionSuccessful{
 		Header:         make(nexus.Header),
 		Reader:         reader,
-		OperationID:    options.OperationID,
 		OperationToken: options.OperationToken,
 		StartTime:      options.StartTime,
 		CloseTime:      options.CloseTime,
@@ -138,14 +121,6 @@ func (c *OperationCompletionSuccessful) applyToHTTPRequest(request *http.Request
 	}
 	request.Header.Set(headerOperationState, string(nexus.OperationStateSucceeded))
 
-	if c.OperationID == "" && c.OperationToken != "" {
-		c.OperationID = c.OperationToken
-	} else if c.OperationToken == "" && c.OperationID != "" {
-		c.OperationToken = c.OperationID
-	}
-	if c.Header.Get(nexus.HeaderOperationID) == "" && c.OperationID != "" {
-		request.Header.Set(nexus.HeaderOperationID, c.OperationID)
-	}
 	if c.Header.Get(nexus.HeaderOperationToken) == "" && c.OperationToken != "" {
 		request.Header.Set(nexus.HeaderOperationToken, c.OperationToken)
 	}
@@ -167,18 +142,12 @@ func (c *OperationCompletionSuccessful) applyToHTTPRequest(request *http.Request
 
 // OperationCompletionUnsuccessful is input for [NewCompletionHTTPRequest], used to deliver unsuccessful operation
 // results.
-//
-// NOTE: Experimental
 type OperationCompletionUnsuccessful struct {
 	// Header to send in the completion request.
 	// Note that this is a Nexus header, not an HTTP header.
 	Header nexus.Header
 	// State of the operation, should be failed or canceled.
 	State nexus.OperationState
-	// OperationID is the unique ID for this operation. Used when a completion callback is received before a started response.
-	//
-	// Deprecated: Use OperatonToken instead.
-	OperationID string
 	// OperationToken is the unique token for this operation. Used when a completion callback is received before a
 	// started response.
 	OperationToken string
@@ -193,8 +162,6 @@ type OperationCompletionUnsuccessful struct {
 }
 
 // OperationCompletionUnsuccessfulOptions are options for [NewOperationCompletionUnsuccessful].
-//
-// NOTE: Experimental
 type OperationCompletionUnsuccessfulOptions struct {
 	// A [FailureConverter] to convert a [Failure] instance to and from an [error]. Defaults to
 	// [DefaultFailureConverter].
@@ -215,8 +182,6 @@ type OperationCompletionUnsuccessfulOptions struct {
 }
 
 // NewOperationCompletionUnsuccessful constructs an [OperationCompletionUnsuccessful] from a given error.
-//
-// NOTE: Experimental
 func NewOperationCompletionUnsuccessful(opErr *nexus.OperationError, options OperationCompletionUnsuccessfulOptions) (*OperationCompletionUnsuccessful, error) {
 	if options.FailureConverter == nil {
 		options.FailureConverter = nexus.DefaultFailureConverter()
@@ -227,7 +192,6 @@ func NewOperationCompletionUnsuccessful(opErr *nexus.OperationError, options Ope
 		Header:         make(nexus.Header),
 		State:          opErr.State,
 		Failure:        failure,
-		OperationID:    options.OperationID,
 		OperationToken: options.OperationToken,
 		StartTime:      options.StartTime,
 		CloseTime:      options.CloseTime,
@@ -245,15 +209,7 @@ func (c *OperationCompletionUnsuccessful) applyToHTTPRequest(request *http.Reque
 	request.Header.Set(headerOperationState, string(c.State))
 	request.Header.Set("Content-Type", contentTypeJSON)
 
-	if c.OperationID == "" && c.OperationToken != "" {
-		c.OperationID = c.OperationToken
-	}
-	if c.OperationToken == "" && c.OperationID != "" {
-		c.OperationToken = c.OperationID
-	}
-	if c.Header.Get(nexus.HeaderOperationID) == "" && c.OperationID != "" {
-		request.Header.Set(nexus.HeaderOperationID, c.OperationID)
-	} else if c.Header.Get(nexus.HeaderOperationToken) == "" && c.OperationToken != "" {
+	if c.Header.Get(nexus.HeaderOperationToken) == "" && c.OperationToken != "" {
 		request.Header.Set(nexus.HeaderOperationToken, c.OperationToken)
 	}
 	if c.Header.Get(headerOperationStartTime) == "" && !c.StartTime.IsZero() {
@@ -278,17 +234,11 @@ func (c *OperationCompletionUnsuccessful) applyToHTTPRequest(request *http.Reque
 }
 
 // CompletionRequest is input for CompletionHandler.CompleteOperation.
-//
-// NOTE: Experimental
 type CompletionRequest struct {
 	// The original HTTP request.
 	HTTPRequest *http.Request
 	// State of the operation.
 	State nexus.OperationState
-	// OperationID is the unique ID for this operation. Used when a completion callback is received before a started response.
-	//
-	// Deprecated: Use OperatonToken instead.
-	OperationID string
 	// OperationToken is the unique token for this operation. Used when a completion callback is received before a
 	// started response.
 	OperationToken string
@@ -306,15 +256,11 @@ type CompletionRequest struct {
 
 // A CompletionHandler can receive operation completion requests as delivered via the callback URL provided in
 // start-operation requests.
-//
-// NOTE: Experimental
 type CompletionHandler interface {
 	CompleteOperation(context.Context, *CompletionRequest) error
 }
 
 // CompletionHandlerOptions are options for [NewCompletionHTTPHandler].
-//
-// NOTE: Experimental
 type CompletionHandlerOptions struct {
 	// Handler for completion requests.
 	Handler CompletionHandler
@@ -338,14 +284,8 @@ func (h *completionHTTPHandler) ServeHTTP(writer http.ResponseWriter, request *h
 	ctx := request.Context()
 	completion := CompletionRequest{
 		State:          nexus.OperationState(request.Header.Get(headerOperationState)),
-		OperationID:    request.Header.Get(nexus.HeaderOperationID),
 		OperationToken: request.Header.Get(nexus.HeaderOperationToken),
 		HTTPRequest:    request,
-	}
-	if completion.OperationID == "" && completion.OperationToken != "" {
-		completion.OperationID = completion.OperationToken
-	} else if completion.OperationToken == "" && completion.OperationID != "" {
-		completion.OperationToken = completion.OperationID
 	}
 	if startTimeHeader := request.Header.Get(headerOperationStartTime); startTimeHeader != "" {
 		var parseTimeErr error
@@ -401,8 +341,6 @@ func (h *completionHTTPHandler) ServeHTTP(writer http.ResponseWriter, request *h
 }
 
 // NewCompletionHTTPHandler constructs an [http.Handler] from given options for handling operation completion requests.
-//
-// NOTE: Experimental
 func NewCompletionHTTPHandler(options CompletionHandlerOptions) http.Handler {
 	if options.Logger == nil {
 		options.Logger = slog.Default()

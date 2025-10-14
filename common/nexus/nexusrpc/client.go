@@ -42,7 +42,7 @@ var errEmptyOperationName = errors.New("empty operation name")
 
 var errEmptyOperationToken = errors.New("empty operation token")
 
-// Error that indicates a client encountered something unexpected in the server's response.
+// UnexpectedResponseError indicates a client encountered something unexpected in the server's response.
 type UnexpectedResponseError struct {
 	// Error message.
 	Message string
@@ -80,8 +80,8 @@ func newUnexpectedResponseError(message string, response *http.Response, body []
 //
 // Use an [OperationHandle] to cancel, get the result of, and get information about asynchronous operations.
 //
-// OperationHandles can be obtained either by starting new operations or by calling [HTTPClient.NewHandle] for existing
-// operations.
+// OperationHandles can be obtained either by starting new operations or by calling [HTTPClient.NewOperationHandle] for
+// existing operations.
 //
 // [Nexus HTTP API]: https://github.com/nexus-rpc/api
 type HTTPClient struct {
@@ -154,6 +154,8 @@ type ClientStartOperationResponse[T any] struct {
 //     [OperationError].
 //
 //  4. Any other error.
+//
+// nolint:revive // (cyclomatic complexity) Containing the entire implementation inline is clearer here.
 func (c *HTTPClient) StartOperation(
 	ctx context.Context,
 	operation string,
@@ -165,6 +167,7 @@ func (c *HTTPClient) StartOperation(
 	if r, ok := input.(*nexus.Reader); ok {
 		// Close the input reader in case we error before sending the HTTP request (which may double close but
 		// that's fine since we ignore the error).
+		// nolint:errcheck // double close is fine
 		defer r.Close()
 		reader = r
 	} else {
@@ -269,9 +272,6 @@ func (c *HTTPClient) StartOperation(
 		if info.State != nexus.OperationStateRunning {
 			return nil, newUnexpectedResponseError(fmt.Sprintf("invalid operation state in response info: %q", info.State), response, body)
 		}
-		if info.Token == "" && info.ID != "" {
-			info.Token = info.ID
-		}
 		handle, err := c.NewOperationHandle(operation, info.Token)
 		if err != nil {
 			return nil, newUnexpectedResponseError("empty operation token in response", response, body)
@@ -301,7 +301,7 @@ func (c *HTTPClient) StartOperation(
 	}
 }
 
-// NewHandle gets a handle to an asynchronous operation by name and token.
+// NewOperationHandle gets a handle to an asynchronous operation by name and token.
 // Does not incur a trip to the server.
 // Fails if provided an empty operation or token.
 func (c *HTTPClient) NewOperationHandle(operation string, token string) (*OperationHandle[*nexus.LazyValue], error) {
@@ -318,7 +318,6 @@ func (c *HTTPClient) NewOperationHandle(operation string, token string) (*Operat
 	return &OperationHandle[*nexus.LazyValue]{
 		client:    c,
 		Operation: operation,
-		ID:        token, // Duplicate token as ID for the deprecation period.
 		Token:     token,
 	}, nil
 }
@@ -329,7 +328,9 @@ func (c *HTTPClient) NewOperationHandle(operation string, token string) (*Operat
 func readAndReplaceBody(response *http.Response) ([]byte, error) {
 	responseBody := response.Body
 	body, err := io.ReadAll(responseBody)
-	responseBody.Close()
+	if err := responseBody.Close(); err != nil {
+		return nil, err
+	}
 	response.Body = io.NopCloser(bytes.NewReader(body))
 	return body, err
 }
@@ -455,9 +456,7 @@ func retryBehaviorFromHeader(header http.Header) nexus.HandlerErrorRetryBehavior
 func getUnsuccessfulStateFromHeader(response *http.Response, body []byte) (nexus.OperationState, error) {
 	state := nexus.OperationState(response.Header.Get(headerOperationState))
 	switch state {
-	case nexus.OperationStateCanceled:
-		return state, nil
-	case nexus.OperationStateFailed:
+	case nexus.OperationStateCanceled, nexus.OperationStateFailed:
 		return state, nil
 	default:
 		return state, newUnexpectedResponseError(fmt.Sprintf("invalid operation state header: %q", state), response, body)
@@ -485,7 +484,6 @@ func StartOperation[I, O any](ctx context.Context, client *HTTPClient, operation
 	handle := OperationHandle[O]{
 		client:    client,
 		Operation: operation.Name(),
-		ID:        result.Pending.ID,
 		Token:     result.Pending.Token,
 	}
 	return &ClientStartOperationResponse[O]{

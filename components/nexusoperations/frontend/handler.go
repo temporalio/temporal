@@ -86,6 +86,7 @@ type completionHandler struct {
 }
 
 // CompleteOperation implements nexus.CompletionHandler.
+// nolint:revive // (cyclomatic complexity) This function is long but the complexity is justified.
 func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest) (retErr error) {
 	startTime := time.Now()
 	if !h.Config.Enabled() {

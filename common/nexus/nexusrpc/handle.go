@@ -12,10 +12,6 @@ import (
 type OperationHandle[T any] struct {
 	// Name of the Operation this handle represents.
 	Operation string
-	// Handler generated ID for this handle's operation.
-	//
-	// Deprecated: Use Token instead.
-	ID string
 	// Handler generated token for this handle's operation.
 	Token string
 
