@@ -5,7 +5,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	priorities "go.temporal.io/server/common/priorities"
+	"go.temporal.io/server/common/priorities"
 )
 
 func validateExecution(w *commonpb.WorkflowExecution) error {
