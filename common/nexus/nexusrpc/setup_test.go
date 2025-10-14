@@ -2,9 +2,11 @@ package nexusrpc_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -76,4 +78,53 @@ func setupForCompletion(t *testing.T, handler nexusrpc.CompletionHandler, serial
 		// nolint // ignore error on close in test
 		listener.Close()
 	}
+}
+
+// There's zero chance of concurrent updates in the test where this is used. Don't bother locking.
+type customSerializer struct {
+	encoded int
+	decoded int
+}
+
+func (c *customSerializer) Serialize(v any) (*nexus.Content, error) {
+	vint := v.(int)
+	c.encoded++
+	return &nexus.Content{
+		Header: map[string]string{
+			"custom": strconv.Itoa(vint),
+		},
+	}, nil
+}
+
+func (c *customSerializer) Deserialize(s *nexus.Content, v any) error {
+	vintPtr := v.(*int)
+	decoded, err := strconv.Atoi(s.Header["custom"])
+	if err != nil {
+		return err
+	}
+	*vintPtr = decoded
+	c.decoded++
+	return nil
+}
+
+type customFailureConverter struct{}
+
+var errCustom = errors.New("custom")
+
+// ErrorToFailure implements FailureConverter.
+func (c customFailureConverter) ErrorToFailure(err error) nexus.Failure {
+	return nexus.Failure{
+		Message: err.Error(),
+		Metadata: map[string]string{
+			"type": "custom",
+		},
+	}
+}
+
+// FailureToError implements FailureConverter.
+func (c customFailureConverter) FailureToError(f nexus.Failure) error {
+	if f.Metadata["type"] != "custom" {
+		return errors.New(f.Message)
+	}
+	return fmt.Errorf("%w: %s", errCustom, f.Message)
 }

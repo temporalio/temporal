@@ -374,3 +374,45 @@ func TestStart_NilContentHeaderDoesNotPanic(t *testing.T) {
 	err = response.Consume(&responseBody)
 	require.NoError(t, err)
 }
+
+var numberValidatorOperation = nexus.NewSyncOperation("number-validator", func(ctx context.Context, input int, _ nexus.StartOperationOptions) (int, error) {
+	if input != 3 {
+		return input, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid number: %d", input)
+	}
+	return input, nil
+})
+
+var service = nexus.NewService(testService)
+var registry = nexus.NewServiceRegistry()
+
+func init() {
+	service.MustRegister(numberValidatorOperation)
+	registry.MustRegister(service)
+}
+
+func TestCustomSerializer(t *testing.T) {
+	handler, err := registry.NewHandler()
+	require.NoError(t, err)
+
+	c := &customSerializer{}
+	ctx, client, teardown := setupCustom(t, handler, c, nil)
+	defer teardown()
+
+	result, err := nexusrpc.StartOperation(ctx, client, numberValidatorOperation, 3, nexus.StartOperationOptions{})
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Successful)
+	require.Equal(t, 2, c.decoded)
+	require.Equal(t, 2, c.encoded)
+}
+
+func TestCustomFailureConverter(t *testing.T) {
+	handler, err := registry.NewHandler()
+	require.NoError(t, err)
+
+	c := customFailureConverter{}
+	ctx, client, teardown := setupCustom(t, handler, nil, c)
+	defer teardown()
+
+	_, err = nexusrpc.StartOperation(ctx, client, numberValidatorOperation, 0, nexus.StartOperationOptions{})
+	require.ErrorIs(t, err, errCustom)
+}

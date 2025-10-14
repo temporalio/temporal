@@ -20,8 +20,8 @@ import (
 
 func applyResultToHTTPResponse(r nexus.HandlerStartOperationResult[any], writer http.ResponseWriter, handler *httpHandler) {
 	switch r := r.(type) {
-	case *nexus.HandlerStartOperationResultSync[any]:
-		handler.writeResult(writer, r.Value)
+	case interface{ ValueAsAny() any }:
+		handler.writeResult(writer, r.ValueAsAny())
 	case *nexus.HandlerStartOperationResultAsync:
 		info := nexus.OperationInfo{
 			Token: r.OperationToken,
