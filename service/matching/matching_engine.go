@@ -3004,7 +3004,10 @@ func prepareTaskQueueUserData(
 	return data
 }
 
-func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+func (e *matchingEngineImpl) UpdateTaskQueueConfig(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueConfigRequest,
+) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
 	taskQueueFamily, err := tqid.NewTaskQueueFamily(request.NamespaceId, request.UpdateTaskqueueConfig.GetTaskQueue())
 	if err != nil {
 		return nil, err
@@ -3059,16 +3062,11 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request 
 			// Fairness Weight Overrides
 			if len(updateTaskQueueConfig.GetSetFairnessWeightOverrides()) > 0 ||
 				len(updateTaskQueueConfig.GetUnsetFairnessWeightOverrides()) > 0 {
-				maxFairnessKeyWeightOverrides := e.config.MaxFairnessKeyWeightOverrides(
-					request.NamespaceId,
-					request.UpdateTaskqueueConfig.GetTaskQueue(),
-					taskQueueType)
-
 				cfg.FairnessWeightOverrides, err = mergeFairnessWeightOverrides(
 					cfg.FairnessWeightOverrides,
 					updateTaskQueueConfig.GetSetFairnessWeightOverrides(),
 					updateTaskQueueConfig.GetUnsetFairnessWeightOverrides(),
-					maxFairnessKeyWeightOverrides,
+					tqm.GetConfig().MaxFairnessKeyWeightOverrides(),
 				)
 				if err != nil {
 					return nil, false, err
