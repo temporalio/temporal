@@ -116,20 +116,20 @@ const (
 //	base.yaml
 //	    env.yaml   -- environment is one of the input params ex-development
 //	      env_az.yaml -- zone is another input param
-func Load(env string, configDir string, zone string, config interface{}) error {
+func Load(env string, configDir string, zone string, config any) error {
 	return LoadWithEnvMap(env, configDir, zone, config, getEnvMap(), false)
 }
 
 // LoadFromEnv loads the configuration using only the embedded template and environment variables.
 // This ignores any config files on disk and relies entirely on environment variable substitution.
-func LoadFromEnv(config interface{}) error {
+func LoadFromEnv(config any) error {
 	return LoadWithEnvMap("", "", "", config, getEnvMap(), true)
 }
 
 // LoadWithEnvMap loads configuration with a specific environment variable map.
 // This is useful for testing with controlled environment variables.
 // If useEmbeddedOnly is true, it will skip config file loading and use only the embedded template.
-func LoadWithEnvMap(env string, configDir string, zone string, config interface{}, envMap map[string]string, useEmbeddedOnly bool) error {
+func LoadWithEnvMap(env string, configDir string, zone string, config any, envMap map[string]string, useEmbeddedOnly bool) error {
 	// If using embedded template only, skip file loading
 	if useEmbeddedOnly {
 		getLogger().Info("Loading configuration from environment variables only")
@@ -216,12 +216,26 @@ func processConfigFile(data []byte, filename string, envMap map[string]string) (
 	return renderTemplate(data, filename, envMap)
 }
 
-// renderTemplate renders a config file as a Go template with environment variables
+// templateContext mimics dockerize's Context struct to support .Env.VAR_NAME syntax.
+// In dockerize, .Env is a method that returns the environment map, allowing dot-based access.
+type templateContext struct {
+	envMap map[string]string
+}
+
+// Env returns the environment variable map, matching dockerize's Context.Env() method.
+// This allows templates to use .Env.VAR_NAME syntax for environment variable access.
+func (c *templateContext) Env() map[string]string {
+	return c.envMap
+}
+
+// renderTemplate renders a config file as a Go template with environment variables.
+// It matches dockerize's template processing, supporting .Env.VAR_NAME syntax.
 func renderTemplate(data []byte, filename string, envMap map[string]string) ([]byte, error) {
 	templateFuncs := sprig.FuncMap()
-	templateData := map[string]interface{}{
-		"Env": envMap,
-	}
+
+	// Create a context matching dockerize's structure
+	// The Env() method allows .Env.VAR_NAME to work as: call .Env() -> get map -> access VAR_NAME key
+	ctx := &templateContext{envMap: envMap}
 
 	tpl, err := template.New(filename).Funcs(templateFuncs).Parse(string(data))
 	if err != nil {
@@ -229,7 +243,7 @@ func renderTemplate(data []byte, filename string, envMap map[string]string) ([]b
 	}
 
 	var rendered bytes.Buffer
-	err = tpl.Execute(&rendered, templateData)
+	err = tpl.Execute(&rendered, ctx)
 	if err != nil {
 		return nil, err
 	}

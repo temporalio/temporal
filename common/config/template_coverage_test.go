@@ -21,7 +21,7 @@ func TestEmbeddedTemplateCoversAllConfigFields(t *testing.T) {
 	require.NoError(t, err)
 
 	// Parse rendered template into a generic map to see what fields are present
-	var templateData map[string]interface{}
+	var templateData map[string]any
 	err = yaml.Unmarshal(rendered, &templateData)
 	require.NoError(t, err)
 
@@ -57,7 +57,7 @@ func TestEmbeddedTemplateCoversAllConfigFields(t *testing.T) {
 
 	// Verify that required nested fields are also present
 	t.Run("Persistence fields", func(t *testing.T) {
-		persistenceData, ok := templateData["persistence"].(map[string]interface{})
+		persistenceData, ok := templateData["persistence"].(map[string]any)
 		require.True(t, ok, "persistence section must exist")
 
 		// Check required persistence fields
@@ -69,7 +69,7 @@ func TestEmbeddedTemplateCoversAllConfigFields(t *testing.T) {
 	})
 
 	t.Run("Services fields", func(t *testing.T) {
-		servicesData, ok := templateData["services"].(map[string]interface{})
+		servicesData, ok := templateData["services"].(map[string]any)
 		require.True(t, ok, "services section must exist")
 
 		// Check that at least the core services are defined
@@ -81,7 +81,7 @@ func TestEmbeddedTemplateCoversAllConfigFields(t *testing.T) {
 	})
 
 	t.Run("Log fields", func(t *testing.T) {
-		logData, ok := templateData["log"].(map[string]interface{})
+		logData, ok := templateData["log"].(map[string]any)
 		require.True(t, ok, "log section must exist")
 
 		// Verify basic log config is present
@@ -93,10 +93,12 @@ func TestEmbeddedTemplateCoversAllConfigFields(t *testing.T) {
 // TestEmbeddedTemplateHasDefaults verifies that the embedded template produces valid config
 // when required environment variables are set. This test documents which env vars are required.
 func TestEmbeddedTemplateHasDefaults(t *testing.T) {
-	t.Run("cassandra_requires_seeds", func(t *testing.T) {
-		// When using cassandra (the default DB), CASSANDRA_SEEDS must be set
-		emptyEnv := make(map[string]string)
-		rendered, err := processConfigFile(embeddedConfigTemplate, "config_template_embedded.yaml", emptyEnv)
+	t.Run("cassandra_with_required_env", func(t *testing.T) {
+		// When using cassandra (the default DB) with CASSANDRA_SEEDS set, config should be valid
+		cassandraEnv := map[string]string{
+			"CASSANDRA_SEEDS": "localhost",
+		}
+		rendered, err := processConfigFile(embeddedConfigTemplate, "config_template_embedded.yaml", cassandraEnv)
 		require.NoError(t, err)
 
 		var cfg Config
@@ -105,8 +107,10 @@ func TestEmbeddedTemplateHasDefaults(t *testing.T) {
 
 		validate := newValidator()
 		err = validate.Validate(&cfg)
-		require.Error(t, err, "Cassandra (default DB) requires CASSANDRA_SEEDS to be set")
-		require.Contains(t, err.Error(), "Cassandra.Hosts", "Error should mention missing Cassandra hosts")
+		require.NoError(t, err, "Cassandra config with required env vars should be valid")
+
+		// Verify cassandra hosts were set
+		require.NotEmpty(t, cfg.Persistence.DataStores["default"].Cassandra.Hosts, "cassandra hosts should be set from CASSANDRA_SEEDS")
 	})
 
 	t.Run("postgres_with_required_env", func(t *testing.T) {
@@ -157,12 +161,12 @@ func TestEmbeddedTemplateHasDefaults(t *testing.T) {
 }
 
 // TestEmbeddedTemplateMatchesDockerTemplate verifies that the embedded template
-// has the same structure and fields as the docker template (with only syntax differences).
+// matches the docker template exactly (using dockerize-compatible template syntax).
 func TestEmbeddedTemplateMatchesDockerTemplate(t *testing.T) {
-	// This test is informational - it documents that the embedded template should match docker template
+	// This test is informational - it documents that the embedded template matches docker template
 	t.Log("Embedded template should match docker/config_template.yaml structure")
-	t.Log("Only difference should be template syntax: .Env.VAR -> (index .Env \"VAR\")")
-	t.Log("And the # enable-template comment at the top")
+	t.Log("Both use dockerize-compatible syntax: .Env.VAR_NAME")
+	t.Log("Embedded template has # enable-template comment at the top for config loader detection")
 
 	// Render both templates with the same env
 	testEnv := map[string]string{
@@ -175,7 +179,7 @@ func TestEmbeddedTemplateMatchesDockerTemplate(t *testing.T) {
 	require.NoError(t, err)
 
 	// Parse both into generic maps
-	var embeddedData map[string]interface{}
+	var embeddedData map[string]any
 	err = yaml.Unmarshal(embeddedRendered, &embeddedData)
 	require.NoError(t, err)
 
