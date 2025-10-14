@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/testvars"
 )
 
 // alwaysTrue predicate for convenience
@@ -371,5 +372,95 @@ func BenchmarkRandomUpdate(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		p := pairs[r.Intn(len(pairs))]
 		m.upsertHeartbeats(p.ns, []*workerpb.WorkerHeartbeat{p.hb})
+	}
+}
+
+// TestPluginMetricsExported verifies that plugin metrics are correctly recorded
+// with the expected dimensions (namespace_id and plugin_name).
+func TestPluginMetricsExported(t *testing.T) {
+	tv := testvars.New(t)
+
+	// Generate test values using testvars for consistency and uniqueness
+	worker1Key := tv.WorkerIdentity() + "_1"
+	worker2Key := tv.WorkerIdentity() + "_2"
+	worker3Key := tv.WorkerIdentity() + "_3"
+
+	pluginA := "plugin-a"
+	pluginB := "plugin-b"
+	pluginC := "plugin-c"
+	pluginAVersion := "1.0.0"
+	pluginBVersion := "2.1.0"
+	pluginCVersion := "3.0.0"
+	pluginAVersion2 := "1.5.0" // Different version of plugin-a for worker2
+
+	// Use capture handler to verify metrics
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	m := newRegistryImpl(
+		2,              // numBuckets
+		time.Hour,      // TTL
+		0,              // MinEvictAge
+		10,             // maxItems
+		time.Hour,      // evictionInterval
+		captureHandler, // metricsHandler
+	)
+	defer m.Stop()
+
+	// Test data with 3 workers (tests uniqueness logic):
+	// Worker 1: 2 plugins (plugin-a, plugin-b)
+	// Worker 2: 2 plugins (plugin-a, plugin-c) - plugin-a is shared with worker1
+	// Worker 3: 0 plugins
+
+	worker1 := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: worker1Key,
+		Status:            enumspb.WORKER_STATUS_RUNNING,
+		Plugins: []*workerpb.PluginInfo{
+			{Name: pluginA, Version: pluginAVersion},
+			{Name: pluginB, Version: pluginBVersion},
+		},
+	}
+
+	worker2 := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: worker2Key,
+		Status:            enumspb.WORKER_STATUS_RUNNING,
+		Plugins: []*workerpb.PluginInfo{
+			{Name: pluginA, Version: pluginAVersion2}, // Same plugin name as worker1, different version
+			{Name: pluginC, Version: pluginCVersion},
+		},
+	}
+
+	worker3 := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: worker3Key,
+		Status:            enumspb.WORKER_STATUS_RUNNING,
+		// No plugins - empty array
+	}
+
+	testNamespace := tv.NamespaceID()
+	m.upsertHeartbeats(testNamespace, []*workerpb.WorkerHeartbeat{worker1, worker2, worker3})
+
+	// Verify plugin metrics - should have exactly 3 recordings despite plugin-a being in both workers
+	snapshot := capture.Snapshot()
+	pluginMetrics := snapshot[metrics.WorkerPluginNameMetric.Name()]
+	assert.Len(t, pluginMetrics, 3, "plugin-a from both workers should be deduplicated")
+
+	// Helper function to find metric by namespace and plugin name
+	findMetric := func(namespace, pluginName string) *metricstest.CapturedRecording {
+		for _, metric := range pluginMetrics {
+			if metric.Tags["namespace_id"] == namespace && metric.Tags[metrics.WorkerPluginNameTagName] == pluginName {
+				return metric
+			}
+		}
+		return nil
+	}
+
+	// Verify each expected plugin has a metric with correct dimensions and value
+	expectedPlugins := []string{pluginA, pluginB, pluginC}
+
+	for _, expectedPlugin := range expectedPlugins {
+		metric := findMetric(testNamespace.String(), expectedPlugin)
+		assert.NotNil(t, metric, "should have metric for namespace '%s' and plugin: %s", testNamespace.String(), expectedPlugin)
+		assert.Equal(t, float64(1), metric.Value, "plugin metric value should be 1 for %s", expectedPlugin)
 	}
 }
