@@ -70,7 +70,6 @@ func (q *DLQWriter) WriteTaskToDLQ(
 		SourceCluster: sourceCluster,
 		TargetCluster: targetCluster,
 	}
-
 	_, err := q.dlqWriter.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,
 	})
