@@ -9,6 +9,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/fx"
@@ -42,15 +43,16 @@ type (
 	// It partitions the keyspace into buckets and enforces TTL and capacity.
 	// Eviction runs in the background.
 	registryImpl struct {
-		buckets          []*bucket       // buckets for partitioning the keyspace
-		maxItems         int64           // maximum number of entries allowed across all buckets
-		ttl              time.Duration   // time after which entries are considered expired
-		minEvictAge      time.Duration   // minimum age of entries to consider for eviction
-		evictionInterval time.Duration   // interval for periodic eviction checks
-		total            atomic.Int64    // atomic counter of total entries
-		quit             chan struct{}   // channel to signal shutdown of the eviction loop
-		seed             maphash.Seed    // seed for the hasher, used to ensure consistent hashing
-		metricsHandler   metrics.Handler // metrics handler for recording registry metrics
+		buckets                   []*bucket       // buckets for partitioning the keyspace
+		maxItems                  int64           // maximum number of entries allowed across all buckets
+		ttl                       time.Duration   // time after which entries are considered expired
+		minEvictAge               time.Duration   // minimum age of entries to consider for eviction
+		evictionInterval          time.Duration   // interval for periodic eviction checks
+		total                     atomic.Int64    // atomic counter of total entries
+		quit                      chan struct{}   // channel to signal shutdown of the eviction loop
+		seed                      maphash.Seed    // seed for the hasher, used to ensure consistent hashing
+		metricsHandler            metrics.Handler // metrics handler for recording registry metrics
+		enableWorkerPluginMetrics func() bool     // dynamic config function to control plugin metrics export
 	}
 )
 
@@ -177,7 +179,7 @@ func (b *bucket) evictByCapacity(threshold time.Time) bool {
 }
 
 // NewRegistry creates a workers heartbeat registry with the given parameters.
-func NewRegistry(lc fx.Lifecycle, metricsHandler metrics.Handler) Registry {
+func NewRegistry(lc fx.Lifecycle, metricsHandler metrics.Handler, enableWorkerPluginMetrics dynamicconfig.BoolPropertyFn) Registry {
 	m := newRegistryImpl(
 		defaultBuckets,
 		defaultEntryTTL,
@@ -185,6 +187,7 @@ func NewRegistry(lc fx.Lifecycle, metricsHandler metrics.Handler) Registry {
 		defaultMaxEntries,
 		defaultEvictionInterval,
 		metricsHandler,
+		enableWorkerPluginMetrics,
 	)
 
 	lc.Append(fx.StartStopHook(m.Start, m.Stop))
@@ -198,16 +201,18 @@ func newRegistryImpl(numBuckets int,
 	maxItems int64,
 	evictionInterval time.Duration,
 	metricsHandler metrics.Handler,
+	enableWorkerPluginMetrics func() bool,
 ) *registryImpl {
 	m := &registryImpl{
-		buckets:          make([]*bucket, numBuckets),
-		maxItems:         maxItems,
-		ttl:              ttl,
-		minEvictAge:      minEvictAge,
-		evictionInterval: evictionInterval,
-		seed:             maphash.MakeSeed(),
-		quit:             make(chan struct{}),
-		metricsHandler:   metricsHandler,
+		buckets:                   make([]*bucket, numBuckets),
+		maxItems:                  maxItems,
+		ttl:                       ttl,
+		minEvictAge:               minEvictAge,
+		evictionInterval:          evictionInterval,
+		seed:                      maphash.MakeSeed(),
+		quit:                      make(chan struct{}),
+		metricsHandler:            metricsHandler,
+		enableWorkerPluginMetrics: enableWorkerPluginMetrics,
 	}
 
 	for i := range m.buckets {
@@ -257,6 +262,11 @@ func (m *registryImpl) recordEvictionMetric() {
 
 // recordPluginMetric sets a value of 1 for each unique plugin name present in the heartbeats.
 func (m *registryImpl) recordPluginMetric(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) {
+	// Check if plugin metrics are enabled via dynamic config
+	if !m.enableWorkerPluginMetrics() {
+		return
+	}
+
 	// Track which plugins we've already recorded
 	recordedPlugins := make(map[string]bool)
 
