@@ -1,6 +1,7 @@
 package chasm
 
 import (
+	"fmt"
 	"reflect"
 )
 
@@ -52,6 +53,42 @@ func WithShardingFn(
 	return func(rc *RegistrableComponent) {
 		if shardingFn != nil {
 			rc.shardingFn = shardingFn
+		}
+	}
+}
+
+func WithSearchAttributes(searchAttributes []*SearchAttribute) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		if len(searchAttributes) == 0 {
+			return
+		}
+
+		fieldToAlias := make(map[string]string)
+
+		for _, key := range searchAttributes {
+			field := key.GetField()
+
+			if key.GetValueType() != field.valueType {
+				panic(fmt.Sprintf(
+					"search attribute alias %q has type %s but field %s has type %s",
+					key.GetAlias(),
+					key.GetValueType(),
+					field.GetFieldName(),
+					field.valueType,
+				))
+			}
+
+			fieldName := field.GetFieldName()
+			if existingAlias, exists := fieldToAlias[fieldName]; exists {
+				panic(fmt.Sprintf(
+					"duplicate search attribute field %q: aliases %q and %q both map to the same field",
+					fieldName,
+					existingAlias,
+					key.GetAlias(),
+				))
+			}
+
+			fieldToAlias[fieldName] = key.GetAlias()
 		}
 	}
 }

@@ -622,9 +622,11 @@ func (l *testComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
-func (l *testComponent) SearchAttributes(_ chasm.Context) map[string]chasm.VisibilityValue {
-	return map[string]chasm.VisibilityValue{
-		testComponentPausedSAName: chasm.VisibilityValueBool(l.ActivityInfo.Paused),
+func (l *testComponent) SearchAttributes(_ chasm.Context) []*chasm.SearchAttribute {
+	testComponentSearchAttribute := chasm.NewSearchAttributeBool(testComponentPausedSAName, chasm.SearchAttributeFieldBool01)
+	testComponentSearchAttribute.SetValue(l.ActivityInfo.Paused)
+	return []*chasm.SearchAttribute{
+		&testComponentSearchAttribute.SearchAttribute,
 	}
 }
 

@@ -32,6 +32,62 @@ func (s *RegistryTestSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 }
 
+func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithSearchAttributes() {
+	ctrl := gomock.NewController(s.T())
+	lib := chasm.NewMockLibrary(ctrl)
+	lib.EXPECT().Name().Return("TestLibrary").AnyTimes()
+
+	s.T().Run("successful registration with valid search attributes", func(t *testing.T) {
+		boolKey := chasm.NewSearchAttributeBool("MyBoolAlias", chasm.SearchAttributeFieldBool01)
+		timeKey := chasm.NewSearchAttributeTime("MyTimeAlias", chasm.SearchAttributeFieldDatetime01)
+
+		component := chasm.NewRegistrableComponent[*chasm.MockComponent](
+			"Component1",
+			chasm.WithSearchAttributes([]*chasm.SearchAttribute{
+				&boolKey.SearchAttribute,
+				&timeKey.SearchAttribute,
+			}),
+		)
+
+		lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{component})
+		lib.EXPECT().Tasks().Return(nil)
+
+		r := chasm.NewRegistry(s.logger)
+		err := r.Register(lib)
+		require.NoError(t, err)
+	})
+
+	s.T().Run("panic on type mismatch", func(t *testing.T) {
+		// Trying to map a bool key to an int field - should panic
+		boolKey := chasm.NewSearchAttributeBool("MyBoolAlias", chasm.SearchAttributeFieldInt01)
+
+		require.Panics(t, func() {
+			chasm.NewRegistrableComponent[*chasm.MockComponent](
+				"Component1",
+				chasm.WithSearchAttributes([]*chasm.SearchAttribute{
+					&boolKey.SearchAttribute,
+				}),
+			)
+		})
+	})
+
+	s.T().Run("panic on duplicate field", func(t *testing.T) {
+		// Both keys trying to use the same field - should panic
+		boolKey1 := chasm.NewSearchAttributeBool("MyBoolAlias1", chasm.SearchAttributeFieldBool01)
+		boolKey2 := chasm.NewSearchAttributeBool("MyBoolAlias2", chasm.SearchAttributeFieldBool01)
+
+		require.Panics(t, func() {
+			chasm.NewRegistrableComponent[*chasm.MockComponent](
+				"Component1",
+				chasm.WithSearchAttributes([]*chasm.SearchAttribute{
+					&boolKey1.SearchAttribute,
+					&boolKey2.SearchAttribute,
+				}),
+			)
+		})
+	})
+}
+
 func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Success() {
 	r := chasm.NewRegistry(s.logger)
 	ctrl := gomock.NewController(s.T())
