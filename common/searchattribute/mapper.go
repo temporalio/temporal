@@ -3,6 +3,8 @@
 package searchattribute
 
 import (
+	"errors"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
@@ -138,10 +140,11 @@ func AliasFields(
 
 		aliasName, err := mapper.GetAlias(saName, namespaceName)
 		if err != nil {
-			if _, isInvalidArgument := err.(*serviceerror.InvalidArgument); isInvalidArgument {
-				// Silently ignore serviceerror.InvalidArgument because it indicates unmapped field (alias was deleted, for example).
-				// IMPORTANT: AliasFields should never return serviceerror.InvalidArgument because it is used by Poll API and the error
-				// goes through up to SDK, which shutdowns worker when it receives serviceerror.InvalidArgument as poll response.
+			// Silently ignore serviceerror.InvalidArgument because it indicates unmapped field (alias was deleted, for example).
+			// IMPORTANT: AliasFields should never return serviceerror.InvalidArgument because it is used by Poll API and the error
+			// goes through up to SDK, which shutdowns worker when it receives serviceerror.InvalidArgument as poll response.
+			var invalidArgumentErr *serviceerror.InvalidArgument
+			if errors.As(err, &invalidArgumentErr) {
 				continue
 			}
 			return nil, err
