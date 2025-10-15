@@ -22,7 +22,7 @@ type Callback struct {
 func NewCallback(
 	requestID string,
 	registrationTime *timestamppb.Timestamp,
-	state callbackspb.CallbackState,
+	state *callbackspb.CallbackState,
 	cb *callbackspb.Callback,
 ) *Callback {
 	return &Callback{
