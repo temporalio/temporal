@@ -23,15 +23,15 @@ func ResolveSearchAttributeAlias(
 ) (string, enumspb.IndexedValueType, error) {
 	fmt.Printf("RESOLVEDBG: Starting resolution for field name='%s', namespace='%s'\n", name, ns.String())
 
-	if fieldName, ok := strings.CutPrefix(name, searchattribute.ReservedPrefix); ok {
-		fmt.Printf("RESOLVEDBG: Found Temporal prefix, stripped field name='%s'\n", fieldName)
-		saType, err := saTypeMap.GetType(fieldName)
-		if err == nil {
-			fmt.Printf("RESOLVEDBG: Successfully resolved with Temporal prefix: field='%s', type=%v\n", fieldName, saType)
-			return fieldName, saType, nil
-		}
-		fmt.Printf("RESOLVEDBG: Failed to get type for Temporal prefixed field='%s', error=%v\n", fieldName, err)
-	}
+	// if fieldName, ok := strings.CutPrefix(name, searchattribute.ReservedPrefix); ok {
+	// 	fmt.Printf("RESOLVEDBG: Found Temporal prefix, stripped field name='%s'\n", fieldName)
+	// 	saType, err := saTypeMap.GetType(fieldName)
+	// 	if err == nil {
+	// 		fmt.Printf("RESOLVEDBG: Successfully resolved with Temporal prefix: field='%s', type=%v\n", fieldName, saType)
+	// 		return fieldName, saType, nil
+	// 	}
+	// 	fmt.Printf("RESOLVEDBG: Failed to get type for Temporal prefixed field='%s', error=%v\n", fieldName, err)
+	// }
 
 	if searchattribute.IsMappable(name) {
 		fmt.Printf("RESOLVEDBG: Field '%s' is mappable, trying visibility mapper\n", name)
@@ -119,6 +119,14 @@ func tryDirectAndPrefixedLookup(name string, saTypeMap searchattribute.NameTypeM
 		return prefixedName, saType, true
 	}
 	fmt.Printf("RESOLVEDBG: tryDirectAndPrefixedLookup - prefixed lookup failed for name='%s'\n", prefixedName)
+
+	strippedName := strings.TrimPrefix(name, searchattribute.ReservedPrefix)
+	fmt.Printf("RESOLVEDBG: tryDirectAndPrefixedLookup - trying stripped name='%s'\n", strippedName)
+	if saType, err := saTypeMap.GetType(strippedName); err == nil {
+		fmt.Printf("RESOLVEDBG: tryDirectAndPrefixedLookup - stripped lookup succeeded: name='%s', type=%v\n", strippedName, saType)
+		return strippedName, saType, true
+	}
+	fmt.Printf("RESOLVEDBG: tryDirectAndPrefixedLookup - stripped lookup failed for name='%s'\n", strippedName)
 
 	fmt.Printf("RESOLVEDBG: tryDirectAndPrefixedLookup - both direct and prefixed lookups failed for name='%s'\n", name)
 	return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, false
