@@ -65,10 +65,10 @@ func TestResolveSearchAttributeAlias_CustomScheduleID(t *testing.T) {
 
 	mapper := customMapper{
 		fieldToAlias: map[string]string{
-			searchattribute.ScheduleID: "schedule-alias",
+			searchattribute.ScheduleID: searchattribute.ScheduleID,
 		},
 		aliasToField: map[string]string{
-			"schedule-alias": searchattribute.ScheduleID,
+			searchattribute.ScheduleID: searchattribute.ScheduleID,
 		},
 	}
 
