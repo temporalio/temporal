@@ -130,7 +130,6 @@ SYSTEM_WORKFLOWS_ROOT := ./service/worker
 
 # Pinning modernc.org/sqlite to this version until https://gitlab.com/cznic/sqlite/-/issues/196 is resolved.
 PINNED_DEPENDENCIES := \
-	modernc.org/sqlite@v1.34.1 \
 	modernc.org/libc@v1.55.3 \
 
 # Code coverage & test report output files.
