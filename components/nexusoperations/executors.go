@@ -360,6 +360,7 @@ func (e taskExecutor) loadOperationArgs(
 	return
 }
 
+//nolint:revive // cognitive-complexity
 func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexus.ClientStartOperationResult[*commonpb.Payload], callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		operation, err := hsm.MachineData[Operation](node)

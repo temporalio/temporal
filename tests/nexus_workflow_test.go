@@ -1167,7 +1167,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 	s.Greater(startedEventIdx, 0)
 
 	// Send a valid - failed completion request.
-	completion, err := nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(errors.New("test operation failed")), nexus.OperationCompletionUnsuccessfulOptions{})
+	completion, err := nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(errors.New("test operation failed")), nexus.OperationCompletionUnsuccessfulOptions{}) //nolint:staticcheck // deprecated API used in test
 	s.NoError(err)
 	res, snap, _ := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackURL, completion, callbackToken)
 	s.Equal(http.StatusOK, res.StatusCode)

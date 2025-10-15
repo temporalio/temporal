@@ -85,6 +85,7 @@ type completionHandler struct {
 }
 
 // CompleteOperation implements nexus.CompletionHandler.
+//nolint:revive // cognitive-complexity
 func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.CompletionRequest) (retErr error) {
 	startTime := time.Now()
 	if !h.Config.Enabled() {
