@@ -1517,6 +1517,7 @@ type ReplicationTaskInfo struct {
 	LastVersionHistoryItem *v13.VersionHistoryItem `protobuf:"bytes,21,opt,name=last_version_history_item,json=lastVersionHistoryItem,proto3" json:"last_version_history_item,omitempty"`
 	IsFirstTask            bool                    `protobuf:"varint,22,opt,name=is_first_task,json=isFirstTask,proto3" json:"is_first_task,omitempty"`
 	TargetClusters         []string                `protobuf:"bytes,23,rep,name=target_clusters,json=targetClusters,proto3" json:"target_clusters,omitempty"`
+	IsForceReplication     bool                    `protobuf:"varint,24,opt,name=is_force_replication,json=isForceReplication,proto3" json:"is_force_replication,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -1682,6 +1683,13 @@ func (x *ReplicationTaskInfo) GetTargetClusters() []string {
 		return x.TargetClusters
 	}
 	return nil
+}
+
+func (x *ReplicationTaskInfo) GetIsForceReplication() bool {
+	if x != nil {
+		return x.IsForceReplication
+	}
+	return false
 }
 
 // visibility_task_data column
@@ -4688,7 +4696,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x05stamp\x18\x11 \x01(\x05R\x05stamp\x1a\\\n" +
 	"\x19CloseExecutionTaskDetails\x12?\n" +
 	"\x1ccan_skip_visibility_archival\x18\x01 \x01(\bR\x19canSkipVisibilityArchivalB\x0e\n" +
-	"\ftask_detailsJ\x04\b\x0e\x10\x0f\"\x83\b\n" +
+	"\ftask_detailsJ\x04\b\x0e\x10\x0f\"\xb5\b\n" +
 	"\x13ReplicationTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -4710,7 +4718,8 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x10task_equivalents\x18\x14 \x03(\v27.temporal.server.api.persistence.v1.ReplicationTaskInfoR\x0ftaskEquivalents\x12m\n" +
 	"\x19last_version_history_item\x18\x15 \x01(\v22.temporal.server.api.history.v1.VersionHistoryItemR\x16lastVersionHistoryItem\x12\"\n" +
 	"\ris_first_task\x18\x16 \x01(\bR\visFirstTask\x12'\n" +
-	"\x0ftarget_clusters\x18\x17 \x03(\tR\x0etargetClustersJ\x04\b\t\x10\n" +
+	"\x0ftarget_clusters\x18\x17 \x03(\tR\x0etargetClusters\x120\n" +
+	"\x14is_force_replication\x18\x18 \x01(\bR\x12isForceReplicationJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
 	"\x10\vJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0f\"\x99\x04\n" +
 	"\x12VisibilityTaskInfo\x12!\n" +

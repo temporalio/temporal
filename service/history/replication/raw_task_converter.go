@@ -706,12 +706,12 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		)
 	}
 
-	if taskInfo.IsForceReplication {
-		syncStateResult.VersionedTransitionArtifact.IsCloseTransferTaskAcked = c.isCloseTransferTaskAcked(mutableState)
-	}
-
 	if err != nil {
 		return nil, err
+	}
+
+	if taskInfo.IsForceReplication {
+		syncStateResult.VersionedTransitionArtifact.IsCloseTransferTaskAcked = c.isCloseTransferTaskAcked(mutableState)
 	}
 	// do not access mutable state after this point
 
