@@ -195,9 +195,6 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	var closeTasks []tasks.Task
 
 	// Only add the close transfer task if it hasn't already been acked on the active cluster.
-	// When skipCloseTransferTask is true (passive cluster replication case), we skip the
-	// CloseExecutionTask to avoid duplicate processing, but still generate visibility tasks
-	// so that closed workflows remain queryable via ListClosedWorkflowExecutions.
 	if !skipCloseTransferTask {
 		closeExecutionTask := &tasks.CloseExecutionTask{
 			// TaskID, Visiblitytimestamp is set by shard
