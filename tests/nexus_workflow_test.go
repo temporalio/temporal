@@ -292,7 +292,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-			return &nexus.HandlerStartOperationResultSync[any]{Value: "result", Links: []nexus.Link{handlerNexusLink}}, nil
+			nexus.AddHandlerLinks(ctx, handlerNexusLink)
+			return &nexus.HandlerStartOperationResultSync[any]{Value: "result"}, nil
 		},
 	}
 	listenAddr := nexustest.AllocListenAddress()
@@ -572,9 +573,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 
 			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
 			publicCallbackURL = options.CallbackURL
+			nexus.AddHandlerLinks(ctx, handlerNexusLink)
 			return &nexus.HandlerStartOperationResultAsync{
 				OperationToken: "test",
-				Links:          []nexus.Link{handlerNexusLink},
 			}, nil
 		},
 	}
