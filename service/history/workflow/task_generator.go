@@ -31,6 +31,7 @@ type (
 		GenerateWorkflowCloseTasks(
 			closedTime time.Time,
 			deleteAfterClose bool,
+			skipCloseTransferTask bool,
 		) error
 		// GenerateDeleteHistoryEventTask adds a tasks.DeleteHistoryEventTask to the mutable state.
 		// This task is used to delete the history events of the workflow execution after the retention period expires.
@@ -179,20 +180,24 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	closedTime time.Time,
 	deleteAfterClose bool,
+	skipCloseTransferTask bool,
 ) error {
 	closeVersion, err := r.mutableState.GetCloseVersion()
 	if err != nil {
 		return err
 	}
 
-	closeExecutionTask := &tasks.CloseExecutionTask{
-		// TaskID, Visiblitytimestamp is set by shard
-		WorkflowKey:      r.mutableState.GetWorkflowKey(),
-		Version:          closeVersion,
-		DeleteAfterClose: deleteAfterClose,
-	}
-	closeTasks := []tasks.Task{
-		closeExecutionTask,
+	var closeTasks []tasks.Task
+
+	// Only add the close transfer task if it hasn't already been acked on the active cluster
+	if !skipCloseTransferTask {
+		closeExecutionTask := &tasks.CloseExecutionTask{
+			// TaskID, Visiblitytimestamp is set by shard
+			WorkflowKey:      r.mutableState.GetWorkflowKey(),
+			Version:          closeVersion,
+			DeleteAfterClose: deleteAfterClose,
+		}
+		closeTasks = append(closeTasks, closeExecutionTask)
 	}
 
 	// To avoid race condition between visibility close and delete tasks, visibility close task is not created here.

@@ -107,21 +107,14 @@ func (r *TaskRefresherImpl) PartialRefresh(
 		return err
 	}
 
-	if !isCloseTransferAcked {
-		if err := r.refreshTasksForWorkflowClose(
-			ctx,
-			mutableState,
-			taskGenerator,
-			minVersionedTransition,
-		); err != nil {
-			return err
-		}
-	} else {
-		r.shard.GetLogger().Info("Skipping workflow close task generation - close transfer task already acked on active cluster",
-			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
-			tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),
-			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
-		)
+	if err := r.refreshTasksForWorkflowClose(
+		ctx,
+		mutableState,
+		taskGenerator,
+		minVersionedTransition,
+		isCloseTransferAcked,
+	); err != nil {
+		return err
 	}
 
 	if err := r.refreshTasksForRecordWorkflowStarted(
@@ -251,6 +244,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
+	skipCloseTransferTask bool,
 ) error {
 
 	executionState := mutableState.GetExecutionState()
@@ -271,9 +265,18 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 		return err
 	}
 
+	if skipCloseTransferTask {
+		r.shard.GetLogger().Info("Skipping close transfer task - already acked on active cluster",
+			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
+			tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),
+			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
+		)
+	}
+
 	return taskGenerator.GenerateWorkflowCloseTasks(
 		closeEventTime,
 		false,
+		skipCloseTransferTask,
 	)
 }
 
