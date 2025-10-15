@@ -8,11 +8,21 @@ import (
 
 type library struct {
 	chasm.UnimplementedLibrary
-	handler *handler
+	handler                            *handler
+	ActivityStartTaskExecutor          *ActivityStartTaskExecutor
+	ScheduleToCloseTimeoutTaskExecutor *ScheduleToCloseTimeoutTaskExecutor
 }
 
-func newLibrary(*handler) *library {
-	return &library{}
+func newLibrary(
+	handler *handler,
+	ActivityStartTaskExecutor *ActivityStartTaskExecutor,
+	ScheduleToCloseTimeoutTaskExecutor *ScheduleToCloseTimeoutTaskExecutor,
+) *library {
+	return &library{
+		handler:                            handler,
+		ActivityStartTaskExecutor:          ActivityStartTaskExecutor,
+		ScheduleToCloseTimeoutTaskExecutor: ScheduleToCloseTimeoutTaskExecutor,
+	}
 }
 
 func (l *library) Name() string {
@@ -21,4 +31,25 @@ func (l *library) Name() string {
 
 func (l *library) RegisterServices(server *grpc.Server) {
 	server.RegisterService(&activitypb.ActivityService_ServiceDesc, l.handler)
+}
+
+func (l *library) Components() []*chasm.RegistrableComponent {
+	return []*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*Activity]("activity"),
+	}
+}
+
+func (l *library) Tasks() []*chasm.RegistrableTask {
+	return []*chasm.RegistrableTask{
+		chasm.NewRegistrableSideEffectTask(
+			"startActivity",
+			l.ActivityStartTaskExecutor,
+			l.ActivityStartTaskExecutor,
+		),
+		chasm.NewRegistrablePureTask(
+			"activityScheduleToCloseTimeout",
+			l.ScheduleToCloseTimeoutTaskExecutor,
+			l.ScheduleToCloseTimeoutTaskExecutor,
+		),
+	}
 }

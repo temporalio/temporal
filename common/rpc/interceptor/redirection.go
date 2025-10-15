@@ -140,7 +140,7 @@ var (
 		"CountActivityExecutions":        func() any { return &workflowservice.CountActivityExecutionsResponse{} },
 		"ListActivityExecutions":         func() any { return &workflowservice.ListActivityExecutionsResponse{} },
 		"DescribeActivityExecution":      func() any { return &workflowservice.DescribeActivityExecutionResponse{} },
-		"GetActivityResult":              func() any { return &workflowservice.GetActivityResultResponse{} },
+		"GetActivityResult":              func() any { return &workflowservice.GetActivityExecutionResultResponse{} },
 		"RequestCancelActivityExecution": func() any { return &workflowservice.RequestCancelActivityExecutionResponse{} },
 		"TerminateActivityExecution":     func() any { return &workflowservice.TerminateActivityExecutionResponse{} },
 		"DeleteActivityExecution":        func() any { return &workflowservice.DeleteActivityExecutionResponse{} },

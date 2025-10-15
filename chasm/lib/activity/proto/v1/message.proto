@@ -1,0 +1,101 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.activity.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+import "temporal/api/activity/v1/message.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/deployment/v1/message.proto";
+import "temporal/api/enums/v1/activity.proto";
+import "temporal/api/enums/v1/workflow.proto";
+import "temporal/api/failure/v1/message.proto";
+import "temporal/api/sdk/v1/user_metadata.proto";
+import "temporal/api/enums/v1/id.proto";
+
+
+message Identifier {
+  string namespace = 1;
+  string namespace_id = 2; // Do we need this?
+  string activity_id = 3;
+  string run_id = 4;
+  temporal.api.common.v1.ActivityType activity_type = 5;
+}
+
+message Heartbeat {
+  temporal.api.common.v1.Payloads heartbeat_details = 1;
+  google.protobuf.Timestamp last_heartbeat_time = 2;
+}
+
+message Outcome {
+  oneof outcome {
+    // The result if the activity completed successfully.
+    temporal.api.common.v1.Payloads result = 1;
+    // The failure if the activity completed unsuccessfully.
+    temporal.api.failure.v1.Failure failure = 2;
+  }
+}
+
+message Config {
+  int32 maximum_attempts = 1;
+  google.protobuf.Timestamp scheduled_time = 2;
+  google.protobuf.Timestamp expiration_time = 3;
+  bool eager_execution_requested = 4;
+  temporal.api.common.v1.Priority priority = 5;
+  temporal.api.enums.v1.IdReusePolicy id_reuse_policy = 6;
+  temporal.api.enums.v1.IdConflictPolicy id_conflict_policy = 7;
+  temporal.api.activity.v1.OnConflictOptions on_conflict_options = 8;
+  temporal.api.common.v1.SearchAttributes search_attributes = 9;
+  temporal.api.activity.v1.ActivityOptions activity_options = 10;
+}
+
+message Input {
+  temporal.api.common.v1.Payloads input = 1;
+  temporal.api.common.v1.Header header = 2;
+  temporal.api.common.v1.Memo memo = 3; // Do we still need this?
+  repeated temporal.api.common.v1.Callback completion_callbacks = 4;
+  temporal.api.sdk.v1.UserMetadata user_metadata = 5;
+  repeated temporal.api.common.v1.Link links = 6;
+}
+
+message ExecutionInfo {
+  temporal.api.enums.v1.ActivityExecutionStatus status = 1;
+  int64 state_transition_count = 2;
+  int64 state_size_bytes = 3;
+  google.protobuf.Duration execution_duration = 4;
+
+  // Consume from common pkg when moved
+  message PauseInfo {
+    google.protobuf.Timestamp pause_time = 1;
+
+    message Manual {
+      string identity = 1;
+      string reason = 2;
+    }
+
+    oneof paused_by {
+      Manual manual = 2;
+    }
+  }
+
+  PauseInfo pause_info = 5;
+}
+
+message ExecutionDetails {
+  temporal.api.enums.v1.PendingActivityState run_state = 1;
+  google.protobuf.Timestamp last_started_time = 2;
+  int32 attempt = 3;
+  temporal.api.failure.v1.Failure last_failure = 4;
+  string last_worker_identity = 5;
+  google.protobuf.Duration current_retry_interval = 6;
+  google.protobuf.Timestamp last_attempt_complete_time = 7;
+  google.protobuf.Timestamp next_attempt_schedule_time = 8;
+  temporal.api.deployment.v1.WorkerDeploymentVersion last_deployment_version = 9;
+}
+
+
+
+

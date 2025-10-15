@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.activity.proto.v1;
+
+//import "chasm/lib/activity/proto/v1/message.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
+
+message ActivityStartExecuteTask {
+//  ActivityState activity_state = 1;
+  string test = 1;
+}

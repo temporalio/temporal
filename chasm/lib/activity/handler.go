@@ -3,7 +3,6 @@ package activity
 import (
 	"context"
 
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 )
 
@@ -16,9 +15,9 @@ func newHandler() *handler {
 }
 
 func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.StartActivityExecutionRequest) (*activitypb.StartActivityExecutionResponse, error) {
-	return &activitypb.StartActivityExecutionResponse{
-		FrontendResponse: &workflowservice.StartActivityExecutionResponse{
-			// TODO
-		},
-	}, nil
+	panic("implement me")
+}
+
+func (h *handler) DescribeActivityExecution(ctx context.Context, req *activitypb.DescribeActivityExecutionRequest) (*activitypb.DescribeActivityExecutionResponse, error) {
+	panic("implement me")
 }

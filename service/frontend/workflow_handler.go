@@ -6113,3 +6113,24 @@ func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflow
 func (wh *WorkflowHandler) TriggerWorkflowRule(context.Context, *workflowservice.TriggerWorkflowRuleRequest) (*workflowservice.TriggerWorkflowRuleResponse, error) {
 	return nil, serviceerror.NewUnimplemented("method TriggerWorkflowRule not supported")
 }
+
+func (wh *WorkflowHandler) UpdateActivityExecutionOptions(ctx context.Context, request *workflowservice.UpdateActivityExecutionOptionsRequest) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+	return nil, serviceerror.NewUnimplemented("UpdateActivityExecutionOptions is not yet supported")
+}
+
+func (wh *WorkflowHandler) PauseActivityExecution(ctx context.Context, request *workflowservice.PauseActivityExecutionRequest) (*workflowservice.PauseActivityExecutionResponse, error) {
+	return nil, serviceerror.NewUnimplemented("PauseActivityExecution is not yet supported")
+
+}
+
+func (wh *WorkflowHandler) UnpauseActivityExecution(ctx context.Context, request *workflowservice.UnpauseActivityExecutionRequest) (*workflowservice.UnpauseActivityExecutionResponse, error) {
+	return nil, serviceerror.NewUnimplemented("UnpauseActivityExecution is not yet supported")
+}
+
+func (wh *WorkflowHandler) ResetActivityExecution(ctx context.Context, request *workflowservice.ResetActivityExecutionRequest) (*workflowservice.ResetActivityExecutionResponse, error) {
+	return nil, serviceerror.NewUnimplemented("ResetActivityExecution is not yet supported")
+}
+
+func (wh *WorkflowHandler) GetActivityExecutionResult(ctx context.Context, request *workflowservice.GetActivityExecutionResultRequest) (*workflowservice.GetActivityExecutionResultResponse, error) {
+	return nil, serviceerror.NewUnimplemented("GetActivityExecutionResult is not yet supported")
+}

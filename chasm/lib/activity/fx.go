@@ -9,6 +9,8 @@ import (
 var HistoryModule = fx.Module(
 	"activity-history",
 	fx.Provide(
+		newActivityStartTaskExecutor,
+		newScheduleToCloseTimeoutTaskExecutor,
 		newHandler,
 		newLibrary,
 	),
