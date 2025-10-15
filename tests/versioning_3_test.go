@@ -815,6 +815,7 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 
 	activityCompletedChan := make(chan struct{})
 	currentVersionChangedChan := make(chan struct{})
+	doCaN := true
 	wf := func(ctx workflow.Context) (string, error) {
 		var ret string
 		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
@@ -825,6 +826,10 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 			},
 		}), "act").Get(ctx, &ret)
 		s.NoError(err)
+		if expectInheritDueToCaN && doCaN {
+			doCaN = false // only CaN on the first run
+			return "", workflow.NewContinueAsNewError(ctx, "wf")
+		}
 		activityCompletedChan <- struct{}{}
 		<-currentVersionChangedChan
 		return "", errors.New("explicit failure")
@@ -901,22 +906,45 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		runIDBeforeRetry = desc.WorkflowExecution.RunID
 	}
 
+	runIDBeforeCaN := runIDBeforeRetry
+	if expectInheritDueToCaN {
+		// wait for first run to continue-as-new
+		s.Eventually(func() bool {
+			desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeCaN)
+			s.NoError(err)
+			return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
+		}, 5*time.Second, 1*time.Millisecond)
+
+		// get the next run in the continue-as-new chain
+		s.Eventually(func() bool {
+			continuedAsNewRunResp, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
+			s.NoError(err)
+			caNRunID := continuedAsNewRunResp.WorkflowExecution.RunID
+			// confirm that it's a new run
+			if caNRunID != runIDBeforeCaN {
+				runIDBeforeRetry = caNRunID
+				return true
+			}
+			return false
+		}, 5*time.Second, 1*time.Millisecond)
+	}
+
 	// signal workflow to continue (it will fail and then retry)
 	currentVersionChangedChan <- struct{}{}
 
-	// wait for first run to fail
+	// wait for first run after continue-as-new to fail
 	s.Eventually(func() bool {
 		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeRetry)
 		s.NoError(err)
 		return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
-	}, 5*time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 1*time.Millisecond)
 
 	// get the execution info of the next run in the retry chain, wait for next run to start
 	var secondRunId string
 	s.Eventually(func() bool {
-		secondRunResp, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), "")
+		secondRunResp, err := s.SdkClient().DescribeWorkflow(ctx, run.GetID(), "")
 		s.NoError(err)
-		secondRunId = secondRunResp.GetWorkflowExecutionInfo().GetExecution().GetRunId()
+		secondRunId = secondRunResp.WorkflowExecution.RunID
 		// confirm that it's a new run
 		if secondRunId != runIDBeforeRetry {
 			return true
