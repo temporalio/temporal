@@ -96,7 +96,7 @@ func (h GRPCHeaderGetter) Get(key string) string {
 
 // IsExperimentRequested checks if a specific experiment is present in the temporal-experiment header.
 // Returns true if the experiment is explicitly listed or if "*" (wildcard) is present.
-// Headers exceed a length of 100 will be skipped
+// Headers exceeding a length of 100 will be skipped.
 func IsExperimentRequested(ctx context.Context, experiment string) bool {
 	experimentalValues := metadata.ValueFromIncomingContext(ctx, ExperimentHeaderName)
 

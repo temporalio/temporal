@@ -46,9 +46,9 @@ func TestPropagate_CreateNewOutgoingContext_SomeMissing(t *testing.T) {
 	require.True(t, ok)
 
 	require.Equal(t, "22.08.78", md.Get(ClientVersionHeaderName)[0])
-	require.Equal(t, 0, len(md.Get(SupportedServerVersionsHeaderName)))
+	require.Empty(t, md.Get(SupportedServerVersionsHeaderName))
 	require.Equal(t, "28.08.14", md.Get(ClientNameHeaderName)[0])
-	require.Equal(t, 0, len(md.Get(SupportedFeaturesHeaderName)))
+	require.Empty(t, md.Get(SupportedFeaturesHeaderName))
 }
 
 func TestPropagate_UpdateExistingEmptyOutgoingContext(t *testing.T) {
@@ -172,13 +172,13 @@ func TestIsExperimentRequested(t *testing.T) {
 			name:            "max experiment size limit match",
 			headerValues:    []string{strings.Repeat("a,", 49)},
 			checkExperiment: "a",
-			expected:        true, // target-exp is the 10th experiment, within limit
+			expected:        true, // 98 chars, under 100 char limit
 		},
 		{
 			name:            "at max experiment size limit no match",
-			headerValues:    []string{strings.Repeat("a,", 50)},
+			headerValues:    []string{strings.Repeat("a,", 51)},
 			checkExperiment: "a",
-			expected:        false, // target-exp is the 10th experiment, within limit
+			expected:        false, // exceeds 100 char limit, should be skipped
 		},
 	}
 
