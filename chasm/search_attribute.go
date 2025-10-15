@@ -33,8 +33,6 @@ type (
 		valueType enumspb.IndexedValueType
 	}
 
-	SearchAttributeUpdate func(map[string]VisibilityValue)
-
 	SearchAttribute struct {
 		alias     string
 		valueType enumspb.IndexedValueType
@@ -51,10 +49,6 @@ type (
 	}
 
 	SearchAttributeFloat64 struct {
-		SearchAttribute
-	}
-
-	SearchAttributeInt64 struct {
 		SearchAttribute
 	}
 
