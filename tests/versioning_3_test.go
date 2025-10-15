@@ -781,6 +781,97 @@ func (s *Versioning3Suite) TestUnpinnedWorkflowWithRamp_ToUnversioned() {
 	)
 }
 
+func (s *Versioning3Suite) TestAutoUpgradeWorkflowRetry() {
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	wf := func(ctx workflow.Context, version string) (string, error) {
+		var ret string
+		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 1 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    1 * time.Second,
+				BackoffCoefficient: 1,
+			},
+		}), "act").Get(ctx, &ret)
+		s.NoError(err)
+		return "", errors.New("explicit failure")
+	}
+	act1 := func() (string, error) {
+		return "v1", nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:                   tv1.SDKDeploymentVersion(),
+			UseVersioning:             true,
+			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+		},
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
+	w1.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	// Make sure both TQs are registered in v1 which will be the current version. This is to make sure
+	// we don't get to ramping while one of the TQs has not yet got v1 as it's current version.
+	// (note that s.setCurrentDeployment(tv1) can pass even with one TQ added to the version)
+	s.waitForDeploymentDataPropagation(tv1, versionStatusInactive, false, tqTypeWf, tqTypeAct)
+	s.setCurrentDeployment(tv1)
+
+	// wait until all task queue partitions know that tv1 is current
+	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
+
+	run, err := s.SdkClient().ExecuteWorkflow(
+		ctx,
+		sdkclient.StartWorkflowOptions{
+			TaskQueue: tv1.TaskQueue().GetName(),
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval: time.Second,
+			},
+		},
+		"wf",
+	)
+	s.NoError(err)
+
+	// wait for first run to fail
+	s.Eventually(func() bool {
+		desc, err := s.SdkClient().DescribeWorkflow(ctx, run.GetID(), run.GetRunID())
+		s.NoError(err)
+		if desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED {
+			return true
+		}
+		return false
+	}, 5*time.Second, 10*time.Millisecond)
+
+	// get the execution info of the next run in the retry chain, wait for next run to start
+	var secondRunId string
+	s.Eventually(func() bool {
+		secondRunResp, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), "")
+		s.NoError(err)
+		secondRunId = secondRunResp.GetWorkflowExecutionInfo().GetExecution().GetRunId()
+		// confirm that it's a new run
+		if secondRunId != run.GetRunID() {
+			return true
+		}
+		return false
+	}, 5*time.Second, 1*time.Millisecond)
+
+	// confirm that the second run eventually gets auto-upgrade behavior and runs on version 1
+	s.Eventually(func() bool {
+		secondRunResp, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), secondRunId)
+		s.NoError(err)
+		if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE &&
+			secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID() {
+			return true
+		}
+		return false
+	}, 5*time.Second, 1*time.Millisecond)
+}
+
 func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	// This test sets a 50% ramp and runs 50 wfs and ensures both versions got some wf and
 	// activity tasks.
