@@ -118,12 +118,11 @@ func newTaskQueuePartitionManager(
 		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
 
-	tqConfig.EnableFairness, pm.cancelFairnessSub = tqConfig.EnableFairnessSub(unload)
+	var fairness bool
+	fairness, pm.cancelFairnessSub = tqConfig.EnableFairnessSub(unload)
 	// Fairness is disabled for sticky queues for now so that we can still use TTLs.
-	if partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-		tqConfig.EnableFairness = false
-	}
-	if tqConfig.EnableFairness {
+	tqConfig.EnableFairness = fairness && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY
+	if fairness {
 		tqConfig.NewMatcher = true
 	} else {
 		tqConfig.NewMatcher, pm.cancelNewMatcherSub = tqConfig.NewMatcherSub(unload)
