@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -22,6 +21,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
@@ -50,11 +50,11 @@ func (fakeEnv) Now() time.Time {
 var _ hsm.Environment = fakeEnv{}
 
 type mutableState struct {
-	completionNexus nexus.OperationCompletion
+	completionNexus nexusrpc.OperationCompletion
 	completionHsm   *persistencespb.HSMCompletionCallbackArg
 }
 
-func (ms mutableState) GetNexusCompletion(ctx context.Context, requestID string) (nexus.OperationCompletion, error) {
+func (ms mutableState) GetNexusCompletion(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error) {
 	return ms.completionNexus, nil
 }
 
@@ -416,7 +416,7 @@ func TestProcessBackoffTask(t *testing.T) {
 }
 
 func newMutableState(t *testing.T) mutableState {
-	completionNexus, err := nexus.NewOperationCompletionSuccessful(nil, nexus.OperationCompletionSuccessfulOptions{})
+	completionNexus, err := nexusrpc.NewOperationCompletionSuccessful(nil, nexusrpc.OperationCompletionSuccessfulOptions{})
 	require.NoError(t, err)
 	hsmCallbackArg := &persistencespb.HSMCompletionCallbackArg{
 		NamespaceId: "mynsid",

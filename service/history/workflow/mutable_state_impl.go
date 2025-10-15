@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -630,7 +631,7 @@ func (ms *MutableStateImpl) chasmEnabled() bool {
 func (ms *MutableStateImpl) GetNexusCompletion(
 	ctx context.Context,
 	requestID string,
-) (nexus.OperationCompletion, error) {
+) (nexusrpc.OperationCompletion, error) {
 	ce, err := ms.GetCompletionEvent(ctx)
 	if err != nil {
 		return nil, err
@@ -674,7 +675,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			// Nexus does not support it.
 			p = payloads[0]
 		}
-		completion, err := nexus.NewOperationCompletionSuccessful(p, nexus.OperationCompletionSuccessfulOptions{
+		completion, err := nexusrpc.NewOperationCompletionSuccessful(p, nexusrpc.OperationCompletionSuccessfulOptions{
 			Serializer: commonnexus.PayloadSerializer,
 			StartTime:  ms.executionState.GetStartTime().AsTime(),
 			Links:      []nexus.Link{startLink},
@@ -688,9 +689,9 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(
+		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{State: nexus.OperationStateFailed, Cause: &nexus.FailureError{Failure: f}},
-			nexus.OperationCompletionUnsuccessfulOptions{
+			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
@@ -706,12 +707,12 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(
+		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{
 				State: nexus.OperationStateCanceled,
 				Cause: &nexus.FailureError{Failure: f},
 			},
-			nexus.OperationCompletionUnsuccessfulOptions{
+			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
@@ -725,9 +726,9 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(
+		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{State: nexus.OperationStateFailed, Cause: &nexus.FailureError{Failure: f}},
-			nexus.OperationCompletionUnsuccessfulOptions{
+			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
@@ -744,12 +745,12 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(
+		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{
 				State: nexus.OperationStateFailed,
 				Cause: &nexus.FailureError{Failure: f},
 			},
-			nexus.OperationCompletionUnsuccessfulOptions{
+			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
