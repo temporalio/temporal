@@ -235,7 +235,8 @@ func IsReserved(name string) bool {
 	return strings.HasPrefix(name, ReservedPrefix)
 }
 
-// IsMappable returns true if name can have be mapped tho the alias.
+// IsMappable returns true if name can be mapped to the alias.
+// Mappable search attributes are those that can be defined by the user.
 func IsMappable(name string) bool {
 	if _, ok := system[name]; ok {
 		return false
