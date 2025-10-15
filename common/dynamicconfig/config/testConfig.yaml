@@ -107,13 +107,3 @@ testGetIntPropertyFilteredByDestinationKey:
   - value: 50
     constraints:
       destination: test-destination-2
-frontend.allowedExperiments:
-  - value: ["chasm-scheduler", "other-exp"]
-    constraints:
-      namespace: experiment-namespace
-  - value: ["*"]
-    constraints:
-      namespace: wildcard-namespace
-  - value: ["specific-exp"]
-    constraints:
-      namespace: specific-namespace
