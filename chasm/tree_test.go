@@ -937,7 +937,8 @@ func (s *nodeSuite) TestApplyMutation() {
 	s.NotNil(root.value)
 	s.Len(root.currentSA, 1)
 	s.Len(root.currentMemo, 1)
-	s.True(root.currentSA[testComponentStartTimeSAKey].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
+	s.Equal(testComponentStartTimeSAKey, root.currentSA[0].GetAlias())
+	s.True(root.currentSA[0].GetValue().(VisibilityValueTime).Equal(VisibilityValueTime(now)))
 	s.True(root.currentMemo[testComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
 
 	// Validate the "child" node got updated.
@@ -1071,7 +1072,8 @@ func (s *nodeSuite) TestApplySnapshot() {
 	// Validate visibility search attributes and memo are updated as well.
 	s.Len(root.currentSA, 1)
 	s.Len(root.currentMemo, 1)
-	s.True(root.currentSA[testComponentStartTimeSAKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
+	s.Equal(testComponentStartTimeSAKey, root.currentSA[0].GetAlias())
+	s.True(root.currentSA[0].GetValue().(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
 	s.True(root.currentMemo[testComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
 }
 

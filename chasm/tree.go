@@ -145,7 +145,7 @@ type (
 
 		// Root component's search attributes and memo at the start of a transaction.
 		// They will be updated upon CloseTransaction() if they are changed.
-		currentSA   map[string]VisibilityValue
+		currentSA   []*SearchAttribute
 		currentMemo map[string]VisibilityValue
 
 		needsPointerResolution bool
@@ -309,7 +309,8 @@ func newTreeInitSearchAttributesAndMemo(
 	// and currentMemo will just never be used.
 
 	if saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider); ok {
-		root.currentSA = saProvider.SearchAttributes(immutableContext)
+		searchAttrs := saProvider.SearchAttributes(immutableContext)
+		root.currentSA = searchAttrs
 	}
 	if memoProvider, ok := rootComponent.(VisibilityMemoProvider); ok {
 		root.currentMemo = memoProvider.Memo(immutableContext)
@@ -1455,7 +1456,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
 	if ok {
 		newSA := saProvider.SearchAttributes(immutableContext)
-		if !maps.EqualFunc(n.currentSA, newSA, isVisibilityValueEqual) {
+		if !searchAttributeSliceEqual(n.currentSA, newSA) {
 			needUpdate = true
 		}
 		n.currentSA = newSA
@@ -2031,7 +2032,8 @@ func (n *Node) ApplyMutation(
 	}
 	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
 	if ok {
-		n.currentSA = saProvider.SearchAttributes(immutableContext)
+		searchAttrs := saProvider.SearchAttributes(immutableContext)
+		n.currentSA = searchAttrs
 	}
 	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
 	if ok {
@@ -2318,6 +2320,26 @@ func (n *Node) IsStale(
 		n.backend.GetExecutionInfo().TransitionHistory,
 		ref.entityLastUpdateVT,
 	)
+}
+
+// searchAttributeSliceEqual compares two slices of SearchAttribute for equality.
+func searchAttributeSliceEqual(a, b []*SearchAttribute) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	// Create maps for comparison since order might not matter
+	aMap := make(map[string]VisibilityValue, len(a))
+	for _, key := range a {
+		aMap[key.GetAlias()] = key.GetValue()
+	}
+
+	bMap := make(map[string]VisibilityValue, len(b))
+	for _, key := range b {
+		bMap[key.GetAlias()] = key.GetValue()
+	}
+
+	return maps.EqualFunc(aMap, bMap, isVisibilityValueEqual)
 }
 
 func (n *Node) Terminate(
