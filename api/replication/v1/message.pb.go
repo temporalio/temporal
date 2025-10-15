@@ -1894,12 +1894,13 @@ type VersionedTransitionArtifact struct {
 	//
 	//	*VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes
 	//	*VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes
-	StateAttributes isVersionedTransitionArtifact_StateAttributes `protobuf_oneof:"state_attributes"`
-	EventBatches    []*v11.DataBlob                               `protobuf:"bytes,3,rep,name=event_batches,json=eventBatches,proto3" json:"event_batches,omitempty"`
-	NewRunInfo      *NewRunInfo                                   `protobuf:"bytes,4,opt,name=new_run_info,json=newRunInfo,proto3" json:"new_run_info,omitempty"`
-	IsFirstSync     bool                                          `protobuf:"varint,5,opt,name=is_first_sync,json=isFirstSync,proto3" json:"is_first_sync,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	StateAttributes          isVersionedTransitionArtifact_StateAttributes `protobuf_oneof:"state_attributes"`
+	EventBatches             []*v11.DataBlob                               `protobuf:"bytes,3,rep,name=event_batches,json=eventBatches,proto3" json:"event_batches,omitempty"`
+	NewRunInfo               *NewRunInfo                                   `protobuf:"bytes,4,opt,name=new_run_info,json=newRunInfo,proto3" json:"new_run_info,omitempty"`
+	IsFirstSync              bool                                          `protobuf:"varint,5,opt,name=is_first_sync,json=isFirstSync,proto3" json:"is_first_sync,omitempty"`
+	IsCloseTransferTaskAcked bool                                          `protobuf:"varint,6,opt,name=is_close_transfer_task_acked,json=isCloseTransferTaskAcked,proto3" json:"is_close_transfer_task_acked,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *VersionedTransitionArtifact) Reset() {
@@ -1974,6 +1975,13 @@ func (x *VersionedTransitionArtifact) GetNewRunInfo() *NewRunInfo {
 func (x *VersionedTransitionArtifact) GetIsFirstSync() bool {
 	if x != nil {
 		return x.IsFirstSync
+	}
+	return false
+}
+
+func (x *VersionedTransitionArtifact) GetIsCloseTransferTaskAcked() bool {
+	if x != nil {
+		return x.IsCloseTransferTaskAcked
 	}
 	return false
 }
@@ -2164,14 +2172,15 @@ const file_temporal_server_api_replication_v1_message_proto_rawDesc = "" +
 	"\fnamespace_id\x18\x06 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\a \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
-	"\x06run_id\x18\b \x01(\tR\x05runIdJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05\"\xb2\x04\n" +
+	"\x06run_id\x18\b \x01(\tR\x05runIdJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05\"\xf2\x04\n" +
 	"\x1bVersionedTransitionArtifact\x12\x9f\x01\n" +
 	"'sync_workflow_state_mutation_attributes\x18\x01 \x01(\v2G.temporal.server.api.replication.v1.SyncWorkflowStateMutationAttributesH\x00R#syncWorkflowStateMutationAttributes\x12\x9f\x01\n" +
 	"'sync_workflow_state_snapshot_attributes\x18\x02 \x01(\v2G.temporal.server.api.replication.v1.SyncWorkflowStateSnapshotAttributesH\x00R#syncWorkflowStateSnapshotAttributes\x12E\n" +
 	"\revent_batches\x18\x03 \x03(\v2 .temporal.api.common.v1.DataBlobR\feventBatches\x12P\n" +
 	"\fnew_run_info\x18\x04 \x01(\v2..temporal.server.api.replication.v1.NewRunInfoR\n" +
 	"newRunInfo\x12\"\n" +
-	"\ris_first_sync\x18\x05 \x01(\bR\visFirstSyncB\x12\n" +
+	"\ris_first_sync\x18\x05 \x01(\bR\visFirstSync\x12>\n" +
+	"\x1cis_close_transfer_task_acked\x18\x06 \x01(\bR\x18isCloseTransferTaskAckedB\x12\n" +
 	"\x10state_attributesB5Z3go.temporal.io/server/api/replication/v1;repicationb\x06proto3"
 
 var (
