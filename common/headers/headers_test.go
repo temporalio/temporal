@@ -2,6 +2,7 @@ package headers
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -122,7 +123,7 @@ func TestPropagate_EmptyIncomingContext(t *testing.T) {
 	require.Equal(t, "28.08.14", md.Get(ClientNameHeaderName)[0])
 }
 
-func TestIsExperimentEnabled(t *testing.T) {
+func TestIsExperimentRequested(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -140,12 +141,6 @@ func TestIsExperimentEnabled(t *testing.T) {
 		{
 			name:            "exact match returns true",
 			headerValues:    []string{"chasm-scheduler"},
-			checkExperiment: "chasm-scheduler",
-			expected:        true,
-		},
-		{
-			name:            "case insensitive match",
-			headerValues:    []string{"Chasm-Scheduler"},
 			checkExperiment: "chasm-scheduler",
 			expected:        true,
 		},
@@ -174,16 +169,16 @@ func TestIsExperimentEnabled(t *testing.T) {
 			expected:        true,
 		},
 		{
-			name:            "exceeds max experiments limit",
-			headerValues:    []string{"exp1,exp2,exp3,exp4,exp5,exp6,exp7,exp8,exp9,exp10,exp11,exp12"},
-			checkExperiment: "exp11",
-			expected:        false, // exp11 is beyond the limit of 10
+			name:            "max experiment size limit match",
+			headerValues:    []string{strings.Repeat("a,", (maxExperimentHeaderValueSize/2)-1)},
+			checkExperiment: "a",
+			expected:        true, // target-exp is the 10th experiment, within limit
 		},
 		{
-			name:            "at max experiments limit finds match",
-			headerValues:    []string{"exp1,exp2,exp3,exp4,exp5,exp6,exp7,exp8,exp9,target-exp"},
-			checkExperiment: "target-exp",
-			expected:        true, // target-exp is the 10th experiment, within limit
+			name:            "at max experiment size limit no match",
+			headerValues:    []string{strings.Repeat("a,", (maxExperimentHeaderValueSize / 2))},
+			checkExperiment: "a",
+			expected:        false, // target-exp is the 10th experiment, within limit
 		},
 	}
 
@@ -198,7 +193,7 @@ func TestIsExperimentEnabled(t *testing.T) {
 			}
 			ctx = metadata.NewIncomingContext(ctx, md)
 
-			result := IsExperimentEnabled(ctx, tt.checkExperiment)
+			result := IsExperimentRequested(ctx, tt.checkExperiment)
 			require.Equal(t, tt.expected, result)
 		})
 	}

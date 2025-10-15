@@ -24,9 +24,6 @@ import (
 const (
 	WorkflowType      = "temporal-sys-scheduler-workflow"
 	NamespaceDivision = "TemporalScheduler"
-
-	// ChasmSchedulerExperiment is the experiment name for enabling CHASM (V2) scheduler
-	ChasmSchedulerExperiment = "chasm-scheduler"
 )
 
 var (

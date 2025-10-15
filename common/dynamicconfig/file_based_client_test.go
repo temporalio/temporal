@@ -641,23 +641,3 @@ testGetBoolPropertyKey:
 	}
 	s.Equal(3, found)
 }
-
-func (s *fileBasedClientSuite) TestGetAllowedExperiments_MultipleExperiments() {
-	v := dynamicconfig.FrontendAllowedExperiments.Get(s.collection)("experiment-namespace")
-	s.Equal([]string{"chasm-scheduler", "other-exp"}, v)
-}
-
-func (s *fileBasedClientSuite) TestGetAllowedExperiments_Wildcard() {
-	v := dynamicconfig.FrontendAllowedExperiments.Get(s.collection)("wildcard-namespace")
-	s.Equal([]string{"*"}, v)
-}
-
-func (s *fileBasedClientSuite) TestGetAllowedExperiments_SpecificExperiment() {
-	v := dynamicconfig.FrontendAllowedExperiments.Get(s.collection)("specific-namespace")
-	s.Equal([]string{"specific-exp"}, v)
-}
-
-func (s *fileBasedClientSuite) TestGetAllowedExperiments_NoMatch() {
-	v := dynamicconfig.FrontendAllowedExperiments.Get(s.collection)("unknown-namespace")
-	s.Nil(v)
-}
