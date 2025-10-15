@@ -830,8 +830,6 @@ func (s *TaskQueueSuite) TestUpdateUnsetAndDescribeTaskQueueConfig() {
 	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
 }
 
-// removed: inlined where needed
-
 func (s *TaskQueueSuite) runActivitiesWithPriorities(
 	ctx context.Context,
 	tv *testvars.TestVars,
