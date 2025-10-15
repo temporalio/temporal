@@ -27,6 +27,7 @@ type (
 		LastVersionHistoryItem *historyspb.VersionHistoryItem // Last version history item of version transition when version transition does not have associated events
 		NewRunID               string
 		IsFirstTask            bool
+		IsForceReplication     bool
 
 		TaskEquivalents []Task
 	}

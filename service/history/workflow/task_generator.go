@@ -760,6 +760,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 				NextEventID:         lastItem.GetEventId() + 1,
 				TaskEquivalents:     syncWorkflowStateTask,
 				TargetClusters:      targetClusters,
+				IsForceReplication:  true,
 			}}, 1, nil
 		}
 		return syncWorkflowStateTask, 1, nil
@@ -808,6 +809,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			NextEventID:         lastItem.GetEventId() + 1,
 			TaskEquivalents:     replicationTasks,
 			TargetClusters:      targetClusters,
+			IsForceReplication:  true,
 		}}, 1, nil
 	}
 	return replicationTasks, executionInfo.StateTransitionCount, nil
