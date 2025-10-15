@@ -66,7 +66,7 @@ CREATE TABLE executions_visibility (
   KeywordList02   TEXT            GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.KeywordList02")) STORED,
   KeywordList03   TEXT            GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.KeywordList03")) STORED,
 
-  -- Pre-allocated archetype search attributes
+  -- Pre-allocated CHASM search attributes
   TemporalBool01          BOOLEAN         GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalBool01")),
   TemporalBool02          BOOLEAN         GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalBool02")),
   TemporalDatetime01      TIMESTAMP       GENERATED ALWAYS AS (STRFTIME('%Y-%m-%d %H:%M:%f+00:00', JSON_EXTRACT(search_attributes, "$.TemporalDatetime01"))),
@@ -137,7 +137,7 @@ CREATE INDEX by_keyword_08  ON executions_visibility (namespace_id, Keyword08,  
 CREATE INDEX by_keyword_09  ON executions_visibility (namespace_id, Keyword09,  (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 CREATE INDEX by_keyword_10  ON executions_visibility (namespace_id, Keyword10,  (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 
--- Indexes for the pre-allocated Archetype search attributes
+-- Indexes for the pre-allocated  search attributes
 CREATE INDEX by_temporal_bool_01     ON executions_visibility (namespace_id, TemporalBool01,     (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_bool_02     ON executions_visibility (namespace_id, TemporalBool02,     (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_datetime_01 ON executions_visibility (namespace_id, TemporalDatetime01, (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);

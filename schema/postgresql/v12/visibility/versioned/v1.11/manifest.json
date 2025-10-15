@@ -1,8 +1,8 @@
 {
   "CurrVersion": "1.11",
   "MinCompatibleVersion": "0.1",
-  "Description": "add archetype search attributes columns and indices",
+  "Description": "add CHASM search attributes columns and indices",
   "SchemaUpdateCqlFiles": [
-    "add_archetype_search_attributes.sql"
+    "add_chasm_search_attributes.sql"
   ]
 }

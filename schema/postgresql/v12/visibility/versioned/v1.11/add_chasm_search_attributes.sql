@@ -1,4 +1,4 @@
--- Pre-allocated archetype search attributes
+-- Pre-allocated CHASM search attributes
 ALTER TABLE executions_visibility
   ADD COLUMN TemporalBool01         BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'TemporalBool01')::boolean)        STORED,
   ADD COLUMN TemporalBool02         BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'TemporalBool02')::boolean)        STORED,
@@ -17,7 +17,7 @@ ALTER TABLE executions_visibility
   ADD COLUMN TemporalKeywordList01  JSONB           GENERATED ALWAYS AS (search_attributes->'TemporalKeywordList01')            STORED,
   ADD COLUMN TemporalKeywordList02  JSONB           GENERATED ALWAYS AS (search_attributes->'TemporalKeywordList02')            STORED;
 
--- Indexes for the pre-allocated Archetype search attributes
+-- Indexes for the pre-allocated CHASM search attributes
 CREATE INDEX by_temporal_bool_01          ON executions_visibility (namespace_id, TemporalBool01, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_bool_02          ON executions_visibility (namespace_id, TemporalBool02, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_datetime_01      ON executions_visibility (namespace_id, TemporalDatetime01, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
