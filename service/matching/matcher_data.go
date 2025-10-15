@@ -16,7 +16,7 @@ import (
 
 const (
 	invalidHeapIndex      = -13     // use unusual value to stand out in panics
-	pollForwarderPriority = 1000000 // lower than any other priority
+	pollForwarderPriority = 1000000 // lower than any other priority. must be > maxPriorityLevels.
 )
 
 // maxTokens is the maximum number of tokens we might consume at a time for simpleLimiter. This

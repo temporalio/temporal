@@ -14,6 +14,11 @@ import (
 	"go.temporal.io/server/service/matching/counter"
 )
 
+const (
+	// Maximum value for priority levels.
+	maxPriorityLevels = 100
+)
+
 type (
 	// Config represents configuration for matching service
 	Config struct {
@@ -322,6 +327,7 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 	taskQueueName := tq.Name()
 	taskType := tq.TaskType()
 	priorityLevels := priorityKey(config.PriorityLevels(ns.String(), taskQueueName, taskType))
+	priorityLevels = max(priorityLevels, min(priorityLevels, maxPriorityLevels), 1)
 	defaultPriorityKey := (priorityLevels + 1) / 2
 
 	return &taskQueueConfig{
