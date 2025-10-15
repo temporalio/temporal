@@ -17,6 +17,7 @@ linters:
     - exhaustive
     - godox
     - iotamixing
+    - testifylint
   settings:
     staticcheck:
       checks:

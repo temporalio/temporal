@@ -667,7 +667,7 @@ func (s *queryConverterSuite) TestConvertColName() {
 				}
 			} else {
 				s.Error(err)
-				s.Equal(err, tc.err)
+				s.Equal(tc.err, err)
 			}
 		})
 	}

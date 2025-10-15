@@ -54,10 +54,10 @@ func TestChasmRequestInterceptor_ShouldRespond(t *testing.T) {
 		t.Fatalf("failed to connect: %v", err)
 	}
 
-	defer func(conn *grpc.ClientConn) {
+	defer func() {
 		err := conn.Close()
 		require.NoError(t, err)
-	}(conn)
+	}()
 
 	client := testspb.NewTestServiceClient(conn)
 
@@ -78,13 +78,13 @@ func startTestServer(t *testing.T, opt ...grpc.ServerOption) (*grpc.Server, stri
 		panic(err)
 	}
 
+	lib := NewServiceLibrary()
+	lib.RegisterServices(server)
+
 	go func() {
 		err := server.Serve(listener)
 		require.NoError(t, err)
 	}()
-
-	lib := NewServiceLibrary()
-	lib.RegisterServices(server)
 
 	return server, listener.Addr().String()
 }
