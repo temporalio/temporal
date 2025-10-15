@@ -121,9 +121,9 @@ func TestProcessInvocationTask(t *testing.T) {
 				input *nexus.LazyValue,
 				options nexus.StartOperationOptions,
 			) (nexus.HandlerStartOperationResult[any], error) {
+				nexus.AddHandlerLinks(ctx, handlerNexusLink)
 				return &nexus.HandlerStartOperationResultAsync{
 					OperationToken: "op-token",
-					Links:          []nexus.Link{handlerNexusLink},
 				}, nil
 			},
 			expectedMetricOutcome: "pending",
@@ -381,9 +381,9 @@ func TestProcessInvocationTask(t *testing.T) {
 				input *nexus.LazyValue,
 				options nexus.StartOperationOptions,
 			) (nexus.HandlerStartOperationResult[any], error) {
+				nexus.AddHandlerLinks(ctx, handlerNexusLink)
 				return &nexus.HandlerStartOperationResultAsync{
 					OperationToken: "op-token",
-					Links:          []nexus.Link{handlerNexusLink},
 				}, nil
 			},
 			expectedMetricOutcome: "pending",
