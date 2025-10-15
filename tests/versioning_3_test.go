@@ -866,8 +866,8 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	})
 	w2.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf", VersioningBehavior: behavior})
 	w2.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act"})
-	s.NoError(w1.Start())
-	defer w1.Stop()
+	s.NoError(w2.Start())
+	defer w2.Stop()
 
 	// Set v1 to current and propagate to all task queue partitions
 	s.setCurrentDeployment(tv1)
