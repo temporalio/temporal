@@ -15,8 +15,6 @@ type Callback struct {
 
 	// Persisted internal state
 	*callbackspb.CallbackState
-
-	status *callbackspb.CallbackStatus
 }
 
 func NewCallback(
@@ -30,6 +28,7 @@ func NewCallback(
 			RequestId:        requestID,
 			RegistrationTime: registrationTime,
 			Callback:         cb,
+			Status:           callbackspb.CALLBACK_STATUS_STANDBY,
 		},
 	}
 }
@@ -39,10 +38,10 @@ func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
-func (c *Callback) State() *callbackspb.CallbackStatus {
-	return c.status
+func (c *Callback) State() callbackspb.CallbackStatus {
+	return c.Status
 }
 
-func (c *Callback) SetState(status *callbackspb.CallbackStatus) {
-	c.status = status
+func (c *Callback) SetState(status callbackspb.CallbackStatus) {
+	c.Status = status
 }
