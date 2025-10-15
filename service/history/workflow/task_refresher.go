@@ -10,7 +10,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/hsm"
@@ -263,14 +262,6 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	closeEventTime, err := mutableState.GetWorkflowCloseTime(ctx)
 	if err != nil {
 		return err
-	}
-
-	if skipCloseTransferTask {
-		r.shard.GetLogger().Info("Skipping close transfer task - already acked on active cluster",
-			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
-			tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),
-			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
-		)
 	}
 
 	return taskGenerator.GenerateWorkflowCloseTasks(

@@ -13,6 +13,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -89,6 +91,7 @@ type (
 		mutableState      historyi.MutableState
 		config            *configs.Config
 		archivalMetadata  archiver.ArchivalMetadata
+		logger            log.Logger
 	}
 )
 
@@ -101,12 +104,14 @@ func NewTaskGenerator(
 	mutableState historyi.MutableState,
 	config *configs.Config,
 	archivalMetadata archiver.ArchivalMetadata,
+	logger log.Logger,
 ) *TaskGeneratorImpl {
 	return &TaskGeneratorImpl{
 		namespaceRegistry: namespaceRegistry,
 		mutableState:      mutableState,
 		config:            config,
 		archivalMetadata:  archivalMetadata,
+		logger:            logger,
 	}
 }
 
@@ -189,7 +194,10 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 
 	var closeTasks []tasks.Task
 
-	// Only add the close transfer task if it hasn't already been acked on the active cluster
+	// Only add the close transfer task if it hasn't already been acked on the active cluster.
+	// When skipCloseTransferTask is true (passive cluster replication case), we skip the
+	// CloseExecutionTask to avoid duplicate processing, but still generate visibility tasks
+	// so that closed workflows remain queryable via ListClosedWorkflowExecutions.
 	if !skipCloseTransferTask {
 		closeExecutionTask := &tasks.CloseExecutionTask{
 			// TaskID, Visiblitytimestamp is set by shard
@@ -198,6 +206,12 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			DeleteAfterClose: deleteAfterClose,
 		}
 		closeTasks = append(closeTasks, closeExecutionTask)
+	} else {
+		r.logger.Info("Skipping close transfer task generation - already acked on active cluster",
+			tag.WorkflowNamespaceID(r.mutableState.GetExecutionInfo().GetNamespaceId()),
+			tag.WorkflowID(r.mutableState.GetExecutionInfo().GetWorkflowId()),
+			tag.WorkflowRunID(r.mutableState.GetExecutionState().GetRunId()),
+		)
 	}
 
 	// To avoid race condition between visibility close and delete tasks, visibility close task is not created here.

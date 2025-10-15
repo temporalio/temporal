@@ -2172,5 +2172,6 @@ func (p *testTaskGeneratorProvider) NewTaskGenerator(
 		mutableState,
 		shardContext.GetConfig(),
 		shardContext.GetArchivalMetadata(),
+		shardContext.GetLogger(),
 	)
 }
