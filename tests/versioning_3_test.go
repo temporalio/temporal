@@ -799,7 +799,7 @@ func (s *Versioning3Suite) TestWorkflowRetry_Unpinned_ExpectNoInherit() {
 
 func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavior, expectInherit, retryOfChild, retryOfCaN bool) {
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
-	tv2 := tv1.WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
 
 	childWorkflowID := tv1.WorkflowID() + "-child"
 	parentWf := func(ctx workflow.Context) error {
