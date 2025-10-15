@@ -766,9 +766,11 @@ func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
 	priorityKey priorityKey,
 ) *taskTracker {
 	// priorityKey could be zero here if we're tracking dispatched tasks (i.e. called from PollTask)
-	// and the the poll was forwarded so we have a "started" task. We don't return the priority with
-	// the started task info so it's not available here. Use the default priority to avoid confusion
+	// and the poll was forwarded so we have a "started" task. We don't return the priority with the
+	// started task info so it's not available here. Use the default priority to avoid confusion
 	// even though it may not be accurate.
+	// TODO: either return priority with the started task, or do this tracking on the node where the
+	// match happened, so we have the right value here.
 	if priorityKey == 0 {
 		priorityKey = c.config.DefaultPriorityKey
 	}
