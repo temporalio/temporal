@@ -2322,13 +2322,11 @@ func (n *Node) IsStale(
 	)
 }
 
-// searchAttributeSliceEqual compares two slices of SearchAttribute for equality.
 func searchAttributeSliceEqual(a, b []*SearchAttribute) bool {
 	if len(a) != len(b) {
 		return false
 	}
 
-	// Create maps for comparison since order might not matter
 	aMap := make(map[string]VisibilityValue, len(a))
 	for _, key := range a {
 		aMap[key.GetAlias()] = key.GetValue()
