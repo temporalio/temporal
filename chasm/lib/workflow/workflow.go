@@ -22,7 +22,7 @@ type Workflow struct {
 	MSPointer chasm.MSPointer
 
 	// TODO: populate with actual callback component type
-	//Callbacks chasm.Map[string, *CallbackComponent]
+	// Callbacks chasm.Map[string, *CallbackComponent]
 }
 
 func NewWorkflow(
