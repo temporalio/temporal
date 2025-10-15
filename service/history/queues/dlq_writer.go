@@ -71,12 +71,6 @@ func (q *DLQWriter) WriteTaskToDLQ(
 		TargetCluster: targetCluster,
 	}
 
-	// Acquire a process-level lock for this specific DLQ to prevent concurrent writes
-	// from multiple shards causing CAS conflicts in the persistence layer.
-	mu := q.getQueueMutex(queueKey)
-	mu.Lock()
-	defer mu.Unlock()
-
 	_, err := q.dlqWriter.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,
 	})
@@ -86,6 +80,10 @@ func (q *DLQWriter) WriteTaskToDLQ(
 		}
 	}
 
+	// Acquire a process-level lock for this specific DLQ to prevent concurrent writes
+	// from multiple shards causing CAS conflicts in the persistence layer.
+	mu := q.getQueueMutex(queueKey)
+	mu.Lock()
 	resp, err := q.dlqWriter.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
 		QueueType:     queueKey.QueueType,
 		SourceCluster: queueKey.SourceCluster,
@@ -93,9 +91,12 @@ func (q *DLQWriter) WriteTaskToDLQ(
 		Task:          task,
 		SourceShardID: sourceShardID,
 	})
+	mu.Unlock()
+
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrSendTaskToDLQ, err)
 	}
+
 	// "passive" means the namespace is in standby mode and only replicates data
 	namespaceState := metrics.PassiveNamespaceStateTagValue
 	if isNamespaceActive {
