@@ -42,7 +42,7 @@ type schedulerSuite struct {
 }
 
 // SetupSuite initializes the CHASM tree to a default scheduler.
-func (s *schedulerSuite) SetupSuite() {
+func (s *schedulerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.addedTasks = make([]tasks.Task, 0)
