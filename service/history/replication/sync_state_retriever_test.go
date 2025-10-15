@@ -32,13 +32,6 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-const (
-	testCloseTaskID = int64(12345)
-	testReaderID    = int64(1)
-	testShardID     = int32(0)
-	testRangeID     = int64(1)
-)
-
 type (
 	syncWorkflowStateSuite struct {
 		suite.Suite
