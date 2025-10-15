@@ -781,21 +781,41 @@ func (s *Versioning3Suite) TestUnpinnedWorkflowWithRamp_ToUnversioned() {
 	)
 }
 
+func (s *Versioning3Suite) TestWorkflowRetry_ExpectInheritDueToChild_Pinned() {
+	s.testWorkflowRetry(workflow.VersioningBehaviorPinned, false, true)
+}
+
+func (s *Versioning3Suite) TestWorkflowRetry_ExpectInheritDueToCaN_Pinned() {
+	s.testWorkflowRetry(workflow.VersioningBehaviorPinned, true, false)
+}
+
 func (s *Versioning3Suite) TestWorkflowRetry_ExpectNoInherit_Pinned() {
-	s.testWorkflowRetry(workflow.VersioningBehaviorPinned, false)
+	s.testWorkflowRetry(workflow.VersioningBehaviorPinned, false, false)
 }
 
 func (s *Versioning3Suite) TestWorkflowRetry_ExpectNoInherit_Unpinned() {
-	s.testWorkflowRetry(workflow.VersioningBehaviorAutoUpgrade, false)
+	s.testWorkflowRetry(workflow.VersioningBehaviorAutoUpgrade, false, false)
 }
 
-func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavior, expectInherit bool) {
+func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavior, expectInheritDueToCaN, expectInheritDueToChild bool) {
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(1)
 
+	childWorkflowID := tv1.WorkflowID() + "-child"
+	parentWf := func(ctx workflow.Context) error {
+		fut1 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			TaskQueue:   tv1.TaskQueue().GetName(),
+			WorkflowID:  childWorkflowID,
+			RetryPolicy: &temporal.RetryPolicy{},
+		}), "wf")
+		var val1 string
+		s.NoError(fut1.Get(ctx, &val1))
+		return nil
+	}
+
 	activityCompletedChan := make(chan struct{})
 	currentVersionChangedChan := make(chan struct{})
-	wf := func(ctx workflow.Context, version string) (string, error) {
+	wf := func(ctx workflow.Context) (string, error) {
 		var ret string
 		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			StartToCloseTimeout: 1 * time.Second,
@@ -827,6 +847,7 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w1.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf", VersioningBehavior: behavior})
+	w1.RegisterWorkflowWithOptions(parentWf, workflow.RegisterOptions{Name: "parent-wf", VersioningBehavior: behavior})
 	w1.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act"})
 	s.NoError(w1.Start())
 	defer w1.Stop()
@@ -847,6 +868,10 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	s.setCurrentDeployment(tv1)
 	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
 
+	firstWF := "wf"
+	if expectInheritDueToChild {
+		firstWF = "parent-wf"
+	}
 	run, err := s.SdkClient().ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
@@ -855,7 +880,7 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 				InitialInterval: time.Second,
 			},
 		},
-		"wf",
+		firstWF,
 	)
 	s.NoError(err)
 
@@ -866,12 +891,22 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	s.setCurrentDeployment(tv2)
 	s.waitForDeploymentDataPropagation(tv2, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
 
+	// get run ID of first run of the failing workflow
+	wfIDOfRetryingWF := run.GetID()
+	runIDBeforeRetry := run.GetRunID()
+	if expectInheritDueToChild {
+		wfIDOfRetryingWF = childWorkflowID
+		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
+		s.NoError(err)
+		runIDBeforeRetry = desc.WorkflowExecution.RunID
+	}
+
 	// signal workflow to continue (it will fail and then retry)
 	currentVersionChangedChan <- struct{}{}
 
 	// wait for first run to fail
 	s.Eventually(func() bool {
-		desc, err := s.SdkClient().DescribeWorkflow(ctx, run.GetID(), run.GetRunID())
+		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeRetry)
 		s.NoError(err)
 		return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 	}, 5*time.Second, 10*time.Millisecond)
@@ -883,7 +918,7 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		s.NoError(err)
 		secondRunId = secondRunResp.GetWorkflowExecutionInfo().GetExecution().GetRunId()
 		// confirm that it's a new run
-		if secondRunId != run.GetRunID() {
+		if secondRunId != runIDBeforeRetry {
 			return true
 		}
 		return false
@@ -905,15 +940,11 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		case workflow.VersioningBehaviorUnspecified:
 		}
 
-		switch expectInherit {
-		case true:
-			if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() != tv1.BuildID() {
-				return false
-			}
-		case false:
-			if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() != tv2.BuildID() {
-				return false
-			}
+		if (expectInheritDueToCaN || expectInheritDueToChild) &&
+			secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() != tv1.BuildID() {
+			return false
+		} else if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() != tv2.BuildID() {
+			return false
 		}
 		return true
 	}, 5*time.Second, 1*time.Millisecond)
