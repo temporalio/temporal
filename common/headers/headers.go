@@ -94,18 +94,15 @@ func (h GRPCHeaderGetter) Get(key string) string {
 	return ""
 }
 
-const (
-	maxExperimentHeaderValueSize = 100
-)
-
 // IsExperimentRequested checks if a specific experiment is present in the temporal-experiment header.
 // Returns true if the experiment is explicitly listed or if "*" (wildcard) is present.
-// The header can contain a comma-separated list of up to maxExperiments experiment names.
+// Headers exceed a length of 100 will be skipped
 func IsExperimentRequested(ctx context.Context, experiment string) bool {
 	experimentalValues := metadata.ValueFromIncomingContext(ctx, ExperimentHeaderName)
 
 	for _, headerValue := range experimentalValues {
-		if len(headerValue) > maxExperimentHeaderValueSize {
+		// limit value size to prevent misuse
+		if len(headerValue) > 100 {
 			continue
 		}
 		for requested := range strings.SplitSeq(headerValue, ",") {
