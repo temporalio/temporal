@@ -79,19 +79,21 @@ func (q *DLQWriter) WriteTaskToDLQ(
 		}
 	}
 
-	// Acquire a process-level lock for this specific DLQ to prevent concurrent writes
-	// from multiple shards causing CAS conflicts in the persistence layer.
-	mu := q.getQueueMutex(queueKey)
-	mu.Lock()
-	resp, err := q.dlqWriter.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
-		QueueType:     queueKey.QueueType,
-		SourceCluster: queueKey.SourceCluster,
-		TargetCluster: queueKey.TargetCluster,
-		Task:          task,
-		SourceShardID: sourceShardID,
-	})
-	mu.Unlock()
+	resp, err := func() (*persistence.EnqueueTaskResponse, error) {
+		// Acquire a process-level lock for this specific DLQ to prevent concurrent writes
+		// from multiple shards causing CAS conflicts in the persistence layer.
+		mu := q.getQueueMutex(queueKey)
+		mu.Lock()
+		defer mu.Unlock()
 
+		return q.dlqWriter.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
+			QueueType:     queueKey.QueueType,
+			SourceCluster: queueKey.SourceCluster,
+			TargetCluster: queueKey.TargetCluster,
+			Task:          task,
+			SourceShardID: sourceShardID,
+		})
+	}()
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrSendTaskToDLQ, err)
 	}
