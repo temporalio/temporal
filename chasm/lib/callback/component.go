@@ -1,8 +1,8 @@
-package callbacks
+package callback
 
 import (
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/callbacks/gen/callbackspb/v1"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -15,32 +15,34 @@ type Callback struct {
 
 	// Persisted internal state
 	*callbackspb.CallbackState
+
+	status *callbackspb.CallbackStatus
 }
 
 func NewCallback(
 	requestID string,
 	registrationTime *timestamppb.Timestamp,
-	trigger *callbackspb.CallbackState_Trigger,
+	state callbackspb.CallbackState,
 	cb *callbackspb.Callback,
 ) *Callback {
 	return &Callback{
 		CallbackState: &callbackspb.CallbackState{
 			RequestId:        requestID,
 			RegistrationTime: registrationTime,
-			Trigger:          trigger,
 			Callback:         cb,
 		},
 	}
 }
 
 func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	// TODO (seankane): implement lifecycle state
 	return chasm.LifecycleStateRunning
 }
 
-func (c *Callback) State() *callbackspb.CallbackState {
-	return c.CallbackState
+func (c *Callback) State() *callbackspb.CallbackStatus {
+	return c.status
 }
 
-func (c *Callback) SetState(state *callbackspb.CallbackState) {
-	c.CallbackState = state
+func (c *Callback) SetState(status *callbackspb.CallbackStatus) {
+	c.status = status
 }

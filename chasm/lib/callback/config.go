@@ -1,4 +1,4 @@
-package callbacks
+package callback
 
 import (
 	"net/url"
@@ -14,19 +14,19 @@ import (
 )
 
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
-	"chasm.callbacks.request.timeout",
+	"chasm.callback.request.timeout",
 	time.Second*10,
 	`RequestTimeout is the timeout for executing a single callback request.`,
 )
 
 var RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
-	"chasm.callbacks.retryPolicy.initialInterval",
+	"chasm.callback.retryPolicy.initialInterval",
 	time.Second,
 	`The initial backoff interval between every callback request attempt for a given callback.`,
 )
 
 var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
-	"chasm.callbacks.retryPolicy.maxInterval",
+	"chasm.callback.retryPolicy.maxInterval",
 	time.Hour,
 	`The maximum backoff interval between every callback request attempt for a given callback.`,
 )
@@ -52,7 +52,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 }
 
 var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(
-	"chasm.callbacks.allowedAddresses",
+	"chasm.callback.allowedAddresses",
 	allowedAddressConverter,
 	AddressMatchRules{},
 	`The per-namespace list of addresses that are allowed for callbacks and whether secure connections (https) are required.

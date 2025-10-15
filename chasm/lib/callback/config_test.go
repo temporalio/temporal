@@ -1,4 +1,4 @@
-package callbacks
+package callback
 
 import (
 	"regexp"

@@ -2,6 +2,8 @@
 package callbackspb
 
 import (
+	"fmt"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -77,4 +79,26 @@ func (this *Callback) Equal(that interface{}) bool {
 	}
 
 	return proto.Equal(this, that1)
+}
+
+var (
+	CallbackStatus_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"Standby":     1,
+		"Scheduled":   2,
+		"BackingOff":  3,
+		"Failed":      4,
+		"Succeeded":   5,
+	}
+)
+
+// CallbackStatusFromString parses a CallbackStatus value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to CallbackStatus
+func CallbackStatusFromString(s string) (CallbackStatus, error) {
+	if v, ok := CallbackStatus_value[s]; ok {
+		return CallbackStatus(v), nil
+	} else if v, ok := CallbackStatus_shorthandValue[s]; ok {
+		return CallbackStatus(v), nil
+	}
+	return CallbackStatus(0), fmt.Errorf("%s is not a valid CallbackStatus", s)
 }
