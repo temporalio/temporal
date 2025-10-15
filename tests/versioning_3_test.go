@@ -873,10 +873,7 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	s.Eventually(func() bool {
 		desc, err := s.SdkClient().DescribeWorkflow(ctx, run.GetID(), run.GetRunID())
 		s.NoError(err)
-		if desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED {
-			return true
-		}
-		return false
+		return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 	}, 5*time.Second, 10*time.Millisecond)
 
 	// get the execution info of the next run in the retry chain, wait for next run to start
