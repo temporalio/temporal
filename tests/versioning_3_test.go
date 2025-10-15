@@ -781,9 +781,20 @@ func (s *Versioning3Suite) TestUnpinnedWorkflowWithRamp_ToUnversioned() {
 	)
 }
 
-func (s *Versioning3Suite) TestAutoUpgradeWorkflowRetry() {
-	tv1 := testvars.New(s).WithBuildIDNumber(1)
+func (s *Versioning3Suite) TestWorkflowRetry_ExpectNoInherit_Pinned() {
+	s.testWorkflowRetry(workflow.VersioningBehaviorPinned, false)
+}
 
+func (s *Versioning3Suite) TestWorkflowRetry_ExpectNoInherit_Unpinned() {
+	s.testWorkflowRetry(workflow.VersioningBehaviorAutoUpgrade, false)
+}
+
+func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavior, expectInherit bool) {
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(1)
+
+	activityCompletedChan := make(chan struct{})
+	currentVersionChangedChan := make(chan struct{})
 	wf := func(ctx workflow.Context, version string) (string, error) {
 		var ret string
 		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
@@ -794,35 +805,46 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflowRetry() {
 			},
 		}), "act").Get(ctx, &ret)
 		s.NoError(err)
+		activityCompletedChan <- struct{}{}
+		<-currentVersionChangedChan
 		return "", errors.New("explicit failure")
 	}
 	act1 := func() (string, error) {
 		return "v1", nil
 	}
+	act2 := func() (string, error) {
+		return "v2", nil
+	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
-			Version:                   tv1.SDKDeploymentVersion(),
-			UseVersioning:             true,
-			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+			Version:       tv1.SDKDeploymentVersion(),
+			UseVersioning: true,
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
-	w1.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
+	w1.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf", VersioningBehavior: behavior})
 	w1.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act"})
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	// Make sure both TQs are registered in v1 which will be the current version. This is to make sure
-	// we don't get to ramping while one of the TQs has not yet got v1 as it's current version.
-	// (note that s.setCurrentDeployment(tv1) can pass even with one TQ added to the version)
-	s.waitForDeploymentDataPropagation(tv1, versionStatusInactive, false, tqTypeWf, tqTypeAct)
-	s.setCurrentDeployment(tv1)
+	w2 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:       tv2.SDKDeploymentVersion(),
+			UseVersioning: true,
+		},
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w2.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf", VersioningBehavior: behavior})
+	w2.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
 
-	// wait until all task queue partitions know that tv1 is current
+	// Set v1 to current and propagate to all task queue partitions
+	s.setCurrentDeployment(tv1)
 	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
 
 	run, err := s.SdkClient().ExecuteWorkflow(
@@ -836,6 +858,16 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflowRetry() {
 		"wf",
 	)
 	s.NoError(err)
+
+	// wait for workflow to progress on v1
+	<-activityCompletedChan
+
+	// Set v2 to current and propagate to all task queue partitions
+	s.setCurrentDeployment(tv2)
+	s.waitForDeploymentDataPropagation(tv2, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
+
+	// signal workflow to continue (it will fail and then retry)
+	currentVersionChangedChan <- struct{}{}
 
 	// wait for first run to fail
 	s.Eventually(func() bool {
@@ -860,15 +892,33 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflowRetry() {
 		return false
 	}, 5*time.Second, 1*time.Millisecond)
 
-	// confirm that the second run eventually gets auto-upgrade behavior and runs on version 1
+	// confirm that the second run eventually gets auto-upgrade behavior and runs on version 2 (no inherit)
 	s.Eventually(func() bool {
 		secondRunResp, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), secondRunId)
 		s.NoError(err)
-		if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE &&
-			secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID() {
-			return true
+		switch behavior {
+		case workflow.VersioningBehaviorPinned:
+			if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior() != enumspb.VERSIONING_BEHAVIOR_PINNED {
+				return false
+			}
+		case workflow.VersioningBehaviorAutoUpgrade:
+			if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior() != enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+				return false
+			}
+		case workflow.VersioningBehaviorUnspecified:
 		}
-		return false
+
+		switch expectInherit {
+		case true:
+			if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() != tv1.BuildID() {
+				return false
+			}
+		case false:
+			if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() != tv2.BuildID() {
+				return false
+			}
+		}
+		return true
 	}, 5*time.Second, 1*time.Millisecond)
 }
 
