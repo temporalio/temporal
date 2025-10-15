@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -23,6 +22,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -194,7 +194,7 @@ type (
 		GetNexusCompletion(
 			ctx context.Context,
 			requestID string,
-		) (nexus.OperationCompletion, error)
+		) (nexusrpc.OperationCompletion, error)
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.

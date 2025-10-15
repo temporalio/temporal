@@ -3,7 +3,7 @@ package chasm
 import (
 	"context"
 
-	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 )
 
 // MSPointer is a special CHASM type which components can use to access their Node's underlying backend (i.e. mutable
@@ -14,5 +14,5 @@ type MSPointer interface {
 	GetNexusCompletion(
 		ctx context.Context,
 		requestID string,
-	) (nexus.OperationCompletion, error)
+	) (nexusrpc.OperationCompletion, error)
 }

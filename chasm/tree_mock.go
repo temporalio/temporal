@@ -13,11 +13,11 @@ import (
 	context "context"
 	reflect "reflect"
 
-	nexus "github.com/nexus-rpc/sdk-go/nexus"
 	enums "go.temporal.io/api/enums/v1"
 	enums0 "go.temporal.io/server/api/enums/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	definition "go.temporal.io/server/common/definition"
+	nexusrpc "go.temporal.io/server/common/nexus/nexusrpc"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -119,10 +119,10 @@ func (mr *MockNodeBackendMockRecorder) GetExecutionState() *gomock.Call {
 }
 
 // GetNexusCompletion mocks base method.
-func (m *MockNodeBackend) GetNexusCompletion(ctx context.Context, requestID string) (nexus.OperationCompletion, error) {
+func (m *MockNodeBackend) GetNexusCompletion(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNexusCompletion", ctx, requestID)
-	ret0, _ := ret[0].(nexus.OperationCompletion)
+	ret0, _ := ret[0].(nexusrpc.OperationCompletion)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
