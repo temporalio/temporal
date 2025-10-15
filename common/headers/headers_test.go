@@ -170,13 +170,13 @@ func TestIsExperimentRequested(t *testing.T) {
 		},
 		{
 			name:            "max experiment size limit match",
-			headerValues:    []string{strings.Repeat("a,", (maxExperimentHeaderValueSize/2)-1)},
+			headerValues:    []string{strings.Repeat("a,", 49)},
 			checkExperiment: "a",
 			expected:        true, // target-exp is the 10th experiment, within limit
 		},
 		{
 			name:            "at max experiment size limit no match",
-			headerValues:    []string{strings.Repeat("a,", (maxExperimentHeaderValueSize / 2))},
+			headerValues:    []string{strings.Repeat("a,", 50)},
 			checkExperiment: "a",
 			expected:        false, // target-exp is the 10th experiment, within limit
 		},
