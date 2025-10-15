@@ -505,9 +505,6 @@ func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Fast refresh so ratelimiter picks up config quickly.
-	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
-
 	// configure task queue
 	_, err := s.FrontendClient().UpdateTaskQueueConfig(ctx, &workflowservice.UpdateTaskQueueConfigRequest{
 		Namespace:     s.Namespace().String(),
@@ -556,9 +553,6 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Fast refresh so ratelimiter picks up config quickly.
-	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
-
 	// configure task queue
 	_, err := s.FrontendClient().UpdateTaskQueueConfig(ctx, &workflowservice.UpdateTaskQueueConfigRequest{
 		Namespace:     s.Namespace().String(),
@@ -605,9 +599,6 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_WeightOverride_IsEnforcedAcrossThre
 		tasksPerKey   = 30
 		buffer        = 3 * time.Second
 	)
-
-	// Fast refresh so ratelimiter picks up config quickly.
-	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
 
 	// Fairness key overrides take precedence over default.
 	// Override A and C to default and make B twice as heavy (ie ~2x effective RPS).
