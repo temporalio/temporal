@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -705,6 +706,10 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		)
 	}
 
+	if taskInfo.IsForceReplication {
+		syncStateResult.VersionedTransitionArtifact.IsCloseTransferTaskAcked = c.isCloseTransferTaskAcked(mutableState)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -845,6 +850,28 @@ func (c *syncVersionedTransitionTaskConverter) generateBackfillHistoryTask(
 		VersionedTransition: taskInfo.VersionedTransition,
 		VisibilityTime:      timestamppb.New(taskInfo.VisibilityTimestamp),
 	}, nil
+}
+
+func (c *syncVersionedTransitionTaskConverter) isCloseTransferTaskAcked(
+	mutableState historyi.MutableState,
+) bool {
+	closeTransferTaskID := mutableState.GetExecutionInfo().CloseTransferTaskId
+
+	if closeTransferTaskID == 0 {
+		return false
+	}
+
+	transferQueueState, ok := c.shardContext.GetQueueState(tasks.CategoryTransfer)
+	if !ok {
+		return false
+	}
+
+	closeTransferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: mutableState.GetWorkflowKey(),
+		TaskID:      closeTransferTaskID,
+	}
+
+	return queues.IsTaskAcked(closeTransferTask, transferQueueState)
 }
 
 func (c *syncVersionedTransitionTaskConverter) convertTaskEquivalents(
