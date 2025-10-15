@@ -831,6 +831,8 @@ func (s *WorkflowResetWithChildSuite) getWorkflowTaskFinishEventIdAfterChild(ctx
 			if event.GetChildWorkflowExecutionTerminatedEventAttributes().GetWorkflowExecution().GetWorkflowId() == childID {
 				childClosedSeen = true
 			}
+		default:
+			// Do nothing and fall through.
 		}
 		if !childClosedSeen {
 			continue
