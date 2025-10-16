@@ -151,9 +151,9 @@ func (s *PayloadStore) SearchAttributes(
 ) []*chasm.SearchAttribute {
 	// TODO: UpsertSearchAttribute as well when CHASM framework supports Per-Component SearchAttributes
 	// For now, we just update a random existing pre-defined SA to make sure the logic works.
-	key := chasm.NewSearchAttributeKeyword(TestKeywordSAFieldName, chasm.SearchAttributeFieldKeyword01)
-	key.SetValue(TestKeywordSAFieldValue)
-	return []*chasm.SearchAttribute{&key.SearchAttribute}
+	attr := chasm.NewSearchAttributeKeywordByAlias(TestKeywordSAFieldName, TestKeywordSAFieldName)
+	attr.SetValue(TestKeywordSAFieldValue)
+	return []*chasm.SearchAttribute{&attr.SearchAttribute}
 }
 
 // Memo implements chasm.VisibilityMemoProvider interface

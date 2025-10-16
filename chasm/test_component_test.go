@@ -96,9 +96,9 @@ func (tc *TestComponent) Fail(_ MutableContext) {
 
 // SearchAttributes implements VisibilitySearchAttributesProvider interface.
 func (tc *TestComponent) SearchAttributes(_ Context) []*SearchAttribute {
-	key := NewSearchAttributeTime(testComponentStartTimeSAKey, SearchAttributeFieldDatetime01)
-	key.SetValue(tc.ComponentData.GetStartTime().AsTime())
-	return []*SearchAttribute{&key.SearchAttribute}
+	attr := NewSearchAttributeTimeByAlias(testComponentStartTimeSAKey, testComponentStartTimeSAKey)
+	attr.SetValue(tc.ComponentData.GetStartTime().AsTime())
+	return []*SearchAttribute{&attr.SearchAttribute}
 }
 
 // Memo implements VisibilityMemoProvider interface.

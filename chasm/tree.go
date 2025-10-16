@@ -2327,17 +2327,19 @@ func searchAttributeSliceEqual(a, b []*SearchAttribute) bool {
 		return false
 	}
 
-	aMap := make(map[string]VisibilityValue, len(a))
+	aMap := make(map[string]any, len(a))
 	for _, key := range a {
 		aMap[key.GetAlias()] = key.GetValue()
 	}
 
-	bMap := make(map[string]VisibilityValue, len(b))
+	bMap := make(map[string]any, len(b))
 	for _, key := range b {
 		bMap[key.GetAlias()] = key.GetValue()
 	}
 
-	return maps.EqualFunc(aMap, bMap, isVisibilityValueEqual)
+	return maps.EqualFunc(aMap, bMap, func(a, b any) bool {
+		return reflect.DeepEqual(a, b)
+	})
 }
 
 func (n *Node) Terminate(

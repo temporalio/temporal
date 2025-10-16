@@ -63,32 +63,21 @@ func WithSearchAttributes(searchAttributes []*SearchAttribute) RegistrableCompon
 			return
 		}
 
-		fieldToAlias := make(map[string]string)
+		aliasToKey := make(map[string]string)
 
-		for _, key := range searchAttributes {
-			field := key.GetField()
+		for _, sa := range searchAttributes {
+			alias := sa.GetAlias()
 
-			if key.GetValueType() != field.valueType {
+			if existingKey, exists := aliasToKey[alias]; exists {
 				panic(fmt.Sprintf(
-					"search attribute alias %q has type %s but field %s has type %s",
-					key.GetAlias(),
-					key.GetValueType(),
-					field.GetFieldName(),
-					field.valueType,
+					"duplicate search attribute alias %q: keys %q and %q both map to the same alias",
+					alias,
+					existingKey,
+					sa.GetKey(),
 				))
 			}
 
-			fieldName := field.GetFieldName()
-			if existingAlias, exists := fieldToAlias[fieldName]; exists {
-				panic(fmt.Sprintf(
-					"duplicate search attribute field %q: aliases %q and %q both map to the same field",
-					fieldName,
-					existingAlias,
-					key.GetAlias(),
-				))
-			}
-
-			fieldToAlias[fieldName] = key.GetAlias()
+			aliasToKey[alias] = sa.GetKey()
 		}
 	}
 }
