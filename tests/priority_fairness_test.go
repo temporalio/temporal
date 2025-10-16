@@ -73,8 +73,13 @@ func (s *PrioritySuite) TestPriority_Activity_Basic() {
 				var commands []*commandpb.Command
 
 				for i, pri := range rand.Perm(Levels) {
-					input, err := payloads.Encode(wfidx, pri+1)
+					pri += 1 // 1-based
+					input, err := payloads.Encode(wfidx, pri)
 					s.NoError(err)
+					priMsg := &commonpb.Priority{PriorityKey: int32(pri)}
+					if pri == (Levels+1)/2 {
+						priMsg = nil // nil should be treated as default (3)
+					}
 					commands = append(commands, &commandpb.Command{
 						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
@@ -83,10 +88,8 @@ func (s *PrioritySuite) TestPriority_Activity_Basic() {
 								ActivityType:           tv.ActivityType(),
 								TaskQueue:              tv.TaskQueue(),
 								ScheduleToCloseTimeout: durationpb.New(time.Minute),
-								Priority: &commonpb.Priority{
-									PriorityKey: int32(pri + 1),
-								},
-								Input: input,
+								Priority:               priMsg,
+								Input:                  input,
 							},
 						},
 					})
@@ -120,7 +123,7 @@ func (s *PrioritySuite) TestPriority_Activity_Basic() {
 
 	w := wrongorderness(runs)
 	s.T().Log("wrongorderness:", w)
-	s.Less(w, 0.15)
+	s.Less(w, 0.1)
 }
 
 func (s *PrioritySuite) TestSubqueue_Migration() {

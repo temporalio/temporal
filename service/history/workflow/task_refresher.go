@@ -83,7 +83,9 @@ func (r *TaskRefresherImpl) PartialRefresh(
 	minVersionedTransition *persistencespb.VersionedTransition,
 	previousPendingChildIds map[int64]struct{},
 ) error {
-	// TODO: handle task refresh for non workflow mutable states.
+	// CHASM tasks will be replicated as part of ApplyMutation/ApplySnapshot.
+	// Physical tasks will also be automatically generated upon CloseTransaction.
+	// So there's no need to do partial refresh for CHASM components.
 	if !mutableState.IsWorkflow() {
 		return nil
 	}
@@ -356,8 +358,6 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 
 	pendingActivityInfos := mutableState.GetPendingActivityInfos()
 
-	refreshActivityTimerTask := false
-
 	for _, activityInfo := range pendingActivityInfos {
 
 		// Skip task generation if this activity has not been updated since minVersionedTransition.
@@ -379,8 +379,6 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 			}
 		}
 
-		refreshActivityTimerTask = true
-
 		if activityInfo.StartedEventId != common.EmptyEventID {
 			continue
 		}
@@ -394,10 +392,6 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 		); err != nil {
 			return err
 		}
-	}
-
-	if !refreshActivityTimerTask {
-		return nil
 	}
 
 	_, err := NewTimerSequence(mutableState).CreateNextActivityTimer()
@@ -414,8 +408,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 		return nil
 	}
 
-	refreshUserTimerTask := false
-
 	pendingTimerInfos := mutableState.GetPendingTimerInfos()
 	for _, timerInfo := range pendingTimerInfos {
 
@@ -427,8 +419,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 			continue
 		}
 
-		refreshUserTimerTask = true
-
 		// need to update user timer task mask for which task is generated
 		if err := mutableState.UpdateUserTimerTaskStatus(
 			timerInfo.TimerId,
@@ -436,10 +426,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 		); err != nil {
 			return err
 		}
-	}
-
-	if !refreshUserTimerTask {
-		return nil
 	}
 
 	_, err := NewTimerSequence(mutableState).CreateNextUserTimer()

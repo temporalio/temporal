@@ -4,12 +4,12 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.uber.org/fx"
@@ -32,7 +32,7 @@ func ConfigProvider(coll *dynamicconfig.Collection) *Config {
 }
 
 func RegisterHTTPHandler(options HandlerOptions, logger log.Logger, router *mux.Router) {
-	h := nexus.NewCompletionHTTPHandler(nexus.CompletionHandlerOptions{
+	h := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
 		Handler: &completionHandler{
 			options,
 			headers.NewDefaultVersionChecker(),
