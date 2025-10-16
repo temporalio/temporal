@@ -392,7 +392,7 @@ lint-typos:
 		echo "Skipping spell check..."; \
 	fi
 
-# Check spelling only on files changed from main branch
+# Check spelling only on files changed from main branch (recieve misspelling test)
 lint-typos-changed:
 	@printf $(COLOR) "Checking spelling on changed files with typos..."
 	@if command -v $(TYPOS) >/dev/null 2>&1; then \
