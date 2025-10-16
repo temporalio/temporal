@@ -68,8 +68,12 @@ type (
 
 		// These fields are for use by matcherData:
 		waitableMatchResult
-		forwardCtx      context.Context // non-nil for sync match task only
-		isPollForwarder bool
+		forwardCtx context.Context // non-nil for sync match task only
+		// effectivePriority is initialized from an explicit task priority if present, or the
+		// default for the task queue. It can also be the special pollForwarderPriority (higher
+		// than normal priorities) to indicate the poll forwarder. In some other cases (e.g.
+		// migration) it may be adjusted from the explicit task priority.
+		effectivePriority priorityKey
 	}
 
 	// taskResponse is used to report the result of either a match with a local poller,
@@ -116,10 +120,11 @@ func newInternalTaskForSyncMatch(
 				TaskId: syncMatchTaskId,
 			},
 		},
-		forwardInfo:  forwardInfo,
-		source:       source,
-		redirectInfo: redirectInfo,
-		responseC:    make(chan taskResponse, 1),
+		forwardInfo:       forwardInfo,
+		source:            source,
+		redirectInfo:      redirectInfo,
+		responseC:         make(chan taskResponse, 1),
+		effectivePriority: priorityKey(info.GetPriority().GetPriorityKey()),
 	}
 }
 
@@ -132,7 +137,8 @@ func newInternalTaskFromBacklog(
 			AllocatedTaskInfo: info,
 			completionFunc:    completionFunc,
 		},
-		source: enumsspb.TASK_SOURCE_DB_BACKLOG,
+		source:            enumsspb.TASK_SOURCE_DB_BACKLOG,
+		effectivePriority: priorityKey(info.GetData().GetPriority().GetPriorityKey()),
 	}
 }
 
@@ -145,9 +151,10 @@ func newInternalQueryTask(
 			taskID:  taskID,
 			request: request,
 		},
-		forwardInfo: request.GetForwardInfo(),
-		responseC:   make(chan taskResponse, 1),
-		source:      enumsspb.TASK_SOURCE_HISTORY,
+		forwardInfo:       request.GetForwardInfo(),
+		responseC:         make(chan taskResponse, 1),
+		source:            enumsspb.TASK_SOURCE_HISTORY,
+		effectivePriority: priorityKey(request.GetPriority().GetPriorityKey()),
 	}
 }
 
@@ -175,7 +182,11 @@ func newInternalStartedTask(info *startedTaskInfo) *internalTask {
 }
 
 func newPollForwarderTask() *internalTask {
-	return &internalTask{isPollForwarder: true}
+	return &internalTask{effectivePriority: pollForwarderPriority}
+}
+
+func (task *internalTask) isPollForwarder() bool {
+	return task.effectivePriority == pollForwarderPriority
 }
 
 // hasEmptyResponse is true if a task contains an empty response for the appropriate TaskInfo
