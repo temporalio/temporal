@@ -60,11 +60,10 @@ type (
 	// queue, corresponding to a single versioned queue of a task queue partition.
 	// TODO(pri): rename this
 	physicalTaskQueueManagerImpl struct {
-		status             int32
-		partitionMgr       *taskQueuePartitionManagerImpl
-		queue              *PhysicalTaskQueueKey
-		config             *taskQueueConfig
-		defaultPriorityKey priorityKey
+		status       int32
+		partitionMgr *taskQueuePartitionManagerImpl
+		queue        *PhysicalTaskQueueKey
+		config       *taskQueueConfig
 
 		// This context is valid for lifetime of this physicalTaskQueueManagerImpl.
 		// It can be used to notify when the task queue is closing.
@@ -142,7 +141,6 @@ func newPhysicalTaskQueueManager(
 		return config.PollerScalingDecisionsPerSecond() * 1e6
 	}
 	pqMgr := &physicalTaskQueueManagerImpl{
-		defaultPriorityKey:       defaultPriorityLevel(config.PriorityLevels()),
 		status:                   common.DaemonStatusInitialized,
 		partitionMgr:             partitionMgr,
 		queue:                    queue,
@@ -398,7 +396,6 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		// there. In that case, go back for another task.
 		// If we didn't do this, the task would be rejected when we call RecordXTaskStarted on
 		// history, but this is more efficient.
-
 		if task.event != nil && IsTaskExpired(task.event.AllocatedTaskInfo) {
 			// task is expired while polling
 			c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, metrics.TaskExpireStageMemoryTag)
@@ -477,6 +474,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchQueryTask(
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	task := newInternalQueryTask(taskId, request)
+	c.config.setDefaultPriority(task)
 	if !task.isForwarded() {
 		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(request.GetPriority().GetPriorityKey())).incrementTaskCount()
 	}
@@ -502,6 +500,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 		}
 	}
 	task := newInternalNexusTask(taskId, deadline, opDeadline, request)
+	c.config.setDefaultPriority(task)
 	if !task.isForwarded() {
 		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(0)).incrementTaskCount() // Nexus has no priorities
 	}
@@ -766,8 +765,14 @@ func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
 	intervals map[priorityKey]*taskTracker,
 	priorityKey priorityKey,
 ) *taskTracker {
+	// priorityKey could be zero here if we're tracking dispatched tasks (i.e. called from PollTask)
+	// and the poll was forwarded so we have a "started" task. We don't return the priority with the
+	// started task info so it's not available here. Use the default priority to avoid confusion
+	// even though it may not be accurate.
+	// TODO: either return priority with the started task, or do this tracking on the node where the
+	// match happened, so we have the right value here.
 	if priorityKey == 0 {
-		priorityKey = c.defaultPriorityKey
+		priorityKey = c.config.DefaultPriorityKey
 	}
 
 	// First try with read lock for the common case where tracker already exists.

@@ -14,6 +14,11 @@ import (
 	"go.temporal.io/server/service/matching/counter"
 )
 
+const (
+	// Maximum value for priority levels.
+	maxPriorityLevels = 100
+)
+
 type (
 	// Config represents configuration for matching service
 	Config struct {
@@ -143,7 +148,8 @@ type (
 		MinTaskThrottlingBurstSize func() int
 		MaxTaskDeleteBatchSize     func() int
 		TaskDeleteInterval         func() time.Duration
-		PriorityLevels             func() priorityKey
+		PriorityLevels             priorityKey
+		DefaultPriorityKey         priorityKey
 
 		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
 		GetUserDataMinWaitTime     time.Duration
@@ -320,6 +326,9 @@ func NewConfig(
 func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *taskQueueConfig {
 	taskQueueName := tq.Name()
 	taskType := tq.TaskType()
+	priorityLevels := priorityKey(config.PriorityLevels(ns.String(), taskQueueName, taskType))
+	priorityLevels = max(priorityLevels, min(priorityLevels, maxPriorityLevels), 1)
+	defaultPriorityKey := (priorityLevels + 1) / 2
 
 	return &taskQueueConfig{
 		RangeSize: config.RangeSize,
@@ -366,9 +375,8 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		TaskDeleteInterval: func() time.Duration {
 			return config.TaskDeleteInterval(ns.String(), taskQueueName, taskType)
 		},
-		PriorityLevels: func() priorityKey {
-			return priorityKey(config.PriorityLevels(ns.String(), taskQueueName, taskType))
-		},
+		PriorityLevels:             priorityLevels,
+		DefaultPriorityKey:         defaultPriorityKey,
 		GetUserDataLongPollTimeout: config.GetUserDataLongPollTimeout,
 		GetUserDataMinWaitTime:     1 * time.Second,
 		GetUserDataReturnBudget:    returnEmptyTaskTimeBudget,
@@ -450,6 +458,17 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 	}
 }
 
-func defaultPriorityLevel(priorityLevels priorityKey) priorityKey {
-	return priorityKey(priorityLevels+1) / 2
+func (c *taskQueueConfig) clipPriority(priority priorityKey) priorityKey {
+	if priority == 0 {
+		priority = c.DefaultPriorityKey
+	}
+	priority = max(priority, 1)
+	priority = min(priority, c.PriorityLevels)
+	return priority
+}
+
+func (c *taskQueueConfig) setDefaultPriority(task *internalTask) {
+	if task.effectivePriority == 0 {
+		task.effectivePriority = c.DefaultPriorityKey
+	}
 }
