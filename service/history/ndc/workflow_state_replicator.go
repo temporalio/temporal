@@ -1159,7 +1159,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	sourceCluster string,
 	newRunInfo *replicationspb.NewRunInfo,
 	isStateBased bool,
-	isCloseTransferTaskAcked bool,
+	skipGenerateCloseTransferTask bool,
 ) error {
 	var lastWriteVersion int64
 	executionInfo := sourceMutableState.ExecutionInfo
@@ -1222,7 +1222,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	}
 
 	taskRefresher := workflow.NewTaskRefresher(r.shardContext)
-	err = taskRefresher.Refresh(ctx, mutableState, isCloseTransferTaskAcked)
+	err = taskRefresher.Refresh(ctx, mutableState, skipGenerateCloseTransferTask)
 	if err != nil {
 		return err
 	}
