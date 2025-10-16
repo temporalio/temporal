@@ -30,7 +30,7 @@ func TestValidTransitions(t *testing.T) {
 
 	// AttemptFailed
 	mctx := &chasm.MockMutableContext{}
-	err := TransitionAttemptFailed.Apply(mctx, callback, EventAttemptFailed{
+	err := TransitionAttemptFailed.Apply(callback, mctx, EventAttemptFailed{
 		Time:        currentTime,
 		Err:         errors.New("test"),
 		RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
@@ -52,7 +52,7 @@ func TestValidTransitions(t *testing.T) {
 
 	// Rescheduled
 	mctx = &chasm.MockMutableContext{}
-	err = TransitionRescheduled.Apply(mctx, callback, EventRescheduled{})
+	err = TransitionRescheduled.Apply(callback, mctx, EventRescheduled{})
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
@@ -76,7 +76,7 @@ func TestValidTransitions(t *testing.T) {
 	// Succeeded
 	currentTime = currentTime.Add(time.Second)
 	mctx = &chasm.MockMutableContext{}
-	err = TransitionSucceeded.Apply(mctx, callback, EventSucceeded{Time: currentTime})
+	err = TransitionSucceeded.Apply(callback, mctx, EventSucceeded{Time: currentTime})
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
@@ -96,7 +96,7 @@ func TestValidTransitions(t *testing.T) {
 
 	// failed
 	mctx = &chasm.MockMutableContext{}
-	err = TransitionFailed.Apply(mctx, callback, EventFailed{Time: currentTime, Err: errors.New("failed")})
+	err = TransitionFailed.Apply(callback, mctx, EventFailed{Time: currentTime, Err: errors.New("failed")})
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
