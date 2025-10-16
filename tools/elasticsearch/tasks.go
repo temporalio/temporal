@@ -78,7 +78,7 @@ func (task *SetupTask) setupIndex(ctx context.Context) error {
 		// Check if the error is an Elasticsearch error and if so check if the index already exists.
 		var esErr *elastic.Error
 		if errors.As(err, &esErr) {
-			if esErr.Status == 400 && esErr.Details.Type == "resource_already_exists_exception" {
+			if esErr.Status == 400 && esErr.Details != nil && esErr.Details.Type == "resource_already_exists_exception" {
 				task.logger.Info("Index already exists, skipping creation", tag.NewStringTag("indexName", config.VisibilityIndex))
 				return nil
 			}
