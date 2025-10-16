@@ -895,6 +895,9 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		s.Eventually(func() bool {
 			desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, run0.GetRunID())
 			s.NoError(err)
+			if err != nil {
+				return false
+			}
 			return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
 		}, 5*time.Second, 1*time.Millisecond)
 	}
@@ -903,7 +906,10 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	s.Eventually(func() bool {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfIDOfRetryingWF, "")
 		s.NoError(err)
-		// Check if workflow is running and waiting for signal
+		if err != nil {
+			return false
+		}
+		// Check if workflow is running on v1
 		return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
 	}, 5*time.Second, 1*time.Millisecond)
 
@@ -914,6 +920,9 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		s.Eventually(func() bool {
 			desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
 			s.NoError(err)
+			if err != nil {
+				return false
+			}
 			runIDBeforeRetry = desc.WorkflowExecution.RunID
 			return true
 		}, 5*time.Second, 1*time.Millisecond)
@@ -922,6 +931,9 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		s.Eventually(func() bool {
 			continuedAsNewRunResp, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
 			s.NoError(err)
+			if err != nil {
+				return false
+			}
 			caNRunID := continuedAsNewRunResp.WorkflowExecution.RunID
 			// confirm that it's a new run
 			if caNRunID != run0.GetRunID() {
@@ -943,6 +955,9 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	s.Eventually(func() bool {
 		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeRetry)
 		s.NoError(err)
+		if err != nil {
+			return false
+		}
 		return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 	}, 5*time.Second, 1*time.Millisecond)
 
@@ -951,6 +966,9 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	s.Eventually(func() bool {
 		secondRunResp, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
 		s.NoError(err)
+		if err != nil {
+			return false
+		}
 		secondRunID = secondRunResp.WorkflowExecution.RunID
 		// confirm that it's a new run
 		if secondRunID != runIDBeforeRetry {
@@ -972,7 +990,6 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 			if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior() != enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 				return false
 			}
-		case workflow.VersioningBehaviorUnspecified:
 		default:
 		}
 		switch expectInherit {
