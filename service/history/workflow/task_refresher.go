@@ -87,7 +87,9 @@ func (r *TaskRefresherImpl) PartialRefresh(
 	previousPendingChildIds map[int64]struct{},
 	shouldSkipGeneratingCloseTransferTask bool,
 ) error {
-	// TODO: handle task refresh for non workflow mutable states.
+	// CHASM tasks will be replicated as part of ApplyMutation/ApplySnapshot.
+	// Physical tasks will also be automatically generated upon CloseTransaction.
+	// So there's no need to do partial refresh for CHASM components.
 	if !mutableState.IsWorkflow() {
 		return nil
 	}

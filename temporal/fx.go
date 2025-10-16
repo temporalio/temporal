@@ -1208,6 +1208,13 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.ComponentFX,
 				tag.NewStringTag("function", e.ConstructorName))
 		}
+	case *fxevent.BeforeRun:
+		l.logger.Debug("before run",
+			tag.ComponentFX,
+			tag.NewStringTag("name", e.Name),
+			tag.NewStringTag("kind", e.Kind),
+			tag.NewStringTag("module", e.ModuleName),
+		)
 	default:
 		l.logger.Warn("unknown fx log type, update fxLogAdapter",
 			tag.ComponentFX,

@@ -4217,13 +4217,13 @@ func (d *dynamicRateBurstWrapper) Burst() int {
 
 // TODO(pri): cleanup; delete this
 func useNewMatcher(config *Config) {
-	config.NewMatcher = func(_ string, _ string, _ enumspb.TaskQueueType, callback func(bool)) (v bool, cancel func()) {
+	config.NewMatcherSub = func(_ string, _ string, _ enumspb.TaskQueueType, callback func(bool)) (v bool, cancel func()) {
 		return true, func() {}
 	}
 }
 
 func useFairness(config *Config) {
-	config.EnableFairness = func(_ string, _ string, _ enumspb.TaskQueueType, callback func(bool)) (v bool, cancel func()) {
+	config.EnableFairnessSub = func(_ string, _ string, _ enumspb.TaskQueueType, callback func(bool)) (v bool, cancel func()) {
 		return true, func() {}
 	}
 }

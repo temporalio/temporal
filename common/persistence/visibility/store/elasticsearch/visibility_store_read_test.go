@@ -408,15 +408,15 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
 	s.Nil(queryParams.Sorter)
 
 	query = `CustomKeywordField = 'pid'`
-	_, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
-	s.Error(err)
-	var invalidArgumentErr *serviceerror.InvalidArgument
-	s.ErrorAs(err, &invalidArgumentErr)
-	s.EqualError(err, "mapper error")
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	s.NoError(err)
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"CustomKeywordField":"pid"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
 
 	query = `AliasForUnknownField = 'pid'`
 	_, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
+	var invalidArgumentErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "invalid query: unable to convert filter expression: unable to convert left side of \"AliasForUnknownField = 'pid'\": invalid search attribute: AliasForUnknownField")
 
@@ -433,10 +433,10 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
 	s.Equal(`[{"CustomKeywordField":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `order by CustomKeywordField asc`
-	_, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
-	s.Error(err)
-	s.ErrorAs(err, &invalidArgumentErr)
-	s.EqualError(err, "mapper error")
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	s.NoError(err)
+	s.JSONEq(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.NotNil(queryParams.Sorter)
 
 	query = `order by AliasForUnknownField asc`
 	_, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
@@ -463,19 +463,13 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper_Error() {
 	s.Error(err)
 	var invalidArgumentErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgumentErr)
-	s.EqualError(err, "mapper error")
+	s.EqualError(err, "invalid query: unable to convert filter expression: unable to convert left side of \"ProductId = 'pid'\": invalid search attribute: ProductId")
 
 	query = `order by ExecutionTime`
 	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Equal(`[{"ExecutionTime":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
-
-	query = `order by CustomIntField asc`
-	_, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
-	s.Error(err)
-	s.ErrorAs(err, &invalidArgumentErr)
-	s.EqualError(err, "mapper error")
 
 	s.visibilityStore.searchAttributesMapperProvider = nil
 }
