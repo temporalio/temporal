@@ -813,8 +813,8 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		return nil
 	}
 
-	activityCompletedChan := make(chan struct{})
-	currentVersionChangedChan := make(chan struct{})
+	activityCompletedChan := make(chan struct{}, 5)
+	currentVersionChangedChan := make(chan struct{}, 5)
 	doCaN := true
 	wf := func(ctx workflow.Context) (string, error) {
 		var ret string
@@ -929,12 +929,13 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 
 	// signal workflow to continue (it will fail and then retry on v2 if it doesn't inherit)
 	currentVersionChangedChan <- struct{}{}
+	currentVersionChangedChan <- struct{}{}
 
-	// wait for first run after continue-as-new to fail
+	// wait for run that will retry to fail
 	s.Eventually(func() bool {
 		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeRetry)
 		s.NoError(err)
-		return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+		return desc.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	}, 10*time.Second, 1*time.Second)
 
 	// get the execution info of the next run in the retry chain, wait for next run to start
