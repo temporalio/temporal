@@ -1386,6 +1386,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskToProto(
 		LastVersionHistoryItem: syncVersionedTransitionTask.LastVersionHistoryItem,
 		IsFirstTask:            syncVersionedTransitionTask.IsFirstTask,
 		TargetClusters:         syncVersionedTransitionTask.TargetClusters,
+		IsForceReplication:     syncVersionedTransitionTask.IsForceReplication,
 		TaskEquivalents:        taskInfoEquivalents,
 	}, nil
 }
@@ -1424,6 +1425,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskFromProto(
 		TaskEquivalents:        taskEquivalents,
 		IsFirstTask:            syncVersionedTransitionTask.IsFirstTask,
 		TargetClusters:         syncVersionedTransitionTask.TargetClusters,
+		IsForceReplication:     syncVersionedTransitionTask.IsForceReplication,
 	}, nil
 }
 
