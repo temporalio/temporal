@@ -1,0 +1,44 @@
+# Configuration for typos spell checker
+# See: https://github.com/crate-ci/typos
+
+[default]
+# Ensure we check binary file names
+binary = false
+
+[default.extend-words]
+# Add custom dictionary entries here if needed
+# Example: correctword = "correctword"
+
+[files]
+# Exclude generated protobuf files
+extend-exclude = [
+  "*.pb.go",
+  "*.pb.gw.go",
+  "*.proto",
+  "*.binpb",
+  # Exclude other generated or third-party files
+  "*.gen.go",
+  ".bin/**",
+  ".testoutput/**",
+  "vendor/**",
+  ".stamp/**",
+]
+
+[type.go]
+extend-glob = ["*.go"]
+
+# Inline typos ignore comments:
+# To ignore a specific line, add a comment on the same line or the line before:
+#   // typos:disable-next-line
+#   var myVar = "mispeling"  // intentional
+#
+# To ignore a specific word on a line:
+#   var myVar = "mispeling"  // typos:ignore
+#
+# To disable checking for an entire file, add at the top:
+#   // typos:disable-file
+#
+# To check only changed files (useful for local development):
+#   git diff --name-only --diff-filter=ACMR main...HEAD | typos --file-list -
+# Or check only staged files:
+#   git diff --cached --name-only | typos --file-list -

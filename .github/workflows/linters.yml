@@ -133,6 +133,16 @@ jobs:
             exit 1
           fi
 
+  typos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: check spelling with typos
+        uses: crate-ci/typos@v1.28.4
+        with:
+          config: .github/_typos.toml
+
   linters-succeed:
     name: All Linters Succeed
     needs:
@@ -141,6 +151,7 @@ jobs:
       - lint-actions
       - fmt-imports
       - golangci
+      - typos
     runs-on: ubuntu-latest
     if: always()
     env:
