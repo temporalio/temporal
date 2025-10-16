@@ -194,7 +194,6 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 
 	var closeTasks []tasks.Task
 
-	// Only add the close transfer task if it hasn't already been acked on the active cluster.
 	if !skipCloseTransferTask {
 		closeExecutionTask := &tasks.CloseExecutionTask{
 			// TaskID, Visiblitytimestamp is set by shard
