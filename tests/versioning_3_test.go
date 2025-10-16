@@ -948,13 +948,13 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	}, 5*time.Second, 1*time.Millisecond)
 
 	// get the execution info of the next run in the retry chain, wait for next run to start
-	var secondRunId string
+	var secondRunID string
 	s.Eventually(func() bool {
 		secondRunResp, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
 		s.NoError(err)
-		secondRunId = secondRunResp.WorkflowExecution.RunID
+		secondRunID = secondRunResp.WorkflowExecution.RunID
 		// confirm that it's a new run
-		if secondRunId != runIDBeforeRetry {
+		if secondRunID != runIDBeforeRetry {
 			return true
 		}
 		return false
@@ -962,7 +962,7 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 
 	// confirm that the second run eventually gets auto-upgrade behavior and runs on version 2 (no inherit)
 	s.Eventually(func() bool {
-		secondRunResp, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfIDOfRetryingWF, secondRunId)
+		secondRunResp, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfIDOfRetryingWF, secondRunID)
 		s.NoError(err)
 		switch behavior {
 		case workflow.VersioningBehaviorPinned:
