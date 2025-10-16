@@ -70,3 +70,26 @@ message Callback {
 
     repeated temporal.api.common.v1.Link links = 100;
 }
+
+message InvokerState {
+    string namespace_id = 1;
+}
+
+// message InvocationResult {
+//     oneof result {
+//         InvocationResultOK ok = 1;
+//         InvocationResultFailure failure = 2;
+//         InvocationResultRetry retry = 3;
+//     }
+// }
+
+// message InvocationResultOK {
+// }
+
+// message InvocationResultFailure {
+//     temporal.api.failure.v1.Failure failure = 1;
+// }
+
+// message InvocationResultRetry {
+//     temporal.api.failure.v1.Failure failure = 1;
+// }

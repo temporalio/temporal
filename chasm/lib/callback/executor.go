@@ -1,11 +1,13 @@
 package callback
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -45,12 +47,85 @@ func NewInvocationTaskExecutor(opts InvocationTaskExecutorOptions) *InvocationTa
 }
 
 func (e *InvocationTaskExecutor) Execute(
-	ctx chasm.MutableContext,
+	ctx context.Context,
+	invokerRef chasm.ComponentRef,
+	taskAttributes chasm.TaskAttributes,
+	task *callbackspb.InvocationTask,
+) error {
+	var ns *namespace.Namespace
+	var invoker *Invoker
+	var callback *Callback
+
+	_, err := chasm.ReadComponent(
+		ctx,
+		invokerRef,
+		func(i *Invoker, ctx chasm.Context, _ any) (struct{}, error) {
+			invoker = &Invoker{
+				InvokerState: common.CloneProto(i.InvokerState),
+			}
+			invoker.completion, err := i.MSPointer.GetNexusCompletion(ctx, i.Callback.GetRequestId())
+			if err != nil {
+				return struct{}{}, err
+			}
+			invoker.workflowID = i.Callback.GetWorkflowID()
+			invoker.runID = i.Callback.GetRunID()
+			invoker.attempt = i.Callback.GetAttempt()
+
+			c, err := i.Callback.Get(ctx)
+			if err != nil {
+				return struct{}{}, err
+			}
+
+			callback = &Callback{
+				CallbackState: common.CloneProto(c.CallbackState),
+				NamespaceID:   namespace.ID(invoker.NamespaceId),
+			}
+			return struct{}{}, nil
+		},
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to read component: %w", err)
+	}
+
+	callCtx, cancel := context.WithTimeout(
+		context.Background(),
+		e.Config.RequestTimeout(invoker.NamespaceId, taskAttributes.Destination),
+	)
+	defer cancel()
+
+	result := invoker.Invoke(callCtx, ns, e, taskAttributes, task)
+
+	_, _, err = chasm.UpdateComponent(
+		ctx,
+		invokerRef,
+		func(i *Invoker, ctx chasm.MutableContext, _ any) (struct{}, error) {
+			c, err := i.Callback.Get(ctx)
+			if err != nil {
+				return struct{}{}, err
+			}
+			c.Status = result
+
+			c.CallbackState = callback.CallbackState
+
+			return struct{}{}, nil
+		},
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update component: %w", err)
+	}
+
+	return nil
+}
+
+func (e *InvocationTaskExecutor) Validate(
+	ctx chasm.Context,
 	callback *Callback,
 	_ chasm.TaskAttributes,
 	_ *callbackspb.InvocationTask,
-) error {
-	return fmt.Errorf("not implemented")
+) (bool, error) {
+	return callback.Status == callbackspb.CALLBACK_STATUS_SCHEDULED, nil
 }
 
 // BackoffTaskExecutor is responsible for the retry scheduling after failed

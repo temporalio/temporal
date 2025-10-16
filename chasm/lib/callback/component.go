@@ -3,6 +3,7 @@ package callback
 import (
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/common/namespace"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -15,6 +16,8 @@ type Callback struct {
 
 	// Persisted internal state
 	*callbackspb.CallbackState
+
+	NamespaceID namespace.ID
 }
 
 func NewCallback(
