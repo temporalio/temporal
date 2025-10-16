@@ -52,7 +52,7 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 		returnErr bool
 	}{
 		{value: "2018-06-07T08:04:05.123456789Z", returnErr: false},
-		{value: "2018-06-07T15:04:05+07:00", returnErr: false},
+		{value: "2018-06-07T08:04:05Z", returnErr: false},
 		{value: "", returnErr: true},
 		{value: "should not be modified", returnErr: false},
 	}
@@ -66,6 +66,45 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 		s.NoError(err)
 		s.Len(v, 1)
 		s.Equal(expected[i].value, v[0])
+	}
+}
+
+func (s *QueryInterceptorSuite) TestRelativeTimeProcessFunc() {
+	vi := NewValuesInterceptor(
+		"test-namespace",
+		searchattribute.TestNameTypeMap,
+	)
+
+	cases := []struct {
+		name      string
+		key       string
+		value     interface{}
+		returnErr bool
+	}{
+		{name: "5 minutes relative", key: searchattribute.StartTime, value: "5m", returnErr: false},
+		{name: "1 hour relative", key: searchattribute.CloseTime, value: "1h", returnErr: false},
+		{name: "2 days relative", key: searchattribute.ExecutionTime, value: "2d", returnErr: false},
+		{name: "1h30m relative", key: searchattribute.StartTime, value: "1h30m", returnErr: false},
+		{name: "500ms relative", key: searchattribute.CloseTime, value: "500ms", returnErr: false},
+		{name: "negative 5 minutes", key: searchattribute.StartTime, value: "-5m", returnErr: false},
+		{name: "negative 1 hour", key: searchattribute.CloseTime, value: "-1h", returnErr: false},
+		{name: "negative 2 days", key: searchattribute.ExecutionTime, value: "-2d", returnErr: false},
+		{name: "invalid duration", key: searchattribute.StartTime, value: "5q", returnErr: true},
+	}
+
+	for _, testCase := range cases {
+		s.Run(testCase.name, func() {
+			v, err := vi.Values(testCase.key, testCase.key, testCase.value)
+			if testCase.returnErr {
+				s.Error(err)
+				var converterErr *query.ConverterError
+				s.ErrorAs(err, &converterErr)
+				return
+			}
+			s.NoError(err)
+			s.Len(v, 1)
+			s.IsType("", v[0])
+		})
 	}
 }
 

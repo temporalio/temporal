@@ -319,13 +319,13 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 	query = `StartTime = "2018-06-07T15:04:05.123456789-08:00"`
 	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"StartTime":{"query":"2018-06-07T15:04:05.123456789-08:00"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"StartTime":{"query":"2018-06-07T23:04:05.123456789Z"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `WorkflowId = 'wid' and StartTime > "2018-06-07T15:04:05+00:00"`
 	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":[{"term":{"WorkflowId":"wid"}},{"range":{"StartTime":{"from":"2018-06-07T15:04:05+00:00","include_lower":false,"include_upper":true,"to":null}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":[{"term":{"WorkflowId":"wid"}},{"range":{"StartTime":{"from":"2018-06-07T15:04:05Z","include_lower":false,"include_upper":true,"to":null}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `ExecutionTime < 1000000`
@@ -374,7 +374,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal(err.Error(), "invalid query: unable to convert filter expression: unable to convert values of comparison expression: invalid value for search attribute ExecutionTime of type Datetime: \"unable to parse\"")
+	s.Contains(err.Error(), "invalid query: unable to convert filter expression: unable to convert values of comparison expression: invalid value for search attribute ExecutionTime")
 
 	// invalid union injection
 	query = `WorkflowId = 'wid' union select * from dummy`

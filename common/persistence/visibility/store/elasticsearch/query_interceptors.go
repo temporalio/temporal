@@ -113,8 +113,16 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...int
 func parseSystemSearchAttributeValues(name string, value any) (any, error) {
 	switch name {
 	case searchattribute.StartTime, searchattribute.CloseTime, searchattribute.ExecutionTime:
-		if nanos, isNumber := value.(int64); isNumber {
-			value = time.Unix(0, nanos).UTC().Format(time.RFC3339Nano)
+		switch v := value.(type) {
+		case int64:
+			value = time.Unix(0, v).UTC().Format(time.RFC3339Nano)
+		case string:
+			tm, err := query.ParseRelativeOrAbsoluteTime(v)
+			if err != nil {
+				return nil, query.NewConverterError(
+					"invalid value for search attribute %s: %v (%v)", name, value, err)
+			}
+			value = tm.Format(time.RFC3339Nano)
 		}
 	case searchattribute.ExecutionStatus:
 		if status, isNumber := value.(int64); isNumber {
@@ -166,10 +174,12 @@ func validateValueType(name string, value any, fieldType enumspb.IndexedValueTyp
 		case int64:
 			value = time.Unix(0, v).UTC().Format(time.RFC3339Nano)
 		case string:
-			if _, err := time.Parse(time.RFC3339Nano, v); err != nil {
+			tm, err := query.ParseRelativeOrAbsoluteTime(v)
+			if err != nil {
 				return nil, query.NewConverterError(
 					"invalid value for search attribute %s of type %s: %#v", name, fieldType.String(), value)
 			}
+			value = tm.Format(time.RFC3339Nano)
 		default:
 			return nil, query.NewConverterError(
 				"invalid value for search attribute %s of type %s: %#v", name, fieldType.String(), value)

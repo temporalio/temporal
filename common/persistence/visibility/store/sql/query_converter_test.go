@@ -991,6 +991,85 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 	}
 }
 
+func (s *queryConverterSuite) TestParseSQLValRelativeTime() {
+	testCases := []struct {
+		name   string
+		input  string
+		saName string
+		saType enumspb.IndexedValueType
+	}{
+		{
+			name:   "5 minutes",
+			input:  "'5m'",
+			saName: "AliasForDatetime01",
+			saType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		},
+		{
+			name:   "1 hour",
+			input:  "'1h'",
+			saName: "StartTime",
+			saType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		},
+		{
+			name:   "2 days",
+			input:  "'2d'",
+			saName: "CloseTime",
+			saType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		},
+		{
+			name:   "1 hour 30 minutes",
+			input:  "'1h30m'",
+			saName: "ExecutionTime",
+			saType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		},
+		{
+			name:   "30 seconds",
+			input:  "'30s'",
+			saName: "StartTime",
+			saType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		},
+		{
+			name:   "negative 5 minutes",
+			input:  "'-5m'",
+			saName: "AliasForDatetime01",
+			saType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		},
+		{
+			name:   "negative 1 hour",
+			input:  "'-1h'",
+			saName: "CloseTime",
+			saType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		},
+		{
+			name:   "negative 2 days",
+			input:  "'-2d'",
+			saName: "ExecutionTime",
+			saType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
+			stmt, err := sqlparser.Parse(sql)
+			s.NoError(err)
+			expr := stmt.(*sqlparser.Select).Where.Expr
+			value, err := s.queryConverter.parseSQLVal(
+				expr.(*sqlparser.SQLVal),
+				tc.saName,
+				tc.saType,
+			)
+			s.NoError(err)
+			s.NotNil(value)
+			resultStr, ok := value.(string)
+			s.True(ok, "result should be a string")
+			s.NotEmpty(resultStr)
+			_, parseErr := time.Parse(s.queryConverter.getDatetimeFormat(), resultStr)
+			s.NoError(parseErr, "result should be a valid timestamp in the expected format")
+		})
+	}
+}
+
 func TestSupportedComparisonOperators(t *testing.T) {
 	s := assert.New(t)
 	msg := "If you're changing the supported operators, remember to check they work with " +
