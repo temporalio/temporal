@@ -249,14 +249,14 @@ func (c *clientImpl) FetchWorkerConfig(
 	return c.client.FetchWorkerConfig(ctx, request, opts...)
 }
 
-func (c *clientImpl) GetActivityResult(
+func (c *clientImpl) GetActivityExecutionResult(
 	ctx context.Context,
-	request *workflowservice.GetActivityResultRequest,
+	request *workflowservice.GetActivityExecutionResultRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.GetActivityResultResponse, error) {
+) (*workflowservice.GetActivityExecutionResultResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.GetActivityResult(ctx, request, opts...)
+	return c.client.GetActivityExecutionResult(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetClusterInfo(
@@ -529,6 +529,16 @@ func (c *clientImpl) PauseWorkflowExecution(
 	return c.client.PauseWorkflowExecution(ctx, request, opts...)
 }
 
+func (c *clientImpl) PauseActivityExecution(
+	ctx context.Context,
+	request *workflowservice.PauseActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PauseActivityExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.PauseActivityExecution(ctx, request, opts...)
+}
+
 func (c *clientImpl) PollActivityTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollActivityTaskQueueRequest,
@@ -647,6 +657,16 @@ func (c *clientImpl) ResetActivity(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.ResetActivity(ctx, request, opts...)
+}
+
+func (c *clientImpl) ResetActivityExecution(
+	ctx context.Context,
+	request *workflowservice.ResetActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ResetActivityExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ResetActivityExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) ResetStickyTaskQueue(
@@ -947,6 +967,26 @@ func (c *clientImpl) UnpauseWorkflowExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.UnpauseWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) UnpauseActivityExecution(
+	ctx context.Context,
+	request *workflowservice.UnpauseActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UnpauseActivityExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UnpauseActivityExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateActivityExecutionOptions(
+	ctx context.Context,
+	request *workflowservice.UpdateActivityExecutionOptionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateActivityExecutionOptions(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateActivityOptions(

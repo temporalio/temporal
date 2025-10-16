@@ -43,7 +43,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
 		// TODO: Map to PollActivityResult if request is long-polling
-		"/temporal.api.workflowservice.v1.WorkflowService/GetActivityResult": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetActivityExecutionResult": 1,
 
 		// potentially long-running, depending on the operations
 		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation": 1,
@@ -122,7 +122,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelActivityExecution":        2,
 		"/temporal.api.workflowservice.v1.WorkflowService/TerminateActivityExecution":            2,
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteActivityExecution":               2,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetActivityResult":                     2,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetActivityExecutionResult":            2,
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":       3,
