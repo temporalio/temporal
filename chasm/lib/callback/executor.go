@@ -108,7 +108,6 @@ func (e *BackoffTaskExecutor) Validate(
 	return callback.Status == callbackspb.CALLBACK_STATUS_BACKING_OFF, nil
 }
 
-
 // generateInvocationTask creates an InvocationTask based on the callback variant
 func (e *BackoffTaskExecutor) generateInvocationTask(callback *Callback) (*callbackspb.InvocationTask, error) {
 	switch variant := callback.Callback.GetVariant().(type) {
