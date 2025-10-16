@@ -541,7 +541,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	}
 	nextVersionedTransition := transitionhistory.CopyVersionedTransition(localVersionedTransition)
 	nextVersionedTransition.TransitionCount++
-	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition, prevPendingChildIds, versionedTransition.IsCloseTransferTaskAcked)
+	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition, prevPendingChildIds, versionedTransition.IsCloseTransferTaskAcked && versionedTransition.IsForceReplication)
 	if err != nil {
 		return err
 	}
@@ -588,7 +588,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	}
 	snapshot := attribute.State
 	if localMutableState == nil {
-		return r.applySnapshotWhenWorkflowNotExist(ctx, namespaceID, workflowID, runID, wfCtx, releaseFn, snapshot, sourceClusterName, versionedTransition.NewRunInfo, true, versionedTransition.IsCloseTransferTaskAcked)
+		return r.applySnapshotWhenWorkflowNotExist(ctx, namespaceID, workflowID, runID, wfCtx, releaseFn, snapshot, sourceClusterName, versionedTransition.NewRunInfo, true, versionedTransition.IsCloseTransferTaskAcked && versionedTransition.IsForceReplication)
 	}
 	return r.applySnapshotWhenWorkflowExist(ctx, namespaceID, workflowID, runID, wfCtx, releaseFn, localMutableState, snapshot, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName)
 }

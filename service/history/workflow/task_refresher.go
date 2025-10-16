@@ -23,7 +23,7 @@ type (
 		Refresh(
 			ctx context.Context,
 			mutableState historyi.MutableState,
-			isCloseTransferAcked bool,
+			shouldSkipGeneratingCloseTransferTask bool,
 		) error
 		// PartialRefresh refresh tasks for all sub state machines that have been updated
 		// since the given minVersionedTransition (inclusive).
@@ -39,7 +39,7 @@ type (
 			mutableState historyi.MutableState,
 			minVersionedTransition *persistencespb.VersionedTransition,
 			previousPendingChildIds map[int64]struct{},
-			isCloseTransferAcked bool,
+			shouldSkipGeneratingCloseTransferTask bool,
 		) error
 	}
 
@@ -66,14 +66,14 @@ func NewTaskRefresher(
 func (r *TaskRefresherImpl) Refresh(
 	ctx context.Context,
 	mutableState historyi.MutableState,
-	isCloseTransferAcked bool,
+	shouldSkipGeneratingCloseTransferTask bool,
 ) error {
 	if r.shard.GetConfig().EnableNexus() {
 		// Invalidate all tasks generated for this mutable state before the refresh.
 		mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
 	}
 
-	if err := r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil, isCloseTransferAcked); err != nil {
+	if err := r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil, shouldSkipGeneratingCloseTransferTask); err != nil {
 		return err
 	}
 
@@ -85,7 +85,7 @@ func (r *TaskRefresherImpl) PartialRefresh(
 	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 	previousPendingChildIds map[int64]struct{},
-	isCloseTransferAcked bool,
+	shouldSkipGeneratingCloseTransferTask bool,
 ) error {
 	// TODO: handle task refresh for non workflow mutable states.
 	if !mutableState.IsWorkflow() {
@@ -111,7 +111,7 @@ func (r *TaskRefresherImpl) PartialRefresh(
 		mutableState,
 		taskGenerator,
 		minVersionedTransition,
-		isCloseTransferAcked,
+		shouldSkipGeneratingCloseTransferTask,
 	); err != nil {
 		return err
 	}
