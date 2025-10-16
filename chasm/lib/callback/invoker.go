@@ -34,16 +34,23 @@ type CanGetNexusCompletion interface {
 }
 
 // The Invoker component is responsible for executing callbacks.
+//
+// This is the CHASM port that combines functionality from HSM's:
+// - nexusInvocation struct (components/callbacks/nexus_invocation.go:35-40)
+// - callbackInvokable interface implementation (nexus_invocation.go:63-131)
 type Invoker struct {
 	chasm.UnimplementedComponent
 
 	*callbackspb.InvokerState
 
+	// Reference to the Callback component being invoked
 	Callback chasm.Field[*Callback]
 
+	// Interface to retrieve Nexus operation completion data
 	CanGetNexusCompletion chasm.Field[CanGetNexusCompletion]
 
-	// components/callbacks/nexus_invocation.go:nexusInvocation fields
+	// Fields from HSM's nexusInvocation struct (nexus_invocation.go:35-40)
+	// These hold the invocation context needed for the HTTP request
 	completion        nexusrpc.OperationCompletion
 	workflowID, runID string
 	attempt           int32
@@ -63,6 +70,17 @@ func (i *Invoker) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
+// Invoke executes the HTTP callback request for a Nexus operation completion.
+//
+// This is the CHASM port of nexusInvocation.Invoke() from nexus_invocation.go:63-131.
+// It performs the same HTTP request logic but returns CHASM's CallbackStatus enum
+// instead of HSM's invocationResult types (invocationResultOK, invocationResultRetry,
+// invocationResultFail).
+//
+// The return value mapping:
+// - HSM invocationResultOK -> CHASM CALLBACK_STATUS_SUCCEEDED
+// - HSM invocationResultRetry -> CHASM CALLBACK_STATUS_BACKING_OFF
+// - HSM invocationResultFail -> CHASM CALLBACK_STATUS_FAILED
 func (i *Invoker) Invoke(
 	ctx context.Context,
 	ns *namespace.Namespace,
@@ -90,6 +108,7 @@ func (i *Invoker) Invoke(
 	if request.Header == nil {
 		request.Header = make(http.Header)
 	}
+	// TODO seankane: Port header setting from HSM (nexus_invocation.go:88-90)
 	// for k, v := range i.Callback.Header {
 	// 	request.Header.Set(k, v)
 	// }
@@ -109,7 +128,7 @@ func (i *Invoker) Invoke(
 
 	if err != nil {
 		e.Logger.Error("Callback request failed with error", tag.Error(err))
-		return callbackspb.CALLBACK_STATUS_FAILED
+		return callbackspb.CALLBACK_STATUS_BACKING_OFF
 	}
 
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
@@ -119,7 +138,7 @@ func (i *Invoker) Invoke(
 		if _, err = io.Copy(io.Discard, response.Body); err == nil {
 			if err = response.Body.Close(); err != nil {
 				e.Logger.Error("Callback request failed with error", tag.Error(err))
-				return callbackspb.CALLBACK_STATUS_FAILED
+				return callbackspb.CALLBACK_STATUS_BACKING_OFF
 			}
 		}
 		return callbackspb.CALLBACK_STATUS_SUCCEEDED
@@ -131,14 +150,15 @@ func (i *Invoker) Invoke(
 	if retryable {
 		return callbackspb.CALLBACK_STATUS_BACKING_OFF
 	}
-
 	return callbackspb.CALLBACK_STATUS_FAILED
 }
 
+// isRetryableHTTPResponse determines if an HTTP response should trigger a retry.
 func isRetryableHTTPResponse(response *http.Response) bool {
 	return response.StatusCode >= 500 || slices.Contains(retryable4xxErrorTypes, response.StatusCode)
 }
 
+// outcomeTag generates a metric tag for the HTTP call outcome.
 func outcomeTag(callCtx context.Context, response *http.Response, callErr error) string {
 	if callErr != nil {
 		if callCtx.Err() != nil {
@@ -149,10 +169,13 @@ func outcomeTag(callCtx context.Context, response *http.Response, callErr error)
 	return fmt.Sprintf("status:%d", response.StatusCode)
 }
 
-// Reads and replaces the http response body and attempts to deserialize it into a Nexus failure. If successful,
-// returns a nexus.HandlerError with the deserialized failure as the Cause. If there is an error reading the body or
-// during deserialization, returns a nexus.HandlerError with a generic Cause based on response status.
-// TODO: This logic is duplicated in the frontend handler for forwarded requests. Eventually it should live in the Nexus SDK.
+// readHandlerErrFromResponse reads and replaces the http response body and attempts to
+// deserialize it into a Nexus failure. If successful, returns a nexus.HandlerError with
+// the deserialized failure as the Cause. If there is an error reading the body or during
+// deserialization, returns a nexus.HandlerError with a generic Cause based on response status.
+//
+// TODO: This logic is duplicated in the frontend handler for forwarded requests.
+// Eventually it should live in the Nexus SDK.
 func readHandlerErrFromResponse(response *http.Response, logger log.Logger) error {
 	handlerErr := &nexus.HandlerError{
 		Type:  commonnexus.HandlerErrorTypeFromHTTPStatus(response.StatusCode),
@@ -181,8 +204,8 @@ func readHandlerErrFromResponse(response *http.Response, logger log.Logger) erro
 	return handlerErr
 }
 
-// readAndReplaceBody reads the response body in its entirety and closes it, and then replaces the original response
-// body with an in-memory buffer.
+// readAndReplaceBody reads the response body in its entirety and closes it, and then
+// replaces the original response body with an in-memory buffer.
 // The body is replaced even when there was an error reading the entire body.
 func readAndReplaceBody(response *http.Response) ([]byte, error) {
 	responseBody := response.Body
@@ -192,6 +215,7 @@ func readAndReplaceBody(response *http.Response) ([]byte, error) {
 	return body, err
 }
 
+// isMediaTypeJSON checks if the content type is application/json.
 func isMediaTypeJSON(contentType string) bool {
 	if contentType == "" {
 		return false

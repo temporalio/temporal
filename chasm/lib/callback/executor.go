@@ -1,3 +1,24 @@
+// Package callback provides CHASM-based callback execution infrastructure.
+//
+// This package is a port of the HSM-based callback execution system from
+// components/callbacks/executors.go.
+//
+// HSM Pattern (Old):
+//   - Used hsm.Registry with RegisterImmediateExecutor and RegisterTimerExecutor
+//   - Task execution through env.Access() with hsm.AccessRead/Write
+//   - State transitions via hsm.MachineTransition with explicit transition types
+//   - Results returned as invocationResult interface types
+//   - LoadInvocationArgs and saveResult were separate reusable methods
+//
+// CHASM Pattern (New):
+//   - Explicit executor structs with Execute() and Validate() methods
+//   - Component access through chasm.ReadComponent and chasm.UpdateComponent
+//   - Direct state manipulation by setting fields (Status, NextAttemptScheduleTime)
+//   - Results returned as CallbackStatus enum values
+//   - Logic inlined in Execute() methods for clarity
+//
+// The core HTTP invocation logic remains unchanged - only the state management
+// framework differs.
 package callback
 
 import (
@@ -23,7 +44,9 @@ type HTTPCallerProvider func(queues.NamespaceIDAndDestination) HTTPCaller
 
 // InvocationTaskExecutor is responsible for the invocation of a callback.
 // For Nexus callbacks this will be an HTTP call, for other callbacks this
-// could be any CHASM invocation. (?)
+// could be any CHASM invocation.
+// This is the CHASM port of the HSM taskExecutor.executeInvocationTask functionality
+// from components/callbacks/executors.go.
 type InvocationTaskExecutor struct {
 	InvocationTaskExecutorOptions
 }
@@ -56,6 +79,11 @@ func (e *InvocationTaskExecutor) Execute(
 	var invoker *Invoker
 	var callback *Callback
 
+	// Read the invoker component and load invocation arguments.
+	// This replaces the HSM pattern of env.Access(ctx, ref, hsm.AccessRead, ...) with
+	// CHASM's chasm.ReadComponent(). We extract the callback data and prepare the
+	// nexusInvocation struct fields (completion, attempt, nexus variant) similar to
+	// HSM's loadInvocationArgs() in executors.go:132-194.
 	_, err := chasm.ReadComponent(
 		ctx,
 		invokerRef,
@@ -106,6 +134,11 @@ func (e *InvocationTaskExecutor) Execute(
 
 	result := invoker.Invoke(callCtx, ns, e, taskAttributes, task)
 
+	// Save the invocation result back to the callback component.
+	// Replaces the pattern of env.Access(ctx, ref, hsm.AccessWrite, ...) and
+	// hsm.MachineTransition() from executors.go:197-226. In HSM, the result was mapped
+	// to TransitionSucceeded/TransitionAttemptFailed/TransitionFailed. In CHASM, we
+	// directly update the callback's Status field to SUCCEEDED/BACKING_OFF/FAILED.
 	_, _, err = chasm.UpdateComponent(
 		ctx,
 		invokerRef,
@@ -139,8 +172,8 @@ func (e *InvocationTaskExecutor) Validate(
 }
 
 // BackoffTaskExecutor is responsible for the retry scheduling after failed
-// attempts. This is a timer executor that will fire if a response is
-// not received in time. (?)
+// attempts. This is a timer executor that will fire when the backoff period
+// expires and the callback should be retried.
 type BackoffTaskExecutor struct {
 	BackoffTaskExecutorOptions
 }
@@ -160,7 +193,8 @@ func NewBackoffTaskExecutor(opts BackoffTaskExecutorOptions) *BackoffTaskExecuto
 }
 
 // Execute transitions the callback from BACKING_OFF to SCHEDULED state
-// and generates an InvocationTask for the next attempt
+// and generates an InvocationTask for the next attempt. Directly 
+// manipulate the state schedule the next invocation attempt.
 func (e *BackoffTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	callback *Callback,
