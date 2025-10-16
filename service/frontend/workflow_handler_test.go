@@ -190,6 +190,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		healthInterceptor,
 		scheduler.NewSpecBuilder(),
 		true,
+		nil, // Not testing activity handler here
 	)
 }
 
