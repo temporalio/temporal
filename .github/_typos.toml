@@ -6,8 +6,23 @@
 binary = false
 
 [default.extend-words]
-# Add custom dictionary entries here if needed
-# Example: correctword = "correctword"
+# Add custom dictionary entries here for intentional "misspellings" used in the codebase
+# Preemptable is used consistently instead of "Preemptible" for caller types
+Preemptable = "Preemptable"
+preemptable = "preemptable"
+# "ba" is a legitimate variable name in merge tests (shorthand for "b merged with a")
+ba = "ba"
+# Hash strings may contain letter combinations that look like typos
+Ue = "Ue"
+# Test data and base64 strings that contain letter combinations that look like typos
+nd = "nd"
+abd = "abd"
+# Environment variable name that must remain for backwards compatibility
+AVAILABILTY = "AVAILABILTY"
+# Proto-generated field names that have typos in the proto definition
+# These should be fixed in the proto file first, then regenerated
+Heartbeart = "Heartbeart"
+heartbeart = "heartbeart"
 
 [files]
 # Exclude generated protobuf files
@@ -18,10 +33,14 @@ extend-exclude = [
   "*.binpb",
   # Exclude other generated or third-party files
   "*.gen.go",
+  "*.json.gz",
   ".bin/**",
   ".testoutput/**",
   "vendor/**",
   ".stamp/**",
+  "**/testdata/**",
+  # Exclude SVG files - they contain hex color codes that trigger false positives (e.g., #f38BA8)
+  "*.svg",
 ]
 
 [type.go]
