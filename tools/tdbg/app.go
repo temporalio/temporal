@@ -109,10 +109,13 @@ func NewCliApp(opts ...Option) *cli.App {
 	prompterFactory := NewPrompterFactory()
 	app.Before = func(ctx *cli.Context) error {
 		colorFlag := ctx.String("color")
-		if colorFlag == "always" {
+		switch colorFlag {
+		case "always":
 			color.NoColor = false
-		} else if colorFlag == "never" {
+		case "never":
 			color.NoColor = true
+		default:
+			// fatih/color will inspect the enviroment and terminal and set a reasonable default.
 		}
 		return nil
 	}
