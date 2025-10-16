@@ -137,11 +137,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: check spelling with typos
+      - name: Get changed files
+        id: changed-files
+        run: |
+          git diff --name-only --diff-filter=ACMR origin/${{ github.base_ref }}...HEAD | tr '\n' ' ' > changed_files.txt
+          echo "files=$(cat changed_files.txt)" >> $GITHUB_OUTPUT
+
+      - name: check spelling with typos on changed files
+        if: steps.changed-files.outputs.files != ''
         uses: crate-ci/typos@v1.28.4
         with:
           config: .github/_typos.toml
+          files: ${{ steps.changed-files.outputs.files }}
 
   linters-succeed:
     name: All Linters Succeed
