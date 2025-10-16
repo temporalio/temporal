@@ -34,7 +34,7 @@ func TestSpecProcessorSuite(t *testing.T) {
 	suite.Run(t, &specProcessorSuite{})
 }
 func (s *specProcessorSuite) SetupTest() {
-	s.SetupSuite()
+	s.schedulerSuite.SetupTest()
 	s.processor = newTestSpecProcessor(s.controller)
 }
 

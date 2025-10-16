@@ -42,14 +42,14 @@ type (
 		mockRescheduler *MockRescheduler
 
 		config         *configs.Config
-		options        *Options
+		options        Options
 		rateLimiter    quotas.RequestRateLimiter
 		logger         log.Logger
 		metricsHandler metrics.Handler
 	}
 )
 
-var testQueueOptions = &Options{
+var testQueueOptions = Options{
 	ReaderOptions: ReaderOptions{
 		BatchSize:            dynamicconfig.GetIntPropertyFn(10),
 		MaxPendingTasksCount: dynamicconfig.GetIntPropertyFn(100),
@@ -685,7 +685,7 @@ func (s *queueBaseSuite) newQueueBase(
 		s.mockScheduler,
 		s.mockRescheduler,
 		factory,
-		s.options,
+		&s.options,
 		s.rateLimiter,
 		NoopReaderCompletionFn,
 		GrouperNamespaceID{},

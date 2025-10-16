@@ -76,6 +76,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(NamespaceHandoverInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),
+	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
@@ -253,6 +254,7 @@ func GrpcServerOptionsProvider(
 		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
+		// Telemetry interceptor must be after redirection to ensure metrics are recorded in the correct cluster
 		telemetryInterceptor.UnaryIntercept,
 		healthInterceptor.Intercept,
 		namespaceValidatorInterceptor.StateValidationIntercept,
@@ -353,6 +355,7 @@ func NamespaceHandoverInterceptorProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 ) *interceptor.NamespaceHandoverInterceptor {
 	return interceptor.NewNamespaceHandoverInterceptor(
 		dc,
@@ -360,6 +363,17 @@ func NamespaceHandoverInterceptorProvider(
 		metricsHandler,
 		logger,
 		timeSource,
+		requestErrorHandler,
+	)
+}
+
+func ErrorHandlerProvider(
+	logger log.Logger,
+	serviceConfig *Config,
+) *interceptor.RequestErrorHandler {
+	return interceptor.NewRequestErrorHandler(
+		logger,
+		serviceConfig.LogAllReqErrors,
 	)
 }
 
@@ -368,12 +382,14 @@ func TelemetryInterceptorProvider(
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	serviceConfig *Config,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
 		serviceConfig.LogAllReqErrors,
+		requestErrorHandler,
 	)
 }
 
@@ -777,6 +793,7 @@ func RegisterNexusHTTPHandler(
 	endpointRegistry nexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceRateLimiterInterceptor interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
@@ -796,6 +813,7 @@ func RegisterNexusHTTPHandler(
 		endpointRegistry,
 		authInterceptor,
 		telemetryInterceptor,
+		requestErrorHandler,
 		redirectionInterceptor,
 		namespaceValidatorInterceptor,
 		namespaceRateLimiterInterceptor,

@@ -56,13 +56,15 @@ func (ch *commandHandler) HandleScheduleCommand(
 	endpoint, err := ch.endpointRegistry.GetByName(ctx, ns.ID(), attrs.Endpoint)
 	if err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
-			if !ch.config.EndpointNotFoundAlwaysNonRetryable(nsName) {
-				return workflow.FailWorkflowTaskError{
-					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
-					Message: fmt.Sprintf("endpoint %q not found", attrs.Endpoint),
-				}
+			return workflow.FailWorkflowTaskError{
+				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+				Message: fmt.Sprintf("endpoint %q not found", attrs.Endpoint),
 			}
-			// Ignore, and let the operation fail when the task is executed.
+		} else if errors.As(err, new(*serviceerror.PermissionDenied)) {
+			return workflow.FailWorkflowTaskError{
+				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+				Message: fmt.Sprintf("caller namespace %q unauthorized for %q", ns.Name(), attrs.Endpoint),
+			}
 		} else {
 			return err
 		}

@@ -116,7 +116,6 @@ type (
 		chasmRegistry         *chasm.Registry
 		grpcClientInterceptor *grpcinject.Interceptor
 		spanExporters         map[telemetry.SpanExporterType]sdktrace.SpanExporter
-		dynamicConfigLogger   log.Logger
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -210,12 +209,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
 		// If this doesn't build, make sure you're building with tags 'test_dep':
-		testHooks: testhooks.NewTestHooksImpl(),
-		// We are overriding the dynamic config logger with a new one that uses the INFO level
-		// because there are some debug logs that are too verbose for testing.
-		// ex: "No such key in dynamic config, using default"
-		// this can be removed if logging from this package becomes less verbose
-		dynamicConfigLogger:      log.NewZapLogger(log.BuildZapLogger(log.Config{Level: "info"})),
+		testHooks:                testhooks.NewTestHooksImpl(),
 		serviceFxOptions:         params.ServiceFxOptions,
 		taskCategoryRegistry:     params.TaskCategoryRegistry,
 		chasmRegistry:            params.ChasmRegistry,
@@ -235,7 +229,6 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 }
 
 func (c *TemporalImpl) Start() error {
-
 	// create temporal-system namespace, this must be created before starting
 	// the services - so directly use the metadataManager to create this
 	if err := c.createSystemNamespace(); err != nil {
@@ -378,11 +371,6 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func(client dynamicconfig.Client, lc fx.Lifecycle) *dynamicconfig.Collection {
-				col := dynamicconfig.NewCollection(client, c.dynamicConfigLogger)
-				lc.Append(fx.StartStopHook(col.Start, col.Stop))
-				return col
-			}),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -458,11 +446,6 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func(client dynamicconfig.Client, lc fx.Lifecycle) *dynamicconfig.Collection {
-				col := dynamicconfig.NewCollection(client, c.dynamicConfigLogger)
-				lc.Append(fx.StartStopHook(col.Start, col.Stop))
-				return col
-			}),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -524,11 +507,6 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func(client dynamicconfig.Client, lc fx.Lifecycle) *dynamicconfig.Collection {
-				col := dynamicconfig.NewCollection(client, c.dynamicConfigLogger)
-				lc.Append(fx.StartStopHook(col.Start, col.Stop))
-				return col
-			}),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
@@ -596,11 +574,6 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func(client dynamicconfig.Client, lc fx.Lifecycle) *dynamicconfig.Collection {
-				col := dynamicconfig.NewCollection(client, c.dynamicConfigLogger)
-				lc.Append(fx.StartStopHook(col.Start, col.Stop))
-				return col
-			}),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -767,6 +740,7 @@ func (c *TemporalImpl) newRPCFactory(
 		int(httpPort),
 		frontendTLSConfig,
 		options,
+		map[primitives.ServiceName][]grpc.DialOption{},
 		monitor,
 	), nil
 }
