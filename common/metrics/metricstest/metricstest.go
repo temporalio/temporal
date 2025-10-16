@@ -12,7 +12,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
-	"github.com/prometheus/common/model"
 	exporters "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
@@ -105,7 +104,7 @@ func (h *Handler) Snapshot() (Snapshot, error) {
 	handler.HandleFunc("/metrics", promhttp.HandlerFor(h.reg, promhttp.HandlerOpts{Registry: h.reg}).ServeHTTP)
 	handler.ServeHTTP(rec, req)
 
-	tp := expfmt.NewTextParser(model.UTF8Validation)
+	var tp expfmt.TextParser
 	families, err := tp.TextToMetricFamilies(rec.Body)
 	if err != nil {
 		return Snapshot{}, err
