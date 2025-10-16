@@ -890,25 +890,28 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	)
 	s.NoError(err)
 
-	// wait for workflow to progress on v1
-	<-activityCompletedChan
-
-	// get run ID of first run of the workflow before it fails
 	wfIDOfRetryingWF := run0.GetID()
 	runIDBeforeRetry := run0.GetRunID()
-	if retryOfChild {
-		wfIDOfRetryingWF = childWorkflowID
-		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
-		s.NoError(err)
-		runIDBeforeRetry = desc.WorkflowExecution.RunID
-	} else if retryOfCaN {
+
+	if retryOfCaN {
 		// wait for first run to continue-as-new
 		s.Eventually(func() bool {
 			desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, run0.GetRunID())
 			s.NoError(err)
 			return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
 		}, 5*time.Second, 1*time.Millisecond)
+	}
 
+	// wait for workflow to progress on v1
+	<-activityCompletedChan
+
+	// get run ID of first run of the workflow before it fails
+	if retryOfChild {
+		wfIDOfRetryingWF = childWorkflowID
+		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
+		s.NoError(err)
+		runIDBeforeRetry = desc.WorkflowExecution.RunID
+	} else if retryOfCaN {
 		// get the next run in the continue-as-new chain
 		s.Eventually(func() bool {
 			continuedAsNewRunResp, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
@@ -929,14 +932,19 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 
 	// signal workflow to continue (it will fail and then retry on v2 if it doesn't inherit)
 	currentVersionChangedChan <- struct{}{}
-	currentVersionChangedChan <- struct{}{}
 
 	// wait for run that will retry to fail
+	channelSpotsLeft := 4
 	s.Eventually(func() bool {
 		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeRetry)
 		s.NoError(err)
-		return desc.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
-	}, 10*time.Second, 1*time.Second)
+		if desc.Status != enumspb.WORKFLOW_EXECUTION_STATUS_FAILED && channelSpotsLeft > 0 {
+			currentVersionChangedChan <- struct{}{}
+			channelSpotsLeft--
+			return false
+		}
+		return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+	}, 5*time.Second, 1*time.Millisecond)
 
 	// get the execution info of the next run in the retry chain, wait for next run to start
 	var secondRunId string
