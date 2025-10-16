@@ -38,6 +38,7 @@ func (s *fieldSuite) SetupTest() {
 	s.initAssertions()
 	s.controller = gomock.NewController(s.T())
 	s.nodeBackend = NewMockNodeBackend(s.controller)
+	s.nodeBackend.EXPECT().IsWorkflow().Return(false).AnyTimes()
 
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 	s.registry = NewRegistry(s.logger)

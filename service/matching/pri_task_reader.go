@@ -285,6 +285,7 @@ func (tr *priTaskReader) recordNewTasksLocked(tasks []*persistencespb.AllocatedT
 func (tr *priTaskReader) addNewTasks(tasks []*persistencespb.AllocatedTaskInfo) {
 	for _, t := range tasks {
 		task := newInternalTaskFromBacklog(t, tr.completeTask)
+		tr.backlogMgr.config.setDefaultPriority(task)
 		tr.addTaskToMatcher(task)
 	}
 }
