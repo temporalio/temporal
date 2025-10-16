@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	goSqlDriverName       = "sqlite_temporal"
+	goSQLDriverName       = "sqlite_temporal"
 	sqlConstraintCodes    = sqlite3.SQLITE_CONSTRAINT | sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY | sqlite3.SQLITE_CONSTRAINT_UNIQUE
 	sqlTableExistsPattern = "SQL logic error: table .* already exists \\(1\\)"
 )
@@ -54,7 +54,7 @@ func (c *conn) IsValid() bool {
 }
 
 func init() {
-	sql.Register(goSqlDriverName, newDriver())
+	sql.Register(goSQLDriverName, newDriver())
 }
 
 var sqlTableExistsRegex = regexp.MustCompile(sqlTableExistsPattern)
