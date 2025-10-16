@@ -1457,7 +1457,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories:  versionHistories,
 		TransitionHistory: transitionHistory,
-	}).Times(2)
+	}).Times(3)
 	s.mutableState.EXPECT().HasBufferedEvents().Return(false).Times(1)
 
 	s.progressCache.EXPECT().Get(
@@ -1584,7 +1584,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_FirstTask
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories:  versionHistories,
 		TransitionHistory: transitionHistory,
-	}).Times(2)
+	}).Times(3)
 	s.mutableState.EXPECT().HasBufferedEvents().Return(false).Times(1)
 
 	s.progressCache.EXPECT().Get(
