@@ -935,7 +935,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 			for _, task := range resp.GetReplicationTasks() {
 				if syncAttrs := task.GetSyncVersionedTransitionTaskAttributes(); syncAttrs != nil {
 					if artifact := syncAttrs.GetVersionedTransitionArtifact(); artifact != nil {
-						if artifact.GetIsCloseTransferTaskAcked() {
+						if artifact.GetIsCloseTransferTaskAcked() && artifact.GetIsForceReplication() {
 							return true
 						}
 					}
