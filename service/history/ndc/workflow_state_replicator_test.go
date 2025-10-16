@@ -675,7 +675,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		PartialRefresh(gomock.Any(), gomock.Any(), EqVersionedTransition(&persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 2,
 			TransitionCount:          19,
-		}), nil,
+		}), nil, false,
 		).Return(nil).Times(1)
 
 	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")
@@ -761,7 +761,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 		RunId: s.runID,
 	}).AnyTimes()
 	mockTransactionManager.EXPECT().UpdateWorkflow(gomock.Any(), true, gomock.Any(), nil).Return(nil).Times(1)
-	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), mockMutableState).Return(nil).Times(1)
+	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), mockMutableState, gomock.Any()).Return(nil).Times(1)
 
 	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")
 	s.NoError(err)
@@ -854,7 +854,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		PartialRefresh(gomock.Any(), gomock.Any(), EqVersionedTransition(&persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 2,
 			TransitionCount:          19,
-		}), nil,
+		}), nil, false,
 		).Return(nil).Times(1)
 
 	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")
@@ -921,7 +921,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 		nil,
 		int64(100),
 	), nil).AnyTimes()
-	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 	mockTransactionManager.EXPECT().CreateWorkflow(
 		gomock.Any(),

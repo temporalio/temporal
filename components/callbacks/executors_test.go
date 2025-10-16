@@ -2,25 +2,30 @@ package callbacks_test
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/hsm"
@@ -66,7 +71,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 	cases := []struct {
 		name                  string
 		caller                callbacks.HTTPCaller
-		destinationDown       bool
+		retryable             bool
 		expectedMetricOutcome string
 		assertOutcome         func(*testing.T, callbacks.Callback)
 	}{
@@ -75,7 +80,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
 			},
-			destinationDown:       false,
+			retryable:             false,
 			expectedMetricOutcome: "status:200",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_SUCCEEDED, cb.State())
@@ -86,7 +91,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return nil, errors.New("fake failure")
 			},
-			destinationDown:       true,
+			retryable:             true,
 			expectedMetricOutcome: "unknown-error",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
@@ -97,7 +102,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
 			},
-			destinationDown:       true,
+			retryable:             true,
 			expectedMetricOutcome: "status:500",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
@@ -108,7 +113,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 400, Body: http.NoBody}, nil
 			},
-			destinationDown:       false,
+			retryable:             false,
 			expectedMetricOutcome: "status:400",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
@@ -199,9 +204,8 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 				callbacks.NewInvocationTask("http://localhost"),
 			)
 
-			if tc.destinationDown {
-				var destinationDownErr *queues.DestinationDownError
-				require.ErrorAs(t, err, &destinationDownErr)
+			if tc.retryable {
+				require.NotErrorAs(t, err, &queues.UnprocessableTaskError{})
 			} else {
 				require.NoError(t, err)
 			}
@@ -442,4 +446,293 @@ func newRoot(t *testing.T) *hsm.Node {
 	root, err := hsm.NewRoot(reg, workflow.StateMachineType, mutableState, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
 	require.NoError(t, err)
 	return root
+}
+
+func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
+	dummyRef := persistencespb.ChasmComponentRef{
+		NamespaceId: "namespace-id",
+		BusinessId:  "business-id",
+		EntityId:    "entity-id",
+		Archetype:   "test-archetype",
+	}
+
+	serializedRef, err := dummyRef.Marshal()
+	require.NoError(t, err)
+	encodedRef := base64.RawURLEncoding.EncodeToString(serializedRef)
+	dummyTime := time.Now().UTC()
+
+	createPayloadBytes := func(data []byte) []byte {
+		p := &commonpb.Payload{Data: data}
+		payloadBytes, err := proto.Marshal(p)
+		require.NoError(t, err)
+		return payloadBytes
+	}
+
+	cases := []struct {
+		name                 string
+		setupHistoryClient   func(*testing.T, *gomock.Controller) *historyservicemock.MockHistoryServiceClient
+		completion           nexusrpc.OperationCompletion
+		headerValue          string
+		expectsInternalError bool
+		assertOutcome        func(*testing.T, callbacks.Callback)
+	}{
+		{
+			name: "success-with-successful-operation",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).DoAndReturn(func(ctx context.Context, req *historyservice.CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+					// Verify completion token
+					require.NotNil(t, req.Completion)
+					require.NotNil(t, req.Completion.ComponentRef)
+					require.Equal(t, "namespace-id", req.Completion.ComponentRef.NamespaceId)
+					require.Equal(t, "business-id", req.Completion.ComponentRef.BusinessId)
+					require.Equal(t, "entity-id", req.Completion.ComponentRef.EntityId)
+					require.Equal(t, "request-id", req.Completion.RequestId)
+					require.Equal(t, "test-archetype", req.Completion.ComponentRef.Archetype)
+
+					// Verify successful operation data
+					require.NotNil(t, req.GetSuccess())
+					require.Equal(t, []byte("result-data"), req.GetSuccess().Data)
+					require.Equal(t, req.CloseTime.AsTime(), dummyTime)
+
+					return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+				})
+				return client
+			},
+			completion: func() nexusrpc.OperationCompletion {
+				comp, err := nexusrpc.NewOperationCompletionSuccessful(
+					createPayloadBytes([]byte("result-data")),
+					nexusrpc.OperationCompletionSuccessfulOptions{
+						CloseTime: dummyTime,
+					},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue: encodedRef,
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_SUCCEEDED, cb.State())
+			},
+		},
+		{
+			name: "success-with-failed-operation",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).DoAndReturn(func(ctx context.Context, req *historyservice.CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+					require.NotNil(t, req.Completion)
+					require.NotNil(t, req.GetFailure())
+					require.Equal(t, req.CloseTime.AsTime(), dummyTime)
+
+					return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+				})
+				return client
+			},
+			completion: func() nexusrpc.OperationCompletion {
+				comp, err := nexusrpc.NewOperationCompletionUnsuccessful(
+					&nexus.OperationError{
+						State: nexus.OperationStateFailed,
+						Cause: &nexus.FailureError{Failure: nexus.Failure{Message: "operation failed"}},
+					},
+					nexusrpc.OperationCompletionUnsuccessfulOptions{
+						CloseTime: dummyTime,
+					},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue: encodedRef,
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_SUCCEEDED, cb.State())
+			},
+		},
+		{
+			name: "retryable-rpc-error",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).Return(nil, status.Error(codes.Unavailable, "service unavailable"))
+				return client
+			},
+			completion: func() nexusrpc.OperationCompletion {
+				comp, err := nexusrpc.NewOperationCompletionSuccessful(
+					createPayloadBytes([]byte("result-data")),
+					nexusrpc.OperationCompletionSuccessfulOptions{},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue:          encodedRef,
+			expectsInternalError: true,
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
+			},
+		},
+		{
+			name: "non-retryable-rpc-error",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).Return(nil, status.Error(codes.InvalidArgument, "invalid request"))
+				return client
+			},
+			completion: func() nexusrpc.OperationCompletion {
+				comp, err := nexusrpc.NewOperationCompletionSuccessful(
+					createPayloadBytes([]byte("result-data")),
+					nexusrpc.OperationCompletionSuccessfulOptions{},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue:          encodedRef,
+			expectsInternalError: true,
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
+			},
+		},
+		{
+			name: "invalid-base64-header",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				// No RPC call expected
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			completion: func() nexusrpc.OperationCompletion {
+				comp, err := nexusrpc.NewOperationCompletionSuccessful(
+					createPayloadBytes([]byte("result-data")),
+					nexusrpc.OperationCompletionSuccessfulOptions{},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue:          "invalid-base64!!!",
+			expectsInternalError: true,
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
+			},
+		},
+		{
+			name: "invalid-protobuf-in-ref",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				// No RPC call expected
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			completion: func() nexusrpc.OperationCompletion {
+				comp, err := nexusrpc.NewOperationCompletionSuccessful(
+					createPayloadBytes([]byte("result-data")),
+					nexusrpc.OperationCompletionSuccessfulOptions{},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue:          base64.RawURLEncoding.EncodeToString([]byte("not-valid-protobuf")),
+			expectsInternalError: true,
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
+			namespaceRegistryMock.EXPECT().GetNamespaceByID(gomock.Any()).Return(
+				namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+					Info: &persistencespb.NamespaceInfo{
+						Id:   "namespace-id",
+						Name: "namespace-name",
+					},
+					Config: &persistencespb.NamespaceConfig{},
+				}),
+				nil,
+			)
+			historyClient := tc.setupHistoryClient(t, ctrl)
+
+			headers := make(map[string]string)
+			if tc.headerValue != "" {
+				headers[commonnexus.CallbackTokenHeader] = tc.headerValue
+			}
+
+			// Create mutable state with the test completion
+			mutableState := mutableState{
+				completionNexus: tc.completion,
+			}
+
+			reg := hsm.NewRegistry()
+			require.NoError(t, workflow.RegisterStateMachine(reg))
+			require.NoError(t, callbacks.RegisterStateMachine(reg))
+
+			root, err := hsm.NewRoot(reg, workflow.StateMachineType, mutableState, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
+			require.NoError(t, err)
+
+			cb := callbacks.Callback{
+				CallbackInfo: &persistencespb.CallbackInfo{
+					Callback: &persistencespb.Callback{
+						Variant: &persistencespb.Callback_Nexus_{
+							Nexus: &persistencespb.Callback_Nexus{
+								Url:    chasm.NexusCompletionHandlerURL,
+								Header: headers,
+							},
+						},
+					},
+					State:     enumsspb.CALLBACK_STATE_SCHEDULED,
+					RequestId: "request-id",
+					Attempt:   1,
+				},
+			}
+
+			require.NoError(t, callbacks.RegisterExecutor(reg, callbacks.TaskExecutorOptions{
+				NamespaceRegistry: namespaceRegistryMock,
+				MetricsHandler:    metrics.NoopMetricsHandler,
+				HistoryClient:     historyClient,
+				Logger:            log.NewNoopLogger(),
+				Config: &callbacks.Config{
+					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+					RetryPolicy: func() backoff.RetryPolicy {
+						return backoff.NewExponentialRetryPolicy(time.Second)
+					},
+				},
+			}))
+
+			coll := callbacks.MachineCollection(root)
+			node, err := coll.Add("ID", cb)
+			require.NoError(t, err)
+			env := fakeEnv{node}
+
+			err = reg.ExecuteImmediateTask(
+				context.Background(),
+				env,
+				hsm.Ref{
+					WorkflowKey: definition.NewWorkflowKey("namespace-id", "workflow-id", "run-id"),
+					StateMachineRef: &persistencespb.StateMachineRef{
+						Path: []*persistencespb.StateMachineKey{
+							{
+								Type: callbacks.StateMachineType,
+								Id:   "ID",
+							},
+						},
+					},
+				},
+				callbacks.InvocationTask{},
+			)
+
+			if tc.expectsInternalError {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "internal error, reference-id:")
+			} else {
+				require.NoError(t, err)
+			}
+
+			tc.assertOutcome(t, cb)
+		})
+	}
 }

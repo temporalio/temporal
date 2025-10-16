@@ -87,14 +87,16 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 		},
 	}
 	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	asyncSuccessEndpoint := testcore.RandomizeStr("test-endpoint")
 
 	type testcase struct {
-		name      string
-		outcome   string
-		endpoint  *nexuspb.Endpoint
-		timeout   time.Duration
-		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
-		assertion func(*testing.T, *nexusrpc.ClientStartOperationResponse[string], error, http.Header)
+		name           string
+		outcome        string
+		endpoint       *nexuspb.Endpoint
+		timeout        time.Duration
+		handler        func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
+		assertion      func(*testing.T, *nexusrpc.ClientStartOperationResponse[string], error, http.Header)
+		onlyByEndpoint bool
 	}
 
 	testCases := []testcase{
@@ -109,12 +111,14 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			},
 		},
 		{
-			name:     "async_success",
-			outcome:  "async_success",
-			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
+			name:           "async_success",
+			outcome:        "async_success",
+			onlyByEndpoint: true,
+			endpoint:       s.createNexusEndpoint(asyncSuccessEndpoint, testcore.RandomizeStr("task-queue")),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				// Choose an arbitrary test case to assert that all of the input is delivered to the
 				// poll response.
+				s.Equal(asyncSuccessEndpoint, res.Request.Endpoint)
 				start := res.Request.Variant.(*nexuspb.Request_StartOperation).StartOperation
 				s.Equal(op.Name(), start.Operation)
 				s.Equal("http://localhost/callback", start.Callback)
@@ -313,9 +317,11 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
-				testFn(t, tc, getDispatchByNsAndTqURL(s.HttpAPIAddress(), s.Namespace().String(), tc.endpoint.Spec.Target.GetWorker().TaskQueue))
-			})
+			if !tc.onlyByEndpoint {
+				t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
+					testFn(t, tc, getDispatchByNsAndTqURL(s.HttpAPIAddress(), s.Namespace().String(), tc.endpoint.Spec.Target.GetWorker().TaskQueue))
+				})
+			}
 			t.Run("ByEndpoint", func(t *testing.T) {
 				testFn(t, tc, getDispatchByEndpointURL(s.HttpAPIAddress(), tc.endpoint.Id))
 			})
@@ -668,19 +674,24 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_PayloadSizeLimit() {
 }
 
 func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
+	asyncSuccessEndpoint := testcore.RandomizeStr("async-success-endpoint")
+
 	type testcase struct {
-		outcome   string
-		endpoint  *nexuspb.Endpoint
-		timeout   time.Duration
-		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
-		assertion func(*testing.T, error, http.Header)
+		outcome        string
+		onlyByEndpoint bool
+		endpoint       *nexuspb.Endpoint
+		timeout        time.Duration
+		handler        func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
+		assertion      func(*testing.T, error, http.Header)
 	}
 
 	testCases := []testcase{
 		{
-			outcome:  "success",
-			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
+			outcome:        "success",
+			onlyByEndpoint: true,
+			endpoint:       s.createNexusEndpoint(asyncSuccessEndpoint, testcore.RandomizeStr("task-queue")),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				s.Equal(asyncSuccessEndpoint, res.Request.Endpoint)
 				// Choose an arbitrary test case to assert that all of the input is delivered to the
 				// poll response.
 				op := res.Request.Variant.(*nexuspb.Request_CancelOperation).CancelOperation
@@ -795,9 +806,11 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.outcome, func(t *testing.T) {
-			t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
-				testFn(t, tc, getDispatchByNsAndTqURL(s.HttpAPIAddress(), s.Namespace().String(), tc.endpoint.Spec.Target.GetWorker().TaskQueue))
-			})
+			if !tc.onlyByEndpoint {
+				t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
+					testFn(t, tc, getDispatchByNsAndTqURL(s.HttpAPIAddress(), s.Namespace().String(), tc.endpoint.Spec.Target.GetWorker().TaskQueue))
+				})
+			}
 			t.Run("ByEndpoint", func(t *testing.T) {
 				testFn(t, tc, getDispatchByEndpointURL(s.HttpAPIAddress(), tc.endpoint.Id))
 			})
