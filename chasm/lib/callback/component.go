@@ -110,17 +110,17 @@ func (c *Callback) saveResult(
 ) (chasm.NoValue, error) {
 	switch r := result.(type) {
 	case invocationResultOK:
-		err := TransitionSucceeded.Apply(ctx, c, EventSucceeded{Time: ctx.Now(c)})
+		err := TransitionSucceeded.Apply(c, ctx, EventSucceeded{Time: ctx.Now(c)})
 		return nil, err
 	case invocationResultRetry:
-		err := TransitionAttemptFailed.Apply(ctx, c, EventAttemptFailed{
+		err := TransitionAttemptFailed.Apply(c, ctx, EventAttemptFailed{
 			Time:        ctx.Now(c),
 			Err:         r.err,
 			RetryPolicy: r.retryPolicy,
 		})
 		return nil, err
 	case invocationResultFail:
-		err := TransitionFailed.Apply(ctx, c, EventFailed{
+		err := TransitionFailed.Apply(c, ctx, EventFailed{
 			Time: ctx.Now(c),
 			Err:  r.err,
 		})
