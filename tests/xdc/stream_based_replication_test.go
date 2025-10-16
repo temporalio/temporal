@@ -944,6 +944,24 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 		}
 		return false
 	}, 10*time.Second, 100*time.Millisecond)
+	s.T().Log("Verified IsCloseTransferTaskAcked flag is set in replication artifact")
+
+	// Wait for replication to complete to the passive cluster
+	s.T().Log("Waiting for workflow to replicate to cluster 1 (passive)...")
+	s.Eventually(func() bool {
+		resp, err := targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: ns,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      startResp.GetRunId(),
+			},
+		})
+		if err != nil {
+			return false
+		}
+		return resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 30*time.Second, time.Second)
+	s.T().Log("Verified workflow replicated to cluster 1 (passive) with COMPLETED status")
 
 	// Write captured replication messages to log files for both clusters
 	for _, cluster := range s.clusters {
