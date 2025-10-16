@@ -21,6 +21,7 @@ func (a *Activity) SetState(state activitypb.ActivityExecutionStatus) {
 	a.ActivityState.Status = state
 }
 
+// TransitionScheduled effects a transition to Scheduled status
 var TransitionScheduled = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
@@ -31,6 +32,7 @@ var TransitionScheduled = chasm.NewTransition(
 	},
 )
 
+// TransitionStarted effects a transition to Started status
 var TransitionStarted = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
@@ -41,6 +43,7 @@ var TransitionStarted = chasm.NewTransition(
 	},
 )
 
+// TransitionCompleted effects a transition to Completed status
 var TransitionCompleted = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
@@ -51,6 +54,7 @@ var TransitionCompleted = chasm.NewTransition(
 	},
 )
 
+// TransitionFailed effects a transition to Failed status
 var TransitionFailed = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
@@ -61,6 +65,7 @@ var TransitionFailed = chasm.NewTransition(
 	},
 )
 
+// TransitionTerminated effects a transition to Terminated status
 var TransitionTerminated = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
@@ -72,6 +77,7 @@ var TransitionTerminated = chasm.NewTransition(
 	},
 )
 
+// TransitionTimedOut effects a transition to TimedOut status
 var TransitionTimedOut = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
