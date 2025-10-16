@@ -419,7 +419,6 @@ func (h *nexusHandler) StartOperation(
 		if errors.As(err, &notActiveErr) {
 			return h.forwardStartOperation(ctx, service, operation, input, options, oc)
 		}
-		oc.logger.Error("error intercepting Nexus StartOperation request", tag.Error(err))
 		return nil, err
 	}
 
@@ -593,7 +592,6 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		if errors.As(err, &notActiveErr) {
 			return h.forwardCancelOperation(ctx, service, operation, token, options, oc)
 		}
-		oc.logger.Error("error intercepting Nexus CancelOperation request", tag.Error(err))
 		return err
 	}
 
