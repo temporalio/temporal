@@ -33,7 +33,7 @@ func TestInvokerExecuteTaskSuite(t *testing.T) {
 }
 
 func (s *invokerExecuteTaskSuite) SetupTest() {
-	s.SetupSuite()
+	s.schedulerSuite.SetupTest()
 
 	s.mockFrontendClient = workflowservicemock.NewMockWorkflowServiceClient(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
