@@ -813,8 +813,6 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		return nil
 	}
 
-	activityCompletedChan := make(chan struct{}, 5)
-	currentVersionChangedChan := make(chan struct{}, 5)
 	doCaN := true
 	wf := func(ctx workflow.Context) (string, error) {
 		var ret string
@@ -830,8 +828,8 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 			doCaN = false // only CaN on the first run
 			return "", workflow.NewContinueAsNewError(ctx, "wf")
 		}
-		activityCompletedChan <- struct{}{}
-		<-currentVersionChangedChan
+		// Use Temporal signal instead of Go channel to avoid replay issues
+		workflow.GetSignalChannel(ctx, "currentVersionChanged").Receive(ctx, nil)
 		return "", errors.New("explicit failure")
 	}
 	act1 := func() (string, error) {
@@ -902,15 +900,24 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		}, 5*time.Second, 1*time.Millisecond)
 	}
 
-	// wait for workflow to progress on v1
-	<-activityCompletedChan
+	// wait for workflow to progress on v1 (activity completed and waiting for signal)
+	s.Eventually(func() bool {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfIDOfRetryingWF, "")
+		s.NoError(err)
+		// Check if workflow is running and waiting for signal
+		return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+	}, 5*time.Second, 1*time.Millisecond)
 
 	// get run ID of first run of the workflow before it fails
 	if retryOfChild {
 		wfIDOfRetryingWF = childWorkflowID
-		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
-		s.NoError(err)
-		runIDBeforeRetry = desc.WorkflowExecution.RunID
+		// Wait for child workflow to be created
+		s.Eventually(func() bool {
+			desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
+			s.NoError(err)
+			runIDBeforeRetry = desc.WorkflowExecution.RunID
+			return true
+		}, 5*time.Second, 1*time.Millisecond)
 	} else if retryOfCaN {
 		// get the next run in the continue-as-new chain
 		s.Eventually(func() bool {
@@ -931,18 +938,12 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	s.waitForDeploymentDataPropagation(tv2, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
 
 	// signal workflow to continue (it will fail and then retry on v2 if it doesn't inherit)
-	currentVersionChangedChan <- struct{}{}
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeRetry, "currentVersionChanged", nil))
 
 	// wait for run that will retry to fail
-	channelSpotsLeft := 4
 	s.Eventually(func() bool {
 		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeRetry)
 		s.NoError(err)
-		if desc.Status != enumspb.WORKFLOW_EXECUTION_STATUS_FAILED && channelSpotsLeft > 0 {
-			currentVersionChangedChan <- struct{}{}
-			channelSpotsLeft--
-			return false
-		}
 		return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 	}, 5*time.Second, 1*time.Millisecond)
 
