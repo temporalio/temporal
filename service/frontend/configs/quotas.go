@@ -42,6 +42,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":     1,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
+		// TODO: Map to PollActivityResult if request is long-polling
+		"/temporal.api.workflowservice.v1.WorkflowService/GetActivityResult": 1,
 
 		// potentially long-running, depending on the operations
 		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation": 1,
@@ -71,6 +73,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation":            1,
 		"/temporal.api.workflowservice.v1.WorkflowService/CreateSchedule":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartBatchOperation":              1,
+		"/temporal.api.workflowservice.v1.WorkflowService/StartActivityExecution":           1,
 		DispatchNexusTaskByNamespaceAndTaskQueueAPIName:                                     1,
 		DispatchNexusTaskByEndpointAPIName:                                                  1,
 
@@ -116,6 +119,10 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateTaskQueueConfig":                 2,
 		"/temporal.api.workflowservice.v1.WorkflowService/PauseWorkflowExecution":                2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseWorkflowExecution":              2,
+		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelActivityExecution":        2,
+		"/temporal.api.workflowservice.v1.WorkflowService/TerminateActivityExecution":            2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteActivityExecution":               2,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetActivityResult":                     2,
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":       3,
@@ -132,6 +139,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion": 3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":        3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":           3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":       3,
 
 		// P3: Progress APIs for reporting cancellations and failures.
 		// They are relatively low priority as the tasks need to be retried anyway.
@@ -173,6 +181,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                    1,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorker":                 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions":        1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":         1,
 
 		// APIs that rely on visibility
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         1,

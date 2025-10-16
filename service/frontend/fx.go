@@ -7,6 +7,7 @@ import (
 	"github.com/gorilla/mux"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -113,6 +114,7 @@ var Module = fx.Options(
 	nexusfrontend.Module,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
+	activity.FrontendModule,
 )
 
 func NewServiceProvider(
@@ -764,6 +766,7 @@ func HandlerProvider(
 	membershipMonitor membership.Monitor,
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
+	activityHandler activity.FrontendHandler,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -791,6 +794,7 @@ func HandlerProvider(
 		healthInterceptor,
 		scheduleSpecBuilder,
 		httpEnabled(cfg, serviceName),
+		activityHandler,
 	)
 	return wfHandler
 }
