@@ -813,8 +813,7 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		return nil
 	}
 
-	doCaN := true
-	wf := func(ctx workflow.Context) (string, error) {
+	wf := func(ctx workflow.Context, attempt int) (string, error) {
 		var ret string
 		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			StartToCloseTimeout: 1 * time.Second,
@@ -824,9 +823,8 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 			},
 		}), "act").Get(ctx, &ret)
 		s.NoError(err)
-		if retryOfCaN && doCaN {
-			doCaN = false // only CaN on the first run
-			return "", workflow.NewContinueAsNewError(ctx, "wf")
+		if retryOfCaN && attempt == 1 {
+			return "", workflow.NewContinueAsNewError(ctx, "wf", attempt+1)
 		}
 		// Use Temporal signal instead of Go channel to avoid replay issues
 		workflow.GetSignalChannel(ctx, "currentVersionChanged").Receive(ctx, nil)
@@ -885,6 +883,7 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 			},
 		},
 		wf0,
+		1,
 	)
 	s.NoError(err)
 
