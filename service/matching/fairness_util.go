@@ -35,6 +35,11 @@ func mergeFairnessWeightOverrides(
 	unset []string,
 	maxFairnessKeyWeightOverrides int,
 ) (fairnessWeightOverrides, error) {
+	if len(existing) == 0 {
+		// Validation already made sure that no keys of unset and set equal.
+		return set, nil
+	}
+
 	res := maps.Clone(existing)
 
 	for _, k := range unset {

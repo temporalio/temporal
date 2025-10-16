@@ -46,6 +46,18 @@ func TestMergeFairnessWeightOverrides(t *testing.T) {
 		assert.EqualValues(t, existing, out)
 	})
 
+	t.Run("return set when existing is empty", func(t *testing.T) {
+		set := fairnessWeightOverrides{"a": 1.2, "b": 3.4}
+
+		out, err := mergeFairnessWeightOverrides(nil, set, nil, 10)
+		assert.NoError(t, err)
+		assert.EqualValues(t, set, out)
+
+		out, err = mergeFairnessWeightOverrides(fairnessWeightOverrides{}, set, nil, 10)
+		assert.NoError(t, err)
+		assert.EqualValues(t, set, out)
+	})
+
 	t.Run("enforce capacity", func(t *testing.T) {
 		existing := fairnessWeightOverrides{"e": 1.0, "b": 2.0}
 		unset := []string{"b"}                             // remove one first -> size becomes 1
