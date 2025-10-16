@@ -618,7 +618,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_RunningExecution
 
 			var paused bool
 			// SearchAttribute now uses field name (TemporalBool01) instead of alias (PausedSA)
-			err = payload.Decode(request.SearchAttributes.IndexedFields[chasm.SearchAttributeFieldBool01.GetFieldName()], &paused)
+			err = payload.Decode(request.SearchAttributes.IndexedFields[chasm.ResolveFieldName(enumspb.INDEXED_VALUE_TYPE_BOOL, 1)], &paused)
 			s.NoError(err)
 			s.True(paused)
 

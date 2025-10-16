@@ -38,8 +38,8 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithSearchAttributes
 	lib.EXPECT().Name().Return("TestLibrary").AnyTimes()
 
 	s.T().Run("successful registration with valid search attributes", func(t *testing.T) {
-		boolKey := chasm.NewSearchAttributeBool("MyBoolAlias", chasm.SearchAttributeFieldBool01)
-		timeKey := chasm.NewSearchAttributeTime("MyTimeAlias", chasm.SearchAttributeFieldDatetime01)
+		boolKey := chasm.NewSearchAttributeBoolByIndex("MyBoolKey", 1)
+		timeKey := chasm.NewSearchAttributeTimeByIndex("MyTimeKey", 1)
 
 		component := chasm.NewRegistrableComponent[*chasm.MockComponent](
 			"Component1",
@@ -57,11 +57,11 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithSearchAttributes
 		require.NoError(t, err)
 	})
 
-	s.T().Run("panic on type mismatch", func(t *testing.T) {
-		// Trying to map a bool key to an int field - should panic
-		boolKey := chasm.NewSearchAttributeBool("MyBoolAlias", chasm.SearchAttributeFieldInt01)
+	s.T().Run("no panic with valid keys", func(t *testing.T) {
+		// Creating valid keys should not panic
+		boolKey := chasm.NewSearchAttributeBoolByIndex("MyBoolKey", 1)
 
-		require.Panics(t, func() {
+		require.NotPanics(t, func() {
 			chasm.NewRegistrableComponent[*chasm.MockComponent](
 				"Component1",
 				chasm.WithSearchAttributes([]*chasm.SearchAttribute{
@@ -71,10 +71,10 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithSearchAttributes
 		})
 	})
 
-	s.T().Run("panic on duplicate field", func(t *testing.T) {
-		// Both keys trying to use the same field - should panic
-		boolKey1 := chasm.NewSearchAttributeBool("MyBoolAlias1", chasm.SearchAttributeFieldBool01)
-		boolKey2 := chasm.NewSearchAttributeBool("MyBoolAlias2", chasm.SearchAttributeFieldBool01)
+	s.T().Run("panic on duplicate alias", func(t *testing.T) {
+		// Both keys trying to use the same alias - should panic
+		boolKey1 := chasm.NewSearchAttributeBoolByAlias("MyBoolKey1", "DuplicateAlias")
+		boolKey2 := chasm.NewSearchAttributeBoolByAlias("MyBoolKey2", "DuplicateAlias")
 
 		require.Panics(t, func() {
 			chasm.NewRegistrableComponent[*chasm.MockComponent](

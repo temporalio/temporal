@@ -623,7 +623,7 @@ func (l *testComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 }
 
 func (l *testComponent) SearchAttributes(_ chasm.Context) []*chasm.SearchAttribute {
-	testComponentSearchAttribute := chasm.NewSearchAttributeBool(testComponentPausedSAName, chasm.SearchAttributeFieldBool01)
+	testComponentSearchAttribute := chasm.NewSearchAttributeBoolByIndex(testComponentPausedSAName, 1)
 	testComponentSearchAttribute.SetValue(l.ActivityInfo.Paused)
 	return []*chasm.SearchAttribute{
 		&testComponentSearchAttribute.SearchAttribute,
