@@ -1344,6 +1344,13 @@ second per poller by one physical queue manager`,
 		2000,
 		"Cache size for fairness key rate limits.",
 	)
+	MatchingEnableWorkerPluginMetrics = NewGlobalBoolSetting(
+		"matching.enableWorkerPluginMetrics",
+		false,
+		`MatchingEnableWorkerPluginMetrics controls whether to export worker plugin metrics. 
+The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is 
+an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
+	)
 
 	// keys for history
 
