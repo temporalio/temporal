@@ -50,35 +50,13 @@ func NewValuesInterceptor(
 
 // TODO: this is invoked for non-ES validation code flow. Needs refactoring
 func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
-	fieldName := name
-	if searchattribute.IsMappable(name) {
-		mapper, err := ni.searchAttributesMapperProvider.GetMapper(ni.namespace)
-		if err != nil {
-			return "", err
-		}
-
-		if mapper != nil {
-			fieldName, err = mapper.GetFieldName(name, ni.namespace.String())
-			if err != nil {
-				if name != searchattribute.ScheduleID {
-					return "", err
-				}
-
-				// ScheduleId is a fake SA -- convert to WorkflowId
-				fieldName = searchattribute.WorkflowID
-			} else if name == searchattribute.ScheduleID && name == fieldName {
-				_, isCustom := ni.searchAttributesTypeMap.Custom()[fieldName]
-				if !isCustom {
-					// ScheduleId is a fake SA -- convert to WorkflowId
-					fieldName = searchattribute.WorkflowID
-				}
-			}
-		}
-	}
-
-	fieldType, err := ni.searchAttributesTypeMap.GetType(fieldName)
+	mapper, err := ni.searchAttributesMapperProvider.GetMapper(ni.namespace)
 	if err != nil {
-		return "", query.NewConverterError("invalid search attribute: %s", name)
+		return "", err
+	}
+	fieldName, fieldType, err := query.ResolveSearchAttributeAlias(name, ni.namespace, mapper, ni.searchAttributesTypeMap)
+	if err != nil {
+		return "", err
 	}
 
 	switch usage {
