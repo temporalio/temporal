@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"go.temporal.io/server/chasm"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -16,7 +15,7 @@ type Workflow struct {
 	chasm.UnimplementedComponent
 
 	// State of the workflow is managed by mutable_state_impl, not CHASM engine, so this will always be empty.
-	State proto.Message
+	State *emptypb.Empty
 
 	// MSPointer is a special in-memory field for getting mutable state access.
 	MSPointer chasm.MSPointer
@@ -30,7 +29,6 @@ func NewWorkflow(
 	msPointer chasm.MSPointer,
 ) *Workflow {
 	return &Workflow{
-		State:     &emptypb.Empty{},
 		MSPointer: msPointer,
 	}
 }

@@ -2579,7 +2579,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	if ms.chasmEnabled() {
 		// Initialize chasm tree once for new workflows.
-		mutableContext := chasm.NewMutableContext(context.TODO(), ms.chasmTree.(*chasm.Node))
+		// Using context.Background() because this is done outside an actual request context and the
+		// chasmworkflow.NewWorkflow does not actually use it currently.
+		mutableContext := chasm.NewMutableContext(context.Background(), ms.chasmTree.(*chasm.Node))
 		ms.chasmTree.(*chasm.Node).SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, ms))
 	}
 
