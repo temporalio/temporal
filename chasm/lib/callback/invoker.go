@@ -108,10 +108,9 @@ func (i *Invoker) Invoke(
 	if request.Header == nil {
 		request.Header = make(http.Header)
 	}
-	// TODO seankane: Port header setting from HSM (nexus_invocation.go:88-90)
-	// for k, v := range i.Callback.Header {
-	// 	request.Header.Set(k, v)
-	// }
+	for k, v := range i.nexus.Header {
+		request.Header.Set(k, v)
+	}
 
 	caller := e.HTTPCallerProvider(queues.NamespaceIDAndDestination{
 		NamespaceID: ns.ID().String(),
