@@ -973,12 +973,14 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 				return false
 			}
 		case workflow.VersioningBehaviorUnspecified:
+		default:
 		}
 		switch expectInherit {
 		case true:
 			return secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
 		case false:
 			return secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv2.BuildID()
+		default:
 		}
 		return true
 	}, 5*time.Second, 1*time.Millisecond)
