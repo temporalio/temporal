@@ -15,13 +15,3 @@ message StartActivityExecutionRequest {
 message StartActivityExecutionResponse {
     temporal.api.workflowservice.v1.StartActivityExecutionResponse frontend_response = 1;
 }
-
-message DescribeActivityExecutionRequest {
-  string namespace_id = 1;
-
-  temporal.api.workflowservice.v1.DescribeActivityExecutionRequest frontend_request = 2;
-}
-
-message DescribeActivityExecutionResponse {
-  temporal.api.workflowservice.v1.DescribeActivityExecutionResponse frontend_response = 1;
-}

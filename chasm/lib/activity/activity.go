@@ -1,23 +1,35 @@
 package activity
 
 import (
-	"context"
-	"fmt"
-
-	"go.temporal.io/api/activity/v1"
-	"go.temporal.io/api/enums/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+type ActivityStore interface {
+	PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, res *historyservice.RecordActivityTaskStartedResponse) error
+	RecordCompletion(ctx chasm.MutableContext) error
+}
 
 type Activity struct {
 	chasm.UnimplementedComponent
 
 	*activitypb.ActivityState
+
+	// Standalone only
+	Visibility    chasm.Field[*chasm.Visibility]
+	Attempt       chasm.Field[*activitypb.ActivityAttemptState]
+	LastHeartbeat chasm.Field[*activitypb.ActivityHeartbeatState]
+	// Standalone only
+	RequestData chasm.Field[*activitypb.ActivityRequestData]
+
+	// Pointer to an implementation of the "store" (for a workflow activity this would be a parent pointer back to
+	// the workflow).
+	// TODO: figure out better naming.
+	Store chasm.Field[ActivityStore]
 }
 
 func (a Activity) LifecycleState(context chasm.Context) chasm.LifecycleState {
@@ -34,112 +46,58 @@ func (a Activity) LifecycleState(context chasm.Context) chasm.LifecycleState {
 	}
 }
 
-// GetActivityExecutionInfo constructs an ActivityExecutionInfo from the CHASM activity component.
-// namespace, activityID, and runID come from the CHASM component key, not from persisted data.
-func (a *Activity) GetActivityExecutionInfo(key chasm.EntityKey) *activity.ActivityExecutionInfo {
-	if a.ActivityState == nil {
-		return nil
-	}
-
-	// Convert internal status to external status and run state
-	var status enums.ActivityExecutionStatus
-	var runState enums.PendingActivityState
-
-	switch a.ActivityState.Status {
-	case activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
-		status = enums.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
-		runState = enums.PENDING_ACTIVITY_STATE_UNSPECIFIED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
-		status = enums.ACTIVITY_EXECUTION_STATUS_RUNNING
-		runState = enums.PENDING_ACTIVITY_STATE_SCHEDULED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED:
-		status = enums.ACTIVITY_EXECUTION_STATUS_RUNNING
-		runState = enums.PENDING_ACTIVITY_STATE_STARTED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
-		status = enums.ACTIVITY_EXECUTION_STATUS_RUNNING
-		runState = enums.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
-	// TODO: Add pause support
-	// case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
-	// 	status = enums.ACTIVITY_EXECUTION_STATUS_RUNNING
-	// 	runState = enums.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
-	// case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
-	// 	status = enums.ACTIVITY_EXECUTION_STATUS_RUNNING
-	// 	runState = enums.PENDING_ACTIVITY_STATE_PAUSED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
-		status = enums.ACTIVITY_EXECUTION_STATUS_COMPLETED
-		runState = enums.PENDING_ACTIVITY_STATE_UNSPECIFIED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_FAILED:
-		status = enums.ACTIVITY_EXECUTION_STATUS_FAILED
-		runState = enums.PENDING_ACTIVITY_STATE_UNSPECIFIED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED:
-		status = enums.ACTIVITY_EXECUTION_STATUS_CANCELED
-		runState = enums.PENDING_ACTIVITY_STATE_UNSPECIFIED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED:
-		status = enums.ACTIVITY_EXECUTION_STATUS_TERMINATED
-		runState = enums.PENDING_ACTIVITY_STATE_UNSPECIFIED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
-		status = enums.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
-		runState = enums.PENDING_ACTIVITY_STATE_UNSPECIFIED
-	}
-
-	info := &activity.ActivityExecutionInfo{
-		ActivityType:    a.ActivityState.ActivityType,
-		ActivityOptions: a.ActivityState.ActivityOptions,
-		Status:          status,
-		RunState:        runState,
-		ScheduledTime:   a.ActivityState.ScheduledTime,
-		Priority:        a.ActivityState.Priority,
-		Input:           a.RequestData.Input,
-		Header:          a.RequestData.Header,
-
-		// TODO: These fields are left at zero value for now:
-		// - StartedTime
-		// - LastHeartbeatTime
-		// - HeartbeatDetails
-		// - RetryInfo
-		// - AutoResetPoints
-		// - ClockTime
-	}
-
-	return info
-}
-
-func NewActivity(request *workflowservice.StartActivityExecutionRequest) *Activity {
-	return &Activity{
-		ActivityState: &activitypb.ActivityState{
-			ActivityType:    request.ActivityType,
-			ActivityOptions: request.Options,
-			// TODO(dan): is this the correct way to compute this timestamp?
-			ScheduledTime: timestamppb.New(clock.NewRealTimeSource().Now()),
-			RequestData: &activitypb.ActivityRequestData{
-				Input:        request.Input,
-				Header:       request.Header,
-				UserMetadata: request.UserMetadata,
-			},
-		},
-	}
-}
-
-func GetActivity(ctx context.Context, key chasm.EntityKey) (*Activity, error) {
-	state, err := chasm.ReadComponent(
-		ctx,
-		chasm.NewComponentRef[*Activity](key),
-		func(
-			a *Activity,
-			ctx chasm.Context,
-			_ any,
-		) (*activitypb.ActivityState, error) {
-			fmt.Println("Reading activity state for", key.BusinessID)
-
-			return common.CloneProto(a.ActivityState), nil
-		},
-		nil,
-	)
+func NewStandaloneActivity(
+	ctx chasm.MutableContext,
+	request *workflowservice.StartActivityExecutionRequest,
+) (*Activity, error) {
+	visibility, err := chasm.NewVisibilityWithData(ctx, request.GetSearchAttributes().GetIndexedFields(), request.GetMemo().GetFields())
 	if err != nil {
 		return nil, err
 	}
 
 	return &Activity{
-		ActivityState: state,
+		ActivityState: &activitypb.ActivityState{
+			ActivityType:    request.ActivityType,
+			ActivityOptions: request.Options,
+			Priority:        request.Priority,
+		},
+		Attempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+			Count:           1,
+			LastStartedTime: timestamppb.Now(),
+		}),
+		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
+			Input:        request.Input,
+			Header:       request.Header,
+			UserMetadata: request.UserMetadata,
+		}),
+
+		Visibility: chasm.NewComponentField(ctx, visibility),
 	}, nil
+}
+
+func NewEmbeddedActivity(
+	ctx chasm.MutableContext,
+	state *activitypb.ActivityState,
+	parent ActivityStore,
+) {
+}
+
+func (activity *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, res *historyservice.RecordActivityTaskStartedResponse) error {
+	store, err := activity.Store.Get(ctx)
+	if err != nil {
+		return err
+	}
+	if err := store.PopulateRecordActivityTaskStartedResponse(ctx, res); err != nil {
+		return err
+	}
+	// ...
+	return nil
+}
+
+func (activity *Activity) RecordHeartbeat(ctx chasm.MutableContext, details *commonpb.Payloads) (*struct{}, error) {
+	activity.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
+		RecordedTime: timestamppb.New(ctx.Now(activity)),
+		Details:      details,
+	})
+	return nil, nil
 }
