@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateFairnessWeightUpdate(t *testing.T) {
@@ -15,14 +15,14 @@ func TestValidateFairnessWeightUpdate(t *testing.T) {
 		}
 		unset := []string{}
 		err := validateFairnessWeightUpdate(set, unset, 10)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("unset overrides", func(t *testing.T) {
 		set := map[string]float32{}
 		unset := []string{"z"}
 		err := validateFairnessWeightUpdate(set, unset, 10)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("enforce max number of overrides", func(t *testing.T) {
@@ -32,13 +32,13 @@ func TestValidateFairnessWeightUpdate(t *testing.T) {
 		unset := []string{"z"}
 
 		err := validateFairnessWeightUpdate(set, unset, 10)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		err = validateFairnessWeightUpdate(set, unset, 2)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		err = validateFairnessWeightUpdate(set, unset, 1)
-		assert.ErrorContains(t, err, "too many fairness weight overrides in request: got 2, maximum 1")
+		require.ErrorContains(t, err, "too many fairness weight overrides in request: got 2, maximum 1")
 	})
 
 	t.Run("reject too long key in `set`", func(t *testing.T) {
@@ -47,14 +47,14 @@ func TestValidateFairnessWeightUpdate(t *testing.T) {
 		}
 		unset := []string{}
 		err := validateFairnessWeightUpdate(set, unset, 10)
-		assert.ErrorContains(t, err, "fairness key length exceeds limit")
+		require.ErrorContains(t, err, "fairness key length exceeds limit")
 	})
 
 	t.Run("reject too long key in `unset`", func(t *testing.T) {
 		set := map[string]float32{"a": 1.0}
 		unset := []string{strings.Repeat("abcdefg", 10)}
 		err := validateFairnessWeightUpdate(set, unset, 10)
-		assert.ErrorContains(t, err, "fairness key length exceeds limit")
+		require.ErrorContains(t, err, "fairness key length exceeds limit")
 	})
 
 	t.Run("reject negative weight", func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestValidateFairnessWeightUpdate(t *testing.T) {
 		}
 		unset := []string{}
 		err := validateFairnessWeightUpdate(set, unset, 10)
-		assert.ErrorContains(t, err, "invalid fairness weight weight for key \"a\": must be greater than zero")
+		require.ErrorContains(t, err, "invalid fairness weight weight for key \"a\": must be greater than zero")
 	})
 
 	t.Run("reject overlap between `set` and `unset`", func(t *testing.T) {
@@ -72,6 +72,6 @@ func TestValidateFairnessWeightUpdate(t *testing.T) {
 		}
 		unset := []string{"a"}
 		err := validateFairnessWeightUpdate(set, unset, 10)
-		assert.ErrorContains(t, err, "fairness weight override key \"a\" present in both set and unset lists")
+		require.ErrorContains(t, err, "fairness weight override key \"a\" present in both set and unset lists")
 	})
 }

@@ -864,7 +864,7 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Equal(3, len(task.History.Events))
+				s.Len(task.History.Events, 3)
 
 				var idx int
 				_, scanErr := fmt.Sscanf(task.WorkflowExecution.WorkflowId, parsePattern, &idx)
