@@ -865,6 +865,7 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w2.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf", VersioningBehavior: behavior})
+	w2.RegisterWorkflowWithOptions(parentWf, workflow.RegisterOptions{Name: "parent-wf", VersioningBehavior: behavior})
 	w2.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act"})
 	s.NoError(w2.Start())
 	defer w2.Stop()
@@ -873,11 +874,11 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	s.setCurrentDeployment(tv1)
 	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
 
-	firstWF := "wf"
+	wf0 := "wf"
 	if retryOfChild {
-		firstWF = "parent-wf"
+		wf0 = "parent-wf"
 	}
-	run, err := s.SdkClient().ExecuteWorkflow(
+	run0, err := s.SdkClient().ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
 			TaskQueue: tv1.TaskQueue().GetName(),
@@ -885,32 +886,25 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 				InitialInterval: time.Second,
 			},
 		},
-		firstWF,
+		wf0,
 	)
 	s.NoError(err)
 
 	// wait for workflow to progress on v1
 	<-activityCompletedChan
 
-	// Set v2 to current and propagate to all task queue partitions
-	s.setCurrentDeployment(tv2)
-	s.waitForDeploymentDataPropagation(tv2, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
-
-	// get run ID of first run of the failing workflow
-	wfIDOfRetryingWF := run.GetID()
-	runIDBeforeRetry := run.GetRunID()
+	// get run ID of first run of the workflow before it fails
+	wfIDOfRetryingWF := run0.GetID()
+	runIDBeforeRetry := run0.GetRunID()
 	if retryOfChild {
 		wfIDOfRetryingWF = childWorkflowID
 		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
 		s.NoError(err)
 		runIDBeforeRetry = desc.WorkflowExecution.RunID
-	}
-
-	runIDBeforeCaN := runIDBeforeRetry
-	if retryOfCaN {
+	} else if retryOfCaN {
 		// wait for first run to continue-as-new
 		s.Eventually(func() bool {
-			desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeCaN)
+			desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, run0.GetRunID())
 			s.NoError(err)
 			return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
 		}, 5*time.Second, 1*time.Millisecond)
@@ -921,7 +915,7 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 			s.NoError(err)
 			caNRunID := continuedAsNewRunResp.WorkflowExecution.RunID
 			// confirm that it's a new run
-			if caNRunID != runIDBeforeCaN {
+			if caNRunID != run0.GetRunID() {
 				runIDBeforeRetry = caNRunID
 				return true
 			}
@@ -929,7 +923,11 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		}, 5*time.Second, 1*time.Millisecond)
 	}
 
-	// signal workflow to continue (it will fail and then retry)
+	// Set v2 to current and propagate to all task queue partitions
+	s.setCurrentDeployment(tv2)
+	s.waitForDeploymentDataPropagation(tv2, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
+
+	// signal workflow to continue (it will fail and then retry on v2 if it doesn't inherit)
 	currentVersionChangedChan <- struct{}{}
 
 	// wait for first run after continue-as-new to fail
@@ -937,12 +935,12 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeRetry)
 		s.NoError(err)
 		return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
-	}, 5*time.Second, 1*time.Millisecond)
+	}, 10*time.Second, 1*time.Second)
 
 	// get the execution info of the next run in the retry chain, wait for next run to start
 	var secondRunId string
 	s.Eventually(func() bool {
-		secondRunResp, err := s.SdkClient().DescribeWorkflow(ctx, run.GetID(), "")
+		secondRunResp, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
 		s.NoError(err)
 		secondRunId = secondRunResp.WorkflowExecution.RunID
 		// confirm that it's a new run
@@ -954,7 +952,7 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 
 	// confirm that the second run eventually gets auto-upgrade behavior and runs on version 2 (no inherit)
 	s.Eventually(func() bool {
-		secondRunResp, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), secondRunId)
+		secondRunResp, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfIDOfRetryingWF, secondRunId)
 		s.NoError(err)
 		switch behavior {
 		case workflow.VersioningBehaviorPinned:
