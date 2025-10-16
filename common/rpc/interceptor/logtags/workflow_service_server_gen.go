@@ -26,7 +26,9 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.CreateWorkflowRuleResponse:
 		return nil
 	case *workflowservice.DeleteActivityExecutionRequest:
-		return nil
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
 	case *workflowservice.DeleteActivityExecutionResponse:
 		return nil
 	case *workflowservice.DeleteScheduleRequest:
@@ -57,7 +59,9 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.DeprecateNamespaceResponse:
 		return nil
 	case *workflowservice.DescribeActivityExecutionRequest:
-		return nil
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
 	case *workflowservice.DescribeActivityExecutionResponse:
 		return nil
 	case *workflowservice.DescribeBatchOperationRequest:
@@ -111,9 +115,11 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.FetchWorkerConfigResponse:
 		return nil
-	case *workflowservice.GetActivityResultRequest:
-		return nil
-	case *workflowservice.GetActivityResultResponse:
+	case *workflowservice.GetActivityExecutionResultRequest:
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.GetActivityExecutionResultResponse:
 		return []tag.Tag{
 			tag.WorkflowRunID(r.GetRunId()),
 		}
@@ -230,6 +236,13 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		}
 	case *workflowservice.PauseActivityResponse:
 		return nil
+	case *workflowservice.PauseActivityExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.PauseActivityExecutionResponse:
+		return nil
 	case *workflowservice.PollActivityTaskQueueRequest:
 		return nil
 	case *workflowservice.PollActivityTaskQueueResponse:
@@ -285,7 +298,9 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.RegisterNamespaceResponse:
 		return nil
 	case *workflowservice.RequestCancelActivityExecutionRequest:
-		return nil
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
 	case *workflowservice.RequestCancelActivityExecutionResponse:
 		return nil
 	case *workflowservice.RequestCancelWorkflowExecutionRequest:
@@ -301,6 +316,13 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
 	case *workflowservice.ResetActivityResponse:
+		return nil
+	case *workflowservice.ResetActivityExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.ResetActivityExecutionResponse:
 		return nil
 	case *workflowservice.ResetStickyTaskQueueRequest:
 		return []tag.Tag{
@@ -433,7 +455,9 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.StopBatchOperationResponse:
 		return nil
 	case *workflowservice.TerminateActivityExecutionRequest:
-		return nil
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
 	case *workflowservice.TerminateActivityExecutionResponse:
 		return nil
 	case *workflowservice.TerminateWorkflowExecutionRequest:
@@ -456,6 +480,20 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
 	case *workflowservice.UnpauseActivityResponse:
+		return nil
+	case *workflowservice.UnpauseActivityExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.UnpauseActivityExecutionResponse:
+		return nil
+	case *workflowservice.UpdateActivityExecutionOptionsRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.UpdateActivityExecutionOptionsResponse:
 		return nil
 	case *workflowservice.UpdateActivityOptionsRequest:
 		return []tag.Tag{
