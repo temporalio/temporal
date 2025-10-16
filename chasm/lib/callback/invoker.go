@@ -29,6 +29,10 @@ var retryable4xxErrorTypes = []int{
 	http.StatusTooManyRequests,
 }
 
+type CanGetNexusCompletion interface {
+	GetNexusCompletion(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error)
+}
+
 // The Invoker component is responsible for executing callbacks.
 type Invoker struct {
 	chasm.UnimplementedComponent
@@ -37,12 +41,13 @@ type Invoker struct {
 
 	Callback chasm.Field[*Callback]
 
-	MSPointer chasm.Field[chasm.MSPointer]
+	CanGetNexusCompletion chasm.Field[CanGetNexusCompletion]
 
 	// components/callbacks/nexus_invocation.go:nexusInvocation fields
 	completion        nexusrpc.OperationCompletion
 	workflowID, runID string
 	attempt           int32
+	nexus             *callbackspb.Callback_Nexus
 }
 
 func NewInvoker(ctx chasm.MutableContext, callback *Callback) *Invoker {

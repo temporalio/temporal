@@ -63,15 +63,25 @@ func (e *InvocationTaskExecutor) Execute(
 			invoker = &Invoker{
 				InvokerState: common.CloneProto(i.InvokerState),
 			}
-			invoker.completion, err := i.MSPointer.GetNexusCompletion(ctx, i.Callback.GetRequestId())
+			nexusCompletion, err := i.CanGetNexusCompletion.Get(ctx)
 			if err != nil {
 				return struct{}{}, err
 			}
-			invoker.workflowID = i.Callback.GetWorkflowID()
-			invoker.runID = i.Callback.GetRunID()
-			invoker.attempt = i.Callback.GetAttempt()
 
 			c, err := i.Callback.Get(ctx)
+			if err != nil {
+				return struct{}{}, err
+			}
+
+			invoker.completion, err = nexusCompletion.GetNexusCompletion(
+				context.Background(),
+				c.RequestId,
+			)
+			// TODO seankane: where do we get these?
+			// invoker.workflowID = c.WorkflowID
+			// invoker.runID = c.RunID
+			invoker.attempt = c.Attempt
+			invoker.nexus = c.Callback.GetNexus()
 			if err != nil {
 				return struct{}{}, err
 			}
@@ -191,7 +201,7 @@ func (e *BackoffTaskExecutor) generateInvocationTask(callback *Callback) (*callb
 		// This matches the HSM behavior of extracting scheme + host
 		url := variant.Nexus.Url
 		// For now, we'll use the full URL as destination
-		// TODO: Extract just scheme + host like HSM does
+		// TODO seankane: Extract just scheme + host like HSM does
 		return &callbackspb.InvocationTask{
 			Url: url,
 		}, nil
