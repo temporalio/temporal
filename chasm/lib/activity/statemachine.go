@@ -18,9 +18,6 @@ func (a *Activity) State() activitypb.ActivityExecutionStatus {
 
 // SetState sets the status of the activity.
 func (a *Activity) SetState(state activitypb.ActivityExecutionStatus) {
-	if a.ActivityState == nil {
-		return
-	}
 	a.ActivityState.Status = state
 }
 
