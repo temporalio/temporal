@@ -1199,26 +1199,29 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	// Change deployment and behavior based on completed wft.
 	if wftBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		if versioningInfo != nil {
-			versioningInfo.Behavior = wftBehavior
-			// Deployment Version is not set for unversioned workers.
-			versioningInfo.DeploymentVersion = nil
-			//nolint:staticcheck // SA1019 deprecated Version will clean up later
-			versioningInfo.Version = ""
-			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-			versioningInfo.Deployment = nil
-		}
-	} else {
-		if versioningInfo == nil {
-			versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+			// Copy before modifying to avoid data race
+			versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{
+				Behavior:          wftBehavior,
+				DeploymentVersion: nil,
+				//nolint:staticcheck // SA1019 deprecated Version will clean up later
+				Version: "",
+				//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+				Deployment: nil,
+			}
 			m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
 		}
-		versioningInfo.Behavior = wftBehavior
-		// Only populating the new field.
-		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-		versioningInfo.Deployment = nil
-		//nolint:staticcheck // SA1019 deprecated Version will clean up later [cleanup-wv-3.1]
-		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
-		versioningInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment)
+	} else {
+		// Copy before modifying to avoid data race
+		versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{
+			Behavior: wftBehavior,
+			// Only populating the new field.
+			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+			Deployment: nil,
+			//nolint:staticcheck // SA1019 deprecated Version will clean up later [cleanup-wv-3.1]
+			Version:           worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(wftDeployment)),
+			DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment),
+		}
+		m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
 	}
 
 	// Deployment and behavior after applying the data came from the completed wft.

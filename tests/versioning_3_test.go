@@ -782,22 +782,18 @@ func (s *Versioning3Suite) TestUnpinnedWorkflowWithRamp_ToUnversioned() {
 }
 
 func (s *Versioning3Suite) TestWorkflowRetry_Pinned_ExpectInherit_RetryOfChild() {
-	s.T().Skip("exposes a code path with a flaky data race due to versioningInfo being accessed concurrently")
 	s.testWorkflowRetry(workflow.VersioningBehaviorPinned, true, true, false)
 }
 
 func (s *Versioning3Suite) TestWorkflowRetry_Pinned_ExpectInherit_RetryOfCaN() {
-	s.T().Skip("exposes a code path with a flaky data race due to versioningInfo being accessed concurrently")
 	s.testWorkflowRetry(workflow.VersioningBehaviorPinned, true, false, true)
 }
 
 func (s *Versioning3Suite) TestWorkflowRetry_Pinned_ExpectNoInherit() {
-	s.T().Skip("exposes a code path with a flaky data race due to versioningInfo being accessed concurrently")
 	s.testWorkflowRetry(workflow.VersioningBehaviorPinned, false, false, false)
 }
 
 func (s *Versioning3Suite) TestWorkflowRetry_Unpinned_ExpectNoInherit() {
-	s.T().Skip("exposes a code path with a flaky data race due to versioningInfo being accessed concurrently")
 	s.testWorkflowRetry(workflow.VersioningBehaviorAutoUpgrade, false, false, false)
 }
 
