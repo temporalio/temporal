@@ -21,66 +21,64 @@ func (a *Activity) SetState(state activitypb.ActivityExecutionStatus) {
 	a.ActivityState.Status = state
 }
 
-var (
-	TransitionScheduled = chasm.NewTransition(
-		[]activitypb.ActivityExecutionStatus{
-			activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
-		},
+var TransitionScheduled = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+	func(_ chasm.MutableContext, _ *Activity, _ any) error {
+		return nil
+	},
+)
+
+var TransitionStarted = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-		func(_ chasm.MutableContext, _ *Activity, _ any) error {
-			return nil
-		},
-	)
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+	func(_ chasm.MutableContext, _ *Activity, _ any) error {
+		return nil
+	},
+)
 
-	TransitionStarted = chasm.NewTransition(
-		[]activitypb.ActivityExecutionStatus{
-			activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-		},
+var TransitionCompleted = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-		func(_ chasm.MutableContext, _ *Activity, _ any) error {
-			return nil
-		},
-	)
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+	func(_ chasm.MutableContext, _ *Activity, _ any) error {
+		return nil
+	},
+)
 
-	TransitionCompleted = chasm.NewTransition(
-		[]activitypb.ActivityExecutionStatus{
-			activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-		},
-		activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-		func(_ chasm.MutableContext, _ *Activity, _ any) error {
-			return nil
-		},
-	)
+var TransitionFailed = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+	func(_ chasm.MutableContext, _ *Activity, _ any) error {
+		return nil
+	},
+)
 
-	TransitionFailed = chasm.NewTransition(
-		[]activitypb.ActivityExecutionStatus{
-			activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-		},
-		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
-		func(_ chasm.MutableContext, _ *Activity, _ any) error {
-			return nil
-		},
-	)
+var TransitionTerminated = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+	func(_ chasm.MutableContext, _ *Activity, _ any) error {
+		return nil
+	},
+)
 
-	TransitionTerminated = chasm.NewTransition(
-		[]activitypb.ActivityExecutionStatus{
-			activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-			activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-		},
-		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
-		func(_ chasm.MutableContext, _ *Activity, _ any) error {
-			return nil
-		},
-	)
-
-	TransitionTimedOut = chasm.NewTransition(
-		[]activitypb.ActivityExecutionStatus{
-			activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-			activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-		},
-		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-		func(_ chasm.MutableContext, _ *Activity, _ any) error {
-			return nil
-		},
-	)
+var TransitionTimedOut = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+	func(_ chasm.MutableContext, _ *Activity, _ any) error {
+		return nil
+	},
 )
