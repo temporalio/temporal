@@ -38,6 +38,7 @@ func (s *fieldSuite) SetupTest() {
 	s.initAssertions()
 	s.controller = gomock.NewController(s.T())
 	s.nodeBackend = NewMockNodeBackend(s.controller)
+	s.nodeBackend.EXPECT().IsWorkflow().Return(false).AnyTimes()
 
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 	s.registry = NewRegistry(s.logger)
@@ -317,6 +318,9 @@ func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
 	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
+
+	s.logger.(*testlogger.TestLogger).
+		Expect(testlogger.Error, "failed to resolve deferred pointer during transaction close")
 
 	orphanComponent := &TestSubComponent11{
 		SubComponent11Data: &protoMessageType{
