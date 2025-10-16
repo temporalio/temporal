@@ -164,16 +164,7 @@ func (c *fairBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.
 }
 
 func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) subqueueIndex {
-	levels := c.config.PriorityLevels()
-	if priority == 0 {
-		priority = defaultPriorityLevel(levels)
-	}
-	if priority < 1 {
-		// this should have been rejected much earlier, but just clip it here
-		priority = 1
-	} else if priority > levels {
-		priority = levels
-	}
+	priority = c.config.clipPriority(priority)
 
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()
