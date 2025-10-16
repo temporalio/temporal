@@ -17,6 +17,7 @@ import (
 	enums0 "go.temporal.io/server/api/enums/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	definition "go.temporal.io/server/common/definition"
+	nexusrpc "go.temporal.io/server/common/nexus/nexusrpc"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -117,6 +118,21 @@ func (mr *MockNodeBackendMockRecorder) GetExecutionState() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionState", reflect.TypeOf((*MockNodeBackend)(nil).GetExecutionState))
 }
 
+// GetNexusCompletion mocks base method.
+func (m *MockNodeBackend) GetNexusCompletion(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNexusCompletion", ctx, requestID)
+	ret0, _ := ret[0].(nexusrpc.OperationCompletion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNexusCompletion indicates an expected call of GetNexusCompletion.
+func (mr *MockNodeBackendMockRecorder) GetNexusCompletion(ctx, requestID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusCompletion", reflect.TypeOf((*MockNodeBackend)(nil).GetNexusCompletion), ctx, requestID)
+}
+
 // GetWorkflowKey mocks base method.
 func (m *MockNodeBackend) GetWorkflowKey() definition.WorkflowKey {
 	m.ctrl.T.Helper()
@@ -129,6 +145,20 @@ func (m *MockNodeBackend) GetWorkflowKey() definition.WorkflowKey {
 func (mr *MockNodeBackendMockRecorder) GetWorkflowKey() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowKey", reflect.TypeOf((*MockNodeBackend)(nil).GetWorkflowKey))
+}
+
+// IsWorkflow mocks base method.
+func (m *MockNodeBackend) IsWorkflow() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsWorkflow")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsWorkflow indicates an expected call of IsWorkflow.
+func (mr *MockNodeBackendMockRecorder) IsWorkflow() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflow", reflect.TypeOf((*MockNodeBackend)(nil).IsWorkflow))
 }
 
 // NextTransitionCount mocks base method.

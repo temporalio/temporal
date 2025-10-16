@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -615,13 +616,22 @@ func (ms *MutableStateImpl) ChasmTree() historyi.ChasmTree {
 	return ms.chasmTree
 }
 
+// chasmEnabled returns true is the mutable state has a real chasm tree.
+// The chasmTree is initialized with a noopChasmTree which is then overwritten with an actual chasm tree if chasm is
+// enabled when the mutable state is created. Once the EnableChasm dynamic config is removed and the tree is always
+// initialized, this helper can be removed.
+func (ms *MutableStateImpl) chasmEnabled() bool {
+	_, isNoop := ms.chasmTree.(*noopChasmTree)
+	return !isNoop
+}
+
 // GetNexusCompletion converts a workflow completion event into a [nexus.OperationCompletion].
 // Completions may be sent to arbitrary third parties, we intentionally do not include any termination reasons, and
 // expose only failure messages.
 func (ms *MutableStateImpl) GetNexusCompletion(
 	ctx context.Context,
 	requestID string,
-) (nexus.OperationCompletion, error) {
+) (nexusrpc.OperationCompletion, error) {
 	ce, err := ms.GetCompletionEvent(ctx)
 	if err != nil {
 		return nil, err
@@ -665,7 +675,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			// Nexus does not support it.
 			p = payloads[0]
 		}
-		completion, err := nexus.NewOperationCompletionSuccessful(p, nexus.OperationCompletionSuccessfulOptions{
+		completion, err := nexusrpc.NewOperationCompletionSuccessful(p, nexusrpc.OperationCompletionSuccessfulOptions{
 			Serializer: commonnexus.PayloadSerializer,
 			StartTime:  ms.executionState.GetStartTime().AsTime(),
 			Links:      []nexus.Link{startLink},
@@ -679,9 +689,9 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(
+		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{State: nexus.OperationStateFailed, Cause: &nexus.FailureError{Failure: f}},
-			nexus.OperationCompletionUnsuccessfulOptions{
+			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
@@ -697,12 +707,12 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(
+		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{
 				State: nexus.OperationStateCanceled,
 				Cause: &nexus.FailureError{Failure: f},
 			},
-			nexus.OperationCompletionUnsuccessfulOptions{
+			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
@@ -716,9 +726,9 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(
+		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{State: nexus.OperationStateFailed, Cause: &nexus.FailureError{Failure: f}},
-			nexus.OperationCompletionUnsuccessfulOptions{
+			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
@@ -735,12 +745,12 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(
+		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{
 				State: nexus.OperationStateFailed,
 				Cause: &nexus.FailureError{Failure: f},
 			},
-			nexus.OperationCompletionUnsuccessfulOptions{
+			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
@@ -2565,6 +2575,14 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	if ms.executionState.RunId != execution.GetRunId() {
 		return serviceerror.NewInternalf("applying conflicting run ID: %v != %v",
 			ms.executionState.RunId, execution.GetRunId())
+	}
+
+	if ms.chasmEnabled() {
+		// Initialize chasm tree once for new workflows.
+		// Using context.Background() because this is done outside an actual request context and the
+		// chasmworkflow.NewWorkflow does not actually use it currently.
+		mutableContext := chasm.NewMutableContext(context.Background(), ms.chasmTree.(*chasm.Node))
+		ms.chasmTree.(*chasm.Node).SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, ms))
 	}
 
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()

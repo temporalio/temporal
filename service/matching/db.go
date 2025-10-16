@@ -733,7 +733,7 @@ func (db *taskQueueDB) ensureDefaultSubqueuesLocked(
 
 	// check for default priority and add if not present (this may be initializing subqueue 0)
 	defKey := &persistencespb.SubqueueKey{
-		Priority: int32(defaultPriorityLevel(db.config.PriorityLevels())),
+		Priority: int32(db.config.DefaultPriorityKey),
 	}
 	hasDefault := slices.ContainsFunc(subqueues, func(s *dbSubqueue) bool {
 		return proto.Equal(s.Key, defKey)

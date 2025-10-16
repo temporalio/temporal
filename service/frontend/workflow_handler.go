@@ -886,29 +886,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
 	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
 
-	if request.WorkerHeartbeat != nil {
-		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
-		request.WorkerHeartbeat = nil // clear the heartbeat from the request to avoid sending it to matching service
-
-		// route heartbeat to the matching service only if the request is valid (all validation checks passed)
-		go func() {
-			_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
-				NamespaceId: namespaceID.String(),
-				HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
-					Namespace:       request.Namespace,
-					Identity:        request.Identity,
-					WorkerHeartbeat: heartbeats,
-				},
-			})
-
-			if err != nil {
-				wh.logger.Error("Failed to record worker heartbeat.",
-					tag.WorkflowTaskQueueName(request.TaskQueue.GetName()),
-					tag.Error(err))
-			}
-		}()
-	}
-
 	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(childCtx, &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
 		PollerId:    pollerID,
@@ -3084,6 +3061,12 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
+	}
+
+	// Check if CHASM scheduler experiment is enabled
+	if headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
+		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName.String()) {
+		wh.logger.Debug("CHASM scheduler enabled for request", tag.ScheduleID(request.ScheduleId))
 	}
 
 	if request.Schedule == nil {

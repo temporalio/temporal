@@ -42,7 +42,7 @@ type schedulerSuite struct {
 }
 
 // SetupSuite initializes the CHASM tree to a default scheduler.
-func (s *schedulerSuite) SetupSuite() {
+func (s *schedulerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.addedTasks = make([]tasks.Task, 0)
@@ -68,6 +68,7 @@ func (s *schedulerSuite) SetupSuite() {
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+	s.nodeBackend.EXPECT().IsWorkflow().Return(false).AnyTimes()
 
 	// Collect all tasks added for verification.
 	//

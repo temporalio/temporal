@@ -57,6 +57,7 @@ func (s *nodeSuite) SetupTest() {
 	s.initAssertions()
 	s.controller = gomock.NewController(s.T())
 	s.nodeBackend = NewMockNodeBackend(s.controller)
+	s.nodeBackend.EXPECT().IsWorkflow().Return(false).AnyTimes()
 	s.testLibrary = newTestLibrary(s.controller)
 
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
@@ -479,6 +480,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		ctx := NewMutableContext(context.Background(), rootNode)
 
 		rootComponent := &TestComponent{
+			MSPointer:                    s.nodeBackend,
 			SubComponent1:                NewComponentField(nil, sc1),
 			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
 			SubComponent11Pointer:        ComponentPointerTo(ctx, sc11),
@@ -508,6 +510,8 @@ func (s *nodeSuite) TestPointerAttributes() {
 		component, err := rootNode.Component(mutableContext, ComponentRef{})
 		s.NoError(err)
 		testComponent := component.(*TestComponent)
+
+		s.NotNil(testComponent.MSPointer)
 
 		chasmContext := NewMutableContext(context.Background(), rootNode)
 		sc11Des, err := testComponent.SubComponent11Pointer.Get(chasmContext)
@@ -1529,7 +1533,7 @@ func (s *nodeSuite) TestGetComponent() {
 
 	errValidation := errors.New("some random validation error")
 	expectedTestComponent := &TestComponent{}
-	setTestComponentFields(expectedTestComponent)
+	setTestComponentFields(expectedTestComponent, s.nodeBackend)
 	assertTestComponent := func(component Component) {
 		testComponent, ok := component.(*TestComponent)
 		s.True(ok)
@@ -2600,7 +2604,7 @@ func (s *nodeSuite) testComponentTree() *Node {
 	s.NoError(err)
 	s.Equal(valueStateNeedSyncStructure, node.valueState)
 	// Create subcomponents by assigning fields to TestComponent instance.
-	setTestComponentFields(tc.(*TestComponent))
+	setTestComponentFields(tc.(*TestComponent), s.nodeBackend)
 
 	// Sync tree with subcomponents of TestComponent.
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(4) // for InitialVersionedTransition of children.

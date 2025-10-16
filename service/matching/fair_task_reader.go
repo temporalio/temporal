@@ -458,6 +458,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 	for i, t := range tasks {
 		level := fairLevelFromAllocatedTask(t)
 		internalTasks[i] = newInternalTaskFromBacklog(t, tr.completeTask)
+		tr.backlogMgr.config.setDefaultPriority(internalTasks[i])
 		// After we get to this point, we must eventually call task.finish or
 		// task.finishForwarded, which will call tr.completeTask.
 		tr.outstandingTasks.Put(level, internalTasks[i])
