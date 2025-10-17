@@ -625,6 +625,692 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_LongTimeout_NotIncluded() {
 	}
 }
 
+func (s *mutableStateSuite) TestPopulateDeleteTasks_WithActivityTimeouts() {
+	// Test that activity timeout task references are added to BestEffortDeleteTasks when present.
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	version := int64(1)
+	workflowID := "wf-activity-timeout-delete"
+	runID := uuid.New()
+	s.mutableState = TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		workflowID,
+		runID,
+	)
+
+	// Start the workflow
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:                  1,
+			NamespaceId:              s.namespaceEntry.ID().String(),
+			StartRequest:             &workflowservice.StartWorkflowExecutionRequest{},
+			FirstWorkflowTaskBackoff: durationpb.New(0),
+		},
+	)
+	s.NoError(err)
+
+	// Add and start a workflow task
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		&taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+
+	// Schedule an activity
+	activityID := "test-activity"
+	activityScheduledEvent, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+		wft.StartedEventID,
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:             activityID,
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-tq"},
+			ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
+			ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+			StartToCloseTimeout:    durationpb.New(20 * time.Second),
+			HeartbeatTimeout:       durationpb.New(5 * time.Second),
+		},
+		false,
+	)
+	s.NoError(err)
+	scheduledEventID := activityScheduledEvent.GetEventId()
+
+	// Start the activity
+	_, err = s.mutableState.AddActivityTaskStartedEvent(activityInfo, scheduledEventID, "", "", nil, nil, nil)
+	s.NoError(err)
+
+	// Create mock timeout tasks that meet the criteria (< 120s)
+	now := time.Now().UTC()
+	mockStartToCloseTask := &tasks.ActivityTimeoutTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.mutableState.GetExecutionInfo().NamespaceId,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: now.Add(20 * time.Second),
+		TaskID:              101,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		EventID:             scheduledEventID,
+		Stamp:               activityInfo.Stamp,
+	}
+
+	// Store the tasks in mutable state (simulating what timer_sequence does)
+	// Note: We only store StartToClose here because ScheduleToStart would have been
+	// deleted already when the activity started (line 693), but in this test we're
+	// creating mock tasks after the activity has already started.
+	if s.mutableState.activityTimeoutTasks == nil {
+		s.mutableState.activityTimeoutTasks = make(map[int64]*activityTimeoutTasks)
+	}
+	s.mutableState.activityTimeoutTasks[scheduledEventID] = &activityTimeoutTasks{
+		StartToCloseTimeoutTask: mockStartToCloseTask,
+		// ScheduleToStart is not stored here as it would have been deleted when activity started
+	}
+
+	// Complete the activity
+	_, err = s.mutableState.AddActivityTaskCompletedEvent(
+		scheduledEventID,
+		activityInfo.StartedEventId,
+		&workflowservice.RespondActivityTaskCompletedRequest{
+			Identity: "",
+			Result:   nil,
+		},
+	)
+	s.NoError(err)
+
+	// Verify that BestEffortDeleteTasks contains the timeout task keys
+	del := s.mutableState.BestEffortDeleteTasks
+	s.Contains(del, tasks.CategoryTimer)
+	s.GreaterOrEqual(len(del[tasks.CategoryTimer]), 1, "Should have at least StartToClose timeout task")
+
+	// Check that StartToClose is in the deletion list
+	// (ScheduleToStart would have been deleted when activity started, before these mock tasks were created)
+	foundStartToClose := false
+	for _, key := range del[tasks.CategoryTimer] {
+		if key == mockStartToCloseTask.GetKey() {
+			foundStartToClose = true
+		}
+	}
+	s.True(foundStartToClose, "StartToClose timeout task should be in deletion list")
+}
+
+func (s *mutableStateSuite) TestDeleteScheduleToStartTimeout_WhenActivityStarts() {
+	// Test that ScheduleToStart timeout task is deleted when activity starts.
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	version := int64(1)
+	workflowID := "wf-schedule-to-start-delete"
+	runID := uuid.New()
+	s.mutableState = TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		workflowID,
+		runID,
+	)
+
+	// Start the workflow
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:                  1,
+			NamespaceId:              s.namespaceEntry.ID().String(),
+			StartRequest:             &workflowservice.StartWorkflowExecutionRequest{},
+			FirstWorkflowTaskBackoff: durationpb.New(0),
+		},
+	)
+	s.NoError(err)
+
+	// Add and start a workflow task
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		&taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+
+	// Schedule an activity with ScheduleToStart timeout
+	activityID := "test-activity"
+	activityScheduledEvent, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+		wft.StartedEventID,
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:             activityID,
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-tq"},
+			ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+			StartToCloseTimeout:    durationpb.New(20 * time.Second),
+		},
+		false,
+	)
+	s.NoError(err)
+	scheduledEventID := activityScheduledEvent.GetEventId()
+
+	// Create mock ScheduleToStart timeout task that meets the criteria (< 120s)
+	now := time.Now().UTC()
+	mockScheduleToStartTask := &tasks.ActivityTimeoutTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.mutableState.GetExecutionInfo().NamespaceId,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: now.Add(10 * time.Second),
+		TaskID:              100,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             scheduledEventID,
+		Stamp:               activityInfo.Stamp,
+	}
+
+	// Store the task in mutable state (simulating what timer_sequence does)
+	if s.mutableState.activityTimeoutTasks == nil {
+		s.mutableState.activityTimeoutTasks = make(map[int64]*activityTimeoutTasks)
+	}
+	s.mutableState.activityTimeoutTasks[scheduledEventID] = &activityTimeoutTasks{
+		ScheduleToStartTimeoutTask: mockScheduleToStartTask,
+	}
+
+	// Start the activity - this should delete the ScheduleToStart timeout task
+	_, err = s.mutableState.AddActivityTaskStartedEvent(
+		activityInfo,
+		scheduledEventID,
+		"",
+		"",
+		nil,
+		nil,
+		nil,
+	)
+	s.NoError(err)
+
+	// Verify that BestEffortDeleteTasks contains the ScheduleToStart timeout task key
+	del := s.mutableState.BestEffortDeleteTasks
+	s.Contains(del, tasks.CategoryTimer)
+	foundScheduleToStart := false
+	for _, key := range del[tasks.CategoryTimer] {
+		if key == mockScheduleToStartTask.GetKey() {
+			foundScheduleToStart = true
+			break
+		}
+	}
+	s.True(foundScheduleToStart, "ScheduleToStart timeout task should be deleted when activity starts")
+
+	// Verify that the task was removed from activityTimeoutTasks map
+	if timeoutTasks, exists := s.mutableState.activityTimeoutTasks[scheduledEventID]; exists {
+		s.Nil(timeoutTasks.ScheduleToStartTimeoutTask, "ScheduleToStart timeout task should be nil after deletion")
+	}
+}
+
+func (s *mutableStateSuite) TestDeleteHeartbeatTimeout_WhenHeartbeatReceived() {
+	// Test that Heartbeat timeout task is deleted when heartbeat is received.
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	version := int64(1)
+	workflowID := "wf-heartbeat-delete"
+	runID := uuid.New()
+	s.mutableState = TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		workflowID,
+		runID,
+	)
+
+	// Start the workflow
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:                  1,
+			NamespaceId:              s.namespaceEntry.ID().String(),
+			StartRequest:             &workflowservice.StartWorkflowExecutionRequest{},
+			FirstWorkflowTaskBackoff: durationpb.New(0),
+		},
+	)
+	s.NoError(err)
+
+	// Add and start a workflow task
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		&taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+
+	// Schedule an activity with Heartbeat timeout
+	activityID := "test-activity"
+	activityScheduledEvent, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+		wft.StartedEventID,
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-tq"},
+			HeartbeatTimeout:    durationpb.New(5 * time.Second),
+			StartToCloseTimeout: durationpb.New(20 * time.Second),
+		},
+		false,
+	)
+	s.NoError(err)
+	scheduledEventID := activityScheduledEvent.GetEventId()
+
+	// Start the activity
+	_, err = s.mutableState.AddActivityTaskStartedEvent(
+		activityInfo,
+		scheduledEventID,
+		"",
+		"",
+		nil,
+		nil,
+		nil,
+	)
+	s.NoError(err)
+
+	// Create mock Heartbeat timeout task that meets the criteria (< 120s)
+	now := time.Now().UTC()
+	mockHeartbeatTask := &tasks.ActivityTimeoutTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.mutableState.GetExecutionInfo().NamespaceId,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: now.Add(5 * time.Second),
+		TaskID:              100,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		EventID:             scheduledEventID,
+		Stamp:               activityInfo.Stamp,
+	}
+
+	// Store the task in mutable state (simulating what timer_sequence does)
+	if s.mutableState.activityTimeoutTasks == nil {
+		s.mutableState.activityTimeoutTasks = make(map[int64]*activityTimeoutTasks)
+	}
+	s.mutableState.activityTimeoutTasks[scheduledEventID] = &activityTimeoutTasks{
+		HeartbeatTimeoutTask: mockHeartbeatTask,
+	}
+
+	// Record a heartbeat - this should delete the Heartbeat timeout task
+	s.mutableState.UpdateActivityProgress(
+		activityInfo,
+		&workflowservice.RecordActivityTaskHeartbeatRequest{
+			Identity: "test-worker",
+			Details:  nil,
+		},
+	)
+
+	// Verify that BestEffortDeleteTasks contains the Heartbeat timeout task key
+	del := s.mutableState.BestEffortDeleteTasks
+	s.Contains(del, tasks.CategoryTimer)
+	foundHeartbeat := false
+	for _, key := range del[tasks.CategoryTimer] {
+		if key == mockHeartbeatTask.GetKey() {
+			foundHeartbeat = true
+			break
+		}
+	}
+	s.True(foundHeartbeat, "Heartbeat timeout task should be deleted when heartbeat is received")
+
+	// Verify that the task was removed from activityTimeoutTasks map
+	if timeoutTasks, exists := s.mutableState.activityTimeoutTasks[scheduledEventID]; exists {
+		s.Nil(timeoutTasks.HeartbeatTimeoutTask, "Heartbeat timeout task should be nil after deletion")
+	}
+}
+
+func (s *mutableStateSuite) TestActivityTimeoutDeletion_AllTimersDeletedOnCompletion() {
+	// Test that when activity completes, ALL remaining timeout tasks are deleted.
+	// This handles edge cases where ScheduleToStart or Heartbeat weren't deleted earlier.
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	version := int64(1)
+	workflowID := "wf-completion-selective-delete"
+	runID := uuid.New()
+	s.mutableState = TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		workflowID,
+		runID,
+	)
+
+	// Start the workflow
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:                  1,
+			NamespaceId:              s.namespaceEntry.ID().String(),
+			StartRequest:             &workflowservice.StartWorkflowExecutionRequest{},
+			FirstWorkflowTaskBackoff: durationpb.New(0),
+		},
+	)
+	s.NoError(err)
+
+	// Add and start a workflow task
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		&taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+
+	// Schedule an activity
+	activityID := "test-activity"
+	activityScheduledEvent, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+		wft.StartedEventID,
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:             activityID,
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-tq"},
+			ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
+			StartToCloseTimeout:    durationpb.New(20 * time.Second),
+		},
+		false,
+	)
+	s.NoError(err)
+	scheduledEventID := activityScheduledEvent.GetEventId()
+
+	// Start the activity
+	_, err = s.mutableState.AddActivityTaskStartedEvent(activityInfo, scheduledEventID, "", "", nil, nil, nil)
+	s.NoError(err)
+
+	// Create mock timeout tasks
+	now := time.Now().UTC()
+	mockScheduleToCloseTask := &tasks.ActivityTimeoutTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.mutableState.GetExecutionInfo().NamespaceId,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: now.Add(30 * time.Second),
+		TaskID:              100,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		EventID:             scheduledEventID,
+		Stamp:               activityInfo.Stamp,
+	}
+
+	mockStartToCloseTask := &tasks.ActivityTimeoutTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.mutableState.GetExecutionInfo().NamespaceId,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: now.Add(20 * time.Second),
+		TaskID:              101,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		EventID:             scheduledEventID,
+		Stamp:               activityInfo.Stamp,
+	}
+
+	// Mock ScheduleToStart and Heartbeat tasks that should NOT be deleted on completion
+	mockScheduleToStartTask := &tasks.ActivityTimeoutTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.mutableState.GetExecutionInfo().NamespaceId,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: now.Add(10 * time.Second),
+		TaskID:              102,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             scheduledEventID,
+		Stamp:               activityInfo.Stamp,
+	}
+
+	mockHeartbeatTask := &tasks.ActivityTimeoutTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.mutableState.GetExecutionInfo().NamespaceId,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: now.Add(5 * time.Second),
+		TaskID:              103,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		EventID:             scheduledEventID,
+		Stamp:               activityInfo.Stamp,
+	}
+
+	// Store all tasks (simulating they haven't been deleted yet)
+	if s.mutableState.activityTimeoutTasks == nil {
+		s.mutableState.activityTimeoutTasks = make(map[int64]*activityTimeoutTasks)
+	}
+	s.mutableState.activityTimeoutTasks[scheduledEventID] = &activityTimeoutTasks{
+		ScheduleToStartTimeoutTask: mockScheduleToStartTask,
+		ScheduleToCloseTimeoutTask: mockScheduleToCloseTask,
+		StartToCloseTimeoutTask:    mockStartToCloseTask,
+		HeartbeatTimeoutTask:       mockHeartbeatTask,
+	}
+
+	// Complete the activity
+	_, err = s.mutableState.AddActivityTaskCompletedEvent(
+		scheduledEventID,
+		activityInfo.StartedEventId,
+		&workflowservice.RespondActivityTaskCompletedRequest{
+			Identity: "",
+			Result:   nil,
+		},
+	)
+	s.NoError(err)
+
+	// Verify that ALL timeout tasks are in the deletion list
+	del := s.mutableState.BestEffortDeleteTasks
+	s.Contains(del, tasks.CategoryTimer)
+
+	foundScheduleToClose := false
+	foundStartToClose := false
+	foundScheduleToStart := false
+	foundHeartbeat := false
+	for _, key := range del[tasks.CategoryTimer] {
+		if key == mockScheduleToCloseTask.GetKey() {
+			foundScheduleToClose = true
+		}
+		if key == mockStartToCloseTask.GetKey() {
+			foundStartToClose = true
+		}
+		if key == mockScheduleToStartTask.GetKey() {
+			foundScheduleToStart = true
+		}
+		if key == mockHeartbeatTask.GetKey() {
+			foundHeartbeat = true
+		}
+	}
+
+	s.True(foundScheduleToClose, "ScheduleToClose should be deleted on completion")
+	s.True(foundStartToClose, "StartToClose should be deleted on completion")
+	s.True(foundScheduleToStart, "ScheduleToStart should be deleted on completion (if still exists)")
+	s.True(foundHeartbeat, "Heartbeat should be deleted on completion (if still exists)")
+}
+
+func (s *mutableStateSuite) TestDeleteScheduleToStartTimeout_BothPathsWhenActivityStarts() {
+	// Test that ScheduleToStart is deleted for both transient and non-transient activity starts
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	for _, testCase := range []struct {
+		name              string
+		hasRetryPolicy    bool
+		expectTransientID bool
+	}{
+		{
+			name:              "non-transient activity (no retry policy)",
+			hasRetryPolicy:    false,
+			expectTransientID: false,
+		},
+		{
+			name:              "transient activity (with retry policy)",
+			hasRetryPolicy:    true,
+			expectTransientID: true,
+		},
+	} {
+		s.Run(testCase.name, func() {
+			version := int64(1)
+			workflowID := "wf-schedule-to-start-" + testCase.name
+			runID := uuid.New()
+			s.mutableState = TestGlobalMutableState(
+				s.mockShard,
+				s.mockEventsCache,
+				s.logger,
+				version,
+				workflowID,
+				runID,
+			)
+
+			// Start the workflow
+			_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+				&commonpb.WorkflowExecution{
+					WorkflowId: workflowID,
+					RunId:      runID,
+				},
+				&historyservice.StartWorkflowExecutionRequest{
+					Attempt:                  1,
+					NamespaceId:              s.namespaceEntry.ID().String(),
+					StartRequest:             &workflowservice.StartWorkflowExecutionRequest{},
+					FirstWorkflowTaskBackoff: durationpb.New(0),
+				},
+			)
+			s.NoError(err)
+
+			// Add and start a workflow task
+			wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+			s.NoError(err)
+			_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+				wft.ScheduledEventID,
+				"",
+				&taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				"",
+				nil,
+				nil,
+				nil,
+				false,
+			)
+			s.NoError(err)
+
+			// Schedule an activity
+			activityID := "test-activity"
+			scheduleAttrs := &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:             activityID,
+				ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-tq"},
+				ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+				StartToCloseTimeout:    durationpb.New(20 * time.Second),
+			}
+			if testCase.hasRetryPolicy {
+				scheduleAttrs.RetryPolicy = &commonpb.RetryPolicy{
+					MaximumAttempts: 3,
+				}
+			}
+
+			activityScheduledEvent, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+				wft.StartedEventID,
+				scheduleAttrs,
+				false,
+			)
+			s.NoError(err)
+			scheduledEventID := activityScheduledEvent.GetEventId()
+
+			// Create mock ScheduleToStart timeout task
+			now := time.Now().UTC()
+			mockScheduleToStartTask := &tasks.ActivityTimeoutTask{
+				WorkflowKey: definition.NewWorkflowKey(
+					s.mutableState.GetExecutionInfo().NamespaceId,
+					workflowID,
+					runID,
+				),
+				VisibilityTimestamp: now.Add(10 * time.Second),
+				TaskID:              100,
+				TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+				EventID:             scheduledEventID,
+				Stamp:               activityInfo.Stamp,
+			}
+
+			// Store the task in mutable state
+			if s.mutableState.activityTimeoutTasks == nil {
+				s.mutableState.activityTimeoutTasks = make(map[int64]*activityTimeoutTasks)
+			}
+			s.mutableState.activityTimeoutTasks[scheduledEventID] = &activityTimeoutTasks{
+				ScheduleToStartTimeoutTask: mockScheduleToStartTask,
+			}
+
+			// Start the activity
+			event, err := s.mutableState.AddActivityTaskStartedEvent(
+				activityInfo,
+				scheduledEventID,
+				"",
+				"",
+				nil,
+				nil,
+				nil,
+			)
+			s.NoError(err)
+
+			// Verify StartedEventId is set correctly
+			updatedActivityInfo, ok := s.mutableState.GetActivityInfo(scheduledEventID)
+			s.True(ok)
+			if testCase.expectTransientID {
+				s.Equal(common.TransientEventID, updatedActivityInfo.StartedEventId)
+				s.Nil(event) // transient start returns nil event
+			} else {
+				s.NotEqual(common.TransientEventID, updatedActivityInfo.StartedEventId, "non-transient should have real event ID")
+				s.NotNil(event)
+			}
+
+			// Verify that ScheduleToStart timeout task is deleted
+			del := s.mutableState.BestEffortDeleteTasks
+			s.Contains(del, tasks.CategoryTimer)
+			foundScheduleToStart := false
+			for _, key := range del[tasks.CategoryTimer] {
+				if key == mockScheduleToStartTask.GetKey() {
+					foundScheduleToStart = true
+					break
+				}
+			}
+			s.True(foundScheduleToStart, "ScheduleToStart timeout task should be deleted when activity starts (%s)", testCase.name)
+
+			// Verify that the task was removed from activityTimeoutTasks map
+			if timeoutTasks, exists := s.mutableState.activityTimeoutTasks[scheduledEventID]; exists {
+				s.Nil(timeoutTasks.ScheduleToStartTimeoutTask, "ScheduleToStart timeout task should be nil after deletion (%s)", testCase.name)
+			}
+		})
+	}
+}
+
 // creates a mutable state with first WFT completed on Build ID "b1"
 func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *taskqueuepb.TaskQueue) {
 	version := int64(12)
