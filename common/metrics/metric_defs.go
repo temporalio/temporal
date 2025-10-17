@@ -355,6 +355,8 @@ const (
 	HistorySignalWithStartWorkflowExecutionScope = "SignalWithStartWorkflowExecution"
 	// HistoryCompleteNexusOperationScope tracks CompleteNexusOperation API calls received by service
 	HistoryCompleteNexusOperationScope = "CompleteNexusOperation"
+	// HistoryCompleteNexusOperationChasmScope tracks CompleteNexusOperationChasm API calls received by service
+	HistoryCompleteNexusOperationChasmScope = "CompleteNexusOperationChasm"
 	// HistorySyncShardStatusScope tracks HistorySyncShardStatus API calls received by service
 	HistorySyncShardStatusScope = "SyncShardStatus"
 	// HistoryShardControllerScope is the scope used by shard controller

@@ -62,6 +62,9 @@ type (
 		// TODO(stephanos): move cache out of partition manager
 		cache cache.Cache // non-nil for root-partition
 
+		cancelNewMatcherSub func()
+		cancelFairnessSub   func()
+
 		// rateLimitManager is used to manage the rate limit for task queues.
 		rateLimitManager *rateLimitManager
 	}
@@ -111,6 +114,20 @@ func newTaskQueuePartitionManager(
 		)
 	}
 
+	unload := func(bool) {
+		pm.unloadFromEngine(unloadCauseConfigChange)
+	}
+
+	var fairness bool
+	fairness, pm.cancelFairnessSub = tqConfig.EnableFairnessSub(unload)
+	// Fairness is disabled for sticky queues for now so that we can still use TTLs.
+	tqConfig.EnableFairness = fairness && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY
+	if fairness {
+		tqConfig.NewMatcher = true
+	} else {
+		tqConfig.NewMatcher, pm.cancelNewMatcherSub = tqConfig.NewMatcherSub(unload)
+	}
+
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
 	if err != nil {
 		return nil, err
@@ -134,6 +151,13 @@ func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager
 func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.versionedQueuesLock.Lock()
 	defer pm.versionedQueuesLock.Unlock()
+
+	if pm.cancelFairnessSub != nil {
+		pm.cancelFairnessSub()
+	}
+	if pm.cancelNewMatcherSub != nil {
+		pm.cancelNewMatcherSub()
+	}
 
 	// First, stop all queues to wrap up ongoing operations.
 	for _, vq := range pm.versionedQueues {
@@ -180,6 +204,7 @@ reredirectTask:
 	}
 
 	syncMatchTask := newInternalTaskForSyncMatch(params.taskInfo, params.forwardInfo)
+	pm.config.setDefaultPriority(syncMatchTask)
 	if spoolQueue != nil && spoolQueue.QueueKey().Version().BuildId() != syncMatchQueue.QueueKey().Version().BuildId() {
 		// Task is not forwarded and build ID is different on the two queues -> redirect rule is being applied.
 		// Set redirectInfo in the task as it will be needed if we have to forward the task.
@@ -549,6 +574,10 @@ reredirectTask:
 
 func (pm *taskQueuePartitionManagerImpl) GetUserDataManager() userDataManager {
 	return pm.userDataManager
+}
+
+func (pm *taskQueuePartitionManagerImpl) GetConfig() *taskQueueConfig {
+	return pm.config
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes

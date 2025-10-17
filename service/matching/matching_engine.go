@@ -3004,7 +3004,10 @@ func prepareTaskQueueUserData(
 	return data
 }
 
-func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+func (e *matchingEngineImpl) UpdateTaskQueueConfig(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueConfigRequest,
+) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
 	taskQueueFamily, err := tqid.NewTaskQueueFamily(request.NamespaceId, request.UpdateTaskqueueConfig.GetTaskQueue())
 	if err != nil {
 		return nil, err
@@ -3040,18 +3043,36 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request 
 			}
 			now := hlc.Next(existingClock, e.timeSource)
 			protoTs := hlc.ProtoTimestamp(now)
+
 			// Update relevant config fields
 			cfg := data.PerType[int32(taskQueueType)].Config
 			updateTaskQueueConfig := request.GetUpdateTaskqueueConfig()
 			updateIdentity := updateTaskQueueConfig.GetIdentity()
+
 			// Queue Rate Limit
 			if qrl := updateTaskQueueConfig.GetUpdateQueueRateLimit(); qrl != nil {
 				cfg.QueueRateLimit = buildRateLimitConfig(qrl, protoTs, updateIdentity)
 			}
+
 			// Fairness Queue Rate Limit
 			if fkrl := updateTaskQueueConfig.GetUpdateFairnessKeyRateLimitDefault(); fkrl != nil {
 				cfg.FairnessKeysRateLimitDefault = buildRateLimitConfig(fkrl, protoTs, updateIdentity)
 			}
+
+			// Fairness Weight Overrides
+			if len(updateTaskQueueConfig.GetSetFairnessWeightOverrides()) > 0 ||
+				len(updateTaskQueueConfig.GetUnsetFairnessWeightOverrides()) > 0 {
+				cfg.FairnessWeightOverrides, err = mergeFairnessWeightOverrides(
+					cfg.FairnessWeightOverrides,
+					updateTaskQueueConfig.GetSetFairnessWeightOverrides(),
+					updateTaskQueueConfig.GetUnsetFairnessWeightOverrides(),
+					tqm.GetConfig().MaxFairnessKeyWeightOverrides(),
+				)
+				if err != nil {
+					return nil, false, err
+				}
+			}
+
 			// Update the clock on TaskQueueUserData to enforce LWW on config updates
 			data.Clock = now
 			return data, true, nil

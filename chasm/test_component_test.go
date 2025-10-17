@@ -30,6 +30,8 @@ type (
 		SubComponent11Pointer2       Field[*TestSubComponent11]
 		SubComponentInterfacePointer Field[Component]
 
+		MSPointer MSPointer
+
 		Visibility Field[*Visibility]
 	}
 
@@ -122,7 +124,7 @@ func (tsc2 *TestSubComponent2) LifecycleState(_ Context) LifecycleState {
 	return LifecycleStateRunning
 }
 
-func setTestComponentFields(c *TestComponent) {
+func setTestComponentFields(c *TestComponent, backend *MockNodeBackend) {
 	c.ComponentData = &protoMessageType{
 		CreateRequestId: "component-data",
 	}
@@ -143,6 +145,7 @@ func setTestComponentFields(c *TestComponent) {
 	c.SubData1 = NewDataField[*protoMessageType](nil, &protoMessageType{
 		CreateRequestId: "sub-data1",
 	})
+	c.MSPointer = backend
 }
 
 // returns serialized version of TestComponent from above.
