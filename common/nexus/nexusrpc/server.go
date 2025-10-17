@@ -318,6 +318,19 @@ func (h *httpHandler) handleRequest(writer http.ResponseWriter, request *http.Re
 		return
 	}
 
+	// Handle deprecated /{service}/{operation}/{operation_token}/cancel
+	// TODO(bergundy): remove in server release v1.31.0
+	if len(parts) == 5 && parts[4] == "cancel" {
+		token, err := url.PathUnescape(parts[3])
+		if err != nil {
+			h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to parse URL path"))
+			return
+		}
+
+		h.cancelOperation(service, operation, token, writer, request)
+		return
+	}
+
 	if len(parts) != 4 || parts[3] != "cancel" {
 		h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "not found"))
 		return
