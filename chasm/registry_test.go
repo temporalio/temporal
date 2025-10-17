@@ -37,7 +37,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithSearchAttributes
 	lib := chasm.NewMockLibrary(ctrl)
 	lib.EXPECT().Name().Return("TestLibrary").AnyTimes()
 
-	s.T().Run("successful registration with valid search attributes", func(t *testing.T) {
+	s.Run("successful registration with valid search attributes", func() {
 		boolKey := chasm.NewSearchAttributeBoolByIndex("MyBoolKey", 1)
 		timeKey := chasm.NewSearchAttributeTimeByIndex("MyTimeKey", 1)
 
@@ -54,14 +54,14 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithSearchAttributes
 
 		r := chasm.NewRegistry(s.logger)
 		err := r.Register(lib)
-		require.NoError(t, err)
+		s.NoError(err)
 	})
 
-	s.T().Run("no panic with valid keys", func(t *testing.T) {
+	s.Run("no panic with valid keys", func() {
 		// Creating valid keys should not panic
 		boolKey := chasm.NewSearchAttributeBoolByIndex("MyBoolKey", 1)
 
-		require.NotPanics(t, func() {
+		s.NotPanics(func() {
 			chasm.NewRegistrableComponent[*chasm.MockComponent](
 				"Component1",
 				chasm.WithSearchAttributes([]*chasm.SearchAttribute{
@@ -71,12 +71,12 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithSearchAttributes
 		})
 	})
 
-	s.T().Run("panic on duplicate alias", func(t *testing.T) {
+	s.Run("panic on duplicate alias", func() {
 		// Both keys trying to use the same alias - should panic
 		boolKey1 := chasm.NewSearchAttributeBoolByAlias("MyBoolKey1", "DuplicateAlias")
 		boolKey2 := chasm.NewSearchAttributeBoolByAlias("MyBoolKey2", "DuplicateAlias")
 
-		require.Panics(t, func() {
+		s.Panics(func() {
 			chasm.NewRegistrableComponent[*chasm.MockComponent](
 				"Component1",
 				chasm.WithSearchAttributes([]*chasm.SearchAttribute{

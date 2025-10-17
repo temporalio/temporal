@@ -64,19 +64,22 @@ func ResolveFieldName(valueType enumspb.IndexedValueType, index int) string {
 	}
 }
 
-// Getter methods for SearchAttribute
+// GetKey returns the search attribute key.
 func (s *SearchAttribute) GetKey() string {
 	return s.key
 }
 
+// GetAlias returns the search attribute alias (field name).
 func (s *SearchAttribute) GetAlias() string {
 	return s.alias
 }
 
+// GetValueType returns the indexed value type.
 func (s *SearchAttribute) GetValueType() enumspb.IndexedValueType {
 	return s.valueType
 }
 
+// GetValue returns the search attribute value.
 func (s *SearchAttribute) GetValue() any {
 	return s.value
 }
