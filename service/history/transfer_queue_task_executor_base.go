@@ -99,6 +99,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	directive *taskqueuespb.TaskVersionDirective,
 	priority *commonpb.Priority,
 	transactionPolicy historyi.TransactionPolicy,
+	scheduledRoutingConfigCounter int32,
 ) error {
 	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.NamespaceID,
@@ -110,12 +111,13 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 			Name: task.TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		ScheduledEventId:       task.ScheduledEventID,
-		ScheduleToStartTimeout: durationpb.New(activityScheduleToStartTimeout),
-		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
-		VersionDirective:       directive,
-		Stamp:                  task.Stamp,
-		Priority:               priority,
+		ScheduledEventId:              task.ScheduledEventID,
+		ScheduleToStartTimeout:        durationpb.New(activityScheduleToStartTimeout),
+		Clock:                         vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
+		VersionDirective:              directive,
+		Stamp:                         task.Stamp,
+		Priority:                      priority,
+		ScheduledRoutingConfigCounter: scheduledRoutingConfigCounter,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
@@ -152,6 +154,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	directive *taskqueuespb.TaskVersionDirective,
 	priority *commonpb.Priority,
 	transactionPolicy historyi.TransactionPolicy,
+	scheduledRoutingConfigCounter int32,
 ) error {
 	var sst *durationpb.Duration
 	if workflowTaskScheduleToStartTimeout > 0 {
@@ -163,12 +166,13 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 			WorkflowId: task.WorkflowID,
 			RunId:      task.RunID,
 		},
-		TaskQueue:              taskqueue,
-		ScheduledEventId:       task.ScheduledEventID,
-		ScheduleToStartTimeout: sst,
-		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
-		VersionDirective:       directive,
-		Priority:               priority,
+		TaskQueue:                     taskqueue,
+		ScheduledEventId:              task.ScheduledEventID,
+		ScheduleToStartTimeout:        sst,
+		Clock:                         vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
+		VersionDirective:              directive,
+		Priority:                      priority,
+		ScheduledRoutingConfigCounter: scheduledRoutingConfigCounter,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls

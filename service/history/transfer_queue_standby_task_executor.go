@@ -566,6 +566,7 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 		pushActivityInfo.versionDirective,
 		pushActivityInfo.priority,
 		historyi.TransactionPolicyPassive,
+		pushActivityInfo.scheduledRoutingConfigCounter,
 	)
 }
 
@@ -588,6 +589,7 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 		pushwtInfo.versionDirective,
 		pushwtInfo.priority,
 		historyi.TransactionPolicyPassive,
+		pushwtInfo.scheduledRoutingConfigCounter,
 	)
 }
 

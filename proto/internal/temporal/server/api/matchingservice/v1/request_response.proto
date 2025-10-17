@@ -106,6 +106,9 @@ message AddWorkflowTaskRequest {
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
     temporal.api.common.v1.Priority priority = 12;
+    // Counter copied from the workflow execution's WorkflowExecutionVersioningInfo
+    // during enqueue time.
+    int32 scheduled_routing_config_counter = 13;
 }
 
 message AddWorkflowTaskResponse {
@@ -130,6 +133,9 @@ message AddActivityTaskRequest {
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
     int32 stamp = 12;
     temporal.api.common.v1.Priority priority = 13;
+    // Counter copied from the workflow execution's WorkflowExecutionVersioningInfo
+    // during enqueue time.
+    int32 scheduled_routing_config_counter = 14;
 }
 
 message AddActivityTaskResponse {

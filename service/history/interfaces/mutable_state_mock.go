@@ -2424,6 +2424,20 @@ func (mr *MockMutableStateMockRecorder) GetRetryBackoffDuration(arg0 any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRetryBackoffDuration", reflect.TypeOf((*MockMutableState)(nil).GetRetryBackoffDuration), arg0)
 }
 
+// GetScheduledRoutingConfigCounter mocks base method.
+func (m *MockMutableState) GetScheduledRoutingConfigCounter() int32 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetScheduledRoutingConfigCounter")
+	ret0, _ := ret[0].(int32)
+	return ret0
+}
+
+// GetScheduledRoutingConfigCounter indicates an expected call of GetScheduledRoutingConfigCounter.
+func (mr *MockMutableStateMockRecorder) GetScheduledRoutingConfigCounter() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetScheduledRoutingConfigCounter", reflect.TypeOf((*MockMutableState)(nil).GetScheduledRoutingConfigCounter))
+}
+
 // GetSignalExternalInitiatedEvent mocks base method.
 func (m *MockMutableState) GetSignalExternalInitiatedEvent(arg0 context.Context, arg1 int64) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
@@ -2811,6 +2825,18 @@ func (m *MockMutableState) HasStartedWorkflowTask() bool {
 func (mr *MockMutableStateMockRecorder) HasStartedWorkflowTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasStartedWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasStartedWorkflowTask))
+}
+
+// IncrementScheduledRoutingConfigCounter mocks base method.
+func (m *MockMutableState) IncrementScheduledRoutingConfigCounter() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IncrementScheduledRoutingConfigCounter")
+}
+
+// IncrementScheduledRoutingConfigCounter indicates an expected call of IncrementScheduledRoutingConfigCounter.
+func (mr *MockMutableStateMockRecorder) IncrementScheduledRoutingConfigCounter() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementScheduledRoutingConfigCounter", reflect.TypeOf((*MockMutableState)(nil).IncrementScheduledRoutingConfigCounter))
 }
 
 // InitTransitionHistory mocks base method.

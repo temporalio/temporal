@@ -356,6 +356,8 @@ type (
 		// If there is a pending workflow task that is not started yet, it'll be rescheduled after
 		// transition start.
 		StartDeploymentTransition(deployment *deploymentpb.Deployment) error
+		GetScheduledRoutingConfigCounter() int32
+		IncrementScheduledRoutingConfigCounter()
 
 		AddReapplyCandidateEvent(event *historypb.HistoryEvent)
 		GetReapplyCandidateEvents() []*historypb.HistoryEvent

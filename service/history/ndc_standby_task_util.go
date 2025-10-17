@@ -134,6 +134,7 @@ type (
 		activityTaskScheduleToStartTimeout time.Duration
 		versionDirective                   *taskqueuespb.TaskVersionDirective
 		priority                           *commonpb.Priority
+		scheduledRoutingConfigCounter      int32
 	}
 
 	verifyCompletionRecordedPostActionInfo struct {
@@ -145,6 +146,7 @@ type (
 		taskqueue                          *taskqueuepb.TaskQueue
 		versionDirective                   *taskqueuespb.TaskVersionDirective
 		priority                           *commonpb.Priority
+		scheduledRoutingConfigCounter      int32
 	}
 )
 
@@ -184,6 +186,7 @@ func newActivityRetryTimePostActionInfo(
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
 		versionDirective:                   directive,
 		priority:                           priority,
+		scheduledRoutingConfigCounter:      mutableState.GetScheduledRoutingConfigCounter(),
 	}, nil
 }
 
@@ -200,6 +203,7 @@ func newWorkflowTaskPostActionInfo(
 		taskqueue:                          taskqueue,
 		versionDirective:                   directive,
 		priority:                           priority,
+		scheduledRoutingConfigCounter:      mutableState.GetScheduledRoutingConfigCounter(),
 	}, nil
 }
 

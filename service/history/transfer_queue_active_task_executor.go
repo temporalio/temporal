@@ -247,13 +247,14 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
 	directive := MakeDirectiveForActivityTask(mutableState, ai)
 	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, ai.Priority)
+	scheduledRoutingConfigCounter := mutableState.GetScheduledRoutingConfigCounter()
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
-	return t.pushActivity(ctx, task, timeout, directive, priority, historyi.TransactionPolicyActive)
+	return t.pushActivity(ctx, task, timeout, directive, priority, historyi.TransactionPolicyActive, scheduledRoutingConfigCounter)
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
@@ -296,6 +297,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 
 	directive := MakeDirectiveForWorkflowTask(mutableState)
 	priority := mutableState.GetExecutionInfo().Priority
+	scheduledRoutingConfigCounter := mutableState.GetScheduledRoutingConfigCounter()
 
 	// NOTE: Do not access mutableState after this lock is released.
 	// It is important to release the workflow lock here, because pushWorkflowTask will call matching,
@@ -310,6 +312,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		directive,
 		priority,
 		historyi.TransactionPolicyActive,
+		scheduledRoutingConfigCounter,
 	)
 
 	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); ok {
@@ -333,6 +336,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 			directive,
 			priority,
 			historyi.TransactionPolicyActive,
+			scheduledRoutingConfigCounter,
 		)
 	}
 

@@ -107,9 +107,12 @@ type DeploymentVersionData struct {
 	// Can be in the range [0, 100] if the version is ramping.
 	RampPercentage float32 `protobuf:"fixed32,5,opt,name=ramp_percentage,json=rampPercentage,proto3" json:"ramp_percentage,omitempty"`
 	// Status of the Worker Deployment Version.
-	Status        v1.WorkerDeploymentVersionStatus `protobuf:"varint,6,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkerDeploymentVersionStatus" json:"status,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Status v1.WorkerDeploymentVersionStatus `protobuf:"varint,6,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkerDeploymentVersionStatus" json:"status,omitempty"`
+	// Monotonically increasing counter that is incremented when the routing config is updated in the entity workflows.
+	// Used to detect staleness between history and matching partitions when dispatching tasks.
+	RoutingConfigCounter int32 `protobuf:"varint,7,opt,name=routing_config_counter,json=routingConfigCounter,proto3" json:"routing_config_counter,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *DeploymentVersionData) Reset() {
@@ -182,6 +185,13 @@ func (x *DeploymentVersionData) GetStatus() v1.WorkerDeploymentVersionStatus {
 		return x.Status
 	}
 	return v1.WorkerDeploymentVersionStatus(0)
+}
+
+func (x *DeploymentVersionData) GetRoutingConfigCounter() int32 {
+	if x != nil {
+		return x.RoutingConfigCounter
+	}
+	return 0
 }
 
 // Local state for Worker Deployment Version
@@ -4338,14 +4348,15 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"/temporal/server/api/deployment/v1/message.proto\x12!temporal.server.api.deployment.v1\x1a&temporal/api/enums/v1/task_queue.proto\x1a&temporal/api/enums/v1/deployment.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a(temporal/api/deployment/v1/message.proto\x1a$temporal/api/common/v1/message.proto\"]\n" +
 	"\x17WorkerDeploymentVersion\x12'\n" +
 	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x19\n" +
-	"\bbuild_id\x18\x02 \x01(\tR\abuildId\"\xc4\x03\n" +
+	"\bbuild_id\x18\x02 \x01(\tR\abuildId\"\xfa\x03\n" +
 	"\x15DeploymentVersionData\x12T\n" +
 	"\aversion\x18\x01 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12J\n" +
 	"\x13routing_update_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x11routingUpdateTime\x12H\n" +
 	"\x12current_since_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x10currentSinceTime\x12H\n" +
 	"\x12ramping_since_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10rampingSinceTime\x12'\n" +
 	"\x0framp_percentage\x18\x05 \x01(\x02R\x0erampPercentage\x12L\n" +
-	"\x06status\x18\x06 \x01(\x0e24.temporal.api.enums.v1.WorkerDeploymentVersionStatusR\x06status\"\xbf\v\n" +
+	"\x06status\x18\x06 \x01(\x0e24.temporal.api.enums.v1.WorkerDeploymentVersionStatusR\x06status\x124\n" +
+	"\x16routing_config_counter\x18\a \x01(\x05R\x14routingConfigCounter\"\xbf\v\n" +
 	"\x11VersionLocalState\x12T\n" +
 	"\aversion\x18\x01 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12;\n" +
 	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
