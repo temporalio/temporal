@@ -148,6 +148,7 @@ type (
 		readerID                   int64
 		loadTime                   time.Time
 		scheduledTime              time.Time
+		throttledTime              time.Time
 		scheduleLatency            time.Duration
 		attemptNoUserLatency       time.Duration
 		inMemoryNoUserLatency      time.Duration
@@ -216,6 +217,7 @@ func NewExecutable(
 		clusterMetadata:   clusterMetadata,
 		readerID:          readerID,
 		loadTime:          util.MaxTime(timeSource.Now(), task.GetKey().FireTime),
+		throttledTime:     task.GetVisibilityTime(),
 		logger: log.NewLazyLogger(
 			logger,
 			func() []tag.Tag {
@@ -448,6 +450,11 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 			e.resourceExhaustedCount++
 		}
 
+		// Set throttled time for namespace-scoped resource exhausted errors.
+		if resourceExhaustedErr.Scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE {
+			e.throttledTime = e.timeSource.Now()
+		}
+
 		metrics.TaskThrottledCounter.With(e.metricsHandler).Record(
 			1, metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause))
 		return true, err
@@ -504,6 +511,12 @@ func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 // Returns nil if the task should be completed, and an error if the task should be retried.
 func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if err == nil {
+		return nil
+	}
+
+	// Handle throttling from scheduler - update throttle time and return
+	if errors.Is(err, ctasks.ErrSchedulerThrottle) {
+		e.throttledTime = e.timeSource.Now()
 		return nil
 	}
 
@@ -650,6 +663,8 @@ func (e *executableImpl) Ack() {
 	metrics.TaskLatency.With(priorityTaggedProvider).Record(e.inMemoryNoUserLatency)
 	metrics.TaskQueueLatency.With(priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))).
 		Record(time.Since(e.GetVisibilityTime()))
+	metrics.TaskQueueLatencyNoThrottle.With(priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))).
+		Record(time.Since(e.throttledTime))
 }
 
 func (e *executableImpl) Nack(err error) {
