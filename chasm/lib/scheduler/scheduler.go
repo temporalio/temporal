@@ -4,10 +4,14 @@ import (
 	"fmt"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -29,6 +33,8 @@ type Scheduler struct {
 	Invoker     chasm.Field[*Invoker]
 	Backfillers chasm.Map[string, *Backfiller] // Backfill ID => *Backfiller
 
+	Visibility chasm.Field[*chasm.Visibility]
+
 	// Locally-cached state, invalidated whenever cacheConflictToken != ConflictToken.
 	cacheConflictToken int64
 	compiledSpec       *scheduler.CompiledSpec // compiledSpec is only ever replaced whole, not mutated.
@@ -37,6 +43,12 @@ type Scheduler struct {
 const (
 	// How many recent actions to keep on the Info.RecentActions list.
 	recentActionCount = 10
+
+	// Item limit per spec field on the ScheduleInfo memo.
+	listInfoSpecFieldLimit = 10
+
+	// Field in which the schedule's memo is stored.
+	visibilityMemoFieldInfo = "ScheduleInfo"
 )
 
 // NewScheduler returns an initialized CHASM scheduler root component.
@@ -66,9 +78,13 @@ func NewScheduler(
 	}
 
 	invoker := NewInvoker(ctx, sched)
-	generator := NewGenerator(ctx, sched, invoker)
 	sched.Invoker = chasm.NewComponentField(ctx, invoker)
+
+	generator := NewGenerator(ctx, sched, invoker)
 	sched.Generator = chasm.NewComponentField(ctx, generator)
+
+	visibility := chasm.NewVisibility(ctx)
+	sched.Visibility = chasm.NewComponentField(ctx, visibility)
 
 	return sched
 }
@@ -289,4 +305,76 @@ func (s *Scheduler) recordActionResult(result *schedulerActionResult) {
 			s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, start.StartWorkflowResult)
 		}
 	}
+}
+
+func (s *Scheduler) Memo(
+	ctx chasm.Context,
+) map[string]chasm.VisibilityValue {
+	newInfo, err := s.GetListInfo(ctx)
+	if err != nil {
+		// Unable to retrieve list info. Return nil to skip memo update.
+		// Error will be logged once loggers are available in CHASM.
+		return nil
+	}
+
+	newInfoPayload, err := newInfo.Marshal()
+	if err != nil {
+		// Unable to marshal list info. Return nil to skip memo update.
+		// Error will be logged once loggers are available in CHASM.
+		return nil
+	}
+
+	return map[string]chasm.VisibilityValue{
+		visibilityMemoFieldInfo: chasm.VisibilityValueByteSlice(newInfoPayload),
+	}
+}
+
+// GetListInfo returns the ScheduleListInfo, used as the visibility memo, and to
+// answer List queries.
+func (s *Scheduler) GetListInfo(
+	ctx chasm.Context,
+) (*schedulepb.ScheduleListInfo, error) {
+	spec := common.CloneProto(s.Schedule.Spec)
+
+	// Clear fields that are too large/not useful for the list view.
+	spec.TimezoneData = nil
+
+	// Limit the number of specs and exclusions stored on the memo.
+	spec.ExcludeStructuredCalendar = util.SliceHead(spec.ExcludeStructuredCalendar, listInfoSpecFieldLimit)
+	spec.Interval = util.SliceHead(spec.Interval, listInfoSpecFieldLimit)
+	spec.StructuredCalendar = util.SliceHead(spec.StructuredCalendar, listInfoSpecFieldLimit)
+
+	generator, err := s.Generator.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &schedulepb.ScheduleListInfo{
+		Spec:              spec,
+		WorkflowType:      s.Schedule.Action.GetStartWorkflow().GetWorkflowType(),
+		Notes:             s.Schedule.State.Notes,
+		Paused:            s.Schedule.State.Paused,
+		RecentActions:     util.SliceTail(s.Info.RecentActions, recentActionCount),
+		FutureActionTimes: generator.FutureActionTimes,
+	}, nil
+}
+
+func (s *Scheduler) SetPaused(ctx chasm.MutableContext, paused bool) error {
+	s.Schedule.State.Paused = paused
+
+	vis, err := s.Visibility.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	p, err := payload.Encode(paused)
+	if err != nil {
+		return err
+	}
+
+	// "Pause" is the only Temporal-managed search attribute for schedules, so it is
+	// updated here ad-hoc, instead of via the SearchAttributesProvider interface.
+	pauseAttr := make(map[string]*commonpb.Payload)
+	pauseAttr[searchattribute.TemporalSchedulePaused] = p
+	return vis.SetSearchAttributes(ctx, pauseAttr) // merges with custom search attributes
 }
