@@ -1344,6 +1344,11 @@ second per poller by one physical queue manager`,
 		2000,
 		"Cache size for fairness key rate limits.",
 	)
+	MatchingMaxFairnessKeyWeightOverrides = NewTaskQueueIntSetting(
+		"matching.maxFairnessKeyWeightOverrides",
+		1000,
+		"Maximum number of fairness key weight overrides that can be configured for a task queue at a time.",
+	)
 
 	// keys for history
 
