@@ -26,19 +26,21 @@ message BufferedStart {
     // Trigger-immediately or backfill
     bool manual = 4;
     // An ID generated when the action is buffered for deduplication during
-    // execution. Only used by the state machine scheduler (otherwise left
-    // empty).
+    // execution. Only used by the CHASM scheduler (otherwise left empty).
     string request_id = 6;
     // Initially 0. Once a BufferedStart is ready to execute (overlap policies
     // are resolved), its attempt count is set to 1. If a BufferedStart fails
-    // execution, its attempt count here is incremented. Only used by the state
-    // machine scheduler (otherwise left empty).
+    // execution, its attempt count here is incremented. Only used by the CHASM
+    // scheduler (otherwise left empty).
     int64 attempt = 7;
     // If a BufferedStart is rate limited or needs to backoff while retrying,
-    // this time will be set, and the start will be held in the buffer until the
-    // backoff time has passed. Only used by the state machine scheduler
-    // (otherwise ignored).
+    // this time will be set, and the start will be held in the buffer until
+    // the backoff time has passed. Only used by the CHASM scheduler (otherwise
+    // ignored).
     google.protobuf.Timestamp backoff_time = 8;
+    // The precomputed workflow ID that should be used (as-is) when executing
+    // this start. Only used by the CHASM scheduler (otherwise ignored).
+    string workflow_id = 9;
 }
 
 message InternalState {

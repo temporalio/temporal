@@ -149,6 +149,7 @@ func (b *BackfillerTaskExecutor) processBackfill(
 		startTime,
 		endTime,
 		request.GetOverlapPolicy(),
+		scheduler.WorkflowID(),
 		backfiller.GetBackfillId(),
 		true,
 		&limit,

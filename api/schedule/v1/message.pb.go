@@ -42,19 +42,21 @@ type BufferedStart struct {
 	// Trigger-immediately or backfill
 	Manual bool `protobuf:"varint,4,opt,name=manual,proto3" json:"manual,omitempty"`
 	// An ID generated when the action is buffered for deduplication during
-	// execution. Only used by the state machine scheduler (otherwise left
-	// empty).
+	// execution. Only used by the CHASM scheduler (otherwise left empty).
 	RequestId string `protobuf:"bytes,6,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// Initially 0. Once a BufferedStart is ready to execute (overlap policies
 	// are resolved), its attempt count is set to 1. If a BufferedStart fails
-	// execution, its attempt count here is incremented. Only used by the state
-	// machine scheduler (otherwise left empty).
+	// execution, its attempt count here is incremented. Only used by the CHASM
+	// scheduler (otherwise left empty).
 	Attempt int64 `protobuf:"varint,7,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	// If a BufferedStart is rate limited or needs to backoff while retrying,
-	// this time will be set, and the start will be held in the buffer until the
-	// backoff time has passed. Only used by the state machine scheduler
-	// (otherwise ignored).
-	BackoffTime   *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=backoff_time,json=backoffTime,proto3" json:"backoff_time,omitempty"`
+	// this time will be set, and the start will be held in the buffer until
+	// the backoff time has passed. Only used by the CHASM scheduler (otherwise
+	// ignored).
+	BackoffTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=backoff_time,json=backoffTime,proto3" json:"backoff_time,omitempty"`
+	// The precomputed workflow ID that should be used (as-is) when executing
+	// this start. Only used by the CHASM scheduler (otherwise ignored).
+	WorkflowId    string `protobuf:"bytes,9,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -143,6 +145,13 @@ func (x *BufferedStart) GetBackoffTime() *timestamppb.Timestamp {
 		return x.BackoffTime
 	}
 	return nil
+}
+
+func (x *BufferedStart) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
 }
 
 type InternalState struct {
@@ -940,7 +949,7 @@ var File_temporal_server_api_schedule_v1_message_proto protoreflect.FileDescript
 
 const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"-temporal/server/api/schedule/v1/message.proto\x12\x1ftemporal.server.api.schedule.v1\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/enums/v1/schedule.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xaf\x03\n" +
+	"-temporal/server/api/schedule/v1/message.proto\x12\x1ftemporal.server.api.schedule.v1\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/enums/v1/schedule.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd0\x03\n" +
 	"\rBufferedStart\x12=\n" +
 	"\fnominal_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vnominalTime\x12;\n" +
 	"\vactual_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -951,7 +960,9 @@ const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"\n" +
 	"request_id\x18\x06 \x01(\tR\trequestId\x12\x18\n" +
 	"\aattempt\x18\a \x01(\x03R\aattempt\x12=\n" +
-	"\fbackoff_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vbackoffTime\"\xdf\x04\n" +
+	"\fbackoff_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vbackoffTime\x12\x1f\n" +
+	"\vworkflow_id\x18\t \x01(\tR\n" +
+	"workflowId\"\xdf\x04\n" +
 	"\rInternalState\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12!\n" +
 	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x1f\n" +

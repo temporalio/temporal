@@ -336,8 +336,8 @@ func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 
 	// Set expectations. The read and update calls will also update the Scheduler
 	// component, within the same transition.
-	s.ExpectReadComponent(invoker)
-	s.ExpectUpdateComponent(invoker)
+	s.ExpectReadComponent(ctx, invoker)
+	s.ExpectUpdateComponent(ctx, invoker)
 
 	// Create engine context for side effect task execution
 	engineCtx := s.newEngineContext()

@@ -40,7 +40,7 @@ func (s *generatorTasksSuite) TestExecute_ProcessTimeRangeFails() {
 
 	// If ProcessTimeRange fails, we should fail the task as an internal error.
 	s.specProcessor.EXPECT().ProcessTimeRange(
-		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 	).Return(nil, errors.New("processTimeRange bug"))
 
 	// Execute the generate task.
@@ -74,6 +74,11 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 	invoker, err := sched.Invoker.Get(ctx)
 	s.NoError(err)
 	s.Equal(5, len(invoker.BufferedStarts))
+
+	// Validate RequestId -> WorkflowId mapping
+	for _, start := range invoker.BufferedStarts {
+		s.Equal(start.WorkflowId, invoker.WorkflowID(start.RequestId))
+	}
 
 	// Generator's high water mark should have advanced.
 	newHighWatermark := generator.LastProcessedTime.AsTime()
