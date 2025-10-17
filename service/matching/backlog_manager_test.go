@@ -95,6 +95,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 			nil,
 			metrics.NoopMetricsHandler,
 			func() counter.Counter { return counter.NewMapCounter() },
+			false,
 		)
 	} else if s.newMatcher {
 		s.blm = newPriBacklogManager(
@@ -106,6 +107,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 			s.logger,
 			nil,
 			metrics.NoopMetricsHandler,
+			false,
 		)
 	} else {
 		s.blm = newBacklogManager(

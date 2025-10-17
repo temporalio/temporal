@@ -17,6 +17,7 @@ type (
 		Start()
 		Stop(unloadCause)
 		WaitUntilInitialized(context.Context) error
+		SetupDraining()
 		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers

@@ -28,6 +28,7 @@ type (
 		pqMgr      physicalTaskQueueManager
 		config     *taskQueueConfig
 		tqCtx      context.Context
+		isDraining bool
 		db         *taskQueueDB
 		taskWriter *fairTaskWriter
 
@@ -59,6 +60,7 @@ func newFairBacklogManager(
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
 	counterFactory func() counter.Counter,
+	isDraining bool,
 ) *fairBacklogManagerImpl {
 	// For the purposes of taskQueueDB, call this just a TaskManager. It'll return errors if we
 	// use it incorectly. TODO(fairness): consider a cleaner way of doing this.
@@ -68,7 +70,8 @@ func newFairBacklogManager(
 		pqMgr:               pqMgr,
 		config:              config,
 		tqCtx:               tqCtx,
-		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler),
+		isDraining:          isDraining,
+		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler, isDraining),
 		subqueuesByPriority: make(map[priorityKey]subqueueIndex),
 		priorityBySubqueue:  make(map[subqueueIndex]priorityKey),
 		matchingClient:      matchingClient,
@@ -134,6 +137,10 @@ func (c *fairBacklogManagerImpl) initState(state taskQueueState, err error) {
 		c.skipFinalUpdate.Store(true)
 		c.pqMgr.UnloadFromPartitionManager(unloadCauseInitError)
 		return
+	}
+
+	if state.otherHasTasks {
+		c.pqMgr.SetupDraining()
 	}
 
 	c.subqueueLock.Lock()
@@ -377,4 +384,12 @@ func (c *fairBacklogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 
 func (c *fairBacklogManagerImpl) getDB() *taskQueueDB {
 	return c.db
+}
+
+func (c *fairBacklogManagerImpl) setPriority(task *internalTask) {
+	c.config.setDefaultPriority(task)
+	if c.isDraining {
+		// draining goes before active backlog so we're guaranteed to finish migration
+		task.effectivePriority -= maxPriorityLevels
+	}
 }

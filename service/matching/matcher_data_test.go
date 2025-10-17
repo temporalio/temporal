@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -644,6 +645,11 @@ func TestSimpleLimiterLowToHigh(t *testing.T) {
 		// ready within one minute
 		require.Less(t, ready.delay(now+time.Minute.Nanoseconds()), time.Duration(0))
 	}
+}
+
+func TestCheckConstants(t *testing.T) {
+	// 1000 to leave room for further adjustments
+	assert.Greater(t, pollForwarderPriority, 1000*maxPriorityLevels)
 }
 
 func FuzzMatcherData(f *testing.F) {

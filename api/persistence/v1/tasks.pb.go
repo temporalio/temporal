@@ -230,7 +230,19 @@ type TaskQueueInfo struct {
 	// Each subqueue has its own ack level and approx backlog count, but they share
 	// the range id. For compatibility, ack level and backlog count for subqueue 0
 	// is copied into TaskQueueInfo.
-	Subqueues     []*SubqueueInfo `protobuf:"bytes,9,rep,name=subqueues,proto3" json:"subqueues,omitempty"`
+	Subqueues []*SubqueueInfo `protobuf:"bytes,9,rep,name=subqueues,proto3" json:"subqueues,omitempty"`
+	// For transitioning from tasks (v1) to tasks_v2 and back:
+	//
+	// If this TaskQueueInfo is in v1 and this is set, then v2 may have tasks.
+	// If this TaskQueueInfo is in v2 and this is set, then v1 may have tasks.
+	//
+	// New metadata starts with this flag set (we could skip this when useNewMatcher is off).
+	// Whenever locking any metadata as the inactive one (drain-only), this should be set.
+	// If the flag is true, no tasks should be written to the active table until the inactive
+	// table has also been locked (and the flag set there for a potential reverse transition).
+	// After determinining that the inactive table has no more tasks left, then this
+	// can be cleared on the active table.
+	OtherHasTasks bool `protobuf:"varint,10,opt,name=other_has_tasks,json=otherHasTasks,proto3" json:"other_has_tasks,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -326,6 +338,13 @@ func (x *TaskQueueInfo) GetSubqueues() []*SubqueueInfo {
 		return x.Subqueues
 	}
 	return nil
+}
+
+func (x *TaskQueueInfo) GetOtherHasTasks() bool {
+	if x != nil {
+		return x.OtherHasTasks
+	}
+	return false
 }
 
 type SubqueueInfo struct {
@@ -529,7 +548,7 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\x11version_directive\x18\b \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12\x14\n" +
 	"\x05stamp\x18\t \x01(\x05R\x05stamp\x12<\n" +
 	"\bpriority\x18\n" +
-	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\"\xef\x03\n" +
+	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\"\x97\x04\n" +
 	"\rTaskQueueInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12A\n" +
@@ -540,7 +559,9 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"expiryTime\x12D\n" +
 	"\x10last_update_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0elastUpdateTime\x12:\n" +
 	"\x19approximate_backlog_count\x18\b \x01(\x03R\x17approximateBacklogCount\x12N\n" +
-	"\tsubqueues\x18\t \x03(\v20.temporal.server.api.persistence.v1.SubqueueInfoR\tsubqueues\"\xd9\x02\n" +
+	"\tsubqueues\x18\t \x03(\v20.temporal.server.api.persistence.v1.SubqueueInfoR\tsubqueues\x12&\n" +
+	"\x0fother_has_tasks\x18\n" +
+	" \x01(\bR\rotherHasTasks\"\xd9\x02\n" +
 	"\fSubqueueInfo\x12A\n" +
 	"\x03key\x18\x01 \x01(\v2/.temporal.server.api.persistence.v1.SubqueueKeyR\x03key\x12\x1b\n" +
 	"\tack_level\x18\x02 \x01(\x03R\backLevel\x12Q\n" +
