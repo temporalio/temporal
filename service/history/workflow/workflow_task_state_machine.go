@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -1201,16 +1202,21 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 			// Copy before modifying to avoid data race
 			versioningInfo = common.CloneProto(versioningInfo)
 			versioningInfo.Behavior = wftBehavior
-			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-			versioningInfo.Deployment = nil
+			// Deployment Version is not set for unversioned workers.
+			versioningInfo.DeploymentVersion = nil
 			//nolint:staticcheck // SA1019 deprecated Version will clean up later
 			versioningInfo.Version = ""
-			versioningInfo.DeploymentVersion = nil
+			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+			versioningInfo.Deployment = nil
 			m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
 		}
 	} else {
-		// Copy before modifying to avoid data race
-		versioningInfo = common.CloneProto(versioningInfo)
+		if versioningInfo == nil {
+			versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+		} else {
+			// Copy before modifying to avoid data race
+			versioningInfo = common.CloneProto(versioningInfo)
+		}
 		versioningInfo.Behavior = wftBehavior
 		// Only populating the new field.
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
