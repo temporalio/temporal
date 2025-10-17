@@ -92,10 +92,6 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_Basic() {
 	s.mockFrontendClient.EXPECT().
 		StartWorkflowExecution(gomock.Any(), gomock.Any()).
 		Times(2).
-		// Do(func(req *workflowservice.StartWorkflowExecutionRequest) {
-		// 	// Expect callbacks to be set.
-		// 	s.NotEmpty(req.CompletionCallbacks)
-		// }).
 		Return(&workflowservice.StartWorkflowExecutionResponse{
 			RunId: "run-id",
 		}, nil)
