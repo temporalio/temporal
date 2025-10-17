@@ -13,7 +13,9 @@ var HistoryModule = fx.Module(
 		newLibrary,
 	),
 	fx.Invoke(func(l *library, registry *chasm.Registry) {
-		registry.Register(l)
+		if err := registry.Register(l); err != nil {
+			panic(err) //nolint:forbidigo
+		}
 	}),
 )
 

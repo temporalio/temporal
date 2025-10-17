@@ -46,6 +46,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		FrontendResponse: &workflowservice.StartActivityExecutionResponse{
 			Started: true,
 			RunId:   key.EntityID,
+			// EagerTask: TODO need to figure out how to populate this if tasks are async
 		},
 	}, nil
 }

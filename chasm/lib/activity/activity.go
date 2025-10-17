@@ -33,7 +33,7 @@ type Activity struct {
 }
 
 func (a Activity) LifecycleState(context chasm.Context) chasm.LifecycleState {
-	switch a.ActivityState.Status {
+	switch a.Status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED:
@@ -82,8 +82,8 @@ func NewEmbeddedActivity(
 ) {
 }
 
-func (activity *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, res *historyservice.RecordActivityTaskStartedResponse) error {
-	store, err := activity.Store.Get(ctx)
+func (a *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, res *historyservice.RecordActivityTaskStartedResponse) error {
+	store, err := a.Store.Get(ctx)
 	if err != nil {
 		return err
 	}
@@ -94,9 +94,9 @@ func (activity *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Co
 	return nil
 }
 
-func (activity *Activity) RecordHeartbeat(ctx chasm.MutableContext, details *commonpb.Payloads) (*struct{}, error) {
-	activity.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
-		RecordedTime: timestamppb.New(ctx.Now(activity)),
+func (a *Activity) RecordHeartbeat(ctx chasm.MutableContext, details *commonpb.Payloads) (*struct{}, error) {
+	a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
+		RecordedTime: timestamppb.New(ctx.Now(a)),
 		Details:      details,
 	})
 	return nil, nil
