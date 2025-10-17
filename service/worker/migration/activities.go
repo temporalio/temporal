@@ -44,10 +44,10 @@ type (
 		LastNotVerifiedWorkflowExecution *commonpb.WorkflowExecution
 	}
 
-	verifyStatus int
-	verifyResult struct {
-		status verifyStatus
-		reason string
+	VerifyStatus int
+	VerifyResult struct {
+		Status VerifyStatus
+		Reason string
 	}
 
 	listWorkflowsResponse struct {
@@ -72,7 +72,7 @@ type (
 		TargetClusters   []string
 	}
 
-	verifyReplicationTasksRequest struct {
+	VerifyReplicationTasksRequest struct {
 		Namespace             string
 		NamespaceID           string
 		TargetClusterEndpoint string
@@ -121,13 +121,13 @@ type (
 
 	WorkflowVerifier func(
 		ctx context.Context,
-		request *verifyReplicationTasksRequest,
+		request *VerifyReplicationTasksRequest,
 		remoteAdminClient adminservice.AdminServiceClient,
 		localAdminClient adminservice.AdminServiceClient,
 		ns *namespace.Namespace,
 		we *commonpb.WorkflowExecution,
 		mu *adminservice.DescribeMutableStateResponse,
-	) (verifyResult, error)
+	) (VerifyResult, error)
 )
 
 const (
@@ -135,15 +135,15 @@ const (
 	reasonWorkflowNotFound         = "Workflow not found"
 	reasonWorkflowCloseToRetention = "Workflow close to retention"
 
-	notVerified verifyStatus = 0
-	verified    verifyStatus = 1
-	skipped     verifyStatus = 2
+	notVerified VerifyStatus = 0
+	verified    VerifyStatus = 1
+	skipped     VerifyStatus = 2
 
 	largeHistoryLength = 1000
 )
 
-func (r verifyResult) isVerified() bool {
-	return r.status == verified || r.status == skipped
+func (r VerifyResult) isVerified() bool {
+	return r.Status == verified || r.Status == skipped
 }
 
 // TODO: CallerTypePreemptablee should be set in activity background context for all migration activities.
@@ -652,10 +652,10 @@ func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context
 
 func (a *activities) checkSkipWorkflowExecution(
 	ctx context.Context,
-	request *verifyReplicationTasksRequest,
+	request *VerifyReplicationTasksRequest,
 	we *commonpb.WorkflowExecution,
 	ns *namespace.Namespace,
-) (verifyResult, error) {
+) (VerifyResult, error) {
 	namespaceID := request.NamespaceID
 	tags := []tag.Tag{tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId)}
 	resp, err := a.historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
@@ -669,14 +669,14 @@ func (a *activities) checkSkipWorkflowExecution(
 			// The outstanding workflow execution may be deleted (due to retention) on source cluster after replication tasks were generated.
 			// Since retention runs on both source/target clusters, such execution may also be deleted (hence not found) from target cluster.
 			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.EncounterNotFoundWorkflowCount.Name()).Record(1)
-			return verifyResult{
-				status: skipped,
-				reason: reasonWorkflowNotFound,
+			return VerifyResult{
+				Status: skipped,
+				Reason: reasonWorkflowNotFound,
 			}, nil
 		}
 
-		return verifyResult{
-			status: notVerified,
+		return VerifyResult{
+			Status: notVerified,
 		}, err
 	}
 
@@ -685,9 +685,9 @@ func (a *activities) checkSkipWorkflowExecution(
 	if resp.GetDatabaseMutableState().GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.EncounterZombieWorkflowCount.Name()).Record(1)
 		a.logger.Info("createReplicationTasks skip Zombie workflow", tags...)
-		return verifyResult{
-			status: skipped,
-			reason: reasonZombieWorkflow,
+		return VerifyResult{
+			Status: skipped,
+			Reason: reasonZombieWorkflow,
 		}, nil
 	}
 
@@ -696,25 +696,25 @@ func (a *activities) checkSkipWorkflowExecution(
 		deleteTime := closeTime.AsTime().Add(ns.Retention())
 		if deleteTime.Before(time.Now()) {
 			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.EncounterPassRetentionWorkflowCount.Name()).Record(1)
-			return verifyResult{
-				status: skipped,
-				reason: reasonWorkflowCloseToRetention,
+			return VerifyResult{
+				Status: skipped,
+				Reason: reasonWorkflowCloseToRetention,
 			}, nil
 		}
 	}
 
-	return verifyResult{
-		status: notVerified,
+	return VerifyResult{
+		Status: notVerified,
 	}, nil
 }
 
 func (a *activities) verifySingleReplicationTask(
 	ctx context.Context,
-	request *verifyReplicationTasksRequest,
+	request *VerifyReplicationTasksRequest,
 	remotAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
 	we *commonpb.WorkflowExecution,
-) (verifyResult, error) {
+) (VerifyResult, error) {
 	s := time.Now()
 	// Check if execution exists on remote cluster
 	mu, err := remotAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
@@ -727,7 +727,7 @@ func (a *activities) verifySingleReplicationTask(
 	switch err.(type) {
 	case nil:
 		result, err := a.workflowVerifier(ctx, request, remotAdminClient, a.adminClient, ns, we, mu)
-		if err == nil && result.status == verified {
+		if err == nil && result.Status == verified {
 			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
 		}
 		return result, err
@@ -739,23 +739,23 @@ func (a *activities) verifySingleReplicationTask(
 		return a.checkSkipWorkflowExecution(ctx, request, we, ns)
 
 	case *serviceerror.NamespaceNotFound:
-		return verifyResult{
-			status: notVerified,
+		return VerifyResult{
+			Status: notVerified,
 		}, temporal.NewNonRetryableApplicationError("failed to describe workflow from the remote cluster", "NamespaceNotFound", err)
 
 	default:
 		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).
 			Counter(metrics.VerifyReplicationTaskFailed.Name()).Record(1)
 
-		return verifyResult{
-			status: notVerified,
+		return VerifyResult{
+			Status: notVerified,
 		}, errors.WithMessage(err, "failed to describe workflow from the remote cluster")
 	}
 }
 
 func (a *activities) verifyReplicationTasks(
 	ctx context.Context,
-	request *verifyReplicationTasksRequest,
+	request *VerifyReplicationTasksRequest,
 	details *replicationTasksHeartbeatDetails,
 	remotAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
@@ -798,7 +798,7 @@ const (
 	defaultNoProgressNotRetryableTimeout = 30 * time.Minute
 )
 
-func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
+func (a *activities) VerifyReplicationTasks(ctx context.Context, request *VerifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
 	var response verifyReplicationTasksResponse
 	var details replicationTasksHeartbeatDetails
 	if activity.HasHeartbeatDetails(ctx) {
