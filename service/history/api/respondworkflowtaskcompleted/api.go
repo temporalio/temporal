@@ -338,6 +338,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	//   and admitted updates are lost. Uncomment this check when durable admitted is implemented
 	//   or updates stay in the registry after WFT is failed.
 	hasBufferedEventsOrMessages := ms.HasBufferedEvents() // || updateRegistry.HasOutgoingMessages(false)
+
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
@@ -497,7 +498,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			ms.GetDeploymentTransition() != nil {
 
 			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-
 		} else if updateRegistry.HasOutgoingMessages(true) {
 			// There shouldn't be any sent updates in the registry because
 			// all sent but not processed updates were rejected by server.
@@ -507,10 +507,9 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 	}
 
-	bypassTaskGeneration := request.GetReturnNewWorkflowTask() && wtFailedCause == nil
-	// TODO (alex-update): All current SDKs always set ReturnNewWorkflowTask to true
-	//  which means that server always bypass task generation if WFT didn't fail.
-	//  ReturnNewWorkflowTask flag needs to be removed.
+	// By pass normal task generation flow and return the next workflow task as part of the response.
+	// It is efficient to bypass unless the task had failed.
+	bypassTaskGeneration := handler.shouldBypassTaskGeneration(req, wtFailedCause)
 
 	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && !bypassTaskGeneration {
 		// If task generation can't be bypassed (i.e. WFT has failed),
@@ -764,7 +763,6 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 	branchToken []byte,
 	maximumPageSize int32,
 ) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
-
 	if matchingResp.WorkflowExecution == nil {
 		// this will happen if there is no workflow task to be send to worker / caller
 		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
@@ -1012,7 +1010,6 @@ func failWorkflowTask(
 	wtFailedCause *workflowTaskFailedCause,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) (historyi.MutableState, int64, error) {
-
 	// clear any updates we have accumulated so far
 	wfContext.Clear()
 
@@ -1050,7 +1047,6 @@ func failWorkflowTask(
 }
 
 func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Context, wfContext historyi.WorkflowContext) error {
-
 	// Clear all changes in the workflow context that was made already.
 	wfContext.Clear()
 
@@ -1064,4 +1060,22 @@ func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Co
 		return err
 	}
 	return nil
+}
+
+// Determines whether to bypass the normal task generation flow and return the next workflow task
+// directly in the response.
+func (handler *WorkflowTaskCompletedHandler) shouldBypassTaskGeneration(
+	request *historyservice.RespondWorkflowTaskCompletedRequest,
+	wtFailedCause *workflowTaskFailedCause,
+) bool {
+	unconditionallyEnable := handler.config.EnableReturnNewWorkflowTaskUnconditionally()
+
+	// TODO: Stop honoring the client option (return_new_workflow_task) once we roll out the unconditionallyEnable flag.
+	// Today, the SDK can set return_new_workflow_task to false when the worker is not configured to cache history.
+	// We want to standardize the behavior by always returning the next task and let the worker get the full history.
+	clientRequested := request.CompleteRequest.GetReturnNewWorkflowTask()
+
+	noFailures := wtFailedCause == nil
+
+	return (unconditionallyEnable || clientRequested) && noFailures
 }
