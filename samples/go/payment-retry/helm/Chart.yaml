@@ -1,0 +1,6 @@
+apiVersion: v2
+name: payment-retry-sample
+description: A Helm chart for the Temporal Payment Retry Workflow Sample
+type: application
+version: 0.1.0 # Initial chart version
+appVersion: "1.0.0" # Initial app version (placeholder for worker image)
