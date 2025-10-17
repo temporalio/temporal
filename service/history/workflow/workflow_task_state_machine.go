@@ -1206,11 +1206,11 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 			versioningInfo.Version = ""
 			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 			versioningInfo.Deployment = nil
-			m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
 		}
 	} else {
 		if versioningInfo == nil {
 			versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+			m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
 		}
 		versioningInfo.Behavior = wftBehavior
 		// Only populating the new field.
@@ -1219,7 +1219,6 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		//nolint:staticcheck // SA1019 deprecated Version will clean up later [cleanup-wv-3.1]
 		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
 		versioningInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment)
-		m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
 	}
 
 	// Deployment and behavior after applying the data came from the completed wft.
