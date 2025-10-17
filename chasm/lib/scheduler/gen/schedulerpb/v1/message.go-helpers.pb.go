@@ -153,35 +153,35 @@ func (this *BackfillerState) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type LastCompletionState to the protobuf v3 wire format
-func (val *LastCompletionState) Marshal() ([]byte, error) {
+// Marshal an object of type LastCompletionResult to the protobuf v3 wire format
+func (val *LastCompletionResult) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type LastCompletionState from the protobuf v3 wire format
-func (val *LastCompletionState) Unmarshal(buf []byte) error {
+// Unmarshal an object of type LastCompletionResult from the protobuf v3 wire format
+func (val *LastCompletionResult) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *LastCompletionState) Size() int {
+func (val *LastCompletionResult) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two LastCompletionState values are equivalent by recursively
+// Equal returns whether two LastCompletionResult values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *LastCompletionState) Equal(that interface{}) bool {
+func (this *LastCompletionResult) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *LastCompletionState
+	var that1 *LastCompletionResult
 	switch t := that.(type) {
-	case *LastCompletionState:
+	case *LastCompletionResult:
 		that1 = t
-	case LastCompletionState:
+	case LastCompletionResult:
 		that1 = &t
 	default:
 		return false

@@ -32,7 +32,7 @@ type Scheduler struct {
 
 	// Last success/failure payloads, stored on this separate data node
 	// to minimize write traffic.
-	LastCompletionState chasm.Field[*schedulerpb.LastCompletionState]
+	LastCompletionResult chasm.Field[*schedulerpb.LastCompletionResult]
 
 	Generator   chasm.Field[*Generator]
 	Invoker     chasm.Field[*Invoker]
@@ -70,9 +70,9 @@ func NewScheduler(
 			ScheduleId:    scheduleID,
 			ConflictToken: scheduler.InitialConflictToken,
 		},
-		cacheConflictToken:  scheduler.InitialConflictToken,
-		Backfillers:         make(chasm.Map[string, *Backfiller]),
-		LastCompletionState: chasm.NewDataField(ctx, &schedulerpb.LastCompletionState{}),
+		cacheConflictToken:   scheduler.InitialConflictToken,
+		Backfillers:          make(chasm.Map[string, *Backfiller]),
+		LastCompletionResult: chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{}),
 	}
 
 	invoker := NewInvoker(ctx, sched)
@@ -180,9 +180,9 @@ func (s *Scheduler) getCompiledSpec(specBuilder *scheduler.SpecBuilder) (*schedu
 	return s.compiledSpec, nil
 }
 
-// GetWorkflowID returns the Workflow ID given as part of the request spec.
+// WorkflowID returns the Workflow ID given as part of the request spec.
 // During start generation, nominal time is suffixed to this ID.
-func (s *Scheduler) GetWorkflowID() string {
+func (s *Scheduler) WorkflowID() string {
 	return s.Schedule.Action.GetStartWorkflow().WorkflowId
 }
 
@@ -331,7 +331,7 @@ func (s *Scheduler) HandleNexusCompletion(
 		return err
 	}
 
-	workflowID := invoker.GetWorkflowID(info.RequestId)
+	workflowID := invoker.WorkflowID(info.RequestId)
 	if workflowID == "" {
 		// If the request ID was removed, the request must have already been processed;
 		// fast-succeed.
@@ -345,15 +345,15 @@ func (s *Scheduler) HandleNexusCompletion(
 	switch outcome := info.Outcome.(type) {
 	case *persistencespb.ChasmNexusCompletion_Failure:
 		wfStatus = executionStatusFromFailure(outcome.Failure)
-		s.LastCompletionState = chasm.NewDataField(ctx, &schedulerpb.LastCompletionState{
-			Outcome: &schedulerpb.LastCompletionState_Failure{
+		s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
+			Outcome: &schedulerpb.LastCompletionResult_Failure{
 				Failure: outcome.Failure,
 			},
 		})
 	case *persistencespb.ChasmNexusCompletion_Success:
 		wfStatus = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-		s.LastCompletionState = chasm.NewDataField(ctx, &schedulerpb.LastCompletionState{
-			Outcome: &schedulerpb.LastCompletionState_Success{
+		s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
+			Outcome: &schedulerpb.LastCompletionResult_Success{
 				Success: outcome.Success,
 			},
 		})

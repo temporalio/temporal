@@ -79,7 +79,7 @@ func (g *GeneratorTaskExecutor) Execute(
 		scheduler,
 		t1, t2,
 		scheduler.overlapPolicy(),
-		scheduler.GetWorkflowID(),
+		scheduler.WorkflowID(),
 		"",
 		false,
 		nil,

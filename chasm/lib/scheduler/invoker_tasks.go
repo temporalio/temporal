@@ -119,7 +119,7 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 
 	var invoker *Invoker
 	var scheduler *Scheduler
-	var lastCompletionState *schedulerpb.LastCompletionState
+	var lastCompletionState *schedulerpb.LastCompletionResult
 	var callback *commonpb.Callback
 
 	// Read and deep copy returned components, since we'll continue to access them
@@ -142,7 +142,7 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 				compiledSpec:       s.compiledSpec,
 			}
 
-			lcs, err := s.LastCompletionState.Get(ctx)
+			lcs, err := s.LastCompletionResult.Get(ctx)
 			if err != nil {
 				return struct{}{}, err
 			}
@@ -292,7 +292,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflows(
 	logger log.Logger,
 	scheduler *Scheduler,
 	starts []*schedulespb.BufferedStart,
-	lastCompletionState *schedulerpb.LastCompletionState,
+	lastCompletionState *schedulerpb.LastCompletionResult,
 	callback *commonpb.Callback,
 ) (result executeResult, startResults []*schedulepb.ScheduleActionResult) {
 	metricsWithTag := e.MetricsHandler.WithTags(
@@ -512,7 +512,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 	ctx context.Context,
 	scheduler *Scheduler,
 	start *schedulespb.BufferedStart,
-	lastCompletionState *schedulerpb.LastCompletionState,
+	lastCompletionState *schedulerpb.LastCompletionResult,
 	callback *commonpb.Callback,
 ) (*schedulepb.ScheduleActionResult, error) {
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
@@ -560,9 +560,9 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 
 	// Set last completion result payload.
 	switch outcome := lastCompletionState.Outcome.(type) {
-	case *schedulerpb.LastCompletionState_Failure:
+	case *schedulerpb.LastCompletionResult_Failure:
 		request.ContinuedFailure = outcome.Failure
-	case *schedulerpb.LastCompletionState_Success:
+	case *schedulerpb.LastCompletionResult_Success:
 		request.LastCompletionResult = &commonpb.Payloads{
 			Payloads: []*commonpb.Payload{outcome.Success},
 		}

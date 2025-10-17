@@ -23,10 +23,6 @@ func TestSchedulerNexusCompletionSuite(t *testing.T) {
 	suite.Run(t, &schedulerNexusCompletionSuite{})
 }
 
-func (s *schedulerNexusCompletionSuite) SetupTest() {
-	s.SetupSuite()
-}
-
 type nexusCompletionTestCase struct {
 	SetupInvoker   func(*scheduler.Invoker)
 	SetupScheduler func(*scheduler.Scheduler)
@@ -258,7 +254,7 @@ func (s *schedulerNexusCompletionSuite) runTestCase(tc *nexusCompletionTestCase)
 	// Capture initial state for no-op test.
 	initialRunningWorkflows := len(sched.Info.RunningWorkflows)
 	initialRecentActions := len(sched.Info.RecentActions)
-	initialLastCompletion, err := sched.LastCompletionState.Get(ctx)
+	initialLastCompletion, err := sched.LastCompletionResult.Get(ctx)
 	s.NoError(err)
 
 	// Execute the handler.
@@ -267,15 +263,15 @@ func (s *schedulerNexusCompletionSuite) runTestCase(tc *nexusCompletionTestCase)
 
 	if tc.ExpectNoOp {
 		// Verify no changes
-		s.Equal(initialRunningWorkflows, len(sched.Info.RunningWorkflows))
-		s.Equal(initialRecentActions, len(sched.Info.RecentActions))
-		// Verify LastCompletionState wasn't changed
-		currentLastCompletion, _ := sched.LastCompletionState.Get(ctx)
+		s.Len(sched.Info.RunningWorkflows, initialRunningWorkflows)
+		s.Len(sched.Info.RecentActions, initialRecentActions)
+		// Verify LastCompletionResult wasn't changed
+		currentLastCompletion, _ := sched.LastCompletionResult.Get(ctx)
 		s.Equal(initialLastCompletion, currentLastCompletion)
 		return
 	}
 
-	lastCompletion, err := sched.LastCompletionState.Get(ctx)
+	lastCompletion, err := sched.LastCompletionResult.Get(ctx)
 	s.NoError(err)
 	s.NotNil(lastCompletion)
 
@@ -310,7 +306,7 @@ func (s *schedulerNexusCompletionSuite) runTestCase(tc *nexusCompletionTestCase)
 	}
 
 	// Verify RequestId cleaned up from Invoker.
-	s.Empty(invoker.GetWorkflowID(tc.Completion.RequestId))
+	s.Empty(invoker.WorkflowID(tc.Completion.RequestId))
 
 	if tc.ValidateInvoker != nil {
 		tc.ValidateInvoker(s.T(), invoker)

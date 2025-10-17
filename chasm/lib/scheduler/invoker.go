@@ -174,9 +174,9 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 	i.addTasks(ctx)
 }
 
-// GetWorkflowID returns the workflow ID associated with the given request, or an
+// WorkflowID returns the workflow ID associated with the given request, or an
 // empty string if not found.
-func (i *Invoker) GetWorkflowID(requestID string) string {
+func (i *Invoker) WorkflowID(requestID string) string {
 	wfID := i.RequestIdToWorkflowId[requestID]
 	return wfID
 }
@@ -197,22 +197,27 @@ func (i *Invoker) recordCompletedAction(
 	delete(i.RequestIdToWorkflowId, requestID)
 
 	// Check if the action is still in BufferedStarts, clear it out.
-	i.BufferedStarts = slices.DeleteFunc(i.BufferedStarts, func(start *schedulespb.BufferedStart) bool {
+	idx := slices.IndexFunc(i.BufferedStarts, func(start *schedulespb.BufferedStart) bool {
 		if start.GetRequestId() == requestID {
 			scheduleTime = start.DesiredTime.AsTime()
 			return true
 		}
 		return false
 	})
-
-	// If we don't have any starts buffered, recording actions is a no-op from
-	// Invoker POV.
-	if len(i.BufferedStarts) < 1 {
-		return
+	if idx >= 0 {
+		i.BufferedStarts = slices.Delete(i.BufferedStarts, idx, idx+1)
 	}
 
-	// Update DesiredTime on the first start for metrics.
-	i.BufferedStarts[0].DesiredTime = timestamppb.New(closeTime)
+	// Update DesiredTime on the first pending start for metrics. DesiredTime is used
+	// to drive action latency between buffered starts (the time it takes between
+	// completing one start and kicking off the next). We set that on the first start
+	// pending execution.
+	idx = slices.IndexFunc(i.BufferedStarts, func(start *schedulespb.BufferedStart) bool {
+		return start.Attempt == 0
+	})
+	if idx >= 0 {
+		i.BufferedStarts[idx].DesiredTime = timestamppb.New(closeTime)
+	}
 
 	// addTasks will add an immediate ProcessBufferTask if we have any starts pending
 	// kick-off.

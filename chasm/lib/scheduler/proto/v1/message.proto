@@ -87,7 +87,7 @@ message BackfillerState {
 
 // CHASM scheduler retains the payload data for the last completed workflow
 // (either failure or success). 
-message LastCompletionState {
+message LastCompletionResult {
     oneof outcome {
         temporal.api.common.v1.Payload success = 1;
         temporal.api.failure.v1.Failure failure = 2;
