@@ -69,6 +69,7 @@ func WithSearchAttributes(searchAttributes []*SearchAttribute) RegistrableCompon
 			alias := sa.GetAlias()
 
 			if existingKey, exists := aliasToKey[alias]; exists {
+				//nolint:forbidigo // panic is appropriate during component registration setup
 				panic(fmt.Sprintf(
 					"duplicate search attribute alias %q: keys %q and %q both map to the same alias",
 					alias,
