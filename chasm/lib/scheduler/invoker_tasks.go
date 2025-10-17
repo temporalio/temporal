@@ -312,7 +312,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflows(
 		// Check if this start is already in RecentActions. If so, we crashed
 		// after starting a workflow, but before recording the result.
 		if scheduler.isActionCompleted(start.WorkflowId) {
-			logger.Warn("skipping already-completed workflow", tag.WorkflowID(start.WorkflowId))
+			logger.Info("skipping already-completed workflow", tag.WorkflowID(start.WorkflowId))
 			continue
 		}
 
