@@ -93,7 +93,7 @@ func (a *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, 
 	return nil
 }
 
-func (a *Activity) RecordHeartbeat(ctx chasm.MutableContext, details *commonpb.Payloads) (*struct{}, error) {
+func (a *Activity) RecordHeartbeat(ctx chasm.MutableContext, details *commonpb.Payloads) (chasm.NoValue, error) {
 	a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
 		RecordedTime: timestamppb.New(ctx.Now(a)),
 		Details:      details,
