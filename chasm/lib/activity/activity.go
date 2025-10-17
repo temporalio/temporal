@@ -70,7 +70,6 @@ func NewStandaloneActivity(
 			Header:       request.Header,
 			UserMetadata: request.UserMetadata,
 		}),
-
 		Visibility: chasm.NewComponentField(ctx, visibility),
 	}, nil
 }
