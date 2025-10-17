@@ -1199,8 +1199,6 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	// Change deployment and behavior based on completed wft.
 	if wftBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		if versioningInfo != nil {
-			// Copy before modifying to avoid data race
-			versioningInfo = common.CloneProto(versioningInfo)
 			versioningInfo.Behavior = wftBehavior
 			// Deployment Version is not set for unversioned workers.
 			versioningInfo.DeploymentVersion = nil
@@ -1213,9 +1211,6 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	} else {
 		if versioningInfo == nil {
 			versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
-		} else {
-			// Copy before modifying to avoid data race
-			versioningInfo = common.CloneProto(versioningInfo)
 		}
 		versioningInfo.Behavior = wftBehavior
 		// Only populating the new field.
