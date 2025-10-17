@@ -214,13 +214,9 @@ func (i *Invoker) recordCompletedAction(
 	// Update DesiredTime on the first start for metrics.
 	i.BufferedStarts[0].DesiredTime = timestamppb.New(closeTime)
 
-	// We add an immediate ProcessBufferTask if we have any queued-up starts, since
-	// a completed action will bump the next buffered action to "ready". The regular
-	// addTasks logic won't apply, since getEligibleBufferedStarts only looks at the
-	// current state of the BufferedStarts queue (it doesn't recompute eligible).
-	ctx.AddTask(i, chasm.TaskAttributes{
-		ScheduledTime: chasm.TaskScheduledTimeImmediate,
-	}, &schedulerpb.InvokerProcessBufferTask{})
+	// addTasks will add an immediate ProcessBufferTask if we have any starts pending
+	// kick-off.
+	i.addTasks(ctx)
 
 	return
 }
