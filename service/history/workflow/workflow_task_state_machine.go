@@ -1218,8 +1218,12 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 			Deployment: nil,
 			//nolint:staticcheck // SA1019 deprecated Version will clean up later [cleanup-wv-3.1]
-			Version:           worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(wftDeployment)),
-			DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment),
+			Version:            worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(wftDeployment)),
+			DeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment),
+			VersioningOverride: m.ms.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(),
+			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+			DeploymentTransition: m.ms.GetExecutionInfo().GetVersioningInfo().GetDeploymentTransition(),
+			VersionTransition:    m.ms.GetExecutionInfo().GetVersioningInfo().GetVersionTransition(),
 		}
 		m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
 	}
