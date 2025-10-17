@@ -127,6 +127,9 @@ type CallbackState struct {
 	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
 	// Request ID that added the callback.
 	RequestId     string `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	WorkflowId    string `protobuf:"bytes,10,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	RunId         string `protobuf:"bytes,11,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	NamespaceId   string `protobuf:"bytes,12,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -213,6 +216,27 @@ func (x *CallbackState) GetNextAttemptScheduleTime() *timestamppb.Timestamp {
 func (x *CallbackState) GetRequestId() string {
 	if x != nil {
 		return x.RequestId
+	}
+	return ""
+}
+
+func (x *CallbackState) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *CallbackState) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *CallbackState) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
 	}
 	return ""
 }
@@ -335,228 +359,6 @@ func (x *InvokerState) GetNamespaceId() string {
 	return ""
 }
 
-type InvocationResult struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Result:
-	//
-	//	*InvocationResult_Ok
-	//	*InvocationResult_Failure
-	//	*InvocationResult_Retry
-	Result        isInvocationResult_Result `protobuf_oneof:"result"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *InvocationResult) Reset() {
-	*x = InvocationResult{}
-	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *InvocationResult) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*InvocationResult) ProtoMessage() {}
-
-func (x *InvocationResult) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use InvocationResult.ProtoReflect.Descriptor instead.
-func (*InvocationResult) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *InvocationResult) GetResult() isInvocationResult_Result {
-	if x != nil {
-		return x.Result
-	}
-	return nil
-}
-
-func (x *InvocationResult) GetOk() *InvocationResultOK {
-	if x != nil {
-		if x, ok := x.Result.(*InvocationResult_Ok); ok {
-			return x.Ok
-		}
-	}
-	return nil
-}
-
-func (x *InvocationResult) GetFailure() *InvocationResultFailure {
-	if x != nil {
-		if x, ok := x.Result.(*InvocationResult_Failure); ok {
-			return x.Failure
-		}
-	}
-	return nil
-}
-
-func (x *InvocationResult) GetRetry() *InvocationResultRetry {
-	if x != nil {
-		if x, ok := x.Result.(*InvocationResult_Retry); ok {
-			return x.Retry
-		}
-	}
-	return nil
-}
-
-type isInvocationResult_Result interface {
-	isInvocationResult_Result()
-}
-
-type InvocationResult_Ok struct {
-	Ok *InvocationResultOK `protobuf:"bytes,1,opt,name=ok,proto3,oneof"`
-}
-
-type InvocationResult_Failure struct {
-	Failure *InvocationResultFailure `protobuf:"bytes,2,opt,name=failure,proto3,oneof"`
-}
-
-type InvocationResult_Retry struct {
-	Retry *InvocationResultRetry `protobuf:"bytes,3,opt,name=retry,proto3,oneof"`
-}
-
-func (*InvocationResult_Ok) isInvocationResult_Result() {}
-
-func (*InvocationResult_Failure) isInvocationResult_Result() {}
-
-func (*InvocationResult_Retry) isInvocationResult_Result() {}
-
-type InvocationResultOK struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *InvocationResultOK) Reset() {
-	*x = InvocationResultOK{}
-	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *InvocationResultOK) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*InvocationResultOK) ProtoMessage() {}
-
-func (x *InvocationResultOK) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use InvocationResultOK.ProtoReflect.Descriptor instead.
-func (*InvocationResultOK) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescGZIP(), []int{4}
-}
-
-type InvocationResultFailure struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Failure       *v1.Failure            `protobuf:"bytes,1,opt,name=failure,proto3" json:"failure,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *InvocationResultFailure) Reset() {
-	*x = InvocationResultFailure{}
-	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *InvocationResultFailure) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*InvocationResultFailure) ProtoMessage() {}
-
-func (x *InvocationResultFailure) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use InvocationResultFailure.ProtoReflect.Descriptor instead.
-func (*InvocationResultFailure) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *InvocationResultFailure) GetFailure() *v1.Failure {
-	if x != nil {
-		return x.Failure
-	}
-	return nil
-}
-
-type InvocationResultRetry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Failure       *v1.Failure            `protobuf:"bytes,1,opt,name=failure,proto3" json:"failure,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *InvocationResultRetry) Reset() {
-	*x = InvocationResultRetry{}
-	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *InvocationResultRetry) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*InvocationResultRetry) ProtoMessage() {}
-
-func (x *InvocationResultRetry) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use InvocationResultRetry.ProtoReflect.Descriptor instead.
-func (*InvocationResultRetry) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *InvocationResultRetry) GetFailure() *v1.Failure {
-	if x != nil {
-		return x.Failure
-	}
-	return nil
-}
-
 // Trigger for when the workflow is closed.
 type CallbackState_WorkflowClosed struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -566,7 +368,7 @@ type CallbackState_WorkflowClosed struct {
 
 func (x *CallbackState_WorkflowClosed) Reset() {
 	*x = CallbackState_WorkflowClosed{}
-	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[7]
+	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -578,7 +380,7 @@ func (x *CallbackState_WorkflowClosed) String() string {
 func (*CallbackState_WorkflowClosed) ProtoMessage() {}
 
 func (x *CallbackState_WorkflowClosed) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[7]
+	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -609,7 +411,7 @@ type Callback_Nexus struct {
 
 func (x *Callback_Nexus) Reset() {
 	*x = Callback_Nexus{}
-	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[8]
+	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -621,7 +423,7 @@ func (x *Callback_Nexus) String() string {
 func (*Callback_Nexus) ProtoMessage() {}
 
 func (x *Callback_Nexus) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[8]
+	mi := &file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -655,7 +457,7 @@ var File_temporal_server_chasm_lib_callback_proto_v1_message_proto protoreflect.
 
 const file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"9temporal/server/chasm/lib/callback/proto/v1/message.proto\x12,temporal.server.chasm.lib.callbacks.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\"\xd3\x04\n" +
+	"9temporal/server/chasm/lib/callback/proto/v1/message.proto\x12,temporal.server.chasm.lib.callbacks.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\"\xae\x05\n" +
 	"\rCallbackState\x12R\n" +
 	"\bcallback\x18\x01 \x01(\v26.temporal.server.chasm.lib.callbacks.proto.v1.CallbackR\bcallback\x12G\n" +
 	"\x11registration_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x10registrationTime\x12T\n" +
@@ -665,7 +467,12 @@ const file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc = "
 	"\x14last_attempt_failure\x18\a \x01(\v2 .temporal.api.failure.v1.FailureR\x12lastAttemptFailure\x12W\n" +
 	"\x1anext_attempt_schedule_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x17nextAttemptScheduleTime\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\t \x01(\tR\trequestId\x1a\x10\n" +
+	"request_id\x18\t \x01(\tR\trequestId\x12\x1f\n" +
+	"\vworkflow_id\x18\n" +
+	" \x01(\tR\n" +
+	"workflowId\x12\x15\n" +
+	"\x06run_id\x18\v \x01(\tR\x05runId\x12!\n" +
+	"\fnamespace_id\x18\f \x01(\tR\vnamespaceId\x1a\x10\n" +
 	"\x0eWorkflowClosed\"\xde\x02\n" +
 	"\bCallback\x12T\n" +
 	"\x05nexus\x18\x02 \x01(\v2<.temporal.server.chasm.lib.callbacks.proto.v1.Callback.NexusH\x00R\x05nexus\x122\n" +
@@ -678,17 +485,7 @@ const file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc = "
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\t\n" +
 	"\avariantJ\x04\b\x01\x10\x02\"1\n" +
 	"\fInvokerState\x12!\n" +
-	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\"\xb0\x02\n" +
-	"\x10InvocationResult\x12R\n" +
-	"\x02ok\x18\x01 \x01(\v2@.temporal.server.chasm.lib.callbacks.proto.v1.InvocationResultOKH\x00R\x02ok\x12a\n" +
-	"\afailure\x18\x02 \x01(\v2E.temporal.server.chasm.lib.callbacks.proto.v1.InvocationResultFailureH\x00R\afailure\x12[\n" +
-	"\x05retry\x18\x03 \x01(\v2C.temporal.server.chasm.lib.callbacks.proto.v1.InvocationResultRetryH\x00R\x05retryB\b\n" +
-	"\x06result\"\x14\n" +
-	"\x12InvocationResultOK\"U\n" +
-	"\x17InvocationResultFailure\x12:\n" +
-	"\afailure\x18\x01 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"S\n" +
-	"\x15InvocationResultRetry\x12:\n" +
-	"\afailure\x18\x01 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure*\xc9\x01\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId*\xc9\x01\n" +
 	"\x0eCallbackStatus\x12\x1f\n" +
 	"\x1bCALLBACK_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17CALLBACK_STATUS_STANDBY\x10\x01\x12\x1d\n" +
@@ -710,43 +507,34 @@ func file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescGZIP(
 }
 
 var file_temporal_server_chasm_lib_callback_proto_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_temporal_server_chasm_lib_callback_proto_v1_message_proto_goTypes = []any{
 	(CallbackStatus)(0),                  // 0: temporal.server.chasm.lib.callbacks.proto.v1.CallbackStatus
 	(*CallbackState)(nil),                // 1: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState
 	(*Callback)(nil),                     // 2: temporal.server.chasm.lib.callbacks.proto.v1.Callback
 	(*InvokerState)(nil),                 // 3: temporal.server.chasm.lib.callbacks.proto.v1.InvokerState
-	(*InvocationResult)(nil),             // 4: temporal.server.chasm.lib.callbacks.proto.v1.InvocationResult
-	(*InvocationResultOK)(nil),           // 5: temporal.server.chasm.lib.callbacks.proto.v1.InvocationResultOK
-	(*InvocationResultFailure)(nil),      // 6: temporal.server.chasm.lib.callbacks.proto.v1.InvocationResultFailure
-	(*InvocationResultRetry)(nil),        // 7: temporal.server.chasm.lib.callbacks.proto.v1.InvocationResultRetry
-	(*CallbackState_WorkflowClosed)(nil), // 8: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.WorkflowClosed
-	(*Callback_Nexus)(nil),               // 9: temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus
-	nil,                                  // 10: temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus.HeaderEntry
-	(*timestamppb.Timestamp)(nil),        // 11: google.protobuf.Timestamp
-	(*v1.Failure)(nil),                   // 12: temporal.api.failure.v1.Failure
-	(*v11.Link)(nil),                     // 13: temporal.api.common.v1.Link
+	(*CallbackState_WorkflowClosed)(nil), // 4: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.WorkflowClosed
+	(*Callback_Nexus)(nil),               // 5: temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus
+	nil,                                  // 6: temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus.HeaderEntry
+	(*timestamppb.Timestamp)(nil),        // 7: google.protobuf.Timestamp
+	(*v1.Failure)(nil),                   // 8: temporal.api.failure.v1.Failure
+	(*v11.Link)(nil),                     // 9: temporal.api.common.v1.Link
 }
 var file_temporal_server_chasm_lib_callback_proto_v1_message_proto_depIdxs = []int32{
-	2,  // 0: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.callback:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.Callback
-	11, // 1: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.registration_time:type_name -> google.protobuf.Timestamp
-	0,  // 2: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.status:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.CallbackStatus
-	11, // 3: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
-	12, // 4: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
-	11, // 5: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
-	9,  // 6: temporal.server.chasm.lib.callbacks.proto.v1.Callback.nexus:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus
-	13, // 7: temporal.server.chasm.lib.callbacks.proto.v1.Callback.links:type_name -> temporal.api.common.v1.Link
-	5,  // 8: temporal.server.chasm.lib.callbacks.proto.v1.InvocationResult.ok:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.InvocationResultOK
-	6,  // 9: temporal.server.chasm.lib.callbacks.proto.v1.InvocationResult.failure:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.InvocationResultFailure
-	7,  // 10: temporal.server.chasm.lib.callbacks.proto.v1.InvocationResult.retry:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.InvocationResultRetry
-	12, // 11: temporal.server.chasm.lib.callbacks.proto.v1.InvocationResultFailure.failure:type_name -> temporal.api.failure.v1.Failure
-	12, // 12: temporal.server.chasm.lib.callbacks.proto.v1.InvocationResultRetry.failure:type_name -> temporal.api.failure.v1.Failure
-	10, // 13: temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus.header:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus.HeaderEntry
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	2, // 0: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.callback:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.Callback
+	7, // 1: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.registration_time:type_name -> google.protobuf.Timestamp
+	0, // 2: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.status:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.CallbackStatus
+	7, // 3: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
+	8, // 4: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
+	7, // 5: temporal.server.chasm.lib.callbacks.proto.v1.CallbackState.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
+	5, // 6: temporal.server.chasm.lib.callbacks.proto.v1.Callback.nexus:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus
+	9, // 7: temporal.server.chasm.lib.callbacks.proto.v1.Callback.links:type_name -> temporal.api.common.v1.Link
+	6, // 8: temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus.header:type_name -> temporal.server.chasm.lib.callbacks.proto.v1.Callback.Nexus.HeaderEntry
+	9, // [9:9] is the sub-list for method output_type
+	9, // [9:9] is the sub-list for method input_type
+	9, // [9:9] is the sub-list for extension type_name
+	9, // [9:9] is the sub-list for extension extendee
+	0, // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_callback_proto_v1_message_proto_init() }
@@ -757,18 +545,13 @@ func file_temporal_server_chasm_lib_callback_proto_v1_message_proto_init() {
 	file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[1].OneofWrappers = []any{
 		(*Callback_Nexus_)(nil),
 	}
-	file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[3].OneofWrappers = []any{
-		(*InvocationResult_Ok)(nil),
-		(*InvocationResult_Failure)(nil),
-		(*InvocationResult_Retry)(nil),
-	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   10,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -76,7 +76,7 @@ func (e *InvocationTaskExecutor) Execute(
 	task *callbackspb.InvocationTask,
 ) error {
 	var ns *namespace.Namespace
-	var invoker *Invoker
+	// var invoker *Invoker
 	var callback *Callback
 
 	// Read the invoker component and load invocation arguments.
@@ -87,37 +87,29 @@ func (e *InvocationTaskExecutor) Execute(
 	_, err := chasm.ReadComponent(
 		ctx,
 		invokerRef,
-		func(i *Invoker, ctx chasm.Context, _ any) (struct{}, error) {
-			invoker = &Invoker{
-				InvokerState: common.CloneProto(i.InvokerState),
+		func(c *Callback, ctx chasm.Context, _ any) (struct{}, error) {
+			callback = &Callback{
+				CallbackState: common.CloneProto(c.CallbackState),
 			}
-			nexusCompletion, err := i.CanGetNexusCompletion.Get(ctx)
+
+			nexusCompletion, err := c.CanGetNexusCompletion.Get(ctx)
 			if err != nil {
 				return struct{}{}, err
 			}
 
-			c, err := i.Callback.Get(ctx)
-			if err != nil {
-				return struct{}{}, err
-			}
-
-			invoker.completion, err = nexusCompletion.GetNexusCompletion(
+			c.completion, err = nexusCompletion.GetNexusCompletion(
 				context.Background(),
 				c.RequestId,
 			)
-			// TODO seankane: where do we get these?
-			// invoker.workflowID = c.WorkflowID
-			// invoker.runID = c.RunID
-			invoker.attempt = c.Attempt
-			invoker.nexus = c.Callback.GetNexus()
+			callback.WorkflowId = c.WorkflowId
+			callback.RunId = c.RunId
+			callback.Attempt = c.Attempt
+			callback.nexus = c.Callback.GetNexus()
+			callback.NamespaceId = c.NamespaceId
 			if err != nil {
 				return struct{}{}, err
 			}
 
-			callback = &Callback{
-				CallbackState: common.CloneProto(c.CallbackState),
-				NamespaceID:   namespace.ID(invoker.NamespaceId),
-			}
 			return struct{}{}, nil
 		},
 		nil,
@@ -128,11 +120,11 @@ func (e *InvocationTaskExecutor) Execute(
 
 	callCtx, cancel := context.WithTimeout(
 		context.Background(),
-		e.Config.RequestTimeout(invoker.NamespaceId, taskAttributes.Destination),
+		e.Config.RequestTimeout(callback.NamespaceId, taskAttributes.Destination),
 	)
 	defer cancel()
 
-	result := invoker.Invoke(callCtx, ns, e, taskAttributes, task)
+	result := callback.invoke(callCtx, ns, e, taskAttributes, task)
 
 	// Save the invocation result back to the callback component.
 	// Replaces the pattern of env.Access(ctx, ref, hsm.AccessWrite, ...) and
@@ -142,15 +134,9 @@ func (e *InvocationTaskExecutor) Execute(
 	_, _, err = chasm.UpdateComponent(
 		ctx,
 		invokerRef,
-		func(i *Invoker, ctx chasm.MutableContext, _ any) (struct{}, error) {
-			c, err := i.Callback.Get(ctx)
-			if err != nil {
-				return struct{}{}, err
-			}
+		func(c *Callback, ctx chasm.MutableContext, _ any) (struct{}, error) {
 			c.Status = result
-
 			c.CallbackState = callback.CallbackState
-
 			return struct{}{}, nil
 		},
 		nil,
@@ -193,7 +179,7 @@ func NewBackoffTaskExecutor(opts BackoffTaskExecutorOptions) *BackoffTaskExecuto
 }
 
 // Execute transitions the callback from BACKING_OFF to SCHEDULED state
-// and generates an InvocationTask for the next attempt. Directly 
+// and generates an InvocationTask for the next attempt. Directly
 // manipulate the state schedule the next invocation attempt.
 func (e *BackoffTaskExecutor) Execute(
 	ctx chasm.MutableContext,
