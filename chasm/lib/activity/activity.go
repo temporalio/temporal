@@ -32,13 +32,14 @@ type Activity struct {
 	Store chasm.Field[ActivityStore]
 }
 
+// TODO: we need to add more lifecycle states to better categorize some activity states, particulary for terminated/canceled.
 func (a Activity) LifecycleState(context chasm.Context) chasm.LifecycleState {
 	switch a.Status {
-	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED:
+	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
 		return chasm.LifecycleStateCompleted
 	case activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
 		return chasm.LifecycleStateFailed
 	default:

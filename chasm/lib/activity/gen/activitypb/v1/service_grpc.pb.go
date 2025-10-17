@@ -20,8 +20,7 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	ActivityService_StartActivityExecution_FullMethodName    = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/StartActivityExecution"
-	ActivityService_DescribeActivityExecution_FullMethodName = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/DescribeActivityExecution"
+	ActivityService_StartActivityExecution_FullMethodName = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/StartActivityExecution"
 )
 
 // ActivityServiceClient is the client API for ActivityService service.
@@ -29,7 +28,6 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ActivityServiceClient interface {
 	StartActivityExecution(ctx context.Context, in *StartActivityExecutionRequest, opts ...grpc.CallOption) (*StartActivityExecutionResponse, error)
-	DescribeActivityExecution(ctx context.Context, in *DescribeActivityExecutionRequest, opts ...grpc.CallOption) (*DescribeActivityExecutionResponse, error)
 }
 
 type activityServiceClient struct {
@@ -49,21 +47,11 @@ func (c *activityServiceClient) StartActivityExecution(ctx context.Context, in *
 	return out, nil
 }
 
-func (c *activityServiceClient) DescribeActivityExecution(ctx context.Context, in *DescribeActivityExecutionRequest, opts ...grpc.CallOption) (*DescribeActivityExecutionResponse, error) {
-	out := new(DescribeActivityExecutionResponse)
-	err := c.cc.Invoke(ctx, ActivityService_DescribeActivityExecution_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // ActivityServiceServer is the server API for ActivityService service.
 // All implementations must embed UnimplementedActivityServiceServer
 // for forward compatibility
 type ActivityServiceServer interface {
 	StartActivityExecution(context.Context, *StartActivityExecutionRequest) (*StartActivityExecutionResponse, error)
-	DescribeActivityExecution(context.Context, *DescribeActivityExecutionRequest) (*DescribeActivityExecutionResponse, error)
 	mustEmbedUnimplementedActivityServiceServer()
 }
 
@@ -73,9 +61,6 @@ type UnimplementedActivityServiceServer struct {
 
 func (UnimplementedActivityServiceServer) StartActivityExecution(context.Context, *StartActivityExecutionRequest) (*StartActivityExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StartActivityExecution not implemented")
-}
-func (UnimplementedActivityServiceServer) DescribeActivityExecution(context.Context, *DescribeActivityExecutionRequest) (*DescribeActivityExecutionResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DescribeActivityExecution not implemented")
 }
 func (UnimplementedActivityServiceServer) mustEmbedUnimplementedActivityServiceServer() {}
 
@@ -108,24 +93,6 @@ func _ActivityService_StartActivityExecution_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ActivityService_DescribeActivityExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DescribeActivityExecutionRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ActivityServiceServer).DescribeActivityExecution(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ActivityService_DescribeActivityExecution_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ActivityServiceServer).DescribeActivityExecution(ctx, req.(*DescribeActivityExecutionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // ActivityService_ServiceDesc is the grpc.ServiceDesc for ActivityService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -136,10 +103,6 @@ var ActivityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StartActivityExecution",
 			Handler:    _ActivityService_StartActivityExecution_Handler,
-		},
-		{
-			MethodName: "DescribeActivityExecution",
-			Handler:    _ActivityService_DescribeActivityExecution_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

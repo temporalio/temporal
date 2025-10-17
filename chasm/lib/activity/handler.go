@@ -17,14 +17,13 @@ func newHandler() *handler {
 }
 
 func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.StartActivityExecutionRequest) (*activitypb.StartActivityExecutionResponse, error) {
-	request := req.GetFrontendRequest()
-	_, key, _, err := chasm.NewEntity(
+	response, key, _, err := chasm.NewEntity(
 		ctx,
 		chasm.EntityKey{
 			NamespaceID: req.GetNamespaceId(),
-			BusinessID:  request.GetActivityId(),
+			BusinessID:  req.GetFrontendRequest().GetActivityId(),
 		},
-		func(mutableContext chasm.MutableContext, _ any) (*Activity, any, error) {
+		func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, *workflowservice.StartActivityExecutionResponse, error) {
 			newActivity, err := NewStandaloneActivity(mutableContext, request)
 			if err != nil {
 				return nil, nil, err
@@ -35,18 +34,19 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 				return nil, nil, err
 			}
 
-			return newActivity, nil, nil
+			return newActivity, &workflowservice.StartActivityExecutionResponse{
+				Started: true,
+				// EagerTask: TODO when supported, need to call the same code that would handle the RecordActivityTaskStarted API
+			}, nil
 		}, nil)
 
 	if err != nil {
 		return nil, err
 	}
 
+	response.RunId = key.EntityID
+
 	return &activitypb.StartActivityExecutionResponse{
-		FrontendResponse: &workflowservice.StartActivityExecutionResponse{
-			Started: true,
-			RunId:   key.EntityID,
-			// EagerTask: TODO need to figure out how to populate this if tasks are async
-		},
+		FrontendResponse: response,
 	}, nil
 }
