@@ -180,6 +180,7 @@ reredirectTask:
 	}
 
 	syncMatchTask := newInternalTaskForSyncMatch(params.taskInfo, params.forwardInfo)
+	pm.config.setDefaultPriority(syncMatchTask)
 	if spoolQueue != nil && spoolQueue.QueueKey().Version().BuildId() != syncMatchQueue.QueueKey().Version().BuildId() {
 		// Task is not forwarded and build ID is different on the two queues -> redirect rule is being applied.
 		// Set redirectInfo in the task as it will be needed if we have to forward the task.

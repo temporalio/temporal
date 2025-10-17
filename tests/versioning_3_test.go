@@ -781,6 +781,228 @@ func (s *Versioning3Suite) TestUnpinnedWorkflowWithRamp_ToUnversioned() {
 	)
 }
 
+func (s *Versioning3Suite) TestWorkflowRetry_Pinned_ExpectInherit_RetryOfChild() {
+	s.testWorkflowRetry(workflow.VersioningBehaviorPinned, true, true, false)
+}
+
+func (s *Versioning3Suite) TestWorkflowRetry_Pinned_ExpectInherit_RetryOfCaN() {
+	s.testWorkflowRetry(workflow.VersioningBehaviorPinned, true, false, true)
+}
+
+func (s *Versioning3Suite) TestWorkflowRetry_Pinned_ExpectNoInherit() {
+	s.testWorkflowRetry(workflow.VersioningBehaviorPinned, false, false, false)
+}
+
+func (s *Versioning3Suite) TestWorkflowRetry_Unpinned_ExpectNoInherit() {
+	s.testWorkflowRetry(workflow.VersioningBehaviorAutoUpgrade, false, false, false)
+}
+
+func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavior, expectInherit, retryOfChild, retryOfCaN bool) {
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	childWorkflowID := tv1.WorkflowID() + "-child"
+	parentWf := func(ctx workflow.Context) error {
+		fut1 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			TaskQueue:   tv1.TaskQueue().GetName(),
+			WorkflowID:  childWorkflowID,
+			RetryPolicy: &temporal.RetryPolicy{},
+		}), "wf")
+		var val1 string
+		s.NoError(fut1.Get(ctx, &val1))
+		return nil
+	}
+
+	wf := func(ctx workflow.Context, attempt int) (string, error) {
+		var ret string
+		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 1 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    1 * time.Second,
+				BackoffCoefficient: 1,
+			},
+		}), "act").Get(ctx, &ret)
+		s.NoError(err)
+		if retryOfCaN && attempt == 1 {
+			return "", workflow.NewContinueAsNewError(ctx, "wf", attempt+1)
+		}
+		// Use Temporal signal instead of Go channel to avoid replay issues
+		workflow.GetSignalChannel(ctx, "currentVersionChanged").Receive(ctx, nil)
+		return "", errors.New("explicit failure")
+	}
+	act1 := func() (string, error) {
+		return "v1", nil
+	}
+	act2 := func() (string, error) {
+		return "v2", nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:       tv1.SDKDeploymentVersion(),
+			UseVersioning: true,
+		},
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf", VersioningBehavior: behavior})
+	w1.RegisterWorkflowWithOptions(parentWf, workflow.RegisterOptions{Name: "parent-wf", VersioningBehavior: behavior})
+	w1.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	w2 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:       tv2.SDKDeploymentVersion(),
+			UseVersioning: true,
+		},
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w2.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf", VersioningBehavior: behavior})
+	w2.RegisterWorkflowWithOptions(parentWf, workflow.RegisterOptions{Name: "parent-wf", VersioningBehavior: behavior})
+	w2.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act"})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	// Set v1 to current and propagate to all task queue partitions
+	s.setCurrentDeployment(tv1)
+	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
+
+	wf0 := "wf"
+	if retryOfChild {
+		wf0 = "parent-wf"
+	}
+	run0, err := s.SdkClient().ExecuteWorkflow(
+		ctx,
+		sdkclient.StartWorkflowOptions{
+			TaskQueue: tv1.TaskQueue().GetName(),
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval: time.Second,
+			},
+		},
+		wf0,
+		1,
+	)
+	s.NoError(err)
+
+	wfIDOfRetryingWF := run0.GetID()
+	runIDBeforeRetry := run0.GetRunID()
+
+	if retryOfCaN {
+		// wait for first run to continue-as-new
+		s.Eventually(func() bool {
+			desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, run0.GetRunID())
+			s.NoError(err)
+			if err != nil {
+				return false
+			}
+			return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
+		}, 5*time.Second, 1*time.Millisecond)
+	}
+
+	// wait for workflow to progress on v1 (activity completed and waiting for signal)
+	s.Eventually(func() bool {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfIDOfRetryingWF, "")
+		s.NoError(err)
+		if err != nil {
+			return false
+		}
+		// Check if workflow is running on v1
+		return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+	}, 5*time.Second, 1*time.Millisecond)
+
+	// get run ID of first run of the workflow before it fails
+	if retryOfChild {
+		wfIDOfRetryingWF = childWorkflowID
+		// Wait for child workflow to be created
+		s.Eventually(func() bool {
+			desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
+			s.NoError(err)
+			if err != nil {
+				return false
+			}
+			runIDBeforeRetry = desc.WorkflowExecution.RunID
+			return true
+		}, 5*time.Second, 1*time.Millisecond)
+	} else if retryOfCaN {
+		// get the next run in the continue-as-new chain
+		s.Eventually(func() bool {
+			continuedAsNewRunResp, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
+			s.NoError(err)
+			if err != nil {
+				return false
+			}
+			caNRunID := continuedAsNewRunResp.WorkflowExecution.RunID
+			// confirm that it's a new run
+			if caNRunID != run0.GetRunID() {
+				runIDBeforeRetry = caNRunID
+				return true
+			}
+			return false
+		}, 5*time.Second, 1*time.Millisecond)
+	}
+
+	// Set v2 to current and propagate to all task queue partitions
+	s.setCurrentDeployment(tv2)
+	s.waitForDeploymentDataPropagation(tv2, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
+
+	// signal workflow to continue (it will fail and then retry on v2 if it doesn't inherit)
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeRetry, "currentVersionChanged", nil))
+
+	// wait for run that will retry to fail
+	s.Eventually(func() bool {
+		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeRetry)
+		s.NoError(err)
+		if err != nil {
+			return false
+		}
+		return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+	}, 5*time.Second, 1*time.Millisecond)
+
+	// get the execution info of the next run in the retry chain, wait for next run to start
+	var secondRunID string
+	s.Eventually(func() bool {
+		secondRunResp, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
+		s.NoError(err)
+		if err != nil {
+			return false
+		}
+		secondRunID = secondRunResp.WorkflowExecution.RunID
+		// confirm that it's a new run
+		if secondRunID != runIDBeforeRetry {
+			return true
+		}
+		return false
+	}, 5*time.Second, 1*time.Millisecond)
+
+	// confirm that the second run eventually gets auto-upgrade behavior and runs on version 2 (no inherit)
+	s.Eventually(func() bool {
+		secondRunResp, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfIDOfRetryingWF, secondRunID)
+		s.NoError(err)
+		switch behavior {
+		case workflow.VersioningBehaviorPinned:
+			if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior() != enumspb.VERSIONING_BEHAVIOR_PINNED {
+				return false
+			}
+		case workflow.VersioningBehaviorAutoUpgrade:
+			if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior() != enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+				return false
+			}
+		default:
+		}
+		switch expectInherit {
+		case true:
+			return secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+		case false:
+			return secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv2.BuildID()
+		default:
+		}
+		return true
+	}, 5*time.Second, 1*time.Millisecond)
+}
+
 func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	// This test sets a 50% ramp and runs 50 wfs and ensures both versions got some wf and
 	// activity tasks.
