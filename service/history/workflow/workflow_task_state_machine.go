@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -1200,31 +1199,25 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	if wftBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		if versioningInfo != nil {
 			// Copy before modifying to avoid data race
-			versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{
-				Behavior:          wftBehavior,
-				DeploymentVersion: nil,
-				//nolint:staticcheck // SA1019 deprecated Version will clean up later
-				Version: "",
-				//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-				Deployment: nil,
-			}
+			versioningInfo = common.CloneProto(versioningInfo)
+			versioningInfo.Behavior = wftBehavior
+			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+			versioningInfo.Deployment = nil
+			//nolint:staticcheck // SA1019 deprecated Version will clean up later
+			versioningInfo.Version = ""
+			versioningInfo.DeploymentVersion = nil
 			m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
 		}
 	} else {
 		// Copy before modifying to avoid data race
-		versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{
-			Behavior: wftBehavior,
-			// Only populating the new field.
-			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-			Deployment: nil,
-			//nolint:staticcheck // SA1019 deprecated Version will clean up later [cleanup-wv-3.1]
-			Version:            worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(wftDeployment)),
-			DeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment),
-			VersioningOverride: m.ms.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(),
-			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-			DeploymentTransition: m.ms.GetExecutionInfo().GetVersioningInfo().GetDeploymentTransition(),
-			VersionTransition:    m.ms.GetExecutionInfo().GetVersioningInfo().GetVersionTransition(),
-		}
+		versioningInfo = common.CloneProto(versioningInfo)
+		versioningInfo.Behavior = wftBehavior
+		// Only populating the new field.
+		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+		versioningInfo.Deployment = nil
+		//nolint:staticcheck // SA1019 deprecated Version will clean up later [cleanup-wv-3.1]
+		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
+		versioningInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment)
 		m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
 	}
 
