@@ -240,7 +240,6 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 	// Either type of request will spawn a Backfiller and schedule an immediate pure task.
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
-	// s.True(s.hasTask(&tasks.ChasmTaskPure{}, chasm.TaskScheduledTimeImmediate))
 
 	// Run a backfill task.
 	err = s.executor.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
