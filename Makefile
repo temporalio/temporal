@@ -206,6 +206,9 @@ ACTIONLINT := $(LOCALBIN)/actionlint-$(ACTIONLINT_VER)
 $(ACTIONLINT): | $(LOCALBIN)
 	$(call go-install-tool,$(ACTIONLINT),github.com/rhysd/actionlint/cmd/actionlint,$(ACTIONLINT_VER))
 
+TYPOS_VER := v1.28.4
+TYPOS := typos
+
 WORKFLOWCHECK_VER := master # TODO: pin this specific version once 0.3.0 follow-up is released
 WORKFLOWCHECK := $(LOCALBIN)/workflowcheck-$(WORKFLOWCHECK_VER)
 $(WORKFLOWCHECK): | $(LOCALBIN)
@@ -379,7 +382,28 @@ fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, w
 	@printf $(COLOR) "Formatting imports..."
 	@$(GCI) write --skip-generated -s standard -s default ./*
 
-lint: lint-code lint-actions lint-api lint-protos
+lint-typos:
+	@printf $(COLOR) "Checking spelling with typos..."
+	@if command -v $(TYPOS) >/dev/null 2>&1; then \
+		$(TYPOS) --config .github/_typos.toml; \
+	else \
+		printf $(RED) "WARNING: typos is not installed. Install it from https://github.com/crate-ci/typos or run: cargo install typos-cli"; \
+		echo ""; \
+		echo "Skipping spell check..."; \
+	fi
+
+# Check spelling only on files changed from main branch
+lint-typos-changed:
+	@printf $(COLOR) "Checking spelling on changed files with typos..."
+	@if command -v $(TYPOS) >/dev/null 2>&1; then \
+		git diff --name-only --diff-filter=ACMR $(MAIN_BRANCH)...HEAD | $(TYPOS) --config .github/_typos.toml --file-list -; \
+	else \
+		printf $(RED) "WARNING: typos is not installed. Install it from https://github.com/crate-ci/typos or run: cargo install typos-cli"; \
+		echo ""; \
+		echo "Skipping spell check..."; \
+	fi
+
+lint: lint-code lint-actions lint-api lint-protos lint-typos-changed
 	@printf $(COLOR) "Run linters..."
 
 lint-api: $(API_LINTER) $(API_BINPB)
