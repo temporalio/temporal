@@ -103,6 +103,7 @@ var (
 
 const (
 	forceReplicationWorkflowName               = "force-replication"
+	forceReplicationWorkflowV2Name             = "force-replication-v2"
 	forceTaskQueueUserDataReplicationWorkflow  = "force-task-queue-user-data-replication"
 	forceReplicationStatusQueryType            = "force-replication-status"
 	taskQueueUserDataReplicationDoneSignalType = "task-queue-user-data-replication-done"
@@ -197,6 +198,84 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	// There are still more workflows to replicate. Continue-as-new to process on a new run.
 	// This prevents history size from exceeding the server-defined limit
 	return workflow.NewContinueAsNewError(ctx, ForceReplicationWorkflow, params)
+}
+
+func ForceReplicationWorkflowV2(ctx workflow.Context, params ForceReplicationParams) error {
+	// For now, we'll return the initial page token for simplicity.
+	// If we want this to be more precise, we could track processed pages.
+	startPageToken := params.NextPageToken
+
+	_ = workflow.SetQueryHandler(ctx, forceReplicationStatusQueryType, func() (ForceReplicationStatus, error) {
+		return ForceReplicationStatus{
+			LastCloseTime:                      params.LastCloseTime,
+			LastStartTime:                      params.LastStartTime,
+			ContinuedAsNewCount:                params.ContinuedAsNewCount,
+			TaskQueueUserDataReplicationStatus: params.TaskQueueUserDataReplicationStatus,
+			TotalWorkflowCount:                 params.TotalForceReplicateWorkflowCount,
+			ReplicatedWorkflowCount:            params.ReplicatedWorkflowCount,
+			ReplicatedWorkflowCountPerSecond:   params.ReplicatedWorkflowCountPerSecond,
+			PageTokenForRestart:                startPageToken,
+		}, nil
+	})
+
+	if err := validateAndSetForceReplicationParams(ctx, &params); err != nil {
+		return err
+	}
+
+	if params.TotalForceReplicateWorkflowCount == 0 {
+		wfCount, err := countWorkflowForReplication(ctx, params)
+		if err != nil {
+			return err
+		}
+		params.TotalForceReplicateWorkflowCount = wfCount
+	}
+
+	metadataResp, err := getClusterMetadata(ctx, params)
+	if err != nil {
+		return err
+	}
+
+	if !params.TaskQueueUserDataReplicationStatus.Done {
+		err = maybeKickoffTaskQueueUserDataReplication(ctx, params, func(failureReason string) {
+			params.TaskQueueUserDataReplicationStatus.FailureMessage = failureReason
+			params.TaskQueueUserDataReplicationStatus.Done = true
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	workflowExecutionsCh := workflow.NewBufferedChannel(ctx, params.PageCountPerExecution)
+	var listWorkflowsErr error
+	workflow.Go(ctx, func(ctx workflow.Context) {
+		listWorkflowsErr = listWorkflowsForReplication(ctx, workflowExecutionsCh, &params)
+
+		// enqueueReplicationTasks only returns when workflowExecutionsCh is closed (or if it encounters an error).
+		// Therefore, listWorkflowsErr will be set prior to their use and params will be updated.
+		workflowExecutionsCh.Close()
+	})
+
+	if err := enqueueReplicationTasksLocal(ctx, workflowExecutionsCh, metadataResp.NamespaceID, &params); err != nil {
+		return err
+	}
+
+	if listWorkflowsErr != nil {
+		return listWorkflowsErr
+	}
+
+	if params.NextPageToken == nil {
+		err := workflow.Await(ctx, func() bool { return params.TaskQueueUserDataReplicationStatus.Done })
+		if err != nil {
+			return err
+		}
+		if params.TaskQueueUserDataReplicationStatus.FailureMessage != "" {
+			return fmt.Errorf("task queue user data replication failed: %v", params.TaskQueueUserDataReplicationStatus.FailureMessage)
+		}
+		return nil
+	}
+
+	params.ContinuedAsNewCount++
+	return workflow.NewContinueAsNewError(ctx, ForceReplicationWorkflowV2, params)
 }
 
 func maybeKickoffTaskQueueUserDataReplication(ctx workflow.Context, params ForceReplicationParams, onDone func(failureReason string)) error {
@@ -464,6 +543,108 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 				}
 			})
 		}
+
+		for pendingGenerateTasks >= params.ConcurrentActivityCount || pendingVerifyTasks >= params.ConcurrentActivityCount {
+			selector.Select(ctx) // this will block until one of the in-flight activities completes
+			if lastActivityErr != nil {
+				return lastActivityErr
+			}
+		}
+	}
+
+	for pendingGenerateTasks > 0 || pendingVerifyTasks > 0 {
+		selector.Select(ctx)
+		if lastActivityErr != nil {
+			return lastActivityErr
+		}
+	}
+
+	return nil
+}
+
+func enqueueReplicationTasksLocal(ctx workflow.Context, workflowExecutionsCh workflow.Channel, namespaceID string, params *ForceReplicationParams) error {
+	selector := workflow.NewSelector(ctx)
+	pendingGenerateTasks := 0
+	pendingVerifyTasks := 0
+
+	lao := workflow.LocalActivityOptions{
+		StartToCloseTimeout: time.Hour,
+		RetryPolicy:         forceReplicationActivityRetryPolicy,
+	}
+
+	lactx := workflow.WithLocalActivityOptions(ctx, lao)
+	var workflowExecutions []*commonpb.WorkflowExecution
+	var lastActivityErr error
+	var a *activities
+
+	var targetClusters []string
+	if params.TargetClusterName != "" {
+		targetClusters = []string{params.TargetClusterName}
+	}
+
+	for workflowExecutionsCh.Receive(ctx, &workflowExecutions) {
+		executions := workflowExecutions
+
+		verifyTaskDone := func(f workflow.Future) {
+			var verifyTaskResponse verifyReplicationTasksResponse
+			if err := f.Get(ctx, &verifyTaskResponse); err != nil {
+				lastActivityErr = err
+			} else {
+				// Update replication status
+				params.ReplicatedWorkflowCount += int64(verifyTaskResponse.VerifiedWorkflowCount)
+				params.QPSQueue.Enqueue(ctx, params.ReplicatedWorkflowCount)
+				params.ReplicatedWorkflowCountPerSecond = params.QPSQueue.CalculateQPS()
+
+				// Report new QPS to metrics
+				tags := map[string]string{
+					metrics.OperationTagName: metrics.MigrationWorkflowScope,
+					NamespaceTagName:         params.Namespace,
+				}
+				workflow.GetMetricsHandler(ctx).WithTags(tags).Gauge(ForceReplicationRpsTagName).Update(params.ReplicatedWorkflowCountPerSecond)
+			}
+
+			pendingVerifyTasks--
+		}
+
+		verifyTask := func() {
+			verifyTaskFuture := workflow.ExecuteLocalActivity(
+				lactx,
+				a.VerifyReplicationTasks,
+				&verifyReplicationTasksRequest{
+					TargetClusterEndpoint: params.TargetClusterEndpoint,
+					TargetClusterName:     params.TargetClusterName,
+					Namespace:             params.Namespace,
+					NamespaceID:           namespaceID,
+					Executions:            executions,
+					VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
+				})
+
+			pendingVerifyTasks++
+			selector.AddFuture(verifyTaskFuture, verifyTaskDone)
+		}
+
+		generateTaskFuture := workflow.ExecuteLocalActivity(
+			lactx,
+			a.GenerateReplicationTasks,
+			&generateReplicationTasksRequest{
+				NamespaceID:      namespaceID,
+				Executions:       executions,
+				RPS:              params.OverallRps / float64(params.ConcurrentActivityCount),
+				GetParentInfoRPS: params.GetParentInfoRPS / float64(params.ConcurrentActivityCount),
+				TargetClusters:   targetClusters,
+			})
+
+		pendingGenerateTasks++
+		selector.AddFuture(generateTaskFuture, func(f workflow.Future) {
+			if err := f.Get(ctx, nil); err != nil {
+				lastActivityErr = err
+			}
+
+			if params.EnableVerification {
+				verifyTask()
+			}
+			pendingGenerateTasks--
+		})
 
 		for pendingGenerateTasks >= params.ConcurrentActivityCount || pendingVerifyTasks >= params.ConcurrentActivityCount {
 			selector.Select(ctx) // this will block until one of the in-flight activities completes

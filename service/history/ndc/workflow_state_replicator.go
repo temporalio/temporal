@@ -187,7 +187,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	default:
 		return err
 	}
-	return r.applySnapshotWhenWorkflowNotExist(ctx, namespaceID, wid, rid, wfCtx, releaseFn, request.GetWorkflowState(), request.RemoteCluster, nil, false)
+	return r.applySnapshotWhenWorkflowNotExist(ctx, namespaceID, wid, rid, wfCtx, releaseFn, request.GetWorkflowState(), request.RemoteCluster, nil, false, false)
 }
 
 //nolint:revive // cognitive complexity 37 (> max enabled 25)
@@ -432,7 +432,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 		}
 	}
 
-	err = r.taskRefresher.Refresh(ctx, localMutableState)
+	err = r.taskRefresher.Refresh(ctx, localMutableState, false)
 	if err != nil {
 		return err
 	}
@@ -541,7 +541,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	}
 	nextVersionedTransition := transitionhistory.CopyVersionedTransition(localVersionedTransition)
 	nextVersionedTransition.TransitionCount++
-	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition, prevPendingChildIds)
+	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition, prevPendingChildIds, versionedTransition.IsCloseTransferTaskAcked && versionedTransition.IsForceReplication)
 	if err != nil {
 		return err
 	}
@@ -588,7 +588,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	}
 	snapshot := attribute.State
 	if localMutableState == nil {
-		return r.applySnapshotWhenWorkflowNotExist(ctx, namespaceID, workflowID, runID, wfCtx, releaseFn, snapshot, sourceClusterName, versionedTransition.NewRunInfo, true)
+		return r.applySnapshotWhenWorkflowNotExist(ctx, namespaceID, workflowID, runID, wfCtx, releaseFn, snapshot, sourceClusterName, versionedTransition.NewRunInfo, true, versionedTransition.IsCloseTransferTaskAcked && versionedTransition.IsForceReplication)
 	}
 	return r.applySnapshotWhenWorkflowExist(ctx, namespaceID, workflowID, runID, wfCtx, releaseFn, localMutableState, snapshot, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName)
 }
@@ -687,14 +687,14 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 	)
 	if isBranchSwitched || len(localTransitionHistory) == 0 {
 		// TODO: If branch switched, maybe refresh from LCA?
-		err = r.taskRefresher.Refresh(ctx, localMutableState)
+		err = r.taskRefresher.Refresh(ctx, localMutableState, false)
 		if err != nil {
 			return err
 		}
 	} else {
 		nextVersionedTransition := transitionhistory.CopyVersionedTransition(localVersionedTransition)
 		nextVersionedTransition.TransitionCount++
-		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition, prevPendingChildIds)
+		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, nextVersionedTransition, prevPendingChildIds, false)
 		if err != nil {
 			return err
 		}
@@ -1159,6 +1159,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	sourceCluster string,
 	newRunInfo *replicationspb.NewRunInfo,
 	isStateBased bool,
+	skipGenerateCloseTransferTask bool,
 ) error {
 	var lastWriteVersion int64
 	executionInfo := sourceMutableState.ExecutionInfo
@@ -1221,7 +1222,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	}
 
 	taskRefresher := workflow.NewTaskRefresher(r.shardContext)
-	err = taskRefresher.Refresh(ctx, mutableState)
+	err = taskRefresher.Refresh(ctx, mutableState, skipGenerateCloseTransferTask)
 	if err != nil {
 		return err
 	}

@@ -468,6 +468,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			visibilityConfig.EXPECT().ClusterConfiguredForArchival().Return(p.VisibilityConfig.ClusterEnabled).AnyTimes()
 			archivalMetadata.EXPECT().GetVisibilityConfig().Return(visibilityConfig).AnyTimes()
 			shardContext.EXPECT().GetArchivalMetadata().Return(archivalMetadata).AnyTimes()
+			shardContext.EXPECT().GetLogger().Return(log.NewTestLogger()).AnyTimes()
 			shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
 
 			if p.ExpectArchive {

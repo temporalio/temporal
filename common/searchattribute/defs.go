@@ -93,6 +93,13 @@ const (
 	// execution. It is updated at workflow task completion when the server gets the
 	// behavior (`auto_upgrade` or `pinned`) from the SDK. Empty for unversioned workflows.
 	TemporalWorkflowVersioningBehavior = "TemporalWorkflowVersioningBehavior"
+
+	// TemporalReportedProblems is a search attribute that stores the information about problems
+	// the workflow has encountered in making progress. It is updated after successive workflow task
+	// failures with the last workflow task failure cause. After the workflow task is completed
+	// successfully, the search attribute is removed. Format of a single problem:
+	// "category=<category> cause=<cause>".
+	TemporalReportedProblems = "TemporalReportedProblems"
 )
 
 var (
@@ -136,6 +143,7 @@ var (
 		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
 		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalPauseInfo:          enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalReportedProblems:   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
@@ -151,6 +159,7 @@ var (
 		TemporalSchedulePaused:             enumspb.INDEXED_VALUE_TYPE_BOOL,
 		TemporalNamespaceDivision:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalPauseInfo:                  enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalReportedProblems:           enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		TemporalWorkerDeploymentVersion:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalWorkflowVersioningBehavior: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalWorkerDeployment:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -226,7 +235,8 @@ func IsReserved(name string) bool {
 	return strings.HasPrefix(name, ReservedPrefix)
 }
 
-// IsMappable returns true if name can have be mapped tho the alias.
+// IsMappable returns true if name can be mapped to the alias.
+// Mappable search attributes are those that can be defined by the user.
 func IsMappable(name string) bool {
 	if _, ok := system[name]; ok {
 		return false

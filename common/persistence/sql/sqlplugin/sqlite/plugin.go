@@ -77,7 +77,7 @@ func (p *plugin) createDBConnection(
 		return nil, fmt.Errorf("error building DSN: %w", err)
 	}
 
-	db, err := sqlx.Connect(goSqlDriverName, dsn)
+	db, err := sqlx.Connect(goSQLDriverName, dsn)
 	if err != nil {
 		return nil, err
 	}

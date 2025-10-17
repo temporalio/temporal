@@ -25,7 +25,7 @@ func TestGeneratorTasksSuite(t *testing.T) {
 }
 
 func (s *generatorTasksSuite) SetupTest() {
-	s.SetupSuite()
+	s.schedulerSuite.SetupTest()
 	s.executor = scheduler.NewGeneratorTaskExecutor(scheduler.GeneratorTaskExecutorOptions{
 		Config:         defaultConfig(),
 		MetricsHandler: metrics.NoopMetricsHandler,

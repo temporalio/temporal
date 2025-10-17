@@ -7,7 +7,6 @@ import (
 	"io"
 
 	"github.com/google/uuid"
-	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -16,6 +15,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/queues"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -24,7 +24,7 @@ import (
 type chasmInvocation struct {
 	nexus      *persistencespb.Callback_Nexus
 	attempt    int32
-	completion nexus.OperationCompletion
+	completion nexusrpc.OperationCompletion
 	requestID  string
 }
 
@@ -92,7 +92,7 @@ func (c chasmInvocation) getHistoryRequest(
 	}
 
 	switch op := c.completion.(type) {
-	case *nexus.OperationCompletionSuccessful:
+	case *nexusrpc.OperationCompletionSuccessful:
 		payloadBody, err := io.ReadAll(op.Reader)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read payload: %v", err)
@@ -113,7 +113,7 @@ func (c chasmInvocation) getHistoryRequest(
 			CloseTime:  timestamppb.New(op.CloseTime),
 			Completion: completion,
 		}
-	case *nexus.OperationCompletionUnsuccessful:
+	case *nexusrpc.OperationCompletionUnsuccessful:
 		apiFailure, err := commonnexus.NexusFailureToAPIFailure(op.Failure, true)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert failure type: %v", err)

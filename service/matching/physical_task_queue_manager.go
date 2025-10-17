@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -60,19 +59,16 @@ type (
 	// queue, corresponding to a single versioned queue of a task queue partition.
 	// TODO(pri): rename this
 	physicalTaskQueueManagerImpl struct {
-		status             int32
-		partitionMgr       *taskQueuePartitionManagerImpl
-		queue              *PhysicalTaskQueueKey
-		config             *taskQueueConfig
-		defaultPriorityKey priorityKey
+		status       int32
+		partitionMgr *taskQueuePartitionManagerImpl
+		queue        *PhysicalTaskQueueKey
+		config       *taskQueueConfig
 
 		// This context is valid for lifetime of this physicalTaskQueueManagerImpl.
 		// It can be used to notify when the task queue is closing.
 		tqCtx       context.Context
 		tqCtxCancel context.CancelFunc
 
-		cancelMatcherSub  func()
-		cancelFairnessSub func()
 		backlogMgr        backlogManager
 		liveness          *liveness
 		oldMatcher        *TaskMatcher // TODO(pri): old matcher cleanup
@@ -142,7 +138,6 @@ func newPhysicalTaskQueueManager(
 		return config.PollerScalingDecisionsPerSecond() * 1e6
 	}
 	pqMgr := &physicalTaskQueueManagerImpl{
-		defaultPriorityKey:       defaultPriorityLevel(config.PriorityLevels()),
 		status:                   common.DaemonStatusInitialized,
 		partitionMgr:             partitionMgr,
 		queue:                    queue,
@@ -175,18 +170,8 @@ func newPhysicalTaskQueueManager(
 		pqMgr.partitionMgr.engine.historyClient,
 	)
 
-	isSticky := queue.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY
-	isChild := !isSticky && !queue.Partition().IsRoot()
-
-	var fairness, newMatcher bool
-	// Fairness is disabled for sticky queues for now so that we can still use TTLs.
-	if !isSticky {
-		fairness, pqMgr.cancelFairnessSub = config.EnableFairness(func(bool) {
-			// unload on change so that we can reload with the new setting:
-			pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
-		})
-	}
-	if fairness {
+	switch {
+	case config.EnableFairness:
 		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagFairness)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagFairness)
 
@@ -208,7 +193,7 @@ func newPhysicalTaskQueueManager(
 		)
 		var fwdr *priForwarder
 		var err error
-		if isChild {
+		if queue.Partition().IsChild() {
 			// Every DB Queue needs its own forwarder so that the throttles do not interfere
 			fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
 			if err != nil {
@@ -228,14 +213,8 @@ func newPhysicalTaskQueueManager(
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
-	}
 
-	newMatcher, pqMgr.cancelMatcherSub = config.NewMatcher(func(bool) {
-		// unload on change to NewMatcher so that we can reload with the new setting:
-		pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
-	})
-
-	if newMatcher {
+	case config.NewMatcher:
 		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagPriority)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagPriority)
 
@@ -251,7 +230,7 @@ func newPhysicalTaskQueueManager(
 		)
 		var fwdr *priForwarder
 		var err error
-		if isChild {
+		if queue.Partition().IsChild() {
 			// Every DB Queue needs its own forwarder so that the throttles do not interfere
 			fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
 			if err != nil {
@@ -271,33 +250,33 @@ func newPhysicalTaskQueueManager(
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
-	}
+	default:
+		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagClassic)
+		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagClassic)
 
-	pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagClassic)
-	pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagClassic)
-
-	pqMgr.backlogMgr = newBacklogManager(
-		tqCtx,
-		pqMgr,
-		config,
-		e.taskManager,
-		pqMgr.logger,
-		pqMgr.throttledLogger,
-		e.matchingRawClient,
-		taggedMetricsHandler,
-	)
-	var fwdr *Forwarder
-	var err error
-	if isChild {
-		// Every DB Queue needs its own forwarder so that the throttles do not interfere
-		fwdr, err = newForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
-		if err != nil {
-			return nil, err
+		pqMgr.backlogMgr = newBacklogManager(
+			tqCtx,
+			pqMgr,
+			config,
+			e.taskManager,
+			pqMgr.logger,
+			pqMgr.throttledLogger,
+			e.matchingRawClient,
+			taggedMetricsHandler,
+		)
+		var fwdr *Forwarder
+		var err error
+		if queue.Partition().IsChild() {
+			// Every DB Queue needs its own forwarder so that the throttles do not interfere
+			fwdr, err = newForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
+			if err != nil {
+				return nil, err
+			}
 		}
+		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.GetRateLimitManager().GetRateLimiter())
+		pqMgr.matcher = pqMgr.oldMatcher
+		return pqMgr, nil
 	}
-	pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.GetRateLimitManager().GetRateLimiter())
-	pqMgr.matcher = pqMgr.oldMatcher
-	return pqMgr, nil
 }
 
 func (c *physicalTaskQueueManagerImpl) Start() {
@@ -325,12 +304,6 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 		common.DaemonStatusStopped,
 	) {
 		return
-	}
-	if c.cancelMatcherSub != nil {
-		c.cancelMatcherSub()
-	}
-	if c.cancelFairnessSub != nil {
-		c.cancelFairnessSub()
 	}
 	// this may attempt to write one final ack update, do this before canceling tqCtx
 	c.backlogMgr.Stop()
@@ -398,7 +371,6 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		// there. In that case, go back for another task.
 		// If we didn't do this, the task would be rejected when we call RecordXTaskStarted on
 		// history, but this is more efficient.
-
 		if task.event != nil && IsTaskExpired(task.event.AllocatedTaskInfo) {
 			// task is expired while polling
 			c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, metrics.TaskExpireStageMemoryTag)
@@ -477,6 +449,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchQueryTask(
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	task := newInternalQueryTask(taskId, request)
+	c.config.setDefaultPriority(task)
 	if !task.isForwarded() {
 		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(request.GetPriority().GetPriorityKey())).incrementTaskCount()
 	}
@@ -502,6 +475,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 		}
 	}
 	task := newInternalNexusTask(taskId, deadline, opDeadline, request)
+	c.config.setDefaultPriority(task)
 	if !task.isForwarded() {
 		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(0)).incrementTaskCount() // Nexus has no priorities
 	}
@@ -715,6 +689,10 @@ func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
 	})
 }
 
+func (c *physicalTaskQueueManagerImpl) GetFairnessWeightOverrides() fairnessWeightOverrides {
+	return c.partitionMgr.GetRateLimitManager().GetFairnessWeightOverrides()
+}
+
 func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	pollStartTime time.Time,
 	statsFn func() *taskqueuepb.TaskQueueStats,
@@ -766,8 +744,14 @@ func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
 	intervals map[priorityKey]*taskTracker,
 	priorityKey priorityKey,
 ) *taskTracker {
+	// priorityKey could be zero here if we're tracking dispatched tasks (i.e. called from PollTask)
+	// and the poll was forwarded so we have a "started" task. We don't return the priority with the
+	// started task info so it's not available here. Use the default priority to avoid confusion
+	// even though it may not be accurate.
+	// TODO: either return priority with the started task, or do this tracking on the node where the
+	// match happened, so we have the right value here.
 	if priorityKey == 0 {
-		priorityKey = c.defaultPriorityKey
+		priorityKey = c.config.DefaultPriorityKey
 	}
 
 	// First try with read lock for the common case where tracker already exists.

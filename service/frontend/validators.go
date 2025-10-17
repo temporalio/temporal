@@ -5,6 +5,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/priorities"
+)
+
+var (
+	errFairnessKeyEmpty = serviceerror.NewInvalidArgument("fairness weight override key must not be empty")
 )
 
 func validateExecution(w *commonpb.WorkflowExecution) error {
@@ -37,5 +42,51 @@ func validateStringField(fieldName string, value string, maxLen int, required bo
 	if len(value) > maxLen {
 		return serviceerror.NewInvalidArgumentf("%s field too long (max %d characters).", fieldName, maxLen)
 	}
+	return nil
+}
+
+func validateFairnessWeightUpdate(
+	set map[string]float32,
+	unset []string,
+	maxConfigLimit int,
+) error {
+	total := len(set) + len(unset)
+	if total > maxConfigLimit {
+		return serviceerror.NewInvalidArgumentf(
+			"too many fairness weight overrides in request: got %d, maximum %d",
+			total, maxConfigLimit,
+		)
+	}
+
+	for k, w := range set {
+		if k == "" {
+			return errFairnessKeyEmpty
+		}
+		if err := priorities.ValidateFairnessKey(k); err != nil {
+			return err
+		}
+		if err := priorities.ValidateFairnessWeight(w); err != nil {
+			return serviceerror.NewInvalidArgumentf(
+				"invalid fairness weight weight for key %q: %v", k, err,
+			)
+		}
+	}
+
+	for _, k := range unset {
+		if k == "" {
+			return errFairnessKeyEmpty
+		}
+		if err := priorities.ValidateFairnessKey(k); err != nil {
+			return err
+		}
+	}
+
+	for _, u := range unset {
+		if _, ok := set[u]; ok {
+			return serviceerror.NewInvalidArgumentf(
+				"fairness weight override key %q present in both set and unset lists", u)
+		}
+	}
+
 	return nil
 }
