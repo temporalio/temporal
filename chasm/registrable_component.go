@@ -1,6 +1,7 @@
 package chasm
 
 import (
+	"fmt"
 	"reflect"
 )
 
@@ -52,6 +53,32 @@ func WithShardingFn(
 	return func(rc *RegistrableComponent) {
 		if shardingFn != nil {
 			rc.shardingFn = shardingFn
+		}
+	}
+}
+
+func WithSearchAttributes(searchAttributes []*SearchAttribute) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		if len(searchAttributes) == 0 {
+			return
+		}
+
+		aliasToKey := make(map[string]string)
+
+		for _, sa := range searchAttributes {
+			alias := sa.GetAlias()
+
+			if existingKey, exists := aliasToKey[alias]; exists {
+				//nolint:forbidigo // panic is appropriate during component registration setup
+				panic(fmt.Sprintf(
+					"duplicate search attribute alias %q: keys %q and %q both map to the same alias",
+					alias,
+					existingKey,
+					sa.GetKey(),
+				))
+			}
+
+			aliasToKey[alias] = sa.GetKey()
 		}
 	}
 }
