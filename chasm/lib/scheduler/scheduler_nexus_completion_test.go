@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -15,34 +15,103 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type schedulerNexusCompletionSuite struct {
-	schedulerSuite
-}
-
-func TestSchedulerNexusCompletionSuite(t *testing.T) {
-	suite.Run(t, &schedulerNexusCompletionSuite{})
-}
-
 type nexusCompletionTestCase struct {
-	SetupInvoker   func(*scheduler.Invoker)
-	SetupScheduler func(*scheduler.Scheduler)
-	Completion     *persistencespb.ChasmNexusCompletion
-
-	ExpectPaused          bool
-	ExpectStatus          enumspb.WorkflowExecutionStatus
-	ExpectInRecentActions bool
-	ExpectNoOp            bool // For idempotent case
-	ValidateInvoker       func(*testing.T, *scheduler.Invoker)
+	name              string
+	setupInvoker      func(*scheduler.Invoker)
+	setupScheduler    func(*scheduler.Scheduler)
+	completion        *persistencespb.ChasmNexusCompletion
+	expectPaused      bool
+	expectStatus      enumspb.WorkflowExecutionStatus
+	expectNoOp        bool
+	validateInvoker   func(*testing.T, *scheduler.Invoker)
+	validateScheduler func(*testing.T, *scheduler.Scheduler)
 }
 
-func (s *schedulerNexusCompletionSuite) TestHandleNexusCompletion_Success() {
-	s.runTestCase(&nexusCompletionTestCase{
-		SetupInvoker: func(invoker *scheduler.Invoker) {
+func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
+	sched, ctx, node := setupSchedulerForTest(t)
+
+	invoker, err := sched.Invoker.Get(ctx)
+	require.NoError(t, err)
+
+	if tc.setupInvoker != nil {
+		tc.setupInvoker(invoker)
+	}
+	if tc.setupScheduler != nil {
+		tc.setupScheduler(sched)
+	}
+
+	initialRunningWorkflows := len(sched.Info.RunningWorkflows)
+	initialRecentActions := len(sched.Info.RecentActions)
+	initialLastCompletion, err := sched.LastCompletionResult.Get(ctx)
+	require.NoError(t, err)
+
+	err = sched.HandleNexusCompletion(ctx, tc.completion)
+	require.NoError(t, err)
+
+	_, err = node.CloseTransaction()
+	require.NoError(t, err)
+
+	if tc.expectNoOp {
+		require.Len(t, sched.Info.RunningWorkflows, initialRunningWorkflows)
+		require.Len(t, sched.Info.RecentActions, initialRecentActions)
+		currentLastCompletion, _ := sched.LastCompletionResult.Get(ctx)
+		require.Equal(t, initialLastCompletion, currentLastCompletion)
+		return
+	}
+
+	lastCompletion, err := sched.LastCompletionResult.Get(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, lastCompletion)
+
+	if tc.completion.GetSuccess() != nil {
+		require.NotNil(t, lastCompletion.GetSuccess())
+	} else if tc.completion.GetFailure() != nil {
+		require.NotNil(t, lastCompletion.GetFailure())
+	}
+
+	require.Equal(t, tc.expectPaused, sched.Schedule.State.Paused)
+	if tc.expectPaused {
+		require.NotEmpty(t, sched.Schedule.State.Notes)
+		require.Contains(t, sched.Schedule.State.Notes, "wf-1")
+	}
+
+	for _, wf := range sched.Info.RunningWorkflows {
+		require.NotEqual(t, "wf-1", wf.WorkflowId)
+	}
+
+	if tc.expectStatus != enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED {
+		found := false
+		for _, action := range sched.Info.RecentActions {
+			if action.StartWorkflowResult.WorkflowId == "wf-1" {
+				require.Equal(t, tc.expectStatus, action.StartWorkflowStatus)
+				found = true
+				break
+			}
+		}
+		require.True(t, found)
+	}
+
+	require.Empty(t, invoker.WorkflowID(tc.completion.RequestId))
+
+	if tc.validateInvoker != nil {
+		tc.validateInvoker(t, invoker)
+	}
+	if tc.validateScheduler != nil {
+		tc.validateScheduler(t, sched)
+	}
+}
+
+// TestHandleNexusCompletion_Success verifies that a successful workflow completion
+// is properly recorded with the success payload and workflow status is updated.
+func TestHandleNexusCompletion_Success(t *testing.T) {
+	tc := nexusCompletionTestCase{
+		name: "successful completion",
+		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.RequestIdToWorkflowId = map[string]string{
 				"req-1": "wf-1",
 			}
 		},
-		SetupScheduler: func(sched *scheduler.Scheduler) {
+		setupScheduler: func(sched *scheduler.Scheduler) {
 			sched.Info.RunningWorkflows = []*commonpb.WorkflowExecution{
 				{WorkflowId: "wf-1", RunId: "run-1"},
 			}
@@ -56,27 +125,31 @@ func (s *schedulerNexusCompletionSuite) TestHandleNexusCompletion_Success() {
 				},
 			}
 		},
-		Completion: &persistencespb.ChasmNexusCompletion{
+		completion: &persistencespb.ChasmNexusCompletion{
 			RequestId: "req-1",
 			Outcome: &persistencespb.ChasmNexusCompletion_Success{
 				Success: &commonpb.Payload{Data: []byte("success-data")},
 			},
 			CloseTime: timestamppb.New(time.Now()),
 		},
-		ExpectPaused:          false,
-		ExpectStatus:          enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		ExpectInRecentActions: true,
-	})
+		expectPaused: false,
+		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+	}
+
+	executeNexusCompletion(t, tc)
 }
 
-func (s *schedulerNexusCompletionSuite) TestHandleNexusCompletion_Failure() {
-	s.runTestCase(&nexusCompletionTestCase{
-		SetupInvoker: func(invoker *scheduler.Invoker) {
+// TestHandleNexusCompletion_Failure verifies that a failed workflow completion
+// is properly recorded with the failure payload and workflow status is updated.
+func TestHandleNexusCompletion_Failure(t *testing.T) {
+	tc := nexusCompletionTestCase{
+		name: "failed completion",
+		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.RequestIdToWorkflowId = map[string]string{
 				"req-1": "wf-1",
 			}
 		},
-		SetupScheduler: func(sched *scheduler.Scheduler) {
+		setupScheduler: func(sched *scheduler.Scheduler) {
 			sched.Info.RunningWorkflows = []*commonpb.WorkflowExecution{
 				{WorkflowId: "wf-1", RunId: "run-1"},
 			}
@@ -90,7 +163,7 @@ func (s *schedulerNexusCompletionSuite) TestHandleNexusCompletion_Failure() {
 				},
 			}
 		},
-		Completion: &persistencespb.ChasmNexusCompletion{
+		completion: &persistencespb.ChasmNexusCompletion{
 			RequestId: "req-1",
 			Outcome: &persistencespb.ChasmNexusCompletion_Failure{
 				Failure: &failurepb.Failure{
@@ -99,20 +172,24 @@ func (s *schedulerNexusCompletionSuite) TestHandleNexusCompletion_Failure() {
 			},
 			CloseTime: timestamppb.New(time.Now()),
 		},
-		ExpectPaused:          false,
-		ExpectStatus:          enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		ExpectInRecentActions: true,
-	})
+		expectPaused: false,
+		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+	}
+
+	executeNexusCompletion(t, tc)
 }
 
-func (s *schedulerNexusCompletionSuite) TestHandleNexusCompletion_PauseOnFailure() {
-	s.runTestCase(&nexusCompletionTestCase{
-		SetupInvoker: func(invoker *scheduler.Invoker) {
+// TestHandleNexusCompletion_PauseOnFailure verifies that when PauseOnFailure is enabled,
+// a workflow failure causes the schedule to be paused and notes to be set.
+func TestHandleNexusCompletion_PauseOnFailure(t *testing.T) {
+	tc := nexusCompletionTestCase{
+		name: "pause on failure",
+		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.RequestIdToWorkflowId = map[string]string{
 				"req-1": "wf-1",
 			}
 		},
-		SetupScheduler: func(sched *scheduler.Scheduler) {
+		setupScheduler: func(sched *scheduler.Scheduler) {
 			sched.Schedule.Policies.PauseOnFailure = true
 			sched.Info.RunningWorkflows = []*commonpb.WorkflowExecution{
 				{WorkflowId: "wf-1", RunId: "run-1"},
@@ -127,7 +204,7 @@ func (s *schedulerNexusCompletionSuite) TestHandleNexusCompletion_PauseOnFailure
 				},
 			}
 		},
-		Completion: &persistencespb.ChasmNexusCompletion{
+		completion: &persistencespb.ChasmNexusCompletion{
 			RequestId: "req-1",
 			Outcome: &persistencespb.ChasmNexusCompletion_Failure{
 				Failure: &failurepb.Failure{
@@ -136,43 +213,50 @@ func (s *schedulerNexusCompletionSuite) TestHandleNexusCompletion_PauseOnFailure
 			},
 			CloseTime: timestamppb.New(time.Now()),
 		},
-		ExpectPaused:          true,
-		ExpectStatus:          enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		ExpectInRecentActions: true,
-	})
+		expectPaused: true,
+		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+	}
+
+	executeNexusCompletion(t, tc)
 }
 
-func (s *schedulerNexusCompletionSuite) TestHandleNexusCompletion_Idempotent() {
-	s.runTestCase(&nexusCompletionTestCase{
-		SetupInvoker: func(invoker *scheduler.Invoker) {
-			// Empty RequestIdToWorkflowId map simulates already processed
+// TestHandleNexusCompletion_Idempotent verifies that handling a completion for an
+// already-processed request ID is a no-op and doesn't modify scheduler state.
+func TestHandleNexusCompletion_Idempotent(t *testing.T) {
+	tc := nexusCompletionTestCase{
+		name: "idempotent completion",
+		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.RequestIdToWorkflowId = map[string]string{}
 		},
-		SetupScheduler: func(sched *scheduler.Scheduler) {
-			// Setup some state to verify it doesn't change
+		setupScheduler: func(sched *scheduler.Scheduler) {
 			sched.Info.RunningWorkflows = []*commonpb.WorkflowExecution{
 				{WorkflowId: "other-wf", RunId: "other-run"},
 			}
 		},
-		Completion: &persistencespb.ChasmNexusCompletion{
+		completion: &persistencespb.ChasmNexusCompletion{
 			RequestId: "req-1",
 			Outcome: &persistencespb.ChasmNexusCompletion_Success{
 				Success: &commonpb.Payload{Data: []byte("success-data")},
 			},
 			CloseTime: timestamppb.New(time.Now()),
 		},
-		ExpectNoOp: true,
-	})
+		expectNoOp: true,
+	}
+
+	executeNexusCompletion(t, tc)
 }
 
-func (s *schedulerNexusCompletionSuite) TestHandleNexusCompletion_Canceled() {
-	s.runTestCase(&nexusCompletionTestCase{
-		SetupInvoker: func(invoker *scheduler.Invoker) {
+// TestHandleNexusCompletion_Canceled verifies that a canceled workflow completion
+// is properly recorded with CANCELED status.
+func TestHandleNexusCompletion_Canceled(t *testing.T) {
+	tc := nexusCompletionTestCase{
+		name: "canceled completion",
+		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.RequestIdToWorkflowId = map[string]string{
 				"req-1": "wf-1",
 			}
 		},
-		SetupScheduler: func(sched *scheduler.Scheduler) {
+		setupScheduler: func(sched *scheduler.Scheduler) {
 			sched.Info.RunningWorkflows = []*commonpb.WorkflowExecution{
 				{WorkflowId: "wf-1", RunId: "run-1"},
 			}
@@ -186,7 +270,7 @@ func (s *schedulerNexusCompletionSuite) TestHandleNexusCompletion_Canceled() {
 				},
 			}
 		},
-		Completion: &persistencespb.ChasmNexusCompletion{
+		completion: &persistencespb.ChasmNexusCompletion{
 			RequestId: "req-1",
 			Outcome: &persistencespb.ChasmNexusCompletion_Failure{
 				Failure: &failurepb.Failure{
@@ -198,20 +282,24 @@ func (s *schedulerNexusCompletionSuite) TestHandleNexusCompletion_Canceled() {
 			},
 			CloseTime: timestamppb.New(time.Now()),
 		},
-		ExpectPaused:          false,
-		ExpectStatus:          enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
-		ExpectInRecentActions: true,
-	})
+		expectPaused: false,
+		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+	}
+
+	executeNexusCompletion(t, tc)
 }
 
-func (s *schedulerNexusCompletionSuite) TestHandleNexusCompletion_CompletionBeforeStart() {
+// TestHandleNexusCompletion_CompletionBeforeStart verifies that a workflow can
+// complete before its start is recorded, and the completion is properly handled
+// with the workflow removed from BufferedStarts.
+func TestHandleNexusCompletion_CompletionBeforeStart(t *testing.T) {
 	desiredTime := time.Now()
-	s.runTestCase(&nexusCompletionTestCase{
-		SetupInvoker: func(invoker *scheduler.Invoker) {
+	tc := nexusCompletionTestCase{
+		name: "completion before start",
+		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.RequestIdToWorkflowId = map[string]string{
 				"req-1": "wf-1",
 			}
-			// Workflow is still in BufferedStarts (hasn't been started yet)
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{
 				{
 					RequestId:   "req-1",
@@ -220,95 +308,30 @@ func (s *schedulerNexusCompletionSuite) TestHandleNexusCompletion_CompletionBefo
 				},
 			}
 		},
-		SetupScheduler: func(sched *scheduler.Scheduler) {
-			// Workflow NOT in RunningWorkflows or RecentActions
-		},
-		Completion: &persistencespb.ChasmNexusCompletion{
+		setupScheduler: func(sched *scheduler.Scheduler) {},
+		completion: &persistencespb.ChasmNexusCompletion{
 			RequestId: "req-1",
 			Outcome: &persistencespb.ChasmNexusCompletion_Success{
 				Success: &commonpb.Payload{Data: []byte("success-data")},
 			},
 			CloseTime: timestamppb.New(time.Now()),
 		},
-		ExpectPaused:          false,
-		ExpectInRecentActions: true,
-		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
-			s.Empty(invoker.BufferedStarts, "BufferedStart should be removed after completion")
+		expectPaused: false,
+		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
+		validateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
+			require.Empty(t, invoker.BufferedStarts)
 		},
-	})
-}
-
-func (s *schedulerNexusCompletionSuite) runTestCase(tc *nexusCompletionTestCase) {
-	ctx := s.newMutableContext()
-	sched := s.scheduler
-	invoker, err := sched.Invoker.Get(ctx)
-	s.NoError(err)
-
-	if tc.SetupInvoker != nil {
-		tc.SetupInvoker(invoker)
-	}
-	if tc.SetupScheduler != nil {
-		tc.SetupScheduler(sched)
-	}
-
-	// Capture initial state for no-op test.
-	initialRunningWorkflows := len(sched.Info.RunningWorkflows)
-	initialRecentActions := len(sched.Info.RecentActions)
-	initialLastCompletion, err := sched.LastCompletionResult.Get(ctx)
-	s.NoError(err)
-
-	// Execute the handler.
-	err = sched.HandleNexusCompletion(ctx, tc.Completion)
-	s.NoError(err)
-
-	if tc.ExpectNoOp {
-		// Verify no changes
-		s.Len(sched.Info.RunningWorkflows, initialRunningWorkflows)
-		s.Len(sched.Info.RecentActions, initialRecentActions)
-		// Verify LastCompletionResult wasn't changed
-		currentLastCompletion, _ := sched.LastCompletionResult.Get(ctx)
-		s.Equal(initialLastCompletion, currentLastCompletion)
-		return
-	}
-
-	lastCompletion, err := sched.LastCompletionResult.Get(ctx)
-	s.NoError(err)
-	s.NotNil(lastCompletion)
-
-	if tc.Completion.GetSuccess() != nil {
-		s.NotNil(lastCompletion.GetSuccess())
-	} else if tc.Completion.GetFailure() != nil {
-		s.NotNil(lastCompletion.GetFailure())
-	}
-
-	s.Equal(tc.ExpectPaused, sched.Schedule.State.Paused)
-	if tc.ExpectPaused {
-		s.NotEmpty(sched.Schedule.State.Notes)
-		s.Contains(sched.Schedule.State.Notes, "wf-1")
-	}
-
-	// Verify workflow removed from RunningWorkflows.
-	for _, wf := range sched.Info.RunningWorkflows {
-		s.NotEqual("wf-1", wf.WorkflowId)
-	}
-
-	// Verify RecentActions was updated.
-	if tc.ExpectInRecentActions {
-		found := false
-		for _, action := range sched.Info.RecentActions {
-			if action.StartWorkflowResult.WorkflowId == "wf-1" {
-				s.Equal(tc.ExpectStatus, action.StartWorkflowStatus)
-				found = true
-				break
+		validateScheduler: func(t *testing.T, sched *scheduler.Scheduler) {
+			found := false
+			for _, action := range sched.Info.RecentActions {
+				if action.StartWorkflowResult.WorkflowId == "wf-1" {
+					found = true
+					break
+				}
 			}
-		}
-		s.True(found, "workflow should be in RecentActions")
+			require.True(t, found, "workflow should be in RecentActions")
+		},
 	}
 
-	// Verify RequestId cleaned up from Invoker.
-	s.Empty(invoker.WorkflowID(tc.Completion.RequestId))
-
-	if tc.ValidateInvoker != nil {
-		tc.ValidateInvoker(s.T(), invoker)
-	}
+	executeNexusCompletion(t, tc)
 }

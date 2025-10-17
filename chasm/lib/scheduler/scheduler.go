@@ -296,13 +296,37 @@ func (s *Scheduler) recordActionResult(result *schedulerActionResult) {
 	s.Info.OverlapSkipped += result.overlapSkipped
 	s.Info.MissedCatchupWindow += result.missedCatchupWindow
 
-	if len(result.starts) > 0 {
-		s.Info.RecentActions = util.SliceTail(append(s.Info.RecentActions, result.starts...), recentActionCount)
+	// Filter any actions being recorded that may have already been recorded/completed.
+	newActions := util.FilterSlice(result.starts, func(incoming *schedulepb.ScheduleActionResult) bool {
+		wid := incoming.StartWorkflowResult.WorkflowId
+		recentIdx := slices.IndexFunc(s.Info.RecentActions, func(existing *schedulepb.ScheduleActionResult) bool {
+			recorded := existing.StartWorkflowResult.WorkflowId == wid
+			return recorded
+		})
+
+		return recentIdx < 0
+	})
+	if len(newActions) > 0 {
+		s.Info.RecentActions = util.SliceTail(append(s.Info.RecentActions, newActions...), recentActionCount)
 	}
 
+	// Update RunningWorkflows.
 	for _, start := range result.starts {
-		if start.StartWorkflowResult != nil {
+		completed := start.StartWorkflowStatus >= enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+
+		if !completed {
+			// Add running workflows to the list (duplicates are acceptable for ALLOW_ALL policy)
 			s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, start.StartWorkflowResult)
+		} else {
+			// Remove completed workflows by WorkflowId+RunId
+			wid := start.StartWorkflowResult.WorkflowId
+			rid := start.StartWorkflowResult.RunId
+			runningIdx := slices.IndexFunc(s.Info.RunningWorkflows, func(wfe *commonpb.WorkflowExecution) bool {
+				return wfe.WorkflowId == wid && wfe.RunId == rid
+			})
+			if runningIdx >= 0 {
+				s.Info.RunningWorkflows = slices.Delete(s.Info.RunningWorkflows, runningIdx, runningIdx+1)
+			}
 		}
 	}
 }
@@ -398,17 +422,14 @@ func (s *Scheduler) recordCompletedAction(
 	})
 
 	// Update the RecentActions entry's status.
-	found := false
-	for _, action := range s.Info.RecentActions {
-		if action.StartWorkflowResult.WorkflowId == workflowID {
-			action.StartWorkflowStatus = workflowStatus
-			found = true
-			break
-		}
-	}
+	idx := slices.IndexFunc(s.Info.RecentActions, func(action *schedulepb.ScheduleActionResult) bool {
+		return action.StartWorkflowResult.WorkflowId == workflowID
+	})
 
-	// If we didn't find an entry in RecentActions, add one.
-	if !found {
+	if idx >= 0 {
+		s.Info.RecentActions[idx].StartWorkflowStatus = workflowStatus
+	} else {
+		// If we didn't find an entry in RecentActions, add one.
 		if scheduleTime.IsZero() {
 			// We're completing a workflow that wasn't in BufferedStarts, RunningWorkflows,
 			// or RecentActions, but *did* have a request ID entry. That shouldn't be possible.
