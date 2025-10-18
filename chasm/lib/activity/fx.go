@@ -12,8 +12,8 @@ var HistoryModule = fx.Module(
 		newHandler,
 		newLibrary,
 	),
-	fx.Invoke(func(l *library, registry *chasm.Registry) {
-		registry.Register(l)
+	fx.Invoke(func(l *library, registry *chasm.Registry) error {
+		return registry.Register(l)
 	}),
 )
 
