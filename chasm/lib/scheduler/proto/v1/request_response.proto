@@ -4,115 +4,59 @@ package temporal.server.chasm.lib.scheduler.proto.v1;
 
 option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpb";
 
-import "temporal/api/schedule/v1/message.proto";
-import "temporal/api/common/v1/message.proto";
+import "temporal/api/workflowservice/v1/request_response.proto";
 
 message CreateScheduleRequest {
-    // Namespace the schedule will be created in.
-    string namespace_id = 1;
+    temporal.api.workflowservice.v1.CreateScheduleRequest request = 1;
 
-    // User-provided schedule ID.
-    string schedule_id = 2;
-
-    // A unique identifier for this create request for idempotence. Typically UUIDv4.
-    string request_id = 3;
-
-    // Identity of the user/worker performing this update.
-    string identity = 4;
-
-    temporal.api.schedule.v1.Schedule schedule = 5;
-    temporal.api.schedule.v1.SchedulePatch initial_patch = 6;
-
-    // User-provided search attributes to be attached to the schedule itself.
-    temporal.api.common.v1.SearchAttributes search_attributes = 10;
-
-    // User-provided memo to be attached to the schedule itself.
-    temporal.api.common.v1.Memo memo = 11;
+    // Internal namespace ID (UUID).
+    string namespace_id = 2;
 }
 
 message CreateScheduleResponse {
-    int64 conflict_token = 1;
+    temporal.api.workflowservice.v1.CreateScheduleResponse response = 1;
 }
 
 message UpdateScheduleRequest {
-    // Namespace the schedule is in.
-    string namespace_id = 1;
+    temporal.api.workflowservice.v1.UpdateScheduleRequest request = 1;
 
-    // User-provided schedule ID.
-    string schedule_id = 2;
-
-    // A unique identifier for this update request for idempotence. Typically UUIDv4.
-    string request_id = 3;
-
-    temporal.api.schedule.v1.Schedule schedule = 4;
-
-    // User-provided search attributes to be attached to the schedule itself.
-    temporal.api.common.v1.SearchAttributes search_attributes = 10;
-
-    // User-provided memo to be attached to the schedule itself.
-    temporal.api.common.v1.Memo memo = 11;
-
-    // Conflict token from a previous read, for optimistic concurrency control.
-    int64 conflict_token = 12;
-
-    // Identity of the user/worker performing this update.
-    string identity = 13;
+    // Internal namespace ID (UUID).
+    string namespace_id = 2;
 }
 
 message UpdateScheduleResponse {
-    int64 conflict_token = 1;
+    temporal.api.workflowservice.v1.UpdateScheduleResponse response = 1;
 }
 
 message PatchScheduleRequest {
-    // Namespace the schedule is in.
-    string namespace_id = 1;
+    temporal.api.workflowservice.v1.PatchScheduleRequest request = 1;
 
-    // User-provided schedule ID.
-    string schedule_id = 2;
-
-    // A unique identifier for this patch request for idempotence. Typically UUIDv4.
-    string request_id = 3;
-
-    // Identity of the user/worker performing this patch.
-    string identity = 4;
-
-    // Patch to apply to the schedule.
-    temporal.api.schedule.v1.SchedulePatch patch = 5;
-
-    // Conflict token from a previous read, for optimistic concurrency control.
-    int64 conflict_token = 10;
+    // Internal namespace ID (UUID).
+    string namespace_id = 2;
 }
 
 message PatchScheduleResponse {
-    int64 conflict_token = 1;
+    temporal.api.workflowservice.v1.PatchScheduleResponse response = 1;
 }
 
 message DeleteScheduleRequest {
-    // Namespace the schedule is in.
-    string namespace_id = 1;
+    temporal.api.workflowservice.v1.DeleteScheduleRequest request = 1;
 
-    // User-provided schedule ID.
-    string schedule_id = 2;
-
-    // Identity of the user/worker performing this deletion.
-    string identity = 3;
+    // Internal namespace ID (UUID).
+    string namespace_id = 2;
 }
 
 message DeleteScheduleResponse {
+    temporal.api.workflowservice.v1.DeleteScheduleResponse response = 1;
 }
 
 message DescribeScheduleRequest {
-    // Namespace the schedule is in.
-    string namespace_id = 1;
+    temporal.api.workflowservice.v1.DescribeScheduleRequest request = 1;
 
-    // User-provided schedule ID.
-    string schedule_id = 2;
+    // Internal namespace ID (UUID).
+    string namespace_id = 2;
 }
 
 message DescribeScheduleResponse {
-    temporal.api.schedule.v1.Schedule schedule = 1;
-    temporal.api.schedule.v1.ScheduleInfo info = 2;
-    temporal.api.common.v1.Memo memo = 3;
-    temporal.api.common.v1.SearchAttributes search_attributes = 4;
-    int64 conflict_token = 5;
+    temporal.api.workflowservice.v1.DescribeScheduleResponse response = 1;
 }

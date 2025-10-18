@@ -26,13 +26,13 @@ var File_temporal_server_chasm_lib_scheduler_proto_v1_service_proto protoreflect
 
 const file_temporal_server_chasm_lib_scheduler_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	":temporal/server/chasm/lib/scheduler/proto/v1/service.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1aCtemporal/server/chasm/lib/scheduler/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xd0\a\n" +
-	"\x10SchedulerService\x12\xbc\x01\n" +
-	"\x0eCreateSchedule\x12C.temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleResponse\"\x1f\x92\xc4\x03\x1b\x12\fnamespace_id\x1a\vschedule_id\x12\xbc\x01\n" +
-	"\x0eUpdateSchedule\x12C.temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleResponse\"\x1f\x92\xc4\x03\x1b\x12\fnamespace_id\x1a\vschedule_id\x12\xb9\x01\n" +
-	"\rPatchSchedule\x12B.temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleRequest\x1aC.temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleResponse\"\x1f\x92\xc4\x03\x1b\x12\fnamespace_id\x1a\vschedule_id\x12\xbc\x01\n" +
-	"\x0eDeleteSchedule\x12C.temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleResponse\"\x1f\x92\xc4\x03\x1b\x12\fnamespace_id\x1a\vschedule_id\x12\xc2\x01\n" +
-	"\x10DescribeSchedule\x12E.temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleRequest\x1aF.temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleResponse\"\x1f\x92\xc4\x03\x1b\x12\fnamespace_id\x1a\vschedule_idBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
+	":temporal/server/chasm/lib/scheduler/proto/v1/service.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1aCtemporal/server/chasm/lib/scheduler/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xf8\a\n" +
+	"\x10SchedulerService\x12\xc4\x01\n" +
+	"\x0eCreateSchedule\x12C.temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleResponse\"'\x92\xc4\x03#\x12\fnamespace_id\x1a\x13request.schedule_id\x12\xc4\x01\n" +
+	"\x0eUpdateSchedule\x12C.temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleResponse\"'\x92\xc4\x03#\x12\fnamespace_id\x1a\x13request.schedule_id\x12\xc1\x01\n" +
+	"\rPatchSchedule\x12B.temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleRequest\x1aC.temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleResponse\"'\x92\xc4\x03#\x12\fnamespace_id\x1a\x13request.schedule_id\x12\xc4\x01\n" +
+	"\x0eDeleteSchedule\x12C.temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleResponse\"'\x92\xc4\x03#\x12\fnamespace_id\x1a\x13request.schedule_id\x12\xca\x01\n" +
+	"\x10DescribeSchedule\x12E.temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleRequest\x1aF.temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleResponse\"'\x92\xc4\x03#\x12\fnamespace_id\x1a\x13request.schedule_idBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
 
 var file_temporal_server_chasm_lib_scheduler_proto_v1_service_proto_goTypes = []any{
 	(*CreateScheduleRequest)(nil),    // 0: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest

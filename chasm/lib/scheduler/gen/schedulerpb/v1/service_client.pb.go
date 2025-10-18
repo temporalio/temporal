@@ -27,14 +27,14 @@ type SchedulerServiceLayeredClient struct {
 }
 
 // NewSchedulerServiceLayeredClient initializes a new SchedulerServiceLayeredClient.
-func NewSchedulerServiceLayeredClient(
+func NewNewSchedulerServiceLayeredClient(
 	dc *dynamicconfig.Collection,
 	rpcFactory common.RPCFactory,
 	monitor membership.Monitor,
 	config *config.Persistence,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-) (SchedulerServiceClient, error) {
+) (*SchedulerServiceLayeredClient, error) {
 	resolver, err := monitor.GetResolver(primitives.HistoryService)
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func (c *SchedulerServiceLayeredClient) callCreateScheduleNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetScheduleId(), c.numShards)
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetRequest().GetScheduleId(), c.numShards)
 	op := func(ctx context.Context, client SchedulerServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
@@ -123,7 +123,7 @@ func (c *SchedulerServiceLayeredClient) callUpdateScheduleNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetScheduleId(), c.numShards)
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetRequest().GetScheduleId(), c.numShards)
 	op := func(ctx context.Context, client SchedulerServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
@@ -166,7 +166,7 @@ func (c *SchedulerServiceLayeredClient) callPatchScheduleNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetScheduleId(), c.numShards)
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetRequest().GetScheduleId(), c.numShards)
 	op := func(ctx context.Context, client SchedulerServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
@@ -209,7 +209,7 @@ func (c *SchedulerServiceLayeredClient) callDeleteScheduleNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetScheduleId(), c.numShards)
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetRequest().GetScheduleId(), c.numShards)
 	op := func(ctx context.Context, client SchedulerServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
@@ -252,7 +252,7 @@ func (c *SchedulerServiceLayeredClient) callDescribeScheduleNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetScheduleId(), c.numShards)
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetRequest().GetScheduleId(), c.numShards)
 	op := func(ctx context.Context, client SchedulerServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)

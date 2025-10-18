@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -86,18 +87,21 @@ func TestDescribe_Basic(t *testing.T) {
 
 	req := &schedulerpb.DescribeScheduleRequest{
 		NamespaceId: namespaceID,
-		ScheduleId:  scheduleID,
+		Request: &workflowservice.DescribeScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+		},
 	}
 
 	resp, err := env.scheduler.Describe(ctx, req)
 
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-	require.NotNil(t, resp.Schedule)
-	require.NotNil(t, resp.Info)
-	require.Equal(t, env.scheduler.Schedule, resp.Schedule)
-	require.Equal(t, env.scheduler.Info, resp.Info)
-	require.Equal(t, env.scheduler.ConflictToken, resp.ConflictToken)
+	require.NotNil(t, resp.Response)
+	require.NotNil(t, resp.Response.Schedule)
+	require.NotNil(t, resp.Response.Info)
+	require.Equal(t, env.scheduler.Schedule, resp.Response.Schedule)
+	require.Equal(t, env.scheduler.Info, resp.Response.Info)
 }
 
 func TestDescribe_ReturnsCorrectScheduleFields(t *testing.T) {
@@ -112,16 +116,19 @@ func TestDescribe_ReturnsCorrectScheduleFields(t *testing.T) {
 
 	req := &schedulerpb.DescribeScheduleRequest{
 		NamespaceId: namespaceID,
-		ScheduleId:  scheduleID,
+		Request: &workflowservice.DescribeScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+		},
 	}
 
 	resp, err := env.scheduler.Describe(ctx, req)
 
 	require.NoError(t, err)
-	require.Equal(t, env.scheduler.Schedule.Spec, resp.Schedule.Spec)
-	require.Equal(t, env.scheduler.Schedule.Action, resp.Schedule.Action)
-	require.Equal(t, env.scheduler.Schedule.Policies, resp.Schedule.Policies)
-	require.Equal(t, env.scheduler.Schedule.State, resp.Schedule.State)
+	require.Equal(t, env.scheduler.Schedule.Spec, resp.Response.Schedule.Spec)
+	require.Equal(t, env.scheduler.Schedule.Action, resp.Response.Schedule.Action)
+	require.Equal(t, env.scheduler.Schedule.Policies, resp.Response.Schedule.Policies)
+	require.Equal(t, env.scheduler.Schedule.State, resp.Response.Schedule.State)
 }
 
 func TestDescribe_ReturnsCorrectInfo(t *testing.T) {

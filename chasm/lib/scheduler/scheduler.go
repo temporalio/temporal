@@ -1,12 +1,15 @@
 package scheduler
 
 import (
-	"errors"
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/serviceerror"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
@@ -41,7 +44,7 @@ const (
 	recentActionCount = 10
 )
 
-var ErrConflictTokenMismatch = errors.New("conflict token mismatch")
+var ErrConflictTokenMismatch = serviceerror.NewFailedPrecondition("mismatched conflict token")
 
 // NewScheduler returns an initialized CHASM scheduler root component.
 func NewScheduler(
@@ -102,12 +105,14 @@ func Create(
 		ctx,
 		"", // TODO: should be namespace name
 		req.NamespaceId,
-		req.ScheduleId,
-		req.Schedule,
-		req.InitialPatch,
+		req.Request.ScheduleId,
+		req.Request.Schedule,
+		req.Request.InitialPatch,
 	)
 	return sched, &schedulerpb.CreateScheduleResponse{
-		ConflictToken: sched.ConflictToken,
+		Response: &workflowservice.CreateScheduleResponse{
+			ConflictToken: []byte{},
+		},
 	}, nil
 }
 
@@ -335,10 +340,12 @@ func (s *Scheduler) Describe(
 	req *schedulerpb.DescribeScheduleRequest,
 ) (*schedulerpb.DescribeScheduleResponse, error) {
 	return &schedulerpb.DescribeScheduleResponse{
-		Schedule:      common.CloneProto(s.Schedule),
-		Info:          common.CloneProto(s.Info),
-		ConflictToken: s.ConflictToken,
-		// TODO - memo and search_attributes are handled by visibility (separate PR)
+		Response: &workflowservice.DescribeScheduleResponse{
+			Schedule:      common.CloneProto(s.Schedule),
+			Info:          common.CloneProto(s.Info),
+			ConflictToken: s.GenerateConflictToken(),
+			// TODO - memo and search_attributes are handled by visibility (separate PR)
+		},
 	}, nil
 }
 
@@ -348,7 +355,9 @@ func (s *Scheduler) Delete(
 	req *schedulerpb.DeleteScheduleRequest,
 ) (*schedulerpb.DeleteScheduleResponse, error) {
 	s.Closed = true
-	return &schedulerpb.DeleteScheduleResponse{}, nil
+	return &schedulerpb.DeleteScheduleResponse{
+		Response: &workflowservice.DeleteScheduleResponse{},
+	}, nil
 }
 
 // Update replaces the schedule with a new one for UpdateSchedule requests.
@@ -356,18 +365,18 @@ func (s *Scheduler) Update(
 	ctx chasm.MutableContext,
 	req *schedulerpb.UpdateScheduleRequest,
 ) (*schedulerpb.UpdateScheduleResponse, error) {
-	if req.ConflictToken != s.ConflictToken {
+	if !s.ValidateConflictToken(req.Request.ConflictToken) {
 		return nil, ErrConflictTokenMismatch
 	}
 
-	s.Schedule = common.CloneProto(req.Schedule)
+	s.Schedule = common.CloneProto(req.Request.Schedule)
 	// TODO - also merge custom search attributes here
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
 
 	return &schedulerpb.UpdateScheduleResponse{
-		ConflictToken: s.ConflictToken,
+		Response: &workflowservice.UpdateScheduleResponse{},
 	}, nil
 }
 
@@ -376,27 +385,34 @@ func (s *Scheduler) Patch(
 	ctx chasm.MutableContext,
 	req *schedulerpb.PatchScheduleRequest,
 ) (*schedulerpb.PatchScheduleResponse, error) {
-	if req.ConflictToken != s.ConflictToken {
-		return nil, ErrConflictTokenMismatch
-	}
-
 	// Handle paused status.
 	// TODO - use SetPaused from visibility for this
-	if req.Patch.Pause != "" {
+	if req.Request.Patch.Pause != "" {
 		s.Schedule.State.Paused = true
-		s.Schedule.State.Notes = req.Patch.Pause
+		s.Schedule.State.Notes = req.Request.Patch.Pause
 	}
-	if req.Patch.Unpause != "" {
+	if req.Request.Patch.Unpause != "" {
 		s.Schedule.State.Paused = false
-		s.Schedule.State.Notes = req.Patch.Unpause
+		s.Schedule.State.Notes = req.Request.Patch.Unpause
 	}
 
-	s.handlePatch(ctx, req.Patch)
+	s.handlePatch(ctx, req.Request.Patch)
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
 
 	return &schedulerpb.PatchScheduleResponse{
-		ConflictToken: s.ConflictToken,
+		Response: &workflowservice.PatchScheduleResponse{},
 	}, nil
+}
+
+func (s *Scheduler) GenerateConflictToken() []byte {
+	token := make([]byte, 8)
+	binary.LittleEndian.PutUint64(token, uint64(s.ConflictToken))
+	return token
+}
+
+func (s *Scheduler) ValidateConflictToken(token []byte) bool {
+	current := s.GenerateConflictToken()
+	return bytes.Equal(current, token)
 }

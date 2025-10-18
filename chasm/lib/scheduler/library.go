@@ -3,14 +3,11 @@ package scheduler
 import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
 type (
 	Library struct {
-		fx.In
-
 		chasm.UnimplementedLibrary
 
 		handler *handler
