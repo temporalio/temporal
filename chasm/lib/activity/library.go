@@ -8,11 +8,16 @@ import (
 
 type library struct {
 	chasm.UnimplementedLibrary
+
 	handler *handler
 }
 
-func newLibrary(*handler) *library {
-	return &library{}
+func newLibrary(
+	handler *handler,
+) *library {
+	return &library{
+		handler: handler,
+	}
 }
 
 func (l *library) Name() string {
@@ -21,4 +26,10 @@ func (l *library) Name() string {
 
 func (l *library) RegisterServices(server *grpc.Server) {
 	server.RegisterService(&activitypb.ActivityService_ServiceDesc, l.handler)
+}
+
+func (l *library) Components() []*chasm.RegistrableComponent {
+	return []*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*Activity]("activity"),
+	}
 }

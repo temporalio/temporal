@@ -154,9 +154,7 @@ type ActivityState struct {
 	// Priority metadata. (TODO: why isn't this part of ActivityOptions?)
 	Priority *v1.Priority `protobuf:"bytes,5,opt,name=priority,proto3" json:"priority,omitempty"`
 	// Set if activity cancelation was requested.
-	CancelState *ActivityCancelState `protobuf:"bytes,6,opt,name=cancel_state,json=cancelState,proto3" json:"cancel_state,omitempty"`
-	// Set if activity cancelation was requested.
-	Attempt       *ActivityAttemptState `protobuf:"bytes,7,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	CancelState   *ActivityCancelState `protobuf:"bytes,6,opt,name=cancel_state,json=cancelState,proto3" json:"cancel_state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -229,13 +227,6 @@ func (x *ActivityState) GetPriority() *v1.Priority {
 func (x *ActivityState) GetCancelState() *ActivityCancelState {
 	if x != nil {
 		return x.CancelState
-	}
-	return nil
-}
-
-func (x *ActivityState) GetAttempt() *ActivityAttemptState {
-	if x != nil {
-		return x.Attempt
 	}
 	return nil
 }
@@ -704,15 +695,14 @@ var File_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto protor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc = "" +
 	"\n" +
-	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\"\xd1\x04\n" +
+	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\"\xf4\x03\n" +
 	"\rActivityState\x12I\n" +
 	"\ractivity_type\x18\x01 \x01(\v2$.temporal.api.common.v1.ActivityTypeR\factivityType\x12T\n" +
 	"\x10activity_options\x18\x02 \x01(\v2).temporal.api.activity.v1.ActivityOptionsR\x0factivityOptions\x12\\\n" +
 	"\x06status\x18\x03 \x01(\x0e2D.temporal.server.chasm.lib.activity.proto.v1.ActivityExecutionStatusR\x06status\x12A\n" +
 	"\x0escheduled_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\rscheduledTime\x12<\n" +
 	"\bpriority\x18\x05 \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12c\n" +
-	"\fcancel_state\x18\x06 \x01(\v2@.temporal.server.chasm.lib.activity.proto.v1.ActivityCancelStateR\vcancelState\x12[\n" +
-	"\aattempt\x18\a \x01(\v2A.temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptStateR\aattempt\"\xa7\x01\n" +
+	"\fcancel_state\x18\x06 \x01(\v2@.temporal.server.chasm.lib.activity.proto.v1.ActivityCancelStateR\vcancelState\"\xa7\x01\n" +
 	"\x13ActivityCancelState\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12=\n" +
@@ -798,27 +788,26 @@ var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_depIdx
 	11, // 3: temporal.server.chasm.lib.activity.proto.v1.ActivityState.scheduled_time:type_name -> google.protobuf.Timestamp
 	12, // 4: temporal.server.chasm.lib.activity.proto.v1.ActivityState.priority:type_name -> temporal.api.common.v1.Priority
 	2,  // 5: temporal.server.chasm.lib.activity.proto.v1.ActivityState.cancel_state:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState
-	3,  // 6: temporal.server.chasm.lib.activity.proto.v1.ActivityState.attempt:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState
-	11, // 7: temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState.request_time:type_name -> google.protobuf.Timestamp
-	13, // 8: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.current_retry_interval:type_name -> google.protobuf.Duration
-	11, // 9: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_started_time:type_name -> google.protobuf.Timestamp
-	11, // 10: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
-	14, // 11: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_failure:type_name -> temporal.api.failure.v1.Failure
-	15, // 12: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
-	16, // 13: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.details:type_name -> temporal.api.common.v1.Payloads
-	11, // 14: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.recorded_time:type_name -> google.protobuf.Timestamp
-	16, // 15: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.input:type_name -> temporal.api.common.v1.Payloads
-	17, // 16: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.header:type_name -> temporal.api.common.v1.Header
-	18, // 17: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.user_metadata:type_name -> temporal.api.sdk.v1.UserMetadata
-	7,  // 18: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.successful:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful
-	8,  // 19: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.failed:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed
-	16, // 20: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful.output:type_name -> temporal.api.common.v1.Payloads
-	14, // 21: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
-	22, // [22:22] is the sub-list for method output_type
-	22, // [22:22] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	11, // 6: temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState.request_time:type_name -> google.protobuf.Timestamp
+	13, // 7: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.current_retry_interval:type_name -> google.protobuf.Duration
+	11, // 8: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_started_time:type_name -> google.protobuf.Timestamp
+	11, // 9: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
+	14, // 10: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_failure:type_name -> temporal.api.failure.v1.Failure
+	15, // 11: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
+	16, // 12: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.details:type_name -> temporal.api.common.v1.Payloads
+	11, // 13: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.recorded_time:type_name -> google.protobuf.Timestamp
+	16, // 14: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.input:type_name -> temporal.api.common.v1.Payloads
+	17, // 15: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.header:type_name -> temporal.api.common.v1.Header
+	18, // 16: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.user_metadata:type_name -> temporal.api.sdk.v1.UserMetadata
+	7,  // 17: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.successful:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful
+	8,  // 18: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.failed:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed
+	16, // 19: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful.output:type_name -> temporal.api.common.v1.Payloads
+	14, // 20: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_init() }
