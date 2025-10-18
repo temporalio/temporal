@@ -386,7 +386,7 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 
 		for _, poller := range d.pollers.heap {
 			// can't match cases:
-			if poller.queryOnly && !(task.isQuery() || task.isPollForwarder) {
+			if poller.queryOnly && (!task.isQuery() && !task.isPollForwarder) {
 				continue
 			} else if task.isPollForwarder && poller.forwardCtx == nil {
 				continue

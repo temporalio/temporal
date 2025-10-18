@@ -71,9 +71,6 @@ message ActivityState {
 
     // Set if activity cancelation was requested.
     ActivityCancelState cancel_state = 6;
-
-    // Set if activity cancelation was requested.
-    ActivityAttemptState attempt = 7;
 }
 
 message ActivityCancelState {

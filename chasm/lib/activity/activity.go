@@ -24,7 +24,7 @@ type Activity struct {
 	Attempt       chasm.Field[*activitypb.ActivityAttemptState]
 	LastHeartbeat chasm.Field[*activitypb.ActivityHeartbeatState]
 	// Standalone only
-	RequestData chasm.Field[*activitypb.ActivityHeartbeatState]
+	RequestData chasm.Field[*activitypb.ActivityRequestData]
 
 	// Pointer to an implementation of the "store" (for a workflow activity this would be a parent pointer back to
 	// the workflow).
@@ -32,19 +32,46 @@ type Activity struct {
 	Store chasm.Field[ActivityStore]
 }
 
-// LifecycleState implements chasm.Component.
-func (activity *Activity) LifecycleState(chasm.Context) chasm.LifecycleState {
-	// TODO
-	return chasm.LifecycleStateRunning
+// LifecycleState TODO: we need to add more lifecycle states to better categorize some activity states, particulary for terminated/canceled.
+func (a Activity) LifecycleState(context chasm.Context) chasm.LifecycleState {
+	switch a.Status {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
+		return chasm.LifecycleStateCompleted
+	case activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
+		return chasm.LifecycleStateFailed
+	default:
+		return chasm.LifecycleStateRunning
+	}
 }
 
 func NewStandaloneActivity(
 	ctx chasm.MutableContext,
 	request *workflowservice.StartActivityExecutionRequest,
 ) (*Activity, error) {
+	visibility, err := chasm.NewVisibilityWithData(ctx, request.GetSearchAttributes().GetIndexedFields(), request.GetMemo().GetFields())
+	if err != nil {
+		return nil, err
+	}
+
 	return &Activity{
-		//
-		// chasm.NewVisibilityWithData(ctx)
+		ActivityState: &activitypb.ActivityState{
+			ActivityType:    request.ActivityType,
+			ActivityOptions: request.Options,
+			Priority:        request.Priority,
+		},
+		Attempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+			Count:           1,
+			LastStartedTime: timestamppb.Now(),
+		}),
+		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
+			Input:        request.Input,
+			Header:       request.Header,
+			UserMetadata: request.UserMetadata,
+		}),
+		Visibility: chasm.NewComponentField(ctx, visibility),
 	}, nil
 }
 
@@ -55,8 +82,8 @@ func NewEmbeddedActivity(
 ) {
 }
 
-func (activity *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, res *historyservice.RecordActivityTaskStartedResponse) error {
-	store, err := activity.Store.Get(ctx)
+func (a *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, res *historyservice.RecordActivityTaskStartedResponse) error {
+	store, err := a.Store.Get(ctx)
 	if err != nil {
 		return err
 	}
@@ -67,9 +94,9 @@ func (activity *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Co
 	return nil
 }
 
-func (activity *Activity) RecordHeartbeat(ctx chasm.MutableContext, details *commonpb.Payloads) (*struct{}, error) {
-	activity.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
-		RecordedTime: timestamppb.New(ctx.Now(activity)),
+func (a *Activity) RecordHeartbeat(ctx chasm.MutableContext, details *commonpb.Payloads) (chasm.NoValue, error) {
+	a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
+		RecordedTime: timestamppb.New(ctx.Now(a)),
 		Details:      details,
 	})
 	return nil, nil

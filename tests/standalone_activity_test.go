@@ -10,6 +10,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -28,7 +29,12 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
-	_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+	s.OverrideDynamicConfig(
+		dynamicconfig.EnableChasm,
+		true,
+	)
+
+	resp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 		Namespace:  s.Namespace().String(),
 		ActivityId: testcore.RandomizeStr(t.Name()),
 		Options: &activitypb.ActivityOptions{
@@ -39,4 +45,6 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 		},
 	})
 	require.NoError(t, err)
+	require.NotNil(t, resp.GetRunId())
+	require.True(t, resp.Started)
 }

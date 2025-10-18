@@ -13,12 +13,12 @@ func (a *Activity) State() activitypb.ActivityExecutionStatus {
 	if a.ActivityState == nil {
 		return activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
 	}
-	return a.ActivityState.Status
+	return a.Status
 }
 
 // SetState sets the status of the activity.
 func (a *Activity) SetState(state activitypb.ActivityExecutionStatus) {
-	a.ActivityState.Status = state
+	a.Status = state
 }
 
 // TransitionScheduled effects a transition to Scheduled status
