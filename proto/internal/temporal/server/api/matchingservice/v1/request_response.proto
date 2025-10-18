@@ -130,6 +130,7 @@ message AddActivityTaskRequest {
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
     int32 stamp = 12;
     temporal.api.common.v1.Priority priority = 13;
+    int32 attempt = 14;
 }
 
 message AddActivityTaskResponse {

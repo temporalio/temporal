@@ -51,7 +51,7 @@ func (s *apiSuite) TeardownTest() {
 func (s *apiSuite) TestWorkflowCompleted() {
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 
-	_, err := isActivityTaskValid(s.workflowLease, rand.Int63())
+	_, err := isActivityTaskValid(s.workflowLease, rand.Int63(), 1)
 	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
@@ -62,9 +62,10 @@ func (s *apiSuite) TestWorkflowRunning_ActivityTaskNotStarted() {
 	s.mutableState.EXPECT().GetActivityInfo(activityScheduleEventID).Return(&persistencespb.ActivityInfo{
 		ScheduledEventId: activityScheduleEventID,
 		StartedEventId:   common.EmptyEventID,
+		Attempt:          3,
 	}, true)
 
-	valid, err := isActivityTaskValid(s.workflowLease, activityScheduleEventID)
+	valid, err := isActivityTaskValid(s.workflowLease, activityScheduleEventID, 3)
 	s.NoError(err)
 	s.True(valid)
 }
@@ -77,7 +78,7 @@ func (s *apiSuite) TestWorkflowRunning_ActivityTaskStarted() {
 		StartedEventId:   activityScheduleEventID + 1,
 	}, true)
 
-	valid, err := isActivityTaskValid(s.workflowLease, activityScheduleEventID)
+	valid, err := isActivityTaskValid(s.workflowLease, activityScheduleEventID, 1)
 	s.NoError(err)
 	s.False(valid)
 }
@@ -87,7 +88,21 @@ func (s *apiSuite) TestWorkflowRunning_ActivityTaskMissing() {
 	activityScheduleEventID := rand.Int63()
 	s.mutableState.EXPECT().GetActivityInfo(activityScheduleEventID).Return(nil, false)
 
-	valid, err := isActivityTaskValid(s.workflowLease, activityScheduleEventID)
+	valid, err := isActivityTaskValid(s.workflowLease, activityScheduleEventID, 1)
+	s.NoError(err)
+	s.False(valid)
+}
+
+func (s *apiSuite) TestWorkflowRunning_AttemptMismatch() {
+	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	activityScheduleEventID := rand.Int63()
+	s.mutableState.EXPECT().GetActivityInfo(activityScheduleEventID).Return(&persistencespb.ActivityInfo{
+		ScheduledEventId: activityScheduleEventID,
+		StartedEventId:   common.EmptyEventID,
+		Attempt:          4,
+	}, true)
+
+	valid, err := isActivityTaskValid(s.workflowLease, activityScheduleEventID, 3)
 	s.NoError(err)
 	s.False(valid)
 }

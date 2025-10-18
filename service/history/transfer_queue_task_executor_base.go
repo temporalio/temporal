@@ -116,6 +116,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		VersionDirective:       directive,
 		Stamp:                  task.Stamp,
 		Priority:               priority,
+		Attempt:                task.Attempt,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls

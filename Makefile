@@ -492,12 +492,14 @@ report-test-crash: $(TEST_OUTPUT_ROOT)
 		--crashreportname=$(CRASH_REPORT_NAME)
 
 ##### Schema #####
-install-schema-cass-es: temporal-cassandra-tool install-schema-es
+install-schema-cass: temporal-cassandra-tool
 	@printf $(COLOR) "Install Cassandra schema..."
 	./temporal-cassandra-tool drop -k $(TEMPORAL_DB) -f
 	./temporal-cassandra-tool create -k $(TEMPORAL_DB) --rf 1
 	./temporal-cassandra-tool -k $(TEMPORAL_DB) setup-schema -v 0.0
 	./temporal-cassandra-tool -k $(TEMPORAL_DB) update-schema -d ./schema/cassandra/temporal/versioned
+
+install-schema-cass-es: temporal-schema-cass install-schema-es
 
 install-schema-mysql: install-schema-mysql8
 

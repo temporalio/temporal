@@ -435,6 +435,7 @@ func (s *TaskSerializer) transferActivityTaskToProto(
 		TaskId:                  activityTask.TaskID,
 		VisibilityTime:          timestamppb.New(activityTask.VisibilityTimestamp),
 		Stamp:                   activityTask.Stamp,
+		Attempt:                 int32(activityTask.Attempt),
 	}
 }
 
@@ -453,6 +454,7 @@ func (s *TaskSerializer) transferActivityTaskFromProto(
 		ScheduledEventID:    activityTask.ScheduledEventId,
 		Version:             activityTask.Version,
 		Stamp:               activityTask.Stamp,
+		Attempt:             activityTask.Attempt,
 	}
 }
 

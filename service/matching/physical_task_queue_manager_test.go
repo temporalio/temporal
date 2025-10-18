@@ -220,6 +220,7 @@ func randomTaskInfoWithAgeTaskID(age time.Duration, TaskID int64) *persistencesp
 			ScheduledEventId: rand.Int63(),
 			CreateTime:       timestamppb.New(rt1),
 			ExpiryTime:       timestamppb.New(rt2),
+			Attempt:          rand.Int31n(5) + 1,
 		},
 		TaskId: TaskID,
 	}

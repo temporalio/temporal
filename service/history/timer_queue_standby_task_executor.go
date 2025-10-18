@@ -710,6 +710,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), activityTask.TaskID),
 		VersionDirective:       pushActivityInfo.versionDirective,
 		Stamp:                  activityTask.Stamp,
+		Attempt:                activityTask.Attempt,
 	})
 
 	if err != nil {

@@ -1310,6 +1310,7 @@ type TransferTaskInfo struct {
 	// It monotonically increments when the activity options are changed.
 	// It is used to check if activity related tasks are still relevant to  their corresponding state machine.
 	Stamp         int32 `protobuf:"varint,17,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	Attempt       int32 `protobuf:"varint,19,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1470,6 +1471,13 @@ func (x *TransferTaskInfo) GetChasmTaskInfo() *ChasmTaskInfo {
 func (x *TransferTaskInfo) GetStamp() int32 {
 	if x != nil {
 		return x.Stamp
+	}
+	return 0
+}
+
+func (x *TransferTaskInfo) GetAttempt() int32 {
+	if x != nil {
+		return x.Attempt
 	}
 	return 0
 }
@@ -4672,7 +4680,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\rRequestIDInfo\x12?\n" +
 	"\n" +
 	"event_type\x18\x01 \x01(\x0e2 .temporal.api.enums.v1.EventTypeR\teventType\x12\x19\n" +
-	"\bevent_id\x18\x02 \x01(\x03R\aeventId\"\xdf\a\n" +
+	"\bevent_id\x18\x02 \x01(\x03R\aeventId\"\xf9\a\n" +
 	"\x10TransferTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -4693,7 +4701,8 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x12delete_after_close\x18\x0f \x01(\bR\x10deleteAfterClose\x12\x91\x01\n" +
 	"\x1cclose_execution_task_details\x18\x10 \x01(\v2N.temporal.server.api.persistence.v1.TransferTaskInfo.CloseExecutionTaskDetailsH\x00R\x19closeExecutionTaskDetails\x12[\n" +
 	"\x0fchasm_task_info\x18\x12 \x01(\v21.temporal.server.api.persistence.v1.ChasmTaskInfoH\x00R\rchasmTaskInfo\x12\x14\n" +
-	"\x05stamp\x18\x11 \x01(\x05R\x05stamp\x1a\\\n" +
+	"\x05stamp\x18\x11 \x01(\x05R\x05stamp\x12\x18\n" +
+	"\aattempt\x18\x13 \x01(\x05R\aattempt\x1a\\\n" +
 	"\x19CloseExecutionTaskDetails\x12?\n" +
 	"\x1ccan_skip_visibility_archival\x18\x01 \x01(\bR\x19canSkipVisibilityArchivalB\x0e\n" +
 	"\ftask_detailsJ\x04\b\x0e\x10\x0f\"\xb5\b\n" +

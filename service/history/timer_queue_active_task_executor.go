@@ -591,6 +591,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		VersionDirective:       directive,
 		Stamp:                  task.Stamp,
 		Priority:               priority,
+		Attempt:                activityInfo.GetAttempt(),
 	})
 	if err != nil {
 		return err

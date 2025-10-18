@@ -285,6 +285,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 		TaskQueue:           taskQueueName,
 		ScheduledEventID:    event.GetEventId(),
 		VisibilityTimestamp: time.Now().UTC(),
+		Stamp:               ai.Stamp,
+		Attempt:             ai.Attempt,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -2695,6 +2697,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 		Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), task.TaskID),
 		VersionDirective:       worker_versioning.MakeUseAssignmentRulesDirective(),
 		Stamp:                  ai.Stamp,
+		Attempt:                ai.Attempt,
 	}
 }
 

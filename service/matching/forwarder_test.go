@@ -160,6 +160,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
+	t.Equal(taskInfo.Data.GetAttempt(), request.GetAttempt())
 	t.EqualValues(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
 		int32(request.GetScheduleToStartTimeout().AsDuration().Seconds()))
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
@@ -188,6 +189,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask_WithBuildId() {
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
+	t.Equal(taskInfo.Data.GetAttempt(), request.GetAttempt())
 	t.EqualValues(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
 		int32(request.GetScheduleToStartTimeout().AsDuration().Seconds()))
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())

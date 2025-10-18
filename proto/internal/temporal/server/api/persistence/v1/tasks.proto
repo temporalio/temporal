@@ -32,6 +32,7 @@ message TaskInfo {
     // Stamp field allows to differentiate between different instances of the same task
     int32 stamp = 9;
     temporal.api.common.v1.Priority priority = 10;
+    int32 attempt = 11;
 }
 
 // task_queue column

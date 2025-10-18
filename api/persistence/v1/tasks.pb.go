@@ -103,6 +103,7 @@ type TaskInfo struct {
 	// Stamp field allows to differentiate between different instances of the same task
 	Stamp         int32         `protobuf:"varint,9,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	Priority      *v12.Priority `protobuf:"bytes,10,opt,name=priority,proto3" json:"priority,omitempty"`
+	Attempt       int32         `protobuf:"varint,11,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -205,6 +206,13 @@ func (x *TaskInfo) GetPriority() *v12.Priority {
 		return x.Priority
 	}
 	return nil
+}
+
+func (x *TaskInfo) GetAttempt() int32 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
 }
 
 // task_queue column
@@ -514,7 +522,7 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\x11AllocatedTaskInfo\x12@\n" +
 	"\x04data\x18\x01 \x01(\v2,.temporal.server.api.persistence.v1.TaskInfoR\x04data\x12\x1b\n" +
 	"\ttask_pass\x18\x03 \x01(\x03R\btaskPass\x12\x17\n" +
-	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\x87\x04\n" +
+	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\xa1\x04\n" +
 	"\bTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -529,7 +537,8 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\x11version_directive\x18\b \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12\x14\n" +
 	"\x05stamp\x18\t \x01(\x05R\x05stamp\x12<\n" +
 	"\bpriority\x18\n" +
-	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\"\xef\x03\n" +
+	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12\x18\n" +
+	"\aattempt\x18\v \x01(\x05R\aattempt\"\xef\x03\n" +
 	"\rTaskQueueInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12A\n" +

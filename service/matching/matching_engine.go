@@ -576,6 +576,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		VersionDirective: addRequest.VersionDirective,
 		Stamp:            addRequest.Stamp,
 		Priority:         addRequest.Priority,
+		Attempt:          addRequest.GetAttempt(),
 	}
 
 	return pm.AddTask(ctx, addTaskParams{

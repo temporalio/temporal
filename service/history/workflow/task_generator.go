@@ -551,6 +551,8 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 		TaskQueue:        activityInfo.TaskQueue,
 		ScheduledEventID: activityInfo.ScheduledEventId,
 		Version:          activityInfo.Version,
+		Attempt:          activityInfo.GetAttempt(),
+		Stamp:            activityInfo.Stamp,
 	})
 
 	return nil

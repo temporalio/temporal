@@ -837,6 +837,7 @@ func randomTaskInfo() *persistencespb.AllocatedTaskInfo {
 			ScheduledEventId: rand.Int63(),
 			CreateTime:       timestamppb.New(rt1),
 			ExpiryTime:       timestamppb.New(rt2),
+			Attempt:          rand.Int31n(5) + 1,
 		},
 		TaskId: rand.Int63(),
 	}
@@ -854,6 +855,7 @@ func randomTaskInfoWithAge(age time.Duration) *persistencespb.AllocatedTaskInfo 
 			ScheduledEventId: rand.Int63(),
 			CreateTime:       timestamppb.New(rt1),
 			ExpiryTime:       timestamppb.New(rt2),
+			Attempt:          rand.Int31n(5) + 1,
 		},
 		TaskId: rand.Int63(),
 	}

@@ -80,6 +80,8 @@ func (s *taskSerializerSuite) TestTransferActivityTask() {
 		TaskQueue:           shuffle.String("random task queue name"),
 		ScheduledEventID:    rand.Int63(),
 		Version:             rand.Int63(),
+		Stamp:               rand.Int31n(5) + 1,
+		Attempt:             rand.Int31n(5) + 1,
 	}
 
 	s.assertEqualTasks(activityTask)

@@ -107,6 +107,7 @@ func (f *priForwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				Stamp:                  task.event.Data.GetStamp(),
 				VersionDirective:       task.event.Data.GetVersionDirective(),
 				Priority:               task.event.Data.GetPriority(),
+				Attempt:                task.event.Data.GetAttempt(),
 			},
 		)
 	default:

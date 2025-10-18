@@ -744,6 +744,7 @@ type AddActivityTaskRequest struct {
 	ForwardInfo      *v18.TaskForwardInfo      `protobuf:"bytes,11,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
 	Stamp            int32                     `protobuf:"varint,12,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	Priority         *v11.Priority             `protobuf:"bytes,13,opt,name=priority,proto3" json:"priority,omitempty"`
+	Attempt          int32                     `protobuf:"varint,14,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -846,6 +847,13 @@ func (x *AddActivityTaskRequest) GetPriority() *v11.Priority {
 		return x.Priority
 	}
 	return nil
+}
+
+func (x *AddActivityTaskRequest) GetAttempt() int32 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
 }
 
 type AddActivityTaskResponse struct {
@@ -5022,7 +5030,7 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\fforward_info\x18\v \x01(\v21.temporal.server.api.taskqueue.v1.TaskForwardInfoR\vforwardInfo\x12<\n" +
 	"\bpriority\x18\f \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\"E\n" +
 	"\x17AddWorkflowTaskResponse\x12*\n" +
-	"\x11assigned_build_id\x18\x01 \x01(\tR\x0fassignedBuildId\"\xa3\x05\n" +
+	"\x11assigned_build_id\x18\x01 \x01(\tR\x0fassignedBuildId\"\xbd\x05\n" +
 	"\x16AddActivityTaskRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12C\n" +
@@ -5035,7 +5043,8 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	" \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12T\n" +
 	"\fforward_info\x18\v \x01(\v21.temporal.server.api.taskqueue.v1.TaskForwardInfoR\vforwardInfo\x12\x14\n" +
 	"\x05stamp\x18\f \x01(\x05R\x05stamp\x12<\n" +
-	"\bpriority\x18\r \x01(\v2 .temporal.api.common.v1.PriorityR\bpriorityJ\x04\b\x03\x10\x04\"E\n" +
+	"\bpriority\x18\r \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12\x18\n" +
+	"\aattempt\x18\x0e \x01(\x05R\aattemptJ\x04\b\x03\x10\x04\"E\n" +
 	"\x17AddActivityTaskResponse\x12*\n" +
 	"\x11assigned_build_id\x18\x01 \x01(\tR\x0fassignedBuildId\"\xd3\x03\n" +
 	"\x14QueryWorkflowRequest\x12!\n" +

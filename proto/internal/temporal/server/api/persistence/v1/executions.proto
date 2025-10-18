@@ -342,6 +342,7 @@ message TransferTaskInfo {
     // It monotonically increments when the activity options are changed.
     // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
     int32 stamp = 17;
+    int32 attempt = 19;
 }
 
 // replication column
