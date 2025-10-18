@@ -28,7 +28,7 @@ type (
 		config         *Config
 		metricsHandler metrics.Handler
 		baseLogger     log.Logger
-		specProcessor  SpecProcessor
+		SpecProcessor  SpecProcessor
 	}
 )
 
@@ -37,7 +37,7 @@ func NewGeneratorTaskExecutor(opts GeneratorTaskExecutorOptions) *GeneratorTaskE
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		baseLogger:     opts.BaseLogger,
-		specProcessor:  opts.SpecProcessor,
+		SpecProcessor:  opts.SpecProcessor,
 	}
 }
 
@@ -81,7 +81,7 @@ func (g *GeneratorTaskExecutor) Execute(
 		t2 = t1
 	}
 
-	result, err := g.specProcessor.ProcessTimeRange(scheduler, t1, t2, scheduler.overlapPolicy(), "", false, nil)
+	result, err := g.SpecProcessor.ProcessTimeRange(scheduler, t1, t2, scheduler.overlapPolicy(), "", false, nil)
 	if err != nil {
 		// An error here should be impossible, send to the DLQ.
 		logger.Error("error processing time range", tag.Error(err))
