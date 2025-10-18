@@ -15,11 +15,13 @@ type SchedulerIdleTaskExecutorOptions struct {
 }
 
 type SchedulerIdleTaskExecutor struct {
-	SchedulerIdleTaskExecutorOptions
+	config *Config
 }
 
 func NewSchedulerIdleTaskExecutor(opts SchedulerIdleTaskExecutorOptions) *SchedulerIdleTaskExecutor {
-	return &SchedulerIdleTaskExecutor{opts}
+	return &SchedulerIdleTaskExecutor{
+		config: opts.Config,
+	}
 }
 
 func (r *SchedulerIdleTaskExecutor) Execute(

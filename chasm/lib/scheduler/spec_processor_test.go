@@ -45,16 +45,16 @@ func newTestSpecProcessor(ctrl *gomock.Controller) *testSpecProcessor {
 	mockMetrics.EXPECT().Timer(gomock.Any()).Return(metrics.NoopTimerMetricFunc).AnyTimes()
 
 	return &testSpecProcessor{
-		SpecProcessor: &scheduler.SpecProcessorImpl{
-			Config: &scheduler.Config{
+		SpecProcessor: scheduler.NewSpecProcessor(
+			&scheduler.Config{
 				Tweakables: func(_ string) scheduler.Tweakables {
 					return scheduler.DefaultTweakables
 				},
 			},
-			MetricsHandler: mockMetrics,
-			Logger:         log.NewTestLogger(),
-			SpecBuilder:    legacyscheduler.NewSpecBuilder(),
-		},
+			mockMetrics,
+			log.NewTestLogger(),
+			legacyscheduler.NewSpecBuilder(),
+		),
 	}
 }
 
