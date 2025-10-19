@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -356,7 +357,20 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	}
 
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
-		return c.matcher.PollForQuery(ctx, pollMetadata)
+		ctx, cancel := context.WithCancel(ctx)
+		key := uuid.New()
+		// Listening to registry changes in case the cluster becomes active while the poll is waiting
+		c.namespaceRegistry.RegisterStateChangeCallback(key, func(ns *namespace.Namespace, deletedFromDb bool) {
+			if ns.ID() == namespaceEntry.ID() && namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
+				cancel()
+			}
+		})
+		defer c.namespaceRegistry.UnregisterStateChangeCallback(key)
+
+		t, err := c.matcher.PollForQuery(ctx, pollMetadata)
+		if !errors.Is(err, context.Canceled) {
+			return t, err
+		} // else the cluster has become active so continue regular poll path
 	}
 
 	for {
