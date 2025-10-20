@@ -10,7 +10,7 @@ retract (
 require (
 	cloud.google.com/go/storage v1.51.0
 	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/aws/aws-sdk-go v1.55.6
+	github.com/aws/aws-sdk-go v1.55.8
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cactus/go-statsd-client/v5 v5.1.0
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da
@@ -59,7 +59,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.34.0
 	go.opentelemetry.io/otel/sdk/metric v1.34.0
 	go.opentelemetry.io/otel/trace v1.34.0
-	go.temporal.io/api v1.54.1-0.20251016004347-cf9c3e8c6ed7
+	go.temporal.io/api v1.55.0
 	go.temporal.io/sdk v1.35.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/mock v0.6.0

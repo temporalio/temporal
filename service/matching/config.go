@@ -82,6 +82,7 @@ type (
 
 		RateLimiterRefreshInterval    time.Duration
 		FairnessKeyRateLimitCacheSize dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		MaxFairnessKeyWeightOverrides dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -182,6 +183,7 @@ type (
 		// Rate limiting
 		RateLimiterRefreshInterval    time.Duration
 		FairnessKeyRateLimitCacheSize func() int
+		MaxFairnessKeyWeightOverrides func() int
 
 		BreakdownMetricsByTaskQueue func() bool
 		BreakdownMetricsByPartition func() bool
@@ -296,6 +298,7 @@ func NewConfig(
 		PriorityLevels:                           dynamicconfig.MatchingPriorityLevels.Get(dc),
 		RateLimiterRefreshInterval:               time.Minute,
 		FairnessKeyRateLimitCacheSize:            dynamicconfig.MatchingFairnessKeyRateLimitCacheSize.Get(dc),
+		MaxFairnessKeyWeightOverrides:            dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
 
 		AdminNamespaceToPartitionDispatchRate:          dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Get(dc),
@@ -441,6 +444,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		RateLimiterRefreshInterval: config.RateLimiterRefreshInterval,
 		FairnessKeyRateLimitCacheSize: func() int {
 			return config.FairnessKeyRateLimitCacheSize(ns.String(), taskQueueName, taskType)
+		},
+		MaxFairnessKeyWeightOverrides: func() int {
+			return config.MaxFairnessKeyWeightOverrides(ns.String(), taskQueueName, taskType)
 		},
 		PollerHistoryTTL: func() time.Duration {
 			return config.PollerHistoryTTL(ns.String())
