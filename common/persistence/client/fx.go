@@ -89,11 +89,13 @@ func ClusterNameProvider(config *cluster.Config) ClusterName {
 
 func EventBlobCacheProvider(
 	dc *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) persistence.XDCCache {
 	return persistence.NewEventsBlobCache(
 		dynamicconfig.XDCCacheMaxSizeBytes.Get(dc)(),
 		20*time.Second,
+		metricsHandler,
 		logger,
 	)
 }
