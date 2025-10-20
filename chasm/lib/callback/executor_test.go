@@ -111,8 +111,8 @@ func TestCallback_Invoke_Outcomes(t *testing.T) {
 				CallbackState: &callbackspb.CallbackState{
 					RequestId: "request-id",
 					Callback: &callbackspb.Callback{
-						Variant: &callbackspb.Callback_Nexus_{
-							Nexus: &callbackspb.Callback_Nexus{
+						Variant: &callbackspb.Callback_Nexus{
+							Nexus: &callbackspb.Nexus{
 								Url: "http://localhost",
 							},
 						},
@@ -125,9 +125,6 @@ func TestCallback_Invoke_Outcomes(t *testing.T) {
 				},
 				// Pre-populate the fields needed for invoke()
 				completion: completion,
-				nexus: &callbackspb.Callback_Nexus{
-					Url: "http://localhost",
-				},
 			}
 
 			// Create executor
@@ -189,8 +186,8 @@ func TestBackoffTaskExecutor_Execute(t *testing.T) {
 			RequestId:        "request-id",
 			RegistrationTime: timestamppb.New(timeSource.Now()),
 			Callback: &callbackspb.Callback{
-				Variant: &callbackspb.Callback_Nexus_{
-					Nexus: &callbackspb.Callback_Nexus{
+				Variant: &callbackspb.Callback_Nexus{
+					Nexus: &callbackspb.Nexus{
 						Url: "http://localhost",
 					},
 				},
@@ -370,8 +367,8 @@ func TestBackoffTaskExecutor_GenerateInvocationTask(t *testing.T) {
 	callback := &Callback{
 		CallbackState: &callbackspb.CallbackState{
 			Callback: &callbackspb.Callback{
-				Variant: &callbackspb.Callback_Nexus_{
-					Nexus: &callbackspb.Callback_Nexus{
+				Variant: &callbackspb.Callback_Nexus{
+					Nexus: &callbackspb.Nexus{
 						Url: "http://localhost:8080/callback",
 					},
 				},
@@ -380,8 +377,9 @@ func TestBackoffTaskExecutor_GenerateInvocationTask(t *testing.T) {
 	}
 
 	// Test task generation works correctly
-	task, err := executor.generateInvocationTask(callback)
+	task, taskAttr, err := executor.generateInvocationTask(callback)
 	require.NoError(t, err)
 	require.NotNil(t, task)
 	require.Equal(t, "http://localhost:8080/callback", task.Url)
+	require.Equal(t, "http://localhost:8080", taskAttr.Destination)
 }

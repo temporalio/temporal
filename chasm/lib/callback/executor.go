@@ -1,30 +1,10 @@
-// Package callback provides CHASM-based callback execution infrastructure.
-//
-// This package is a port of the HSM-based callback execution system from
-// components/callbacks/executors.go.
-//
-// HSM Pattern (Old):
-//   - Used hsm.Registry with RegisterImmediateExecutor and RegisterTimerExecutor
-//   - Task execution through env.Access() with hsm.AccessRead/Write
-//   - State transitions via hsm.MachineTransition with explicit transition types
-//   - Results returned as invocationResult interface types
-//   - LoadInvocationArgs and saveResult were separate reusable methods
-//
-// CHASM Pattern (New):
-//   - Explicit executor structs with Execute() and Validate() methods
-//   - Component access through chasm.ReadComponent and chasm.UpdateComponent
-//   - Direct state manipulation by setting fields (Status, NextAttemptScheduleTime)
-//   - Results returned as CallbackStatus enum values
-//   - Logic inlined in Execute() methods for clarity
-//
-// The core HTTP invocation logic remains unchanged - only the state management
-// framework differs.
 package callback
 
 import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -80,10 +60,6 @@ func (e *InvocationTaskExecutor) Execute(
 	var callback *Callback
 
 	// Read the invoker component and load invocation arguments.
-	// This replaces the HSM pattern of env.Access(ctx, ref, hsm.AccessRead, ...) with
-	// CHASM's chasm.ReadComponent(). We extract the callback data and prepare the
-	// nexusInvocation struct fields (completion, attempt, nexus variant) similar to
-	// HSM's loadInvocationArgs() in executors.go:132-194.
 	_, err := chasm.ReadComponent(
 		ctx,
 		invokerRef,
@@ -104,7 +80,7 @@ func (e *InvocationTaskExecutor) Execute(
 			callback.WorkflowId = c.WorkflowId
 			callback.RunId = c.RunId
 			callback.Attempt = c.Attempt
-			callback.nexus = c.Callback.GetNexus()
+			callback.Callback = c.Callback
 			callback.NamespaceId = c.NamespaceId
 			if err != nil {
 				return struct{}{}, err
@@ -191,14 +167,14 @@ func (e *BackoffTaskExecutor) Execute(
 	callback.NextAttemptScheduleTime = nil
 	callback.Status = callbackspb.CALLBACK_STATUS_SCHEDULED
 
-	// Generate an invocation task for the next attempt
-	invocationTask, err := e.generateInvocationTask(callback)
+	// Generate an invocation task and task attributes for the next attempt
+	invocationTask, taskAttrs, err := e.generateInvocationTask(callback)
 	if err != nil {
 		return fmt.Errorf("failed to generate invocation task: %w", err)
 	}
 
 	// Add the task to be executed
-	ctx.AddTask(callback, chasm.TaskAttributes{}, invocationTask)
+	ctx.AddTask(callback, taskAttrs, invocationTask)
 
 	return nil
 }
@@ -213,19 +189,31 @@ func (e *BackoffTaskExecutor) Validate(
 	return callback.Status == callbackspb.CALLBACK_STATUS_BACKING_OFF, nil
 }
 
-// generateInvocationTask creates an InvocationTask based on the callback variant
-func (e *BackoffTaskExecutor) generateInvocationTask(callback *Callback) (*callbackspb.InvocationTask, error) {
+// generateInvocationTask creates an InvocationTask and TaskAttributes based on the callback variant.
+// This is the CHASM port of HSM's RegenerateTasks logic from statemachine.go:79-100.
+// The destination (scheme + host) is extracted from the URL and used for task routing,
+// matching HSM's pattern where InvocationTask stores destination as u.Scheme + "://" + u.Host.
+func (e *BackoffTaskExecutor) generateInvocationTask(callback *Callback) (*callbackspb.InvocationTask, chasm.TaskAttributes, error) {
 	switch variant := callback.Callback.GetVariant().(type) {
-	case *callbackspb.Callback_Nexus_:
-		// For Nexus callbacks, extract the destination from the URL
-		// This matches the HSM behavior of extracting scheme + host
-		url := variant.Nexus.Url
-		// For now, we'll use the full URL as destination
-		// TODO seankane: Extract just scheme + host like HSM does
+	case *callbackspb.Callback_Nexus:
+		// Parse URL to extract scheme and host, matching HSM's behavior
+		// from statemachine.go:86-90
+		u, err := url.Parse(variant.Nexus.Url)
+		if err != nil {
+			return nil, chasm.TaskAttributes{}, fmt.Errorf("failed to parse URL: %w", err)
+		}
+
+		// Extract destination (scheme + host) for task routing
+		destination := u.Scheme + "://" + u.Host
+
 		return &callbackspb.InvocationTask{
-			Url: url,
-		}, nil
+				Url: variant.Nexus.Url,
+			},
+			chasm.TaskAttributes{
+				Destination: destination,
+			},
+			nil
 	default:
-		return nil, fmt.Errorf("unsupported callback variant: %v", variant)
+		return nil, chasm.TaskAttributes{}, fmt.Errorf("unsupported callback variant: %v", variant)
 	}
 }

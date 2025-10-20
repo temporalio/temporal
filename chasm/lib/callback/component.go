@@ -29,6 +29,9 @@ const (
 	Archetype chasm.Archetype = "Callback"
 )
 
+// Callback represents a callback component in CHASM.
+//
+// This is the CHASM port of HSM's nexusInvocation struct from nexus_invocation.go:25-32.
 type Callback struct {
 	chasm.UnimplementedComponent
 
@@ -41,7 +44,6 @@ type Callback struct {
 	// Fields from HSM's nexusInvocation struct (nexus_invocation.go:35-40)
 	// These hold the invocation context needed for the HTTP request
 	completion nexusrpc.OperationCompletion
-	nexus      *callbackspb.Callback_Nexus
 }
 
 func NewCallback(
@@ -104,14 +106,14 @@ func (c *Callback) invoke(
 		}
 	}
 
-	request, err := nexusrpc.NewCompletionHTTPRequest(ctx, task.Url, c.completion)
+	request, err := nexusrpc.NewCompletionHTTPRequest(ctx, taskAttributes.Destination, c.completion)
 	if err != nil {
 		return callbackspb.CALLBACK_STATUS_FAILED
 	}
 	if request.Header == nil {
 		request.Header = make(http.Header)
 	}
-	for k, v := range c.nexus.Header {
+	for k, v := range c.Callback.GetNexus().Header {
 		request.Header.Set(k, v)
 	}
 
