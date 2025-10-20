@@ -1293,17 +1293,16 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskToProto(
 	syncWorkflowStateTask *tasks.SyncWorkflowStateTask,
 ) *persistencespb.ReplicationTaskInfo {
 	return &persistencespb.ReplicationTaskInfo{
-		NamespaceId:              syncWorkflowStateTask.NamespaceID,
-		WorkflowId:               syncWorkflowStateTask.WorkflowID,
-		RunId:                    syncWorkflowStateTask.RunID,
-		TaskType:                 enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
-		TaskId:                   syncWorkflowStateTask.TaskID,
-		Version:                  syncWorkflowStateTask.Version,
-		VisibilityTime:           timestamppb.New(syncWorkflowStateTask.VisibilityTimestamp),
-		Priority:                 syncWorkflowStateTask.Priority,
-		TargetClusters:           syncWorkflowStateTask.TargetClusters,
-		IsForceReplication:       syncWorkflowStateTask.IsForceReplication,
-		IsCloseTransferTaskAcked: syncWorkflowStateTask.IsCloseTransferTaskAcked,
+		NamespaceId:        syncWorkflowStateTask.NamespaceID,
+		WorkflowId:         syncWorkflowStateTask.WorkflowID,
+		RunId:              syncWorkflowStateTask.RunID,
+		TaskType:           enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
+		TaskId:             syncWorkflowStateTask.TaskID,
+		Version:            syncWorkflowStateTask.Version,
+		VisibilityTime:     timestamppb.New(syncWorkflowStateTask.VisibilityTimestamp),
+		Priority:           syncWorkflowStateTask.Priority,
+		TargetClusters:     syncWorkflowStateTask.TargetClusters,
+		IsForceReplication: syncWorkflowStateTask.IsForceReplication,
 	}
 }
 
@@ -1320,13 +1319,12 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskFromProto(
 			syncWorkflowStateTask.WorkflowId,
 			syncWorkflowStateTask.RunId,
 		),
-		VisibilityTimestamp:      visibilityTimestamp,
-		Version:                  syncWorkflowStateTask.Version,
-		TaskID:                   syncWorkflowStateTask.TaskId,
-		Priority:                 syncWorkflowStateTask.Priority,
-		TargetClusters:           syncWorkflowStateTask.TargetClusters,
-		IsForceReplication:       syncWorkflowStateTask.IsForceReplication,
-		IsCloseTransferTaskAcked: syncWorkflowStateTask.IsCloseTransferTaskAcked,
+		VisibilityTimestamp: visibilityTimestamp,
+		Version:             syncWorkflowStateTask.Version,
+		TaskID:              syncWorkflowStateTask.TaskId,
+		Priority:            syncWorkflowStateTask.Priority,
+		TargetClusters:      syncWorkflowStateTask.TargetClusters,
+		IsForceReplication:  syncWorkflowStateTask.IsForceReplication,
 	}
 }
 
