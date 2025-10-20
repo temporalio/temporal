@@ -213,9 +213,10 @@ type InternalTaskQueueStatus struct {
 	ApproximateBacklogCount int64                  `protobuf:"varint,5,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3" json:"approximate_backlog_count,omitempty"`
 	MaxReadLevel            int64                  `protobuf:"varint,6,opt,name=max_read_level,json=maxReadLevel,proto3" json:"max_read_level,omitempty"`
 	FairMaxReadLevel        *FairLevel             `protobuf:"bytes,9,opt,name=fair_max_read_level,json=fairMaxReadLevel,proto3" json:"fair_max_read_level,omitempty"`
-	Draining                bool                   `protobuf:"varint,10,opt,name=draining,proto3" json:"draining,omitempty"` // this status is from a draining queue
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// Draining means that this status is from a draining queue.
+	Draining      bool `protobuf:"varint,10,opt,name=draining,proto3" json:"draining,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InternalTaskQueueStatus) Reset() {

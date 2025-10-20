@@ -68,7 +68,7 @@ func (s *PrioritySuite) TestPriority_Activity_Basic() {
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Equal(3, len(task.History.Events))
+				s.Len(task.History.Events, 3)
 
 				var wfidx int
 				_, err := fmt.Sscanf(task.WorkflowExecution.WorkflowId, "wf%d", &wfidx)
@@ -155,7 +155,7 @@ func (s *PrioritySuite) TestSubqueue_Migration() {
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Equal(3, len(task.History.Events))
+				s.Len(task.History.Events, 3)
 
 				var commands []*commandpb.Command
 
@@ -284,7 +284,7 @@ func (s *FairnessSuite) TestFairness_Activity_Basic() {
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Equal(3, len(task.History.Events))
+				s.Len(task.History.Events, 3)
 
 				var wfidx int
 				_, err := fmt.Sscanf(task.WorkflowExecution.WorkflowId, "wf%d", &wfidx)
@@ -402,7 +402,7 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 			_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 				tv,
 				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-					s.Equal(3, len(task.History.Events))
+					s.Len(task.History.Events, 3)
 
 					var commands []*commandpb.Command
 
