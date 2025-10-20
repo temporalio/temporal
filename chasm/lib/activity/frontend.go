@@ -3,9 +3,12 @@ package activity
 import (
 	"context"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type FrontendHandler interface {
@@ -23,17 +26,43 @@ type frontendHandler struct {
 	FrontendHandler
 	client            activitypb.ActivityServiceClient
 	namespaceRegistry namespace.Registry
+	dc                *dynamicconfig.Collection
 }
 
-func NewFrontendHandler(client activitypb.ActivityServiceClient, namespaceRegistry namespace.Registry) FrontendHandler {
+func NewFrontendHandler(client activitypb.ActivityServiceClient, namespaceRegistry namespace.Registry, dc *dynamicconfig.Collection) FrontendHandler {
 	return &frontendHandler{
 		client:            client,
 		namespaceRegistry: namespaceRegistry,
+		dc:                dc,
 	}
 }
 
 func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workflowservice.StartActivityExecutionRequest) (*workflowservice.StartActivityExecutionResponse, error) {
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	activityType := ""
+	if req.ActivityType != nil {
+		activityType = req.ActivityType.GetName()
+	}
+
+	if req.Options.RetryPolicy == nil {
+		req.Options.RetryPolicy = &commonpb.RetryPolicy{}
+	}
+
+	validator := NewRequestAttributesValidator(
+		req.ActivityId,
+		activityType,
+		dynamicconfig.DefaultActivityRetryPolicy.Get(h.dc),
+		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
+		namespaceID,
+		req.Options,
+		req.Priority,
+	)
+
+	err = validator.ValidateAndAdjustTimeouts(durationpb.New(0))
 	if err != nil {
 		return nil, err
 	}
