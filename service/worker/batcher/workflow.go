@@ -95,7 +95,7 @@ type (
 		postResetOperations []*workflowpb.PostResetOperation
 		// Deprecated fields:
 		ResetType        enumspb.ResetType
-		ResetReapplyType enumspb.ResetReapplyType
+		ResetReapplyType enumspb.ResetReapplyType //nolint:staticcheck // SA1019 deprecated but still supported
 	}
 
 	// UpdateOptionsParams is the parameters for updating workflow execution options
@@ -351,7 +351,7 @@ func validateParams(params BatchParams) error {
 		return nil
 	case BatchTypeUnpauseActivities:
 		if params.UnpauseActivitiesParams.ActivityType == "" && !params.UnpauseActivitiesParams.MatchAll {
-			return fmt.Errorf("must provide ActivityType or MatchAll")
+			return errors.New("must provide ActivityType or MatchAll")
 		}
 		return nil
 	case BatchTypeResetActivities:

@@ -255,10 +255,10 @@ type activities struct {
 	concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
-func (a *activities) checkNamespace(namespace string) error {
+func (a *activities) checkNamespace(ns string) error {
 	// Ignore system namespace for backward compatibility.
 	// TODO: Remove the system namespace special handling after 1.19+
-	if namespace != a.namespace.String() && a.namespace.String() != primitives.SystemLocalNamespace {
+	if ns != a.namespace.String() && a.namespace.String() != primitives.SystemLocalNamespace {
 		return errNamespaceMismatch
 	}
 	return nil
@@ -546,19 +546,19 @@ func startTaskProcessor(
 			case BatchTypeReset:
 				err = processTask(ctx, limiter, task,
 					func(execution *commonpb.WorkflowExecution) error {
-						var eventId int64
+						var eventID int64
 						var err error
-						var resetReapplyType enumspb.ResetReapplyType
+						var resetReapplyType enumspb.ResetReapplyType //nolint:staticcheck // SA1019 deprecated but still supported
 						var resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType
 						if batchParams.ResetParams.resetOptions != nil {
 							// Using ResetOptions
 							// Note: getResetEventIDByOptions may modify workflowExecution.RunId, if reset should be to a prior run
-							eventId, err = getResetEventIDByOptions(ctx, batchParams.ResetParams.resetOptions, batchParams.Namespace, execution, frontendClient, logger)
-							resetReapplyType = batchParams.ResetParams.resetOptions.ResetReapplyType
+							eventID, err = getResetEventIDByOptions(ctx, batchParams.ResetParams.resetOptions, batchParams.Namespace, execution, frontendClient, logger)
+							resetReapplyType = batchParams.ResetParams.resetOptions.ResetReapplyType //nolint:staticcheck // SA1019 deprecated but still supported
 							resetReapplyExcludeTypes = batchParams.ResetParams.resetOptions.ResetReapplyExcludeTypes
 						} else {
 							// Old fields
-							eventId, err = getResetEventIDByType(ctx, batchParams.ResetParams.ResetType, batchParams.Namespace, execution, frontendClient, logger)
+							eventID, err = getResetEventIDByType(ctx, batchParams.ResetParams.ResetType, batchParams.Namespace, execution, frontendClient, logger)
 							resetReapplyType = batchParams.ResetParams.ResetReapplyType
 						}
 						if err != nil {
@@ -569,7 +569,7 @@ func startTaskProcessor(
 							WorkflowExecution:         execution,
 							Reason:                    batchParams.Reason,
 							RequestId:                 uuid.New(),
-							WorkflowTaskFinishEventId: eventId,
+							WorkflowTaskFinishEventId: eventID,
 							ResetReapplyType:          resetReapplyType,
 							ResetReapplyExcludeTypes:  resetReapplyExcludeTypes,
 							PostResetOperations:       batchParams.ResetParams.postResetOperations,
