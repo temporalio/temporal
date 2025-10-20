@@ -223,13 +223,18 @@ func convertWorkflowStateReplicationTask(
 			if err := common.DiscardUnknownProto(workflowMutableState); err != nil {
 				return nil, err
 			}
+
+			isCloseTransferTaskAcked := isCloseTransferTaskAckedForWorkflow(mutableState, shardContext)
+
 			return &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
 				SourceTaskId: taskInfo.TaskID,
 				Priority:     taskInfo.Priority,
 				Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
 					SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{
-						WorkflowState: workflowMutableState,
+						WorkflowState:            workflowMutableState,
+						IsForceReplication:       taskInfo.IsForceReplication,
+						IsCloseTransferTaskAcked: isCloseTransferTaskAcked,
 					},
 				},
 				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
@@ -854,13 +859,22 @@ func (c *syncVersionedTransitionTaskConverter) generateBackfillHistoryTask(
 func (c *syncVersionedTransitionTaskConverter) isCloseTransferTaskAcked(
 	mutableState historyi.MutableState,
 ) bool {
+	return isCloseTransferTaskAckedForWorkflow(mutableState, c.shardContext)
+}
+
+// isCloseTransferTaskAckedForWorkflow checks if the close transfer task for a workflow
+// has been acknowledged (past the watermark) in the transfer queue.
+func isCloseTransferTaskAckedForWorkflow(
+	mutableState historyi.MutableState,
+	shardContext historyi.ShardContext,
+) bool {
 	closeTransferTaskID := mutableState.GetExecutionInfo().CloseTransferTaskId
 
 	if closeTransferTaskID == 0 {
 		return false
 	}
 
-	transferQueueState, ok := c.shardContext.GetQueueState(tasks.CategoryTransfer)
+	transferQueueState, ok := shardContext.GetQueueState(tasks.CategoryTransfer)
 	if !ok {
 		return false
 	}

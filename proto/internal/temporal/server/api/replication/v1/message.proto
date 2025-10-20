@@ -179,6 +179,8 @@ message HistoryTaskAttributes {
 
 message SyncWorkflowStateTaskAttributes {
     temporal.server.api.persistence.v1.WorkflowMutableState workflow_state = 1;
+    bool is_force_replication = 2;
+    bool is_close_transfer_task_acked = 3;
 }
 
 message TaskQueueUserDataAttributes {
