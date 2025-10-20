@@ -5816,6 +5816,13 @@ func (ms *MutableStateImpl) RetryActivity(
 		ai.Attempt+1,
 		activityFailure)
 
+	// Delete old per-attempt timeout tasks since they're invalidated by the retry.
+	// Note: ScheduleToCloseTimeoutTask is NOT deleted because it spans across all retry attempts
+	// and is based on FirstScheduledTime, not the current attempt's ScheduledTime.
+	ms.deleteActivityTimeoutTask(ai.ScheduledEventId, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, ai)
+	ms.deleteActivityTimeoutTask(ai.ScheduledEventId, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, ai)
+	ms.deleteActivityTimeoutTask(ai.ScheduledEventId, enumspb.TIMEOUT_TYPE_HEARTBEAT, ai)
+
 	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
@@ -6256,6 +6263,12 @@ func (ms *MutableStateImpl) deleteActivityTimeoutTask(
 	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
 		task = timeoutTasks.ScheduleToStartTimeoutTask
 		timeoutTasks.ScheduleToStartTimeoutTask = nil
+	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
+		task = timeoutTasks.ScheduleToCloseTimeoutTask
+		timeoutTasks.ScheduleToCloseTimeoutTask = nil
+	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
+		task = timeoutTasks.StartToCloseTimeoutTask
+		timeoutTasks.StartToCloseTimeoutTask = nil
 	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 		task = timeoutTasks.HeartbeatTimeoutTask
 		timeoutTasks.HeartbeatTimeoutTask = nil
@@ -6284,39 +6297,11 @@ func (ms *MutableStateImpl) recordActivityTimeoutTasksForDeletion(
 		return
 	}
 
-	timeoutTasks, exists := ms.activityTimeoutTasks[scheduledEventID]
-	if !exists {
-		return
-	}
-
 	// Delete all timeout tasks for this activity
-	if task := timeoutTasks.ScheduleToStartTimeoutTask; task != nil {
-		ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
-			ms.BestEffortDeleteTasks[tasks.CategoryTimer],
-			task.GetKey(),
-		)
-	}
-
-	if task := timeoutTasks.ScheduleToCloseTimeoutTask; task != nil {
-		ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
-			ms.BestEffortDeleteTasks[tasks.CategoryTimer],
-			task.GetKey(),
-		)
-	}
-
-	if task := timeoutTasks.StartToCloseTimeoutTask; task != nil {
-		ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
-			ms.BestEffortDeleteTasks[tasks.CategoryTimer],
-			task.GetKey(),
-		)
-	}
-
-	if task := timeoutTasks.HeartbeatTimeoutTask; task != nil {
-		ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
-			ms.BestEffortDeleteTasks[tasks.CategoryTimer],
-			task.GetKey(),
-		)
-	}
+	ms.deleteActivityTimeoutTask(scheduledEventID, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, activityInfo)
+	ms.deleteActivityTimeoutTask(scheduledEventID, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, activityInfo)
+	ms.deleteActivityTimeoutTask(scheduledEventID, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, activityInfo)
+	ms.deleteActivityTimeoutTask(scheduledEventID, enumspb.TIMEOUT_TYPE_HEARTBEAT, activityInfo)
 
 	delete(ms.activityTimeoutTasks, scheduledEventID)
 }
