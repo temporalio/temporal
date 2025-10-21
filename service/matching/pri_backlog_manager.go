@@ -47,6 +47,7 @@ type (
 		pqMgr      physicalTaskQueueManager
 		config     *taskQueueConfig
 		tqCtx      context.Context
+		isDraining bool
 		db         *taskQueueDB
 		taskWriter *priTaskWriter
 
@@ -79,12 +80,14 @@ func newPriBacklogManager(
 	throttledLogger log.ThrottledLogger,
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
+	isDraining bool,
 ) *priBacklogManagerImpl {
 	bmg := &priBacklogManagerImpl{
 		pqMgr:               pqMgr,
 		config:              config,
 		tqCtx:               tqCtx,
-		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler),
+		isDraining:          isDraining,
+		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler, isDraining),
 		subqueuesByPriority: make(map[priorityKey]subqueueIndex),
 		priorityBySubqueue:  make(map[subqueueIndex]priorityKey),
 		matchingClient:      matchingClient,
@@ -150,6 +153,10 @@ func (c *priBacklogManagerImpl) initState(state taskQueueState, err error) {
 		c.skipFinalUpdate.Store(true)
 		c.pqMgr.UnloadFromPartitionManager(unloadCauseInitError)
 		return
+	}
+
+	if state.otherHasTasks {
+		c.pqMgr.SetupDraining()
 	}
 
 	c.subqueueLock.Lock()
@@ -382,4 +389,12 @@ func (c *priBacklogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 
 func (c *priBacklogManagerImpl) getDB() *taskQueueDB {
 	return c.db
+}
+
+func (c *priBacklogManagerImpl) setPriority(task *internalTask) {
+	c.config.setDefaultPriority(task)
+	if c.isDraining {
+		// draining goes before active backlog so we're guaranteed to finish migration
+		task.effectivePriority -= maxPriorityLevels
+	}
 }

@@ -213,8 +213,10 @@ type InternalTaskQueueStatus struct {
 	ApproximateBacklogCount int64                  `protobuf:"varint,5,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3" json:"approximate_backlog_count,omitempty"`
 	MaxReadLevel            int64                  `protobuf:"varint,6,opt,name=max_read_level,json=maxReadLevel,proto3" json:"max_read_level,omitempty"`
 	FairMaxReadLevel        *FairLevel             `protobuf:"bytes,9,opt,name=fair_max_read_level,json=fairMaxReadLevel,proto3" json:"fair_max_read_level,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// Draining means that this status is from a draining queue.
+	Draining      bool `protobuf:"varint,10,opt,name=draining,proto3" json:"draining,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InternalTaskQueueStatus) Reset() {
@@ -308,6 +310,13 @@ func (x *InternalTaskQueueStatus) GetFairMaxReadLevel() *FairLevel {
 		return x.FairMaxReadLevel
 	}
 	return nil
+}
+
+func (x *InternalTaskQueueStatus) GetDraining() bool {
+	if x != nil {
+		return x.Draining
+	}
+	return false
 }
 
 type TaskQueueVersionInfoInternal struct {
@@ -682,7 +691,7 @@ const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"\bbuild_id\"A\n" +
 	"\tFairLevel\x12\x1b\n" +
 	"\ttask_pass\x18\x01 \x01(\x03R\btaskPass\x12\x17\n" +
-	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\xaa\x04\n" +
+	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\xc6\x04\n" +
 	"\x17InternalTaskQueueStatus\x12\x1d\n" +
 	"\n" +
 	"read_level\x18\x01 \x01(\x03R\treadLevel\x12S\n" +
@@ -693,7 +702,9 @@ const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"\floaded_tasks\x18\x04 \x01(\x03R\vloadedTasks\x12:\n" +
 	"\x19approximate_backlog_count\x18\x05 \x01(\x03R\x17approximateBacklogCount\x12$\n" +
 	"\x0emax_read_level\x18\x06 \x01(\x03R\fmaxReadLevel\x12Z\n" +
-	"\x13fair_max_read_level\x18\t \x01(\v2+.temporal.server.api.taskqueue.v1.FairLevelR\x10fairMaxReadLevel\"\x90\x01\n" +
+	"\x13fair_max_read_level\x18\t \x01(\v2+.temporal.server.api.taskqueue.v1.FairLevelR\x10fairMaxReadLevel\x12\x1a\n" +
+	"\bdraining\x18\n" +
+	" \x01(\bR\bdraining\"\x90\x01\n" +
 	"\x1cTaskQueueVersionInfoInternal\x12p\n" +
 	"\x18physical_task_queue_info\x18\x02 \x01(\v27.temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfoR\x15physicalTaskQueueInfo\"\xc2\x04\n" +
 	"\x15PhysicalTaskQueueInfo\x12?\n" +
