@@ -6,7 +6,7 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/temporalio/tctl-kit/pkg/color"
+	"github.com/fatih/color"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/service/history/tasks"
@@ -101,12 +101,24 @@ func NewCliApp(opts ...Option) *cli.App {
 			EnvVars: []string{"TEMPORAL_CLI_TLS_SERVER_NAME"},
 		},
 		&cli.StringFlag{
-			Name:  color.FlagColor,
-			Usage: fmt.Sprintf("When to use color: %v, %v, %v.", color.Auto, color.Always, color.Never),
-			Value: string(color.Auto),
+			Name:  "color",
+			Usage: fmt.Sprintf("When to use color: %v, %v, %v.", "auto", "always", "never"),
+			Value: "auto",
 		},
 	}
 	prompterFactory := NewPrompterFactory()
+	app.Before = func(ctx *cli.Context) error {
+		colorFlag := ctx.String("color")
+		switch colorFlag {
+		case "always":
+			color.NoColor = false
+		case "never":
+			color.NoColor = true
+		default:
+			// fatih/color will inspect the enviroment and terminal and set a reasonable default.
+		}
+		return nil
+	}
 	app.Commands = getCommands(
 		params.ClientFactory,
 		NewDLQServiceProvider(
@@ -132,9 +144,9 @@ func handleError(c *cli.Context, err error) {
 		return
 	}
 
-	_, _ = fmt.Fprintf(c.App.ErrWriter, "%s %+v\n", color.Red(c, "Error:"), err)
+	_, _ = fmt.Fprintf(c.App.ErrWriter, "%s %+v\n", color.RedString("Error:"), err)
 	if os.Getenv(showErrorStackEnv) != `` {
-		_, _ = fmt.Fprintln(c.App.ErrWriter, color.Magenta(c, "Stack trace:"))
+		_, _ = fmt.Fprintln(c.App.ErrWriter, color.MagentaString("Stack trace:"))
 		debug.PrintStack()
 	} else {
 		_, _ = fmt.Fprintf(c.App.ErrWriter, "('export %s=1' to see stack traces)\n", showErrorStackEnv)

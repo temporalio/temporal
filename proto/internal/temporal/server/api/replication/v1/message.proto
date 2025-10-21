@@ -248,4 +248,5 @@ message VersionedTransitionArtifact {
     NewRunInfo new_run_info = 4;
     bool is_first_sync = 5;
     bool is_close_transfer_task_acked = 6;
+    bool is_force_replication = 7;
 }
