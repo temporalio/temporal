@@ -32,14 +32,19 @@ const (
 
 type (
 	taskQueueDB struct {
-		sync.Mutex
+		// constants
 		config         *taskQueueConfig
 		queue          *PhysicalTaskQueueKey
-		rangeID        int64
+		isDraining     bool
 		store          persistence.TaskManager
 		logger         log.Logger
 		metricsHandler metrics.Handler
-		subqueues      []*dbSubqueue
+
+		// mutable
+		sync.Mutex
+		rangeID       int64
+		subqueues     []*dbSubqueue
+		otherHasTasks bool
 
 		// used to avoid unnecessary metadata writes:
 		lastChange time.Time // updated when metadata is changed in memory
@@ -53,9 +58,10 @@ type (
 	}
 
 	taskQueueState struct {
-		rangeID   int64
-		ackLevel  int64 // TODO(pri): old matcher cleanup, delete later
-		subqueues []persistencespb.SubqueueInfo
+		rangeID       int64
+		ackLevel      int64 // TODO(pri): old matcher cleanup, delete later
+		subqueues     []persistencespb.SubqueueInfo
+		otherHasTasks bool
 	}
 
 	subqueueIndex int
@@ -89,10 +95,12 @@ func newTaskQueueDB(
 	queue *PhysicalTaskQueueKey,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	isDraining bool,
 ) *taskQueueDB {
 	return &taskQueueDB{
 		config:         config,
 		queue:          queue,
+		isDraining:     isDraining,
 		store:          store,
 		logger:         logger,
 		metricsHandler: metricsHandler,
@@ -153,9 +161,10 @@ func (db *taskQueueDB) RenewLease(
 		}
 	}
 	return taskQueueState{
-		rangeID:   db.rangeID,
-		ackLevel:  db.subqueues[subqueueZero].AckLevel, // TODO(pri): cleanup, only used by old backlog manager
-		subqueues: db.cloneSubqueues(),
+		rangeID:       db.rangeID,
+		ackLevel:      db.subqueues[subqueueZero].AckLevel, // TODO(pri): cleanup, only used by old backlog manager
+		subqueues:     db.cloneSubqueues(),
+		otherHasTasks: !db.isDraining && db.otherHasTasks,
 	}, nil
 }
 
@@ -170,6 +179,10 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 	switch err.(type) {
 	case nil:
 		db.rangeID = response.RangeID
+		// If we are the draining one, then assume the other has tasks, so we can migrate
+		// backwards safely. Note that we do this even if enableMigration is turned off so that
+		// if we started migration on a partition, we continue it.
+		db.otherHasTasks = response.TaskQueueInfo.OtherHasTasks || db.isDraining
 		db.subqueues = db.ensureDefaultSubqueuesLocked(
 			response.TaskQueueInfo.Subqueues,
 			response.TaskQueueInfo.AckLevel,
@@ -191,6 +204,11 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 	case *serviceerror.NotFound:
 		db.rangeID = initialRangeID
 		db.subqueues = db.ensureDefaultSubqueuesLocked(nil, 0, 0)
+
+		// Assume otherHasTasks for safe migration, both when we're active and inactive.
+		// We can skip this if useNewMatcher+enableFairness are false and we are the active one.
+		db.otherHasTasks = db.config.NewMatcher || db.config.EnableFairness || db.isDraining
+
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
 			RangeID:       db.rangeID,
 			TaskQueueInfo: db.cachedQueueInfo(),
@@ -403,6 +421,10 @@ func (db *taskQueueDB) CreateTasks(
 	ctx context.Context,
 	reqs []*writeTaskRequest,
 ) (createTasksResponse, error) {
+	if db.isDraining {
+		return createTasksResponse{}, softassert.UnexpectedInternalErr(db.logger, "CreateTasks can't be used in draining mode", nil)
+	}
+
 	db.Lock()
 	defer db.Unlock()
 
@@ -471,6 +493,10 @@ func (db *taskQueueDB) CreateFairTasks(
 	ctx context.Context,
 	reqs []*writeTaskRequest,
 ) (createFairTasksResponse, error) {
+	if db.isDraining {
+		return createFairTasksResponse{}, softassert.UnexpectedInternalErr(db.logger, "CreateTasks can't be used in draining mode", nil)
+	}
+
 	db.Lock()
 	defer db.Unlock()
 
@@ -681,6 +707,7 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 		LastUpdateTime:          timestamp.TimeNowPtrUtc(),
 		ApproximateBacklogCount: db.subqueues[subqueueZero].ApproximateBacklogCount, // backwards compatibility
 		Subqueues:               infos,
+		OtherHasTasks:           db.otherHasTasks,
 	}
 }
 

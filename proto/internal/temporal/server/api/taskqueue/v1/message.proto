@@ -55,6 +55,8 @@ message InternalTaskQueueStatus {
     int64 approximate_backlog_count = 5;
     int64 max_read_level = 6;
     FairLevel fair_max_read_level = 9;
+    // Draining means that this status is from a draining queue.
+    bool draining = 10;
 }
 
 message TaskQueueVersionInfoInternal {
