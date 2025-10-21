@@ -101,20 +101,29 @@ func (c *Persistence) Validate() error {
 				ErrPersistenceConfig,
 				c.SecondaryVisibilityStore)
 		}
-		if isPrimaryEs && isSecondaryEs {
-			// ElasticSearch config for visibilityStore and secondaryVisibilityStore must be the same except for
-			// `indices.visibility` config key and private fields - this is a restriction due to global ES client
-			esConfig := *c.DataStores[c.VisibilityStore].Elasticsearch
-			secEsConfig := *c.DataStores[c.SecondaryVisibilityStore].Elasticsearch
-			esConfig.Indices = nil
-			secEsConfig.Indices = nil
-			if !reflect.DeepEqual(esConfig, secEsConfig) {
-				return fmt.Errorf(
-					"%w: config mismatch for visibilityStore and secondaryVisibilityStore",
-					ErrPersistenceConfig,
-				)
-			}
-		}
+		// The code below prevents configuring two Elasticsearch backed visibility stores.
+		// Doing so was for a long time not possible, because of Temporal using a globally defined Elasticsearch client.
+		// The code has been refactored in multiple steps, creating effectively a visibility store scoped client.
+		// The last changes to make this usable were merged in v1.25 (commit 03e316fa0d1827cd8ee4ec48cb95c7aa8b7c47b0).
+		// The guard is still not removed, because there is still a feature gap of search attributes not being registered on both ES instances.
+		// This happens in later versions and eventually in v1.28 this guard is officially removed (commit 1c701f0da7dbeb108fc3674a58e615a87604fcdc).
+		// Since we only want to use the dual visibility feature to re-index our ES instances we can live with the limitations
+		// of not being able to sync new search attributes. We only any to use dual visibility for the actual re-index and then we disable it again.
+		// Once we reach v1.28 we can fully remove this patch.
+		//if isPrimaryEs && isSecondaryEs {
+		//	// ElasticSearch config for visibilityStore and secondaryVisibilityStore must be the same except for
+		//	// `indices.visibility` config key and private fields - this is a restriction due to global ES client
+		//	esConfig := *c.DataStores[c.VisibilityStore].Elasticsearch
+		//	secEsConfig := *c.DataStores[c.SecondaryVisibilityStore].Elasticsearch
+		//	esConfig.Indices = nil
+		//	secEsConfig.Indices = nil
+		//	if !reflect.DeepEqual(esConfig, secEsConfig) {
+		//		return fmt.Errorf(
+		//			"%w: config mismatch for visibilityStore and secondaryVisibilityStore",
+		//			ErrPersistenceConfig,
+		//		)
+		//	}
+		//}
 	}
 
 	for _, st := range stores {
