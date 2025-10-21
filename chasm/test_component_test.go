@@ -69,7 +69,7 @@ const (
 )
 
 var (
-	testComponentStartTimeSearchAttribute = NewSearchAttributeTimeByField(testComponentStartTimeSAKey, testComponentStartTimeSAKey)
+	testComponentStartTimeSearchAttribute = NewSearchAttributeDateTimeByField(testComponentStartTimeSAKey, testComponentStartTimeSAKey)
 
 	_ VisibilitySearchAttributesProvider = (*TestComponent)(nil)
 	_ VisibilityMemoProvider             = (*TestComponent)(nil)

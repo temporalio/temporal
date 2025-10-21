@@ -608,7 +608,7 @@ const (
 )
 
 var (
-	testComponentPausedSearchAttribute = chasm.NewSearchAttributeBoolByIndex(testComponentPausedSAName, 1)
+	testComponentPausedSearchAttribute = chasm.NewSearchAttributeBool(testComponentPausedSAName, chasm.SearchAttributeFieldBool01)
 
 	_ chasm.VisibilitySearchAttributesProvider = (*testComponent)(nil)
 	_ chasm.VisibilityMemoProvider             = (*testComponent)(nil)
