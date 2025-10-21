@@ -56,21 +56,19 @@ func (e *InvocationTaskExecutor) Execute(
 	task *callbackspb.InvocationTask,
 ) error {
 	var ns *namespace.Namespace
-	// var invoker *Invoker
-	var callback *Callback
 
 	// Read the invoker component and load invocation arguments.
-	_, err := chasm.ReadComponent(
+	callback, err := chasm.ReadComponent(
 		ctx,
 		invokerRef,
-		func(c *Callback, ctx chasm.Context, _ any) (struct{}, error) {
-			callback = &Callback{
+		func(c *Callback, ctx chasm.Context, _ any) (*Callback, error) {
+			callback := &Callback{
 				CallbackState: common.CloneProto(c.CallbackState),
 			}
 
 			nexusCompletion, err := c.CanGetNexusCompletion.Get(ctx)
 			if err != nil {
-				return struct{}{}, err
+				return nil, err
 			}
 
 			c.completion, err = nexusCompletion.GetNexusCompletion(
@@ -83,10 +81,10 @@ func (e *InvocationTaskExecutor) Execute(
 			callback.Callback = c.Callback
 			callback.NamespaceId = c.NamespaceId
 			if err != nil {
-				return struct{}{}, err
+				return nil, err
 			}
 
-			return struct{}{}, nil
+			return callback, nil
 		},
 		nil,
 	)
@@ -127,10 +125,11 @@ func (e *InvocationTaskExecutor) Execute(
 func (e *InvocationTaskExecutor) Validate(
 	ctx chasm.Context,
 	callback *Callback,
-	_ chasm.TaskAttributes,
-	_ *callbackspb.InvocationTask,
+	taskAttributes chasm.TaskAttributes,
+	invocationTask *callbackspb.InvocationTask,
 ) (bool, error) {
-	return callback.Status == callbackspb.CALLBACK_STATUS_SCHEDULED, nil
+	return callback.Attempt == invocationTask.Attempt &&
+		callback.Status == callbackspb.CALLBACK_STATUS_SCHEDULED, nil
 }
 
 // BackoffTaskExecutor is responsible for the retry scheduling after failed
@@ -207,7 +206,8 @@ func (e *BackoffTaskExecutor) generateInvocationTask(callback *Callback) (*callb
 		destination := u.Scheme + "://" + u.Host
 
 		return &callbackspb.InvocationTask{
-				Url: variant.Nexus.Url,
+				Attempt: callback.Attempt,
+				Url:     variant.Nexus.Url,
 			},
 			chasm.TaskAttributes{
 				Destination: destination,
