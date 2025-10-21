@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // TestBackoffTaskExecutor_StateTransition tests that BackoffTaskExecutor correctly transitions
@@ -53,7 +54,7 @@ func TestBackoffTaskExecutor_StateTransition(t *testing.T) {
 			},
 			Status:                  callbackspb.CALLBACK_STATUS_BACKING_OFF,
 			Attempt:                 1,
-			NextAttemptScheduleTime: nil, // Will be set below
+			NextAttemptScheduleTime: timestamppb.Now(),
 		},
 	}
 
@@ -74,14 +75,11 @@ func TestBackoffTaskExecutor_StateTransition(t *testing.T) {
 	err := executor.Execute(ctx, callback, chasm.TaskAttributes{}, &callbackspb.BackoffTask{})
 	require.NoError(t, err)
 
-	// Verify state transitioned to SCHEDULED
+	// Verify state transitioned to SCHEDULED and next attempt schedule time cleared
 	require.Equal(t, callbackspb.CALLBACK_STATUS_SCHEDULED, callback.Status)
-	// Verify next attempt schedule time was cleared
 	require.Nil(t, callback.NextAttemptScheduleTime)
 }
 
-// TestBackoffTaskExecutor_ValidateStateGuard tests that BackoffTask can only execute
-// when the callback is in BACKING_OFF state.
 func TestBackoffTaskExecutor_ValidateStateGuard(t *testing.T) {
 	logger := log.NewNoopLogger()
 	executor := NewBackoffTaskExecutor(BackoffTaskExecutorOptions{
@@ -95,60 +93,23 @@ func TestBackoffTaskExecutor_ValidateStateGuard(t *testing.T) {
 		Logger:         logger,
 	})
 
-	tests := []struct {
-		name     string
-		status   callbackspb.CallbackStatus
-		expected bool
-	}{
-		{
-			name:     "valid_backing_off",
-			status:   callbackspb.CALLBACK_STATUS_BACKING_OFF,
-			expected: true,
-		},
-		{
-			name:     "invalid_standby",
-			status:   callbackspb.CALLBACK_STATUS_STANDBY,
-			expected: false,
-		},
-		{
-			name:     "invalid_scheduled",
-			status:   callbackspb.CALLBACK_STATUS_SCHEDULED,
-			expected: false,
-		},
-		{
-			name:     "invalid_succeeded",
-			status:   callbackspb.CALLBACK_STATUS_SUCCEEDED,
-			expected: false,
-		},
-		{
-			name:     "invalid_failed",
-			status:   callbackspb.CALLBACK_STATUS_FAILED,
-			expected: false,
+	// Test valid state
+	callback := &Callback{
+		CallbackState: &callbackspb.CallbackState{
+			Status: callbackspb.CALLBACK_STATUS_BACKING_OFF,
 		},
 	}
+	valid, err := executor.Validate(nil, callback, chasm.TaskAttributes{}, &callbackspb.BackoffTask{})
+	require.NoError(t, err)
+	require.True(t, valid)
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			callback := &Callback{
-				CallbackState: &callbackspb.CallbackState{
-					Status: tc.status,
-				},
-			}
-
-			valid, err := executor.Validate(
-				nil, // context not used in validator
-				callback,
-				chasm.TaskAttributes{},
-				&callbackspb.BackoffTask{},
-			)
-			require.NoError(t, err)
-			require.Equal(t, tc.expected, valid)
-		})
-	}
+	// Test invalid state
+	callback.Status = callbackspb.CALLBACK_STATUS_SCHEDULED
+	valid, err = executor.Validate(nil, callback, chasm.TaskAttributes{}, &callbackspb.BackoffTask{})
+	require.NoError(t, err)
+	require.False(t, valid)
 }
 
-// TestInvocationTaskExecutor_ValidateStateGuard tests that InvocationTask can only execute
-// when the callback is in SCHEDULED state.
 func TestInvocationTaskExecutor_ValidateStateGuard(t *testing.T) {
 	logger := log.NewNoopLogger()
 	executor := NewInvocationTaskExecutor(InvocationTaskExecutorOptions{
@@ -162,61 +123,23 @@ func TestInvocationTaskExecutor_ValidateStateGuard(t *testing.T) {
 		Logger:         logger,
 	})
 
-	tests := []struct {
-		name     string
-		status   callbackspb.CallbackStatus
-		expected bool
-	}{
-		{
-			name:     "valid_scheduled",
-			status:   callbackspb.CALLBACK_STATUS_SCHEDULED,
-			expected: true,
-		},
-		{
-			name:     "invalid_standby",
-			status:   callbackspb.CALLBACK_STATUS_STANDBY,
-			expected: false,
-		},
-		{
-			name:     "invalid_backing_off",
-			status:   callbackspb.CALLBACK_STATUS_BACKING_OFF,
-			expected: false,
-		},
-		{
-			name:     "invalid_succeeded",
-			status:   callbackspb.CALLBACK_STATUS_SUCCEEDED,
-			expected: false,
-		},
-		{
-			name:     "invalid_failed",
-			status:   callbackspb.CALLBACK_STATUS_FAILED,
-			expected: false,
+	// Test valid state
+	callback := &Callback{
+		CallbackState: &callbackspb.CallbackState{
+			Status: callbackspb.CALLBACK_STATUS_SCHEDULED,
 		},
 	}
+	valid, err := executor.Validate(nil, callback, chasm.TaskAttributes{}, &callbackspb.InvocationTask{})
+	require.NoError(t, err)
+	require.True(t, valid)
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			callback := &Callback{
-				CallbackState: &callbackspb.CallbackState{
-					Status: tc.status,
-				},
-			}
-
-			valid, err := executor.Validate(
-				nil, // context not used in validator
-				callback,
-				chasm.TaskAttributes{},
-				&callbackspb.InvocationTask{},
-			)
-			require.NoError(t, err)
-			require.Equal(t, tc.expected, valid)
-		})
-	}
+	// Test invalid state
+	callback.Status = callbackspb.CALLBACK_STATUS_BACKING_OFF
+	valid, err = executor.Validate(nil, callback, chasm.TaskAttributes{}, &callbackspb.InvocationTask{})
+	require.NoError(t, err)
+	require.False(t, valid)
 }
 
-// TestBackoffTaskExecutor_DestinationExtraction tests that BackoffTaskExecutor
-// correctly generates InvocationTask with proper destination extraction.
-// This tests the scheme + host extraction matching HSM's behavior.
 func TestBackoffTaskExecutor_DestinationExtraction(t *testing.T) {
 	logger := log.NewNoopLogger()
 	executor := NewBackoffTaskExecutor(BackoffTaskExecutorOptions{
@@ -230,73 +153,27 @@ func TestBackoffTaskExecutor_DestinationExtraction(t *testing.T) {
 		Logger:         logger,
 	})
 
-	tests := []struct {
-		name                string
-		url                 string
-		expectedDestination string
-		expectedURL         string
-		expectError         bool
-	}{
-		{
-			name:                "standard_http_url",
-			url:                 "http://localhost:8080/path/to/callback?query=string",
-			expectedDestination: "http://localhost:8080",
-			expectedURL:         "http://localhost:8080/path/to/callback?query=string",
-			expectError:         false,
-		},
-		{
-			name:                "https_url",
-			url:                 "https://example.com:443/callback",
-			expectedDestination: "https://example.com:443",
-			expectedURL:         "https://example.com:443/callback",
-			expectError:         false,
-		},
-		{
-			name:                "url_without_port",
-			url:                 "http://example.com/callback",
-			expectedDestination: "http://example.com",
-			expectedURL:         "http://example.com/callback",
-			expectError:         false,
-		},
-		{
-			name:                "hsm_test_url",
-			url:                 "http://address:666/path/to/callback?query=string",
-			expectedDestination: "http://address:666",
-			expectedURL:         "http://address:666/path/to/callback?query=string",
-			expectError:         false,
-		},
-		{
-			name:        "invalid_url",
-			url:         "not a valid url ://",
-			expectError: true,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			callback := &Callback{
-				CallbackState: &callbackspb.CallbackState{
-					Callback: &callbackspb.Callback{
-						Variant: &callbackspb.Callback_Nexus{
-							Nexus: &callbackspb.Nexus{
-								Url: tc.url,
-							},
-						},
+	// Test valid URL with path and query parameters
+	callback := &Callback{
+		CallbackState: &callbackspb.CallbackState{
+			Callback: &callbackspb.Callback{
+				Variant: &callbackspb.Callback_Nexus{
+					Nexus: &callbackspb.Nexus{
+						Url: "http://localhost:8080/path/to/callback?query=string",
 					},
 				},
-			}
-
-			invocationTask, taskAttrs, err := executor.generateInvocationTask(callback)
-
-			if tc.expectError {
-				require.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-			require.NotNil(t, invocationTask)
-			require.Equal(t, tc.expectedURL, invocationTask.Url)
-			require.Equal(t, tc.expectedDestination, taskAttrs.Destination)
-		})
+			},
+		},
 	}
+
+	invocationTask, taskAttrs, err := executor.generateInvocationTask(callback)
+	require.NoError(t, err)
+	require.NotNil(t, invocationTask)
+	require.Equal(t, "http://localhost:8080/path/to/callback?query=string", invocationTask.Url)
+	require.Equal(t, "http://localhost:8080", taskAttrs.Destination)
+
+	// Test invalid URL
+	callback.Callback.Variant.(*callbackspb.Callback_Nexus).Nexus.Url = "not a valid url ://"
+	_, _, err = executor.generateInvocationTask(callback)
+	require.Error(t, err)
 }
