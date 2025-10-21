@@ -583,6 +583,29 @@ jobs:
           FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_test_suites }} -count=5"
 
+      # Collect Elasticsearch/OpenSearch logs
+      - name: Collect Elasticsearch logs
+        if: always()
+        run: |
+          mkdir -p .testoutput/container-logs
+          # Collect logs for elasticsearch containers if they exist
+          for container in elasticsearch elasticsearch8 opensearch2; do
+            if docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} ps -q $container 2>/dev/null; then
+              echo "Collecting logs for $container..."
+              docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} logs $container > .testoutput/container-logs/${container}.log 2>&1 || true
+            fi
+          done
+
+      # Upload container logs
+      - name: Upload container logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-logs--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{matrix.shard_index}}--${{github.run_attempt}}--${{matrix.name}}--functional-test
+          path: ./.testoutput/container-logs/*.log
+          if-no-files-found: ignore
+          retention-days: 28
+
       # Upload OpenTelemetry traces.
       - name: Upload OpenTelemetry traces
         if: always()
@@ -742,6 +765,29 @@ jobs:
           FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_xdc_test_suites }} -count=5"
 
+      # Collect Elasticsearch/OpenSearch logs
+      - name: Collect Elasticsearch logs
+        if: always()
+        run: |
+          mkdir -p .testoutput/container-logs
+          # Collect logs for elasticsearch containers if they exist
+          for container in elasticsearch elasticsearch8 opensearch2; do
+            if docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} ps -q $container 2>/dev/null; then
+              echo "Collecting logs for $container..."
+              docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} logs $container > .testoutput/container-logs/${container}.log 2>&1 || true
+            fi
+          done
+
+      # Upload container logs
+      - name: Upload container logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-logs--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
+          path: ./.testoutput/container-logs/*.log
+          if-no-files-found: ignore
+          retention-days: 28
+
       # Upload OpenTelemetry traces.
       - name: Upload OpenTelemetry traces
         if: always()
@@ -892,6 +938,29 @@ jobs:
         env:
           FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_ndc_test_suites }} -count=5"
+
+      # Collect Elasticsearch/OpenSearch logs
+      - name: Collect Elasticsearch logs
+        if: always()
+        run: |
+          mkdir -p .testoutput/container-logs
+          # Collect logs for elasticsearch containers if they exist
+          for container in elasticsearch elasticsearch8 opensearch2; do
+            if docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} ps -q $container 2>/dev/null; then
+              echo "Collecting logs for $container..."
+              docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} logs $container > .testoutput/container-logs/${container}.log 2>&1 || true
+            fi
+          done
+
+      # Upload container logs
+      - name: Upload container logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-logs--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
+          path: ./.testoutput/container-logs/*.log
+          if-no-files-found: ignore
+          retention-days: 28
 
       # Upload OpenTelemetry traces.
       - name: Upload OpenTelemetry traces
