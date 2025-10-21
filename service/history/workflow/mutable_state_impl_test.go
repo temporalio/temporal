@@ -1164,128 +1164,53 @@ func (s *mutableStateSuite) TestActivityTimeoutDeletion_PerAttemptTimersDeletedO
 	// are deleted but ScheduleToClose is preserved since it spans all retry attempts.
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
-	version := int64(1)
-	workflowID := "wf-retry-selective-delete"
-	runID := uuid.New()
-	s.mutableState = TestGlobalMutableState(
-		s.mockShard,
-		s.mockEventsCache,
-		s.logger,
-		version,
-		workflowID,
-		runID,
-	)
-
-	// Start the workflow
-	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
-		&commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-		&historyservice.StartWorkflowExecutionRequest{
-			Attempt:                  1,
-			NamespaceId:              s.namespaceEntry.ID().String(),
-			StartRequest:             &workflowservice.StartWorkflowExecutionRequest{},
-			FirstWorkflowTaskBackoff: durationpb.New(0),
-		},
-	)
-	s.NoError(err)
-
-	// Add and start a workflow task
-	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
-	s.NoError(err)
-	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
-		wft.ScheduledEventID,
-		"",
-		&taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		"",
-		nil,
-		nil,
-		nil,
-		false,
-	)
-	s.NoError(err)
-
-	// Schedule an activity with retry policy
-	activityID := "test-activity-retry"
-	activityScheduledEvent, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
-		wft.StartedEventID,
+	// Schedule and start an activity with retry policy
+	_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+		int64(2), // workflowTaskCompletedEventID
 		&commandpb.ScheduleActivityTaskCommandAttributes{
-			ActivityId:             activityID,
-			ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-tq"},
-			ScheduleToCloseTimeout: durationpb.New(60 * time.Second),
-			ScheduleToStartTimeout: durationpb.New(10 * time.Second),
-			StartToCloseTimeout:    durationpb.New(20 * time.Second),
-			HeartbeatTimeout:       durationpb.New(5 * time.Second),
-			RetryPolicy: &commonpb.RetryPolicy{
-				InitialInterval:    durationpb.New(1 * time.Second),
-				MaximumInterval:    durationpb.New(10 * time.Second),
-				BackoffCoefficient: 2.0,
-				MaximumAttempts:    3,
-			},
+			ActivityId:   "activity",
+			ActivityType: &commonpb.ActivityType{Name: "type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "tq"},
+			RetryPolicy:  &commonpb.RetryPolicy{InitialInterval: durationpb.New(time.Second)},
 		},
 		false,
 	)
 	s.NoError(err)
-	scheduledEventID := activityScheduledEvent.GetEventId()
 
-	// Start the activity
-	_, err = s.mutableState.AddActivityTaskStartedEvent(activityInfo, scheduledEventID, "", "", nil, nil, nil)
+	_, err = s.mutableState.AddActivityTaskStartedEvent(activityInfo, activityInfo.ScheduledEventId, "", "", nil, nil, nil)
 	s.NoError(err)
 
 	// Create mock timeout tasks for all types
-	now := time.Now().UTC()
+	workflowKey := s.mutableState.GetWorkflowKey()
+	scheduledEventID := activityInfo.ScheduledEventId
+
 	mockScheduleToCloseTask := &tasks.ActivityTimeoutTask{
-		WorkflowKey: definition.NewWorkflowKey(
-			s.mutableState.GetExecutionInfo().NamespaceId,
-			workflowID,
-			runID,
-		),
-		VisibilityTimestamp: now.Add(60 * time.Second),
-		TaskID:              200,
-		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
-		EventID:             scheduledEventID,
-		Stamp:               activityInfo.Stamp,
+		WorkflowKey: workflowKey,
+		TaskID:      200,
+		TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		EventID:     scheduledEventID,
+		Stamp:       activityInfo.Stamp,
 	}
-
 	mockScheduleToStartTask := &tasks.ActivityTimeoutTask{
-		WorkflowKey: definition.NewWorkflowKey(
-			s.mutableState.GetExecutionInfo().NamespaceId,
-			workflowID,
-			runID,
-		),
-		VisibilityTimestamp: now.Add(10 * time.Second),
-		TaskID:              201,
-		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventID:             scheduledEventID,
-		Stamp:               activityInfo.Stamp,
+		WorkflowKey: workflowKey,
+		TaskID:      201,
+		TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:     scheduledEventID,
+		Stamp:       activityInfo.Stamp,
 	}
-
 	mockStartToCloseTask := &tasks.ActivityTimeoutTask{
-		WorkflowKey: definition.NewWorkflowKey(
-			s.mutableState.GetExecutionInfo().NamespaceId,
-			workflowID,
-			runID,
-		),
-		VisibilityTimestamp: now.Add(20 * time.Second),
-		TaskID:              202,
-		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		EventID:             scheduledEventID,
-		Stamp:               activityInfo.Stamp,
+		WorkflowKey: workflowKey,
+		TaskID:      202,
+		TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		EventID:     scheduledEventID,
+		Stamp:       activityInfo.Stamp,
 	}
-
 	mockHeartbeatTask := &tasks.ActivityTimeoutTask{
-		WorkflowKey: definition.NewWorkflowKey(
-			s.mutableState.GetExecutionInfo().NamespaceId,
-			workflowID,
-			runID,
-		),
-		VisibilityTimestamp: now.Add(5 * time.Second),
-		TaskID:              203,
-		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
-		EventID:             scheduledEventID,
-		Stamp:               activityInfo.Stamp,
+		WorkflowKey: workflowKey,
+		TaskID:      203,
+		TimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		EventID:     scheduledEventID,
+		Stamp:       activityInfo.Stamp,
 	}
 
 	// Store all tasks
@@ -1300,12 +1225,7 @@ func (s *mutableStateSuite) TestActivityTimeoutDeletion_PerAttemptTimersDeletedO
 	}
 
 	// Retry the activity
-	retryState, err := s.mutableState.RetryActivity(
-		activityInfo,
-		&failurepb.Failure{
-			Message: "activity failed",
-		},
-	)
+	retryState, err := s.mutableState.RetryActivity(activityInfo, &failurepb.Failure{})
 	s.NoError(err)
 	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
 

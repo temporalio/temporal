@@ -5817,8 +5817,6 @@ func (ms *MutableStateImpl) RetryActivity(
 		activityFailure)
 
 	// Delete old per-attempt timeout tasks since they're invalidated by the retry.
-	// Note: ScheduleToCloseTimeoutTask is NOT deleted because it spans across all retry attempts
-	// and is based on FirstScheduledTime, not the current attempt's ScheduledTime.
 	ms.deleteActivityTimeoutTask(ai.ScheduledEventId, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, ai)
 	ms.deleteActivityTimeoutTask(ai.ScheduledEventId, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, ai)
 	ms.deleteActivityTimeoutTask(ai.ScheduledEventId, enumspb.TIMEOUT_TYPE_HEARTBEAT, ai)
