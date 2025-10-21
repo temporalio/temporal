@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"fmt"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
@@ -9,6 +10,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -78,9 +80,10 @@ func (g *GeneratorTaskExecutor) Execute(
 	result, err := g.SpecProcessor.ProcessTimeRange(scheduler, t1, t2, scheduler.overlapPolicy(), "", false, nil)
 	if err != nil {
 		// An error here should be impossible, send to the DLQ.
-		logger.Error("error processing time range", tag.Error(err))
+		msg := "failed to process a time range"
+		logger.Error(msg, tag.Error(err))
 		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternalf("failed to process a time range"),
+			serviceerror.NewInternal(msg),
 			err)
 	}
 
@@ -89,8 +92,15 @@ func (g *GeneratorTaskExecutor) Execute(
 		invoker.EnqueueBufferedStarts(ctx, result.BufferedStarts)
 	}
 
-	// Write the new high water mark.
+	// Write the new high water mark and future action times.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
+	if err := g.updateFutureActionTimes(ctx, generator, scheduler); err != nil {
+		msg := "failed to update future action times"
+		logger.Error(msg, tag.Error(err))
+		return fmt.Errorf("%w: %w",
+			serviceerror.NewInternal(msg),
+			err)
+	}
 
 	// Check if the schedule has gone idle.
 	idleTimeTotal := g.Config.Tweakables(scheduler.Namespace).IdleTime
@@ -126,6 +136,47 @@ func (g *GeneratorTaskExecutor) logSchedule(logger log.Logger, msg string, sched
 	logger.Debug(msg,
 		tag.NewStringerTag("spec", jsonStringer{scheduler.Schedule.Spec}),
 		tag.NewStringerTag("policies", jsonStringer{scheduler.Schedule.Policies}))
+}
+
+func (g *GeneratorTaskExecutor) updateFutureActionTimes(
+	ctx chasm.MutableContext,
+	generator *Generator,
+	scheduler *Scheduler,
+) error {
+	nextTime := func(t time.Time) (time.Time, error) {
+		res, err := g.SpecProcessor.GetNextTime(scheduler, t)
+		return res.Next, err
+	}
+
+	// Make sure we don't emit more future times than are remaining.
+	count := recentActionCount
+	if scheduler.Schedule.State.LimitedActions {
+		count = min(int(scheduler.Schedule.State.RemainingActions), recentActionCount)
+	}
+
+	futureTimes := make([]*timestamppb.Timestamp, 0, count)
+	t := timestamp.TimeValue(generator.LastProcessedTime)
+	var err error
+	for len(futureTimes) < count {
+		t, err = nextTime(t)
+		if err != nil {
+			return err
+		}
+		if t.IsZero() {
+			break
+		}
+
+		if scheduler.Info.UpdateTime.AsTime().After(t) {
+			// Skip action times that occur before the schedule's update time.
+			continue
+		}
+
+		futureTimes = append(futureTimes, timestamppb.New(t))
+	}
+
+	generator.FutureActionTimes = futureTimes
+
+	return nil
 }
 
 func (g *GeneratorTaskExecutor) Validate(
