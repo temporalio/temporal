@@ -24,6 +24,8 @@ const (
 )
 
 var (
+	testKeywordSearchAttribute = chasm.NewSearchAttributeKeywordByField(TestKeywordSAFieldName, TestKeywordSAFieldName)
+
 	_ chasm.VisibilitySearchAttributesProvider = (*PayloadStore)(nil)
 	_ chasm.VisibilityMemoProvider             = (*PayloadStore)(nil)
 )
@@ -150,10 +152,7 @@ func (s *PayloadStore) LifecycleState(
 func (s *PayloadStore) SearchAttributes(
 	ctx chasm.Context,
 ) map[string]chasm.VisibilityValue {
-	// TODO: UpsertSearchAttribute as well when CHASM framework supports Per-Component SearchAttributes
-	// For now, we just update a random existing pre-defined SA to make sure the logic works.
-	attr := chasm.NewSearchAttributeKeywordByAlias(TestKeywordSAFieldName, TestKeywordSAFieldName)
-	s.UpsertSearchAttributes(attr.SetValue(TestKeywordSAFieldValue))
+	s.UpsertSearchAttributes(testKeywordSearchAttribute.SetValue(TestKeywordSAFieldValue))
 	return s.ComponentSearchAttributesProvider.SearchAttributes(ctx)
 }
 

@@ -97,7 +97,7 @@ func (tc *TestComponent) Fail(_ MutableContext) {
 
 // SearchAttributes implements VisibilitySearchAttributesProvider interface.
 func (tc *TestComponent) SearchAttributes(ctx Context) map[string]VisibilityValue {
-	attr := NewSearchAttributeTimeByAlias(testComponentStartTimeSAKey, testComponentStartTimeSAKey)
+	attr := NewSearchAttributeTimeByField(testComponentStartTimeSAKey, testComponentStartTimeSAKey)
 	tc.UpsertSearchAttributes(attr.SetValue(tc.ComponentData.GetStartTime().AsTime()))
 	return tc.ComponentSearchAttributesProvider.SearchAttributes(ctx)
 }

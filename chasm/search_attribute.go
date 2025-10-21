@@ -95,7 +95,7 @@ func NewSearchAttributeBoolByIndex(alias string, index int) *SearchAttributeBool
 	}
 }
 
-func NewSearchAttributeBoolByAlias(alias string, field string) *SearchAttributeBool {
+func NewSearchAttributeBoolByField(alias string, field string) *SearchAttributeBool {
 	return &SearchAttributeBool{
 		SearchAttribute: SearchAttribute{
 			alias:     alias,
@@ -123,7 +123,7 @@ func NewSearchAttributeTimeByIndex(alias string, index int) *SearchAttributeTime
 	}
 }
 
-func NewSearchAttributeTimeByAlias(alias string, field string) *SearchAttributeTime {
+func NewSearchAttributeTimeByField(alias string, field string) *SearchAttributeTime {
 	return &SearchAttributeTime{
 		SearchAttribute: SearchAttribute{
 			alias:     alias,
@@ -151,7 +151,7 @@ func NewSearchAttributeFloat64ByIndex(alias string, index int) *SearchAttributeF
 	}
 }
 
-func NewSearchAttributeFloat64ByAlias(alias string, field string) *SearchAttributeFloat64 {
+func NewSearchAttributeFloat64ByField(alias string, field string) *SearchAttributeFloat64 {
 	return &SearchAttributeFloat64{
 		SearchAttribute: SearchAttribute{
 			alias:     alias,
@@ -179,7 +179,7 @@ func NewSearchAttributeKeywordByIndex(alias string, index int) *SearchAttributeK
 	}
 }
 
-func NewSearchAttributeKeywordByAlias(alias string, field string) *SearchAttributeKeyword {
+func NewSearchAttributeKeywordByField(alias string, field string) *SearchAttributeKeyword {
 	return &SearchAttributeKeyword{
 		SearchAttribute: SearchAttribute{
 			alias:     alias,
@@ -207,7 +207,7 @@ func NewSearchAttributeTextByIndex(alias string, index int) *SearchAttributeText
 	}
 }
 
-func NewSearchAttributeTextByAlias(alias string, field string) *SearchAttributeText {
+func NewSearchAttributeTextByField(alias string, field string) *SearchAttributeText {
 	return &SearchAttributeText{
 		SearchAttribute: SearchAttribute{
 			alias:     alias,
@@ -235,7 +235,7 @@ func NewSearchAttributeKeywordListByIndex(alias string, index int) *SearchAttrib
 	}
 }
 
-func NewSearchAttributeKeywordListByAlias(alias string, field string) *SearchAttributeKeywordList {
+func NewSearchAttributeKeywordListByField(alias string, field string) *SearchAttributeKeywordList {
 	return &SearchAttributeKeywordList{
 		SearchAttribute: SearchAttribute{
 			alias:     alias,
