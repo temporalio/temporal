@@ -40,7 +40,7 @@ func (task *SetupTask) Run() error {
 		return err
 	}
 
-	if err := task.setupIndex(); err != nil {
+	if err := task.setupIndex(context.TODO()); err != nil {
 		task.logger.Error("Failed to setup index.", tag.Error(err))
 		return err
 	}
@@ -87,15 +87,25 @@ func (task *SetupTask) setupTemplate() error {
 	return nil
 }
 
-// setupIndex handles index creation
-func (task *SetupTask) setupIndex() error {
+// setupIndex handles index creation. It checks if the index exists and skips creation if it does.
+func (task *SetupTask) setupIndex(ctx context.Context) error {
 	config := task.config
 	if len(config.VisibilityIndex) == 0 {
 		task.logger.Info("Skipping index creation, missing index name")
 		return nil
 	}
 
-	success, err := task.esClient.CreateIndex(context.TODO(), config.VisibilityIndex, nil)
+	// Check if index already exists to make this operation idempotent
+	exists, err := task.esClient.IndexExists(ctx, config.VisibilityIndex)
+	if err != nil {
+		return task.handleOperationFailure("failed to check if index exists", err)
+	}
+	if exists {
+		task.logger.Info("Index already exists, skipping creation", tag.NewStringTag("indexName", config.VisibilityIndex))
+		return nil
+	}
+
+	success, err := task.esClient.CreateIndex(ctx, config.VisibilityIndex, nil)
 	if err != nil {
 		return task.handleOperationFailure("index creation failed", err)
 	} else if !success {
@@ -138,10 +148,10 @@ func (task *SetupTask) RunTemplateUpgrade() error {
 }
 
 // RunIndexCreation runs only index creation
-func (task *SetupTask) RunIndexCreation() error {
+func (task *SetupTask) RunIndexCreation(ctx context.Context) error {
 	task.logger.Info("Starting index creation", tag.NewAnyTag("config", task.config))
 
-	if err := task.setupIndex(); err != nil {
+	if err := task.setupIndex(ctx); err != nil {
 		task.logger.Error("Failed to create index.", tag.Error(err))
 		return err
 	}
