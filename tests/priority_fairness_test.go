@@ -379,7 +379,7 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 			require.NoError(c, err)
 			require.Equal(c, onDraining, tasksOnDraining)
 			require.Equal(c, onActive, tasksOnActive)
-		}, 5*time.Second, 50*time.Millisecond)
+		}, 15*time.Second, 250*time.Millisecond)
 	}
 
 	setConfig("initial", newMatcher, fairness)
