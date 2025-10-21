@@ -184,12 +184,12 @@ BEGIN
     rowid,
     Text01,
     Text02,
-    Text03,
+    Text03
   ) VALUES (
     NEW.rowid,
     NEW.Text01,
     NEW.Text02,
-    NEW.Text03,
+    NEW.Text03
   );
   -- insert into fts_keyword_list table
   INSERT INTO executions_visibility_fts_keyword_list (
@@ -227,13 +227,13 @@ BEGIN
     rowid,
     Text01,
     Text02,
-    Text03,
+    Text03
   ) VALUES (
     'delete',
     OLD.rowid,
     OLD.Text01,
     OLD.Text02,
-    OLD.Text03,
+    OLD.Text03
   );
   -- delete from fts_keyword_list table
   INSERT INTO executions_visibility_fts_keyword_list (
@@ -273,24 +273,24 @@ BEGIN
     rowid,
     Text01,
     Text02,
-    Text03,
+    Text03
   ) VALUES (
     'delete',
     OLD.rowid,
     OLD.Text01,
     OLD.Text02,
-    OLD.Text03,
+    OLD.Text03
   );
   INSERT INTO executions_visibility_fts_text (
     rowid,
     Text01,
     Text02,
-    Text03,
+    Text03
   ) VALUES (
     NEW.rowid,
     NEW.Text01,
     NEW.Text02,
-    NEW.Text03,
+    NEW.Text03
   );
   -- update fts_keyword_list table
   INSERT INTO executions_visibility_fts_keyword_list (
