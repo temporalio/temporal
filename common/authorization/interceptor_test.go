@@ -7,7 +7,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -73,6 +75,7 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 		nil,
 		"",
 		"",
+		dynamicconfig.GetBoolPropertyFn(false),
 	)
 	s.handler = func(ctx context.Context, req interface{}) (interface{}, error) { return true, nil }
 }
@@ -136,6 +139,29 @@ func (s *authorizerInterceptorSuite) TestAuthorizationFailed() {
 	s.Error(err)
 }
 
+func (s *authorizerInterceptorSuite) TestAuthorizationFailedExposed() {
+	interceptor := NewInterceptor(
+		s.mockClaimMapper,
+		s.mockAuthorizer,
+		s.mockMetricsHandler,
+		log.NewNoopLogger(),
+		mockNamespaceChecker(testNamespace),
+		nil,
+		"",
+		"",
+		dynamicconfig.GetBoolPropertyFn(true),
+	)
+
+	authErr := serviceerror.NewInternal("intentional test failure")
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceTarget).
+		Return(Result{Decision: DecisionDeny}, authErr)
+	s.mockMetricsHandler.EXPECT().Counter(metrics.ServiceErrAuthorizeFailedCounter.Name()).Return(metrics.NoopCounterMetricFunc)
+
+	res, err := interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
+	s.Nil(res)
+	s.ErrorIs(err, authErr)
+}
+
 func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
 	admin := &Claims{System: RoleAdmin}
 	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), admin, describeNamespaceTarget).
@@ -155,6 +181,7 @@ func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
 		nil,
 		"",
 		"",
+		dynamicconfig.GetBoolPropertyFn(false),
 	)
 	_, err := interceptor.Intercept(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 	s.NoError(err)
@@ -170,6 +197,7 @@ func (s *authorizerInterceptorSuite) TestAlternateHeaders() {
 		nil,
 		"custom-header",
 		"custom-extra-header",
+		dynamicconfig.GetBoolPropertyFn(false),
 	)
 
 	cases := []struct {

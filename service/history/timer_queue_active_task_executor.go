@@ -296,6 +296,22 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		return result, nil
 	}
 
+	workflow.RecordActivityCompletionMetrics(
+		t.shardContext,
+		mutableState.GetNamespaceEntry().Name(),
+		ai.TaskQueue,
+		workflow.ActivityCompletionMetrics{
+			Status:             workflow.ActivityStatusTimeout,
+			AttemptStartedTime: timestamp.TimeValue(ai.StartedTime),
+			FirstScheduledTime: timestamp.TimeValue(ai.FirstScheduledTime),
+			Closed:             retryState != enumspb.RETRY_STATE_IN_PROGRESS,
+			TimerType:          timerSequenceID.TimerType,
+		},
+		metrics.OperationTag(metrics.TimerActiveTaskActivityTimeoutScope),
+		metrics.WorkflowTypeTag(mutableState.GetWorkflowType().GetName()),
+		metrics.ActivityTypeTag(ai.ActivityType.GetName()),
+		metrics.VersioningBehaviorTag(mutableState.GetEffectiveVersioningBehavior()))
+
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		// TODO uncommment once RETRY_STATE_PAUSED is supported
 		// || retryState == enumspb.RETRY_STATE_PAUSED {
@@ -909,6 +925,7 @@ func (t *timerQueueActiveTaskExecutor) processActivityWorkflowRules(
 		// need to update activity
 		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
 			activityInfo.StartedEventId = common.EmptyEventID
+			activityInfo.StartVersion = common.EmptyVersion
 			activityInfo.StartedTime = nil
 			activityInfo.RequestId = ""
 			return nil
@@ -993,19 +1010,18 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	// Execute all fired pure tasks for a component while holding the workflow lock.
 	processedTimers := 0
 	err = t.executeChasmPureTimers(
-		ctx,
-		wfCtx,
 		ms,
 		task,
-		func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, taskInstance any) error {
+		func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, taskInstance any) (bool, error) {
 			// ExecutePureTask also calls the task's validator. Invalid tasks will no-op
 			// succeed.
-			if err := executor.ExecutePureTask(ctx, taskAttributes, taskInstance); err != nil {
-				return err
+			executed, err := executor.ExecutePureTask(ctx, taskAttributes, taskInstance)
+			if err == nil {
+				processedTimers += 1
+
 			}
 
-			processedTimers += 1
-			return nil
+			return executed, err
 		},
 	)
 	if err != nil {

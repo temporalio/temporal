@@ -118,16 +118,22 @@ func (s *queueV2Store) EnqueueMessage(
 	if err != nil {
 		return nil, err
 	}
-	messageID, err := s.getNextMessageID(ctx, request.QueueType, request.QueueName)
+	lastMessageID, ok, err := s.getMaxMessageID(ctx, request.QueueType, request.QueueName)
 	if err != nil {
 		return nil, err
 	}
-	err = s.tryInsert(ctx, request.QueueType, request.QueueName, request.Blob, messageID)
+	var nextMessageID int64
+	if !ok {
+		nextMessageID = persistence.FirstQueueMessageID
+	} else {
+		nextMessageID = lastMessageID + 1
+	}
+	err = s.tryInsert(ctx, request.QueueType, request.QueueName, request.Blob, nextMessageID)
 	if err != nil {
 		return nil, err
 	}
 	return &persistence.InternalEnqueueMessageResponse{
-		Metadata: persistence.MessageMetadata{ID: messageID},
+		Metadata: persistence.MessageMetadata{ID: nextMessageID},
 	}, nil
 }
 
@@ -427,17 +433,22 @@ func getQueueFromMetadata(
 	}, nil
 }
 
-func (s *queueV2Store) getNextMessageID(ctx context.Context, queueType persistence.QueueV2Type, queueName string) (int64, error) {
-	maxMessageID, ok, err := s.getMaxMessageID(ctx, queueType, queueName)
+func (s *queueV2Store) getMessageCountAndLastID(
+	ctx context.Context,
+	queueType persistence.QueueV2Type,
+	queueName string,
+	partition *persistencespb.QueuePartition,
+) (messageCount int64, maxMessageID int64, err error) {
+	var ok bool
+	maxMessageID, ok, err = s.getMaxMessageID(ctx, queueType, queueName)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	if !ok {
-		return persistence.FirstQueueMessageID, nil
+		return 0, -1, nil // No messages
 	}
-
-	// The next message ID is the max message ID + 1.
-	return maxMessageID + 1, nil
+	messageCount = maxMessageID - partition.MinMessageId + 1
+	return messageCount, maxMessageID, nil
 }
 
 func (s *queueV2Store) getMaxMessageID(ctx context.Context, queueType persistence.QueueV2Type, queueName string) (int64, bool, error) {
@@ -484,14 +495,14 @@ func (s *queueV2Store) ListQueues(
 		if err != nil {
 			return nil, err
 		}
-		nextMessageID, err := s.getNextMessageID(ctx, request.QueueType, queueName)
+		messageCount, lastMessageID, err := s.getMessageCountAndLastID(ctx, request.QueueType, queueName, partition)
 		if err != nil {
 			return nil, err
 		}
-		messageCount := nextMessageID - partition.MinMessageId
 		queues = append(queues, persistence.QueueInfo{
-			QueueName:    queueName,
-			MessageCount: messageCount,
+			QueueName:     queueName,
+			MessageCount:  messageCount,
+			LastMessageID: lastMessageID,
 		})
 	}
 	if err := iter.Close(); err != nil {

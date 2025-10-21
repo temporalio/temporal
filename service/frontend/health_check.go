@@ -53,7 +53,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (enumsspb.HealthState, er
 
 	hosts := resolver.AvailableMembers()
 	if len(hosts) == 0 {
-		return enumsspb.HEALTH_STATE_SERVING, nil
+		return enumsspb.HEALTH_STATE_NOT_SERVING, nil
 	}
 
 	receiveCh := make(chan enumsspb.HealthState, len(hosts))

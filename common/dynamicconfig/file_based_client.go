@@ -14,6 +14,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	expmaps "golang.org/x/exp/maps"
@@ -44,7 +45,8 @@ type (
 	configValueMap map[string][]ConstrainedValue
 
 	fileBasedClient struct {
-		values          atomic.Value // configValueMap
+		values          atomic.Value                    // configValueMap
+		keys            collection.SyncMap[Key, string] // normalized key cache
 		logger          log.Logger
 		reader          FileReader
 		lastUpdatedTime time.Time
@@ -90,6 +92,7 @@ func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConf
 		config:        config,
 		doneCh:        doneCh,
 		subscriptions: make(map[int]ClientUpdateFunc),
+		keys:          collection.NewSyncMap[Key, string](),
 	}
 
 	err := client.init()
@@ -101,8 +104,15 @@ func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConf
 }
 
 func (fc *fileBasedClient) GetValue(key Key) []ConstrainedValue {
+	// Cache normalized keys to avoid string allocations
+	normalized, ok := fc.keys.Get(key)
+	if !ok {
+		normalized = strings.ToLower(key.String())
+		fc.keys.Set(key, normalized)
+	}
+
 	values := fc.values.Load().(configValueMap)
-	return values[strings.ToLower(key.String())]
+	return values[normalized]
 }
 
 func (fc *fileBasedClient) Subscribe(f ClientUpdateFunc) (cancel func()) {

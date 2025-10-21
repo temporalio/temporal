@@ -12,6 +12,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas/calculator"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/telemetry"
 	"go.uber.org/fx"
@@ -37,13 +38,15 @@ type (
 	GrpcServerOptionsParams struct {
 		fx.In
 
-		Logger                 log.Logger
-		RpcFactory             common.RPCFactory
-		RetryableInterceptor   *interceptor.RetryableInterceptor
-		TelemetryInterceptor   *interceptor.TelemetryInterceptor
-		RateLimitInterceptor   *interceptor.RateLimitInterceptor
-		TracingStatsHandler    telemetry.ServerStatsHandler
-		AdditionalInterceptors []grpc.UnaryServerInterceptor `optional:"true"`
+		Logger                       log.Logger
+		RPCFactory                   common.RPCFactory
+		RetryableInterceptor         *interceptor.RetryableInterceptor
+		TelemetryInterceptor         *interceptor.TelemetryInterceptor
+		RateLimitInterceptor         *interceptor.RateLimitInterceptor
+		TracingStatsHandler          telemetry.ServerStatsHandler
+		MetricsStatsHandler          metrics.ServerStatsHandler
+		AdditionalInterceptors       []grpc.UnaryServerInterceptor  `optional:"true"`
+		AdditionalStreamInterceptors []grpc.StreamServerInterceptor `optional:"true"`
 	}
 )
 
@@ -119,20 +122,34 @@ func GrpcServerOptionsProvider(
 	params GrpcServerOptionsParams,
 ) []grpc.ServerOption {
 
-	grpcServerOptions, err := params.RpcFactory.GetInternodeGRPCServerOptions()
+	grpcServerOptions, err := params.RPCFactory.GetInternodeGRPCServerOptions()
 	if err != nil {
 		params.Logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
 
+	multiStats := rpc.MultiStatsHandler{}
 	if params.TracingStatsHandler != nil {
-		grpcServerOptions = append(grpcServerOptions, grpc.StatsHandler(params.TracingStatsHandler))
+		multiStats = append(multiStats, params.TracingStatsHandler)
+	}
+	if params.MetricsStatsHandler != nil {
+		multiStats = append(multiStats, params.MetricsStatsHandler)
+	}
+	if len(multiStats) > 0 {
+		grpcServerOptions = append(grpcServerOptions, grpc.StatsHandler(multiStats))
+	}
+
+	streamInterceptors := []grpc.StreamServerInterceptor{
+		params.TelemetryInterceptor.StreamIntercept,
+		interceptor.CustomErrorStreamInterceptor,
+	}
+	if len(params.AdditionalStreamInterceptors) > 0 {
+		streamInterceptors = append(streamInterceptors, params.AdditionalStreamInterceptors...)
 	}
 
 	return append(
 		grpcServerOptions,
 		grpc.ChainUnaryInterceptor(getUnaryInterceptors(params)...),
-		grpc.ChainStreamInterceptor(params.TelemetryInterceptor.StreamIntercept),
-		grpc.StreamInterceptor(interceptor.CustomErrorStreamInterceptor),
+		grpc.ChainStreamInterceptor(streamInterceptors...),
 	)
 }
 

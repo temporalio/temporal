@@ -248,7 +248,7 @@ func GetHistoryTaskQueueName(
 }
 
 func GetHistoryTaskQueueCategoryID(queueName string) (int, error) {
-	fields := strings.Split(queueName, "_")
+	fields := strings.SplitN(queueName, "_", 4)
 	if len(fields) != 4 {
 		return 0, fmt.Errorf("%w: %s", ErrInvalidQueueName, queueName)
 	}

@@ -10,7 +10,13 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/matching/counter"
+)
+
+const (
+	// Maximum value for priority levels.
+	maxPriorityLevels = 100
 )
 
 type (
@@ -37,8 +43,9 @@ type (
 		// task queue configuration
 
 		RangeSize                                int64
-		NewMatcher                               dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
-		EnableFairness                           dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
+		NewMatcherSub                            dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
+		EnableFairnessSub                        dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
+		EnableMigration                          dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -76,6 +83,7 @@ type (
 
 		RateLimiterRefreshInterval    time.Duration
 		FairnessKeyRateLimitCacheSize dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		MaxFairnessKeyWeightOverrides dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -105,6 +113,7 @@ type (
 
 		ListNexusEndpointsLongPollTimeout dynamicconfig.DurationPropertyFn
 		NexusEndpointsRefreshInterval     dynamicconfig.DurationPropertyFn
+		MinDispatchTaskTimeout            dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
 		PollerScalingBacklogAgeScaleUp  dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PollerScalingWaitTime           dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -132,8 +141,11 @@ type (
 		LongPollExpirationInterval func() time.Duration
 		BacklogTaskForwardTimeout  func() time.Duration
 		RangeSize                  int64
-		NewMatcher                 func(func(bool)) (bool, func())
-		EnableFairness             func(func(bool)) (bool, func())
+		NewMatcher                 bool
+		NewMatcherSub              func(func(bool)) (bool, func())
+		EnableFairness             bool
+		EnableFairnessSub          func(func(bool)) (bool, func())
+		EnableMigration            func() bool
 		GetTasksBatchSize          func() int
 		GetTasksReloadAt           func() int
 		UpdateAckInterval          func() time.Duration
@@ -141,7 +153,8 @@ type (
 		MinTaskThrottlingBurstSize func() int
 		MaxTaskDeleteBatchSize     func() int
 		TaskDeleteInterval         func() time.Duration
-		PriorityLevels             func() priorityKey
+		PriorityLevels             priorityKey
+		DefaultPriorityKey         priorityKey
 
 		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
 		GetUserDataMinWaitTime     time.Duration
@@ -172,6 +185,7 @@ type (
 		// Rate limiting
 		RateLimiterRefreshInterval    time.Duration
 		FairnessKeyRateLimitCacheSize func() int
+		MaxFairnessKeyWeightOverrides func() int
 
 		BreakdownMetricsByTaskQueue func() bool
 		BreakdownMetricsByPartition func() bool
@@ -238,8 +252,9 @@ func NewConfig(
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		RangeSize:                                100000,
-		NewMatcher:                               dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
-		EnableFairness:                           dynamicconfig.MatchingEnableFairness.Subscribe(dc),
+		NewMatcherSub:                            dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
+		EnableFairnessSub:                        dynamicconfig.MatchingEnableFairness.Subscribe(dc),
+		EnableMigration:                          dynamicconfig.MatchingEnableMigration.Get(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
@@ -286,6 +301,7 @@ func NewConfig(
 		PriorityLevels:                           dynamicconfig.MatchingPriorityLevels.Get(dc),
 		RateLimiterRefreshInterval:               time.Minute,
 		FairnessKeyRateLimitCacheSize:            dynamicconfig.MatchingFairnessKeyRateLimitCacheSize.Get(dc),
+		MaxFairnessKeyWeightOverrides:            dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
 
 		AdminNamespaceToPartitionDispatchRate:          dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Get(dc),
@@ -303,6 +319,7 @@ func NewConfig(
 
 		ListNexusEndpointsLongPollTimeout: dynamicconfig.MatchingListNexusEndpointsLongPollTimeout.Get(dc),
 		NexusEndpointsRefreshInterval:     dynamicconfig.MatchingNexusEndpointsRefreshInterval.Get(dc),
+		MinDispatchTaskTimeout:            nexusoperations.MinDispatchTaskTimeout.Get(dc),
 
 		PollerScalingBacklogAgeScaleUp:  dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp.Get(dc),
 		PollerScalingWaitTime:           dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),
@@ -317,14 +334,20 @@ func NewConfig(
 func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *taskQueueConfig {
 	taskQueueName := tq.Name()
 	taskType := tq.TaskType()
+	priorityLevels := priorityKey(config.PriorityLevels(ns.String(), taskQueueName, taskType))
+	priorityLevels = max(priorityLevels, min(priorityLevels, maxPriorityLevels), 1)
+	defaultPriorityKey := (priorityLevels + 1) / 2
 
 	return &taskQueueConfig{
 		RangeSize: config.RangeSize,
-		NewMatcher: func(cb func(bool)) (bool, func()) {
-			return config.NewMatcher(ns.String(), taskQueueName, taskType, cb)
+		NewMatcherSub: func(cb func(bool)) (bool, func()) {
+			return config.NewMatcherSub(ns.String(), taskQueueName, taskType, cb)
 		},
-		EnableFairness: func(cb func(bool)) (bool, func()) {
-			return config.EnableFairness(ns.String(), taskQueueName, taskType, cb)
+		EnableFairnessSub: func(cb func(bool)) (bool, func()) {
+			return config.EnableFairnessSub(ns.String(), taskQueueName, taskType, cb)
+		},
+		EnableMigration: func() bool {
+			return config.EnableMigration(ns.String(), taskQueueName, taskType)
 		},
 		GetTasksBatchSize: func() int {
 			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)
@@ -363,9 +386,8 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		TaskDeleteInterval: func() time.Duration {
 			return config.TaskDeleteInterval(ns.String(), taskQueueName, taskType)
 		},
-		PriorityLevels: func() priorityKey {
-			return priorityKey(config.PriorityLevels(ns.String(), taskQueueName, taskType))
-		},
+		PriorityLevels:             priorityLevels,
+		DefaultPriorityKey:         defaultPriorityKey,
 		GetUserDataLongPollTimeout: config.GetUserDataLongPollTimeout,
 		GetUserDataMinWaitTime:     1 * time.Second,
 		GetUserDataReturnBudget:    returnEmptyTaskTimeBudget,
@@ -429,6 +451,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		FairnessKeyRateLimitCacheSize: func() int {
 			return config.FairnessKeyRateLimitCacheSize(ns.String(), taskQueueName, taskType)
 		},
+		MaxFairnessKeyWeightOverrides: func() int {
+			return config.MaxFairnessKeyWeightOverrides(ns.String(), taskQueueName, taskType)
+		},
 		PollerHistoryTTL: func() time.Duration {
 			return config.PollerHistoryTTL(ns.String())
 		},
@@ -447,6 +472,17 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 	}
 }
 
-func defaultPriorityLevel(priorityLevels priorityKey) priorityKey {
-	return priorityKey(priorityLevels+1) / 2
+func (c *taskQueueConfig) clipPriority(priority priorityKey) priorityKey {
+	if priority == 0 {
+		priority = c.DefaultPriorityKey
+	}
+	priority = max(priority, 1)
+	priority = min(priority, c.PriorityLevels)
+	return priority
+}
+
+func (c *taskQueueConfig) setDefaultPriority(task *internalTask) {
+	if task.effectivePriority == 0 {
+		task.effectivePriority = c.DefaultPriorityKey
+	}
 }

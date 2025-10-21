@@ -346,7 +346,8 @@ type (
 		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
 
-		Tasks map[tasks.Category][]tasks.Task
+		Tasks                 map[tasks.Category][]tasks.Task
+		BestEffortDeleteTasks map[tasks.Category][]tasks.Key
 
 		// TODO deprecate Condition in favor of DBRecordVersion
 		Condition       int64
@@ -416,6 +417,9 @@ type (
 		ShardID      int32
 		TaskCategory tasks.Category
 		TaskKey      tasks.Key
+
+		// BestEffort indicates that this request is a suggestion. System may choose to ignore it without error.
+		BestEffort bool
 	}
 
 	// RangeCompleteHistoryTasksRequest deletes a range of history tasks
@@ -1385,15 +1389,16 @@ func BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, runID string) strin
 
 // SplitHistoryGarbageCleanupInfo returns workflow identity information
 func SplitHistoryGarbageCleanupInfo(info string) (namespaceID, workflowID, runID string, err error) {
-	ss := strings.Split(info, ":")
-	// workflowID can contain ":" so len(ss) can be greater than 3
-	if len(ss) < numItemsInGarbageInfo {
-		return "", "", "", fmt.Errorf("not able to split info for  %s", info)
+	// Expect format: namespaceID:workflowID:runID, but workflowID may contain ':' so we
+	// take everything between the first and last ':' as workflowID.
+	first := strings.IndexByte(info, ':')
+	last := strings.LastIndexByte(info, ':')
+	if first < 0 || first == last { // need at least two ':' to have 3 parts
+		return "", "", "", fmt.Errorf("not able to split info for %s", info)
 	}
-	namespaceID = ss[0]
-	runID = ss[len(ss)-1]
-	workflowEnd := len(info) - len(runID) - 1
-	workflowID = info[len(namespaceID)+1 : workflowEnd]
+	namespaceID = info[:first]
+	workflowID = info[first+1 : last]
+	runID = info[last+1:]
 	return
 }
 

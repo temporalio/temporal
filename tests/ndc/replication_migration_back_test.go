@@ -77,7 +77,6 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	passiveClusterConfig.WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
 	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableReplicationStream.Key():       true,
-		dynamicconfig.EnableEagerNamespaceRefresher.Key(): true,
 		dynamicconfig.NamespaceCacheRefreshInterval.Key(): dynamicconfig.NamespaceCacheRefreshInterval,
 	}
 	s.controller = gomock.NewController(s.T())

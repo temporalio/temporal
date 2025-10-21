@@ -78,6 +78,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	s.ptqMgr = NewMockphysicalTaskQueueManager(s.controller)
 	s.ptqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
 	s.ptqMgr.EXPECT().ProcessSpooledTask(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.ptqMgr.EXPECT().GetFairnessWeightOverrides().AnyTimes().Return(fairnessWeightOverrides{ /* To avoid deadlock with gomock method */ })
 
 	var ctx context.Context
 	ctx, s.cancelCtx = context.WithCancel(context.Background())
@@ -94,6 +95,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 			nil,
 			metrics.NoopMetricsHandler,
 			func() counter.Counter { return counter.NewMapCounter() },
+			false,
 		)
 	} else if s.newMatcher {
 		s.blm = newPriBacklogManager(
@@ -105,6 +107,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 			s.logger,
 			nil,
 			metrics.NoopMetricsHandler,
+			false,
 		)
 	} else {
 		s.blm = newBacklogManager(

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -887,29 +886,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
 	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
 
-	if request.WorkerHeartbeat != nil {
-		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
-		request.WorkerHeartbeat = nil // clear the heartbeat from the request to avoid sending it to matching service
-
-		// route heartbeat to the matching service only if the request is valid (all validation checks passed)
-		go func() {
-			_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
-				NamespaceId: namespaceID.String(),
-				HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
-					Namespace:       request.Namespace,
-					Identity:        request.Identity,
-					WorkerHeartbeat: heartbeats,
-				},
-			})
-
-			if err != nil {
-				wh.logger.Error("Failed to record worker heartbeat.",
-					tag.WorkflowTaskQueueName(request.TaskQueue.GetName()),
-					tag.Error(err))
-			}
-		}()
-	}
-
 	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(childCtx, &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
 		PollerId:    pollerID,
@@ -1302,6 +1278,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		1,
 		nil,
 		common.EmptyVersion,
+		common.EmptyVersion,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1472,6 +1449,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		"",
 		1,
 		nil,
+		common.EmptyVersion,
 		common.EmptyVersion,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
@@ -1657,6 +1635,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		1,
 		nil,
 		common.EmptyVersion,
+		common.EmptyVersion,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1832,6 +1811,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		"",
 		1,
 		nil,
+		common.EmptyVersion,
 		common.EmptyVersion,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
@@ -2538,40 +2518,24 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 	}, nil
 }
 
-// ScanWorkflowExecutions is a visibility API to list large amount of workflow executions in a specific namespace without order.
+// ScanWorkflowExecutions _was_ a Visibility API to list large amount of workflow executions in a specific namespace without order.
+// It has since been deprecated in favor of `ListWorkflowExecutions` and rewritten to use `ListWorkflowExecutions` internally.
+// Deprecated: Use `ListWorkflowExecutions`
 func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *workflowservice.ScanWorkflowExecutionsRequest) (_ *workflowservice.ScanWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
-	if request.GetPageSize() <= 0 || request.GetPageSize() > maxPageSize {
-		request.PageSize = maxPageSize
-	}
-
-	namespaceName := namespace.Name(request.GetNamespace())
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
-	if err != nil {
-		return nil, err
-	}
-
-	req := &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID:   namespaceID,
-		Namespace:     namespaceName,
-		PageSize:      int(request.GetPageSize()),
+	listResp, err := wh.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace:     request.Namespace,
+		PageSize:      request.PageSize,
 		NextPageToken: request.NextPageToken,
-		Query:         request.GetQuery(),
-	}
-	persistenceResp, err := wh.visibilityMgr.ScanWorkflowExecutions(ctx, req)
+		Query:         request.Query,
+	})
 	if err != nil {
 		return nil, err
 	}
-
 	resp := &workflowservice.ScanWorkflowExecutionsResponse{
-		Executions:    persistenceResp.Executions,
-		NextPageToken: persistenceResp.NextPageToken,
+		Executions:    listResp.Executions,
+		NextPageToken: listResp.NextPageToken,
 	}
 	return resp, nil
 }
@@ -3099,6 +3063,12 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
+	// Check if CHASM scheduler experiment is enabled
+	if headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
+		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName.String()) {
+		wh.logger.Debug("CHASM scheduler enabled for request", tag.ScheduleID(request.ScheduleId))
+	}
+
 	if request.Schedule == nil {
 		request.Schedule = &schedulepb.Schedule{}
 	}
@@ -3339,7 +3309,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 		versionStr = worker_versioning.WorkerDeploymentVersionToStringV31(v)
 	}
 
-	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.Identity, request.IgnoreMissingTaskQueues, request.GetConflictToken())
+	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.Identity, request.IgnoreMissingTaskQueues, request.GetConflictToken(), request.GetAllowNoPollers())
 	if err != nil {
 		if common.IsResourceExhausted(err) {
 			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManySetCurrentVersionRequests)
@@ -3398,7 +3368,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		return nil, serviceerror.NewInvalidArgument("Percentage must be between 0 and 100 (inclusive)")
 	}
 
-	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.GetPercentage(), request.GetIdentity(), request.IgnoreMissingTaskQueues, request.GetConflictToken())
+	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.GetPercentage(), request.GetIdentity(), request.IgnoreMissingTaskQueues, request.GetConflictToken(), request.GetAllowNoPollers())
 	if err != nil {
 		if common.IsResourceExhausted(err) {
 			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManySetRampingVersionRequests)
@@ -3491,6 +3461,25 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 		WorkerDeploymentInfo: workerDeploymentInfo,
 		ConflictToken:        cT,
 	}, nil
+}
+
+func (wh *WorkflowHandler) SetWorkerDeploymentManager(ctx context.Context, request *workflowservice.SetWorkerDeploymentManagerRequest) (_ *workflowservice.SetWorkerDeploymentManagerResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if request.GetIdentity() == "" {
+		return nil, serviceerror.NewInvalidArgument("Identity is required")
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	return wh.workerDeploymentClient.SetManager(ctx, namespaceEntry, request)
 }
 
 func (wh *WorkflowHandler) DeleteWorkerDeployment(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentRequest) (_ *workflowservice.DeleteWorkerDeploymentResponse, retError error) {
@@ -5237,23 +5226,8 @@ func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string)
 	if len(rawURL) > wh.config.CallbackURLMaxLength(ns.String()) {
 		return status.Errorf(codes.InvalidArgument, "invalid url: url length longer than max length allowed of %d", wh.config.CallbackURLMaxLength(ns.String()))
 	}
-
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return err
-	}
-	if !(u.Scheme == "http" || u.Scheme == "https") {
-		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
-	}
-	for _, cfg := range wh.config.CallbackEndpointConfigs(ns.String()) {
-		if cfg.Regexp.MatchString(u.Host) {
-			if u.Scheme == "http" && !cfg.AllowInsecure {
-				return status.Errorf(codes.InvalidArgument, "invalid url: callback address does not allow insecure connections: %v", u)
-			}
-			return nil
-		}
-	}
-	return status.Errorf(codes.InvalidArgument, "invalid url: url does not match any configured callback address: %v", u)
+	rules := wh.config.CallbackEndpointConfigs(ns.String())
+	return rules.Validate(rawURL)
 }
 
 type buildIdAndFlag interface {
@@ -6031,23 +6005,35 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	if err != nil {
 		return nil, err
 	}
+
 	// Validation: prohibit setting rate limit on workflow task queues
 	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		return nil, serviceerror.NewInvalidArgument("Setting rate limit on workflow task queues is not allowed.")
 	}
-	queueRateLimit := request.GetUpdateQueueRateLimit()
-	fairnessKeyRateLimitDefault := request.GetUpdateFairnessKeyRateLimitDefault()
+
 	// Validate rate limits
+	queueRateLimit := request.GetUpdateQueueRateLimit()
 	if err := validateRateLimit(queueRateLimit, "UpdateQueueRateLimit"); err != nil {
 		return nil, err
 	}
+	fairnessKeyRateLimitDefault := request.GetUpdateFairnessKeyRateLimitDefault()
 	if err := validateRateLimit(fairnessKeyRateLimitDefault, "UpdateFairnessKeyRateLimitDefault"); err != nil {
 		return nil, err
 	}
+
 	// Validate identity field
 	if err := validateStringField("Identity", request.GetIdentity(), wh.config.MaxIDLengthLimit(), false); err != nil {
 		return nil, err
 	}
+
+	// Validate Fairness Weight Updates
+	setFairnessWeightOverrides := request.GetSetFairnessWeightOverrides()
+	unsetFairnessWeightOverrides := request.GetUnsetFairnessWeightOverrides()
+	limit := wh.config.MaxFairnessWeightOverrideConfigLimit(request.GetNamespace(), request.TaskQueue, request.TaskQueueType)
+	if err := validateFairnessWeightUpdate(setFairnessWeightOverrides, unsetFairnessWeightOverrides, limit); err != nil {
+		return nil, err
+	}
+
 	resp, err := wh.matchingClient.UpdateTaskQueueConfig(ctx, &matchingservice.UpdateTaskQueueConfigRequest{
 		NamespaceId:           namespaceID.String(),
 		UpdateTaskqueueConfig: request,

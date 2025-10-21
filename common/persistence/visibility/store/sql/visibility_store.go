@@ -84,7 +84,7 @@ func (s *VisibilityStore) RecordWorkflowExecutionStarted(
 		return err
 	}
 
-	_, err = s.sqlStore.Db.InsertIntoVisibility(ctx, row)
+	_, err = s.sqlStore.DB.InsertIntoVisibility(ctx, row)
 	return err
 }
 
@@ -103,7 +103,7 @@ func (s *VisibilityStore) RecordWorkflowExecutionClosed(
 	row.ExecutionDuration = &request.ExecutionDuration
 	row.StateTransitionCount = &request.StateTransitionCount
 
-	result, err := s.sqlStore.Db.ReplaceIntoVisibility(ctx, row)
+	result, err := s.sqlStore.DB.ReplaceIntoVisibility(ctx, row)
 	if err != nil {
 		return err
 	}
@@ -129,7 +129,7 @@ func (s *VisibilityStore) UpsertWorkflowExecution(
 		return err
 	}
 
-	result, err := s.sqlStore.Db.ReplaceIntoVisibility(ctx, row)
+	result, err := s.sqlStore.DB.ReplaceIntoVisibility(ctx, row)
 	if err != nil {
 		return err
 	}
@@ -147,7 +147,7 @@ func (s *VisibilityStore) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *manager.VisibilityDeleteWorkflowExecutionRequest,
 ) error {
-	_, err := s.sqlStore.Db.DeleteFromVisibility(ctx, sqlplugin.VisibilityDeleteFilter{
+	_, err := s.sqlStore.DB.DeleteFromVisibility(ctx, sqlplugin.VisibilityDeleteFilter{
 		NamespaceID: request.NamespaceID.String(),
 		RunID:       request.RunID,
 	})
@@ -189,7 +189,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		return nil, err
 	}
 
-	rows, err := s.sqlStore.Db.SelectFromVisibility(ctx, *selectFilter)
+	rows, err := s.sqlStore.DB.SelectFromVisibility(ctx, *selectFilter)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(
 			fmt.Sprintf("ListWorkflowExecutions operation failed. Select failed: %v", err))
@@ -228,13 +228,6 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	}, nil
 }
 
-func (s *VisibilityStore) ScanWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequestV2,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.ListWorkflowExecutions(ctx, request)
-}
-
 func (s *VisibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
@@ -271,7 +264,7 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 		return s.countGroupByWorkflowExecutions(ctx, selectFilter, saTypeMap)
 	}
 
-	count, err := s.sqlStore.Db.CountFromVisibility(ctx, *selectFilter)
+	count, err := s.sqlStore.DB.CountFromVisibility(ctx, *selectFilter)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(
 			fmt.Sprintf("CountWorkflowExecutions operation failed. Query failed: %v", err))
@@ -294,7 +287,7 @@ func (s *VisibilityStore) countGroupByWorkflowExecutions(
 		}
 	}
 
-	rows, err := s.sqlStore.Db.CountGroupByFromVisibility(ctx, *selectFilter)
+	rows, err := s.sqlStore.DB.CountGroupByFromVisibility(ctx, *selectFilter)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(
 			fmt.Sprintf("CountWorkflowExecutions operation failed. Query failed: %v", err))
@@ -327,7 +320,7 @@ func (s *VisibilityStore) GetWorkflowExecution(
 	ctx context.Context,
 	request *manager.GetWorkflowExecutionRequest,
 ) (*store.InternalGetWorkflowExecutionResponse, error) {
-	row, err := s.sqlStore.Db.GetFromVisibility(ctx, sqlplugin.VisibilityGetFilter{
+	row, err := s.sqlStore.DB.GetFromVisibility(ctx, sqlplugin.VisibilityGetFilter{
 		NamespaceID: request.NamespaceID.String(),
 		RunID:       request.RunID,
 	})
@@ -406,15 +399,6 @@ func (s *VisibilityStore) prepareSearchAttributesForDb(
 		if value == nil {
 			delete(searchAttributes, name)
 			continue
-		}
-		tp, err := saTypeMap.GetType(name)
-		if err != nil {
-			return nil, err
-		}
-		if tp == enumspb.INDEXED_VALUE_TYPE_DATETIME {
-			if dt, ok := value.(time.Time); ok {
-				searchAttributes[name] = dt.Format(time.RFC3339Nano)
-			}
 		}
 	}
 	return &searchAttributes, nil

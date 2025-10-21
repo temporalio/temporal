@@ -140,7 +140,13 @@ func (vsa VisibilitySearchAttributes) Value() (driver.Value, error) {
 	return string(bs), nil
 }
 
-func ParseCountGroupByRows(rows *sql.Rows, groupBy []string) ([]VisibilityCountRow, error) {
+type dbRowsIf interface {
+	Next() bool
+	Scan(...any) error
+	Close() error
+}
+
+func ParseCountGroupByRows(rows dbRowsIf, groupBy []string) ([]VisibilityCountRow, error) {
 	// Number of columns is number of group by fields plus the count column.
 	rowValues := make([]any, len(groupBy)+1)
 	for i := range rowValues {
@@ -160,10 +166,25 @@ func ParseCountGroupByRows(rows *sql.Rows, groupBy []string) ([]VisibilityCountR
 				return nil, err
 			}
 		}
-		count := *(rowValues[len(rowValues)-1].(*any))
+		var countTyped int64
+		countValue := reflect.ValueOf(*(rowValues[len(rowValues)-1].(*any)))
+		if countValue.CanInt() {
+			countTyped = countValue.Int()
+		} else if countValue.CanUint() {
+			countTyped = int64(countValue.Uint())
+		} else {
+			// This should never happen.
+			return nil, serviceerror.NewInternal(
+				fmt.Sprintf(
+					"Unable to parse count value from DB (got: %v of type: %T, expected type: integer)",
+					countValue,
+					countValue,
+				),
+			)
+		}
 		res = append(res, VisibilityCountRow{
 			GroupValues: groupValues,
-			Count:       count.(int64),
+			Count:       countTyped,
 		})
 	}
 	return res, nil
@@ -172,24 +193,22 @@ func ParseCountGroupByRows(rows *sql.Rows, groupBy []string) ([]VisibilityCountR
 func parseCountGroupByGroupValue(fieldName string, value any) (any, error) {
 	switch fieldName {
 	case searchattribute.ExecutionStatus:
-		switch typedValue := value.(type) {
-		case int:
-			return enumspb.WorkflowExecutionStatus(typedValue).String(), nil
-		case int32:
-			return enumspb.WorkflowExecutionStatus(typedValue).String(), nil
-		case int64:
-			return enumspb.WorkflowExecutionStatus(typedValue).String(), nil
-		default:
-			// This should never happen.
-			return nil, serviceerror.NewInternal(
-				fmt.Sprintf(
-					"Unable to parse %s value from DB (got: %v of type: %T, expected type: integer)",
-					searchattribute.ExecutionStatus,
-					value,
-					value,
-				),
-			)
+		v := reflect.ValueOf(value)
+		if v.CanInt() {
+			return enumspb.WorkflowExecutionStatus(v.Int()).String(), nil
 		}
+		if v.CanUint() {
+			return enumspb.WorkflowExecutionStatus(v.Uint()).String(), nil
+		}
+		// This should never happen.
+		return nil, serviceerror.NewInternal(
+			fmt.Sprintf(
+				"Unable to parse %s value from DB (got: %v of type: %T, expected type: integer)",
+				searchattribute.ExecutionStatus,
+				value,
+				value,
+			),
+		)
 	default:
 		return value, nil
 	}

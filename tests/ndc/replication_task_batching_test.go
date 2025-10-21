@@ -73,7 +73,6 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	passiveClusterConfig.WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
 	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableReplicationStream.Key():       true,
-		dynamicconfig.EnableEagerNamespaceRefresher.Key(): true,
 		dynamicconfig.EnableReplicationTaskBatching.Key(): true,
 	}
 	s.controller = gomock.NewController(s.T())

@@ -27,6 +27,7 @@ const (
 	resourceExhaustedScopeTag   = "resource_exhausted_scope"
 	PartitionTagName            = "partition"
 	PriorityTagName             = "priority"
+	PersistenceDBKindTagName    = "db_kind"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -354,6 +355,8 @@ const (
 	HistorySignalWithStartWorkflowExecutionScope = "SignalWithStartWorkflowExecution"
 	// HistoryCompleteNexusOperationScope tracks CompleteNexusOperation API calls received by service
 	HistoryCompleteNexusOperationScope = "CompleteNexusOperation"
+	// HistoryCompleteNexusOperationChasmScope tracks CompleteNexusOperationChasm API calls received by service
+	HistoryCompleteNexusOperationChasmScope = "CompleteNexusOperationChasm"
 	// HistorySyncShardStatusScope tracks HistorySyncShardStatus API calls received by service
 	HistorySyncShardStatusScope = "SyncShardStatus"
 	// HistoryShardControllerScope is the scope used by shard controller
@@ -595,6 +598,21 @@ var (
 		"service_error_with_type",
 		WithDescription("The number of all service request errors by error type."),
 	)
+	ServiceConnAccepted = NewCounterDef(
+		"service_grpc_conn_accepted",
+		WithDescription("Number of gRPC's TCP connections accepted by the service."),
+	)
+	ServiceConnClosed = NewCounterDef(
+		"service_grpc_conn_closed",
+		WithDescription("Number of gRPC's TCP connections closed on the service."),
+	)
+	ServiceConnActive = NewGaugeDef(
+		"service_grpc_conn_active",
+		WithDescription("Current number of gRPC's active TCP connections."),
+	)
+	ServiceDialLatency                       = NewTimerDef("service_dial_latency", WithDescription("The latency of establishing a new TCP connection."))
+	ServiceDialSuccessCount                  = NewCounterDef("service_dial_success", WithDescription("Number of TCP dial attempts that successfully established a connection."))
+	ServiceDialErrorCount                    = NewCounterDef("service_dial_error", WithDescription("Number of TCP dial attempts that failed to establish a connection."))
 	ServiceLatency                           = NewTimerDef("service_latency")
 	ServiceLatencyNoUserLatency              = NewTimerDef("service_latency_nouserlatency")
 	ServiceLatencyUserLatency                = NewTimerDef("service_latency_userlatency")
@@ -814,12 +832,30 @@ var (
 		"pending_tasks",
 		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
 	)
-	TaskSchedulerThrottled                               = NewCounterDef("task_scheduler_throttled")
-	QueueScheduleLatency                                 = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
-	QueueReaderCountHistogram                            = NewDimensionlessHistogramDef("queue_reader_count")
-	QueueSliceCountHistogram                             = NewDimensionlessHistogramDef("queue_slice_count")
-	QueueActionCounter                                   = NewCounterDef("queue_actions")
-	ActivityE2ELatency                                   = NewTimerDef("activity_end_to_end_latency")
+	TaskSchedulerThrottled    = NewCounterDef("task_scheduler_throttled")
+	QueueScheduleLatency      = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
+	QueueReaderCountHistogram = NewDimensionlessHistogramDef("queue_reader_count")
+	QueueSliceCountHistogram  = NewDimensionlessHistogramDef("queue_slice_count")
+	QueueActionCounter        = NewCounterDef("queue_actions")
+	ActivityE2ELatency        = NewTimerDef(
+		"activity_end_to_end_latency",
+		WithDescription("DEPRECATED: Will be removed in one of the next releases. Duration of an activity attempt. Use activity_start_to_close_latency instead."),
+	)
+	ActivityStartToCloseLatency = NewTimerDef(
+		"activity_start_to_close_latency",
+		WithDescription("Duration of a single activity attempt. Doesn't include retries or backoffs."),
+	)
+	ActivityScheduleToCloseLatency = NewTimerDef(
+		"activity_schedule_to_close_latency",
+		WithDescription("Duration of activity execution from scheduled time to terminal state. Includes retries and backoffs."),
+	)
+	ActivitySuccess                                      = NewCounterDef("activity_success", WithDescription("Number of activities that succeeded (doesn't include retries)."))
+	ActivityFail                                         = NewCounterDef("activity_fail", WithDescription("Number of activities that failed and won't be retried anymore."))
+	ActivityTaskFail                                     = NewCounterDef("activity_task_fail", WithDescription("Number of activity task failures (includes retries)."))
+	ActivityCancel                                       = NewCounterDef("activity_cancel")
+	ActivityTaskTimeout                                  = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
+	ActivityTimeout                                      = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
+	ActivityPayloadSize                                  = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
 	AckLevelUpdateCounter                                = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                          = NewCounterDef("ack_level_update_failed")
 	CommandCounter                                       = NewCounterDef("command")
@@ -994,6 +1030,11 @@ var (
 		"dlq_message_count",
 		WithDescription("The number of messages currently in DLQ."),
 	)
+	DataLossCounter = NewCounterDef(
+		"data_loss_errors",
+		WithDescription("Total number of data loss errors encountered. This is a high cardinality metrics that has namespace, workflowID and runID tags."+
+			"It is only emitted when system.enableDataLossMetrics is enabled. Only enable this if metrics system can handle it's cardinality"),
+	)
 	ReadNamespaceErrors                     = NewCounterDef("read_namespace_errors")
 	RateLimitedTaskRunnableWaitTime         = NewTimerDef("rate_limited_task_runnable_wait_time")
 	CircuitBreakerExecutableBlocked         = NewCounterDef("circuit_breaker_executable_blocked")
@@ -1071,6 +1112,21 @@ var (
 		"task_retry_transient",
 		WithDescription("Count of tasks that hit a transient error during match or forward and are retried immediately"),
 	)
+
+	// ----------------------------------------------------------------------------------------------------------------
+	// Matching service: Metrics to track the health of worker registry.
+	WorkerRegistryEvictionBlockedByAgeMetric = NewGaugeDef(
+		"worker_registry_eviction_blocked_by_age",
+		WithDescription(
+			"Set if entries could not be evicted due to minEvictAge policy in a given eviction iteration. "+
+				"Reset once a subsequent eviction succeeds.",
+		),
+	)
+	WorkerRegistryCapacityUtilizationMetric = NewGaugeDef(
+		"worker_registry_capacity_utilization",
+		WithDescription("Tracks the ratio of total entries to maxItems."),
+	)
+	// ----------------------------------------------------------------------------------------------------------------
 
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
@@ -1211,6 +1267,10 @@ var (
 		"schedule_action_dropped",
 		WithDescription("The number of schedule actions that failed to start"),
 	)
+	SchedulePayloadSize = NewCounterDef(
+		"schedule_payload_size",
+		WithDescription("The size in bytes of a customer payload (including action results and update signals)"),
+	)
 
 	// Worker Versioning
 	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")
@@ -1267,22 +1327,27 @@ var (
 	CassandraSessionRefreshFailures        = NewCounterDef("cassandra_session_refresh_failures")
 	PersistenceSessionRefreshFailures      = NewCounterDef("persistence_session_refresh_failures")
 	PersistenceSessionRefreshAttempts      = NewCounterDef("persistence_session_refresh_attempts")
+	PersistenceSQLMaxOpenConn              = NewGaugeDef("persistence_sql_max_open_conn")
+	PersistenceSQLOpenConn                 = NewGaugeDef("persistence_sql_open_conn")
+	PersistenceSQLIdleConn                 = NewGaugeDef("persistence_sql_idle_conn")
+	PersistenceSQLInUse                    = NewGaugeDef("persistence_sql_in_use")
 
 	// Common service base metrics
-	RestartCount           = NewCounterDef("restarts")
-	NumGoRoutinesGauge     = NewGaugeDef("num_goroutines")
-	GoMaxProcsGauge        = NewGaugeDef("gomaxprocs")
-	MemoryAllocatedGauge   = NewGaugeDef("memory_allocated")
-	MemoryHeapGauge        = NewGaugeDef("memory_heap")
-	MemoryHeapObjectsGauge = NewGaugeDef("memory_heap_objects")
-	MemoryHeapIdleGauge    = NewGaugeDef("memory_heapidle")
-	MemoryHeapInuseGauge   = NewGaugeDef("memory_heapinuse")
-	MemoryStackGauge       = NewGaugeDef("memory_stack")
-	MemoryMallocsGauge     = NewGaugeDef("memory_mallocs")
-	MemoryFreesGauge       = NewGaugeDef("memory_frees")
-	NumGCCounter           = NewBytesHistogramDef("memory_num_gc")
-	GcPauseMsTimer         = NewTimerDef("memory_gc_pause_ms")
-	NumGCGauge             = NewGaugeDef("memory_num_gc_last",
+	RestartCount            = NewCounterDef("restarts")
+	NumGoRoutinesGauge      = NewGaugeDef("num_goroutines")
+	GoMaxProcsGauge         = NewGaugeDef("gomaxprocs")
+	MemoryAllocatedGauge    = NewGaugeDef("memory_allocated")
+	MemoryHeapGauge         = NewGaugeDef("memory_heap")
+	MemoryHeapObjectsGauge  = NewGaugeDef("memory_heap_objects")
+	MemoryHeapIdleGauge     = NewGaugeDef("memory_heapidle")
+	MemoryHeapInuseGauge    = NewGaugeDef("memory_heapinuse")
+	MemoryHeapReleasedGauge = NewGaugeDef("memory_heapreleased")
+	MemoryStackGauge        = NewGaugeDef("memory_stack")
+	MemoryMallocsGauge      = NewGaugeDef("memory_mallocs")
+	MemoryFreesGauge        = NewGaugeDef("memory_frees")
+	NumGCCounter            = NewBytesHistogramDef("memory_num_gc")
+	GcPauseMsTimer          = NewTimerDef("memory_gc_pause_ms")
+	NumGCGauge              = NewGaugeDef("memory_num_gc_last",
 		WithDescription("Last runtime.MemStats.NumGC"),
 	)
 	GcPauseNsTotal = NewGaugeDef("memory_pause_total_ns_last",

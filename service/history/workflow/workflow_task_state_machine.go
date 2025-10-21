@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -27,6 +28,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -42,6 +44,7 @@ type (
 const (
 	workflowTaskRetryBackoffMinAttempts = 3
 	workflowTaskRetryInitialInterval    = 5 * time.Second
+	maxWorkflowTaskTimeoutToDelete      = 120 * time.Second
 )
 
 func newWorkflowTaskStateMachine(
@@ -240,20 +243,14 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskCompletedEvent(
 }
 
 func (m *workflowTaskStateMachine) ApplyWorkflowTaskFailedEvent() error {
-	m.failWorkflowTask(true)
-	return nil
+	return m.failWorkflowTask(true)
 }
 
-func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(
-	timeoutType enumspb.TimeoutType,
-) error {
-	incrementAttempt := true
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(timeoutType enumspb.TimeoutType) error {
 	// Do not increment workflow task attempt in the case of sticky timeout to prevent creating next workflow task as transient.
-	if timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
-		incrementAttempt = false
-	}
-	m.failWorkflowTask(incrementAttempt)
-	return nil
+	incrementAttempt := timeoutType != enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
+
+	return m.failWorkflowTask(incrementAttempt)
 }
 
 func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
@@ -752,6 +749,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		metrics.FirstAttemptTag(workflowTask.Attempt),
 	)
 
+	numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())
+	if numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0 {
+		if err := m.ms.RemoveReportedProblemsSearchAttribute(); err != nil {
+			return nil, err
+		}
+	}
+
 	return event, nil
 }
 
@@ -808,6 +812,12 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			forkEventVersion,
 			binaryChecksum,
 		)
+
+		if event != nil {
+			m.ms.executionInfo.LastWorkflowTaskFailure = &persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause{
+				LastWorkflowTaskFailureCause: cause,
+			}
+		}
 	}
 
 	if err := m.ApplyWorkflowTaskFailedEvent(); err != nil {
@@ -862,11 +872,17 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 	var event *historypb.HistoryEvent
 	// Avoid creating WorkflowTaskTimedOut history event when workflow task is transient.
 	if !m.ms.IsTransientWorkflowTask() {
+		timeoutType := enumspb.TIMEOUT_TYPE_START_TO_CLOSE
 		event = m.ms.hBuilder.AddWorkflowTaskTimedOutEvent(
 			workflowTask.ScheduledEventID,
 			workflowTask.StartedEventID,
-			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			timeoutType,
 		)
+
+		m.ms.executionInfo.LastWorkflowTaskFailure = &persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType{
+			LastWorkflowTaskTimedOutType: timeoutType,
+		}
+
 	}
 
 	if err := m.ApplyWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
@@ -875,9 +891,29 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 	return event, nil
 }
 
+func (m *workflowTaskStateMachine) recordTimeoutTasksForDeletion(workflowTask *historyi.WorkflowTaskInfo) {
+	// Record persisted workflow task timeout tasks for deletion after successful persistence update.
+	if task := workflowTask.ScheduleToStartTimeoutTask; task != nil {
+		key := task.GetKey()
+		if key.FireTime.Sub(workflowTask.ScheduledTime) < maxWorkflowTaskTimeoutToDelete {
+			m.ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(m.ms.BestEffortDeleteTasks[tasks.CategoryTimer], key)
+		}
+	}
+	if task := workflowTask.StartToCloseTimeoutTask; task != nil {
+		key := task.GetKey()
+		if key.FireTime.Sub(workflowTask.StartedTime) < maxWorkflowTaskTimeoutToDelete {
+			m.ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(m.ms.BestEffortDeleteTasks[tasks.CategoryTimer], key)
+		}
+	}
+}
+
 func (m *workflowTaskStateMachine) failWorkflowTask(
 	incrementAttempt bool,
-) {
+) error {
+	// Get current workflow task info before clearing it, to capture timeout tasks for deletion
+	currentWorkflowTask := m.getWorkflowTaskInfo()
+	m.recordTimeoutTasksForDeletion(currentWorkflowTask)
+
 	// Increment attempts only if workflow task is failing on non-sticky task queue.
 	// If it was sticky task queue, clear sticky task queue first and try again before creating transient workflow task.
 	if m.ms.IsStickyTaskQueueSet() {
@@ -907,10 +943,26 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	}
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
+
+	consecutiveFailuresRequired := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())
+	if consecutiveFailuresRequired > 0 && failWorkflowTaskInfo.Attempt >= int32(consecutiveFailuresRequired) {
+		if err := m.ms.UpdateReportedProblemsSearchAttribute(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // deleteWorkflowTask deletes a workflow task.
 func (m *workflowTaskStateMachine) deleteWorkflowTask() {
+	// Get current workflow task info before deleting it, to capture timeout tasks for deletion
+	currentWorkflowTask := m.getWorkflowTaskInfo()
+	m.recordTimeoutTasksForDeletion(currentWorkflowTask)
+
+	// Clear in-memory timeout tasks
+	m.ms.SetWorkflowTaskScheduleToStartTimeoutTask(nil)
+	m.ms.SetWorkflowTaskStartToCloseTimeoutTask(nil)
+
 	resetWorkflowTaskInfo := &historyi.WorkflowTaskInfo{
 		Version:             common.EmptyVersion,
 		ScheduledEventID:    common.EmptyEventID,
@@ -923,7 +975,7 @@ func (m *workflowTaskStateMachine) deleteWorkflowTask() {
 
 		TaskQueue: nil,
 		// Keep the last original scheduled Timestamp, so that AddWorkflowTaskScheduledEventAsHeartbeat can continue with it.
-		OriginalScheduledTime: m.getWorkflowTaskInfo().OriginalScheduledTime,
+		OriginalScheduledTime: currentWorkflowTask.OriginalScheduledTime,
 		Type:                  enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
 		SuggestContinueAsNew:  false,
 		HistorySizeBytes:      0,
@@ -1077,23 +1129,27 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 }
 
 func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskInfo {
-	return &historyi.WorkflowTaskInfo{
-		Version:                m.ms.executionInfo.WorkflowTaskVersion,
-		ScheduledEventID:       m.ms.executionInfo.WorkflowTaskScheduledEventId,
-		StartedEventID:         m.ms.executionInfo.WorkflowTaskStartedEventId,
-		RequestID:              m.ms.executionInfo.WorkflowTaskRequestId,
-		WorkflowTaskTimeout:    m.ms.executionInfo.WorkflowTaskTimeout.AsDuration(),
-		Attempt:                m.ms.executionInfo.WorkflowTaskAttempt,
-		StartedTime:            m.ms.executionInfo.WorkflowTaskStartedTime.AsTime(),
-		ScheduledTime:          m.ms.executionInfo.WorkflowTaskScheduledTime.AsTime(),
-		TaskQueue:              m.ms.CurrentTaskQueue(),
-		OriginalScheduledTime:  m.ms.executionInfo.WorkflowTaskOriginalScheduledTime.AsTime(),
-		Type:                   m.ms.executionInfo.WorkflowTaskType,
-		SuggestContinueAsNew:   m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew,
-		HistorySizeBytes:       m.ms.executionInfo.WorkflowTaskHistorySizeBytes,
-		BuildId:                m.ms.executionInfo.WorkflowTaskBuildId,
-		BuildIdRedirectCounter: m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter,
+	wft := &historyi.WorkflowTaskInfo{
+		Version:                    m.ms.executionInfo.WorkflowTaskVersion,
+		ScheduledEventID:           m.ms.executionInfo.WorkflowTaskScheduledEventId,
+		StartedEventID:             m.ms.executionInfo.WorkflowTaskStartedEventId,
+		RequestID:                  m.ms.executionInfo.WorkflowTaskRequestId,
+		WorkflowTaskTimeout:        m.ms.executionInfo.WorkflowTaskTimeout.AsDuration(),
+		Attempt:                    m.ms.executionInfo.WorkflowTaskAttempt,
+		StartedTime:                m.ms.executionInfo.WorkflowTaskStartedTime.AsTime(),
+		ScheduledTime:              m.ms.executionInfo.WorkflowTaskScheduledTime.AsTime(),
+		TaskQueue:                  m.ms.CurrentTaskQueue(),
+		OriginalScheduledTime:      m.ms.executionInfo.WorkflowTaskOriginalScheduledTime.AsTime(),
+		Type:                       m.ms.executionInfo.WorkflowTaskType,
+		SuggestContinueAsNew:       m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew,
+		HistorySizeBytes:           m.ms.executionInfo.WorkflowTaskHistorySizeBytes,
+		BuildId:                    m.ms.executionInfo.WorkflowTaskBuildId,
+		BuildIdRedirectCounter:     m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter,
+		ScheduleToStartTimeoutTask: m.ms.GetWorkflowTaskScheduleToStartTimeoutTask(),
+		StartToCloseTimeoutTask:    m.ms.GetWorkflowTaskStartToCloseTimeoutTask(),
 	}
+
+	return wft
 }
 
 func (m *workflowTaskStateMachine) beforeAddWorkflowTaskCompletedEvent() {

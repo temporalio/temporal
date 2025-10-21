@@ -140,18 +140,6 @@ func (p *visibilityManagerImpl) ListWorkflowExecutions(
 	return p.convertInternalListResponse(response)
 }
 
-func (p *visibilityManagerImpl) ScanWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequestV2,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ScanWorkflowExecutions(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.convertInternalListResponse(response)
-}
-
 func (p *visibilityManagerImpl) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,

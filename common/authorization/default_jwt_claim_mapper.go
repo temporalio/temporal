@@ -125,7 +125,7 @@ func (a *defaultJWTClaimMapper) extractPermissions(permissions []interface{}, cl
 			}
 			parts = []string{match[a.matchNamespaceIndex], match[a.matchRoleIndex]}
 		} else {
-			parts = strings.Split(p, ":")
+			parts = strings.SplitN(p, ":", 2)
 			if len(parts) != 2 {
 				a.logger.Warn(fmt.Sprintf("ignoring permission in unexpected format: %v", permission))
 				continue

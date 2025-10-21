@@ -167,7 +167,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		s.mockShard,
 		namespace.ID(namespaceID),
 		we,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil).Times(1)
 
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(nil, serviceerror.NewNotFound("ms not found"))
@@ -274,7 +274,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		s.mockShard,
 		namespace.ID(namespaceID),
 		we,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil).Times(1)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
@@ -284,7 +284,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 			WorkflowId: s.workflowID,
 			RunId:      branchInfo.GetTreeId(),
 		},
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil).Times(1)
 
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(nil, serviceerror.NewNotFound("ms not found"))
@@ -459,7 +459,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend()
 		s.mockShard,
 		namespace.ID(namespaceID),
 		we,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
@@ -540,7 +540,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_SyncHSM(
 		s.mockShard,
 		namespace.ID(namespaceID),
 		we,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
@@ -654,7 +654,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 			RunId:      s.runID,
 		},
 		chasm.ArchetypeAny,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
@@ -675,7 +675,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		PartialRefresh(gomock.Any(), gomock.Any(), EqVersionedTransition(&persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 2,
 			TransitionCount:          19,
-		}), nil,
+		}), nil, false,
 		).Return(nil).Times(1)
 
 	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")
@@ -745,7 +745,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 			RunId:      s.runID,
 		},
 		chasm.ArchetypeAny,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
@@ -761,7 +761,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 		RunId: s.runID,
 	}).AnyTimes()
 	mockTransactionManager.EXPECT().UpdateWorkflow(gomock.Any(), true, gomock.Any(), nil).Return(nil).Times(1)
-	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), mockMutableState).Return(nil).Times(1)
+	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), mockMutableState, gomock.Any()).Return(nil).Times(1)
 
 	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")
 	s.NoError(err)
@@ -833,7 +833,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 			RunId:      s.runID,
 		},
 		chasm.ArchetypeAny,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
@@ -854,7 +854,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		PartialRefresh(gomock.Any(), gomock.Any(), EqVersionedTransition(&persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 2,
 			TransitionCount:          19,
-		}), nil,
+		}), nil, false,
 		).Return(nil).Times(1)
 
 	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")
@@ -912,7 +912,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 			RunId:      s.runID,
 		},
 		chasm.ArchetypeAny,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{},
@@ -921,7 +921,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 		nil,
 		int64(100),
 	), nil).AnyTimes()
-	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 	mockTransactionManager.EXPECT().CreateWorkflow(
 		gomock.Any(),
@@ -1006,7 +1006,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 			RunId:      s.runID,
 		},
 		chasm.ArchetypeAny,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{

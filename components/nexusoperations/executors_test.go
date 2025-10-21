@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -24,6 +25,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/components/nexusoperations"
@@ -39,6 +41,13 @@ var endpointEntry = &persistencespb.NexusEndpointEntry{
 	Endpoint: &persistencespb.NexusEndpoint{
 		Spec: &persistencespb.NexusEndpointSpec{
 			Name: "endpoint",
+			Target: &persistencespb.NexusEndpointTarget{
+				Variant: &persistencespb.NexusEndpointTarget_External_{
+					External: &persistencespb.NexusEndpointTarget_External{
+						Url: "http://" + uuid.NewString(),
+					},
+				},
+			},
 		},
 	},
 }
@@ -112,9 +121,9 @@ func TestProcessInvocationTask(t *testing.T) {
 				input *nexus.LazyValue,
 				options nexus.StartOperationOptions,
 			) (nexus.HandlerStartOperationResult[any], error) {
+				nexus.AddHandlerLinks(ctx, handlerNexusLink)
 				return &nexus.HandlerStartOperationResultAsync{
 					OperationToken: "op-token",
-					Links:          []nexus.Link{handlerNexusLink},
 				}, nil
 			},
 			expectedMetricOutcome: "pending",
@@ -295,7 +304,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Regexp(t, "Post \"http://localhost:\\d+/service/operation\\?callback=http%3A%2F%2Flocalhost%2Fcallback\": context deadline exceeded", op.LastAttemptFailure.Message)
+				require.Regexp(t, "request timed out", op.LastAttemptFailure.Message)
 				require.Equal(t, 0, len(events))
 			},
 		},
@@ -312,12 +321,12 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Regexp(t, "Post \"http://localhost:\\d+/service/operation\\?callback=http%3A%2F%2Flocalhost%2Fcallback\": context deadline exceeded", op.LastAttemptFailure.Message)
+				require.Regexp(t, "request timed out", op.LastAttemptFailure.Message)
 				require.Equal(t, 0, len(events))
 			},
 		},
 		{
-			name:                  "ScheduleToCloseTimeout less than MinOperationTimeout",
+			name:                  "ScheduleToCloseTimeout less than MinRequestTimeout",
 			requestTimeout:        time.Hour,
 			schedToCloseTimeout:   time.Microsecond,
 			destinationDown:       false,
@@ -372,9 +381,9 @@ func TestProcessInvocationTask(t *testing.T) {
 				input *nexus.LazyValue,
 				options nexus.StartOperationOptions,
 			) (nexus.HandlerStartOperationResult[any], error) {
+				nexus.AddHandlerLinks(ctx, handlerNexusLink)
 				return &nexus.HandlerStartOperationResultAsync{
 					OperationToken: "op-token",
-					Links:          []nexus.Link{handlerNexusLink},
 				}, nil
 			},
 			expectedMetricOutcome: "pending",
@@ -493,9 +502,10 @@ func TestProcessInvocationTask(t *testing.T) {
 					Enabled:                 dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					MaxOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
-					MinOperationTimeout:     dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+					MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
 					CallbackURLTemplate:     dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
+					UseSystemCallbackURL:    dynamicconfig.GetBoolPropertyFn(true),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
@@ -505,8 +515,8 @@ func TestProcessInvocationTask(t *testing.T) {
 				MetricsHandler:         metricsHandler,
 				Logger:                 log.NewNoopLogger(),
 				EndpointRegistry:       endpointReg,
-				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
-					return nexus.NewHTTPClient(nexus.HTTPClientOptions{
+				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
+					return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 						BaseURL:    "http://" + listenAddr,
 						Service:    service,
 						Serializer: commonnexus.PayloadSerializer,
@@ -625,6 +635,7 @@ func TestProcessCancelationTask(t *testing.T) {
 		requestTimeout        time.Duration
 		schedToCloseTimeout   time.Duration
 		destinationDown       bool
+		header                map[string]string
 	}{
 		{
 			name:            "failure",
@@ -650,6 +661,23 @@ func TestProcessCancelationTask(t *testing.T) {
 			requestTimeout:  time.Hour,
 			destinationDown: false,
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+				return nil
+			},
+			expectedMetricOutcome: "successful",
+			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
+				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, c.State())
+				require.Nil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
+			},
+		},
+		{
+			name:            "success with headers",
+			requestTimeout:  time.Hour,
+			destinationDown: false,
+			header:          map[string]string{"key": "value"},
+			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+				if options.Header["key"] != "value" {
+					return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, `"key" header is not equal to "value"`)
+				}
 				return nil
 			},
 			expectedMetricOutcome: "successful",
@@ -724,8 +752,12 @@ func TestProcessCancelationTask(t *testing.T) {
 			nexustest.NewNexusServer(t, listenAddr, h)
 
 			reg := newRegistry(t)
-			backend := &hsmtest.NodeBackend{}
-			node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), tc.schedToCloseTimeout))
+			event := mustNewScheduledEvent(time.Now(), tc.schedToCloseTimeout)
+			if tc.header != nil {
+				event.GetNexusOperationScheduledEventAttributes().NexusHeader = tc.header
+			}
+			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
+			node := newOperationNode(t, backend, backend.Events[0])
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
 			_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
@@ -787,7 +819,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				Config: &nexusoperations.Config{
 					Enabled:                             dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
-					MinOperationTimeout:                 dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+					MinRequestTimeout:                   dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					RecordCancelRequestCompletionEvents: dynamicconfig.GetBoolPropertyFn(true),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
@@ -797,8 +829,8 @@ func TestProcessCancelationTask(t *testing.T) {
 				MetricsHandler:    metricsHandler,
 				Logger:            log.NewNoopLogger(),
 				EndpointRegistry:  endpointReg,
-				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
-					return nexus.NewHTTPClient(nexus.HTTPClientOptions{
+				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
+					return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 						BaseURL:    "http://" + listenAddr,
 						Service:    service,
 						Serializer: commonnexus.PayloadSerializer,
@@ -872,7 +904,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 				return endpointEntry, nil
 			},
 		},
-		ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
+		ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
 			return nil, serviceerror.NewInternal("shouldn't get here")
 		},
 	}))

@@ -1,0 +1,100 @@
+name: Flaky Tests Report
+
+on:
+  schedule:
+    # Run on Wednesdays at noon Eastern time (5 PM UTC)
+    - cron: '0 17 * * 3'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Number of days to look back for flaky tests'
+        required: false
+        default: '7'
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  flaky-tests-report:
+    runs-on: ubuntu-latest    
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: ">=0.8.0"
+
+      - name: Install Python dependencies
+        run: |
+          cd tools/flakes
+          uv sync
+
+      - name: Install tringa
+        run: |
+          uv tool install git+https://github.com/dandavison/tringa@main --force
+
+      - name: Run tringa
+        id: generate-output-file
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          DAYS_PARAM: ${{ github.event.inputs.days || '7' }}
+        run: |
+          set -euo pipefail
+          
+          # Create output directory
+          mkdir -p tools/flakes/out
+          
+          tringa --json --since-days "$DAYS_PARAM" repo sql \
+            'select classname, name, count(*) as failure_count, max(artifact) as artifact from test where passed = false and skipped = false group by classname, name order by failure_count desc' \
+            --branch main \
+            --workflow-id 80591745 \
+            https://github.com/temporalio/temporal > tools/flakes/out/out.json
+          
+          echo "✅ Tringa command completed"
+          echo "📊 Output file size: $(wc -c < tools/flakes/out/out.json) bytes"
+          echo "📄 Full output file:"
+          cat tools/flakes/out/out.json
+
+      - name: Run Python script to process flaky tests
+        id: process-flaky-tests
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          RUN_ID: ${{ github.run_id }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -x
+          cd tools/flakes && uv run main.py \
+            --file out/out.json \
+            --github-summary \
+            --slack-webhook "$SLACK_WEBHOOK" \
+            --run-id "$RUN_ID" \
+            --ref-name "$REF_NAME" \
+            --sha "$SHA"
+
+      - name: Upload generated reports
+        uses: actions/upload-artifact@v4
+        if: steps.process-flaky-tests.outcome == 'success'
+        with:
+          name: flaky-tests-reports-${{ github.run_number }}
+          path: tools/flakes/out/*
+          retention-days: 30

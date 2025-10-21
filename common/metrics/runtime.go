@@ -72,6 +72,7 @@ func (r *RuntimeMetricsReporter) report() {
 	MemoryHeapObjectsGauge.With(r.handler).Record(float64(memStats.HeapObjects))
 	MemoryHeapIdleGauge.With(r.handler).Record(float64(memStats.HeapIdle))
 	MemoryHeapInuseGauge.With(r.handler).Record(float64(memStats.HeapInuse))
+	MemoryHeapReleasedGauge.With(r.handler).Record(float64(memStats.HeapReleased))
 	MemoryStackGauge.With(r.handler).Record(float64(memStats.StackInuse))
 	MemoryMallocsGauge.With(r.handler).Record(float64(memStats.Mallocs))
 	MemoryFreesGauge.With(r.handler).Record(float64(memStats.Frees))

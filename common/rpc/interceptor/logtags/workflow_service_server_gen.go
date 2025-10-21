@@ -357,6 +357,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.SetWorkerDeploymentCurrentVersionResponse:
 		return nil
+	case *workflowservice.SetWorkerDeploymentManagerRequest:
+		return nil
+	case *workflowservice.SetWorkerDeploymentManagerResponse:
+		return nil
 	case *workflowservice.SetWorkerDeploymentRampingVersionRequest:
 		return nil
 	case *workflowservice.SetWorkerDeploymentRampingVersionResponse:

@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/headers"
@@ -97,11 +98,12 @@ type (
 var _ userDataManager = (*userDataManagerImpl)(nil)
 
 var (
-	errUserDataNoMutateNonRoot  = serviceerror.NewInvalidArgument("can only mutate user data on root workflow task queue")
-	errRequestedVersionTooLarge = serviceerror.NewInvalidArgument("requested task queue user data for version greater than known version")
-	errTaskQueueClosed          = serviceerror.NewUnavailable("task queue closed")
-	errUserDataUnmodified       = errors.New("sentinel error for unchanged user data")
-	errUserDataVersionMismatch  = errors.New("user data version mismatch")
+	errUserDataNoMutateNonRoot         = serviceerror.NewInvalidArgument("can only mutate user data on root workflow task queue")
+	errRequestedVersionTooLarge        = serviceerror.NewInvalidArgument("requested task queue user data for version greater than known version")
+	errTaskQueueClosed                 = serviceerror.NewUnavailable("task queue closed")
+	errFairnessOverridesUpdateRejected = serviceerror.NewInvalidArgument("fairness weight overrides update rejected: exceeding maximum key size")
+	errUserDataUnmodified              = errors.New("sentinel error for unchanged user data")
+	errUserDataVersionMismatch         = errors.New("user data version mismatch")
 )
 
 func newUserDataManager(
@@ -488,7 +490,7 @@ func (m *userDataManagerImpl) updateUserData(
 		return nil, false, serviceerror.NewFailedPreconditionf("user data version mismatch: requested: %d, current: %d", options.KnownVersion, preUpdateVersion)
 	}
 	updatedUserData, shouldReplicate, err := updateFn(preUpdateData)
-	if err == errUserDataUnmodified {
+	if err == errUserDataUnmodified || err == errFairnessOverridesUpdateRejected {
 		return userData, false, err
 	}
 	if err != nil {
@@ -544,7 +546,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 
 	if req.WaitNewData {
 		var cancel context.CancelFunc
-		ctx, cancel = newChildContext(ctx, m.config.GetUserDataLongPollTimeout(), m.config.GetUserDataReturnBudget)
+		ctx, cancel = contextutil.WithDeadlineBuffer(ctx, m.config.GetUserDataLongPollTimeout(), m.config.GetUserDataReturnBudget)
 		defer cancel()
 	}
 

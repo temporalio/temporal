@@ -158,6 +158,7 @@ message SyncActivityTaskAttributes {
     google.protobuf.Duration retry_maximum_interval = 23;
     int32 retry_maximum_attempts = 24;
     double retry_backoff_coefficient = 25;
+    int64 start_version = 26;
 }
 
 message HistoryTaskAttributes {
@@ -246,4 +247,6 @@ message VersionedTransitionArtifact {
     repeated temporal.api.common.v1.DataBlob event_batches = 3;
     NewRunInfo new_run_info = 4;
     bool is_first_sync = 5;
+    bool is_close_transfer_task_acked = 6;
+    bool is_force_replication = 7;
 }

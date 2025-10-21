@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -76,14 +77,15 @@ func PeerCert(tlsInfo *credentials.TLSInfo) *x509.Certificate {
 }
 
 type Interceptor struct {
-	claimMapper         ClaimMapper
-	authorizer          Authorizer
-	metricsHandler      metrics.Handler
-	logger              log.Logger
-	namespaceChecker    NamespaceChecker
-	audienceGetter      JWTAudienceMapper
-	authHeaderName      string
-	authExtraHeaderName string
+	claimMapper            ClaimMapper
+	authorizer             Authorizer
+	metricsHandler         metrics.Handler
+	logger                 log.Logger
+	namespaceChecker       NamespaceChecker
+	audienceGetter         JWTAudienceMapper
+	authHeaderName         string
+	authExtraHeaderName    string
+	exposeAuthorizerErrors dynamicconfig.BoolPropertyFn
 }
 
 // NewInterceptor creates an authorization interceptor.
@@ -96,16 +98,18 @@ func NewInterceptor(
 	audienceGetter JWTAudienceMapper,
 	authHeaderName string,
 	authExtraHeaderName string,
+	exposeAuthorizerErrors dynamicconfig.BoolPropertyFn,
 ) *Interceptor {
 	return &Interceptor{
-		claimMapper:         claimMapper,
-		authorizer:          authorizer,
-		logger:              logger,
-		namespaceChecker:    namespaceChecker,
-		metricsHandler:      metricsHandler,
-		authHeaderName:      cmp.Or(authHeaderName, defaultAuthHeaderName),
-		authExtraHeaderName: cmp.Or(authExtraHeaderName, defaultAuthExtraHeaderName),
-		audienceGetter:      audienceGetter,
+		claimMapper:            claimMapper,
+		authorizer:             authorizer,
+		logger:                 logger,
+		namespaceChecker:       namespaceChecker,
+		metricsHandler:         metricsHandler,
+		authHeaderName:         cmp.Or(authHeaderName, defaultAuthHeaderName),
+		authExtraHeaderName:    cmp.Or(authExtraHeaderName, defaultAuthExtraHeaderName),
+		audienceGetter:         audienceGetter,
+		exposeAuthorizerErrors: exposeAuthorizerErrors,
 	}
 }
 
@@ -222,6 +226,9 @@ func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTar
 	if err != nil {
 		metrics.ServiceErrAuthorizeFailedCounter.With(mh).Record(1)
 		a.logger.Error("Authorization error", tag.Error(err))
+		if a.exposeAuthorizerErrors() {
+			return err
+		}
 		return errUnauthorized // return a generic error to the caller without disclosing details
 	}
 	if result.Decision != DecisionAllow {

@@ -14,7 +14,9 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -87,6 +89,17 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	s.dynamicConfigOverrides[dynamicconfig.EnableTransitionHistory.Key()] = s.enableTransitionHistory
 	// TODO (prathyush): remove this after setting it to true by default.
 	s.dynamicConfigOverrides[dynamicconfig.SendRawHistoryBetweenInternalServices.Key()] = true
+	// Override checkpoint intervals to 3 seconds for faster testing
+	s.dynamicConfigOverrides[dynamicconfig.TransferProcessorUpdateAckInterval.Key()] = time.Second * 3
+	s.dynamicConfigOverrides[dynamicconfig.TimerProcessorUpdateAckInterval.Key()] = time.Second * 3
+	s.dynamicConfigOverrides[dynamicconfig.VisibilityProcessorUpdateAckInterval.Key()] = time.Second * 3
+	s.dynamicConfigOverrides[dynamicconfig.OutboundProcessorUpdateAckInterval.Key()] = time.Second * 3
+	s.dynamicConfigOverrides[dynamicconfig.ArchivalProcessorUpdateAckInterval.Key()] = time.Second * 3
+	// Override max poll intervals to 3 seconds for faster task discovery in tests
+	s.dynamicConfigOverrides[dynamicconfig.TransferProcessorMaxPollInterval.Key()] = time.Second * 3
+	s.dynamicConfigOverrides[dynamicconfig.TimerProcessorMaxPollInterval.Key()] = time.Second * 3
+	s.dynamicConfigOverrides[dynamicconfig.VisibilityProcessorMaxPollInterval.Key()] = time.Second * 3
+	s.dynamicConfigOverrides[dynamicconfig.OutboundProcessorMaxPollInterval.Key()] = time.Second * 3
 
 	clusterConfigs := []*testcore.TestClusterConfig{
 		{
@@ -448,4 +461,18 @@ func (s *xdcBaseSuite) mustToPayload(v any) *commonpb.Payload {
 	payload, err := conv.ToPayload(v)
 	s.NoError(err)
 	return payload
+}
+
+func (s *xdcBaseSuite) newClientAndWorker(hostport, ns, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  hostport,
+		Namespace: ns,
+	})
+	s.NoError(err)
+
+	worker := sdkworker.New(sdkClient, taskqueue, sdkworker.Options{
+		Identity: identity,
+	})
+
+	return sdkClient, worker
 }

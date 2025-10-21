@@ -44,8 +44,7 @@ type (
 
 		// cache converted values. use weak pointers to avoid holding on to values in the cache
 		// that are no longer in use.
-		convertCacheLock sync.Mutex
-		convertCache     map[weak.Pointer[ConstrainedValue]]any
+		convertCache sync.Map // map[weak.Pointer[ConstrainedValue]]any
 	}
 
 	subscription[T any] struct {
@@ -113,7 +112,6 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 		logger:        logger,
 		errCount:      -1,
 		subscriptions: make(map[Key]map[int]any),
-		convertCache:  make(map[weak.Pointer[ConstrainedValue]]any),
 	}
 }
 
@@ -261,9 +259,6 @@ func matchAndConvertCvs[T any](
 ) (T, any) {
 	cvp, err := findMatch(cvs, precedence)
 	if err != nil {
-		if c.throttleLog() {
-			c.logger.Debug("No such key in dynamic config, using default", tag.Key(key.String()), tag.Error(err))
-		}
 		// couldn't find a constrained match, use default
 		return def, usingDefaultValue
 	}
@@ -331,9 +326,6 @@ func findAndResolveWithConstrainedDefaults[T any](
 		// leave value as the zero value, that's the best we can do
 		return value, usingDefaultValue
 	} else if valOrder == 0 {
-		if c.throttleLog() {
-			c.logger.Debug("No such key in dynamic config, using default", tag.Key(key.String()))
-		}
 		return defVal, usingDefaultValue
 	} else if defOrder < valOrder {
 		// value was present but constrained default took precedence
@@ -459,9 +451,6 @@ func dispatchUpdate[T any](
 	var raw any
 	cvp, err := findMatch(cvs, sub.prec)
 	if err != nil {
-		if c.throttleLog() {
-			c.logger.Debug("No such key in dynamic config, using default", tag.Key(key.String()), tag.Error(err))
-		}
 		raw = usingDefaultValue
 	} else {
 		raw = cvp.Value
@@ -525,33 +514,25 @@ func dispatchUpdateWithConstrainedDefault[T any](
 func convertWithCache[T any](c *Collection, key Key, convert func(any) (T, error), cvp *ConstrainedValue) (T, error) {
 	weakcvp := weak.Make(cvp)
 
-	c.convertCacheLock.Lock()
-	if converted, ok := c.convertCache[weakcvp]; ok {
+	if converted, ok := c.convertCache.Load(weakcvp); ok {
 		if t, ok := converted.(T); ok {
-			c.convertCacheLock.Unlock()
 			return t, nil
 		}
 		// Each key can only be used with a single type, so this shouldn't happen
 		c.logger.Warn("Cached converted value has wrong type", tag.Key(key.String()))
 		// Fall through to regular conversion
 	}
-	c.convertCacheLock.Unlock()
 
-	// unlock around convert
 	t, err := convert(cvp.Value)
 	if err != nil {
 		var zero T
 		return zero, err
 	}
 
-	c.convertCacheLock.Lock()
-	c.convertCache[weakcvp] = t
-	c.convertCacheLock.Unlock()
+	c.convertCache.Store(weakcvp, t)
 
 	runtime.AddCleanup(cvp, func(w weak.Pointer[ConstrainedValue]) {
-		c.convertCacheLock.Lock()
-		delete(c.convertCache, w)
-		c.convertCacheLock.Unlock()
+		c.convertCache.Delete(w)
 	}, weakcvp)
 
 	return t, nil

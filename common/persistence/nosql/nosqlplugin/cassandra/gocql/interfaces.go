@@ -2,6 +2,8 @@ package gocql
 
 import (
 	"context"
+
+	"github.com/gocql/gocql"
 )
 
 // Note: this file defines the minimal interface that is needed by Temporal's cassandra
@@ -34,6 +36,8 @@ type (
 		WithTimestamp(int64) Query
 		Consistency(Consistency) Query
 		Bind(...interface{}) Query
+		Idempotent(bool) Query
+		SetSpeculativeExecutionPolicy(SpeculativeExecutionPolicy) Query
 	}
 
 	// Iter is the interface for executing and iterating over all resulting rows.
@@ -52,4 +56,7 @@ type (
 
 	// SerialConsistency is the serial consistency level used by a Query
 	SerialConsistency uint16
+
+	// SpeculativeExecutionPolicy is a gocql SpeculativeExecutionPolicy
+	SpeculativeExecutionPolicy gocql.SpeculativeExecutionPolicy
 )

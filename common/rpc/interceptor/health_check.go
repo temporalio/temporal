@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/api"
@@ -40,6 +41,13 @@ type (
 	}
 )
 
+var excludedAPIsForHealthSignal = map[string]struct{}{
+	"DeepHealthCheck":             {},
+	"PollMutableState":            {},
+	"PollWorkflowExecutionUpdate": {},
+}
+var getWorkflowExecutionHistoryAPI = "GetWorkflowExecutionHistory"
+
 // NewHealthCheckInterceptor creates a new health check interceptor
 func NewHealthCheckInterceptor(healthSignalAggregator HealthSignalAggregator) *HealthCheckInterceptor {
 	return &HealthCheckInterceptor{
@@ -60,10 +68,19 @@ func (h *HealthCheckInterceptor) UnaryIntercept(
 
 	// Skip health check recording for specific methods
 	methodName := api.MethodName(info.FullMethod)
-	if methodName != "DeepHealthCheck" { // Do not try to measure a tool with itself.
-		h.healthSignalAggregator.Record(elapsed, err)
+
+	// Skip GetWorkflowExecutionHistory polling request
+	if methodName == getWorkflowExecutionHistoryAPI {
+		if request, ok := req.(*historyservice.GetWorkflowExecutionHistoryRequest); ok {
+			if r := request.GetRequest(); r != nil && r.GetWaitNewEvent() {
+				return resp, err
+			}
+		}
 	}
 
+	if _, ok := excludedAPIsForHealthSignal[methodName]; !ok {
+		h.healthSignalAggregator.Record(elapsed, err)
+	}
 	return resp, err
 }
 

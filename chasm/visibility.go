@@ -13,29 +13,22 @@ const (
 	visibilityTaskFqType      = "core.visTask"
 )
 
-// CoreLibrary contains built-in components maintained as part of the CHASM framework.
-type CoreLibrary struct {
-	UnimplementedLibrary
+// VisibilitySearchAttributesProvider if implemented by the root Component,
+// allows the CHASM framework to automatically determine, at the end of
+// a transaction, if a visibility task needs to be generated to update the
+// visibility record with the returned search attributes.
+//
+// TODO: Improve this interface after support registering CHASM search attributes.
+type VisibilitySearchAttributesProvider interface {
+	SearchAttributes(Context) map[string]VisibilityValue
 }
 
-func (b *CoreLibrary) Name() string {
-	return "core"
-}
-
-func (b *CoreLibrary) Components() []*RegistrableComponent {
-	return []*RegistrableComponent{
-		NewRegistrableComponent[*Visibility]("vis"),
-	}
-}
-
-func (b *CoreLibrary) Tasks() []*RegistrableTask {
-	return []*RegistrableTask{
-		NewRegistrableSideEffectTask(
-			"visTask",
-			&visibilityTaskValidator{},
-			&visibilityTaskExecutor{},
-		),
-	}
+// VisibilityMemoProvider if implemented by the root Component,
+// allows the CHASM framework to automatically determine, at the end of
+// a transaction, if a visibility task needs to be generated to update the
+// visibility record with the returned memo.
+type VisibilityMemoProvider interface {
+	Memo(Context) map[string]VisibilityValue
 }
 
 type Visibility struct {
@@ -43,10 +36,8 @@ type Visibility struct {
 
 	Data *persistencespb.ChasmVisibilityData
 
-	SA   Map[string, *commonpb.Payload]
-	Memo Map[string, *commonpb.Payload]
-
-	// TODO: Add CATMemo here for Memo added by the Components
+	SA   Field[*commonpb.SearchAttributes]
+	Memo Field[*commonpb.Memo]
 }
 
 func NewVisibility(
@@ -57,8 +48,32 @@ func NewVisibility(
 			TransitionCount: 0,
 		},
 	}
-	visibility.GenerateTask(mutableContext)
+
+	visibility.generateTask(mutableContext)
 	return visibility
+}
+
+func NewVisibilityWithData(
+	mutableContext MutableContext,
+	customSearchAttributes map[string]*commonpb.Payload,
+	customMemo map[string]*commonpb.Payload,
+) (*Visibility, error) {
+	visibility := &Visibility{
+		Data: &persistencespb.ChasmVisibilityData{
+			TransitionCount: 0,
+		},
+		SA: NewDataField(
+			mutableContext,
+			&commonpb.SearchAttributes{IndexedFields: customSearchAttributes},
+		),
+		Memo: NewDataField(
+			mutableContext,
+			&commonpb.Memo{Fields: customMemo},
+		),
+	}
+
+	visibility.generateTask(mutableContext)
+	return visibility, nil
 }
 
 func (v *Visibility) LifecycleState(_ Context) LifecycleState {
@@ -68,44 +83,70 @@ func (v *Visibility) LifecycleState(_ Context) LifecycleState {
 func (v *Visibility) GetSearchAttributes(
 	chasmContext Context,
 ) (map[string]*commonpb.Payload, error) {
-	return v.getPayloadMap(chasmContext, v.SA)
+	sa, err := v.SA.Get(chasmContext)
+	if err != nil {
+		return nil, err
+	}
+	return sa.GetIndexedFields(), nil
 }
 
-func (v *Visibility) UpsertSearchAttributes(
+func (v *Visibility) SetSearchAttributes(
 	mutableContext MutableContext,
-	updates map[string]any,
+	customSearchAttributes map[string]*commonpb.Payload,
 ) error {
-	return v.updatePayloadMap(mutableContext, &v.SA, updates)
-}
+	currentSA, err := v.SA.Get(mutableContext)
+	if err != nil {
+		return err
+	}
 
-func (v *Visibility) RemoveSearchAttributes(
-	mutableContext MutableContext,
-	keys ...string,
-) {
-	v.removeFromPayloadMap(mutableContext, v.SA, keys)
+	if currentSA == nil {
+		currentSA = &commonpb.SearchAttributes{}
+		v.SA = NewDataField(mutableContext, currentSA)
+	}
+
+	currentSA.IndexedFields = payload.MergeMapOfPayload(
+		currentSA.GetIndexedFields(),
+		customSearchAttributes,
+	)
+	v.generateTask(mutableContext)
+
+	return nil
 }
 
 func (v *Visibility) GetMemo(
 	chasmContext Context,
 ) (map[string]*commonpb.Payload, error) {
-	return v.getPayloadMap(chasmContext, v.Memo)
+	memo, err := v.Memo.Get(chasmContext)
+	if err != nil {
+		return nil, err
+	}
+	return memo.GetFields(), nil
 }
 
-func (v *Visibility) UpsertMemo(
+func (v *Visibility) SetMemo(
 	mutableContext MutableContext,
-	updates map[string]any,
+	customMemo map[string]*commonpb.Payload,
 ) error {
-	return v.updatePayloadMap(mutableContext, &v.Memo, updates)
+	currentMemo, err := v.Memo.Get(mutableContext)
+	if err != nil {
+		return err
+	}
+
+	if currentMemo == nil {
+		currentMemo = &commonpb.Memo{}
+		v.Memo = NewDataField(mutableContext, currentMemo)
+	}
+
+	currentMemo.Fields = payload.MergeMapOfPayload(
+		currentMemo.GetFields(),
+		customMemo,
+	)
+	v.generateTask(mutableContext)
+
+	return nil
 }
 
-func (v *Visibility) RemoveMemo(
-	mutableContext MutableContext,
-	keys ...string,
-) {
-	v.removeFromPayloadMap(mutableContext, v.Memo, keys)
-}
-
-func (v *Visibility) GenerateTask(
+func (v *Visibility) generateTask(
 	mutableContext MutableContext,
 ) {
 	v.Data.TransitionCount++
@@ -116,119 +157,11 @@ func (v *Visibility) GenerateTask(
 	)
 }
 
-func (v *Visibility) getPayloadMap(
-	chasmContext Context,
-	m Map[string, *commonpb.Payload],
-) (map[string]*commonpb.Payload, error) {
-	result := make(map[string]*commonpb.Payload, len(m))
-	for key, field := range m {
-		value, err := field.Get(chasmContext)
-		if err != nil {
-			return nil, err
-		}
-		result[key] = value
-	}
-	return result, nil
-}
+type visibilityTaskHandler struct{}
 
-func (v *Visibility) updatePayloadMap(
-	mutableContext MutableContext,
-	m *Map[string, *commonpb.Payload],
-	updates map[string]any,
-) error {
-	if len(updates) != 0 && *m == nil {
-		*m = make(Map[string, *commonpb.Payload], len(updates))
-	}
-	for key, value := range updates {
-		p, err := payload.Encode(value)
-		if err != nil {
-			return err
-		}
-		(*m)[key] = NewDataField(mutableContext, p)
-	}
-	v.GenerateTask(mutableContext)
-	return nil
-}
+var defaultVisibilityTaskHandler = &visibilityTaskHandler{}
 
-func (v *Visibility) removeFromPayloadMap(
-	mutableContext MutableContext,
-	m Map[string, *commonpb.Payload],
-	keys []string,
-) {
-	for _, key := range keys {
-		delete(m, key)
-	}
-	v.GenerateTask(mutableContext)
-}
-
-func GetSearchAttribute[T any](
-	chasmContext Context,
-	visibility *Visibility,
-	key string,
-) (T, error) {
-	return getVisibilityPayloadValue[T](chasmContext, visibility.SA, key)
-}
-
-func UpsertSearchAttribute[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
-	chasmContext MutableContext,
-	visibility *Visibility,
-	name string,
-	value T,
-) {
-	upsertVisibilityPayload(chasmContext, &visibility.SA, visibility, name, value)
-}
-
-func GetMemo[T any](
-	chasmContext Context,
-	visibility *Visibility,
-	key string,
-) (T, error) {
-	return getVisibilityPayloadValue[T](chasmContext, visibility.Memo, key)
-}
-
-func UpsertMemo[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
-	chasmContext MutableContext,
-	visibility *Visibility,
-	name string,
-	value T,
-) {
-	upsertVisibilityPayload(chasmContext, &visibility.Memo, visibility, name, value)
-}
-
-func upsertVisibilityPayload[T ~int | ~int32 | ~int64 | ~string | ~bool | ~float64 | ~[]byte](
-	chasmContext MutableContext,
-	m *Map[string, *commonpb.Payload],
-	visibility *Visibility,
-	name string,
-	value T,
-) {
-	p, _ := payload.Encode(value)
-	if *m == nil {
-		*m = make(Map[string, *commonpb.Payload])
-	}
-	(*m)[name] = NewDataField(chasmContext, p)
-	visibility.GenerateTask(chasmContext)
-}
-
-func getVisibilityPayloadValue[T any](
-	chasmContext Context,
-	payloadMap Map[string, *commonpb.Payload],
-	key string,
-) (T, error) {
-	var value T
-	p, err := payloadMap[key].Get(chasmContext)
-	if err != nil {
-		return value, err
-	}
-	if err = payload.Decode(p, &value); err != nil {
-		return value, err
-	}
-	return value, nil
-}
-
-type visibilityTaskValidator struct{}
-
-func (v *visibilityTaskValidator) Validate(
+func (v *visibilityTaskHandler) Validate(
 	_ Context,
 	component *Visibility,
 	_ TaskAttributes,
@@ -237,9 +170,7 @@ func (v *visibilityTaskValidator) Validate(
 	return task.TransitionCount == component.Data.TransitionCount, nil
 }
 
-type visibilityTaskExecutor struct{}
-
-func (v *visibilityTaskExecutor) Execute(
+func (v *visibilityTaskHandler) Execute(
 	_ context.Context,
 	_ ComponentRef,
 	_ TaskAttributes,

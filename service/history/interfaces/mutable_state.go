@@ -293,6 +293,13 @@ type (
 		CheckSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) bool
 		RemoveSpeculativeWorkflowTaskTimeoutTask()
 
+		SetWorkflowTaskScheduleToStartTimeoutTask(task *tasks.WorkflowTaskTimeoutTask)
+		SetWorkflowTaskStartToCloseTimeoutTask(task *tasks.WorkflowTaskTimeoutTask)
+		GetWorkflowTaskScheduleToStartTimeoutTask() *tasks.WorkflowTaskTimeoutTask
+		GetWorkflowTaskStartToCloseTimeoutTask() *tasks.WorkflowTaskTimeoutTask
+
+		StoreActivityTimeoutTask(task *tasks.ActivityTimeoutTask)
+
 		IsDirty() bool
 		IsTransitionHistoryEnabled() bool
 		// StartTransaction sets up the mutable state for transacting.

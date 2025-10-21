@@ -245,15 +245,16 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 	}
 	versionedTransitionArtifact.IsFirstSync = isNewWorkflow
 
-	newRunId := mutableState.GetExecutionInfo().SuccessorRunId
-	sourceVersionHistories := versionhistory.CopyVersionHistories(mutableState.GetExecutionInfo().VersionHistories)
-	sourceTransitionHistory := transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory)
+	executionInfo := mutableState.GetExecutionInfo()
+	newRunID := executionInfo.SuccessorRunId
+	sourceVersionHistories := versionhistory.CopyVersionHistories(executionInfo.VersionHistories)
+	sourceTransitionHistory := transitionhistory.CopyVersionedTransitions(executionInfo.TransitionHistory)
 	if cacheReleaseFunc != nil {
 		cacheReleaseFunc(nil)
 	}
 
-	if len(newRunId) > 0 {
-		newRunInfo, err := s.getNewRunInfo(ctx, namespace.ID(namespaceID), execution, newRunId)
+	if len(newRunID) > 0 {
+		newRunInfo, err := s.getNewRunInfo(ctx, namespace.ID(namespaceID), execution, newRunID)
 		if err != nil {
 			return nil, err
 		}
@@ -326,6 +327,18 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 	default:
 		return nil, err
 	}
+
+	// if new run is not started by current cluster, it means the new run transaction is not happened at current cluster
+	// so when sending replication task, we should not include new run info
+	startVersion, err := mutableState.GetStartVersion()
+	if err != nil {
+		return nil, err
+	}
+	clusterMetadata := s.shardContext.GetClusterMetadata()
+	if !clusterMetadata.IsVersionFromSameCluster(startVersion, clusterMetadata.GetClusterID()) {
+		return nil, nil
+	}
+
 	versionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().VersionHistories)
 	if err != nil {
 		return nil, err

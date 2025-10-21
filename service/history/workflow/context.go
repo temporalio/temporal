@@ -790,24 +790,22 @@ func (c *ContextImpl) conflictResolveEventReapply(
 }
 
 func (c *ContextImpl) updateWorkflowMode() (persistence.UpdateWorkflowMode, error) {
-	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
 	if !c.config.EnableUpdateWorkflowModeIgnoreCurrent() {
 		return persistence.UpdateWorkflowModeUpdateCurrent, nil
 	}
 
-	updateMode = persistence.UpdateWorkflowModeIgnoreCurrent
 	if c.MutableState.IsCurrentWorkflowGuaranteed() {
-		updateMode = persistence.UpdateWorkflowModeUpdateCurrent
+		return persistence.UpdateWorkflowModeUpdateCurrent, nil
 	}
 
 	guaranteed, err := c.MutableState.IsNonCurrentWorkflowGuaranteed()
 	if err != nil {
-		return updateMode, err
+		return 0, err
 	}
 	if guaranteed {
-		updateMode = persistence.UpdateWorkflowModeBypassCurrent
+		return persistence.UpdateWorkflowModeBypassCurrent, nil
 	}
-	return updateMode, nil
+	return persistence.UpdateWorkflowModeIgnoreCurrent, nil
 }
 
 func (c *ContextImpl) ReapplyEvents(
@@ -911,7 +909,7 @@ func (c *ContextImpl) RefreshTasks(
 		return err
 	}
 
-	if err := NewTaskRefresher(shardContext).Refresh(ctx, mutableState); err != nil {
+	if err := NewTaskRefresher(shardContext).Refresh(ctx, mutableState, false); err != nil {
 		return err
 	}
 

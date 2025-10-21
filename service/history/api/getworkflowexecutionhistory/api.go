@@ -17,10 +17,12 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -37,6 +39,7 @@ func Invoke(
 	persistenceVisibilityMgr manager.VisibilityManager,
 ) (_ *historyservice.GetWorkflowExecutionHistoryResponseWithRaw, retError error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
+	namespaceName := namespace.Name(request.GetRequest().GetNamespace())
 	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
 		return nil, err
@@ -184,7 +187,8 @@ func Invoke(
 	// when data inconsistency occurs. Long term solution should check event
 	// batch pointing backwards within history store.
 	defer func() {
-		if _, ok := retError.(*serviceerror.DataLoss); ok {
+		var dataLossErr *serviceerror.DataLoss
+		if errors.As(retError, &dataLossErr) {
 			api.TrimHistoryNode(
 				ctx,
 				shardContext,
@@ -209,6 +213,7 @@ func Invoke(
 				historyBlob, _, err = api.GetRawHistory(
 					ctx,
 					shardContext,
+					namespaceName,
 					namespaceID,
 					execution,
 					lastFirstEventID,
@@ -227,6 +232,7 @@ func Invoke(
 				history, _, err = api.GetHistory(
 					ctx,
 					shardContext,
+					namespaceName,
 					namespaceID,
 					execution,
 					lastFirstEventID,
@@ -242,13 +248,27 @@ func Invoke(
 				}
 				// GetHistory func will not return empty history. Log workflow details if that is not the case
 				if len(history.Events) == 0 {
-					shardContext.GetLogger().Error(
-						"GetHistory returned empty history",
+					dataLossErr := softassert.UnexpectedDataLoss(
+						shardContext.GetLogger(),
+						"no events in workflow history",
+						nil,
 						tag.WorkflowNamespaceID(namespaceID.String()),
+						tag.WorkflowNamespace(request.GetRequest().GetNamespace()),
 						tag.WorkflowID(execution.GetWorkflowId()),
 						tag.WorkflowRunID(execution.GetRunId()),
 					)
-					return nil, serviceerror.NewDataLoss("no events in workflow history")
+					// Emit dataloss metric
+					if shardContext.GetConfig().EnableDataLossMetrics() {
+						persistence.EmitDataLossMetric(
+							shardContext.GetMetricsHandler(),
+							request.GetRequest().GetNamespace(),
+							execution.GetWorkflowId(),
+							execution.GetRunId(),
+							"GetWorkflowExecutionHistory",
+							dataLossErr,
+						)
+					}
+					return nil, dataLossErr
 				}
 				history.Events = history.Events[len(history.Events)-1 : len(history.Events)]
 			}
@@ -272,6 +292,7 @@ func Invoke(
 				historyBlob, continuationToken.PersistenceToken, err = api.GetRawHistory(
 					ctx,
 					shardContext,
+					namespaceName,
 					namespaceID,
 					execution,
 					continuationToken.FirstEventId,
@@ -285,6 +306,7 @@ func Invoke(
 				history, continuationToken.PersistenceToken, err = api.GetHistory(
 					ctx,
 					shardContext,
+					namespaceName,
 					namespaceID,
 					execution,
 					continuationToken.FirstEventId,

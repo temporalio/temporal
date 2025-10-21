@@ -20,14 +20,17 @@ type (
 	TestComponent    struct {
 		UnimplementedComponent
 
-		ComponentData          *protoMessageType
-		SubComponent1          Field[*TestSubComponent1]
-		SubComponent2          Field[*TestSubComponent2]
-		SubData1               Field[*protoMessageType]
-		SubComponents          Map[string, *TestSubComponent1]
-		PendingActivities      Map[int, *TestSubComponent1]
-		SubComponent11Pointer  Field[*TestSubComponent11]
-		SubComponent11Pointer2 Field[*TestSubComponent11]
+		ComponentData                *protoMessageType
+		SubComponent1                Field[*TestSubComponent1]
+		SubComponent2                Field[*TestSubComponent2]
+		SubData1                     Field[*protoMessageType]
+		SubComponents                Map[string, *TestSubComponent1]
+		PendingActivities            Map[int, *TestSubComponent1]
+		SubComponent11Pointer        Field[*TestSubComponent11]
+		SubComponent11Pointer2       Field[*TestSubComponent11]
+		SubComponentInterfacePointer Field[Component]
+
+		MSPointer MSPointer
 
 		Visibility Field[*Visibility]
 	}
@@ -59,6 +62,11 @@ type (
 	}
 )
 
+const (
+	testComponentStartTimeSAKey   = "StartTimeSAKey"
+	testComponentStartTimeMemoKey = "StartTimeMemoKey"
+)
+
 func (tc *TestComponent) LifecycleState(_ Context) LifecycleState {
 	switch tc.ComponentData.GetStatus() {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
@@ -86,11 +94,37 @@ func (tc *TestComponent) Fail(_ MutableContext) {
 	tc.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 }
 
+// SearchAttributes implements VisibilitySearchAttributesProvider interface.
+func (tc *TestComponent) SearchAttributes(_ Context) map[string]VisibilityValue {
+	return map[string]VisibilityValue{
+		testComponentStartTimeSAKey: VisibilityValueTime(tc.ComponentData.GetStartTime().AsTime()),
+	}
+}
+
+// Memo implements VisibilityMemoProvider interface.
+func (tc *TestComponent) Memo(_ Context) map[string]VisibilityValue {
+	return map[string]VisibilityValue{
+		testComponentStartTimeMemoKey: VisibilityValueTime(tc.ComponentData.GetStartTime().AsTime()),
+	}
+}
+
+func (tsc1 *TestSubComponent1) LifecycleState(_ Context) LifecycleState {
+	return LifecycleStateRunning
+}
+
 func (tsc1 *TestSubComponent1) GetData() string {
 	return tsc1.SubComponent1Data.GetCreateRequestId()
 }
 
-func setTestComponentFields(c *TestComponent) {
+func (tsc11 *TestSubComponent11) LifecycleState(_ Context) LifecycleState {
+	return LifecycleStateRunning
+}
+
+func (tsc2 *TestSubComponent2) LifecycleState(_ Context) LifecycleState {
+	return LifecycleStateRunning
+}
+
+func setTestComponentFields(c *TestComponent, backend *MockNodeBackend) {
 	c.ComponentData = &protoMessageType{
 		CreateRequestId: "component-data",
 	}
@@ -111,6 +145,7 @@ func setTestComponentFields(c *TestComponent) {
 	c.SubData1 = NewDataField[*protoMessageType](nil, &protoMessageType{
 		CreateRequestId: "sub-data1",
 	})
+	c.MSPointer = backend
 }
 
 // returns serialized version of TestComponent from above.

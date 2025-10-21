@@ -173,7 +173,7 @@ func ConfigureCassandraCluster(cfg config.Cassandra, cluster *gocql.ClusterConfi
 // parseHosts returns parses a list of hosts separated by comma
 func parseHosts(input string) []string {
 	var hosts []string
-	for _, h := range strings.Split(input, ",") {
+	for h := range strings.SplitSeq(input, ",") {
 		if host := strings.TrimSpace(h); len(host) > 0 {
 			hosts = append(hosts, host)
 		}
