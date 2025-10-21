@@ -79,6 +79,10 @@ func WithSearchAttributes(
 			field := sa.GetField()
 			valueType := sa.GetValueType()
 
+			if existingAlias, exists := rc.fieldToAlias[field]; exists {
+				panic("duplicate field name in search attributes: field '" + field + "' is used by both alias '" + existingAlias + "' and '" + alias + "'")
+			}
+
 			rc.aliasToField[alias] = field
 			rc.fieldToAlias[field] = alias
 			rc.saTypeMap[field] = valueType
