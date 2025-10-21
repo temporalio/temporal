@@ -105,7 +105,7 @@ func NewSearchAttributeBoolByField(alias string, field string) *SearchAttributeB
 	}
 }
 
-func (s SearchAttributeBool) SetValue(value bool) SearchAttributeKeyValue {
+func (s SearchAttributeBool) ValueSet(value bool) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
 		alias: s.alias,
 		field: s.field,
@@ -133,7 +133,7 @@ func NewSearchAttributeTimeByField(alias string, field string) *SearchAttributeT
 	}
 }
 
-func (s SearchAttributeTime) SetValue(value time.Time) SearchAttributeKeyValue {
+func (s SearchAttributeTime) ValueSet(value time.Time) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
 		alias: s.alias,
 		field: s.field,
@@ -161,7 +161,7 @@ func NewSearchAttributeFloat64ByField(alias string, field string) *SearchAttribu
 	}
 }
 
-func (s SearchAttributeFloat64) SetValue(value float64) SearchAttributeKeyValue {
+func (s SearchAttributeFloat64) ValueSet(value float64) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
 		alias: s.alias,
 		field: s.field,
@@ -189,7 +189,7 @@ func NewSearchAttributeKeywordByField(alias string, field string) *SearchAttribu
 	}
 }
 
-func (s SearchAttributeKeyword) SetValue(value string) SearchAttributeKeyValue {
+func (s SearchAttributeKeyword) ValueSet(value string) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
 		alias: s.alias,
 		field: s.field,
@@ -217,7 +217,7 @@ func NewSearchAttributeTextByField(alias string, field string) *SearchAttributeT
 	}
 }
 
-func (s SearchAttributeText) SetValue(value string) SearchAttributeKeyValue {
+func (s SearchAttributeText) ValueSet(value string) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
 		alias: s.alias,
 		field: s.field,
@@ -245,7 +245,7 @@ func NewSearchAttributeKeywordListByField(alias string, field string) *SearchAtt
 	}
 }
 
-func (s SearchAttributeKeywordList) SetValue(value []string) SearchAttributeKeyValue {
+func (s SearchAttributeKeywordList) ValueSet(value []string) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
 		alias: s.alias,
 		field: s.field,

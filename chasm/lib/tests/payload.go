@@ -153,7 +153,7 @@ func (s *PayloadStore) LifecycleState(
 func (s *PayloadStore) SearchAttributes(
 	ctx chasm.Context,
 ) map[string]chasm.VisibilityValue {
-	s.UpsertSearchAttributes(testKeywordSearchAttribute.SetValue(TestKeywordSAFieldValue))
+	s.UpsertSearchAttributes(testKeywordSearchAttribute.ValueSet(TestKeywordSAFieldValue))
 	return s.ComponentSearchAttributesProvider.SearchAttributes(ctx)
 }
 
