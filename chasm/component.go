@@ -60,6 +60,15 @@ func (s *ComponentSearchAttributesProvider) UpsertSearchAttributes(attributes ..
 	}
 }
 
+func (s *ComponentSearchAttributesProvider) UpsertMemo(memoValues ...MemoValue) {
+	if s.memo == nil {
+		s.memo = make(map[string]VisibilityValue)
+	}
+	for _, memoValue := range memoValues {
+		s.memo[memoValue.key] = memoValue.value
+	}
+}
+
 // Shall it be named ComponentLifecycleState?
 type LifecycleState int
 

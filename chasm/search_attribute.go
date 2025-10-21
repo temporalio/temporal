@@ -51,6 +51,11 @@ type (
 		value VisibilityValue
 	}
 
+	MemoValue struct {
+		key   string
+		value VisibilityValue
+	}
+
 	SearchAttributeFieldBool struct {
 		field string
 	}
@@ -194,7 +199,7 @@ func NewSearchAttributeBoolByField(alias string, field string) *SearchAttributeB
 	}
 }
 
-func (s SearchAttributeBool) ValueSet(value bool) SearchAttributeValue {
+func (s SearchAttributeBool) NewValue(value bool) SearchAttributeValue {
 	return SearchAttributeValue{
 		field: s.field,
 		value: VisibilityValueBool(value),
@@ -231,7 +236,7 @@ func NewSearchAttributeIntByField(alias string, field string) *SearchAttributeIn
 	}
 }
 
-func (s SearchAttributeInt) ValueSet(value int64) SearchAttributeValue {
+func (s SearchAttributeInt) NewValue(value int64) SearchAttributeValue {
 	return SearchAttributeValue{
 		field: s.field,
 		value: VisibilityValueInt64(value),
@@ -248,7 +253,7 @@ func NewSearchAttributeDateTimeByField(alias string, field string) *SearchAttrib
 	}
 }
 
-func (s SearchAttributeDateTime) ValueSet(value time.Time) SearchAttributeValue {
+func (s SearchAttributeDateTime) NewValue(value time.Time) SearchAttributeValue {
 	return SearchAttributeValue{
 		field: s.field,
 		value: VisibilityValueTime(value),
@@ -275,7 +280,7 @@ func NewSearchAttributeDoubleByField(alias string, field string) *SearchAttribut
 	}
 }
 
-func (s SearchAttributeDouble) ValueSet(value float64) SearchAttributeValue {
+func (s SearchAttributeDouble) NewValue(value float64) SearchAttributeValue {
 	return SearchAttributeValue{
 		field: s.field,
 		value: VisibilityValueFloat64(value),
@@ -302,7 +307,7 @@ func NewSearchAttributeKeywordByField(alias string, field string) *SearchAttribu
 	}
 }
 
-func (s SearchAttributeKeyword) ValueSet(value string) SearchAttributeValue {
+func (s SearchAttributeKeyword) NewValue(value string) SearchAttributeValue {
 	return SearchAttributeValue{
 		field: s.field,
 		value: VisibilityValueString(value),
@@ -329,9 +334,16 @@ func NewSearchAttributeKeywordListByField(alias string, field string) *SearchAtt
 	}
 }
 
-func (s SearchAttributeKeywordList) ValueSet(value []string) SearchAttributeValue {
+func (s SearchAttributeKeywordList) NewValue(value []string) SearchAttributeValue {
 	return SearchAttributeValue{
 		field: s.field,
 		value: VisibilityValueStringSlice(value),
+	}
+}
+
+func NewMemoValue(key string, value VisibilityValue) MemoValue {
+	return MemoValue{
+		key:   key,
+		value: value,
 	}
 }
