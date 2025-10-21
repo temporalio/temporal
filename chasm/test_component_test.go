@@ -68,6 +68,12 @@ const (
 	testComponentStartTimeMemoKey = "StartTimeMemoKey"
 )
 
+var (
+	_ VisibilitySearchAttributesProvider = (*TestComponent)(nil)
+	_ VisibilityMemoProvider             = (*TestComponent)(nil)
+	_ VisibilitySearchAttributesMapper   = (*TestComponent)(nil)
+)
+
 func (tc *TestComponent) LifecycleState(_ Context) LifecycleState {
 	switch tc.ComponentData.GetStatus() {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:

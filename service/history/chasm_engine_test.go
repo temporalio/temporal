@@ -608,6 +608,8 @@ const (
 )
 
 var (
+	testComponentPausedSearchAttribute = chasm.NewSearchAttributeBoolByIndex(testComponentPausedSAName, 1)
+
 	_ chasm.VisibilitySearchAttributesProvider = (*testComponent)(nil)
 	_ chasm.VisibilityMemoProvider             = (*testComponent)(nil)
 )
@@ -624,8 +626,7 @@ func (l *testComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 }
 
 func (l *testComponent) SearchAttributes(ctx chasm.Context) map[string]chasm.VisibilityValue {
-	testComponentSearchAttribute := chasm.NewSearchAttributeBoolByIndex(testComponentPausedSAName, 1)
-	l.UpsertSearchAttributes(testComponentSearchAttribute.SetValue(l.ActivityInfo.Paused))
+	l.UpsertSearchAttributes(testComponentPausedSearchAttribute.SetValue(l.ActivityInfo.Paused))
 	return l.ComponentSearchAttributesProvider.SearchAttributes(ctx)
 }
 
