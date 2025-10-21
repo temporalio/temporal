@@ -180,7 +180,7 @@ func createIndex(cli *cli.Context, logger log.Logger) error {
 		},
 	}
 
-	return task.RunIndexCreation(context.Background())
+	return task.RunIndexCreation()
 }
 
 // dropIndex deletes a visibility index
