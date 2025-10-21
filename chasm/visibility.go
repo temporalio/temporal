@@ -18,7 +18,7 @@ const (
 // a transaction, if a visibility task needs to be generated to update the
 // visibility record with the returned search attributes.
 type VisibilitySearchAttributesProvider interface {
-	SearchAttributes(Context) []*SearchAttribute
+	SearchAttributes(Context) map[string]VisibilityValue
 }
 
 // VisibilityMemoProvider if implemented by the root Component,
@@ -27,6 +27,11 @@ type VisibilitySearchAttributesProvider interface {
 // visibility record with the returned memo.
 type VisibilityMemoProvider interface {
 	Memo(Context) map[string]VisibilityValue
+}
+
+type VisibilitySearchAttributesMapper interface {
+	GetAlias(field string) string
+	GetField(alias string) string
 }
 
 type Visibility struct {

@@ -145,7 +145,7 @@ type (
 
 		// Root component's search attributes and memo at the start of a transaction.
 		// They will be updated upon CloseTransaction() if they are changed.
-		currentSA   []*SearchAttribute
+		currentSA   map[string]VisibilityValue
 		currentMemo map[string]VisibilityValue
 
 		needsPointerResolution bool
@@ -309,8 +309,7 @@ func newTreeInitSearchAttributesAndMemo(
 	// and currentMemo will just never be used.
 
 	if saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider); ok {
-		searchAttrs := saProvider.SearchAttributes(immutableContext)
-		root.currentSA = searchAttrs
+		root.currentSA = saProvider.SearchAttributes(immutableContext)
 	}
 	if memoProvider, ok := rootComponent.(VisibilityMemoProvider); ok {
 		root.currentMemo = memoProvider.Memo(immutableContext)
@@ -1456,7 +1455,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
 	if ok {
 		newSA := saProvider.SearchAttributes(immutableContext)
-		if !searchAttributeSliceEqual(n.currentSA, newSA) {
+		if !maps.EqualFunc(n.currentSA, newSA, isVisibilityValueEqual) {
 			needUpdate = true
 		}
 		n.currentSA = newSA
@@ -2032,8 +2031,7 @@ func (n *Node) ApplyMutation(
 	}
 	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
 	if ok {
-		searchAttrs := saProvider.SearchAttributes(immutableContext)
-		n.currentSA = searchAttrs
+		n.currentSA = saProvider.SearchAttributes(immutableContext)
 	}
 	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
 	if ok {
@@ -2320,26 +2318,6 @@ func (n *Node) IsStale(
 		n.backend.GetExecutionInfo().TransitionHistory,
 		ref.entityLastUpdateVT,
 	)
-}
-
-func searchAttributeSliceEqual(a, b []*SearchAttribute) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	aMap := make(map[string]any, len(a))
-	for _, key := range a {
-		aMap[key.GetAlias()] = key.GetValue()
-	}
-
-	bMap := make(map[string]any, len(b))
-	for _, key := range b {
-		bMap[key.GetAlias()] = key.GetValue()
-	}
-
-	return maps.EqualFunc(aMap, bMap, func(a, b any) bool {
-		return reflect.DeepEqual(a, b)
-	})
 }
 
 func (n *Node) Terminate(

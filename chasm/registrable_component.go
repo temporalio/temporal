@@ -68,17 +68,17 @@ func WithSearchAttributes(searchAttributes []*SearchAttribute) RegistrableCompon
 		for _, sa := range searchAttributes {
 			alias := sa.GetAlias()
 
-			if existingKey, exists := aliasToKey[alias]; exists {
+			if existingField, exists := aliasToKey[alias]; exists {
 				//nolint:forbidigo // panic is appropriate during component registration setup
 				panic(fmt.Sprintf(
-					"duplicate search attribute alias %q: keys %q and %q both map to the same alias",
+					"duplicate search attribute alias %q: fields %q and %q both map to the same alias",
 					alias,
-					existingKey,
-					sa.GetKey(),
+					existingField,
+					sa.GetField(),
 				))
 			}
 
-			aliasToKey[alias] = sa.GetKey()
+			aliasToKey[alias] = sa.GetField()
 		}
 	}
 }

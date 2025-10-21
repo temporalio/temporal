@@ -19,6 +19,7 @@ type (
 	protoMessageType = persistencespb.WorkflowExecutionState // Random proto message.
 	TestComponent    struct {
 		UnimplementedComponent
+		ComponentSearchAttributesProvider
 
 		ComponentData                *protoMessageType
 		SubComponent1                Field[*TestSubComponent1]
@@ -95,10 +96,10 @@ func (tc *TestComponent) Fail(_ MutableContext) {
 }
 
 // SearchAttributes implements VisibilitySearchAttributesProvider interface.
-func (tc *TestComponent) SearchAttributes(_ Context) []*SearchAttribute {
+func (tc *TestComponent) SearchAttributes(ctx Context) map[string]VisibilityValue {
 	attr := NewSearchAttributeTimeByAlias(testComponentStartTimeSAKey, testComponentStartTimeSAKey)
-	attr.SetValue(tc.ComponentData.GetStartTime().AsTime())
-	return []*SearchAttribute{&attr.SearchAttribute}
+	tc.UpsertSearchAttributes(attr.SetValue(tc.ComponentData.GetStartTime().AsTime()))
+	return tc.ComponentSearchAttributesProvider.SearchAttributes(ctx)
 }
 
 // Memo implements VisibilityMemoProvider interface.
