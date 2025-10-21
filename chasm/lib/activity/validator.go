@@ -17,7 +17,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// RequestAttributesValidator validates and adjusts activity request attributes.
+// RequestAttributesValidator struct used for validating and normalizing activity request attributes.
 type RequestAttributesValidator struct {
 	activityID                      string
 	activityType                    string
@@ -29,7 +29,7 @@ type RequestAttributesValidator struct {
 	standaloneActivityAttributes    *StandaloneActivityAttributes
 }
 
-// Fields for validating standalone activity specific attributes.
+// StandaloneActivityAttributes Fields for validating standalone activity specific attributes.
 type StandaloneActivityAttributes struct {
 	namespaceName    string
 	requestID        string
@@ -38,8 +38,8 @@ type StandaloneActivityAttributes struct {
 	saValidator      *searchattribute.Validator
 }
 
-// Modified attributes after validating standalone activity specific attributes. It is up to the caller to decide how to
-// handle these modified attributes.
+// StandaloneActivityModifiedAttributes Modified attributes after validating standalone activity specific attributes.
+// It is up to the caller to decide how to handle these modified attributes.
 type StandaloneActivityModifiedAttributes struct {
 	requestID                 string
 	searchAttributesUnaliased *commonpb.SearchAttributes // Unaliased search attributes after validation
