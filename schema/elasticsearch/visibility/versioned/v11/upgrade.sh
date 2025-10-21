@@ -69,12 +69,6 @@ new_mapping='
     "TemporalKeyword04": {
       "type": "keyword"
     },
-    "TemporalText01": {
-      "type": "text"
-    },
-    "TemporalText02": {
-      "type": "text"
-    },
     "TemporalKeywordList01": {
       "type": "keyword"
     },

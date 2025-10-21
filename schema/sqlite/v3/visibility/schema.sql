@@ -79,8 +79,6 @@ CREATE TABLE executions_visibility (
   TemporalKeyword02       VARCHAR(255)    GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalKeyword02")),
   TemporalKeyword03       VARCHAR(255)    GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalKeyword03")),
   TemporalKeyword04       VARCHAR(255)    GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalKeyword04")),
-  TemporalText01          TEXT            GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalText01"))        STORED,
-  TemporalText02          TEXT            GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalText02"))        STORED,
   TemporalKeywordList01   TEXT            GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalKeywordList01")) STORED,
   TemporalKeywordList02   TEXT            GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalKeywordList02")) STORED,
   
@@ -155,8 +153,6 @@ CREATE VIRTUAL TABLE executions_visibility_fts_text USING fts5 (
   Text01,
   Text02,
   Text03,
-  TemporalText01,
-  TemporalText02,
   content='executions_visibility',
   tokenize="unicode61 remove_diacritics 2"
 );
@@ -189,15 +185,11 @@ BEGIN
     Text01,
     Text02,
     Text03,
-    TemporalText01,
-    TemporalText02
   ) VALUES (
     NEW.rowid,
     NEW.Text01,
     NEW.Text02,
     NEW.Text03,
-    NEW.TemporalText01,
-    NEW.TemporalText02
   );
   -- insert into fts_keyword_list table
   INSERT INTO executions_visibility_fts_keyword_list (
@@ -236,16 +228,12 @@ BEGIN
     Text01,
     Text02,
     Text03,
-    TemporalText01,
-    TemporalText02
   ) VALUES (
     'delete',
     OLD.rowid,
     OLD.Text01,
     OLD.Text02,
     OLD.Text03,
-    OLD.TemporalText01,
-    OLD.TemporalText02
   );
   -- delete from fts_keyword_list table
   INSERT INTO executions_visibility_fts_keyword_list (
@@ -286,31 +274,23 @@ BEGIN
     Text01,
     Text02,
     Text03,
-    TemporalText01,
-    TemporalText02
   ) VALUES (
     'delete',
     OLD.rowid,
     OLD.Text01,
     OLD.Text02,
     OLD.Text03,
-    OLD.TemporalText01,
-    OLD.TemporalText02
   );
   INSERT INTO executions_visibility_fts_text (
     rowid,
     Text01,
     Text02,
     Text03,
-    TemporalText01,
-    TemporalText02
   ) VALUES (
     NEW.rowid,
     NEW.Text01,
     NEW.Text02,
     NEW.Text03,
-    NEW.TemporalText01,
-    NEW.TemporalText02
   );
   -- update fts_keyword_list table
   INSERT INTO executions_visibility_fts_keyword_list (

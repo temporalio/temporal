@@ -12,8 +12,6 @@ ALTER TABLE executions_visibility
   ADD COLUMN TemporalKeyword02      VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalKeyword02')               STORED,
   ADD COLUMN TemporalKeyword03      VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalKeyword03')               STORED,
   ADD COLUMN TemporalKeyword04      VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalKeyword04')               STORED,
-  ADD COLUMN TemporalText01         TSVECTOR        GENERATED ALWAYS AS ((search_attributes->>'TemporalText01')::tsvector)      STORED,
-  ADD COLUMN TemporalText02         TSVECTOR        GENERATED ALWAYS AS ((search_attributes->>'TemporalText02')::tsvector)      STORED,
   ADD COLUMN TemporalKeywordList01  JSONB           GENERATED ALWAYS AS (search_attributes->'TemporalKeywordList01')            STORED,
   ADD COLUMN TemporalKeywordList02  JSONB           GENERATED ALWAYS AS (search_attributes->'TemporalKeywordList02')            STORED;
 
@@ -30,7 +28,5 @@ CREATE INDEX by_temporal_keyword_01       ON executions_visibility (namespace_id
 CREATE INDEX by_temporal_keyword_02       ON executions_visibility (namespace_id, TemporalKeyword02, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_keyword_03       ON executions_visibility (namespace_id, TemporalKeyword03, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_keyword_04       ON executions_visibility (namespace_id, TemporalKeyword04, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
-CREATE INDEX by_temporal_text_01          ON executions_visibility USING GIN (namespace_id, TemporalText01);
-CREATE INDEX by_temporal_text_02          ON executions_visibility USING GIN (namespace_id, TemporalText02);
 CREATE INDEX by_temporal_keyword_list_01  ON executions_visibility USING GIN (namespace_id, TemporalKeywordList01 jsonb_path_ops);
 CREATE INDEX by_temporal_keyword_list_02  ON executions_visibility USING GIN (namespace_id, TemporalKeywordList02 jsonb_path_ops);

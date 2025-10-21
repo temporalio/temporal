@@ -29,8 +29,6 @@ CREATE TABLE chasm_search_attributes (
   TemporalKeyword02         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword02"),
   TemporalKeyword03         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword03"),
   TemporalKeyword04         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword04"),
-  TemporalText01            TEXT            GENERATED ALWAYS AS (search_attributes->>"$.TemporalText01") STORED,
-  TemporalText02            TEXT            GENERATED ALWAYS AS (search_attributes->>"$.TemporalText02") STORED,
   TemporalKeywordList01     JSON            GENERATED ALWAYS AS (search_attributes->"$.TemporalKeywordList01"),
   TemporalKeywordList02     JSON            GENERATED ALWAYS AS (search_attributes->"$.TemporalKeywordList02"),
 
@@ -49,7 +47,5 @@ CREATE INDEX by_temporal_keyword_01        ON chasm_search_attributes (namespace
 CREATE INDEX by_temporal_keyword_02        ON chasm_search_attributes (namespace_id, TemporalKeyword02);
 CREATE INDEX by_temporal_keyword_03        ON chasm_search_attributes (namespace_id, TemporalKeyword03);
 CREATE INDEX by_temporal_keyword_04        ON chasm_search_attributes (namespace_id, TemporalKeyword04);
-CREATE FULLTEXT INDEX by_temporal_text_01  ON chasm_search_attributes (TemporalText01);
-CREATE FULLTEXT INDEX by_temporal_text_02  ON chasm_search_attributes (TemporalText02);
 CREATE INDEX by_temporal_keyword_list_01   ON chasm_search_attributes (namespace_id, (CAST(TemporalKeywordList01 AS CHAR(255) ARRAY)));
 CREATE INDEX by_temporal_keyword_list_02   ON chasm_search_attributes (namespace_id, (CAST(TemporalKeywordList02 AS CHAR(255) ARRAY)));
