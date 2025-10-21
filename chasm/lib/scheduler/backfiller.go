@@ -45,6 +45,9 @@ func newBackfiller(
 }
 
 func (b *Backfiller) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
+	if b.Closed {
+		return chasm.LifecycleStateCompleted
+	}
 	return chasm.LifecycleStateRunning
 }
 

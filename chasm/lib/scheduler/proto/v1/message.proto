@@ -76,4 +76,7 @@ message BackfillerState {
     // Attempt count, incremented when the buffer is full and the Backfiller
     // needs to back off before retrying to fill.
     int64 attempt = 8;
+
+    // Set to true after the backfill is complete, used for lifecycle management.
+    bool closed = 9;
 }
