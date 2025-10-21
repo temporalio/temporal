@@ -1,6 +1,7 @@
 package chasm
 
 import (
+	"fmt"
 	"reflect"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -79,15 +80,26 @@ func WithSearchAttributes(
 			field := sa.GetField()
 			valueType := sa.GetValueType()
 
-			if existingAlias, exists := rc.fieldToAlias[field]; exists {
-				panic("duplicate field name in search attributes: field '" + field + "' is used by both alias '" + existingAlias + "' and '" + alias + "'")
-			}
-
 			rc.aliasToField[alias] = field
 			rc.fieldToAlias[field] = alias
 			rc.saTypeMap[field] = valueType
 		}
 	}
+}
+
+// validate checks for errors in the component configuration.
+func (rc *RegistrableComponent) validate() error {
+	// Check for duplicate field names in search attributes
+	fieldToAliases := make(map[string][]string)
+	for alias, field := range rc.aliasToField {
+		fieldToAliases[field] = append(fieldToAliases[field], alias)
+	}
+	for field, aliases := range fieldToAliases {
+		if len(aliases) > 1 {
+			return fmt.Errorf("search attributes contain duplicate field names: field '%s' is used by multiple aliases: %v", field, aliases)
+		}
+	}
+	return nil
 }
 
 // fqType returns the fully qualified name of the component, which is a combination of
