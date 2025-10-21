@@ -3,6 +3,7 @@ package activity
 import (
 	"fmt"
 
+	"github.com/pborman/uuid"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -11,6 +12,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -24,6 +26,23 @@ type RequestAttributesValidator struct {
 	namespaceID                     namespace.ID
 	options                         *activitypb.ActivityOptions
 	priority                        *commonpb.Priority
+	standaloneActivityAttributes    *StandaloneActivityAttributes
+}
+
+// Fields for validating standalone activity specific attributes.
+type StandaloneActivityAttributes struct {
+	namespaceName    string
+	requestID        string
+	searchAttributes *commonpb.SearchAttributes
+	saMapperProvider searchattribute.MapperProvider
+	saValidator      *searchattribute.Validator
+}
+
+// Modified attributes after validating standalone activity specific attributes. It is up to the caller to decide how to
+// handle these modified attributes.
+type StandaloneActivityModifiedAttributes struct {
+	requestID                 string
+	searchAttributesUnaliased *commonpb.SearchAttributes // Unaliased search attributes after validation
 }
 
 func NewRequestAttributesValidator(
@@ -34,6 +53,7 @@ func NewRequestAttributesValidator(
 	namespaceID namespace.ID,
 	options *activitypb.ActivityOptions,
 	priority *commonpb.Priority,
+	standaloneActivityAttributes *StandaloneActivityAttributes,
 ) RequestAttributesValidator {
 	return RequestAttributesValidator{
 		activityID:                      activityID,
@@ -43,6 +63,7 @@ func NewRequestAttributesValidator(
 		namespaceID:                     namespaceID,
 		options:                         options,
 		priority:                        priority,
+		standaloneActivityAttributes:    standaloneActivityAttributes,
 	}
 }
 
@@ -51,7 +72,7 @@ func (v *RequestAttributesValidator) GetActivityOptions() *activitypb.ActivityOp
 }
 
 // ValidateAndAdjustTimeouts validates the activity request attributes and adjusts the ActivityOptions timeout based on
-// the following rules.
+// the following rules. This validation is shared by both standalone and embedded activities.
 // runTimeout is the workflow run timeout. Set to durationpb.New(0) if not applicable.
 // 1. If ScheduleToClose is set, fill in missing ScheduleToStart and StartToClose from ScheduleToClose
 // 2. If StartToClose is set but ScheduleToClose is not set, set ScheduleToClose to runTimeout, and fill in missing ScheduleToStart from runTimeout
@@ -169,6 +190,66 @@ func (v *RequestAttributesValidator) adjustActivityTimeouts(runTimeout *duration
 	}
 
 	v.options.HeartbeatTimeout = timestamp.MinDurationPtr(v.options.GetHeartbeatTimeout(), v.options.GetStartToCloseTimeout())
+
+	return nil
+}
+
+// ValidateStandaloneActivity validates the standalone activity specific attributes. It will return the modified
+// attributes that are not idempotent, letting the caller decide how to handle them.
+func (v *RequestAttributesValidator) ValidateStandaloneActivity() (*StandaloneActivityModifiedAttributes, error) {
+	if v.standaloneActivityAttributes == nil {
+		return nil, nil
+	}
+
+	modifiedAttributes := &StandaloneActivityModifiedAttributes{}
+
+	if err := v.validateRequestID(modifiedAttributes); err != nil {
+		return nil, err
+	}
+
+	if v.standaloneActivityAttributes.searchAttributes != nil {
+		if err := v.validateAndUnaliasSearchAttributes(modifiedAttributes); err != nil {
+			return nil, err
+		}
+	}
+
+	return modifiedAttributes, nil
+}
+
+func (v *RequestAttributesValidator) validateRequestID(modifiedAttributes *StandaloneActivityModifiedAttributes) error {
+	requestID := v.standaloneActivityAttributes.requestID
+
+	if requestID == "" {
+		// For easy direct API use, we default the request ID here but expect all
+		// SDKs and other auto-retrying clients to set it
+		modifiedAttributes.requestID = uuid.New()
+	}
+
+	if len(requestID) > v.maxIDLengthLimit || len(modifiedAttributes.requestID) > v.maxIDLengthLimit {
+		return serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
+	}
+
+	return nil
+}
+
+func (v *RequestAttributesValidator) validateAndUnaliasSearchAttributes(modifiedAttributes *StandaloneActivityModifiedAttributes) error {
+	saa := v.standaloneActivityAttributes
+	namespaceName := saa.namespaceName
+
+	unaliasedSaa, err := searchattribute.UnaliasFields(saa.saMapperProvider, saa.searchAttributes, namespaceName)
+	if err != nil {
+		return err
+	}
+
+	if err := saa.saValidator.Validate(unaliasedSaa, namespaceName); err != nil {
+		return err
+	}
+
+	if err := saa.saValidator.ValidateSize(unaliasedSaa, namespaceName); err != nil {
+		return err
+	}
+
+	modifiedAttributes.searchAttributesUnaliased = unaliasedSaa
 
 	return nil
 }

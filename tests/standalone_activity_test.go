@@ -47,6 +47,7 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 			},
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 		},
+		RequestId: "test-request-id",
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.GetRunId())

@@ -114,6 +114,7 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 			RetryPolicy:            attributes.RetryPolicy,
 		},
 		attributes.GetPriority(),
+		nil,
 	)
 
 	err := validator.ValidateAndAdjustTimeouts(runTimeout)

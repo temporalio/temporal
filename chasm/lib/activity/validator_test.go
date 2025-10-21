@@ -12,11 +12,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-type testCase struct {
-	name      string
-	validator RequestAttributesValidator
-}
-
 const (
 	defaultActivityID       = "test-activity-id"
 	defaultActivityType     = "test-activity-type"
@@ -45,14 +40,25 @@ func TestValidateSuccess(t *testing.T) {
 		defaultNamespaceID,
 		&defaultActvityOptions,
 		&defaultPriority,
+		&StandaloneActivityAttributes{
+			requestID: "test-request-id",
+		},
 	)
 
 	err := validator.ValidateAndAdjustTimeouts(durationpb.New(0))
 	require.NoError(t, err)
+
+	modifiedAttributes, err := validator.ValidateStandaloneActivity()
+	require.NoError(t, err)
+	require.Empty(t, modifiedAttributes.requestID)
+	require.Nil(t, modifiedAttributes.searchAttributesUnaliased)
 }
 
 func TestValidateFailures(t *testing.T) {
-	cases := []testCase{
+	cases := []struct {
+		name      string
+		validator RequestAttributesValidator
+	}{
 		{
 			name: "Empty ActivityId",
 			validator: NewRequestAttributesValidator(
@@ -63,6 +69,7 @@ func TestValidateFailures(t *testing.T) {
 				defaultNamespaceID,
 				&defaultActvityOptions,
 				&defaultPriority,
+				nil,
 			),
 		},
 		{
@@ -75,6 +82,7 @@ func TestValidateFailures(t *testing.T) {
 				defaultNamespaceID,
 				&defaultActvityOptions,
 				&defaultPriority,
+				nil,
 			),
 		},
 		{
@@ -87,6 +95,7 @@ func TestValidateFailures(t *testing.T) {
 				defaultNamespaceID,
 				&defaultActvityOptions,
 				&defaultPriority,
+				nil,
 			),
 		},
 		{
@@ -99,6 +108,7 @@ func TestValidateFailures(t *testing.T) {
 				defaultNamespaceID,
 				&defaultActvityOptions,
 				&defaultPriority,
+				nil,
 			),
 		},
 		{
@@ -114,6 +124,7 @@ func TestValidateFailures(t *testing.T) {
 					ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 				},
 				&defaultPriority,
+				nil,
 			),
 		},
 		{
@@ -129,6 +140,7 @@ func TestValidateFailures(t *testing.T) {
 					ScheduleToCloseTimeout: durationpb.New(-1 * time.Second),
 				},
 				&defaultPriority,
+				nil,
 			),
 		},
 		{
@@ -145,6 +157,7 @@ func TestValidateFailures(t *testing.T) {
 					ScheduleToStartTimeout: durationpb.New(-1 * time.Second),
 				},
 				&defaultPriority,
+				nil,
 			),
 		},
 		{
@@ -160,6 +173,7 @@ func TestValidateFailures(t *testing.T) {
 					StartToCloseTimeout: durationpb.New(-1 * time.Second),
 				},
 				&defaultPriority,
+				nil,
 			),
 		},
 		{
@@ -176,6 +190,7 @@ func TestValidateFailures(t *testing.T) {
 					HeartbeatTimeout:       durationpb.New(-1 * time.Second),
 				},
 				&defaultPriority,
+				nil,
 			),
 		},
 		{
@@ -188,6 +203,7 @@ func TestValidateFailures(t *testing.T) {
 				defaultNamespaceID,
 				&defaultActvityOptions,
 				&commonpb.Priority{FairnessKey: string(make([]byte, 1001))},
+				nil,
 			),
 		},
 	}
@@ -198,6 +214,24 @@ func TestValidateFailures(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
+	validator := NewRequestAttributesValidator(
+		defaultActivityID,
+		defaultActivityType,
+		defaultRetrySettings,
+		defaultMaxIDLengthLimit,
+		defaultNamespaceID,
+		&defaultActvityOptions,
+		&defaultPriority,
+		&StandaloneActivityAttributes{
+			requestID: string(make([]byte, 1001)),
+		},
+	)
+
+	_, err := validator.ValidateStandaloneActivity()
+	require.Error(t, err)
 }
 
 func TestAdjustActivityTimeouts(t *testing.T) {
@@ -322,6 +356,7 @@ func TestAdjustActivityTimeouts(t *testing.T) {
 				defaultNamespaceID,
 				tc.options,
 				&defaultPriority,
+				nil,
 			)
 
 			err := validator.ValidateAndAdjustTimeouts(tc.runTimeout)
