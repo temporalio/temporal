@@ -612,7 +612,6 @@ var (
 
 	_ chasm.VisibilitySearchAttributesProvider = (*testComponent)(nil)
 	_ chasm.VisibilityMemoProvider             = (*testComponent)(nil)
-	_ chasm.VisibilitySearchAttributesMapper   = (*testComponent)(nil)
 )
 
 type testComponent struct {
@@ -655,6 +654,7 @@ func (l *testChasmLibrary) Name() string {
 
 func (l *testChasmLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*testComponent]("test_component"),
+		chasm.NewRegistrableComponent[*testComponent]("test_component",
+			chasm.WithSearchAttributes(testComponentPausedSearchAttribute)),
 	}
 }

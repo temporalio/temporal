@@ -73,7 +73,6 @@ var (
 
 	_ VisibilitySearchAttributesProvider = (*TestComponent)(nil)
 	_ VisibilityMemoProvider             = (*TestComponent)(nil)
-	_ VisibilitySearchAttributesMapper   = (*TestComponent)(nil)
 )
 
 func (tc *TestComponent) LifecycleState(_ Context) LifecycleState {

@@ -41,8 +41,6 @@ var UnimplementedComponentT = reflect.TypeFor[UnimplementedComponent]()
 type ComponentSearchAttributesProvider struct {
 	searchAttributes map[string]VisibilityValue
 	memo             map[string]VisibilityValue
-	aliasToField     map[string]string
-	fieldToAlias     map[string]string
 }
 
 func (s *ComponentSearchAttributesProvider) SearchAttributes(_ Context) map[string]VisibilityValue {
@@ -53,29 +51,13 @@ func (s *ComponentSearchAttributesProvider) Memo(_ Context) map[string]Visibilit
 	return s.memo
 }
 
-func (s *ComponentSearchAttributesProvider) UpsertSearchAttributes(attributes ...SearchAttributeKeyValue) {
+func (s *ComponentSearchAttributesProvider) UpsertSearchAttributes(attributes ...SearchAttributeValue) {
 	if s.searchAttributes == nil {
 		s.searchAttributes = make(map[string]VisibilityValue)
 	}
-	if s.aliasToField == nil {
-		s.aliasToField = make(map[string]string)
-	}
-	if s.fieldToAlias == nil {
-		s.fieldToAlias = make(map[string]string)
-	}
 	for _, attribute := range attributes {
 		s.searchAttributes[attribute.field] = attribute.value
-		s.aliasToField[attribute.alias] = attribute.field
-		s.fieldToAlias[attribute.field] = attribute.alias
 	}
-}
-
-func (s *ComponentSearchAttributesProvider) GetAlias(field string) string {
-	return s.fieldToAlias[field]
-}
-
-func (s *ComponentSearchAttributesProvider) GetField(alias string) string {
-	return s.aliasToField[alias]
 }
 
 // Shall it be named ComponentLifecycleState?

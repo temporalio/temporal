@@ -2,6 +2,8 @@ package chasm
 
 import (
 	"reflect"
+
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 type (
@@ -13,6 +15,11 @@ type (
 		ephemeral     bool
 		singleCluster bool
 		shardingFn    func(EntityKey) string
+
+		// Search attribute mappings
+		aliasToField map[string]string
+		fieldToAlias map[string]string
+		saTypeMap    map[string]enumspb.IndexedValueType
 	}
 
 	RegistrableComponentOption func(*RegistrableComponent)
@@ -56,6 +63,29 @@ func WithShardingFn(
 	}
 }
 
+func WithSearchAttributes(
+	searchAttributes ...SearchAttributeDefinition,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		if len(searchAttributes) == 0 {
+			return
+		}
+		rc.aliasToField = make(map[string]string, len(searchAttributes))
+		rc.fieldToAlias = make(map[string]string, len(searchAttributes))
+		rc.saTypeMap = make(map[string]enumspb.IndexedValueType, len(searchAttributes))
+
+		for _, sa := range searchAttributes {
+			alias := sa.GetAlias()
+			field := sa.GetField()
+			valueType := sa.GetValueType()
+
+			rc.aliasToField[alias] = field
+			rc.fieldToAlias[field] = alias
+			rc.saTypeMap[field] = valueType
+		}
+	}
+}
+
 // fqType returns the fully qualified name of the component, which is a combination of
 // the library name and the component type. This is used to uniquely identify
 // the component in the registry.
@@ -65,4 +95,20 @@ func (rc RegistrableComponent) fqType() string {
 		panic("component is not registered to a library")
 	}
 	return fullyQualifiedName(rc.library.Name(), rc.componentType)
+}
+
+// GetAlias returns the search attribute alias for the given field name.
+func (rc *RegistrableComponent) GetAlias(field string) string {
+	if rc.fieldToAlias == nil {
+		return ""
+	}
+	return rc.fieldToAlias[field]
+}
+
+// GetField returns the search attribute field name for the given alias.
+func (rc *RegistrableComponent) GetField(alias string) string {
+	if rc.aliasToField == nil {
+		return ""
+	}
+	return rc.aliasToField[alias]
 }

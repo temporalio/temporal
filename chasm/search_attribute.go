@@ -31,6 +31,13 @@ var (
 )
 
 type (
+	SearchAttributeDefinition interface {
+		GetAlias() string
+		GetField() string
+		GetValueType() enumspb.IndexedValueType
+		mustEmbedSearchAttribute()
+	}
+
 	SearchAttribute struct {
 		// alias refers to the user defined name of the search attribute
 		alias string
@@ -39,8 +46,7 @@ type (
 		valueType enumspb.IndexedValueType
 	}
 
-	SearchAttributeKeyValue struct {
-		alias string
+	SearchAttributeValue struct {
 		field string
 		value VisibilityValue
 	}
@@ -166,6 +172,8 @@ func (s *SearchAttribute) GetValueType() enumspb.IndexedValueType {
 	return s.valueType
 }
 
+func (s *SearchAttribute) mustEmbedSearchAttribute() {}
+
 func NewSearchAttributeBool(alias string, field SearchAttributeFieldBool) *SearchAttributeBool {
 	return &SearchAttributeBool{
 		SearchAttribute: SearchAttribute{
@@ -186,9 +194,8 @@ func NewSearchAttributeBoolByField(alias string, field string) *SearchAttributeB
 	}
 }
 
-func (s SearchAttributeBool) ValueSet(value bool) SearchAttributeKeyValue {
-	return SearchAttributeKeyValue{
-		alias: s.alias,
+func (s SearchAttributeBool) ValueSet(value bool) SearchAttributeValue {
+	return SearchAttributeValue{
 		field: s.field,
 		value: VisibilityValueBool(value),
 	}
@@ -224,9 +231,8 @@ func NewSearchAttributeIntByField(alias string, field string) *SearchAttributeIn
 	}
 }
 
-func (s SearchAttributeInt) ValueSet(value int64) SearchAttributeKeyValue {
-	return SearchAttributeKeyValue{
-		alias: s.alias,
+func (s SearchAttributeInt) ValueSet(value int64) SearchAttributeValue {
+	return SearchAttributeValue{
 		field: s.field,
 		value: VisibilityValueInt64(value),
 	}
@@ -242,9 +248,8 @@ func NewSearchAttributeDateTimeByField(alias string, field string) *SearchAttrib
 	}
 }
 
-func (s SearchAttributeDateTime) ValueSet(value time.Time) SearchAttributeKeyValue {
-	return SearchAttributeKeyValue{
-		alias: s.alias,
+func (s SearchAttributeDateTime) ValueSet(value time.Time) SearchAttributeValue {
+	return SearchAttributeValue{
 		field: s.field,
 		value: VisibilityValueTime(value),
 	}
@@ -270,9 +275,8 @@ func NewSearchAttributeDoubleByField(alias string, field string) *SearchAttribut
 	}
 }
 
-func (s SearchAttributeDouble) ValueSet(value float64) SearchAttributeKeyValue {
-	return SearchAttributeKeyValue{
-		alias: s.alias,
+func (s SearchAttributeDouble) ValueSet(value float64) SearchAttributeValue {
+	return SearchAttributeValue{
 		field: s.field,
 		value: VisibilityValueFloat64(value),
 	}
@@ -298,9 +302,8 @@ func NewSearchAttributeKeywordByField(alias string, field string) *SearchAttribu
 	}
 }
 
-func (s SearchAttributeKeyword) ValueSet(value string) SearchAttributeKeyValue {
-	return SearchAttributeKeyValue{
-		alias: s.alias,
+func (s SearchAttributeKeyword) ValueSet(value string) SearchAttributeValue {
+	return SearchAttributeValue{
 		field: s.field,
 		value: VisibilityValueString(value),
 	}
@@ -326,9 +329,8 @@ func NewSearchAttributeKeywordListByField(alias string, field string) *SearchAtt
 	}
 }
 
-func (s SearchAttributeKeywordList) ValueSet(value []string) SearchAttributeKeyValue {
-	return SearchAttributeKeyValue{
-		alias: s.alias,
+func (s SearchAttributeKeywordList) ValueSet(value []string) SearchAttributeValue {
+	return SearchAttributeValue{
 		field: s.field,
 		value: VisibilityValueStringSlice(value),
 	}

@@ -28,7 +28,6 @@ var (
 
 	_ chasm.VisibilitySearchAttributesProvider = (*PayloadStore)(nil)
 	_ chasm.VisibilityMemoProvider             = (*PayloadStore)(nil)
-	_ chasm.VisibilitySearchAttributesMapper   = (*PayloadStore)(nil)
 )
 
 type (
