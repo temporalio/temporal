@@ -45,11 +45,11 @@ type ComponentSearchAttributesProvider struct {
 	fieldToAlias     map[string]string
 }
 
-func (s *ComponentSearchAttributesProvider) SearchAttributes(ctx Context) map[string]VisibilityValue {
+func (s *ComponentSearchAttributesProvider) SearchAttributes(_ Context) map[string]VisibilityValue {
 	return s.searchAttributes
 }
 
-func (s *ComponentSearchAttributesProvider) Memo(ctx Context) map[string]VisibilityValue {
+func (s *ComponentSearchAttributesProvider) Memo(_ Context) map[string]VisibilityValue {
 	return s.memo
 }
 
