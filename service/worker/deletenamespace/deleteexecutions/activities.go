@@ -229,8 +229,10 @@ func (a *Activities) deleteWorkflowExecutionFromVisibility(
 
 	logger.Info("Deleting workflow execution from visibility.")
 	_, err := a.historyClient.DeleteWorkflowVisibilityRecord(ctx, &historyservice.DeleteWorkflowVisibilityRecordRequest{
-		NamespaceId: nsID.String(),
-		Execution:   execution.GetExecution(),
+		NamespaceId:       nsID.String(),
+		Execution:         execution.GetExecution(),
+		WorkflowStartTime: execution.StartTime,
+		WorkflowCloseTime: execution.CloseTime,
 	})
 	switch err.(type) {
 	case nil:
