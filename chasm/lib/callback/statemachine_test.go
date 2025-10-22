@@ -107,8 +107,8 @@ func TestValidTransitions(t *testing.T) {
 	// Store the pre-succeeded state to test Failed later
 	dup := &Callback{
 		CallbackState: proto.Clone(callback.CallbackState).(*callbackspb.CallbackState),
-		status:        callback.State(),
 	}
+	dup.Status = callback.State()
 
 	// Succeeded
 	currentTime = currentTime.Add(time.Second)

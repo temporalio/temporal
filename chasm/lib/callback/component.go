@@ -17,8 +17,6 @@ type Callback struct {
 
 	// Persisted internal state
 	*callbackspb.CallbackState
-
-	status callbackspb.CallbackStatus
 }
 
 func NewCallback(
@@ -42,11 +40,11 @@ func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 }
 
 func (c *Callback) State() callbackspb.CallbackStatus {
-	return c.status
+	return c.Status
 }
 
 func (c *Callback) SetState(status callbackspb.CallbackStatus) {
-	c.status = status
+	c.Status = status
 }
 
 func (c *Callback) recordAttempt(ts time.Time) {
