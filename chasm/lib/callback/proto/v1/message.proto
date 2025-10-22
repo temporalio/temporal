@@ -59,19 +59,19 @@ enum CallbackStatus {
 
 
 message Callback {
+    message Nexus {
+        // Callback URL.
+        // (-- api-linter: core::0140::uri=disabled
+        //     aip.dev/not-precedent: Not respecting aip here. --)
+        string url = 1;
+        // Header to attach to callback request.
+        map<string, string> header = 2;
+    }
+
     reserved 1; // For a generic callback mechanism to be added later.
     oneof variant {
         Nexus nexus = 2;
     }
 
     repeated temporal.api.common.v1.Link links = 100;
-}
-
-message Nexus {
-    // Callback URL.
-    // (-- api-linter: core::0140::uri=disabled
-    //     aip.dev/not-precedent: Not respecting aip here. --)
-    string url = 1;
-    // Header to attach to callback request.
-    map<string, string> header = 2;
 }
