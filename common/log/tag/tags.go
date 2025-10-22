@@ -914,6 +914,16 @@ func ActivityInfo(activityInfo interface{}) ZapTag {
 	return NewAnyTag("activity-info", activityInfo)
 }
 
+// ActivityID returns tag for a standalone activity ID
+func ActivityID(id string) ZapTag {
+	return NewStringTag("activity-id", id)
+}
+
+// ActivitySize returns tag for a standalone activity size
+func ActivitySize(activitySize int64) ZapTag {
+	return NewInt64("activity-size", activitySize)
+}
+
 // WorkflowTaskRequestId returns tag for workflow task RequestId
 func WorkflowTaskRequestId(s string) ZapTag {
 	return NewStringTag("workflow-task-request-id", s)

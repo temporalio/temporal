@@ -8,6 +8,8 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -29,23 +31,29 @@ type FrontendHandler interface {
 type frontendHandler struct {
 	FrontendHandler
 	client            activitypb.ActivityServiceClient
-	namespaceRegistry namespace.Registry
 	dc                *dynamicconfig.Collection
+	logger            log.Logger
+	metricsHandler    metrics.Handler
+	namespaceRegistry namespace.Registry
 	saMapperProvider  searchattribute.MapperProvider
 	saValidator       *searchattribute.Validator
 }
 
 func NewFrontendHandler(
 	client activitypb.ActivityServiceClient,
-	namespaceRegistry namespace.Registry,
 	dc *dynamicconfig.Collection,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+	namespaceRegistry namespace.Registry,
 	saMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 	visibilityMgr manager.VisibilityManager) FrontendHandler {
 	return &frontendHandler{
 		client:            client,
-		namespaceRegistry: namespaceRegistry,
 		dc:                dc,
+		logger:            logger,
+		metricsHandler:    metricsHandler,
+		namespaceRegistry: namespaceRegistry,
 		saMapperProvider:  saMapperProvider,
 		saValidator: searchattribute.NewValidator(
 			saProvider,
@@ -63,11 +71,46 @@ func NewFrontendHandler(
 	}
 }
 
+// StartActivityExecution initiates a standalone activity execution in the specified namespace.
+// It validates the request, resolves the namespace ID, applies default configurations,
+// and forwards the request to the activity service client.
+//
+// The method performs the following steps:
+// 1. Resolves the namespace name to its internal ID
+// 2. Validates and populates request fields (timeouts, retry policies, search attributes). The request is cloned
+// before mutation to preserve the original for retries.
+// 3. Sends the request to the history activity service.
+//
+// Parameters:
+//   - ctx: Context for the request, used for cancellation and deadlines
+//   - req: StartActivityExecutionRequest containing activity details, options, and metadata
+//
+// Returns:
+//   - *workflowservice.StartActivityExecutionResponse: Response containing activity execution details
+//   - error: Any error encountered during namespace resolution, validation, or execution
 func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workflowservice.StartActivityExecutionRequest) (*workflowservice.StartActivityExecutionResponse, error) {
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
+
+	modifiedReq, err := h.validateAndPopulateListRequest(req, namespaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := h.client.StartActivityExecution(ctx, &activitypb.StartActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: modifiedReq,
+	})
+
+	return resp.GetFrontendResponse(), err
+}
+
+func (h *frontendHandler) validateAndPopulateListRequest(
+	req *workflowservice.StartActivityExecutionRequest, namespaceID namespace.ID) (*workflowservice.StartActivityExecutionRequest, error) {
+	// Since validation includes mutation of the request, we clone it first so that any retries use the original request.
+	req = common.CloneProto(req)
 
 	activityType := ""
 	if req.ActivityType != nil {
@@ -78,7 +121,7 @@ func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workf
 		req.Options.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
-	validator := NewRequestAttributesValidator(
+	modifiedAttributes, err := ValidateActivityRequestAttributes(
 		req.ActivityId,
 		activityType,
 		dynamicconfig.DefaultActivityRetryPolicy.Get(h.dc),
@@ -86,40 +129,44 @@ func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workf
 		namespaceID,
 		req.Options,
 		req.Priority,
-		&StandaloneActivityAttributes{
-			namespaceName:    req.GetNamespace(),
-			requestID:        req.RequestId,
-			searchAttributes: req.SearchAttributes,
-			saMapperProvider: h.saMapperProvider,
-			saValidator:      h.saValidator,
-		},
+		durationpb.New(0),
 	)
-
-	err = validator.ValidateAndAdjustTimeouts(durationpb.New(0))
 	if err != nil {
 		return nil, err
 	}
 
-	modifiedAttributes, err := validator.ValidateStandaloneActivity()
+	// Update the command attributes with the adjusted timeouts
+	if modifiedAttributes != nil {
+		req.Options.ScheduleToCloseTimeout = modifiedAttributes.ScheduleToCloseTimeout
+		req.Options.ScheduleToStartTimeout = modifiedAttributes.ScheduleToStartTimeout
+		req.Options.StartToCloseTimeout = modifiedAttributes.StartToCloseTimeout
+		req.Options.HeartbeatTimeout = modifiedAttributes.HeartbeatTimeout
+	}
+
+	modifiedSaAttributes, err := ValidateStandaloneActivity(
+		req.ActivityId,
+		req.ActivityType.GetName(),
+		dynamicconfig.BlobSizeLimitError.Get(h.dc),
+		dynamicconfig.BlobSizeLimitWarn.Get(h.dc),
+		req.Input.Size(),
+		h.logger,
+		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
+		req.Namespace,
+		req.RequestId,
+		req.SearchAttributes,
+		h.saMapperProvider,
+		h.saValidator)
 	if err != nil {
 		return nil, err
 	}
 
-	if modifiedAttributes.requestID != "" {
-		req.RequestId = modifiedAttributes.requestID
+	if modifiedSaAttributes.requestID != "" {
+		req.RequestId = modifiedSaAttributes.requestID
 	}
 
-	if modifiedAttributes.searchAttributesUnaliased != nil && modifiedAttributes.searchAttributesUnaliased != req.SearchAttributes {
-		// Since searchAttributesUnaliased is not idempotent, we need to clone the request so that in case of retries,
-		// the field is set to the original value.
-		req = common.CloneProto(req)
-		req.SearchAttributes = modifiedAttributes.searchAttributesUnaliased
+	if modifiedSaAttributes.searchAttributesUnaliased != nil {
+		req.SearchAttributes = modifiedSaAttributes.searchAttributesUnaliased
 	}
 
-	resp, err := h.client.StartActivityExecution(ctx, &activitypb.StartActivityExecutionRequest{
-		NamespaceId:     namespaceID.String(),
-		FrontendRequest: req,
-	})
-
-	return resp.GetFrontendResponse(), err
+	return req, nil
 }
