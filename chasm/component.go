@@ -38,37 +38,6 @@ func (UnimplementedComponent) mustEmbedUnimplementedComponent() {}
 
 var UnimplementedComponentT = reflect.TypeFor[UnimplementedComponent]()
 
-type ComponentSearchAttributesProvider struct {
-	searchAttributes map[string]VisibilityValue
-	memo             map[string]VisibilityValue
-}
-
-func (s *ComponentSearchAttributesProvider) SearchAttributes(_ Context) map[string]VisibilityValue {
-	return s.searchAttributes
-}
-
-func (s *ComponentSearchAttributesProvider) Memo(_ Context) map[string]VisibilityValue {
-	return s.memo
-}
-
-func (s *ComponentSearchAttributesProvider) UpsertSearchAttributes(attributes ...SearchAttributeValue) {
-	if s.searchAttributes == nil {
-		s.searchAttributes = make(map[string]VisibilityValue)
-	}
-	for _, attribute := range attributes {
-		s.searchAttributes[attribute.field] = attribute.value
-	}
-}
-
-func (s *ComponentSearchAttributesProvider) UpsertMemo(memoValues ...MemoValue) {
-	if s.memo == nil {
-		s.memo = make(map[string]VisibilityValue)
-	}
-	for _, memoValue := range memoValues {
-		s.memo[memoValue.key] = memoValue.value
-	}
-}
-
 // Shall it be named ComponentLifecycleState?
 type LifecycleState int
 

@@ -33,7 +33,6 @@ var (
 type (
 	PayloadStore struct {
 		chasm.UnimplementedComponent
-		chasm.ComponentSearchAttributesProvider
 
 		State *testspb.TestPayloadStore
 
@@ -151,9 +150,10 @@ func (s *PayloadStore) LifecycleState(
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface
 func (s *PayloadStore) SearchAttributes(
 	ctx chasm.Context,
-) map[string]chasm.VisibilityValue {
-	s.UpsertSearchAttributes(testKeywordSearchAttribute.NewValue(TestKeywordSAFieldValue))
-	return s.ComponentSearchAttributesProvider.SearchAttributes(ctx)
+) []chasm.SearchAttributeValue {
+	return []chasm.SearchAttributeValue{
+		testKeywordSearchAttribute.NewValue(TestKeywordSAFieldValue),
+	}
 }
 
 // Memo implements chasm.VisibilityMemoProvider interface

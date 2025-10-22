@@ -616,7 +616,6 @@ var (
 
 type testComponent struct {
 	chasm.UnimplementedComponent
-	chasm.ComponentSearchAttributesProvider
 
 	ActivityInfo *persistencespb.ActivityInfo
 }
@@ -625,9 +624,10 @@ func (l *testComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
-func (l *testComponent) SearchAttributes(ctx chasm.Context) map[string]chasm.VisibilityValue {
-	l.UpsertSearchAttributes(testComponentPausedSearchAttribute.NewValue(l.ActivityInfo.Paused))
-	return l.ComponentSearchAttributesProvider.SearchAttributes(ctx)
+func (l *testComponent) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeValue {
+	return []chasm.SearchAttributeValue{
+		testComponentPausedSearchAttribute.NewValue(l.ActivityInfo.Paused),
+	}
 }
 
 func (l *testComponent) Memo(_ chasm.Context) map[string]chasm.VisibilityValue {

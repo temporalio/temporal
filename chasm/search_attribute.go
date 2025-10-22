@@ -7,29 +7,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
-// Exported CHASM search attribute field constants
-var (
-	SearchAttributeFieldBool01 = newSearchAttributeFieldBool(1)
-	SearchAttributeFieldBool02 = newSearchAttributeFieldBool(2)
-
-	SearchAttributeFieldDateTime01 = newSearchAttributeFieldDateTime(1)
-	SearchAttributeFieldDateTime02 = newSearchAttributeFieldDateTime(2)
-
-	SearchAttributeFieldInt01 = newSearchAttributeFieldInt(1)
-	SearchAttributeFieldInt02 = newSearchAttributeFieldInt(2)
-
-	SearchAttributeFieldDouble01 = newSearchAttributeFieldDouble(1)
-	SearchAttributeFieldDouble02 = newSearchAttributeFieldDouble(2)
-
-	SearchAttributeFieldKeyword01 = newSearchAttributeFieldKeyword(1)
-	SearchAttributeFieldKeyword02 = newSearchAttributeFieldKeyword(2)
-	SearchAttributeFieldKeyword03 = newSearchAttributeFieldKeyword(3)
-	SearchAttributeFieldKeyword04 = newSearchAttributeFieldKeyword(4)
-
-	SearchAttributeFieldKeywordList01 = newSearchAttributeFieldKeywordList(1)
-	SearchAttributeFieldKeywordList02 = newSearchAttributeFieldKeywordList(2)
-)
-
 type (
 	SearchAttributeDefinition interface {
 		GetAlias() string
@@ -103,6 +80,37 @@ type (
 	SearchAttributeKeywordList struct {
 		SearchAttribute
 	}
+)
+
+func (s SearchAttributeValue) Field() string {
+	return s.field
+}
+
+func (s SearchAttributeValue) Value() VisibilityValue {
+	return s.value
+}
+
+// Exported CHASM search attribute field constants
+var (
+	SearchAttributeFieldBool01 = newSearchAttributeFieldBool(1)
+	SearchAttributeFieldBool02 = newSearchAttributeFieldBool(2)
+
+	SearchAttributeFieldDateTime01 = newSearchAttributeFieldDateTime(1)
+	SearchAttributeFieldDateTime02 = newSearchAttributeFieldDateTime(2)
+
+	SearchAttributeFieldInt01 = newSearchAttributeFieldInt(1)
+	SearchAttributeFieldInt02 = newSearchAttributeFieldInt(2)
+
+	SearchAttributeFieldDouble01 = newSearchAttributeFieldDouble(1)
+	SearchAttributeFieldDouble02 = newSearchAttributeFieldDouble(2)
+
+	SearchAttributeFieldKeyword01 = newSearchAttributeFieldKeyword(1)
+	SearchAttributeFieldKeyword02 = newSearchAttributeFieldKeyword(2)
+	SearchAttributeFieldKeyword03 = newSearchAttributeFieldKeyword(3)
+	SearchAttributeFieldKeyword04 = newSearchAttributeFieldKeyword(4)
+
+	SearchAttributeFieldKeywordList01 = newSearchAttributeFieldKeywordList(1)
+	SearchAttributeFieldKeywordList02 = newSearchAttributeFieldKeywordList(2)
 )
 
 func newSearchAttributeFieldBool(index int) SearchAttributeFieldBool {
