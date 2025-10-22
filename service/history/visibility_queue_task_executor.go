@@ -320,6 +320,7 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		WorkflowID:  task.WorkflowID,
 		RunID:       task.RunID,
 		TaskID:      task.TaskID,
+		StartTime:   task.StartTime,
 	}
 
 	if task.CloseTime.After(time.Unix(0, 0)) {

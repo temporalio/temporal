@@ -1122,6 +1122,7 @@ func (s *TaskSerializer) visibilityDeleteTaskToProto(
 		VisibilityTime:        timestamppb.New(deleteVisibilityTask.VisibilityTimestamp),
 		CloseVisibilityTaskId: deleteVisibilityTask.CloseExecutionVisibilityTaskID,
 		CloseTime:             timestamppb.New(deleteVisibilityTask.CloseTime),
+		StartTime:             timestamppb.New(deleteVisibilityTask.StartTime),
 	}
 }
 
@@ -1138,6 +1139,7 @@ func (s *TaskSerializer) visibilityDeleteTaskFromProto(
 		TaskID:                         deleteVisibilityTask.TaskId,
 		CloseExecutionVisibilityTaskID: deleteVisibilityTask.CloseVisibilityTaskId,
 		CloseTime:                      deleteVisibilityTask.CloseTime.AsTime(),
+		StartTime:                      deleteVisibilityTask.StartTime.AsTime(),
 	}
 }
 

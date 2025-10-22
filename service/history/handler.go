@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
@@ -1989,6 +1990,8 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 		WorkflowID:  request.Execution.GetWorkflowId(),
 		RunID:       request.Execution.GetRunId(),
 		TaskID:      math.MaxInt64,
+		CloseTime:   util.Ptr(request.WorkflowCloseTime.AsTime()),
+		StartTime:   request.WorkflowStartTime.AsTime(),
 	})
 	if err != nil {
 		return nil, h.convertError(err)

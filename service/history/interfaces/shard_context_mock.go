@@ -180,17 +180,17 @@ func (mr *MockShardContextMockRecorder) CurrentVectorClock() *gomock.Call {
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockShardContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, closeExecutionVisibilityTaskID int64, workflowCloseTime time.Time, stage *tasks.DeleteWorkflowExecutionStage) error {
+func (m *MockShardContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, closeExecutionVisibilityTaskID int64, workflowCloseTime, workflowStartTime time.Time, stage *tasks.DeleteWorkflowExecutionStage) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, workflowStartTime, stage)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
-func (mr *MockShardContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage any) *gomock.Call {
+func (mr *MockShardContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, workflowStartTime, stage any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockShardContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockShardContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, workflowStartTime, stage)
 }
 
 // GenerateTaskID mocks base method.
@@ -957,17 +957,17 @@ func (mr *MockControllableContextMockRecorder) CurrentVectorClock() *gomock.Call
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockControllableContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, closeExecutionVisibilityTaskID int64, workflowCloseTime time.Time, stage *tasks.DeleteWorkflowExecutionStage) error {
+func (m *MockControllableContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, closeExecutionVisibilityTaskID int64, workflowCloseTime, workflowStartTime time.Time, stage *tasks.DeleteWorkflowExecutionStage) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, workflowStartTime, stage)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
-func (mr *MockControllableContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage any) *gomock.Call {
+func (mr *MockControllableContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, workflowStartTime, stage any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockControllableContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockControllableContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, workflowStartTime, stage)
 }
 
 // FinishStop mocks base method.
