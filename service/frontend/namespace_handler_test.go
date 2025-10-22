@@ -754,6 +754,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ChangeActiveClusterWit
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: clusterName2,
 				Clusters:          []string{clusterName1, clusterName2},
+				State:             enumspb.REPLICATION_STATE_NORMAL,
 				FailoverHistory: []*persistencespb.FailoverStatus{
 					{
 						FailoverTime:    timestamppb.New(update1Time),
@@ -865,6 +866,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster_Li
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: clusterName2,
 				Clusters:          []string{clusterName1, clusterName2},
+				State:             enumspb.REPLICATION_STATE_NORMAL,
 				FailoverHistory:   sizeLimitedFailoverHistory,
 			},
 			ConfigVersion:               0,
@@ -1147,6 +1149,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_AllAttrSet() {
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: activeClusterName,
 				Clusters:          []string{activeClusterName},
+				State:             enumspb.REPLICATION_STATE_NORMAL,
 			},
 			ConfigVersion:               1,
 			FailoverNotificationVersion: 0,
@@ -1666,6 +1669,7 @@ func (s *namespaceHandlerCommonSuite) TestFailoverGlobalNamespace_NotMaster() {
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: clusterName2,
 				Clusters:          []string{clusterName1, clusterName2},
+				State:             enumspb.REPLICATION_STATE_NORMAL,
 				FailoverHistory: []*persistencespb.FailoverStatus{
 					{
 						FailoverTime:    timestamppb.New(update1Time),
