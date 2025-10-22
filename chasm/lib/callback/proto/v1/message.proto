@@ -52,17 +52,16 @@ enum CallbackStatus {
     CALLBACK_STATUS_SUCCEEDED = 5;
 }
 
+message Nexus {
+    // Callback URL.
+    // (-- api-linter: core::0140::uri=disabled
+    //     aip.dev/not-precedent: Not respecting aip here. --)
+    string url = 1;
+    // Header to attach to callback request.
+    map<string, string> header = 2;
+}
 
 message Callback {
-    message Nexus {
-        // Callback URL.
-        // (-- api-linter: core::0140::uri=disabled
-        //     aip.dev/not-precedent: Not respecting aip here. --)
-        string url = 1;
-        // Header to attach to callback request.
-        map<string, string> header = 2;
-    }
-
     reserved 1; // For a generic callback mechanism to be added later.
     oneof variant {
         Nexus nexus = 2;
