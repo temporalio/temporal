@@ -151,6 +151,7 @@ type (
 		WorkflowID  string
 		TaskID      int64
 		CloseTime   *time.Time
+		StartTime   time.Time
 	}
 
 	// GetWorkflowExecutionRequest is request from GetWorkflowExecution
