@@ -350,19 +350,6 @@ func TestBackoffTaskExecutor_GenerateInvocationTask(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	executor := &BackoffTaskExecutor{
-		BackoffTaskExecutorOptions: BackoffTaskExecutorOptions{
-			Config: &Config{
-				RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-				RetryPolicy: func() backoff.RetryPolicy {
-					return backoff.NewExponentialRetryPolicy(time.Second)
-				},
-			},
-			MetricsHandler: metrics.NewMockHandler(ctrl),
-			Logger:         log.NewNoopLogger(),
-		},
-	}
-
 	// Create a callback with Nexus variant
 	callback := &Callback{
 		CallbackState: &callbackspb.CallbackState{
@@ -377,7 +364,7 @@ func TestBackoffTaskExecutor_GenerateInvocationTask(t *testing.T) {
 	}
 
 	// Test task generation works correctly
-	task, taskAttr, err := executor.generateInvocationTask(callback)
+	task, taskAttr, err := generateInvocationTask(callback)
 	require.NoError(t, err)
 	require.NotNil(t, task)
 	require.Equal(t, "http://localhost:8080/callback", task.Url)

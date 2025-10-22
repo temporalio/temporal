@@ -75,7 +75,3 @@ message Nexus {
     // Header to attach to callback request.
     map<string, string> header = 2;
 }
-
-message InvokerState {
-    string namespace_id = 1;
-}

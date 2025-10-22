@@ -8,7 +8,6 @@ import (
 
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -49,77 +48,79 @@ func NewInvocationTaskExecutor(opts InvocationTaskExecutorOptions) *InvocationTa
 	}
 }
 
+type invoker struct {
+}
+
 func (e *InvocationTaskExecutor) Execute(
 	ctx context.Context,
-	invokerRef chasm.ComponentRef,
+	ref chasm.ComponentRef,
 	taskAttributes chasm.TaskAttributes,
 	task *callbackspb.InvocationTask,
 ) error {
-	var ns *namespace.Namespace
-
-	// Read the invoker component and load invocation arguments.
-	callback, err := chasm.ReadComponent(
-		ctx,
-		invokerRef,
-		func(c *Callback, ctx chasm.Context, _ any) (*Callback, error) {
-			callback := &Callback{
-				CallbackState: common.CloneProto(c.CallbackState),
-			}
-
-			nexusCompletion, err := c.CanGetNexusCompletion.Get(ctx)
-			if err != nil {
-				return nil, err
-			}
-
-			c.completion, err = nexusCompletion.GetNexusCompletion(
-				context.Background(),
-				c.RequestId,
-			)
-			callback.WorkflowId = c.WorkflowId
-			callback.RunId = c.RunId
-			callback.Attempt = c.Attempt
-			callback.Callback = c.Callback
-			callback.NamespaceId = c.NamespaceId
-			if err != nil {
-				return nil, err
-			}
-
-			return callback, nil
-		},
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to read component: %w", err)
-	}
-
-	callCtx, cancel := context.WithTimeout(
-		context.Background(),
-		e.Config.RequestTimeout(callback.NamespaceId, taskAttributes.Destination),
-	)
-	defer cancel()
-
-	result := callback.invoke(callCtx, ns, e, taskAttributes, task)
-
-	// Save the invocation result back to the callback component.
-	// Replaces the pattern of env.Access(ctx, ref, hsm.AccessWrite, ...) and
-	// hsm.MachineTransition() from executors.go:197-226. In HSM, the result was mapped
-	// to TransitionSucceeded/TransitionAttemptFailed/TransitionFailed. In CHASM, we
-	// directly update the callback's Status field to SUCCEEDED/BACKING_OFF/FAILED.
-	_, _, err = chasm.UpdateComponent(
-		ctx,
-		invokerRef,
-		func(c *Callback, ctx chasm.MutableContext, _ any) (struct{}, error) {
-			c.Status = result
-			c.CallbackState = callback.CallbackState
-			return struct{}{}, nil
-		},
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to update component: %w", err)
-	}
-
 	return nil
+	// Read the invoker component and load invocation arguments.
+	// invoker, err := chasm.ReadComponent(
+	// 	ctx,
+	// 	ref,
+	// 	func(c *Callback, ctx chasm.Context, _ any) (*invoker, error) {
+	// 		callback := &Callback{
+	// 			CallbackState: common.CloneProto(c.CallbackState),
+	// 		}
+
+	// 		nexusCompletion, err := c.CanGetNexusCompletion.Get(ctx)
+	// 		if err != nil {
+	// 			return nil, err
+	// 		}
+
+	// 		c.completion, err = nexusCompletion.GetNexusCompletion(
+	// 			context.Background(),
+	// 			c.RequestId,
+	// 		)
+	// 		if err != nil {
+	// 			return nil, err
+	// 		}
+
+	// 		return callback, nil
+	// 	},
+	// 	nil,
+	// )
+	// if err != nil {
+	// 	return fmt.Errorf("failed to read component: %w", err)
+	// }
+
+	// callCtx, cancel := context.WithTimeout(
+	// 	context.Background(),
+	// 	e.Config.RequestTimeout(callback.NamespaceId, taskAttributes.Destination),
+	// )
+	// defer cancel()
+
+	// ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(callback.NamespaceId))
+	// if err != nil {
+	// 	return fmt.Errorf("failed to get namespace: %w", err)
+	// }
+
+	// result := callback.invoke(callCtx, ns, e, taskAttributes, task)
+
+	// // Save the invocation result back to the callback component.
+	// // Replaces the pattern of env.Access(ctx, ref, hsm.AccessWrite, ...) and
+	// // hsm.MachineTransition() from executors.go:197-226. In HSM, the result was mapped
+	// // to TransitionSucceeded/TransitionAttemptFailed/TransitionFailed. In CHASM, we
+	// // directly update the callback's Status field to SUCCEEDED/BACKING_OFF/FAILED.
+	// _, _, err = chasm.UpdateComponent(
+	// 	ctx,
+	// 	ref,
+	// 	func(c *Callback, ctx chasm.MutableContext, _ any) (struct{}, error) {
+	// 		c.SetState(result)
+	// 		c.CallbackState = callback.CallbackState
+	// 		return struct{}{}, nil
+	// 	},
+	// 	nil,
+	// )
+	// if err != nil {
+	// 	return fmt.Errorf("failed to update component: %w", err)
+	// }
+
+	// return nil
 }
 
 func (e *InvocationTaskExecutor) Validate(
@@ -159,7 +160,7 @@ func NewBackoffTaskExecutor(opts BackoffTaskExecutorOptions) *BackoffTaskExecuto
 func (e *BackoffTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	callback *Callback,
-	_ chasm.TaskAttributes,
+	taskAttrs chasm.TaskAttributes,
 	_ *callbackspb.BackoffTask,
 ) error {
 	// Clear the next attempt schedule time and transition to scheduled
@@ -167,7 +168,7 @@ func (e *BackoffTaskExecutor) Execute(
 	callback.Status = callbackspb.CALLBACK_STATUS_SCHEDULED
 
 	// Generate an invocation task and task attributes for the next attempt
-	invocationTask, taskAttrs, err := e.generateInvocationTask(callback)
+	invocationTask, taskAttrs, err := generateInvocationTask(callback)
 	if err != nil {
 		return fmt.Errorf("failed to generate invocation task: %w", err)
 	}
@@ -192,7 +193,7 @@ func (e *BackoffTaskExecutor) Validate(
 // This is the CHASM port of HSM's RegenerateTasks logic from statemachine.go:79-100.
 // The destination (scheme + host) is extracted from the URL and used for task routing,
 // matching HSM's pattern where InvocationTask stores destination as u.Scheme + "://" + u.Host.
-func (e *BackoffTaskExecutor) generateInvocationTask(callback *Callback) (*callbackspb.InvocationTask, chasm.TaskAttributes, error) {
+func generateInvocationTask(callback *Callback) (*callbackspb.InvocationTask, chasm.TaskAttributes, error) {
 	switch variant := callback.Callback.GetVariant().(type) {
 	case *callbackspb.Callback_Nexus:
 		// Parse URL to extract scheme and host, matching HSM's behavior

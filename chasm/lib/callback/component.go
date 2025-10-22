@@ -75,6 +75,11 @@ func (c *Callback) SetState(status callbackspb.CallbackStatus) {
 	c.Status = status
 }
 
+func (c Callback) recordAttempt(ts time.Time) {
+	c.CallbackState.Attempt++
+	c.CallbackState.LastAttemptCompleteTime = timestamppb.New(ts)
+}
+
 // Invoke executes the HTTP callback request for a Nexus operation completion.
 //
 // This is the CHASM port of nexusInvocation.Invoke() from nexus_invocation.go:63-131.
@@ -91,7 +96,7 @@ func (c *Callback) invoke(
 	ns *namespace.Namespace,
 	e *InvocationTaskExecutor,
 	taskAttributes chasm.TaskAttributes,
-	task *callbackspb.InvocationTask,
+	_ *callbackspb.InvocationTask,
 ) callbackspb.CallbackStatus {
 	if e.HTTPTraceProvider != nil {
 		traceLogger := log.With(e.Logger,
