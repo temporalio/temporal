@@ -55,8 +55,8 @@ func TestValidTransitions(t *testing.T) {
 	callback := &Callback{
 		CallbackState: &callbackspb.CallbackState{
 			Callback: &callbackspb.Callback{
-				Variant: &callbackspb.Callback_Nexus_{
-					Nexus: &callbackspb.Callback_Nexus{
+				Variant: &callbackspb.Callback_Nexus{
+					Nexus: &callbackspb.Nexus{
 						Url: "http://address:666/path/to/callback?query=string",
 					},
 				},
