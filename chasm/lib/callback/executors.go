@@ -44,12 +44,12 @@ type InvocationTaskExecutor struct {
 	InvocationTaskExecutorOptions
 }
 
-func (e InvocationTaskExecutor) Execute(ctx context.Context, ref chasm.ComponentRef, attrs chasm.TaskAttributes, task InvocationTask) error {
+func (e InvocationTaskExecutor) Execute(ctx context.Context, ref chasm.ComponentRef, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) error {
 	return e.executeInvocationTask(ctx, ref, attrs, task)
 }
 
-func (e InvocationTaskExecutor) Validate(ctx chasm.Context, cb Callback, attrs chasm.TaskAttributes, task InvocationTask) (bool, error) {
-	return cb.Attempt == task.attempt && cb.Status == callbackspb.CALLBACK_STATUS_SCHEDULED, nil
+func (e InvocationTaskExecutor) Validate(ctx chasm.Context, cb Callback, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) (bool, error) {
+	return cb.Attempt == task.Attempt && cb.Status == callbackspb.CALLBACK_STATUS_SCHEDULED, nil
 }
 
 // invocationResult is a marker for the callbackInvokable.Invoke result to indicate to the executor how to handle the
@@ -93,7 +93,7 @@ func (r invocationResultRetry) error() error {
 
 type callbackInvokable interface {
 	// Invoke executes the callback logic and returns the invocation result.
-	Invoke(ctx context.Context, ns *namespace.Namespace, e InvocationTaskExecutor, task InvocationTask) invocationResult
+	Invoke(ctx context.Context, ns *namespace.Namespace, e InvocationTaskExecutor, task *callbackspb.InvocationTask) invocationResult
 	// WrapError provides each variant the opportunity to wrap the error returned by the task executor for, e.g. to
 	// trigger the circuit breaker.
 	WrapError(result invocationResult, err error) error
@@ -103,7 +103,7 @@ func (e InvocationTaskExecutor) executeInvocationTask(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	_ chasm.TaskAttributes,
-	task InvocationTask,
+	task *callbackspb.InvocationTask,
 ) error {
 	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.NamespaceID))
 	if err != nil {
@@ -117,7 +117,7 @@ func (e InvocationTaskExecutor) executeInvocationTask(
 
 	callCtx, cancel := context.WithTimeout(
 		ctx,
-		e.Config.RequestTimeout(ns.Name().String(), task.destination),
+		e.Config.RequestTimeout(ns.Name().String(), task.Destination),
 	)
 	defer cancel()
 
@@ -145,7 +145,7 @@ func (e InvocationTaskExecutor) loadInvocationArgs(
 			}
 
 			switch variant := component.GetCallback().GetVariant().(type) {
-			case *callbackspb.Callback_Nexus:
+			case *callbackspb.Callback_Nexus_:
 				if variant.Nexus.Url == chasm.NexusCompletionHandlerURL {
 					return chasmInvocation{
 						nexus:      variant.Nexus,
@@ -183,7 +183,7 @@ func (e InvocationTaskExecutor) saveResult(
 		func(component *Callback, ctx chasm.MutableContext, _ any) (struct{}, error) {
 			switch result.(type) {
 			case invocationResultOK:
-				component.Status = callbackspb.CALLBACK_STATUS_SCHEDULED
+				component.Status = callbackspb.CALLBACK_STATUS_SUCCEEDED
 				component.LastAttemptCompleteTime = timestamppb.New(ctx.Now(component))
 			case invocationResultRetry:
 				component.Status = callbackspb.CALLBACK_STATUS_BACKING_OFF
@@ -243,8 +243,8 @@ func (e *BackoffTaskExecutor) Execute(
 
 	// Convert the CHASM task to the internal BackoffTask type
 	// Note: BackoffTask proto is empty, deadline comes from NextAttemptScheduleTime in callback
-	backoffTask := BackoffTask{
-		deadline: callback.NextAttemptScheduleTime.AsTime(),
+	backoffTask := &callbackspb.BackoffTask{
+		Deadline: timestamppb.New(callback.NextAttemptScheduleTime.AsTime()),
 	}
 
 	// Delegate to the taskExecutor implementation
@@ -265,12 +265,12 @@ func (e InvocationTaskExecutor) executeBackoffTask(
 	ctx chasm.MutableContext,
 	callback *Callback,
 	attrs chasm.TaskAttributes,
-	task BackoffTask,
+	task *callbackspb.BackoffTask,
 ) error {
 	callback.Status = callbackspb.CALLBACK_STATUS_SCHEDULED
 	callback.NextAttemptScheduleTime = nil
 
-	invocationTask := InvocationTask{destination: attrs.Destination}
+	invocationTask := &callbackspb.InvocationTask{Destination: attrs.Destination}
 	chasmAttrs := chasm.TaskAttributes{
 		ScheduledTime: chasm.TaskScheduledTimeImmediate,
 		Destination:   attrs.Destination,

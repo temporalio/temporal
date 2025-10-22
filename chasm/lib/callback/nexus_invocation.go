@@ -33,7 +33,7 @@ type CanGetNexusCompletion interface {
 }
 
 type nexusInvocation struct {
-	nexus             *callbackspb.Nexus
+	nexus             *callbackspb.Callback_Nexus
 	completion        nexusrpc.OperationCompletion
 	workflowID, runID string
 	attempt           int32
@@ -60,12 +60,17 @@ func (n nexusInvocation) WrapError(result invocationResult, err error) error {
 	return err
 }
 
-func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e InvocationTaskExecutor, task InvocationTask) invocationResult {
+func (n nexusInvocation) Invoke(
+	ctx context.Context,
+	ns *namespace.Namespace,
+	e InvocationTaskExecutor,
+	task *callbackspb.InvocationTask,
+) invocationResult {
 	if e.HTTPTraceProvider != nil {
 		traceLogger := log.With(e.Logger,
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.Operation("CompleteNexusOperation"),
-			tag.NewStringTag("destination", task.destination),
+			tag.NewStringTag("destination", task.Destination),
 			tag.WorkflowID(n.workflowID),
 			tag.WorkflowRunID(n.runID),
 			tag.AttemptStart(time.Now().UTC()),
@@ -91,14 +96,14 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 
 	caller := e.HTTPCallerProvider(queues.NamespaceIDAndDestination{
 		NamespaceID: ns.ID().String(),
-		Destination: task.destination,
+		Destination: task.Destination,
 	})
 	// Make the call and record metrics.
 	startTime := time.Now()
 	response, err := caller(request)
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	destTag := metrics.DestinationTag(task.destination)
+	destTag := metrics.DestinationTag(task.Destination)
 	statusCodeTag := metrics.OutcomeTag(outcomeTag(ctx, response, err))
 	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
 	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)

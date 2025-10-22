@@ -13,6 +13,7 @@ import (
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -24,9 +25,8 @@ const (
 
 type InvocationTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The base URL for nexus callbacks.
-	// Will have other meanings as more callback use cases are added.
-	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	// The destination for callbacks. Can be a URL for nexus callbacks or temporal:// for internal callbacks.
+	Destination string `protobuf:"bytes,1,opt,name=destination,proto3" json:"destination,omitempty"`
 	// The attempt number for this invocation.
 	Attempt       int32 `protobuf:"varint,2,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -63,9 +63,9 @@ func (*InvocationTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *InvocationTask) GetUrl() string {
+func (x *InvocationTask) GetDestination() string {
 	if x != nil {
-		return x.Url
+		return x.Destination
 	}
 	return ""
 }
@@ -78,7 +78,9 @@ func (x *InvocationTask) GetAttempt() int32 {
 }
 
 type BackoffTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// deadline is the time at which the backoff period ends.
+	Deadline      *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=deadline,proto3" json:"deadline,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -113,15 +115,23 @@ func (*BackoffTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescGZIP(), []int{1}
 }
 
+func (x *BackoffTask) GetDeadline() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Deadline
+	}
+	return nil
+}
+
 var File_temporal_server_chasm_lib_callback_proto_v1_tasks_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/callback/proto/v1/tasks.proto\x12,temporal.server.chasm.lib.callbacks.proto.v1\"<\n" +
-	"\x0eInvocationTask\x12\x10\n" +
-	"\x03url\x18\x01 \x01(\tR\x03url\x12\x18\n" +
-	"\aattempt\x18\x02 \x01(\x05R\aattempt\"\r\n" +
-	"\vBackoffTaskBGZEgo.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspbb\x06proto3"
+	"7temporal/server/chasm/lib/callback/proto/v1/tasks.proto\x12,temporal.server.chasm.lib.callbacks.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"L\n" +
+	"\x0eInvocationTask\x12 \n" +
+	"\vdestination\x18\x01 \x01(\tR\vdestination\x12\x18\n" +
+	"\aattempt\x18\x02 \x01(\x05R\aattempt\"E\n" +
+	"\vBackoffTask\x126\n" +
+	"\bdeadline\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\bdeadlineBGZEgo.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescOnce sync.Once
@@ -137,15 +147,17 @@ func file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescGZIP() 
 
 var file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_goTypes = []any{
-	(*InvocationTask)(nil), // 0: temporal.server.chasm.lib.callbacks.proto.v1.InvocationTask
-	(*BackoffTask)(nil),    // 1: temporal.server.chasm.lib.callbacks.proto.v1.BackoffTask
+	(*InvocationTask)(nil),        // 0: temporal.server.chasm.lib.callbacks.proto.v1.InvocationTask
+	(*BackoffTask)(nil),           // 1: temporal.server.chasm.lib.callbacks.proto.v1.BackoffTask
+	(*timestamppb.Timestamp)(nil), // 2: google.protobuf.Timestamp
 }
 var file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	2, // 0: temporal.server.chasm.lib.callbacks.proto.v1.BackoffTask.deadline:type_name -> google.protobuf.Timestamp
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_init() }
