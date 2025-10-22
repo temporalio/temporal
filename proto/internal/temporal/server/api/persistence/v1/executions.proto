@@ -393,6 +393,7 @@ message VisibilityTaskInfo {
     reserved 9;
     int64 close_visibility_task_id = 10;
     google.protobuf.Timestamp close_time = 11;
+    google.protobuf.Timestamp start_time = 13;
 
     oneof task_details {
         // If the task addresses a CHASM component, this field will be set.
