@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/util"
 )
 
 func Invoke(
@@ -93,6 +94,8 @@ func Invoke(
 		WorkflowID:  execution.GetWorkflowId(),
 		RunID:       execution.GetRunId(),
 		TaskID:      math.MaxInt64,
+		CloseTime:   util.Ptr(resp.State.ExecutionInfo.CloseTime.AsTime()),
+		StartTime:   resp.State.ExecutionInfo.StartTime.AsTime(),
 	}); err != nil {
 		return nil, err
 	}
