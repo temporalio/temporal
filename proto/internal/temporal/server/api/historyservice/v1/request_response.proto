@@ -257,6 +257,10 @@ message RecordWorkflowTaskStartedResponse {
     temporal.api.history.v1.History history = 18;
     bytes next_page_token = 19;
     temporal.api.history.v1.History raw_history = 20;
+    // raw_history_bytes contains the raw history batches as bytes, without deserialization.
+    // This field is used to pass raw bytes from history to matching to frontend without
+    // deserialization at matching's GRPC layer.
+    repeated bytes raw_history_bytes = 21;
 }
 
 // RecordWorkflowTaskStartedResponseWithRawHistory should be wire compatible with RecordWorkflowTaskStartedResponse.
@@ -284,6 +288,10 @@ message RecordWorkflowTaskStartedResponseWithRawHistory {
     temporal.api.history.v1.History history = 18;
     bytes next_page_token = 19;
     repeated bytes raw_history = 20;
+    // raw_history_bytes contains the raw history batches as bytes.
+    // History service will populate both field 20 (raw_history) and field 21 (raw_history_bytes)
+    // with the same raw bytes. Field 21 will NOT be auto-deserialized by matching's GRPC client.
+    repeated bytes raw_history_bytes = 21;
 }
 
 message RecordActivityTaskStartedRequest {

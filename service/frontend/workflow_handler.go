@@ -919,6 +919,18 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
+	// Matching service can send history in response.RawHistory field.
+	// This happens when history.sendRawHistoryBetweenInternalServices is enabled.
+	// Matching serializes it as bytes (field 22), but frontend's gRPC client auto-deserializes it
+	// back to History type, so we just use it directly and process search attributes.
+	if matchingResp.RawHistory != nil {
+		matchingResp.History = matchingResp.RawHistory
+		err := api.ProcessOutgoingSearchAttributes(wh.saProvider, wh.saMapperProvider, matchingResp.History.Events, namespaceEntry.Name(), wh.visibilityMgr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &workflowservice.PollWorkflowTaskQueueResponse{
 		TaskToken:                  matchingResp.TaskToken,
 		WorkflowExecution:          matchingResp.WorkflowExecution,

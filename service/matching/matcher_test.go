@@ -474,7 +474,7 @@ func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
 			_, err := t.rootMatcher.PollForQuery(arg0, &pollMetadata{})
 			t.Assert().ErrorIs(err, errNoTasks)
 		},
-	).Return(emptyPollWorkflowTaskQueueResponse, nil).AnyTimes()
+	).Return(emptyPollWorkflowTaskQueueResponseForMock, nil).AnyTimes()
 
 	// make a poll that expires
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
@@ -506,7 +506,7 @@ func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 			_, err := t.rootMatcher.PollForQuery(arg0, &pollMetadata{})
 			t.Assert().ErrorIs(err, errNoTasks)
 		},
-	).Return(emptyPollWorkflowTaskQueueResponse, nil).AnyTimes()
+	).Return(emptyPollWorkflowTaskQueueResponseForMock, nil).AnyTimes()
 
 	// make a poll that expires
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)

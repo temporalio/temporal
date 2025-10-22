@@ -35,7 +35,7 @@ type (
 	// startedTaskInfo contains info for any task received from
 	// another matching host. This type of task is already marked as started
 	startedTaskInfo struct {
-		workflowTaskInfo *matchingservice.PollWorkflowTaskQueueResponse
+		workflowTaskInfo *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory
 		activityTaskInfo *matchingservice.PollActivityTaskQueueResponse
 		nexusTaskInfo    *matchingservice.PollNexusTaskQueueResponse
 	}
@@ -242,7 +242,7 @@ func (task *internalTask) workflowExecution() *commonpb.WorkflowExecution {
 
 // pollWorkflowTaskQueueResponse returns the poll response for a workflow task that is
 // already marked as started. This method should only be called when isStarted() is true
-func (task *internalTask) pollWorkflowTaskQueueResponse() *matchingservice.PollWorkflowTaskQueueResponse {
+func (task *internalTask) pollWorkflowTaskQueueResponse() *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory {
 	if task.isStarted() {
 		return task.started.workflowTaskInfo
 	}

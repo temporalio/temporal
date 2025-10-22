@@ -233,7 +233,7 @@ func (h *Handler) PollActivityTaskQueue(
 func (h *Handler) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollWorkflowTaskQueueRequest,
-) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
+) (_ *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
@@ -616,4 +616,46 @@ func (h *Handler) DescribeWorker(
 			WorkerHeartbeat: hb,
 		},
 	}, nil
+}
+
+// convertPollWorkflowTaskQueueResponse converts a PollWorkflowTaskQueueResponse to
+// PollWorkflowTaskQueueResponseWithRawHistory.
+// The conversion behavior depends on which history fields are populated:
+// - If RawHistory is set: This field was auto-deserialized by gRPC from bytes (field 22) to History type,
+//   so we copy it to History field (field 19) in the output
+// - If History is set: Copy as-is to History field (field 19) in the output
+func convertPollWorkflowTaskQueueResponse(resp *matchingservice.PollWorkflowTaskQueueResponse) *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory {
+	rawResp := &matchingservice.PollWorkflowTaskQueueResponseWithRawHistory{
+		TaskToken:                  resp.TaskToken,
+		WorkflowExecution:          resp.WorkflowExecution,
+		WorkflowType:               resp.WorkflowType,
+		PreviousStartedEventId:     resp.PreviousStartedEventId,
+		StartedEventId:             resp.StartedEventId,
+		Attempt:                    resp.Attempt,
+		NextEventId:                resp.NextEventId,
+		BacklogCountHint:           resp.BacklogCountHint,
+		StickyExecutionEnabled:     resp.StickyExecutionEnabled,
+		Query:                      resp.Query,
+		TransientWorkflowTask:      resp.TransientWorkflowTask,
+		WorkflowExecutionTaskQueue: resp.WorkflowExecutionTaskQueue,
+		BranchToken:                resp.BranchToken,
+		ScheduledTime:              resp.ScheduledTime,
+		StartedTime:                resp.StartedTime,
+		Queries:                    resp.Queries,
+		Messages:                   resp.Messages,
+		NextPageToken:              resp.NextPageToken,
+		PollerScalingDecision:      resp.PollerScalingDecision,
+	}
+
+	// In PollWorkflowTaskQueueResponse, field 22 (RawHistory) is of type *History.
+	// When gRPC deserializes the response, bytes in field 22 are auto-converted to History type.
+	// We need to copy this to the History field (field 19) in the output, not RawHistory field
+	// (which expects [][]byte in PollWorkflowTaskQueueResponseWithRawHistory).
+	if resp.RawHistory != nil && resp.RawHistory.Events != nil {
+		rawResp.History = resp.RawHistory
+	} else if resp.History != nil && resp.History.Events != nil {
+		rawResp.History = resp.History
+	}
+
+	return rawResp
 }

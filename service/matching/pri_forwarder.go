@@ -210,7 +210,7 @@ func (f *priForwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 		if err != nil {
 			return nil, err
 		}
-		return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: resp}), nil
+		return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: convertPollWorkflowTaskQueueResponse(resp)}), nil
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		resp, err := f.client.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: f.partition.TaskQueue().NamespaceId(),

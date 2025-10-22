@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -168,7 +169,9 @@ type (
 
 var (
 	// EmptyPollWorkflowTaskQueueResponse is the response when there are no workflow tasks to hand out
-	emptyPollWorkflowTaskQueueResponse = &matchingservice.PollWorkflowTaskQueueResponse{}
+	emptyPollWorkflowTaskQueueResponse = &matchingservice.PollWorkflowTaskQueueResponseWithRawHistory{}
+	// emptyPollWorkflowTaskQueueResponseForMock is used for mocks that expect the old gRPC client type
+	emptyPollWorkflowTaskQueueResponseForMock = &matchingservice.PollWorkflowTaskQueueResponse{}
 	// EmptyPollActivityTaskQueueResponse is the response when there are no activity tasks to hand out
 	emptyPollActivityTaskQueueResponse = &matchingservice.PollActivityTaskQueueResponse{}
 
@@ -589,7 +592,7 @@ func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	ctx context.Context,
 	req *matchingservice.PollWorkflowTaskQueueRequest,
 	opMetrics metrics.Handler,
-) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+) (*matchingservice.PollWorkflowTaskQueueResponseWithRawHistory, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
@@ -658,7 +661,7 @@ pollLoop:
 			// we return full history.
 			isStickyEnabled := taskQueueName == mutableStateResp.StickyTaskQueue.GetName()
 
-			hist, nextPageToken, err := e.getHistoryForQueryTask(ctx, namespaceID, task, isStickyEnabled)
+			hist, rawHistoryBytes, nextPageToken, err := e.getHistoryForQueryTask(ctx, namespaceID, task, isStickyEnabled)
 
 			if err != nil {
 				// will notify query client that the query task failed
@@ -676,6 +679,7 @@ pollLoop:
 				StartedEventId:             common.EmptyEventID,
 				Attempt:                    1,
 				History:                    hist,
+				RawHistoryBytes:            rawHistoryBytes,
 				NextPageToken:              nextPageToken,
 			}
 
@@ -769,18 +773,51 @@ pollLoop:
 }
 
 // getHistoryForQueryTask retrieves history associated with a query task returned
-// by PollWorkflowTaskQueue. Returns empty history for sticky query and full history for non-sticky
+// by PollWorkflowTaskQueue. Returns empty history for sticky query and full history for non-sticky.
+// When feature flag is enabled, returns raw history bytes. Otherwise returns deserialized History.
 func (e *matchingEngineImpl) getHistoryForQueryTask(
 	ctx context.Context,
 	nsID namespace.ID,
 	task *internalTask,
 	isStickyEnabled bool,
-) (*historypb.History, []byte, error) {
+) (history *historypb.History, rawHistoryBytes [][]byte, nextPageToken []byte, err error) {
 	if isStickyEnabled {
-		return &historypb.History{Events: []*historypb.HistoryEvent{}}, nil, nil
+		return &historypb.History{Events: []*historypb.HistoryEvent{}}, nil, nil, nil
 	}
 
+	// Check if the feature flag for sending raw history between internal services is enabled
+	sendRawHistoryBetweenInternalServices := e.config.SendRawHistoryBetweenInternalServices()
+
 	maxPageSize := int32(e.config.HistoryMaxPageSize(task.namespace.String()))
+
+	if sendRawHistoryBetweenInternalServices {
+		// When feature flag is enabled, call GetWorkflowExecutionRawHistory to get raw history directly.
+		// This avoids the marshal/unmarshal cycle of GetWorkflowExecutionHistory.
+		resp, err := e.historyClient.GetWorkflowExecutionRawHistory(ctx,
+			&historyservice.GetWorkflowExecutionRawHistoryRequest{
+				NamespaceId: nsID.String(),
+				Request: &adminservice.GetWorkflowExecutionRawHistoryRequest{
+					NamespaceId: nsID.String(),
+					Execution:   task.workflowExecution(),
+					MaximumPageSize: maxPageSize,
+				},
+			})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		// Convert DataBlob history batches to raw bytes
+		if len(resp.GetResponse().GetHistoryBatches()) > 0 {
+			rawHistoryBytes := make([][]byte, 0, len(resp.GetResponse().GetHistoryBatches()))
+			for _, batch := range resp.GetResponse().GetHistoryBatches() {
+				rawHistoryBytes = append(rawHistoryBytes, batch.Data)
+			}
+			return nil, rawHistoryBytes, resp.GetResponse().GetNextPageToken(), nil
+		}
+		return nil, nil, resp.GetResponse().GetNextPageToken(), nil
+	}
+
+	// When feature flag is disabled, call history service to get deserialized history.
 	resp, err := e.historyClient.GetWorkflowExecutionHistory(ctx,
 		&historyservice.GetWorkflowExecutionHistoryRequest{
 			NamespaceId: nsID.String(),
@@ -793,14 +830,13 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 			},
 		})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	// History service can send history events in response.History.Events. In that case use that directly.
-	// This happens when history.sendRawHistoryBetweenInternalServices is enabled.
+	// Process search attributes
 	ns, err := e.namespaceRegistry.GetNamespaceName(nsID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	err = api.ProcessInternalRawHistory(
 		ctx,
@@ -812,21 +848,26 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 		ns,
 		false,
 	)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
+	// Return deserialized History from the nested Response.
 	hist := resp.GetResponse().GetHistory()
 	if resp.GetResponse().GetRawHistory() != nil {
+		// If RawHistory is populated, deserialize it to History
 		historyEvents := make([]*historypb.HistoryEvent, 0, maxPageSize)
 		for _, blob := range resp.GetResponse().GetRawHistory() {
 			events, err := e.historySerializer.DeserializeEvents(blob)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			historyEvents = append(historyEvents, events...)
 		}
 		hist = &historypb.History{Events: historyEvents}
 	}
 
-	return hist, resp.GetResponse().GetNextPageToken(), err
+	return hist, nil, resp.GetResponse().GetNextPageToken(), nil
 }
 
 func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, taskQueueName string, err error) {
@@ -2714,7 +2755,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	task *internalTask,
 	recordStartResp *historyservice.RecordWorkflowTaskStartedResponse,
 	metricsHandler metrics.Handler,
-) *matchingservice.PollWorkflowTaskQueueResponse {
+) *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory {
 
 	var serializedToken []byte
 	if task.isQuery() {
@@ -2745,7 +2786,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 		}
 	}
 
-	response := common.CreateMatchingPollWorkflowTaskQueueResponse(
+	response := common.CreateMatchingPollWorkflowTaskQueueResponseWithRawHistory(
 		recordStartResp,
 		task.workflowExecution(),
 		serializedToken)
@@ -2867,16 +2908,6 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	resp, err := e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
 	if err != nil {
 		return nil, err
-	}
-	// History service can send history events in response.RawHistory. This happens when history.sendRawHistoryBetweenInternalServices is enabled.
-	// In that case use that directly. This is done to avoid deserializing history event blobs in history service.
-	// We need to process search attributes here since history service will not be able to do that on raw events.
-	if resp.RawHistory != nil {
-		resp.History = resp.RawHistory
-		err := api.ProcessOutgoingSearchAttributes(e.saProvider, e.saMapperProvider, resp.History.Events, task.namespace, e.visibilityManager)
-		if err != nil {
-			return nil, err
-		}
 	}
 	return resp, nil
 }
