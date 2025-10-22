@@ -1,7 +1,7 @@
 package callback
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 	"time"
 
@@ -61,14 +61,15 @@ func TestValidTransitions(t *testing.T) {
 					},
 				},
 			},
-			Status: callbackspb.CALLBACK_STATUS_SCHEDULED,
 		},
 	}
+	callback.SetState(callbackspb.CALLBACK_STATUS_SCHEDULED)
+
 	// AttemptFailed
 	mctx := newTestMutableContext(t)
 	err := TransitionAttemptFailed.Apply(mctx, callback, EventAttemptFailed{
 		Time:        currentTime,
-		Err:         fmt.Errorf("test"),
+		Err:         errors.New("test"),
 		RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 	})
 	require.NoError(t, err)
@@ -80,10 +81,10 @@ func TestValidTransitions(t *testing.T) {
 	require.False(t, callback.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
 	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
 	dt := currentTime.Add(time.Second).Sub(callback.NextAttemptScheduleTime.AsTime())
-	require.True(t, dt < time.Millisecond*200)
+	require.Less(t, dt, time.Millisecond*200)
 
 	// Assert backoff task is generated
-	require.Equal(t, 1, len(mctx.tasks))
+	require.Len(t, mctx.tasks, 1)
 	require.IsType(t, &callbackspb.InvocationTask{}, mctx.tasks[0].message)
 
 	// Rescheduled
@@ -100,11 +101,14 @@ func TestValidTransitions(t *testing.T) {
 	require.Nil(t, callback.NextAttemptScheduleTime)
 
 	// Assert callback task is generated
-	require.Equal(t, 1, len(mctx.tasks))
+	require.Len(t, mctx.tasks, 1)
 	require.IsType(t, &callbackspb.InvocationTask{}, mctx.tasks[0].message)
 
 	// Store the pre-succeeded state to test Failed later
-	dup := &Callback{CallbackState: proto.Clone(callback.CallbackState).(*callbackspb.CallbackState)}
+	dup := &Callback{
+		CallbackState: proto.Clone(callback.CallbackState).(*callbackspb.CallbackState),
+		status:        callback.State(),
+	}
 
 	// Succeeded
 	currentTime = currentTime.Add(time.Second)
@@ -120,7 +124,7 @@ func TestValidTransitions(t *testing.T) {
 	require.Nil(t, callback.NextAttemptScheduleTime)
 
 	// Assert task is generated (success transitions also add tasks in chasm)
-	require.Equal(t, 1, len(mctx.tasks))
+	require.Len(t, mctx.tasks, 1)
 
 	// Reset back to scheduled
 	callback = dup
@@ -129,7 +133,7 @@ func TestValidTransitions(t *testing.T) {
 
 	// failed
 	mctx = newTestMutableContext(t)
-	err = TransitionFailed.Apply(mctx, callback, EventFailed{Time: currentTime, Err: fmt.Errorf("failed")})
+	err = TransitionFailed.Apply(mctx, callback, EventFailed{Time: currentTime, Err: errors.New("failed")})
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
@@ -141,5 +145,5 @@ func TestValidTransitions(t *testing.T) {
 	require.Nil(t, callback.NextAttemptScheduleTime)
 
 	// Assert task is generated (failed transitions also add tasks in chasm)
-	require.Equal(t, 1, len(mctx.tasks))
+	require.Len(t, mctx.tasks, 1)
 }
