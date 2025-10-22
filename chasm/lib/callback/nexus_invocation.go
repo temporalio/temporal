@@ -60,7 +60,7 @@ func (n nexusInvocation) WrapError(result invocationResult, err error) error {
 	return err
 }
 
-func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
+func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e InvocationTaskExecutor, task InvocationTask) invocationResult {
 	if e.HTTPTraceProvider != nil {
 		traceLogger := log.With(e.Logger,
 			tag.WorkflowNamespace(ns.Name().String()),

@@ -48,7 +48,7 @@ func logInternalError(logger log.Logger, internalMsg string, internalErr error) 
 	return fmt.Errorf("internal error, reference-id: %v", referenceID)
 }
 
-func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
+func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e InvocationTaskExecutor, task InvocationTask) invocationResult {
 	// Get back the base64-encoded ComponentRef from the header.
 	encodedRef, ok := c.nexus.GetHeader()[commonnexus.CallbackTokenHeader]
 	if !ok {

@@ -21,7 +21,13 @@ import (
 type HTTPCaller func(*http.Request) (*http.Response, error)
 type HTTPCallerProvider func(queues.NamespaceIDAndDestination) HTTPCaller
 
-type TaskExecutorOptions struct {
+func NewInvocationTaskExecutor(opts InvocationTaskExecutorOptions) *InvocationTaskExecutor {
+	return &InvocationTaskExecutor{
+		InvocationTaskExecutorOptions: opts,
+	}
+}
+
+type InvocationTaskExecutorOptions struct {
 	fx.In
 
 	Config             *Config
@@ -34,8 +40,16 @@ type TaskExecutorOptions struct {
 	ChasmEngine        chasm.Engine
 }
 
-type taskExecutor struct {
-	TaskExecutorOptions
+type InvocationTaskExecutor struct {
+	InvocationTaskExecutorOptions
+}
+
+func (e InvocationTaskExecutor) Execute(ctx context.Context, ref chasm.ComponentRef, attrs chasm.TaskAttributes, task InvocationTask) error {
+	return e.executeInvocationTask(ctx, ref, attrs, task)
+}
+
+func (e InvocationTaskExecutor) Validate(ctx chasm.Context, cb Callback, attrs chasm.TaskAttributes, task InvocationTask) (bool, error) {
+	return cb.Attempt == task.attempt && cb.Status == callbackspb.CALLBACK_STATUS_SCHEDULED, nil
 }
 
 // invocationResult is a marker for the callbackInvokable.Invoke result to indicate to the executor how to handle the
@@ -79,16 +93,16 @@ func (r invocationResultRetry) error() error {
 
 type callbackInvokable interface {
 	// Invoke executes the callback logic and returns the invocation result.
-	Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult
+	Invoke(ctx context.Context, ns *namespace.Namespace, e InvocationTaskExecutor, task InvocationTask) invocationResult
 	// WrapError provides each variant the opportunity to wrap the error returned by the task executor for, e.g. to
 	// trigger the circuit breaker.
 	WrapError(result invocationResult, err error) error
 }
 
-func (e taskExecutor) executeInvocationTask(
+func (e InvocationTaskExecutor) executeInvocationTask(
 	ctx context.Context,
 	ref chasm.ComponentRef,
-	attrs chasm.TaskAttributes,
+	_ chasm.TaskAttributes,
 	task InvocationTask,
 ) error {
 	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.NamespaceID))
@@ -112,7 +126,7 @@ func (e taskExecutor) executeInvocationTask(
 	return invokable.WrapError(result, saveErr)
 }
 
-func (e taskExecutor) loadInvocationArgs(
+func (e InvocationTaskExecutor) loadInvocationArgs(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 ) (invokable callbackInvokable, err error) {
@@ -158,12 +172,12 @@ func (e taskExecutor) loadInvocationArgs(
 	)
 }
 
-func (e taskExecutor) saveResult(
+func (e InvocationTaskExecutor) saveResult(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	result invocationResult,
 ) error {
-	_, _, err := chasm.UpdateComponent[*Callback, chasm.ComponentRef, any, struct{}](
+	_, _, err := chasm.UpdateComponent(
 		ctx,
 		ref,
 		func(component *Callback, ctx chasm.MutableContext, _ any) (struct{}, error) {
@@ -192,7 +206,62 @@ func (e taskExecutor) saveResult(
 	return err
 }
 
-func (e taskExecutor) executeBackoffTask(
+type BackoffTaskExecutor struct {
+	BackoffTaskExecutorOptions
+}
+
+type BackoffTaskExecutorOptions struct {
+	fx.In
+
+	Config         *Config
+	MetricsHandler metrics.Handler
+	Logger         log.Logger
+}
+
+func NewBackoffTaskExecutor(opts BackoffTaskExecutorOptions) *BackoffTaskExecutor {
+	return &BackoffTaskExecutor{
+		BackoffTaskExecutorOptions: opts,
+	}
+}
+
+// Execute transitions the callback from BACKING_OFF to SCHEDULED state
+// and generates an InvocationTask for the next attempt.
+func (e *BackoffTaskExecutor) Execute(
+	ctx chasm.MutableContext,
+	callback *Callback,
+	taskAttrs chasm.TaskAttributes,
+	task *callbackspb.BackoffTask,
+) error {
+	// Create a taskExecutor wrapper with the same options
+	executor := InvocationTaskExecutor{
+		InvocationTaskExecutorOptions: InvocationTaskExecutorOptions{
+			Config:         e.Config,
+			MetricsHandler: e.MetricsHandler,
+			Logger:         e.Logger,
+		},
+	}
+
+	// Convert the CHASM task to the internal BackoffTask type
+	// Note: BackoffTask proto is empty, deadline comes from NextAttemptScheduleTime in callback
+	backoffTask := BackoffTask{
+		deadline: callback.NextAttemptScheduleTime.AsTime(),
+	}
+
+	// Delegate to the taskExecutor implementation
+	return executor.executeBackoffTask(ctx, callback, taskAttrs, backoffTask)
+}
+
+func (e *BackoffTaskExecutor) Validate(
+	ctx chasm.Context,
+	callback *Callback,
+	_ chasm.TaskAttributes,
+	_ *callbackspb.BackoffTask,
+) (bool, error) {
+	// Validate that the callback is in BACKING_OFF state
+	return callback.Status == callbackspb.CALLBACK_STATUS_BACKING_OFF, nil
+}
+
+func (e InvocationTaskExecutor) executeBackoffTask(
 	ctx chasm.MutableContext,
 	callback *Callback,
 	attrs chasm.TaskAttributes,

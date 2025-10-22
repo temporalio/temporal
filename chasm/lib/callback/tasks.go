@@ -13,6 +13,7 @@ type InvocationTask struct {
 	// The base URL for nexus callbacks.
 	// Will have other meanings as more callback use cases are added.
 	destination string
+	attempt     int32
 }
 
 func NewInvocationTask(destination string) InvocationTask {

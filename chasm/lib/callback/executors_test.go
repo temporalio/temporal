@@ -23,6 +23,16 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// mockNexusCompletionGetter implements CanGetNexusCompletion for testing
+type mockNexusCompletionGetter struct {
+	completion nexusrpc.OperationCompletion
+	err        error
+}
+
+func (m *mockNexusCompletionGetter) GetNexusCompletion(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error) {
+	return m.completion, m.err
+}
+
 // Test the full executeInvocationTask flow with chasm.ComponentRef
 func TestExecuteInvocationTask(t *testing.T) {
 	cases := []struct {
@@ -165,8 +175,8 @@ func TestExecuteInvocationTask(t *testing.T) {
 			nsRegistry := namespace.NewMockRegistry(ctrl)
 			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
 
-			executor := taskExecutor{
-				TaskExecutorOptions: TaskExecutorOptions{
+			executor := InvocationTaskExecutor{
+				InvocationTaskExecutorOptions: InvocationTaskExecutorOptions{
 					Config: &Config{
 						RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 						RetryPolicy: func() backoff.RetryPolicy {
@@ -288,8 +298,8 @@ func TestLoadInvocationArgs(t *testing.T) {
 			// TODO: Set up CanGetNexusCompletion field properly when Field API is available
 
 			// Create executor
-			executor := taskExecutor{
-				TaskExecutorOptions: TaskExecutorOptions{
+			executor := InvocationTaskExecutor{
+				InvocationTaskExecutorOptions: InvocationTaskExecutorOptions{
 					Logger: logger,
 				},
 			}
@@ -344,8 +354,8 @@ func TestSaveResult(t *testing.T) {
 			defer ctrl.Finish()
 
 			logger := log.NewNoopLogger()
-			executor := taskExecutor{
-				TaskExecutorOptions: TaskExecutorOptions{
+			executor := InvocationTaskExecutor{
+				InvocationTaskExecutorOptions: InvocationTaskExecutorOptions{
 					Config: &Config{
 						RetryPolicy: func() backoff.RetryPolicy {
 							return backoff.NewExponentialRetryPolicy(time.Second)
