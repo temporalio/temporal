@@ -18,6 +18,7 @@ type (
 		ArchetypeID                    uint32
 		CloseExecutionVisibilityTaskID int64
 		CloseTime                      time.Time
+		StartTime                      time.Time
 	}
 )
 
