@@ -1099,6 +1099,8 @@ func visibilityDeleteTaskToProto(
 		VisibilityTime:        timestamppb.New(deleteVisibilityTask.VisibilityTimestamp),
 		CloseVisibilityTaskId: deleteVisibilityTask.CloseExecutionVisibilityTaskID,
 		CloseTime:             timestamppb.New(deleteVisibilityTask.CloseTime),
+		StartTime:             timestamppb.New(deleteVisibilityTask.StartTime),
+		IsRetentionDelete:     deleteVisibilityTask.IsRetentionDelete,
 		TaskDetails: &persistencespb.VisibilityTaskInfo_ChasmTaskInfo{
 			ChasmTaskInfo: &persistencespb.ChasmTaskInfo{
 				ArchetypeId: deleteVisibilityTask.ArchetypeID,
@@ -1121,6 +1123,8 @@ func visibilityDeleteTaskFromProto(
 		ArchetypeID:                    deleteVisibilityTask.GetChasmTaskInfo().GetArchetypeId(),
 		CloseExecutionVisibilityTaskID: deleteVisibilityTask.CloseVisibilityTaskId,
 		CloseTime:                      deleteVisibilityTask.CloseTime.AsTime(),
+		StartTime:                      deleteVisibilityTask.StartTime.AsTime(),
+		IsRetentionDelete:              deleteVisibilityTask.IsRetentionDelete,
 	}
 }
 

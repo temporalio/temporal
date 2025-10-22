@@ -322,10 +322,12 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 	defer cancel()
 
 	request := &manager.VisibilityDeleteWorkflowExecutionRequest{
-		NamespaceID: namespace.ID(task.NamespaceID),
-		WorkflowID:  task.WorkflowID,
-		RunID:       task.RunID,
-		TaskID:      task.TaskID,
+		NamespaceID:       namespace.ID(task.NamespaceID),
+		WorkflowID:        task.WorkflowID,
+		RunID:             task.RunID,
+		TaskID:            task.TaskID,
+		StartTime:         task.StartTime,
+		IsRetentionDelete: task.IsRetentionDelete,
 	}
 
 	if task.CloseTime.After(time.Unix(0, 0)) {
