@@ -123,9 +123,9 @@ func TestCallback_Invoke_Outcomes(t *testing.T) {
 					RunId:       "run-id",
 					NamespaceId: "namespace-id",
 				},
-				// Pre-populate the fields needed for invoke()
-				completion: completion,
 			}
+			// Pre-populate the completion field needed for invoke()
+			callback.completion = completion
 
 			// Create executor
 			executor := &InvocationTaskExecutor{

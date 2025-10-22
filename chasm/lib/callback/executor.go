@@ -3,7 +3,6 @@ package callback
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"net/url"
 
 	"go.temporal.io/server/chasm"
@@ -13,13 +12,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
 )
-
-// HTTPCaller is a method that can be used to invoke HTTP requests.
-type HTTPCaller func(*http.Request) (*http.Response, error)
-type HTTPCallerProvider func(queues.NamespaceIDAndDestination) HTTPCaller
 
 // InvocationTaskExecutor is responsible for the invocation of a callback.
 // For Nexus callbacks this will be an HTTP call, for other callbacks this
