@@ -39,12 +39,12 @@ func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
-func (c *Callback) State() callbackspb.CallbackStatus {
-	return c.Status
+func (c *Callback) Status() callbackspb.CallbackStatus {
+	return c.CallbackState.Status
 }
 
-func (c *Callback) SetState(status callbackspb.CallbackStatus) {
-	c.Status = status
+func (c *Callback) SetStatus(status callbackspb.CallbackStatus) {
+	c.CallbackState.Status = status
 }
 
 func (c *Callback) recordAttempt(ts time.Time) {

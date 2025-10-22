@@ -63,7 +63,7 @@ func TestValidTransitions(t *testing.T) {
 			},
 		},
 	}
-	callback.SetState(callbackspb.CALLBACK_STATUS_SCHEDULED)
+	callback.SetStatus(callbackspb.CALLBACK_STATUS_SCHEDULED)
 
 	// AttemptFailed
 	mctx := newTestMutableContext(t)
@@ -75,7 +75,7 @@ func TestValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert info object is updated
-	require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, callback.State())
+	require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, callback.Status())
 	require.Equal(t, int32(1), callback.Attempt)
 	require.Equal(t, "test", callback.LastAttemptFailure.Message)
 	require.False(t, callback.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
@@ -93,7 +93,7 @@ func TestValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
-	require.Equal(t, callbackspb.CALLBACK_STATUS_SCHEDULED, callback.State())
+	require.Equal(t, callbackspb.CALLBACK_STATUS_SCHEDULED, callback.Status())
 	require.Equal(t, int32(1), callback.Attempt)
 	require.Equal(t, "test", callback.LastAttemptFailure.Message)
 	// Remains unmodified
@@ -108,7 +108,7 @@ func TestValidTransitions(t *testing.T) {
 	dup := &Callback{
 		CallbackState: proto.Clone(callback.CallbackState).(*callbackspb.CallbackState),
 	}
-	dup.Status = callback.State()
+	dup.CallbackState.Status = callback.Status()
 
 	// Succeeded
 	currentTime = currentTime.Add(time.Second)
@@ -117,7 +117,7 @@ func TestValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
-	require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, callback.State())
+	require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, callback.Status())
 	require.Equal(t, int32(2), callback.Attempt)
 	require.Nil(t, callback.LastAttemptFailure)
 	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
@@ -137,7 +137,7 @@ func TestValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
-	require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, callback.State())
+	require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, callback.Status())
 	require.Equal(t, int32(2), callback.Attempt)
 	require.Equal(t, "failed", callback.LastAttemptFailure.Message)
 	require.True(t, callback.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)

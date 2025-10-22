@@ -17,7 +17,7 @@ type EventScheduled struct{}
 var TransitionScheduled = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_STANDBY},
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
-	func(mctx chasm.MutableContext, cb *Callback, event EventScheduled) error {
+	func(cb *Callback, mctx chasm.MutableContext, event EventScheduled) error {
 		mctx.AddTask(cb, chasm.TaskAttributes{}, &callbackspb.InvocationTask{})
 		return nil
 	},
@@ -29,7 +29,7 @@ type EventRescheduled struct{}
 var TransitionRescheduled = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_BACKING_OFF},
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
-	func(mctx chasm.MutableContext, cb *Callback, event EventRescheduled) error {
+	func(cb *Callback, mctx chasm.MutableContext, event EventRescheduled) error {
 		cb.NextAttemptScheduleTime = nil
 		mctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{})
 		return nil
@@ -46,7 +46,7 @@ type EventAttemptFailed struct {
 var TransitionAttemptFailed = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_SCHEDULED},
 	callbackspb.CALLBACK_STATUS_BACKING_OFF,
-	func(mctx chasm.MutableContext, cb *Callback, event EventAttemptFailed) error {
+	func(cb *Callback, mctx chasm.MutableContext, event EventAttemptFailed) error {
 		cb.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
 		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.Attempt), event.Err)
@@ -74,7 +74,7 @@ type EventFailed struct {
 var TransitionFailed = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_SCHEDULED},
 	callbackspb.CALLBACK_STATUS_FAILED,
-	func(mctx chasm.MutableContext, cb *Callback, event EventFailed) error {
+	func(cb *Callback, mctx chasm.MutableContext, event EventFailed) error {
 		cb.recordAttempt(event.Time)
 		cb.LastAttemptFailure = &failurepb.Failure{
 			Message: event.Err.Error(),
@@ -97,7 +97,7 @@ type EventSucceeded struct {
 var TransitionSucceeded = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_SCHEDULED},
 	callbackspb.CALLBACK_STATUS_SUCCEEDED,
-	func(mctx chasm.MutableContext, cb *Callback, event EventSucceeded) error {
+	func(cb *Callback, mctx chasm.MutableContext, event EventSucceeded) error {
 		cb.recordAttempt(event.Time)
 		cb.LastAttemptFailure = nil
 		mctx.AddTask(cb, chasm.TaskAttributes{}, &callbackspb.InvocationTask{})
