@@ -19,34 +19,30 @@ type testMutableContext struct {
 	tasks []testTask
 }
 
+func (c *testMutableContext) AddTask(component chasm.Component, attributes chasm.TaskAttributes, payload any) {
+	c.tasks = append(c.tasks, testTask{component, attributes, payload})
+}
+
+func (c *testMutableContext) Now(_ chasm.Component) time.Time {
+	return time.Now()
+}
+
+func (c *testMutableContext) Ref(_ chasm.Component) ([]byte, error) {
+	return nil, nil
+}
+
 type testTask struct {
 	component  chasm.Component
 	attributes chasm.TaskAttributes
-	message    any
+	payload    any
 }
 
 func newTestMutableContext(t *testing.T) *testMutableContext {
-	ctrl := gomock.NewController(t)
-	mockCtx := chasm.NewMockMutableContext(ctrl)
-	tmc := &testMutableContext{
-		MockMutableContext: mockCtx,
+	return &testMutableContext{
+		MockMutableContext: chasm.NewMockMutableContext(
+			gomock.NewController(t),
+		),
 	}
-
-	// Set up expectations
-	mockCtx.EXPECT().AddTask(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(component chasm.Component, attributes chasm.TaskAttributes, message any) {
-			tmc.tasks = append(tmc.tasks, testTask{
-				component:  component,
-				attributes: attributes,
-				message:    message,
-			})
-		},
-	).AnyTimes()
-
-	mockCtx.EXPECT().Now(gomock.Any()).Return(time.Now()).AnyTimes()
-	mockCtx.EXPECT().Ref(gomock.Any()).Return(nil, nil).AnyTimes()
-
-	return tmc
 }
 
 func TestValidTransitions(t *testing.T) {
@@ -63,7 +59,7 @@ func TestValidTransitions(t *testing.T) {
 			},
 		},
 	}
-	callback.SetStatus(callbackspb.CALLBACK_STATUS_SCHEDULED)
+	callback.SetState(callbackspb.CALLBACK_STATUS_SCHEDULED)
 
 	// AttemptFailed
 	mctx := newTestMutableContext(t)
@@ -75,7 +71,7 @@ func TestValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert info object is updated
-	require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, callback.Status())
+	require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, callback.State())
 	require.Equal(t, int32(1), callback.Attempt)
 	require.Equal(t, "test", callback.LastAttemptFailure.Message)
 	require.False(t, callback.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
@@ -85,7 +81,7 @@ func TestValidTransitions(t *testing.T) {
 
 	// Assert backoff task is generated
 	require.Len(t, mctx.tasks, 1)
-	require.IsType(t, &callbackspb.InvocationTask{}, mctx.tasks[0].message)
+	require.IsType(t, &callbackspb.InvocationTask{}, mctx.tasks[0].payload)
 
 	// Rescheduled
 	mctx = newTestMutableContext(t)
@@ -93,7 +89,7 @@ func TestValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
-	require.Equal(t, callbackspb.CALLBACK_STATUS_SCHEDULED, callback.Status())
+	require.Equal(t, callbackspb.CALLBACK_STATUS_SCHEDULED, callback.State())
 	require.Equal(t, int32(1), callback.Attempt)
 	require.Equal(t, "test", callback.LastAttemptFailure.Message)
 	// Remains unmodified
@@ -102,13 +98,13 @@ func TestValidTransitions(t *testing.T) {
 
 	// Assert callback task is generated
 	require.Len(t, mctx.tasks, 1)
-	require.IsType(t, &callbackspb.InvocationTask{}, mctx.tasks[0].message)
+	require.IsType(t, &callbackspb.InvocationTask{}, mctx.tasks[0].payload)
 
 	// Store the pre-succeeded state to test Failed later
 	dup := &Callback{
 		CallbackState: proto.Clone(callback.CallbackState).(*callbackspb.CallbackState),
 	}
-	dup.CallbackState.Status = callback.Status()
+	dup.CallbackState.Status = callback.State()
 
 	// Succeeded
 	currentTime = currentTime.Add(time.Second)
@@ -117,7 +113,7 @@ func TestValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
-	require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, callback.Status())
+	require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, callback.State())
 	require.Equal(t, int32(2), callback.Attempt)
 	require.Nil(t, callback.LastAttemptFailure)
 	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
@@ -137,7 +133,7 @@ func TestValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
-	require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, callback.Status())
+	require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, callback.State())
 	require.Equal(t, int32(2), callback.Attempt)
 	require.Equal(t, "failed", callback.LastAttemptFailure.Message)
 	require.True(t, callback.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
