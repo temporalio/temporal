@@ -194,7 +194,7 @@ func NewSearchAttributeBool(alias string, boolField SearchAttributeFieldBool) *S
 	}
 }
 
-func newSearchAttributeBoolByField(field string) *SearchAttributeBool {
+func NewSearchAttributeBoolByField(field string) *SearchAttributeBool {
 	return &SearchAttributeBool{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     field,
@@ -221,7 +221,7 @@ func NewSearchAttributeDateTime(alias string, datetimeField SearchAttributeField
 	}
 }
 
-func newSearchAttributeDateTimeByField(field string) *SearchAttributeDateTime {
+func NewSearchAttributeDateTimeByField(field string) *SearchAttributeDateTime {
 	return &SearchAttributeDateTime{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     field,
@@ -248,7 +248,7 @@ func NewSearchAttributeInt(alias string, intField SearchAttributeFieldInt) *Sear
 	}
 }
 
-func newSearchAttributeIntByField(field string) *SearchAttributeInt {
+func NewSearchAttributeIntByField(field string) *SearchAttributeInt {
 	return &SearchAttributeInt{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     field,
@@ -275,7 +275,7 @@ func NewSearchAttributeDouble(alias string, doubleField SearchAttributeFieldDoub
 	}
 }
 
-func newSearchAttributeDoubleByField(field string) *SearchAttributeDouble {
+func NewSearchAttributeDoubleByField(field string) *SearchAttributeDouble {
 	return &SearchAttributeDouble{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     field,
@@ -302,7 +302,7 @@ func NewSearchAttributeKeyword(alias string, keywordField SearchAttributeFieldKe
 	}
 }
 
-func newSearchAttributeKeywordByField(field string) *SearchAttributeKeyword {
+func NewSearchAttributeKeywordByField(field string) *SearchAttributeKeyword {
 	return &SearchAttributeKeyword{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     field,
@@ -329,7 +329,7 @@ func NewSearchAttributeKeywordList(alias string, keywordListField SearchAttribut
 	}
 }
 
-func newSearchAttributeKeywordListByField(field string) *SearchAttributeKeywordList {
+func NewSearchAttributeKeywordListByField(field string) *SearchAttributeKeywordList {
 	return &SearchAttributeKeywordList{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     field,
