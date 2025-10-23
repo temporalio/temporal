@@ -490,6 +490,24 @@ func (w *perNamespaceWorker) startWorker(
 	sdkoptions.OnFatalError = w.onFatalError
 
 	// enable auto-scaling if enabled in dynamic config
+	/*
+			ie.
+			worker.perNamespaceWorkerOptions = sdkworker.Options{
+				WorkflowTaskPollerBehavior: sdkworker.NewPollerBehaviorAutoscaling(sdkworker.PollerBehaviorAutoscalingOptions{
+					InitialNumberOfPollers: 5,   // default
+					MinimumNumberOfPollers: 1,   // default
+					MaximumNumberOfPollers: 100, // default
+				}),
+				ActivityTaskPollerBehavior: sdkworker.NewPollerBehaviorAutoscaling(sdkworker.PollerBehaviorAutoscalingOptions{
+					InitialNumberOfPollers: 5,   // default
+					MinimumNumberOfPollers: 1,   // default
+					MaximumNumberOfPollers: 100, // default
+				}),
+			}
+		TODO: I'm not sure that the sdkworker.NewPollerBehaviorAutoscaling function which generates a PollerBehavior can
+		really be passed through dynamic config. We may need to add a separate dynamic to enable this
+	*/
+
 	sdkoptions.WorkflowTaskPollerBehavior = w.opts.WorkflowTaskPollerBehavior
 	sdkoptions.ActivityTaskPollerBehavior = w.opts.ActivityTaskPollerBehavior
 
