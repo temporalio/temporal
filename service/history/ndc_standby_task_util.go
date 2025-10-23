@@ -169,6 +169,7 @@ func newActivityTaskPostActionInfo(
 		activityTaskScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout.AsDuration(),
 		versionDirective:                   directive,
 		priority:                           priority,
+		scheduledRoutingConfigCounter:      mutableState.GetScheduledRoutingConfigCounter(),
 	}, nil
 }
 
