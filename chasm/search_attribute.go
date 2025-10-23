@@ -30,6 +30,16 @@ var (
 	SearchAttributeFieldKeywordList02 = newSearchAttributeFieldKeywordList(2)
 )
 
+var (
+	_ SearchAttribute = (*searchAttributeDefinition)(nil)
+	_ SearchAttribute = (*SearchAttributeBool)(nil)
+	_ SearchAttribute = (*SearchAttributeDateTime)(nil)
+	_ SearchAttribute = (*SearchAttributeInt)(nil)
+	_ SearchAttribute = (*SearchAttributeDouble)(nil)
+	_ SearchAttribute = (*SearchAttributeKeyword)(nil)
+	_ SearchAttribute = (*SearchAttributeKeywordList)(nil)
+)
+
 type (
 	SearchAttribute interface {
 		getAlias() string
