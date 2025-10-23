@@ -17,8 +17,8 @@ type EventScheduled struct{}
 var TransitionScheduled = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_STANDBY},
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
-	func(mctx chasm.MutableContext, cb *Callback, event EventScheduled) error {
-		mctx.AddTask(cb, chasm.TaskAttributes{}, &callbackspb.InvocationTask{})
+	func(ctx chasm.MutableContext, cb *Callback, event EventScheduled) error {
+		ctx.AddTask(cb, chasm.TaskAttributes{}, &callbackspb.InvocationTask{})
 		return nil
 	},
 )
