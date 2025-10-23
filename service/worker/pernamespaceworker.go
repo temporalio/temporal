@@ -489,6 +489,10 @@ func (w *perNamespaceWorker) startWorker(
 	sdkoptions.MaxConcurrentActivityExecutionSize *= allocation.local
 	sdkoptions.OnFatalError = w.onFatalError
 
+	// enable auto-scaling if enabled in dynamic config
+	sdkoptions.WorkflowTaskPollerBehavior = w.opts.WorkflowTaskPollerBehavior
+	sdkoptions.ActivityTaskPollerBehavior = w.opts.ActivityTaskPollerBehavior
+
 	// this should not block because the client already has server capabilities
 	worker := w.wm.sdkClientFactory.NewWorker(client, primitives.PerNSWorkerTaskQueue, sdkoptions)
 	details := workercommon.RegistrationDetails{
