@@ -12,6 +12,7 @@ package chasm
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	enums "go.temporal.io/api/enums/v1"
 	enums0 "go.temporal.io/server/api/enums/v1"
@@ -74,6 +75,18 @@ func (m *MockNodeBackend) CurrentVersionedTransition() *persistence.VersionedTra
 func (mr *MockNodeBackendMockRecorder) CurrentVersionedTransition() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentVersionedTransition", reflect.TypeOf((*MockNodeBackend)(nil).CurrentVersionedTransition))
+}
+
+// DeleteCHASMPureTasks mocks base method.
+func (m *MockNodeBackend) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "DeleteCHASMPureTasks", maxScheduledTime)
+}
+
+// DeleteCHASMPureTasks indicates an expected call of DeleteCHASMPureTasks.
+func (mr *MockNodeBackendMockRecorder) DeleteCHASMPureTasks(maxScheduledTime any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCHASMPureTasks", reflect.TypeOf((*MockNodeBackend)(nil).DeleteCHASMPureTasks), maxScheduledTime)
 }
 
 // GetCurrentVersion mocks base method.
