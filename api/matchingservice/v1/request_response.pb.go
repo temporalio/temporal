@@ -584,11 +584,8 @@ type AddWorkflowTaskRequest struct {
 	VersionDirective *v18.TaskVersionDirective `protobuf:"bytes,10,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
 	ForwardInfo      *v18.TaskForwardInfo      `protobuf:"bytes,11,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
 	Priority         *v11.Priority             `protobuf:"bytes,12,opt,name=priority,proto3" json:"priority,omitempty"`
-	// Counter copied from the workflow execution's WorkflowExecutionVersioningInfo
-	// during enqueue time.
-	ScheduledRoutingConfigCounter int32 `protobuf:"varint,13,opt,name=scheduled_routing_config_counter,json=scheduledRoutingConfigCounter,proto3" json:"scheduled_routing_config_counter,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *AddWorkflowTaskRequest) Reset() {
@@ -682,13 +679,6 @@ func (x *AddWorkflowTaskRequest) GetPriority() *v11.Priority {
 		return x.Priority
 	}
 	return nil
-}
-
-func (x *AddWorkflowTaskRequest) GetScheduledRoutingConfigCounter() int32 {
-	if x != nil {
-		return x.ScheduledRoutingConfigCounter
-	}
-	return 0
 }
 
 type AddWorkflowTaskResponse struct {
@@ -5028,7 +5018,7 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x06header\x18\x10 \x01(\v2\x1e.temporal.api.common.v1.HeaderR\x06header\x12h\n" +
 	"\x17poller_scaling_decision\x18\x11 \x01(\v20.temporal.api.taskqueue.v1.PollerScalingDecisionR\x15pollerScalingDecision\x12<\n" +
 	"\bpriority\x18\x12 \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12F\n" +
-	"\fretry_policy\x18\x13 \x01(\v2#.temporal.api.common.v1.RetryPolicyR\vretryPolicy\"\xd0\x05\n" +
+	"\fretry_policy\x18\x13 \x01(\v2#.temporal.api.common.v1.RetryPolicyR\vretryPolicy\"\x87\x05\n" +
 	"\x16AddWorkflowTaskRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12C\n" +
@@ -5040,8 +5030,7 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x11version_directive\x18\n" +
 	" \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12T\n" +
 	"\fforward_info\x18\v \x01(\v21.temporal.server.api.taskqueue.v1.TaskForwardInfoR\vforwardInfo\x12<\n" +
-	"\bpriority\x18\f \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12G\n" +
-	" scheduled_routing_config_counter\x18\r \x01(\x05R\x1dscheduledRoutingConfigCounter\"E\n" +
+	"\bpriority\x18\f \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\"E\n" +
 	"\x17AddWorkflowTaskResponse\x12*\n" +
 	"\x11assigned_build_id\x18\x01 \x01(\tR\x0fassignedBuildId\"\xec\x05\n" +
 	"\x16AddActivityTaskRequest\x12!\n" +
