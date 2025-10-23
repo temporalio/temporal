@@ -19,6 +19,22 @@ type testMutableContext struct {
 	tasks []testTask
 }
 
+func (c *testMutableContext) AddTask(component chasm.Component, attributes chasm.TaskAttributes, message any) {
+	c.tasks = append(c.tasks, testTask{
+		component:  component,
+		attributes: attributes,
+		message:    message,
+	})
+}
+
+func (c *testMutableContext) Now(_ chasm.Component) time.Time {
+	return time.Now()
+}
+
+func (c *testMutableContext) Ref(_ chasm.Component) ([]byte, error) {
+	return nil, nil
+}
+
 type testTask struct {
 	component  chasm.Component
 	attributes chasm.TaskAttributes
@@ -26,26 +42,11 @@ type testTask struct {
 }
 
 func newTestMutableContext(t *testing.T) *testMutableContext {
-	ctrl := gomock.NewController(t)
-	mockCtx := chasm.NewMockMutableContext(ctrl)
 	tmc := &testMutableContext{
-		MockMutableContext: mockCtx,
+		MockMutableContext: chasm.NewMockMutableContext(
+			gomock.NewController(t),
+		),
 	}
-
-	// Set up expectations
-	mockCtx.EXPECT().AddTask(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(component chasm.Component, attributes chasm.TaskAttributes, message any) {
-			tmc.tasks = append(tmc.tasks, testTask{
-				component:  component,
-				attributes: attributes,
-				message:    message,
-			})
-		},
-	).AnyTimes()
-
-	mockCtx.EXPECT().Now(gomock.Any()).Return(time.Now()).AnyTimes()
-	mockCtx.EXPECT().Ref(gomock.Any()).Return(nil, nil).AnyTimes()
-
 	return tmc
 }
 
