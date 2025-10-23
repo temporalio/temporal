@@ -24,7 +24,7 @@ const (
 )
 
 var (
-	testKeywordSearchAttribute = chasm.NewSearchAttributeKeywordByField(TestKeywordSAFieldName)
+	TestKeywordSearchAttribute = chasm.NewSearchAttributeKeywordByField(TestKeywordSAFieldName)
 
 	_ chasm.VisibilitySearchAttributesProvider = (*PayloadStore)(nil)
 	_ chasm.VisibilityMemoProvider             = (*PayloadStore)(nil)
@@ -152,7 +152,7 @@ func (s *PayloadStore) SearchAttributes(
 	ctx chasm.Context,
 ) []chasm.SearchAttributeKeyValue {
 	return []chasm.SearchAttributeKeyValue{
-		testKeywordSearchAttribute.Value(TestKeywordSAFieldValue),
+		TestKeywordSearchAttribute.Value(TestKeywordSAFieldValue),
 	}
 }
 

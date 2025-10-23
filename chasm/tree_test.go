@@ -862,7 +862,7 @@ func (s *nodeSuite) TestApplyMutation() {
 	}
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
-	s.Len(root.currentSA, 1)
+	s.Len(root.currentSA, 2)
 	s.Len(root.currentMemo, 1)
 
 	// Manually deserialize some tasks to populate the taskValueCache
@@ -935,7 +935,7 @@ func (s *nodeSuite) TestApplyMutation() {
 	// Validate root node got updated.
 	s.Equal(updatedRoot, root.serializedNode)
 	s.NotNil(root.value)
-	s.Len(root.currentSA, 1)
+	s.Len(root.currentSA, 2)
 	s.Len(root.currentMemo, 1)
 	s.Contains(root.currentSA, "TemporalDatetime01")
 	s.True(root.currentSA["TemporalDatetime01"].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
@@ -1070,7 +1070,7 @@ func (s *nodeSuite) TestApplySnapshot() {
 	s.Equal(expectedMutation, root.mutation)
 
 	// Validate visibility search attributes and memo are updated as well.
-	s.Len(root.currentSA, 1)
+	s.Len(root.currentSA, 2)
 	s.Len(root.currentMemo, 1)
 	s.Contains(root.currentSA, "TemporalDatetime01")
 	s.True(root.currentSA["TemporalDatetime01"].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))

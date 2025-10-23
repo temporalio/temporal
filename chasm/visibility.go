@@ -30,8 +30,8 @@ type VisibilityMemoProvider interface {
 }
 
 type VisibilitySearchAttributesMapper interface {
-	GetAlias(field string) (string, error)
-	GetField(alias string) (string, error)
+	SearchAttributeAlias(field string) (string, error)
+	SearchAttributeField(alias string) (string, error)
 }
 
 type Visibility struct {

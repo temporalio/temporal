@@ -7,7 +7,25 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
-// Exported CHASM search attribute field constants
+// CHASM Search Attribute User Guide:
+//
+// Below contains exported CHASM search attribute field constants. These predefined fields correspond to the exact column name in Visibility storage.
+// For each root component, search attributes can be mapped from a user defined alias to these fields.
+//
+// To define a CHASM search attribute, create this as a package/global scoped variable. Below is an example:
+// var testComponentCompletedSearchAttribute = NewSearchAttributeBool("Completed", SearchAttributeFieldBool01)
+// var testComponentFailedSearchAttribute = NewSearchAttributeBool("Failed", SearchAttributeFieldBool02)
+// var testComponentStartTimeSearchAttribute = NewSearchAttributeTime("StartTime", SearchAttributeFieldDateTime01)
+//
+// Each CHASM search attribute field is associated with a specific indexed value type. The Value() method of a search attribute
+// specifies the supported value to set at compile time. eg. DateTime values must be set with a time.Time typed value.
+//
+// Each root component can ONLY use a predefined search attribute field ONCE. Developers should NOT reassign aliases to different fields.
+// Reassiging fields to different aliases is a breaking change during visibility queries.
+//
+// To register these search attributes with the CHASM Registry, use the WithSearchAttributes() option when creating the component in the library.
+// eg.
+// NewRegistrableComponent[T]("testcomponent", WithSearchAttributes(testComponentCompletedSearchAttribute, testComponentStartTimeSearchAttribute))
 var (
 	SearchAttributeFieldBool01 = newSearchAttributeFieldBool(1)
 	SearchAttributeFieldBool02 = newSearchAttributeFieldBool(2)
@@ -57,6 +75,7 @@ type (
 	}
 
 	SearchAttributeKeyValue struct {
+		Alias string
 		Field string
 		Value VisibilityValue
 	}
@@ -168,24 +187,24 @@ func resolveFieldName(valueType enumspb.IndexedValueType, index int) string {
 }
 
 // GetAlias returns the search attribute alias.
-func (s *searchAttributeDefinition) getAlias() string {
+func (s searchAttributeDefinition) getAlias() string {
 	return s.alias
 }
 
 // GetField returns the search attribute field name.
-func (s *searchAttributeDefinition) getField() string {
+func (s searchAttributeDefinition) getField() string {
 	return s.field
 }
 
 // GetValueType returns the indexed value type.
-func (s *searchAttributeDefinition) getValueType() enumspb.IndexedValueType {
+func (s searchAttributeDefinition) getValueType() enumspb.IndexedValueType {
 	return s.valueType
 }
 
-func (s *searchAttributeDefinition) mustEmbedSearchAttributeDefinition() {}
+func (s searchAttributeDefinition) mustEmbedSearchAttributeDefinition() {}
 
-func NewSearchAttributeBool(alias string, boolField SearchAttributeFieldBool) *SearchAttributeBool {
-	return &SearchAttributeBool{
+func NewSearchAttributeBool(alias string, boolField SearchAttributeFieldBool) SearchAttributeBool {
+	return SearchAttributeBool{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     alias,
 			field:     boolField.field,
@@ -194,8 +213,8 @@ func NewSearchAttributeBool(alias string, boolField SearchAttributeFieldBool) *S
 	}
 }
 
-func NewSearchAttributeBoolByField(field string) *SearchAttributeBool {
-	return &SearchAttributeBool{
+func NewSearchAttributeBoolByField(field string) SearchAttributeBool {
+	return SearchAttributeBool{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     field,
 			field:     field,
@@ -206,13 +225,14 @@ func NewSearchAttributeBoolByField(field string) *SearchAttributeBool {
 
 func (s SearchAttributeBool) Value(value bool) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
+		Alias: s.alias,
 		Field: s.field,
 		Value: VisibilityValueBool(value),
 	}
 }
 
-func NewSearchAttributeDateTime(alias string, datetimeField SearchAttributeFieldDateTime) *SearchAttributeDateTime {
-	return &SearchAttributeDateTime{
+func NewSearchAttributeDateTime(alias string, datetimeField SearchAttributeFieldDateTime) SearchAttributeDateTime {
+	return SearchAttributeDateTime{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     alias,
 			field:     datetimeField.field,
@@ -221,8 +241,8 @@ func NewSearchAttributeDateTime(alias string, datetimeField SearchAttributeField
 	}
 }
 
-func NewSearchAttributeDateTimeByField(field string) *SearchAttributeDateTime {
-	return &SearchAttributeDateTime{
+func NewSearchAttributeDateTimeByField(field string) SearchAttributeDateTime {
+	return SearchAttributeDateTime{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     field,
 			field:     field,
@@ -233,13 +253,14 @@ func NewSearchAttributeDateTimeByField(field string) *SearchAttributeDateTime {
 
 func (s SearchAttributeDateTime) Value(value time.Time) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
+		Alias: s.alias,
 		Field: s.field,
 		Value: VisibilityValueTime(value),
 	}
 }
 
-func NewSearchAttributeInt(alias string, intField SearchAttributeFieldInt) *SearchAttributeInt {
-	return &SearchAttributeInt{
+func NewSearchAttributeInt(alias string, intField SearchAttributeFieldInt) SearchAttributeInt {
+	return SearchAttributeInt{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     alias,
 			field:     intField.field,
@@ -248,8 +269,8 @@ func NewSearchAttributeInt(alias string, intField SearchAttributeFieldInt) *Sear
 	}
 }
 
-func NewSearchAttributeIntByField(field string) *SearchAttributeInt {
-	return &SearchAttributeInt{
+func NewSearchAttributeIntByField(field string) SearchAttributeInt {
+	return SearchAttributeInt{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     field,
 			field:     field,
@@ -260,13 +281,14 @@ func NewSearchAttributeIntByField(field string) *SearchAttributeInt {
 
 func (s SearchAttributeInt) Value(value int64) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
+		Alias: s.alias,
 		Field: s.field,
 		Value: VisibilityValueInt64(value),
 	}
 }
 
-func NewSearchAttributeDouble(alias string, doubleField SearchAttributeFieldDouble) *SearchAttributeDouble {
-	return &SearchAttributeDouble{
+func NewSearchAttributeDouble(alias string, doubleField SearchAttributeFieldDouble) SearchAttributeDouble {
+	return SearchAttributeDouble{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     alias,
 			field:     doubleField.field,
@@ -275,8 +297,8 @@ func NewSearchAttributeDouble(alias string, doubleField SearchAttributeFieldDoub
 	}
 }
 
-func NewSearchAttributeDoubleByField(field string) *SearchAttributeDouble {
-	return &SearchAttributeDouble{
+func NewSearchAttributeDoubleByField(field string) SearchAttributeDouble {
+	return SearchAttributeDouble{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     field,
 			field:     field,
@@ -287,13 +309,14 @@ func NewSearchAttributeDoubleByField(field string) *SearchAttributeDouble {
 
 func (s SearchAttributeDouble) Value(value float64) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
+		Alias: s.alias,
 		Field: s.field,
 		Value: VisibilityValueFloat64(value),
 	}
 }
 
-func NewSearchAttributeKeyword(alias string, keywordField SearchAttributeFieldKeyword) *SearchAttributeKeyword {
-	return &SearchAttributeKeyword{
+func NewSearchAttributeKeyword(alias string, keywordField SearchAttributeFieldKeyword) SearchAttributeKeyword {
+	return SearchAttributeKeyword{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     alias,
 			field:     keywordField.field,
@@ -302,8 +325,8 @@ func NewSearchAttributeKeyword(alias string, keywordField SearchAttributeFieldKe
 	}
 }
 
-func NewSearchAttributeKeywordByField(field string) *SearchAttributeKeyword {
-	return &SearchAttributeKeyword{
+func NewSearchAttributeKeywordByField(field string) SearchAttributeKeyword {
+	return SearchAttributeKeyword{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     field,
 			field:     field,
@@ -314,13 +337,14 @@ func NewSearchAttributeKeywordByField(field string) *SearchAttributeKeyword {
 
 func (s SearchAttributeKeyword) Value(value string) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
+		Alias: s.alias,
 		Field: s.field,
 		Value: VisibilityValueString(value),
 	}
 }
 
-func NewSearchAttributeKeywordList(alias string, keywordListField SearchAttributeFieldKeywordList) *SearchAttributeKeywordList {
-	return &SearchAttributeKeywordList{
+func NewSearchAttributeKeywordList(alias string, keywordListField SearchAttributeFieldKeywordList) SearchAttributeKeywordList {
+	return SearchAttributeKeywordList{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     alias,
 			field:     keywordListField.field,
@@ -329,8 +353,8 @@ func NewSearchAttributeKeywordList(alias string, keywordListField SearchAttribut
 	}
 }
 
-func NewSearchAttributeKeywordListByField(field string) *SearchAttributeKeywordList {
-	return &SearchAttributeKeywordList{
+func NewSearchAttributeKeywordListByField(field string) SearchAttributeKeywordList {
+	return SearchAttributeKeywordList{
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     field,
 			field:     field,
@@ -340,6 +364,7 @@ func NewSearchAttributeKeywordListByField(field string) *SearchAttributeKeywordL
 }
 func (s SearchAttributeKeywordList) Value(value []string) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
+		Alias: s.alias,
 		Field: s.field,
 		Value: VisibilityValueStringSlice(value),
 	}

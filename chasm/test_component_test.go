@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -64,11 +65,14 @@ type (
 
 const (
 	testComponentStartTimeSAKey   = "StartTimeSAKey"
+	testComponentRunIdSAKey       = "RunIdSAKey"
 	testComponentStartTimeMemoKey = "StartTimeMemoKey"
 )
 
 var (
-	testComponentStartTimeSearchAttribute = NewSearchAttributeDateTime(testComponentStartTimeSAKey, SearchAttributeFieldDateTime01)
+	TestKeywordSearchAttribute            = NewSearchAttributeKeywordByField(searchattribute.TemporalScheduledById)
+	TestComponentStartTimeSearchAttribute = NewSearchAttributeDateTime(testComponentStartTimeSAKey, SearchAttributeFieldDateTime01)
+	TestComponentRunIdPredefinedSA        = NewSearchAttributeKeywordByField(testComponentRunIdSAKey)
 
 	_ VisibilitySearchAttributesProvider = (*TestComponent)(nil)
 	_ VisibilityMemoProvider             = (*TestComponent)(nil)
@@ -104,7 +108,8 @@ func (tc *TestComponent) Fail(_ MutableContext) {
 // SearchAttributes implements VisibilitySearchAttributesProvider interface.
 func (tc *TestComponent) SearchAttributes(_ Context) []SearchAttributeKeyValue {
 	return []SearchAttributeKeyValue{
-		testComponentStartTimeSearchAttribute.Value(tc.ComponentData.GetStartTime().AsTime()),
+		TestComponentStartTimeSearchAttribute.Value(tc.ComponentData.GetStartTime().AsTime()),
+		TestComponentRunIdPredefinedSA.Value(tc.ComponentData.GetRunId()),
 	}
 }
 
