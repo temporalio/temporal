@@ -102,7 +102,7 @@ func (tc *TestComponent) Fail(_ MutableContext) {
 }
 
 // SearchAttributes implements VisibilitySearchAttributesProvider interface.
-func (tc *TestComponent) SearchAttributes(ctx Context) []SearchAttributeKeyValue {
+func (tc *TestComponent) SearchAttributes(_ Context) []SearchAttributeKeyValue {
 	return []SearchAttributeKeyValue{
 		testComponentStartTimeSearchAttribute.Value(tc.ComponentData.GetStartTime().AsTime()),
 	}

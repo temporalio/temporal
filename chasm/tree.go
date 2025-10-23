@@ -310,16 +310,21 @@ func newTreeInitSearchAttributesAndMemo(
 
 	if saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider); ok {
 		saSlice := saProvider.SearchAttributes(immutableContext)
-		root.currentSA = make(map[string]VisibilityValue, len(saSlice))
-		for _, sa := range saSlice {
-			root.currentSA[sa.Field] = sa.Value
-		}
+		root.currentSA = searchAttributeKeyValuesToMap(saSlice)
 	}
 	if memoProvider, ok := rootComponent.(VisibilityMemoProvider); ok {
 		root.currentMemo = memoProvider.Memo(immutableContext)
 	}
 
 	return nil
+}
+
+func searchAttributeKeyValuesToMap(saSlice []SearchAttributeKeyValue) map[string]VisibilityValue {
+	result := make(map[string]VisibilityValue, len(saSlice))
+	for _, sa := range saSlice {
+		result[sa.Field] = sa.Value
+	}
+	return result
 }
 
 func (n *Node) SetRootComponent(
@@ -1459,10 +1464,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
 	if ok {
 		saSlice := saProvider.SearchAttributes(immutableContext)
-		newSA := make(map[string]VisibilityValue, len(saSlice))
-		for _, sa := range saSlice {
-			newSA[sa.Field] = sa.Value
-		}
+		newSA := searchAttributeKeyValuesToMap(saSlice)
 		if !maps.EqualFunc(n.currentSA, newSA, isVisibilityValueEqual) {
 			needUpdate = true
 		}
@@ -2040,10 +2042,7 @@ func (n *Node) ApplyMutation(
 	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
 	if ok {
 		saSlice := saProvider.SearchAttributes(immutableContext)
-		n.currentSA = make(map[string]VisibilityValue, len(saSlice))
-		for _, sa := range saSlice {
-			n.currentSA[sa.Field] = sa.Value
-		}
+		n.currentSA = searchAttributeKeyValuesToMap(saSlice)
 	}
 	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
 	if ok {

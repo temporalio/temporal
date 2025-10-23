@@ -624,7 +624,7 @@ func (l *testComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
-func (l *testComponent) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeKeyValue {
+func (l *testComponent) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
 	return []chasm.SearchAttributeKeyValue{
 		testComponentPausedSearchAttribute.Value(l.ActivityInfo.Paused),
 	}
