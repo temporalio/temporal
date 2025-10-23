@@ -15,7 +15,7 @@ import (
 
 // testMutableContext is a minimal test helper for capturing tasks
 type testMutableContext struct {
-	*chasm.MockMutableContext
+	chasm.MutableContext
 	tasks []testTask
 }
 
