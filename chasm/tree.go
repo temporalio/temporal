@@ -184,6 +184,7 @@ type (
 		CurrentVersionedTransition() *persistencespb.VersionedTransition
 		GetWorkflowKey() definition.WorkflowKey
 		AddTasks(...tasks.Task)
+		DeleteCHASMPureTasks(maxScheduledTime time.Time)
 		UpdateWorkflowStateStatus(
 			state enumsspb.WorkflowExecutionState,
 			status enumspb.WorkflowExecutionStatus,
@@ -1842,13 +1843,21 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask(
 	firstPureTask *persistencespb.ChasmComponentAttributes_Task,
 	firstTaskNode *Node,
 ) error {
-	if firstPureTask == nil || firstPureTask.PhysicalTaskStatus == physicalTaskStatusCreated {
+	if firstPureTask == nil {
+		n.backend.DeleteCHASMPureTasks(tasks.MaximumKey.FireTime)
+		return nil
+	}
+
+	firstPureTaskScheduledTime := firstPureTask.ScheduledTime.AsTime()
+	n.backend.DeleteCHASMPureTasks(firstPureTaskScheduledTime)
+
+	if firstPureTask.PhysicalTaskStatus == physicalTaskStatusCreated {
 		return nil
 	}
 
 	n.backend.AddTasks(&tasks.ChasmTaskPure{
 		WorkflowKey:         n.backend.GetWorkflowKey(),
-		VisibilityTimestamp: firstPureTask.ScheduledTime.AsTime(),
+		VisibilityTimestamp: firstPureTaskScheduledTime,
 		Category:            tasks.CategoryTimer,
 	})
 
