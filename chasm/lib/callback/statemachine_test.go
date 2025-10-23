@@ -104,7 +104,7 @@ func TestValidTransitions(t *testing.T) {
 	dup := &Callback{
 		CallbackState: proto.Clone(callback.CallbackState).(*callbackspb.CallbackState),
 	}
-	dup.CallbackState.Status = callback.State()
+	dup.Status = callback.State()
 
 	// Succeeded
 	currentTime = currentTime.Add(time.Second)
