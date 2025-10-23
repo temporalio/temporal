@@ -24,12 +24,12 @@ const (
 )
 
 type CreateScheduleRequest struct {
-	state   protoimpl.MessageState    `protogen:"open.v1"`
-	Request *v1.CreateScheduleRequest `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// Internal namespace ID (UUID).
-	NamespaceId   string `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	NamespaceId     string                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FrontendRequest *v1.CreateScheduleRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CreateScheduleRequest) Reset() {
@@ -62,13 +62,6 @@ func (*CreateScheduleRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *CreateScheduleRequest) GetRequest() *v1.CreateScheduleRequest {
-	if x != nil {
-		return x.Request
-	}
-	return nil
-}
-
 func (x *CreateScheduleRequest) GetNamespaceId() string {
 	if x != nil {
 		return x.NamespaceId
@@ -76,11 +69,18 @@ func (x *CreateScheduleRequest) GetNamespaceId() string {
 	return ""
 }
 
+func (x *CreateScheduleRequest) GetFrontendRequest() *v1.CreateScheduleRequest {
+	if x != nil {
+		return x.FrontendRequest
+	}
+	return nil
+}
+
 type CreateScheduleResponse struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	Response      *v1.CreateScheduleResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState     `protogen:"open.v1"`
+	FrontendResponse *v1.CreateScheduleResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *CreateScheduleResponse) Reset() {
@@ -113,20 +113,20 @@ func (*CreateScheduleResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *CreateScheduleResponse) GetResponse() *v1.CreateScheduleResponse {
+func (x *CreateScheduleResponse) GetFrontendResponse() *v1.CreateScheduleResponse {
 	if x != nil {
-		return x.Response
+		return x.FrontendResponse
 	}
 	return nil
 }
 
 type UpdateScheduleRequest struct {
-	state   protoimpl.MessageState    `protogen:"open.v1"`
-	Request *v1.UpdateScheduleRequest `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// Internal namespace ID (UUID).
-	NamespaceId   string `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	NamespaceId     string                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FrontendRequest *v1.UpdateScheduleRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *UpdateScheduleRequest) Reset() {
@@ -159,13 +159,6 @@ func (*UpdateScheduleRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *UpdateScheduleRequest) GetRequest() *v1.UpdateScheduleRequest {
-	if x != nil {
-		return x.Request
-	}
-	return nil
-}
-
 func (x *UpdateScheduleRequest) GetNamespaceId() string {
 	if x != nil {
 		return x.NamespaceId
@@ -173,11 +166,18 @@ func (x *UpdateScheduleRequest) GetNamespaceId() string {
 	return ""
 }
 
+func (x *UpdateScheduleRequest) GetFrontendRequest() *v1.UpdateScheduleRequest {
+	if x != nil {
+		return x.FrontendRequest
+	}
+	return nil
+}
+
 type UpdateScheduleResponse struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	Response      *v1.UpdateScheduleResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState     `protogen:"open.v1"`
+	FrontendResponse *v1.UpdateScheduleResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *UpdateScheduleResponse) Reset() {
@@ -210,20 +210,20 @@ func (*UpdateScheduleResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *UpdateScheduleResponse) GetResponse() *v1.UpdateScheduleResponse {
+func (x *UpdateScheduleResponse) GetFrontendResponse() *v1.UpdateScheduleResponse {
 	if x != nil {
-		return x.Response
+		return x.FrontendResponse
 	}
 	return nil
 }
 
 type PatchScheduleRequest struct {
-	state   protoimpl.MessageState   `protogen:"open.v1"`
-	Request *v1.PatchScheduleRequest `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// Internal namespace ID (UUID).
-	NamespaceId   string `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	NamespaceId     string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FrontendRequest *v1.PatchScheduleRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *PatchScheduleRequest) Reset() {
@@ -256,13 +256,6 @@ func (*PatchScheduleRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *PatchScheduleRequest) GetRequest() *v1.PatchScheduleRequest {
-	if x != nil {
-		return x.Request
-	}
-	return nil
-}
-
 func (x *PatchScheduleRequest) GetNamespaceId() string {
 	if x != nil {
 		return x.NamespaceId
@@ -270,11 +263,18 @@ func (x *PatchScheduleRequest) GetNamespaceId() string {
 	return ""
 }
 
+func (x *PatchScheduleRequest) GetFrontendRequest() *v1.PatchScheduleRequest {
+	if x != nil {
+		return x.FrontendRequest
+	}
+	return nil
+}
+
 type PatchScheduleResponse struct {
-	state         protoimpl.MessageState    `protogen:"open.v1"`
-	Response      *v1.PatchScheduleResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState    `protogen:"open.v1"`
+	FrontendResponse *v1.PatchScheduleResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *PatchScheduleResponse) Reset() {
@@ -307,20 +307,20 @@ func (*PatchScheduleResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *PatchScheduleResponse) GetResponse() *v1.PatchScheduleResponse {
+func (x *PatchScheduleResponse) GetFrontendResponse() *v1.PatchScheduleResponse {
 	if x != nil {
-		return x.Response
+		return x.FrontendResponse
 	}
 	return nil
 }
 
 type DeleteScheduleRequest struct {
-	state   protoimpl.MessageState    `protogen:"open.v1"`
-	Request *v1.DeleteScheduleRequest `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// Internal namespace ID (UUID).
-	NamespaceId   string `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	NamespaceId     string                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FrontendRequest *v1.DeleteScheduleRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DeleteScheduleRequest) Reset() {
@@ -353,13 +353,6 @@ func (*DeleteScheduleRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *DeleteScheduleRequest) GetRequest() *v1.DeleteScheduleRequest {
-	if x != nil {
-		return x.Request
-	}
-	return nil
-}
-
 func (x *DeleteScheduleRequest) GetNamespaceId() string {
 	if x != nil {
 		return x.NamespaceId
@@ -367,11 +360,18 @@ func (x *DeleteScheduleRequest) GetNamespaceId() string {
 	return ""
 }
 
+func (x *DeleteScheduleRequest) GetFrontendRequest() *v1.DeleteScheduleRequest {
+	if x != nil {
+		return x.FrontendRequest
+	}
+	return nil
+}
+
 type DeleteScheduleResponse struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	Response      *v1.DeleteScheduleResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState     `protogen:"open.v1"`
+	FrontendResponse *v1.DeleteScheduleResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DeleteScheduleResponse) Reset() {
@@ -404,20 +404,20 @@ func (*DeleteScheduleResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *DeleteScheduleResponse) GetResponse() *v1.DeleteScheduleResponse {
+func (x *DeleteScheduleResponse) GetFrontendResponse() *v1.DeleteScheduleResponse {
 	if x != nil {
-		return x.Response
+		return x.FrontendResponse
 	}
 	return nil
 }
 
 type DescribeScheduleRequest struct {
-	state   protoimpl.MessageState      `protogen:"open.v1"`
-	Request *v1.DescribeScheduleRequest `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// Internal namespace ID (UUID).
-	NamespaceId   string `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	NamespaceId     string                      `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FrontendRequest *v1.DescribeScheduleRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DescribeScheduleRequest) Reset() {
@@ -450,13 +450,6 @@ func (*DescribeScheduleRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *DescribeScheduleRequest) GetRequest() *v1.DescribeScheduleRequest {
-	if x != nil {
-		return x.Request
-	}
-	return nil
-}
-
 func (x *DescribeScheduleRequest) GetNamespaceId() string {
 	if x != nil {
 		return x.NamespaceId
@@ -464,11 +457,18 @@ func (x *DescribeScheduleRequest) GetNamespaceId() string {
 	return ""
 }
 
+func (x *DescribeScheduleRequest) GetFrontendRequest() *v1.DescribeScheduleRequest {
+	if x != nil {
+		return x.FrontendRequest
+	}
+	return nil
+}
+
 type DescribeScheduleResponse struct {
-	state         protoimpl.MessageState       `protogen:"open.v1"`
-	Response      *v1.DescribeScheduleResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState       `protogen:"open.v1"`
+	FrontendResponse *v1.DescribeScheduleResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DescribeScheduleResponse) Reset() {
@@ -501,9 +501,9 @@ func (*DescribeScheduleResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *DescribeScheduleResponse) GetResponse() *v1.DescribeScheduleResponse {
+func (x *DescribeScheduleResponse) GetFrontendResponse() *v1.DescribeScheduleResponse {
 	if x != nil {
-		return x.Response
+		return x.FrontendResponse
 	}
 	return nil
 }
@@ -512,32 +512,32 @@ var File_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto pro
 
 const file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"Ctemporal/server/chasm/lib/scheduler/proto/v1/request_response.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\"\x8c\x01\n" +
-	"\x15CreateScheduleRequest\x12P\n" +
-	"\arequest\x18\x01 \x01(\v26.temporal.api.workflowservice.v1.CreateScheduleRequestR\arequest\x12!\n" +
-	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\"m\n" +
-	"\x16CreateScheduleResponse\x12S\n" +
-	"\bresponse\x18\x01 \x01(\v27.temporal.api.workflowservice.v1.CreateScheduleResponseR\bresponse\"\x8c\x01\n" +
-	"\x15UpdateScheduleRequest\x12P\n" +
-	"\arequest\x18\x01 \x01(\v26.temporal.api.workflowservice.v1.UpdateScheduleRequestR\arequest\x12!\n" +
-	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\"m\n" +
-	"\x16UpdateScheduleResponse\x12S\n" +
-	"\bresponse\x18\x01 \x01(\v27.temporal.api.workflowservice.v1.UpdateScheduleResponseR\bresponse\"\x8a\x01\n" +
-	"\x14PatchScheduleRequest\x12O\n" +
-	"\arequest\x18\x01 \x01(\v25.temporal.api.workflowservice.v1.PatchScheduleRequestR\arequest\x12!\n" +
-	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\"k\n" +
-	"\x15PatchScheduleResponse\x12R\n" +
-	"\bresponse\x18\x01 \x01(\v26.temporal.api.workflowservice.v1.PatchScheduleResponseR\bresponse\"\x8c\x01\n" +
-	"\x15DeleteScheduleRequest\x12P\n" +
-	"\arequest\x18\x01 \x01(\v26.temporal.api.workflowservice.v1.DeleteScheduleRequestR\arequest\x12!\n" +
-	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\"m\n" +
-	"\x16DeleteScheduleResponse\x12S\n" +
-	"\bresponse\x18\x01 \x01(\v27.temporal.api.workflowservice.v1.DeleteScheduleResponseR\bresponse\"\x90\x01\n" +
-	"\x17DescribeScheduleRequest\x12R\n" +
-	"\arequest\x18\x01 \x01(\v28.temporal.api.workflowservice.v1.DescribeScheduleRequestR\arequest\x12!\n" +
-	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\"q\n" +
-	"\x18DescribeScheduleResponse\x12U\n" +
-	"\bresponse\x18\x01 \x01(\v29.temporal.api.workflowservice.v1.DescribeScheduleResponseR\bresponseBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
+	"Ctemporal/server/chasm/lib/scheduler/proto/v1/request_response.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\"\x9d\x01\n" +
+	"\x15CreateScheduleRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12a\n" +
+	"\x10frontend_request\x18\x02 \x01(\v26.temporal.api.workflowservice.v1.CreateScheduleRequestR\x0ffrontendRequest\"~\n" +
+	"\x16CreateScheduleResponse\x12d\n" +
+	"\x11frontend_response\x18\x01 \x01(\v27.temporal.api.workflowservice.v1.CreateScheduleResponseR\x10frontendResponse\"\x9d\x01\n" +
+	"\x15UpdateScheduleRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12a\n" +
+	"\x10frontend_request\x18\x02 \x01(\v26.temporal.api.workflowservice.v1.UpdateScheduleRequestR\x0ffrontendRequest\"~\n" +
+	"\x16UpdateScheduleResponse\x12d\n" +
+	"\x11frontend_response\x18\x01 \x01(\v27.temporal.api.workflowservice.v1.UpdateScheduleResponseR\x10frontendResponse\"\x9b\x01\n" +
+	"\x14PatchScheduleRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12`\n" +
+	"\x10frontend_request\x18\x02 \x01(\v25.temporal.api.workflowservice.v1.PatchScheduleRequestR\x0ffrontendRequest\"|\n" +
+	"\x15PatchScheduleResponse\x12c\n" +
+	"\x11frontend_response\x18\x01 \x01(\v26.temporal.api.workflowservice.v1.PatchScheduleResponseR\x10frontendResponse\"\x9d\x01\n" +
+	"\x15DeleteScheduleRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12a\n" +
+	"\x10frontend_request\x18\x02 \x01(\v26.temporal.api.workflowservice.v1.DeleteScheduleRequestR\x0ffrontendRequest\"~\n" +
+	"\x16DeleteScheduleResponse\x12d\n" +
+	"\x11frontend_response\x18\x01 \x01(\v27.temporal.api.workflowservice.v1.DeleteScheduleResponseR\x10frontendResponse\"\xa1\x01\n" +
+	"\x17DescribeScheduleRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12c\n" +
+	"\x10frontend_request\x18\x02 \x01(\v28.temporal.api.workflowservice.v1.DescribeScheduleRequestR\x0ffrontendRequest\"\x82\x01\n" +
+	"\x18DescribeScheduleResponse\x12f\n" +
+	"\x11frontend_response\x18\x01 \x01(\v29.temporal.api.workflowservice.v1.DescribeScheduleResponseR\x10frontendResponseBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescOnce sync.Once
@@ -575,16 +575,16 @@ var file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_goT
 	(*v1.DescribeScheduleResponse)(nil), // 19: temporal.api.workflowservice.v1.DescribeScheduleResponse
 }
 var file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_depIdxs = []int32{
-	10, // 0: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest.request:type_name -> temporal.api.workflowservice.v1.CreateScheduleRequest
-	11, // 1: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleResponse.response:type_name -> temporal.api.workflowservice.v1.CreateScheduleResponse
-	12, // 2: temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleRequest.request:type_name -> temporal.api.workflowservice.v1.UpdateScheduleRequest
-	13, // 3: temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleResponse.response:type_name -> temporal.api.workflowservice.v1.UpdateScheduleResponse
-	14, // 4: temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleRequest.request:type_name -> temporal.api.workflowservice.v1.PatchScheduleRequest
-	15, // 5: temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleResponse.response:type_name -> temporal.api.workflowservice.v1.PatchScheduleResponse
-	16, // 6: temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleRequest.request:type_name -> temporal.api.workflowservice.v1.DeleteScheduleRequest
-	17, // 7: temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleResponse.response:type_name -> temporal.api.workflowservice.v1.DeleteScheduleResponse
-	18, // 8: temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleRequest.request:type_name -> temporal.api.workflowservice.v1.DescribeScheduleRequest
-	19, // 9: temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleResponse.response:type_name -> temporal.api.workflowservice.v1.DescribeScheduleResponse
+	10, // 0: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.CreateScheduleRequest
+	11, // 1: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.CreateScheduleResponse
+	12, // 2: temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.UpdateScheduleRequest
+	13, // 3: temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.UpdateScheduleResponse
+	14, // 4: temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.PatchScheduleRequest
+	15, // 5: temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.PatchScheduleResponse
+	16, // 6: temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.DeleteScheduleRequest
+	17, // 7: temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.DeleteScheduleResponse
+	18, // 8: temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.DescribeScheduleRequest
+	19, // 9: temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.DescribeScheduleResponse
 	10, // [10:10] is the sub-list for method output_type
 	10, // [10:10] is the sub-list for method input_type
 	10, // [10:10] is the sub-list for extension type_name
