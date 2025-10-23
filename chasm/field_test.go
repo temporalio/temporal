@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 )
 
@@ -171,6 +172,7 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(tasks.MaximumKey.FireTime).AnyTimes()
 	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
 
 	// Create component structure that will simulate NewEntity scenario.
@@ -245,6 +247,7 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(tasks.MaximumKey.FireTime).AnyTimes()
 	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
 
 	existingComponent := &TestSubComponent11{

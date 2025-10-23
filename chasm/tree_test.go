@@ -265,6 +265,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(tasks.MaximumKey.FireTime).AnyTimes()
 
 	sc1 := &TestSubComponent1{
 		SubComponent1Data: &protoMessageType{
@@ -456,6 +457,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(tasks.MaximumKey.FireTime).AnyTimes()
 
 	var persistedNodes map[string]*persistencespb.ChasmNode
 
@@ -1139,6 +1141,7 @@ func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
 
 func (s *nodeSuite) TestRefreshTasks() {
 	now := s.timeSource.Now()
+	pureTaskScheduledTime := now.Add(time.Second).UTC()
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
@@ -1170,7 +1173,7 @@ func (s *nodeSuite) TestRefreshTasks() {
 						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
 							{
 								Type:                      "TestLibrary.test_pure_task",
-								ScheduledTime:             timestamppb.New(now.Add(time.Second)),
+								ScheduledTime:             timestamppb.New(pureTaskScheduledTime),
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
 								VersionedTransitionOffset: 2,
 								PhysicalTaskStatus:        physicalTaskStatusCreated,
@@ -1217,6 +1220,7 @@ func (s *nodeSuite) TestRefreshTasks() {
 	}).AnyTimes()
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(pureTaskScheduledTime).Times(1)
 
 	addedTasks := 0
 	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).Do(func(addedTask tasks.Task) {
@@ -1836,6 +1840,7 @@ func (s *nodeSuite) TestCloseTransaction_Success() {
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(tasks.MaximumKey.FireTime).AnyTimes()
 
 	mutations, err := node.CloseTransaction()
 	s.NoError(err)
@@ -1870,6 +1875,7 @@ func (s *nodeSuite) TestCloseTransaction_EmptyNode() {
 
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1)
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(tasks.MaximumKey.FireTime).Times(1)
 
 	mutations, err := node.CloseTransaction()
 	s.NoError(err)
@@ -1888,6 +1894,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(tasks.MaximumKey.FireTime).AnyTimes()
 
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
@@ -1944,6 +1951,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChan
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
 	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(tasks.MaximumKey.FireTime).AnyTimes()
 
 	// Init visiblity component
 	testComponent.(*TestComponent).Visibility = NewComponentField(chasmCtx, NewVisibility(chasmCtx))
@@ -2006,6 +2014,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootSAMemoChanged
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
 	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(tasks.MaximumKey.FireTime).AnyTimes()
 
 	// Init visiblity component
 	testComponent.(*TestComponent).Visibility = NewComponentField(chasmCtx, NewVisibility(chasmCtx))
@@ -2110,6 +2119,8 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	s.testLibrary.mockPureTaskValidator.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
+
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(tasks.MaximumKey.FireTime).Times(1)
 
 	err = root.closeTransactionUpdateComponentTasks(&persistencespb.VersionedTransition{TransitionCount: 2})
 	s.NoError(err)
@@ -2227,6 +2238,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(s.timeSource.Now().UTC()).Times(1)
 
 	physicalTasks := make(map[tasks.Category][]tasks.Task)
 	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).DoAndReturn(func(task tasks.Task) {
@@ -2376,6 +2388,7 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_SideEffectTasks() {
 	}).AnyTimes()
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(tasks.MaximumKey.FireTime).Times(1)
 
 	expectedCategories := []tasks.Category{tasks.CategoryTimer, tasks.CategoryOutbound, tasks.CategoryTransfer}
 	for _, category := range expectedCategories {
@@ -2390,7 +2403,7 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_SideEffectTasks() {
 }
 
 func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
-	now := s.timeSource.Now()
+	now := s.timeSource.Now().UTC()
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
@@ -2473,6 +2486,7 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
 
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(now.Add(time.Minute)).Times(1)
 	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).Do(func(addedTask tasks.Task) {
 		s.IsType(&tasks.ChasmTaskPure{}, addedTask)
 		s.Equal(tasks.CategoryTimer, addedTask.GetCategory())
@@ -2494,6 +2508,7 @@ func (s *nodeSuite) TestTerminate() {
 	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(tasks.MaximumKey.FireTime).AnyTimes()
 
 	// First closeTransaction once to make the tree clean.
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(
@@ -2625,6 +2640,8 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).Return(false, nil).AnyTimes()
+	// immedidate pure tasks will be executed inline and no physical chasm pure task will be generated.
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(tasks.MaximumKey.FireTime).AnyTimes()
 
 	mutations, err := root.CloseTransaction()
 	s.NoError(err)

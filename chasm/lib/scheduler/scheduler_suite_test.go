@@ -69,6 +69,7 @@ func (s *schedulerSuite) SetupTest() {
 	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
 	s.nodeBackend.EXPECT().IsWorkflow().Return(false).AnyTimes()
+	s.nodeBackend.EXPECT().DeleteCHASMPureTasks(gomock.Any()).AnyTimes()
 
 	// Collect all tasks added for verification.
 	//
