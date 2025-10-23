@@ -18,7 +18,7 @@ const (
 // a transaction, if a visibility task needs to be generated to update the
 // visibility record with the returned search attributes.
 type VisibilitySearchAttributesProvider interface {
-	SearchAttributes(Context) []SearchAttributeValue
+	SearchAttributes(Context) []SearchAttributeKeyValue
 }
 
 // VisibilityMemoProvider if implemented by the root Component,

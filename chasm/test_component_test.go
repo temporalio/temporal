@@ -68,7 +68,7 @@ const (
 )
 
 var (
-	testComponentStartTimeSearchAttribute = NewSearchAttributeDateTimeByField(testComponentStartTimeSAKey, testComponentStartTimeSAKey)
+	testComponentStartTimeSearchAttribute = NewSearchAttributeDateTime(testComponentStartTimeSAKey, SearchAttributeFieldDateTime01)
 
 	_ VisibilitySearchAttributesProvider = (*TestComponent)(nil)
 	_ VisibilityMemoProvider             = (*TestComponent)(nil)
@@ -102,9 +102,9 @@ func (tc *TestComponent) Fail(_ MutableContext) {
 }
 
 // SearchAttributes implements VisibilitySearchAttributesProvider interface.
-func (tc *TestComponent) SearchAttributes(ctx Context) []SearchAttributeValue {
-	return []SearchAttributeValue{
-		testComponentStartTimeSearchAttribute.NewValue(tc.ComponentData.GetStartTime().AsTime()),
+func (tc *TestComponent) SearchAttributes(ctx Context) []SearchAttributeKeyValue {
+	return []SearchAttributeKeyValue{
+		testComponentStartTimeSearchAttribute.Value(tc.ComponentData.GetStartTime().AsTime()),
 	}
 }
 

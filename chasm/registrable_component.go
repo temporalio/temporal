@@ -65,7 +65,7 @@ func WithShardingFn(
 }
 
 func WithSearchAttributes(
-	searchAttributes ...SearchAttributeDefinition,
+	searchAttributes ...SearchAttribute,
 ) RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
 		if len(searchAttributes) == 0 {
@@ -76,9 +76,9 @@ func WithSearchAttributes(
 		rc.saTypeMap = make(map[string]enumspb.IndexedValueType, len(searchAttributes))
 
 		for _, sa := range searchAttributes {
-			alias := sa.GetAlias()
-			field := sa.GetField()
-			valueType := sa.GetValueType()
+			alias := sa.getAlias()
+			field := sa.getField()
+			valueType := sa.getValueType()
 
 			rc.aliasToField[alias] = field
 			rc.fieldToAlias[field] = alias
