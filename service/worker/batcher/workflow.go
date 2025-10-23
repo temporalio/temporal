@@ -105,8 +105,8 @@ var (
 	}
 )
 
-// BatchWorkflow is the workflow that runs a batch job of resetting workflows.
-func BatchWorkflow(ctx workflow.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
+// BatchWorkflowProtobuf is the workflow that runs a batch job of resetting workflows.
+func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
 	if batchParams == nil {
 		return HeartBeatDetails{}, errors.New("batchParams is nil")
 	}
@@ -121,7 +121,7 @@ func BatchWorkflow(ctx workflow.Context, batchParams *batchspb.BatchOperationInp
 	opt := workflow.WithActivityOptions(ctx, batchActivityOptions)
 	var result HeartBeatDetails
 	var ac *activities
-	err = workflow.ExecuteActivity(opt, ac.BatchActivity, batchParams).Get(ctx, &result)
+	err = workflow.ExecuteActivity(opt, ac.BatchActivityWithProtobuf, batchParams).Get(ctx, &result)
 	if err != nil {
 		return HeartBeatDetails{}, err
 	}
