@@ -67,14 +67,6 @@ func NewFrontendHandler(
 // 2. Validates and populates request fields (timeouts, retry policies, search attributes). The request is cloned
 // before mutation to preserve the original for retries.
 // 3. Sends the request to the history activity service.
-//
-// Parameters:
-//   - ctx: Context for the request, used for cancellation and deadlines
-//   - req: StartActivityExecutionRequest containing activity details, options, and metadata
-//
-// Returns:
-//   - *workflowservice.StartActivityExecutionResponse: Response containing activity execution details
-//   - error: Any error encountered during namespace resolution, validation, or execution
 func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workflowservice.StartActivityExecutionRequest) (*workflowservice.StartActivityExecutionResponse, error) {
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {

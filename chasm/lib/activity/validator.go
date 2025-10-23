@@ -3,7 +3,7 @@ package activity
 import (
 	"fmt"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -274,7 +274,7 @@ func ValidateStandaloneActivity(
 func validateRequestID(requestID string, maxIDLengthLimit int, modifiedAttributes *ModifiedStandaloneActivityRequestAttributes) error {
 	if requestID == "" {
 		// For easy direct API use, we default the request ID here but expect all SDKs and other auto-retrying clients to set it
-		modifiedAttributes.requestID = uuid.New()
+		modifiedAttributes.requestID = uuid.New().String()
 	}
 
 	if len(requestID) > maxIDLengthLimit || len(modifiedAttributes.requestID) > maxIDLengthLimit {
