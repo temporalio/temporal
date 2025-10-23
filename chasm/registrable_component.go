@@ -121,7 +121,7 @@ func (rc *RegistrableComponent) GetAlias(field string) (string, error) {
 	alias, ok := rc.fieldToAlias[field]
 	if !ok {
 		return "", serviceerror.NewInvalidArgument(
-			fmt.Sprintf("RegistrableComponent name %s has no alias defined for field name %s", rc.fqType(), field),
+			fmt.Sprintf("registrable component name %s has no alias defined for field name %s", rc.fqType(), field),
 		)
 	}
 	return alias, nil
@@ -132,7 +132,7 @@ func (rc *RegistrableComponent) GetField(alias string) (string, error) {
 	field, ok := rc.aliasToField[alias]
 	if !ok {
 		return "", serviceerror.NewInvalidArgument(
-			fmt.Sprintf("RegistrableComponent name %s has no field defined for alias name %s", rc.fqType(), alias),
+			fmt.Sprintf("registrable component name %s has no field defined for alias name %s", rc.fqType(), alias),
 		)
 	}
 	return field, nil
