@@ -54,7 +54,7 @@ func (c *Callback) SetState(status callbackspb.CallbackStatus) {
 	c.Status = status
 }
 
-func (c Callback) recordAttempt(ts time.Time) {
+func (c *Callback) recordAttempt(ts time.Time) {
 	c.Attempt++
 	c.LastAttemptCompleteTime = timestamppb.New(ts)
 }

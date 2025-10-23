@@ -15,16 +15,12 @@ import (
 
 // testMutableContext is a minimal test helper for capturing tasks
 type testMutableContext struct {
-	*chasm.MockMutableContext
+	chasm.MutableContext
 	tasks []testTask
 }
 
-func (c *testMutableContext) AddTask(component chasm.Component, attributes chasm.TaskAttributes, message any) {
-	c.tasks = append(c.tasks, testTask{
-		component:  component,
-		attributes: attributes,
-		message:    message,
-	})
+func (c *testMutableContext) AddTask(component chasm.Component, attributes chasm.TaskAttributes, payload any) {
+	c.tasks = append(c.tasks, testTask{component, attributes, payload})
 }
 
 func (c *testMutableContext) Now(_ chasm.Component) time.Time {
@@ -38,16 +34,15 @@ func (c *testMutableContext) Ref(_ chasm.Component) ([]byte, error) {
 type testTask struct {
 	component  chasm.Component
 	attributes chasm.TaskAttributes
-	message    any
+	payload    any
 }
 
 func newTestMutableContext(t *testing.T) *testMutableContext {
-	tmc := &testMutableContext{
-		MockMutableContext: chasm.NewMockMutableContext(
+	return &testMutableContext{
+		MutableContext: chasm.NewMockMutableContext(
 			gomock.NewController(t),
 		),
 	}
-	return tmc
 }
 
 func TestValidTransitions(t *testing.T) {
@@ -86,7 +81,7 @@ func TestValidTransitions(t *testing.T) {
 
 	// Assert backoff task is generated
 	require.Len(t, mctx.tasks, 1)
-	require.IsType(t, &callbackspb.InvocationTask{}, mctx.tasks[0].message)
+	require.IsType(t, &callbackspb.InvocationTask{}, mctx.tasks[0].payload)
 
 	// Rescheduled
 	mctx = newTestMutableContext(t)
@@ -103,7 +98,7 @@ func TestValidTransitions(t *testing.T) {
 
 	// Assert callback task is generated
 	require.Len(t, mctx.tasks, 1)
-	require.IsType(t, &callbackspb.InvocationTask{}, mctx.tasks[0].message)
+	require.IsType(t, &callbackspb.InvocationTask{}, mctx.tasks[0].payload)
 
 	// Store the pre-succeeded state to test Failed later
 	dup := &Callback{
