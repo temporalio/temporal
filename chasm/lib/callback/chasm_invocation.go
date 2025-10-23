@@ -75,7 +75,7 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	_, err = e.HistoryClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
 		msg := logInternalError(e.Logger, "failed to complete Nexus operation: %v", err)
-		if isRetryableRpcResponse(err) {
+		if isRetryableRPCResponse(err) {
 			return invocationResultRetry{msg}
 		}
 		return invocationResultFail{msg}
@@ -84,7 +84,7 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	return invocationResultOK{}
 }
 
-func isRetryableRpcResponse(err error) bool {
+func isRetryableRPCResponse(err error) bool {
 	var st *status.Status
 	stGetter, ok := err.(interface{ Status() *status.Status })
 	if ok {

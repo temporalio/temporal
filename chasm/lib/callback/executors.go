@@ -153,15 +153,14 @@ func (e InvocationTaskExecutor) loadInvocationArgs(
 						completion: completion,
 						requestID:  component.RequestId,
 					}, nil
-				} else {
-					return nexusInvocation{
-						nexus:      variant.Nexus,
-						completion: completion,
-						workflowID: component.WorkflowId,
-						runID:      component.RunId,
-						attempt:    component.Attempt,
-					}, nil
 				}
+				return nexusInvocation{
+					nexus:      variant.Nexus,
+					completion: completion,
+					workflowID: component.WorkflowId,
+					runID:      component.RunId,
+					attempt:    component.Attempt,
+				}, nil
 			default:
 				return nil, queues.NewUnprocessableTaskError(
 					fmt.Sprintf("unprocessable callback variant: %v", variant),

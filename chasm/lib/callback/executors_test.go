@@ -499,7 +499,7 @@ func TestSaveResult(t *testing.T) {
 func TestInvocationResultTypes(t *testing.T) {
 	t.Run("invocationResultOK", func(t *testing.T) {
 		result := invocationResultOK{}
-		require.Nil(t, result.error())
+		require.NoError(t, result.error())
 		result.mustImplementInvocationResult() // Should not panic
 	})
 
