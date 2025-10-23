@@ -2663,7 +2663,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(true, nil).Times(1)
 	s.testLibrary.mockPureTaskExecutor.EXPECT().
 		Execute(
-			gomock.AssignableToTypeOf(&MutableContextImpl{}),
+			gomock.AssignableToTypeOf(&mutableCtx{}),
 			gomock.Any(),
 			gomock.Eq(taskAttributes),
 			gomock.Any(),
@@ -2854,7 +2854,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 	expectExecute := func(result error) {
 		s.testLibrary.mockPureTaskExecutor.EXPECT().
 			Execute(
-				gomock.AssignableToTypeOf(&MutableContextImpl{}),
+				gomock.AssignableToTypeOf(&mutableCtx{}),
 				gomock.AssignableToTypeOf(&TestComponent{}),
 				gomock.Eq(taskAttributes),
 				gomock.Eq(pureTask),
@@ -3052,7 +3052,7 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	expectValidate := func(componentType any, retValue bool, errValue error) {
 		s.testLibrary.mockSideEffectTaskValidator.EXPECT().
 			Validate(
-				gomock.AssignableToTypeOf((*ContextImpl)(nil)),
+				gomock.AssignableToTypeOf((*immutableCtx)(nil)),
 				gomock.AssignableToTypeOf(componentType),
 				gomock.Eq(TaskAttributes{
 					ScheduledTime: chasmTask.GetVisibilityTime(),

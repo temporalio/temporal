@@ -41,6 +41,20 @@ func (m *MockContext) EXPECT() *MockContextMockRecorder {
 	return m.recorder
 }
 
+// ExecutionKey mocks base method.
+func (m *MockContext) ExecutionKey() EntityKey {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecutionKey")
+	ret0, _ := ret[0].(EntityKey)
+	return ret0
+}
+
+// ExecutionKey indicates an expected call of ExecutionKey.
+func (mr *MockContextMockRecorder) ExecutionKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecutionKey", reflect.TypeOf((*MockContext)(nil).ExecutionKey))
+}
+
 // Now mocks base method.
 func (m *MockContext) Now(arg0 Component) time.Time {
 	m.ctrl.T.Helper()
@@ -118,6 +132,20 @@ func (m *MockMutableContext) AddTask(arg0 Component, arg1 TaskAttributes, arg2 a
 func (mr *MockMutableContextMockRecorder) AddTask(arg0, arg1, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTask", reflect.TypeOf((*MockMutableContext)(nil).AddTask), arg0, arg1, arg2)
+}
+
+// ExecutionKey mocks base method.
+func (m *MockMutableContext) ExecutionKey() EntityKey {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecutionKey")
+	ret0, _ := ret[0].(EntityKey)
+	return ret0
+}
+
+// ExecutionKey indicates an expected call of ExecutionKey.
+func (mr *MockMutableContextMockRecorder) ExecutionKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecutionKey", reflect.TypeOf((*MockMutableContext)(nil).ExecutionKey))
 }
 
 // Now mocks base method.
