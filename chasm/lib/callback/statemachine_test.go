@@ -39,7 +39,7 @@ type testTask struct {
 
 func newTestMutableContext(t *testing.T) *testMutableContext {
 	return &testMutableContext{
-		MockMutableContext: chasm.NewMockMutableContext(
+		MutableContext: chasm.NewMockMutableContext(
 			gomock.NewController(t),
 		),
 	}
