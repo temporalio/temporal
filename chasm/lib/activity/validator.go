@@ -64,7 +64,8 @@ func ValidateActivityRequestAttributes(
 	namespaceID namespace.ID,
 	options *activitypb.ActivityOptions,
 	priority *commonpb.Priority,
-	runTimeout *durationpb.Duration) (*ModifiedActivityRequestAttributes, error) {
+	runTimeout *durationpb.Duration,
+) (*ModifiedActivityRequestAttributes, error) {
 	if err := tqid.NormalizeAndValidate(options.TaskQueue, "", maxIDLengthLimit); err != nil {
 		return nil, fmt.Errorf("invalid TaskQueue: %w. ActivityId=%s ActivityType=%s", err, activityID, activityType)
 	}
@@ -114,7 +115,7 @@ func ValidateActivityRequestAttributes(
 
 	modifiedAttributes := &ModifiedActivityRequestAttributes{}
 
-	if err := populateTimeouts(activityID,
+	if err := normalizeAndValidateTimeouts(activityID,
 		activityType,
 		runTimeout,
 		options,
@@ -139,16 +140,16 @@ func validateActivityRetryPolicy(
 	return retrypolicy.Validate(retryPolicy)
 }
 
-func populateTimeouts(
+func normalizeAndValidateTimeouts(
 	activityID string,
 	activityType string,
 	runTimeout *durationpb.Duration,
 	options *activitypb.ActivityOptions,
 	modifiedAttributes *ModifiedActivityRequestAttributes,
 ) error {
-	ScheduleToCloseSet := options.GetScheduleToCloseTimeout().AsDuration() > 0
-	ScheduleToStartSet := options.GetScheduleToStartTimeout().AsDuration() > 0
-	StartToCloseSet := options.GetStartToCloseTimeout().AsDuration() > 0
+	scheduleToCloseSet := options.GetScheduleToCloseTimeout().AsDuration() > 0
+	scheduleToStartSet := options.GetScheduleToStartTimeout().AsDuration() > 0
+	startToCloseSet := options.GetStartToCloseTimeout().AsDuration() > 0
 
 	// The logic to set the timeouts is "cumulative", so we must clone to local variables to avoid modifying the
 	// original options until all deductions are done.
@@ -157,21 +158,21 @@ func populateTimeouts(
 	currentScheduleToStart := common.CloneProto(options.GetScheduleToStartTimeout())
 	currentHeartbeat := common.CloneProto(options.GetHeartbeatTimeout())
 
-	if ScheduleToCloseSet {
-		if ScheduleToStartSet {
+	if scheduleToCloseSet {
+		if scheduleToStartSet {
 			currentScheduleToStart = timestamp.MinDurationPtr(currentScheduleToStart, currentScheduleToClose)
 		} else {
 			currentScheduleToStart = currentScheduleToClose
 		}
-		if StartToCloseSet {
+		if startToCloseSet {
 			currentStartToClose = timestamp.MinDurationPtr(currentStartToClose, currentScheduleToClose)
 		} else {
 			currentStartToClose = currentScheduleToClose
 		}
-	} else if StartToCloseSet {
+	} else if startToCloseSet {
 		// We are in !validScheduleToClose due to the first if above
 		currentScheduleToClose = runTimeout
-		if !ScheduleToStartSet {
+		if !scheduleToStartSet {
 			currentScheduleToStart = runTimeout
 		}
 	} else {
@@ -237,7 +238,8 @@ func ValidateStandaloneActivity(
 	requestID string,
 	searchAttributes *commonpb.SearchAttributes,
 	saMapperProvider searchattribute.MapperProvider,
-	saValidator *searchattribute.Validator) (*ModifiedStandaloneActivityRequestAttributes, error) {
+	saValidator *searchattribute.Validator,
+) (*ModifiedStandaloneActivityRequestAttributes, error) {
 	modifiedAttributes := &ModifiedStandaloneActivityRequestAttributes{}
 
 	if err := validateRequestID(requestID, maxIDLengthLimit, modifiedAttributes); err != nil {
@@ -256,7 +258,7 @@ func ValidateStandaloneActivity(
 	}
 
 	if searchAttributes != nil {
-		if err := validateAndUnaliasSearchAttributes(
+		if err := validateAndNormalizeSearchAttributes(
 			modifiedAttributes,
 			namespaceName,
 			searchAttributes,
@@ -289,7 +291,8 @@ func validateInputSize(
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	inputSize int,
 	logger log.Logger,
-	namespaceName string) error {
+	namespaceName string,
+) error {
 	sizeWarnLimit := blobSizeLimitWarn(namespaceName)
 	sizeErrorLimit := blobSizeLimitError(namespaceName)
 
@@ -308,12 +311,13 @@ func validateInputSize(
 	return nil
 }
 
-func validateAndUnaliasSearchAttributes(
+func validateAndNormalizeSearchAttributes(
 	modifiedAttributes *ModifiedStandaloneActivityRequestAttributes,
 	namespaceName string,
 	searchAttributes *commonpb.SearchAttributes,
 	saMapperProvider searchattribute.MapperProvider,
-	saValidator *searchattribute.Validator) error {
+	saValidator *searchattribute.Validator,
+) error {
 	unaliasedSaa, err := searchattribute.UnaliasFields(saMapperProvider, searchAttributes, namespaceName)
 	if err != nil {
 		return err

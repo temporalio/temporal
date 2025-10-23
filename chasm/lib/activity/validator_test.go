@@ -24,7 +24,7 @@ const (
 )
 
 var (
-	defaultActvityOptions = activitypb.ActivityOptions{
+	defaultActivityOptions = activitypb.ActivityOptions{
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialInterval: durationpb.New(1 * time.Second),
 		},
@@ -49,7 +49,7 @@ func TestValidateSuccess(t *testing.T) {
 		getDefaultRetrySettings,
 		defaultMaxIDLengthLimit,
 		defaultNamespaceID,
-		&defaultActvityOptions,
+		&defaultActivityOptions,
 		&defaultPriority,
 		durationpb.New(0))
 	require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestValidateFailures(t *testing.T) {
 			getDefaultActivityRetrySettings: getDefaultRetrySettings,
 			maxIDLengthLimit:                defaultMaxIDLengthLimit,
 			namespaceID:                     defaultNamespaceID,
-			options:                         &defaultActvityOptions,
+			options:                         &defaultActivityOptions,
 			priority:                        &defaultPriority,
 			runTimeout:                      nil,
 		},
@@ -86,7 +86,7 @@ func TestValidateFailures(t *testing.T) {
 			getDefaultActivityRetrySettings: getDefaultRetrySettings,
 			maxIDLengthLimit:                defaultMaxIDLengthLimit,
 			namespaceID:                     defaultNamespaceID,
-			options:                         &defaultActvityOptions,
+			options:                         &defaultActivityOptions,
 			priority:                        &defaultPriority,
 			runTimeout:                      nil,
 		},
@@ -97,7 +97,7 @@ func TestValidateFailures(t *testing.T) {
 			getDefaultActivityRetrySettings: getDefaultRetrySettings,
 			maxIDLengthLimit:                defaultMaxIDLengthLimit,
 			namespaceID:                     defaultNamespaceID,
-			options:                         &defaultActvityOptions,
+			options:                         &defaultActivityOptions,
 			priority:                        &defaultPriority,
 			runTimeout:                      nil,
 		},
@@ -108,7 +108,7 @@ func TestValidateFailures(t *testing.T) {
 			getDefaultActivityRetrySettings: getDefaultRetrySettings,
 			maxIDLengthLimit:                defaultMaxIDLengthLimit,
 			namespaceID:                     defaultNamespaceID,
-			options:                         &defaultActvityOptions,
+			options:                         &defaultActivityOptions,
 			priority:                        &defaultPriority,
 			runTimeout:                      nil,
 		},
@@ -191,7 +191,7 @@ func TestValidateFailures(t *testing.T) {
 			getDefaultActivityRetrySettings: getDefaultRetrySettings,
 			maxIDLengthLimit:                defaultMaxIDLengthLimit,
 			namespaceID:                     defaultNamespaceID,
-			options:                         &defaultActvityOptions,
+			options:                         &defaultActivityOptions,
 			priority:                        &commonpb.Priority{FairnessKey: string(make([]byte, 1001))},
 			runTimeout:                      nil,
 		},

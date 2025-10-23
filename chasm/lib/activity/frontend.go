@@ -11,8 +11,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/visibility"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -39,6 +37,7 @@ type frontendHandler struct {
 	saValidator       *searchattribute.Validator
 }
 
+// NewFrontendHandler creates a new FrontendHandler instance for processing activity frontend requests.
 func NewFrontendHandler(
 	client activitypb.ActivityServiceClient,
 	dc *dynamicconfig.Collection,
@@ -46,8 +45,8 @@ func NewFrontendHandler(
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	saMapperProvider searchattribute.MapperProvider,
-	saProvider searchattribute.Provider,
-	visibilityMgr manager.VisibilityManager) FrontendHandler {
+	saValidator *searchattribute.Validator,
+) FrontendHandler {
 	return &frontendHandler{
 		client:            client,
 		dc:                dc,
@@ -55,25 +54,13 @@ func NewFrontendHandler(
 		metricsHandler:    metricsHandler,
 		namespaceRegistry: namespaceRegistry,
 		saMapperProvider:  saMapperProvider,
-		saValidator: searchattribute.NewValidator(
-			saProvider,
-			saMapperProvider,
-			dynamicconfig.SearchAttributesNumberOfKeysLimit.Get(dc),
-			dynamicconfig.SearchAttributesSizeOfValueLimit.Get(dc),
-			dynamicconfig.SearchAttributesTotalSizeLimit.Get(dc),
-			visibilityMgr,
-			visibility.AllowListForValidation(
-				visibilityMgr.GetStoreNames(),
-				dynamicconfig.VisibilityAllowList.Get(dc),
-			),
-			dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dc),
-		),
+		saValidator:       saValidator,
 	}
 }
 
 // StartActivityExecution initiates a standalone activity execution in the specified namespace.
 // It validates the request, resolves the namespace ID, applies default configurations,
-// and forwards the request to the activity service client.
+// and forwards the request to the activity service handler.
 //
 // The method performs the following steps:
 // 1. Resolves the namespace name to its internal ID
@@ -94,7 +81,7 @@ func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workf
 		return nil, err
 	}
 
-	modifiedReq, err := h.validateAndPopulateListRequest(req, namespaceID)
+	modifiedReq, err := h.validateAndPopulateStartRequest(req, namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -107,15 +94,13 @@ func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workf
 	return resp.GetFrontendResponse(), err
 }
 
-func (h *frontendHandler) validateAndPopulateListRequest(
-	req *workflowservice.StartActivityExecutionRequest, namespaceID namespace.ID) (*workflowservice.StartActivityExecutionRequest, error) {
+func (h *frontendHandler) validateAndPopulateStartRequest(
+	req *workflowservice.StartActivityExecutionRequest,
+	namespaceID namespace.ID,
+) (*workflowservice.StartActivityExecutionRequest, error) {
 	// Since validation includes mutation of the request, we clone it first so that any retries use the original request.
 	req = common.CloneProto(req)
-
-	activityType := ""
-	if req.ActivityType != nil {
-		activityType = req.ActivityType.GetName()
-	}
+	activityType := req.ActivityType.GetName()
 
 	if req.Options.RetryPolicy == nil {
 		req.Options.RetryPolicy = &commonpb.RetryPolicy{}
@@ -143,7 +128,7 @@ func (h *frontendHandler) validateAndPopulateListRequest(
 		req.Options.HeartbeatTimeout = modifiedAttributes.HeartbeatTimeout
 	}
 
-	modifiedSaAttributes, err := ValidateStandaloneActivity(
+	modifiedStandaloneActivityAttributes, err := ValidateStandaloneActivity(
 		req.ActivityId,
 		req.ActivityType.GetName(),
 		dynamicconfig.BlobSizeLimitError.Get(h.dc),
@@ -160,12 +145,12 @@ func (h *frontendHandler) validateAndPopulateListRequest(
 		return nil, err
 	}
 
-	if modifiedSaAttributes.requestID != "" {
-		req.RequestId = modifiedSaAttributes.requestID
+	if modifiedStandaloneActivityAttributes.requestID != "" {
+		req.RequestId = modifiedStandaloneActivityAttributes.requestID
 	}
 
-	if modifiedSaAttributes.searchAttributesUnaliased != nil {
-		req.SearchAttributes = modifiedSaAttributes.searchAttributesUnaliased
+	if modifiedStandaloneActivityAttributes.searchAttributesUnaliased != nil {
+		req.SearchAttributes = modifiedStandaloneActivityAttributes.searchAttributesUnaliased
 	}
 
 	return req, nil
