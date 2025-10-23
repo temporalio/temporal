@@ -1736,6 +1736,18 @@ func (mr *MockMutableStateMockRecorder) CurrentVersionedTransition() *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentVersionedTransition", reflect.TypeOf((*MockMutableState)(nil).CurrentVersionedTransition))
 }
 
+// DeleteCHASMPureTasks mocks base method.
+func (m *MockMutableState) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "DeleteCHASMPureTasks", maxScheduledTime)
+}
+
+// DeleteCHASMPureTasks indicates an expected call of DeleteCHASMPureTasks.
+func (mr *MockMutableStateMockRecorder) DeleteCHASMPureTasks(maxScheduledTime any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCHASMPureTasks", reflect.TypeOf((*MockMutableState)(nil).DeleteCHASMPureTasks), maxScheduledTime)
+}
+
 // DeleteSignalRequested mocks base method.
 func (m *MockMutableState) DeleteSignalRequested(requestID string) {
 	m.ctrl.T.Helper()

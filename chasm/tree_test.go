@@ -1099,6 +1099,7 @@ func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
 
 func (s *nodeSuite) TestRefreshTasks() {
 	now := s.timeSource.Now()
+	pureTaskScheduledTime := now.Add(time.Second).UTC()
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
@@ -1130,7 +1131,7 @@ func (s *nodeSuite) TestRefreshTasks() {
 						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
 							{
 								Type:                      "TestLibrary.test_pure_task",
-								ScheduledTime:             timestamppb.New(now.Add(time.Second)),
+								ScheduledTime:             timestamppb.New(pureTaskScheduledTime),
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
 								VersionedTransitionOffset: 2,
 								PhysicalTaskStatus:        physicalTaskStatusCreated,
@@ -1174,6 +1175,7 @@ func (s *nodeSuite) TestRefreshTasks() {
 	s.NoError(err)
 	s.Len(mutation.UpdatedNodes, 2) // TaskStatus for the root node is not reset, so no need to persist it.
 	s.Equal(2, s.nodeBackend.NumTasksAdded())
+	s.Equal(pureTaskScheduledTime, s.nodeBackend.LastDeletePureTaskCall())
 }
 
 func (s *nodeSuite) TestCarryOverTaskStatus() {
@@ -2028,6 +2030,8 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	err = root.closeTransactionUpdateComponentTasks(&persistencespb.VersionedTransition{TransitionCount: 2})
 	s.NoError(err)
 
+	s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
+
 	componentAttr := root.serializedNode.Metadata.GetComponentAttributes()
 	s.Empty(componentAttr.PureTasks)
 	s.Len(componentAttr.SideEffectTasks, 1)
@@ -2138,6 +2142,8 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		TestOutboundSideEffectTask{},
 	)
 
+	// TODO: delete task
+	// s.nodeBackend.EXPECT().DeleteCHASMPureTasks(s.timeSource.Now().UTC()).Times(1)
 	mutation, err := root.CloseTransaction()
 	s.NoError(err)
 
@@ -2286,7 +2292,7 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_SideEffectTasks() {
 }
 
 func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
-	now := s.timeSource.Now()
+	now := s.timeSource.Now().UTC()
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
@@ -2360,6 +2366,9 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
 
 	err = root.ApplyMutation(incomingMutation)
 	s.NoError(err)
+
+	// TODO: delete task
+	// s.nodeBackend.EXPECT().DeleteCHASMPureTasks(now.Add(time.Minute)).Times(1)
 
 	mutation, err := root.CloseTransaction()
 	s.NoError(err)
@@ -2543,6 +2552,9 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	s.NoError(err)
 	s.Len(mutations.UpdatedNodes, 2, "root and subcomponent1 should be updated")
 	s.Empty(mutations.DeletedNodes)
+
+	// immedidate pure tasks will be executed inline and no physical chasm pure task will be generated.
+	s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
 }
 
 func (s *nodeSuite) TestEachPureTask() {

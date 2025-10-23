@@ -3,6 +3,7 @@ package chasm
 import (
 	"context"
 	"sync"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -28,9 +29,10 @@ type MockNodeBackend struct {
 	HandleGetNexusCompletion         func(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error)
 
 	// Recorded calls (protected by mu).
-	mu              sync.Mutex
-	TasksByCategory map[tasks.Category][]tasks.Task
-	UpdateCalls     []struct {
+	mu                  sync.Mutex
+	TasksByCategory     map[tasks.Category][]tasks.Task
+	DeletePureTaskCalls []time.Time
+	UpdateCalls         []struct {
 		State  enumsspb.WorkflowExecutionState
 		Status enumspb.WorkflowExecutionStatus
 	}
@@ -88,6 +90,23 @@ func (m *MockNodeBackend) AddTasks(ts ...tasks.Task) {
 		category := task.GetCategory()
 		m.TasksByCategory[category] = append(m.TasksByCategory[category], task)
 	}
+}
+
+func (m *MockNodeBackend) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.DeletePureTaskCalls = append(m.DeletePureTaskCalls, maxScheduledTime)
+}
+
+func (m *MockNodeBackend) LastDeletePureTaskCall() time.Time {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if len(m.DeletePureTaskCalls) == 0 {
+		return time.Time{}
+	}
+	return m.DeletePureTaskCalls[len(m.DeletePureTaskCalls)-1]
 }
 
 func (m *MockNodeBackend) UpdateWorkflowStateStatus(
