@@ -5,7 +5,10 @@ import (
 	"reflect"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 )
+
+var _ VisibilitySearchAttributesMapper = (*RegistrableComponent)(nil)
 
 type (
 	RegistrableComponent struct {
@@ -114,17 +117,23 @@ func (rc RegistrableComponent) fqType() string {
 }
 
 // GetAlias returns the search attribute alias for the given field name.
-func (rc *RegistrableComponent) GetAlias(field string) string {
-	if rc.fieldToAlias == nil {
-		return ""
+func (rc *RegistrableComponent) GetAlias(field string) (string, error) {
+	alias, ok := rc.fieldToAlias[field]
+	if !ok {
+		return "", serviceerror.NewInvalidArgument(
+			fmt.Sprintf("RegistrableComponent name %s has no alias defined for field name %s", rc.fqType(), field),
+		)
 	}
-	return rc.fieldToAlias[field]
+	return alias, nil
 }
 
 // GetField returns the search attribute field name for the given alias.
-func (rc *RegistrableComponent) GetField(alias string) string {
-	if rc.aliasToField == nil {
-		return ""
+func (rc *RegistrableComponent) GetField(alias string) (string, error) {
+	field, ok := rc.aliasToField[alias]
+	if !ok {
+		return "", serviceerror.NewInvalidArgument(
+			fmt.Sprintf("RegistrableComponent name %s has no field defined for alias name %s", rc.fqType(), alias),
+		)
 	}
-	return rc.aliasToField[alias]
+	return field, nil
 }
