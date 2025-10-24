@@ -12,8 +12,10 @@ import (
 
 type (
 	NewPayloadStoreRequest struct {
-		NamespaceID namespace.ID
-		StoreID     string
+		NamespaceID      namespace.ID
+		StoreID          string
+		IDReusePolicy    chasm.BusinessIDReusePolicy
+		IDConflictPolicy chasm.BusinessIDConflictPolicy
 	}
 
 	NewPayloadStoreResponse struct {
@@ -84,6 +86,7 @@ func NewPayloadStoreHandler(
 			return store, nil, err
 		},
 		nil,
+		chasm.WithBusinessIDPolicy(request.IDReusePolicy, request.IDConflictPolicy),
 	)
 	if err != nil {
 		return NewPayloadStoreResponse{}, err

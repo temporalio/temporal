@@ -56,11 +56,58 @@ func (s *ChasmTestSuite) TestNewPayloadStore() {
 	_, err := tests.NewPayloadStoreHandler(
 		chasm.NewEngineContext(ctx, s.chasmEngine),
 		tests.NewPayloadStoreRequest{
-			NamespaceID: s.NamespaceID(),
-			StoreID:     tv.Any().String(),
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          tv.Any().String(),
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
 		},
 	)
 	s.NoError(err)
+}
+
+func (s *ChasmTestSuite) TestNewPayloadStore_ConflictPolicy() {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(context.Background(), chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+
+	resp, err := tests.NewPayloadStoreHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.NoError(err)
+
+	currentRunID := resp.RunID
+
+	resp, err = tests.NewPayloadStoreHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.IsType(&chasm.ExecutionAlreadyStartedError{}, err)
+
+	resp, err = tests.NewPayloadStoreHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyUseExisting,
+		},
+	)
+	s.NoError(err)
+	s.Equal(currentRunID, resp.RunID)
 }
 
 func (s *ChasmTestSuite) TestPayloadStoreVisibility() {

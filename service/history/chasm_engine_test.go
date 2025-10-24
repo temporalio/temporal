@@ -349,7 +349,7 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Fail() {
 			chasm.BusinessIDConflictPolicyFail,
 		),
 	)
-	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
+	s.IsType(&chasm.ExecutionAlreadyStartedError{}, err)
 }
 
 func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_RejectDuplicate() {
@@ -383,7 +383,87 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_RejectDuplicate() {
 			chasm.BusinessIDConflictPolicyFail,
 		),
 	)
-	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
+	s.IsType(&chasm.ExecutionAlreadyStartedError{}, err)
+}
+
+func (s *chasmEngineSuite) TestNewEntity_ConflictPolicy_UseExisting() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.EntityKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			EntityID:    "",
+		},
+	)
+	newActivityID := tv.ActivityID()
+	// Current run is still running, conflict policy will be used.
+	currentRunConditionFailedErr := s.currentRunConditionFailedErr(
+		tv,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	)
+
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil,
+		currentRunConditionFailedErr,
+	).Times(1)
+
+	entityKey, serializedRef, err := s.engine.NewEntity(
+		context.Background(),
+		ref,
+		s.newTestEntityFn(newActivityID),
+		chasm.WithBusinessIDPolicy(
+			chasm.BusinessIDReusePolicyAllowDuplicate,
+			chasm.BusinessIDConflictPolicyUseExisting,
+		),
+	)
+	s.NoError(err)
+
+	expectedEntityKey := chasm.EntityKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		EntityID:    tv.RunID(),
+	}
+	s.Equal(expectedEntityKey, entityKey)
+	s.validateNewEntityResponseRef(serializedRef, expectedEntityKey)
+}
+
+func (s *chasmEngineSuite) TestNewEntity_ConflictPolicy_TerminateExisting() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.EntityKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			EntityID:    "",
+		},
+	)
+	newActivityID := tv.ActivityID()
+	// Current run is still running, conflict policy will be used.
+	currentRunConditionFailedErr := s.currentRunConditionFailedErr(
+		tv,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	)
+
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil,
+		currentRunConditionFailedErr,
+	).Times(1)
+
+	_, _, err := s.engine.NewEntity(
+		context.Background(),
+		ref,
+		s.newTestEntityFn(newActivityID),
+		chasm.WithBusinessIDPolicy(
+			chasm.BusinessIDReusePolicyAllowDuplicate,
+			chasm.BusinessIDConflictPolicyTerminateExisting,
+		),
+	)
+	s.IsType(&serviceerror.Unimplemented{}, err)
 }
 
 func (s *chasmEngineSuite) newTestEntityFn(
