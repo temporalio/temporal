@@ -4141,12 +4141,14 @@ func (*ReplicateEventsV2Response) Descriptor() ([]byte, []int) {
 }
 
 type ReplicateWorkflowStateRequest struct {
-	state         protoimpl.MessageState    `protogen:"open.v1"`
-	WorkflowState *v19.WorkflowMutableState `protobuf:"bytes,1,opt,name=workflow_state,json=workflowState,proto3" json:"workflow_state,omitempty"`
-	RemoteCluster string                    `protobuf:"bytes,2,opt,name=remote_cluster,json=remoteCluster,proto3" json:"remote_cluster,omitempty"`
-	NamespaceId   string                    `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState    `protogen:"open.v1"`
+	WorkflowState            *v19.WorkflowMutableState `protobuf:"bytes,1,opt,name=workflow_state,json=workflowState,proto3" json:"workflow_state,omitempty"`
+	RemoteCluster            string                    `protobuf:"bytes,2,opt,name=remote_cluster,json=remoteCluster,proto3" json:"remote_cluster,omitempty"`
+	NamespaceId              string                    `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	IsForceReplication       bool                      `protobuf:"varint,4,opt,name=is_force_replication,json=isForceReplication,proto3" json:"is_force_replication,omitempty"`
+	IsCloseTransferTaskAcked bool                      `protobuf:"varint,5,opt,name=is_close_transfer_task_acked,json=isCloseTransferTaskAcked,proto3" json:"is_close_transfer_task_acked,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ReplicateWorkflowStateRequest) Reset() {
@@ -4198,6 +4200,20 @@ func (x *ReplicateWorkflowStateRequest) GetNamespaceId() string {
 		return x.NamespaceId
 	}
 	return ""
+}
+
+func (x *ReplicateWorkflowStateRequest) GetIsForceReplication() bool {
+	if x != nil {
+		return x.IsForceReplication
+	}
+	return false
+}
+
+func (x *ReplicateWorkflowStateRequest) GetIsCloseTransferTaskAcked() bool {
+	if x != nil {
+		return x.IsCloseTransferTaskAcked
+	}
+	return false
 }
 
 type ReplicateWorkflowStateResponse struct {
@@ -10122,11 +10138,13 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x13base_execution_info\x18\x06 \x01(\v22.temporal.server.api.workflow.v1.BaseExecutionInfoR\x11baseExecutionInfo\x12\x1c\n" +
 	"\n" +
 	"new_run_id\x18\a \x01(\tR\bnewRunId:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_id\"\x1b\n" +
-	"\x19ReplicateEventsV2Response\"\xfb\x01\n" +
+	"\x19ReplicateEventsV2Response\"\xed\x02\n" +
 	"\x1dReplicateWorkflowStateRequest\x12_\n" +
 	"\x0eworkflow_state\x18\x01 \x01(\v28.temporal.server.api.persistence.v1.WorkflowMutableStateR\rworkflowState\x12%\n" +
 	"\x0eremote_cluster\x18\x02 \x01(\tR\rremoteCluster\x12!\n" +
-	"\fnamespace_id\x18\x03 \x01(\tR\vnamespaceId:/\x92\xc4\x03+*)workflow_state.execution_info.workflow_id\" \n" +
+	"\fnamespace_id\x18\x03 \x01(\tR\vnamespaceId\x120\n" +
+	"\x14is_force_replication\x18\x04 \x01(\bR\x12isForceReplication\x12>\n" +
+	"\x1cis_close_transfer_task_acked\x18\x05 \x01(\bR\x18isCloseTransferTaskAcked:/\x92\xc4\x03+*)workflow_state.execution_info.workflow_id\" \n" +
 	"\x1eReplicateWorkflowStateResponse\"\xa7\x01\n" +
 	"\x16SyncShardStatusRequest\x12%\n" +
 	"\x0esource_cluster\x18\x01 \x01(\tR\rsourceCluster\x12\x19\n" +

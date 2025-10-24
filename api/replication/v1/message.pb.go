@@ -1325,10 +1325,12 @@ func (x *HistoryTaskAttributes) GetEventsBatches() []*v11.DataBlob {
 }
 
 type SyncWorkflowStateTaskAttributes struct {
-	state         protoimpl.MessageState    `protogen:"open.v1"`
-	WorkflowState *v12.WorkflowMutableState `protobuf:"bytes,1,opt,name=workflow_state,json=workflowState,proto3" json:"workflow_state,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState    `protogen:"open.v1"`
+	WorkflowState            *v12.WorkflowMutableState `protobuf:"bytes,1,opt,name=workflow_state,json=workflowState,proto3" json:"workflow_state,omitempty"`
+	IsForceReplication       bool                      `protobuf:"varint,2,opt,name=is_force_replication,json=isForceReplication,proto3" json:"is_force_replication,omitempty"`
+	IsCloseTransferTaskAcked bool                      `protobuf:"varint,3,opt,name=is_close_transfer_task_acked,json=isCloseTransferTaskAcked,proto3" json:"is_close_transfer_task_acked,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *SyncWorkflowStateTaskAttributes) Reset() {
@@ -1366,6 +1368,20 @@ func (x *SyncWorkflowStateTaskAttributes) GetWorkflowState() *v12.WorkflowMutabl
 		return x.WorkflowState
 	}
 	return nil
+}
+
+func (x *SyncWorkflowStateTaskAttributes) GetIsForceReplication() bool {
+	if x != nil {
+		return x.IsForceReplication
+	}
+	return false
+}
+
+func (x *SyncWorkflowStateTaskAttributes) GetIsCloseTransferTaskAcked() bool {
+	if x != nil {
+		return x.IsCloseTransferTaskAcked
+	}
+	return false
 }
 
 type TaskQueueUserDataAttributes struct {
@@ -2133,9 +2149,11 @@ const file_temporal_server_api_replication_v1_message_proto_rawDesc = "" +
 	"\n" +
 	"new_run_id\x18\t \x01(\tR\bnewRunId\x12G\n" +
 	"\x0eevents_batches\x18\n" +
-	" \x03(\v2 .temporal.api.common.v1.DataBlobR\reventsBatchesJ\x04\b\x01\x10\x02\"\x82\x01\n" +
+	" \x03(\v2 .temporal.api.common.v1.DataBlobR\reventsBatchesJ\x04\b\x01\x10\x02\"\xf4\x01\n" +
 	"\x1fSyncWorkflowStateTaskAttributes\x12_\n" +
-	"\x0eworkflow_state\x18\x01 \x01(\v28.temporal.server.api.persistence.v1.WorkflowMutableStateR\rworkflowState\"\xbc\x01\n" +
+	"\x0eworkflow_state\x18\x01 \x01(\v28.temporal.server.api.persistence.v1.WorkflowMutableStateR\rworkflowState\x120\n" +
+	"\x14is_force_replication\x18\x02 \x01(\bR\x12isForceReplication\x12>\n" +
+	"\x1cis_close_transfer_task_acked\x18\x03 \x01(\bR\x18isCloseTransferTaskAcked\"\xbc\x01\n" +
 	"\x1bTaskQueueUserDataAttributes\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12&\n" +
 	"\x0ftask_queue_name\x18\x02 \x01(\tR\rtaskQueueName\x12R\n" +

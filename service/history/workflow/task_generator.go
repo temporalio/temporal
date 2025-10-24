@@ -755,10 +755,11 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 	if r.mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		syncWorkflowStateTask := []tasks.Task{&tasks.SyncWorkflowStateTask{
 			// TaskID, VisibilityTimestamp is set by shard
-			WorkflowKey:    workflowKey,
-			Version:        lastItem.GetVersion(),
-			Priority:       enumsspb.TASK_PRIORITY_LOW,
-			TargetClusters: targetClusters,
+			WorkflowKey:        workflowKey,
+			Version:            lastItem.GetVersion(),
+			Priority:           enumsspb.TASK_PRIORITY_LOW,
+			TargetClusters:     targetClusters,
+			IsForceReplication: true,
 		}}
 		if r.mutableState.IsTransitionHistoryEnabled() &&
 			// even though current cluster may enabled state transition, but transition history can be cleared

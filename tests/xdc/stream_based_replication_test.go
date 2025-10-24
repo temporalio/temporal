@@ -779,9 +779,8 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 }
 
 func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication() {
-	if !s.enableTransitionHistory {
-		s.T().Skip("Skip when transition history is disabled")
-	}
+	// Test works for both SyncVersionedTransitionTask (with transition history)
+	// and SyncWorkflowStateTask (without transition history)
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
@@ -920,31 +919,61 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	s.T().Log("Generated last history replication tasks to force replication of completed workflow")
 
 	recorder := s.clusters[0].GetReplicationStreamRecorder()
-	s.T().Log("Checking replication stream for close transfer task acknowledgment in versioned transition artifact...")
-	s.Eventually(func() bool {
-		for _, msg := range recorder.GetMessages() {
-			if msg.Direction != testcore.DirectionServerSend {
-				continue
-			}
 
-			resp := testcore.ExtractReplicationMessages(msg.Request)
-			if resp == nil {
-				continue
-			}
+	// Check for flags based on transition history mode
+	if s.enableTransitionHistory {
+		// With transition history: check SyncVersionedTransitionTask
+		s.T().Log("Checking replication stream for close transfer task acknowledgment in versioned transition artifact...")
+		s.Eventually(func() bool {
+			for _, msg := range recorder.GetMessages() {
+				if msg.Direction != testcore.DirectionServerSend {
+					continue
+				}
 
-			for _, task := range resp.GetReplicationTasks() {
-				if syncAttrs := task.GetSyncVersionedTransitionTaskAttributes(); syncAttrs != nil {
-					if artifact := syncAttrs.GetVersionedTransitionArtifact(); artifact != nil {
-						if artifact.GetIsCloseTransferTaskAcked() && artifact.GetIsForceReplication() {
+				resp := testcore.ExtractReplicationMessages(msg.Request)
+				if resp == nil {
+					continue
+				}
+
+				for _, task := range resp.GetReplicationTasks() {
+					if syncAttrs := task.GetSyncVersionedTransitionTaskAttributes(); syncAttrs != nil {
+						if artifact := syncAttrs.GetVersionedTransitionArtifact(); artifact != nil {
+							if artifact.GetIsCloseTransferTaskAcked() && artifact.GetIsForceReplication() {
+								return true
+							}
+						}
+					}
+				}
+			}
+			return false
+		}, 10*time.Second, 100*time.Millisecond)
+		s.T().Log("Verified IsCloseTransferTaskAcked and IsForceReplication flags in SyncVersionedTransitionTask")
+	} else {
+		// Without transition history: check SyncWorkflowStateTask
+		s.T().Log("Checking replication stream for close transfer task acknowledgment in workflow state attributes...")
+		s.Eventually(func() bool {
+			for _, msg := range recorder.GetMessages() {
+				if msg.Direction != testcore.DirectionServerSend {
+					continue
+				}
+
+				resp := testcore.ExtractReplicationMessages(msg.Request)
+				if resp == nil {
+					continue
+				}
+
+				for _, task := range resp.GetReplicationTasks() {
+					if workflowStateAttrs := task.GetSyncWorkflowStateTaskAttributes(); workflowStateAttrs != nil {
+						if workflowStateAttrs.GetIsCloseTransferTaskAcked() && workflowStateAttrs.GetIsForceReplication() {
 							return true
 						}
 					}
 				}
 			}
-		}
-		return false
-	}, 10*time.Second, 100*time.Millisecond)
-	s.T().Log("Verified IsCloseTransferTaskAcked flag is set in replication artifact")
+			return false
+		}, 10*time.Second, 100*time.Millisecond)
+		s.T().Log("Verified IsCloseTransferTaskAcked and IsForceReplication flags in SyncWorkflowStateTask")
+	}
 
 	// Wait for replication to complete to the passive cluster
 	s.T().Log("Waiting for workflow to replicate to cluster 1 (passive)...")
