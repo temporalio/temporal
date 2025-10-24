@@ -512,7 +512,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 			verifyTaskFuture := workflow.ExecuteActivity(
 				actx,
 				a.VerifyReplicationTasks,
-				&verifyReplicationTasksRequest{
+				&VerifyReplicationTasksRequest{
 					TargetClusterEndpoint: params.TargetClusterEndpoint,
 					TargetClusterName:     params.TargetClusterName,
 					Namespace:             params.Namespace,
