@@ -793,13 +793,16 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 	if sendRawHistoryBetweenInternalServices {
 		// When feature flag is enabled, call GetWorkflowExecutionRawHistory to get raw history directly.
 		// This avoids the marshal/unmarshal cycle of GetWorkflowExecutionHistory.
+		// We set StartEventId to FirstEventID (1) which signals "start from the beginning".
+		// The API will default EndEventId to the last event if not specified.
 		resp, err := e.historyClient.GetWorkflowExecutionRawHistory(ctx,
 			&historyservice.GetWorkflowExecutionRawHistoryRequest{
 				NamespaceId: nsID.String(),
 				Request: &adminservice.GetWorkflowExecutionRawHistoryRequest{
-					NamespaceId: nsID.String(),
-					Execution:   task.workflowExecution(),
+					NamespaceId:     nsID.String(),
+					Execution:       task.workflowExecution(),
 					MaximumPageSize: maxPageSize,
+					StartEventId:    common.FirstEventID,
 				},
 			})
 		if err != nil {
