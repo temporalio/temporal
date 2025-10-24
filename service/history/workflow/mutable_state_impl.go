@@ -161,6 +161,7 @@ type (
 		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
+		chasmNodeSizes  map[string]int // chasm node path -> size in bytes
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
 		// Buffer events from DB
@@ -302,6 +303,7 @@ func NewMutableState(
 		chasmTree: &noopChasmTree{},
 
 		approximateSize:              0,
+		chasmNodeSizes:               make(map[string]int),
 		totalTombstones:              0,
 		currentVersion:               namespaceEntry.FailoverVersion(),
 		bufferEventsInDB:             nil,
@@ -528,7 +530,9 @@ func NewMutableStateFromDB(
 			return nil, err
 		}
 		for key, node := range dbRecord.ChasmNodes {
-			mutableState.approximateSize += len(key) + node.Size()
+			nodeSize := node.Size()
+			mutableState.approximateSize += len(key) + nodeSize
+			mutableState.chasmNodeSizes[key] = nodeSize
 		}
 	}
 
@@ -6445,11 +6449,18 @@ func (ms *MutableStateImpl) closeTransaction(
 
 	// CloseTransaction() on chasmTree may update execution state & status,
 	// so must be called before closeTransactionUpdateTransitionHistory().
-	//
-	// TODO: update approximateSize once chasm.NodesMutation returns size change as well.
 	chasmNodesMutation, err := ms.chasmTree.CloseTransaction()
 	if err != nil {
 		return closeTransactionResult{}, err
+	}
+	for nodePath := range chasmNodesMutation.DeletedNodes {
+		ms.approximateSize -= ms.chasmNodeSizes[nodePath]
+		delete(ms.chasmNodeSizes, nodePath)
+	}
+	for nodePath, node := range chasmNodesMutation.UpdatedNodes {
+		newSize := node.Size()
+		ms.approximateSize += newSize - ms.chasmNodeSizes[nodePath]
+		ms.chasmNodeSizes[nodePath] = newSize
 	}
 
 	if isStateDirty {
