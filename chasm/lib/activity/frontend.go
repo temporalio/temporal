@@ -98,7 +98,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		req.Options.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
-	modifiedAttributes, err := ValidateActivityRequestAttributes(
+	err := ValidateAndNormalizeActivityAttributes(
 		req.ActivityId,
 		activityType,
 		dynamicconfig.DefaultActivityRetryPolicy.Get(h.dc),
@@ -112,15 +112,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		return nil, err
 	}
 
-	// Update the command attributes with the adjusted timeouts
-	if modifiedAttributes != nil {
-		req.Options.ScheduleToCloseTimeout = modifiedAttributes.ScheduleToCloseTimeout
-		req.Options.ScheduleToStartTimeout = modifiedAttributes.ScheduleToStartTimeout
-		req.Options.StartToCloseTimeout = modifiedAttributes.StartToCloseTimeout
-		req.Options.HeartbeatTimeout = modifiedAttributes.HeartbeatTimeout
-	}
-
-	modifiedStandaloneActivityAttributes, err := ValidateStandaloneActivity(
+	err = ValidateStandaloneActivity(
 		req.ActivityId,
 		req.ActivityType.GetName(),
 		dynamicconfig.BlobSizeLimitError.Get(h.dc),
@@ -129,20 +121,12 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		h.logger,
 		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
 		req.Namespace,
-		req.RequestId,
+		&req.RequestId,
 		req.SearchAttributes,
 		h.saMapperProvider,
 		h.saValidator)
 	if err != nil {
 		return nil, err
-	}
-
-	if modifiedStandaloneActivityAttributes.requestID != "" {
-		req.RequestId = modifiedStandaloneActivityAttributes.requestID
-	}
-
-	if modifiedStandaloneActivityAttributes.searchAttributesUnaliased != nil {
-		req.SearchAttributes = modifiedStandaloneActivityAttributes.searchAttributesUnaliased
 	}
 
 	return req, nil

@@ -99,20 +99,22 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		attributes.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
-	modifiedAttributes, err := activity.ValidateActivityRequestAttributes(
+	opts := &activitypb.ActivityOptions{
+		TaskQueue:              attributes.TaskQueue,
+		ScheduleToCloseTimeout: attributes.GetScheduleToCloseTimeout(),
+		ScheduleToStartTimeout: attributes.GetScheduleToStartTimeout(),
+		StartToCloseTimeout:    attributes.GetStartToCloseTimeout(),
+		HeartbeatTimeout:       attributes.GetHeartbeatTimeout(),
+		RetryPolicy:            attributes.RetryPolicy,
+	}
+
+	err := activity.ValidateAndNormalizeActivityAttributes(
 		activityID,
 		activityType,
 		v.getDefaultActivityRetrySettings,
 		v.maxIDLengthLimit,
 		namespaceID,
-		&activitypb.ActivityOptions{
-			TaskQueue:              attributes.TaskQueue,
-			ScheduleToCloseTimeout: attributes.GetScheduleToCloseTimeout(),
-			ScheduleToStartTimeout: attributes.GetScheduleToStartTimeout(),
-			StartToCloseTimeout:    attributes.GetStartToCloseTimeout(),
-			HeartbeatTimeout:       attributes.GetHeartbeatTimeout(),
-			RetryPolicy:            attributes.RetryPolicy,
-		},
+		opts,
 		attributes.GetPriority(),
 		runTimeout)
 
@@ -120,11 +122,11 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		return failedCause, err
 	}
 
-	// Update the command attributes with the adjusted timeouts
-	attributes.ScheduleToCloseTimeout = modifiedAttributes.ScheduleToCloseTimeout
-	attributes.ScheduleToStartTimeout = modifiedAttributes.ScheduleToStartTimeout
-	attributes.StartToCloseTimeout = modifiedAttributes.StartToCloseTimeout
-	attributes.HeartbeatTimeout = modifiedAttributes.HeartbeatTimeout
+	attributes.ScheduleToCloseTimeout = opts.ScheduleToCloseTimeout
+	attributes.ScheduleToStartTimeout = opts.ScheduleToStartTimeout
+	attributes.StartToCloseTimeout = opts.StartToCloseTimeout
+	attributes.HeartbeatTimeout = opts.HeartbeatTimeout
+	attributes.RetryPolicy = opts.RetryPolicy
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
