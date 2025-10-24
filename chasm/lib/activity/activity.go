@@ -4,10 +4,10 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/deployment/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -145,7 +145,7 @@ func getActivityField[T any](
 func HandleRecordActivityTaskStarted(
 	ctx context.Context,
 	activityRef chasm.ComponentRef,
-	versionDirective *taskqueue.TaskVersionDirective,
+	versionDirective *taskqueuespb.TaskVersionDirective,
 	workerIdentity string,
 ) (*Activity, error) {
 	activity, _, err := chasm.UpdateComponent(
@@ -165,7 +165,7 @@ func HandleRecordActivityTaskStarted(
 			attempt.LastWorkerIdentity = workerIdentity
 
 			if versionDirective := versionDirective.GetDeploymentVersion(); versionDirective != nil {
-				attempt.LastDeploymentVersion = &deployment.WorkerDeploymentVersion{
+				attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
 					BuildId:        versionDirective.GetBuildId(),
 					DeploymentName: versionDirective.GetDeploymentName(),
 				}

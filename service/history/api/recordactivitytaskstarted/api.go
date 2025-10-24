@@ -7,7 +7,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/history/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -143,10 +143,10 @@ func handleChasmActivityStarted(
 		HeartbeatDetails: lastHeartbeat.GetDetails(),
 		Priority:         updatedActivity.GetPriority(),
 		RetryPolicy:      options.GetRetryPolicy(),
-		ScheduledEvent: &history.HistoryEvent{
+		ScheduledEvent: &historypb.HistoryEvent{
 			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
-			Attributes: &history.HistoryEvent_ActivityTaskScheduledEventAttributes{
-				ActivityTaskScheduledEventAttributes: &history.ActivityTaskScheduledEventAttributes{
+			Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+				ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
 					ActivityId:             activityRef.BusinessID,
 					ActivityType:           updatedActivity.ActivityType,
 					Input:                  requestData.GetInput(),

@@ -38,7 +38,7 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 		true,
 	)
 
-	activityId := testcore.RandomizeStr(t.Name())
+	activityID := testcore.RandomizeStr(t.Name())
 	activityType := &commonpb.ActivityType{
 		Name: "test-activity-type",
 	}
@@ -56,7 +56,7 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 
 	resp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 		Namespace:    s.Namespace().String(),
-		ActivityId:   activityId,
+		ActivityId:   activityID,
 		ActivityType: activityType,
 		Input:        input,
 		Options: &activitypb.ActivityOptions{
@@ -81,7 +81,7 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, activityId, pollResp.GetActivityId())
+	require.Equal(t, activityID, pollResp.GetActivityId())
 	require.True(t, proto.Equal(activityType, pollResp.GetActivityType()))
 	require.EqualValues(t, 1, pollResp.Attempt)
 	require.True(t, proto.Equal(input, pollResp.GetInput()))
