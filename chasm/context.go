@@ -1,5 +1,3 @@
-//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination context_mock.go
-
 package chasm
 
 import (

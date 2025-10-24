@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -72,8 +71,7 @@ func defaultConfig() *scheduler.Config {
 }
 
 func setupSchedulerForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableContext, *chasm.Node) {
-	controller := gomock.NewController(t)
-	nodeBackend := chasm.NewMockNodeBackend(controller)
+	nodeBackend := &chasm.MockNodeBackend{}
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	nodePathEncoder := chasm.DefaultPathEncoder
 
@@ -87,17 +85,17 @@ func setupSchedulerForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableCon
 	timeSource.Update(time.Now())
 
 	tv := testvars.New(t)
-	nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
-	nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
-	nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
-	nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
-	nodeBackend.EXPECT().IsWorkflow().Return(false).AnyTimes()
-	currentVT := &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: 1,
-		TransitionCount:          1,
+	nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
+	nodeBackend.HandleGetWorkflowKey = tv.Any().WorkflowKey
+	nodeBackend.HandleIsWorkflow = func() bool { return false }
+	nodeBackend.HandleCurrentVersionedTransition = func() *persistencespb.VersionedTransition {
+		return &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: 1,
+			TransitionCount:          1,
+		}
 	}
-	nodeBackend.EXPECT().CurrentVersionedTransition().Return(currentVT).AnyTimes()
-	nodeBackend.EXPECT().AddTasks(gomock.Any()).Return().AnyTimes()
+	nodeBackend.HandleIsWorkflow = func() bool { return false }
 
 	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger)
 	ctx := chasm.NewMutableContext(context.Background(), node)
