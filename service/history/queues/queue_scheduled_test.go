@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/shard"
@@ -85,6 +86,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		},
 		s.mockShard.GetNamespaceRegistry(),
 		logger,
+		SchedulerRateLimiter(quotas.NoopRequestRateLimiter),
 	)
 	scheduler = NewRateLimitedScheduler(
 		scheduler,

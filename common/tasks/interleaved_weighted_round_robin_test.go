@@ -156,8 +156,9 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Success
 	testWaitGroup.Add(1)
 
 	mockTask := newTestTask(s.controller, 0)
-	s.mockFIFOScheduler.EXPECT().Submit(mockTask).Do(func(task Task) {
+	s.mockFIFOScheduler.EXPECT().TrySubmit(mockTask).DoAndReturn(func(task Task) bool {
 		testWaitGroup.Done()
+		return true
 	})
 
 	s.scheduler.Submit(mockTask)
