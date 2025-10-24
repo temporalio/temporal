@@ -65,14 +65,14 @@ type (
 
 const (
 	TestComponentStartTimeSAKey   = "StartTimeSAKey"
-	TestComponentRunIdSAKey       = "RunIdSAKey"
+	TestComponentRunIDSAKey       = "RunIdSAKey"
 	TestComponentStartTimeMemoKey = "StartTimeMemoKey"
 )
 
 var (
 	TestKeywordSearchAttribute            = NewSearchAttributeKeywordByField(searchattribute.TemporalScheduledById)
 	TestComponentStartTimeSearchAttribute = NewSearchAttributeDateTime(TestComponentStartTimeSAKey, SearchAttributeFieldDateTime01)
-	TestComponentRunIdPredefinedSA        = NewSearchAttributeKeywordByField(TestComponentRunIdSAKey)
+	TestComponentRunIDPredefinedSA        = NewSearchAttributeKeywordByField(TestComponentRunIDSAKey)
 
 	_ VisibilitySearchAttributesProvider = (*TestComponent)(nil)
 	_ VisibilityMemoProvider             = (*TestComponent)(nil)
@@ -109,7 +109,7 @@ func (tc *TestComponent) Fail(_ MutableContext) {
 func (tc *TestComponent) SearchAttributes(_ Context) []SearchAttributeKeyValue {
 	return []SearchAttributeKeyValue{
 		TestComponentStartTimeSearchAttribute.Value(tc.ComponentData.GetStartTime().AsTime()),
-		TestComponentRunIdPredefinedSA.Value(tc.ComponentData.GetRunId()),
+		TestComponentRunIDPredefinedSA.Value(tc.ComponentData.GetRunId()),
 	}
 }
 
