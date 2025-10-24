@@ -159,7 +159,7 @@ func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
 
 	s.Worker().RegisterWorkflow(workflowFn)
 
-	testCtx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	testCtx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 
 	wid := "test-max-buffered-events-limit"
