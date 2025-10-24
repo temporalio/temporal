@@ -8,10 +8,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/mock/gomock"
+
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
-	"go.uber.org/mock/gomock"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (
@@ -39,7 +42,15 @@ func (s *ScavengerTestSuite) SetupTest() {
 	s.taskQueueTable = &mockTaskQueueTable{}
 	s.taskTables = make(map[string]*mockTaskTable)
 	logger := log.NewTestLogger()
-	s.scvgr = NewScavenger(s.taskMgr, metrics.NoopMetricsHandler, logger)
+
+	reservation := quotas.NewMockReservation(s.controller)
+	reservation.EXPECT().OK().Return(true).AnyTimes()
+	reservation.EXPECT().DelayFrom(gomock.Any()).Return(0 * time.Second).AnyTimes()
+	rateLimiter := quotas.NewMockRateLimiter(s.controller)
+	rateLimiter.EXPECT().ReserveN(gomock.Any(), gomock.Any()).Return(reservation).AnyTimes()
+	rateLimiter.EXPECT().Wait(gomock.Any()).AnyTimes()
+
+	s.scvgr = NewScavenger(s.taskMgr, metrics.NoopMetricsHandler, logger, dynamicconfig.GetIntPropertyFn(10), rateLimiter)
 	maxTasksPerJob = 4
 	executorPollInterval = time.Millisecond * 50
 }
