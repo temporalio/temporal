@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -128,6 +129,7 @@ type (
 		matchingClient                  matchingservice.MatchingServiceClient
 		deploymentStoreClient           deployment.DeploymentStoreClient
 		workerDeploymentClient          workerdeployment.Client
+		schedulerClient                 schedulerpb.SchedulerServiceClient
 		archiverProvider                provider.ArchiverProvider
 		payloadSerializer               serialization.Serializer
 		namespaceRegistry               namespace.Registry
@@ -159,6 +161,7 @@ func NewWorkflowHandler(
 	matchingClient matchingservice.MatchingServiceClient,
 	deploymentStoreClient deployment.DeploymentStoreClient,
 	workerDeploymentClient workerdeployment.Client,
+	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
 	payloadSerializer serialization.Serializer,
 	namespaceRegistry namespace.Registry,
@@ -199,6 +202,7 @@ func NewWorkflowHandler(
 		matchingClient:                  matchingClient,
 		deploymentStoreClient:           deploymentStoreClient,
 		workerDeploymentClient:          workerDeploymentClient,
+		schedulerClient:                 schedulerClient,
 		archiverProvider:                archiverProvider,
 		payloadSerializer:               payloadSerializer,
 		namespaceRegistry:               namespaceRegistry,
@@ -3063,11 +3067,11 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
+	// TODO: check if chasm is enabled?
+	// TODO: check DC per namespace?
 	// Check if CHASM scheduler experiment is enabled
-	if headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
-		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName.String()) {
-		wh.logger.Debug("CHASM scheduler enabled for request", tag.ScheduleID(request.ScheduleId))
-	}
+	useChasmScheduler := headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
+		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName.String())
 
 	if request.Schedule == nil {
 		request.Schedule = &schedulepb.Schedule{}
@@ -3078,8 +3082,12 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	}
 
 	// Add namespace division before unaliasing search attributes.
-	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
+	// Not needed for CHASM scheduler as it is added in the scheduler CHASM code.
+	if !useChasmScheduler {
+		searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
+	}
 
+	// TODO: This should be handled automatically by the CHASM framework.
 	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
 		return nil, err
@@ -3089,6 +3097,38 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
+	if useChasmScheduler {
+		wh.logger.Debug("Creating CHASM scheduler", tag.WorkflowNamespace(namespaceName.String()), tag.ScheduleID(request.ScheduleId))
+
+		// TODO: check other fields to validate as the CHASM flow bypasses the StartWorkflowExecution validation in history.
+		switch action := request.GetSchedule().GetAction().GetAction().(type) {
+		case *schedulepb.ScheduleAction_StartWorkflow:
+			sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
+			sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
+			if err := common.CheckEventBlobSizeLimit(
+				action.StartWorkflow.GetInput().Size(),
+				sizeLimitWarn,
+				sizeLimitError,
+				namespaceID.String(),
+				request.ScheduleId,
+				// action.StartWorkflow.GetWorkflowId(),
+				"", // don't have runid yet
+				wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+				wh.throttledLogger,
+				tag.BlobSizeViolationOperation("CreateSchedule"),
+			); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, serviceerror.NewInvalidArgument("Only StartWorkflow action is supported for schedules")
+		}
+
+		res, err := wh.schedulerClient.CreateSchedule(ctx, &schedulerpb.CreateScheduleRequest{
+			NamespaceId:     namespaceID.String(),
+			FrontendRequest: request,
+		})
+		return res.GetFrontendResponse(), err
+	}
 	// size limits will be validated on history. note that the start workflow request is
 	// embedded in the schedule, which is in the scheduler input. so if the scheduler itself
 	// doesn't exceed the limit, the started workflows should be safe as well.
@@ -3574,6 +3614,29 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workflowservice.DescribeScheduleRequest) (_ *workflowservice.DescribeScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
+	// TODO: dynamic config to enable chasm scheduler per namespace?
+	// TODO: check if chasm is enabled?
+
+	// Prefer CHASM scheduler if enabled.
+	resp, err := wh.describeScheduleCHASM(ctx, request)
+	if err == nil {
+		return resp, nil
+	}
+	var notFoundErr *serviceerror.NotFound
+	if !errors.As(err, &notFoundErr) {
+		return nil, err
+	}
+	return wh.describeScheduleWorkflow(ctx, request)
+}
+
+func (wh *WorkflowHandler) describeScheduleCHASM(ctx context.Context, request *workflowservice.DescribeScheduleRequest) (*workflowservice.DescribeScheduleResponse, error) {
+	res, err := wh.schedulerClient.DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
+		FrontendRequest: request,
+	})
+	return res.GetFrontendResponse(), err
+}
+
+func (wh *WorkflowHandler) describeScheduleWorkflow(ctx context.Context, request *workflowservice.DescribeScheduleRequest) (*workflowservice.DescribeScheduleResponse, error) {
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -3770,14 +3833,40 @@ func (wh *WorkflowHandler) UpdateSchedule(
 ) (_ *workflowservice.UpdateScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
 	if !wh.config.EnableSchedules(request.Namespace) {
 		return nil, errSchedulesNotAllowed
 	}
 
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	res, err := wh.updateScheduleCHASM(ctx, request)
+	if err == nil {
+		return res, nil
+	}
+	var notFoundErr *serviceerror.NotFound
+	if errors.As(err, &notFoundErr) {
+		return nil, err
+	}
+
+	return wh.updateScheduleWorkflow(ctx, request)
+}
+
+func (wh *WorkflowHandler) updateScheduleCHASM(
+	ctx context.Context,
+	request *workflowservice.UpdateScheduleRequest,
+) (*workflowservice.UpdateScheduleResponse, error) {
+	res, err := wh.schedulerClient.UpdateSchedule(ctx, &schedulerpb.UpdateScheduleRequest{
+		FrontendRequest: request,
+	})
+	return res.GetFrontendResponse(), err
+}
+
+func (wh *WorkflowHandler) updateScheduleWorkflow(
+	ctx context.Context,
+	request *workflowservice.UpdateScheduleRequest,
+) (*workflowservice.UpdateScheduleResponse, error) {
 	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
 		return nil, errRequestIDTooLong
 	}
@@ -4005,7 +4094,27 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 	if !wh.config.EnableSchedules(request.Namespace) {
 		return nil, errSchedulesNotAllowed
 	}
+	// Prefer CHASM scheduler if enabled.
+	res, err := wh.deleteScheduleCHASM(ctx, request)
+	if err == nil {
+		return res, nil
+	}
+	var notFoundErr *serviceerror.NotFound
+	if !errors.As(err, &notFoundErr) {
+		return nil, err
+	}
 
+	return wh.deleteScheduleWorkflow(ctx, request)
+}
+
+func (wh *WorkflowHandler) deleteScheduleCHASM(ctx context.Context, request *workflowservice.DeleteScheduleRequest) (*workflowservice.DeleteScheduleResponse, error) {
+	res, err := wh.schedulerClient.DeleteSchedule(ctx, &schedulerpb.DeleteScheduleRequest{
+		FrontendRequest: request,
+	})
+	return res.GetFrontendResponse(), err
+}
+
+func (wh *WorkflowHandler) deleteScheduleWorkflow(ctx context.Context, request *workflowservice.DeleteScheduleRequest) (*workflowservice.DeleteScheduleResponse, error) {
 	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
