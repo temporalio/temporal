@@ -2879,13 +2879,13 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 
 	WorkerHeartbeatsEnabled = NewNamespaceBoolSetting(
 		"frontend.WorkerHeartbeatsEnabled",
-		false,
+		true,
 		`WorkerHeartbeatsEnabled is a "feature enable" flag. It allows workers to send periodic heartbeats to the server.`,
 	)
 
 	ListWorkersEnabled = NewNamespaceBoolSetting(
 		"frontend.ListWorkersEnabled",
-		false,
+		true,
 		`ListWorkersEnabled is a "feature enable" flag. It allows clients to get workers heartbeat information.`,
 	)
 
