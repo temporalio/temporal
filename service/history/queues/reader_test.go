@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/clock"
@@ -88,7 +88,7 @@ func (s *readerSuite) TestStartLoadStop() {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(r)).AnyTimes()
-			mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+			mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
 	}
@@ -278,7 +278,7 @@ func (s *readerSuite) TestPause() {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
-			mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+			mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
 	}
@@ -347,7 +347,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 			for i := 0; i != 100; i++ {
 				mockTask := tasks.NewMockTask(s.controller)
 				mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
-				mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+				mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
 				result = append(result, mockTask)
 			}
 
@@ -382,7 +382,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
-			mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+			mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
 	}
@@ -414,7 +414,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_NoNextSlice() {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
-			mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+			mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
 	}

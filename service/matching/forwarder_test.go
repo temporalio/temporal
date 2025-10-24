@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -255,7 +255,7 @@ func (t *ForwarderTestSuite) TestForwardPollError() {
 func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 
-	pollerID := uuid.New()
+	pollerID := uuid.NewString()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
 	ctx = context.WithValue(ctx, identityKey, "id1")
 	resp := &matchingservice.PollWorkflowTaskQueueResponse{}
@@ -283,7 +283,7 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
-	pollerID := uuid.New()
+	pollerID := uuid.NewString()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
 	ctx = context.WithValue(ctx, identityKey, "id1")
 	resp := &matchingservice.PollActivityTaskQueueResponse{}

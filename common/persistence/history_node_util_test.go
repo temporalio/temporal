@@ -4,7 +4,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -40,8 +40,8 @@ func (s *historyNodeMetadataSuite) TearDownTest() {
 
 func (s *historyNodeMetadataSuite) TestIndexNodeIDToNode() {
 	branch := &persistencespb.HistoryBranch{
-		TreeId:   uuid.New(),
-		BranchId: uuid.New(),
+		TreeId:   uuid.NewString(),
+		BranchId: uuid.NewString(),
 	}
 	numNodeIDs := 10
 	nodePerNodeID := 10
@@ -72,8 +72,8 @@ func (s *historyNodeMetadataSuite) TestIndexNodeIDToNode() {
 
 func (s *historyNodeMetadataSuite) TestReverselyLinkNode() {
 	branch := &persistencespb.HistoryBranch{
-		TreeId:   uuid.New(),
-		BranchId: uuid.New(),
+		TreeId:   uuid.NewString(),
+		BranchId: uuid.NewString(),
 	}
 	numNodeIDs := 10
 	nodePerNodeID := 10
@@ -105,8 +105,8 @@ func (s *historyNodeMetadataSuite) TestReverselyLinkNode() {
 
 func (s *historyNodeMetadataSuite) TestTrimNodes() {
 	branch := &persistencespb.HistoryBranch{
-		TreeId:   uuid.New(),
-		BranchId: uuid.New(),
+		TreeId:   uuid.NewString(),
+		BranchId: uuid.NewString(),
 	}
 
 	node1Valid := s.newRandomHistoryNodeMetadata(branch, 1, rand.Int63(), 0)

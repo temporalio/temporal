@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -100,7 +100,7 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover() {
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -128,7 +128,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           namespaceName,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -405,7 +405,7 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	stickyTaskQueue2 := &taskqueuepb.TaskQueue{Name: stq2, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tq}
 	stickyTaskTimeout := 100 * time.Second
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -530,7 +530,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:             uuid.New(),
+		RequestId:             uuid.NewString(),
 		Namespace:             namespaceName,
 		WorkflowId:            id,
 		WorkflowType:          workflowType,
@@ -591,21 +591,21 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	s.failover(namespaceName, 0, s.clusters[1].ClusterName(), 2)
 
 	// start the same workflow in cluster1 is not allowed if policy is AllowDuplicateFailedOnly
-	startReq.RequestId = uuid.New()
+	startReq.RequestId = uuid.NewString()
 	startReq.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY
 	we, err = client1.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 	s.Nil(we)
 
 	// start the same workflow in cluster1 is not allowed if policy is RejectDuplicate
-	startReq.RequestId = uuid.New()
+	startReq.RequestId = uuid.NewString()
 	startReq.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
 	we, err = client1.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 	s.Nil(we)
 
 	// start the workflow in cluster1
-	startReq.RequestId = uuid.New()
+	startReq.RequestId = uuid.NewString()
 	startReq.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	we, err = client1.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
@@ -631,7 +631,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:             uuid.New(),
+		RequestId:             uuid.NewString(),
 		Namespace:             namespaceName,
 		WorkflowId:            id,
 		WorkflowType:          workflowType,
@@ -696,7 +696,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	s.NoError(err)
 
 	// start the same workflow in cluster0 and terminate the existing workflow
-	startReq.RequestId = uuid.New()
+	startReq.RequestId = uuid.NewString()
 	startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
 	we, err = client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
@@ -726,7 +726,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -883,7 +883,7 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -978,7 +978,7 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 		},
 		Reason:                    "reset execution from test",
 		WorkflowTaskFinishEventId: 4, // before WorkflowTaskStarted
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -1039,7 +1039,7 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1145,7 +1145,7 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1317,7 +1317,7 @@ func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1450,7 +1450,7 @@ func (s *FunctionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1544,7 +1544,7 @@ func (s *FunctionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1626,7 +1626,7 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1750,7 +1750,7 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1849,7 +1849,7 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1931,7 +1931,7 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -2520,7 +2520,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 		},
 		Reason:                    "force-replication-test",
 		WorkflowTaskFinishEventId: 3,
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -2573,7 +2573,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 		},
 		Reason:                    "test",
 		WorkflowTaskFinishEventId: 3,
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
 	resetRun := client0.GetWorkflow(testCtx, workflowID, resp.GetRunId())

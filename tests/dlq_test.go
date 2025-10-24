@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -433,7 +433,7 @@ func (s *DLQSuite) validateWorkflowRun(ctx context.Context, run sdkclient.Workfl
 func (s *DLQSuite) executeDoomedWorkflow(ctx context.Context) (sdkclient.WorkflowRun, int64) {
 	// Execute a workflow.
 	// Use a random workflow ID to ensure that we don't have any collisions with other runs.
-	run := s.executeWorkflow(ctx, *s.failingWorkflowIDPrefix.Load()+uuid.New())
+	run := s.executeWorkflow(ctx, *s.failingWorkflowIDPrefix.Load()+uuid.NewString())
 
 	// Wait for the workflow task to be added to the DLQ.
 	select {

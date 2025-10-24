@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -77,10 +77,10 @@ func (s *syncWorkflowStateSuite) SetupSuite() {
 	s.logger = s.mockShard.GetLogger()
 	s.namespaceID = tests.NamespaceID.String()
 	s.execution = &commonpb.WorkflowExecution{
-		WorkflowId: uuid.New(),
-		RunId:      uuid.New(),
+		WorkflowId: uuid.NewString(),
+		RunId:      uuid.NewString(),
 	}
-	s.newRunId = uuid.New()
+	s.newRunId = uuid.NewString()
 	s.workflowKey = definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,

@@ -70,7 +70,7 @@ func ValidateUUID(s string) (string, error) {
 func NewUUID() UUID {
 	u, err := guuid.NewV7()
 	if err != nil {
-		// Should never happen, but this matches the behavior of pborman/uuid.NewRandom
+		// Should never happen, but this matches the behavior of google/uuid.NewRandom
 		return nil
 	}
 	return u[:]

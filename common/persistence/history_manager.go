@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -78,7 +78,7 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 	}
 	newBranchInfo := &persistencespb.HistoryBranch{
 		TreeId:    forkBranch.TreeId,
-		BranchId:  uuid.New(),
+		BranchId:  uuid.NewString(),
 		Ancestors: newAncestors,
 	}
 

@@ -1,7 +1,7 @@
 package deployment
 
 import (
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
@@ -152,7 +152,7 @@ func (d *DeploymentSeriesWorkflowRunner) syncDeployment(ctx workflow.Context, bu
 func (d *DeploymentSeriesWorkflowRunner) newUUID(ctx workflow.Context) string {
 	var val string
 	_ = workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-		return uuid.New()
+		return uuid.NewString()
 	}).Get(&val)
 	return val
 }
