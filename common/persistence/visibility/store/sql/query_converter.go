@@ -1,58 +1,15 @@
 package sql
 
 import (
-	"errors"
-	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/sqlquery"
-)
-
-type (
-	pluginQueryConverter interface {
-		convertKeywordListComparisonExpr(expr *sqlparser.ComparisonExpr) (sqlparser.Expr, error)
-
-		convertTextComparisonExpr(expr *sqlparser.ComparisonExpr) (sqlparser.Expr, error)
-
-		buildSelectStmt(
-			namespaceID namespace.ID,
-			queryString string,
-			pageSize int,
-			token *pageToken,
-		) (string, []any)
-
-		buildCountStmt(namespaceID namespace.ID, queryString string, groupBy []string) (string, []any)
-
-		getDatetimeFormat() string
-
-		getCoalesceCloseTimeExpr() sqlparser.Expr
-	}
-
-	QueryConverter struct {
-		pluginQueryConverter
-		namespaceName namespace.Name
-		namespaceID   namespace.ID
-		saTypeMap     searchattribute.NameTypeMap
-		saMapper      searchattribute.Mapper
-		queryString   string
-
-		seenNamespaceDivision bool
-	}
-
-	queryParams struct {
-		queryString string
-		// List of search attributes to group by (field name, not db name).
-		groupBy []string
-	}
 )
 
 const (
@@ -76,578 +33,276 @@ var (
 		"\\", "\\\\",
 	}
 
-	supportedComparisonOperators = []string{
-		sqlparser.EqualStr,
-		sqlparser.NotEqualStr,
-		sqlparser.LessThanStr,
-		sqlparser.GreaterThanStr,
-		sqlparser.LessEqualStr,
-		sqlparser.GreaterEqualStr,
-		sqlparser.InStr,
-		sqlparser.NotInStr,
-		sqlparser.StartsWithStr,
-		sqlparser.NotStartsWithStr,
-	}
-
-	supportedKeyworkListOperators = []string{
-		sqlparser.EqualStr,
-		sqlparser.NotEqualStr,
-		sqlparser.InStr,
-		sqlparser.NotInStr,
-	}
-
-	supportedTextOperators = []string{
-		sqlparser.EqualStr,
-		sqlparser.NotEqualStr,
-	}
-
-	supportedTypesRangeCond = []enumspb.IndexedValueType{
-		enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-		enumspb.INDEXED_VALUE_TYPE_INT,
-		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	}
-
-	defaultLikeEscapeExpr = newUnsafeSQLString(string(defaultLikeEscapeChar))
+	defaultLikeEscapeExpr = query.NewUnsafeSQLString(string(defaultLikeEscapeChar))
 )
 
-func newQueryConverterInternal(
-	pqc pluginQueryConverter,
-	namespaceName namespace.Name,
-	namespaceID namespace.ID,
-	saTypeMap searchattribute.NameTypeMap,
-	saMapper searchattribute.Mapper,
-	queryString string,
-) *QueryConverter {
-	return &QueryConverter{
-		pluginQueryConverter: pqc,
-		namespaceName:        namespaceName,
-		namespaceID:          namespaceID,
-		saTypeMap:            saTypeMap,
-		saMapper:             saMapper,
-		queryString:          queryString,
+type (
+	convertComparisonExprIf interface {
+		ConvertComparisonExpr(
+			operator string,
+			col *query.SAColumn,
+			value sqlparser.Expr,
+		) (sqlparser.Expr, error)
+	}
 
-		seenNamespaceDivision: false,
+	convertKeywordComparisonExprIf interface {
+		ConvertKeywordComparisonExpr(
+			operator string,
+			col *query.SAColumn,
+			value sqlparser.Expr,
+		) (sqlparser.Expr, error)
+	}
+
+	convertRangeExprIf interface {
+		ConvertRangeExpr(
+			operator string,
+			col *query.SAColumn,
+			from, to sqlparser.Expr,
+		) (sqlparser.Expr, error)
+	}
+
+	convertIsExprIf interface {
+		ConvertIsExpr(
+			operator string,
+			col *query.SAColumn,
+		) (sqlparser.Expr, error)
+	}
+)
+
+type SQLQueryConverter struct {
+	sqlplugin.VisibilityQueryConverter
+}
+
+var _ query.StoreQueryConverter[sqlparser.Expr] = (*SQLQueryConverter)(nil)
+
+func NewSQLQueryConverter(pluginName string) (*SQLQueryConverter, error) {
+	visQueryConverter, err := sql.GetPluginVisibilityQueryConverter(pluginName)
+	if err != nil {
+		return nil, err
+	}
+	return &SQLQueryConverter{VisibilityQueryConverter: visQueryConverter}, nil
+}
+
+func (c *SQLQueryConverter) BuildParenExpr(expr sqlparser.Expr) (sqlparser.Expr, error) {
+	switch expr.(type) {
+	case *sqlparser.NotExpr, *sqlparser.AndExpr, *sqlparser.OrExpr:
+		return &sqlparser.ParenExpr{Expr: expr}, nil
+	default:
+		return expr, nil
 	}
 }
 
-func (c *QueryConverter) BuildSelectStmt(
-	pageSize int,
-	nextPageToken []byte,
-) (*sqlplugin.VisibilitySelectFilter, error) {
-	token, err := deserializePageToken(nextPageToken)
-	if err != nil {
-		return nil, err
-	}
-	qp, err := c.convertWhereString(c.queryString)
-	if err != nil {
-		return nil, err
-	}
-	if len(qp.groupBy) > 0 {
-		return nil, query.NewConverterError("%s: 'group by' clause", query.NotSupportedErrMessage)
-	}
-	queryString, queryArgs := c.buildSelectStmt(
-		c.namespaceID,
-		qp.queryString,
-		pageSize,
-		token,
-	)
-	return &sqlplugin.VisibilitySelectFilter{Query: queryString, QueryArgs: queryArgs}, nil
+func (c *SQLQueryConverter) BuildNotExpr(expr sqlparser.Expr) (sqlparser.Expr, error) {
+	expr, _ = c.BuildParenExpr(expr)
+	return &sqlparser.NotExpr{Expr: expr}, nil
 }
 
-func (c *QueryConverter) BuildCountStmt() (*sqlplugin.VisibilitySelectFilter, error) {
-	qp, err := c.convertWhereString(c.queryString)
+func (c *SQLQueryConverter) BuildAndExpr(exprs ...sqlparser.Expr) (sqlparser.Expr, error) {
+	if len(exprs) == 1 {
+		return exprs[0], nil
+	}
+	wrappedExprs := make([]sqlparser.Expr, len(exprs))
+	for i, expr := range exprs {
+		if _, ok := expr.(*sqlparser.OrExpr); ok {
+			wrappedExprs[i], _ = c.BuildParenExpr(expr)
+		} else {
+			wrappedExprs[i] = expr
+		}
+	}
+	return query.ReduceExprs(
+		func(left, right sqlparser.Expr) sqlparser.Expr {
+			if left == nil {
+				return right
+			}
+			if right == nil {
+				return left
+			}
+			return &sqlparser.AndExpr{
+				Left:  left,
+				Right: right,
+			}
+		},
+		wrappedExprs...,
+	), nil
+}
+
+func (c *SQLQueryConverter) BuildOrExpr(exprs ...sqlparser.Expr) (sqlparser.Expr, error) {
+	return query.ReduceExprs(
+		func(left, right sqlparser.Expr) sqlparser.Expr {
+			if left == nil {
+				return right
+			}
+			if right == nil {
+				return left
+			}
+			return &sqlparser.OrExpr{
+				Left:  left,
+				Right: right,
+			}
+		},
+		exprs...,
+	), nil
+}
+
+func (c *SQLQueryConverter) ConvertComparisonExpr(
+	operator string,
+	col *query.SAColumn,
+	value any,
+) (sqlparser.Expr, error) {
+	valueExpr, err := c.buildValueExpr(col.FieldName, value)
 	if err != nil {
 		return nil, err
 	}
-	groupByDbNames := make([]string, len(qp.groupBy))
-	for i, fieldName := range qp.groupBy {
-		groupByDbNames[i] = searchattribute.GetSqlDbColName(fieldName)
+	if customConverter, ok := c.VisibilityQueryConverter.(convertComparisonExprIf); ok {
+		return customConverter.ConvertComparisonExpr(operator, col, valueExpr)
 	}
-	queryString, queryArgs := c.buildCountStmt(c.namespaceID, qp.queryString, groupByDbNames)
-	return &sqlplugin.VisibilitySelectFilter{
-		Query:     queryString,
-		QueryArgs: queryArgs,
-		GroupBy:   qp.groupBy,
+	return &sqlparser.ComparisonExpr{
+		Operator: operator,
+		Left:     col,
+		Right:    valueExpr,
 	}, nil
 }
 
-func (c *QueryConverter) convertWhereString(queryString string) (*queryParams, error) {
-	where := strings.TrimSpace(queryString)
-	if where != "" &&
-		!strings.HasPrefix(strings.ToLower(where), "order by") &&
-		!strings.HasPrefix(strings.ToLower(where), "group by") {
-		where = "where " + where
-	}
-	// sqlparser can't parse just WHERE clause but instead accepts only valid SQL statement.
-	sql := "select * from table1 " + where
-	stmt, err := sqlparser.Parse(sql)
-	if err != nil {
-		return nil, query.NewConverterError("%s: %v", query.MalformedSqlQueryErrMessage, err)
-	}
-
-	selectStmt, _ := stmt.(*sqlparser.Select)
-	err = c.convertSelectStmt(selectStmt)
+func (c *SQLQueryConverter) ConvertKeywordComparisonExpr(
+	operator string,
+	col *query.SAColumn,
+	value any,
+) (sqlparser.Expr, error) {
+	valueExpr, err := c.buildValueExpr(col.FieldName, value)
 	if err != nil {
 		return nil, err
 	}
 
-	res := &queryParams{}
-	if selectStmt.Where != nil {
-		res.queryString = sqlparser.String(selectStmt.Where.Expr)
-	}
-	for _, groupByExpr := range selectStmt.GroupBy {
-		// The parser already ensures the type is saColName.
-		colName := groupByExpr.(*saColName)
-		res.groupBy = append(res.groupBy, colName.fieldName)
-	}
-	return res, nil
-}
-
-func (c *QueryConverter) convertSelectStmt(sel *sqlparser.Select) error {
-	if sel.OrderBy != nil {
-		return query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage)
+	if customConverter, ok := c.VisibilityQueryConverter.(convertKeywordComparisonExprIf); ok {
+		return customConverter.ConvertKeywordComparisonExpr(operator, col, valueExpr)
 	}
 
-	if sel.Limit != nil {
-		return query.NewConverterError("%s: 'limit' clause", query.NotSupportedErrMessage)
-	}
-
-	if sel.Where == nil {
-		sel.Where = &sqlparser.Where{
-			Type: sqlparser.WhereStr,
-			Expr: nil,
-		}
-	}
-
-	if sel.Where.Expr != nil {
-		err := c.convertWhereExpr(&sel.Where.Expr)
-		if err != nil {
-			return err
-		}
-
-		// Wrap user's query in parenthesis. This is to ensure that further changes
-		// to the query won't affect the user's query.
-		switch sel.Where.Expr.(type) {
-		case *sqlparser.ParenExpr:
-			// no-op: top-level expression is already a parenthesis
-		default:
-			sel.Where.Expr = &sqlparser.ParenExpr{
-				Expr: sel.Where.Expr,
-			}
-		}
-	}
-
-	// This logic comes from elasticsearch/visibility_store.go#convertQuery function.
-	// If the query did not explicitly filter on TemporalNamespaceDivision,
-	// then add "is null" query to it.
-	if !c.seenNamespaceDivision {
-		namespaceDivisionExpr := &sqlparser.IsExpr{
-			Operator: sqlparser.IsNullStr,
-			Expr: newColName(
-				searchattribute.GetSqlDbColName(searchattribute.TemporalNamespaceDivision),
-			),
-		}
-		if sel.Where.Expr == nil {
-			sel.Where.Expr = namespaceDivisionExpr
-		} else {
-			sel.Where.Expr = &sqlparser.AndExpr{
-				Left:  sel.Where.Expr,
-				Right: namespaceDivisionExpr,
-			}
-		}
-	}
-
-	if len(sel.GroupBy) > 1 {
-		return query.NewConverterError(
-			"%s: 'group by' clause supports only a single field",
-			query.NotSupportedErrMessage,
-		)
-	}
-	for k := range sel.GroupBy {
-		colName, err := c.convertColName(&sel.GroupBy[k])
-		if err != nil {
-			return err
-		}
-		if colName.fieldName != searchattribute.ExecutionStatus {
-			return query.NewConverterError(
-				"%s: 'group by' clause is only supported for %s search attribute",
-				query.NotSupportedErrMessage,
-				searchattribute.ExecutionStatus,
-			)
-		}
-	}
-
-	return nil
-}
-
-func (c *QueryConverter) convertWhereExpr(expr *sqlparser.Expr) error {
-	if expr == nil || *expr == nil {
-		return errors.New("cannot be nil")
-	}
-
-	switch e := (*expr).(type) {
-	case *sqlparser.ParenExpr:
-		return c.convertWhereExpr(&e.Expr)
-	case *sqlparser.NotExpr:
-		return c.convertWhereExpr(&e.Expr)
-	case *sqlparser.AndExpr:
-		return c.convertAndExpr(expr)
-	case *sqlparser.OrExpr:
-		return c.convertOrExpr(expr)
-	case *sqlparser.ComparisonExpr:
-		return c.convertComparisonExpr(expr)
-	case *sqlparser.RangeCond:
-		return c.convertRangeCond(expr)
-	case *sqlparser.IsExpr:
-		return c.convertIsExpr(expr)
-	case *sqlparser.FuncExpr:
-		return query.NewConverterError("%s: function expression", query.NotSupportedErrMessage)
-	case *sqlparser.ColName:
-		return query.NewConverterError("%s: incomplete expression", query.InvalidExpressionErrMessage)
-	default:
-		return query.NewConverterError("%s: expression of type %T", query.NotSupportedErrMessage, e)
-	}
-}
-
-func (c *QueryConverter) convertAndExpr(exprRef *sqlparser.Expr) error {
-	expr, ok := (*exprRef).(*sqlparser.AndExpr)
-	if !ok {
-		return query.NewConverterError("`%s` is not an 'AND' expression", sqlparser.String(*exprRef))
-	}
-	err := c.convertWhereExpr(&expr.Left)
-	if err != nil {
-		return err
-	}
-	return c.convertWhereExpr(&expr.Right)
-}
-
-func (c *QueryConverter) convertOrExpr(exprRef *sqlparser.Expr) error {
-	expr, ok := (*exprRef).(*sqlparser.OrExpr)
-	if !ok {
-		return query.NewConverterError("`%s` is not an 'OR' expression", sqlparser.String(*exprRef))
-	}
-	err := c.convertWhereExpr(&expr.Left)
-	if err != nil {
-		return err
-	}
-	return c.convertWhereExpr(&expr.Right)
-}
-
-func (c *QueryConverter) convertComparisonExpr(exprRef *sqlparser.Expr) error {
-	expr, ok := (*exprRef).(*sqlparser.ComparisonExpr)
-	if !ok {
-		return query.NewConverterError(
-			"`%s` is not a comparison expression",
-			sqlparser.String(*exprRef),
-		)
-	}
-
-	if !isSupportedComparisonOperator(expr.Operator) {
-		return query.NewConverterError(
-			"%s: invalid operator '%s' in `%s`",
-			query.InvalidExpressionErrMessage,
-			expr.Operator,
-			sqlparser.String(expr),
-		)
-	}
-
-	saColNameExpr, err := c.convertColName(&expr.Left)
-	if err != nil {
-		return err
-	}
-
-	err = c.convertValueExpr(&expr.Right, saColNameExpr.alias, saColNameExpr.fieldName, saColNameExpr.valueType)
-	if err != nil {
-		return err
-	}
-
-	switch saColNameExpr.valueType {
-	case enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
-		newExpr, err := c.convertKeywordListComparisonExpr(expr)
-		if err != nil {
-			return err
-		}
-		*exprRef = newExpr
-	case enumspb.INDEXED_VALUE_TYPE_TEXT:
-		newExpr, err := c.convertTextComparisonExpr(expr)
-		if err != nil {
-			return err
-		}
-		*exprRef = newExpr
-	}
-
-	switch expr.Operator {
+	switch operator {
 	case sqlparser.StartsWithStr, sqlparser.NotStartsWithStr:
-		valueExpr, ok := expr.Right.(*unsafeSQLString)
+		v, ok := valueExpr.(*query.UnsafeSQLString)
 		if !ok {
-			return query.NewConverterError(
-				"%s: right-hand side of '%s' must be a literal string (got: %v)",
+			return nil, query.NewConverterError(
+				"%s: right-hand side of %q operator must be a literal string (got: %v)",
 				query.InvalidExpressionErrMessage,
-				expr.Operator,
-				sqlparser.String(expr.Right),
+				operator,
+				value,
 			)
 		}
-		if expr.Operator == sqlparser.StartsWithStr {
-			expr.Operator = sqlparser.LikeStr
+		v.Val = escapeLikeValueForPrefixSearch(v.Val, defaultLikeEscapeChar)
+		if operator == sqlparser.StartsWithStr {
+			operator = sqlparser.LikeStr
 		} else {
-			expr.Operator = sqlparser.NotLikeStr
+			operator = sqlparser.NotLikeStr
 		}
-		expr.Escape = defaultLikeEscapeExpr
-		valueExpr.Val = escapeLikeValueForPrefixSearch(valueExpr.Val, defaultLikeEscapeChar)
+		return &sqlparser.ComparisonExpr{
+			Operator: operator,
+			Left:     col,
+			Right:    v,
+			Escape:   defaultLikeEscapeExpr,
+		}, nil
+	default:
+		return c.ConvertComparisonExpr(operator, col, value)
 	}
-
-	return nil
 }
 
-func (c *QueryConverter) convertRangeCond(exprRef *sqlparser.Expr) error {
-	expr, ok := (*exprRef).(*sqlparser.RangeCond)
-	if !ok {
-		return query.NewConverterError(
-			"`%s` is not a range condition expression",
-			sqlparser.String(*exprRef),
-		)
-	}
-	saColNameExpr, err := c.convertColName(&expr.Left)
+func (c *SQLQueryConverter) ConvertKeywordListComparisonExpr(
+	operator string,
+	col *query.SAColumn,
+	value any,
+) (sqlparser.Expr, error) {
+	valueExpr, err := c.buildValueExpr(col.FieldName, value)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if !isSupportedTypeRangeCond(saColNameExpr.valueType) {
-		return query.NewConverterError(
-			"%s: cannot do range condition on search attribute '%s' of type %s",
-			query.InvalidExpressionErrMessage,
-			saColNameExpr.alias,
-			saColNameExpr.valueType.String(),
-		)
-	}
-	err = c.convertValueExpr(&expr.From, saColNameExpr.alias, saColNameExpr.fieldName, saColNameExpr.valueType)
-	if err != nil {
-		return err
-	}
-	err = c.convertValueExpr(&expr.To, saColNameExpr.alias, saColNameExpr.fieldName, saColNameExpr.valueType)
-	if err != nil {
-		return err
-	}
-	return nil
+	return c.VisibilityQueryConverter.ConvertKeywordListComparisonExpr(operator, col, valueExpr)
 }
 
-func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, error) {
-	expr, ok := (*exprRef).(*sqlparser.ColName)
-	if !ok {
-		return nil, query.NewConverterError(
-			"%s: must be a column name but was %T",
-			query.InvalidExpressionErrMessage,
-			*exprRef,
-		)
-	}
-	saAlias := strings.ReplaceAll(sqlparser.String(expr), "`", "")
-	saFieldName, saType, err := query.ResolveSearchAttributeAlias(saAlias, c.namespaceName, c.saMapper, c.saTypeMap)
+func (c *SQLQueryConverter) ConvertTextComparisonExpr(
+	operator string,
+	col *query.SAColumn,
+	value any,
+) (sqlparser.Expr, error) {
+	valueExpr, err := c.buildValueExpr(col.FieldName, value)
 	if err != nil {
-		return nil, query.NewConverterError(
-			"%s: column name '%s' is not a valid search attribute",
-			query.InvalidExpressionErrMessage,
-			saAlias,
-		)
+		return nil, err
 	}
-	if saFieldName == searchattribute.TemporalNamespaceDivision {
-		c.seenNamespaceDivision = true
-	}
-	if saAlias == searchattribute.CloseTime {
-		*exprRef = c.getCoalesceCloseTimeExpr()
-		return closeTimeSaColName, nil
-	}
-	newExpr := newSAColName(
-		searchattribute.GetSqlDbColName(saFieldName),
-		saAlias,
-		saFieldName,
-		saType,
-	)
-	*exprRef = newExpr
-	return newExpr, nil
+	return c.VisibilityQueryConverter.ConvertTextComparisonExpr(operator, col, valueExpr)
 }
 
-func (c *QueryConverter) convertValueExpr(
-	exprRef *sqlparser.Expr,
-	name string,
-	saFieldName string,
-	saType enumspb.IndexedValueType,
-) error {
-	expr := *exprRef
-	switch e := expr.(type) {
-	case *sqlparser.SQLVal:
-		value, err := c.parseSQLVal(e, name, saType)
-		if err != nil {
-			return err
-		}
+func (c *SQLQueryConverter) ConvertRangeExpr(
+	operator string,
+	col *query.SAColumn,
+	from, to any,
+) (sqlparser.Expr, error) {
+	fromExpr, err := c.buildValueExpr(col.FieldName, from)
+	if err != nil {
+		return nil, err
+	}
+	toExpr, err := c.buildValueExpr(col.FieldName, to)
+	if err != nil {
+		return nil, err
+	}
+	if customConverter, ok := c.VisibilityQueryConverter.(convertRangeExprIf); ok {
+		return customConverter.ConvertRangeExpr(operator, col, fromExpr, toExpr)
+	}
+	return &sqlparser.RangeCond{
+		Operator: operator,
+		Left:     col,
+		From:     fromExpr,
+		To:       toExpr,
+	}, nil
+}
 
-		if name == searchattribute.ScheduleID && saFieldName == searchattribute.WorkflowID {
-			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
-		}
+func (c *SQLQueryConverter) ConvertIsExpr(
+	operator string,
+	col *query.SAColumn,
+) (sqlparser.Expr, error) {
+	if customConverter, ok := c.VisibilityQueryConverter.(convertIsExprIf); ok {
+		return customConverter.ConvertIsExpr(operator, col)
+	}
+	return &sqlparser.IsExpr{
+		Operator: operator,
+		Expr:     col,
+	}, nil
+}
 
-		switch v := value.(type) {
-		case string:
-			// escape strings for safety
-			replacer := strings.NewReplacer(escapeCharMap...)
-			*exprRef = newUnsafeSQLString(replacer.Replace(v))
-		case int64:
-			*exprRef = sqlparser.NewIntVal([]byte(strconv.FormatInt(v, 10)))
-		case float64:
-			*exprRef = sqlparser.NewFloatVal([]byte(strconv.FormatFloat(v, 'f', -1, 64)))
-		default:
-			// this should never happen: query.ParseSqlValue returns one of the types above
-			return query.NewConverterError(
-				"%s: unexpected value type %T for search attribute %s",
-				query.InvalidExpressionErrMessage,
-				v,
-				name,
-			)
-		}
-		return nil
-	case sqlparser.BoolVal:
-		// no-op: no validation needed
-		return nil
-	case sqlparser.ValTuple:
-		// This is "in (1,2,3)" case.
-		for i := range e {
-			err := c.convertValueExpr(&e[i], name, saFieldName, saType)
+func (c *SQLQueryConverter) buildValueExpr(name string, value any) (sqlparser.Expr, error) {
+	// ExecutionStatus is stored as an integer in SQL database.
+	if name == searchattribute.ExecutionStatus {
+		// Query converter already validates the value, so there should not be any errors here.
+		status, _ := enumspb.WorkflowExecutionStatusFromString(value.(string))
+		return sqlparser.NewIntVal([]byte(strconv.FormatInt(int64(status), 10))), nil
+	}
+
+	switch v := value.(type) {
+	case string:
+		// escape strings for safety
+		replacer := strings.NewReplacer(escapeCharMap...)
+		return query.NewUnsafeSQLString(replacer.Replace(v)), nil
+	case int64:
+		return sqlparser.NewIntVal([]byte(strconv.FormatInt(v, 10))), nil
+	case float64:
+		return sqlparser.NewFloatVal([]byte(strconv.FormatFloat(v, 'f', -1, 64))), nil
+	case bool:
+		return sqlparser.BoolVal(v), nil
+	case []any:
+		res := make(sqlparser.ValTuple, len(v))
+		for i, item := range v {
+			var err error
+			res[i], err = c.buildValueExpr(name, item)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
-		return nil
-	case *sqlparser.GroupConcatExpr:
-		return query.NewConverterError("%s: 'group_concat'", query.NotSupportedErrMessage)
-	case *sqlparser.FuncExpr:
-		return query.NewConverterError("%s: nested func", query.NotSupportedErrMessage)
-	case *sqlparser.ColName:
-		return query.NewConverterError(
-			"%s: column name on the right side of comparison expression (did you forget to quote '%s'?)",
-			query.NotSupportedErrMessage,
-			sqlparser.String(expr),
-		)
+		return res, nil
 	default:
-		return query.NewConverterError(
+		// this should never happen: query.ParseSqlValue returns one of the types above
+		return nil, query.NewConverterError(
 			"%s: unexpected value type %T",
 			query.InvalidExpressionErrMessage,
-			expr,
+			value,
 		)
 	}
-}
-
-// parseSQLVal handles values for specific search attributes.
-// Returns a string, an int64 or a float64 if there are no errors.
-// For datetime, converts to UTC.
-// For execution status, converts string to enum value.
-// For execution duration, converts to nanoseconds.
-func (c *QueryConverter) parseSQLVal(
-	expr *sqlparser.SQLVal,
-	saName string,
-	saType enumspb.IndexedValueType,
-) (any, error) {
-	// Using expr.Val instead of sqlparser.String(expr) because the latter escapes chars using MySQL
-	// conventions which is incompatible with SQLite.
-	var sqlValue string
-	switch expr.Type {
-	case sqlparser.StrVal:
-		sqlValue = fmt.Sprintf(`'%s'`, expr.Val)
-	default:
-		sqlValue = string(expr.Val)
-	}
-	value, err := sqlquery.ParseValue(sqlValue)
-	if err != nil {
-		return nil, err
-	}
-
-	if saType == enumspb.INDEXED_VALUE_TYPE_DATETIME {
-		var tm time.Time
-		switch v := value.(type) {
-		case int64:
-			tm = time.Unix(0, v)
-		case string:
-			var err error
-			tm, err = time.Parse(time.RFC3339Nano, v)
-			if err != nil {
-				return nil, query.NewConverterError(
-					"%s: unable to parse datetime '%s'",
-					query.InvalidExpressionErrMessage,
-					v,
-				)
-			}
-		default:
-			return nil, query.NewConverterError(
-				"%s: unexpected value type %T for search attribute %s",
-				query.InvalidExpressionErrMessage,
-				v,
-				saName,
-			)
-		}
-		return tm.UTC().Format(c.getDatetimeFormat()), nil
-	}
-
-	if saName == searchattribute.ExecutionStatus {
-		var status int64
-		switch v := value.(type) {
-		case int64:
-			status = v
-		case string:
-			code, err := enumspb.WorkflowExecutionStatusFromString(v)
-			if err != nil {
-				return nil, query.NewConverterError(
-					"%s: invalid ExecutionStatus value '%s'",
-					query.InvalidExpressionErrMessage,
-					v,
-				)
-			}
-			status = int64(code)
-		default:
-			return nil, query.NewConverterError(
-				"%s: unexpected value type %T for search attribute %s",
-				query.InvalidExpressionErrMessage,
-				v,
-				saName,
-			)
-		}
-		return status, nil
-	}
-
-	if saName == searchattribute.ExecutionDuration {
-		if durationStr, isString := value.(string); isString {
-			duration, err := query.ParseExecutionDurationStr(durationStr)
-			if err != nil {
-				return nil, query.NewConverterError(
-					"invalid value for search attribute %s: %v (%v)", saName, value, err)
-			}
-			value = duration.Nanoseconds()
-		}
-	}
-
-	return value, nil
-}
-
-func (c *QueryConverter) convertIsExpr(exprRef *sqlparser.Expr) error {
-	expr, ok := (*exprRef).(*sqlparser.IsExpr)
-	if !ok {
-		return query.NewConverterError("`%s` is not an 'IS' expression", sqlparser.String(*exprRef))
-	}
-
-	colName, err := c.convertColName(&expr.Expr)
-	if err != nil {
-		return err
-	}
-
-	switch expr.Operator {
-	case sqlparser.IsNullStr, sqlparser.IsNotNullStr:
-		if colName == closeTimeSaColName {
-			// avoid coalescing close time when checking for null
-			expr.Expr = closeTimeSaColName
-		}
-	default:
-		return query.NewConverterError(
-			"%s: 'IS' operator can only be used with 'NULL' or 'NOT NULL'",
-			query.InvalidExpressionErrMessage,
-		)
-	}
-	return nil
 }
 
 func escapeLikeValueForPrefixSearch(in string, escape byte) string {
@@ -660,34 +315,4 @@ func escapeLikeValueForPrefixSearch(in string, escape byte) string {
 	}
 	sb.WriteByte('%')
 	return sb.String()
-}
-
-func isSupportedOperator(supportedOperators []string, operator string) bool {
-	for _, op := range supportedOperators {
-		if operator == op {
-			return true
-		}
-	}
-	return false
-}
-
-func isSupportedComparisonOperator(operator string) bool {
-	return isSupportedOperator(supportedComparisonOperators, operator)
-}
-
-func isSupportedKeywordListOperator(operator string) bool {
-	return isSupportedOperator(supportedKeyworkListOperators, operator)
-}
-
-func isSupportedTextOperator(operator string) bool {
-	return isSupportedOperator(supportedTextOperators, operator)
-}
-
-func isSupportedTypeRangeCond(saType enumspb.IndexedValueType) bool {
-	for _, tp := range supportedTypesRangeCond {
-		if saType == tp {
-			return true
-		}
-	}
-	return false
 }
