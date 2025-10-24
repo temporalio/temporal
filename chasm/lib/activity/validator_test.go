@@ -43,7 +43,7 @@ var (
 )
 
 func TestValidateSuccess(t *testing.T) {
-	modifiedAttributes, err := ValidateActivityRequestAttributes(
+	err := ValidateAndNormalizeActivityAttributes(
 		defaultActivityID,
 		defaultActivityType,
 		getDefaultRetrySettings,
@@ -53,7 +53,6 @@ func TestValidateSuccess(t *testing.T) {
 		&defaultPriority,
 		durationpb.New(0))
 	require.NoError(t, err)
-	require.NotNil(t, modifiedAttributes)
 }
 
 func TestValidateFailures(t *testing.T) {
@@ -199,7 +198,7 @@ func TestValidateFailures(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := ValidateActivityRequestAttributes(
+			err := ValidateAndNormalizeActivityAttributes(
 				tc.activityID,
 				tc.activityType,
 				tc.getDefaultActivityRetrySettings,
@@ -214,7 +213,9 @@ func TestValidateFailures(t *testing.T) {
 }
 
 func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
-	_, err := ValidateStandaloneActivity(
+	requestID := string(make([]byte, 1001))
+
+	err := ValidateStandaloneActivity(
 		defaultActivityID,
 		defaultActivityType,
 		defaultBlobSizeLimitError,
@@ -223,7 +224,7 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 		log.NewNoopLogger(),
 		defaultMaxIDLengthLimit,
 		"default",
-		string(make([]byte, 1001)),
+		&requestID,
 		nil,
 		nil,
 		nil)
@@ -231,7 +232,9 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 }
 
 func TestValidateStandAloneInputTooLarge(t *testing.T) {
-	_, err := ValidateStandaloneActivity(
+	requestID := "test-request-id"
+
+	err := ValidateStandaloneActivity(
 		defaultActivityID,
 		defaultActivityType,
 		defaultBlobSizeLimitError,
@@ -240,7 +243,7 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 		log.NewNoopLogger(),
 		defaultMaxIDLengthLimit,
 		"default",
-		"test-request-id",
+		&requestID,
 		nil,
 		nil,
 		nil)
@@ -248,7 +251,9 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 }
 
 func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
-	_, err := ValidateStandaloneActivity(
+	requestID := "test-request-id"
+
+	err := ValidateStandaloneActivity(
 		defaultActivityID,
 		defaultActivityType,
 		defaultBlobSizeLimitError,
@@ -257,7 +262,7 @@ func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
 		log.NewNoopLogger(),
 		defaultMaxIDLengthLimit,
 		"default",
-		"test-request-id",
+		&requestID,
 		nil,
 		nil,
 		nil)
@@ -270,7 +275,7 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 		options    *activitypb.ActivityOptions
 		runTimeout *durationpb.Duration
 		isErr      bool
-		validate   func(t *testing.T, modifiedAttr *ModifiedActivityRequestAttributes)
+		validate   func(t *testing.T, options *activitypb.ActivityOptions)
 	}{
 		{
 			name: "ScheduleToClose set - fills in missing timeouts",
@@ -280,11 +285,11 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 			},
 			runTimeout: durationpb.New(0),
 			isErr:      false,
-			validate: func(t *testing.T, modifiedAttr *ModifiedActivityRequestAttributes) {
-				require.Equal(t, 10*time.Second, modifiedAttr.ScheduleToCloseTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, modifiedAttr.ScheduleToStartTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, modifiedAttr.StartToCloseTimeout.AsDuration())
-				require.Equal(t, 0*time.Second, modifiedAttr.HeartbeatTimeout.AsDuration())
+			validate: func(t *testing.T, options *activitypb.ActivityOptions) {
+				require.Equal(t, 10*time.Second, options.ScheduleToCloseTimeout.AsDuration())
+				require.Equal(t, 10*time.Second, options.ScheduleToStartTimeout.AsDuration())
+				require.Equal(t, 10*time.Second, options.StartToCloseTimeout.AsDuration())
+				require.Equal(t, 0*time.Second, options.HeartbeatTimeout.AsDuration())
 			},
 		},
 		{
@@ -295,11 +300,11 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 			},
 			runTimeout: durationpb.New(20 * time.Second),
 			isErr:      false,
-			validate: func(t *testing.T, modifiedAttr *ModifiedActivityRequestAttributes) {
-				require.Equal(t, 20*time.Second, modifiedAttr.ScheduleToCloseTimeout.AsDuration())
-				require.Equal(t, 20*time.Second, modifiedAttr.ScheduleToStartTimeout.AsDuration())
-				require.Equal(t, 5*time.Second, modifiedAttr.StartToCloseTimeout.AsDuration())
-				require.Equal(t, 0*time.Second, modifiedAttr.HeartbeatTimeout.AsDuration())
+			validate: func(t *testing.T, options *activitypb.ActivityOptions) {
+				require.Equal(t, 20*time.Second, options.ScheduleToCloseTimeout.AsDuration())
+				require.Equal(t, 20*time.Second, options.ScheduleToStartTimeout.AsDuration())
+				require.Equal(t, 5*time.Second, options.StartToCloseTimeout.AsDuration())
+				require.Equal(t, 0*time.Second, options.HeartbeatTimeout.AsDuration())
 			},
 		},
 		{
@@ -309,7 +314,7 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 			},
 			runTimeout: durationpb.New(0),
 			isErr:      true,
-			validate:   func(t *testing.T, modifiedAttr *ModifiedActivityRequestAttributes) {},
+			validate:   func(t *testing.T, options *activitypb.ActivityOptions) {},
 		},
 		{
 			name: "ScheduleToClose and StartToClose set - StartToClose capped by ScheduleToClose",
@@ -320,11 +325,11 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 			},
 			runTimeout: durationpb.New(0),
 			isErr:      false,
-			validate: func(t *testing.T, modifiedAttr *ModifiedActivityRequestAttributes) {
-				require.Equal(t, 10*time.Second, modifiedAttr.ScheduleToCloseTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, modifiedAttr.ScheduleToStartTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, modifiedAttr.StartToCloseTimeout.AsDuration())
-				require.Equal(t, 0*time.Second, modifiedAttr.HeartbeatTimeout.AsDuration())
+			validate: func(t *testing.T, options *activitypb.ActivityOptions) {
+				require.Equal(t, 10*time.Second, options.ScheduleToCloseTimeout.AsDuration())
+				require.Equal(t, 10*time.Second, options.ScheduleToStartTimeout.AsDuration())
+				require.Equal(t, 10*time.Second, options.StartToCloseTimeout.AsDuration())
+				require.Equal(t, 0*time.Second, options.HeartbeatTimeout.AsDuration())
 			},
 		},
 		{
@@ -336,11 +341,11 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 			},
 			runTimeout: durationpb.New(0),
 			isErr:      false,
-			validate: func(t *testing.T, modifiedAttr *ModifiedActivityRequestAttributes) {
-				require.Equal(t, 10*time.Second, modifiedAttr.ScheduleToCloseTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, modifiedAttr.ScheduleToStartTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, modifiedAttr.StartToCloseTimeout.AsDuration())
-				require.Equal(t, 0*time.Second, modifiedAttr.HeartbeatTimeout.AsDuration())
+			validate: func(t *testing.T, options *activitypb.ActivityOptions) {
+				require.Equal(t, 10*time.Second, options.ScheduleToCloseTimeout.AsDuration())
+				require.Equal(t, 10*time.Second, options.ScheduleToStartTimeout.AsDuration())
+				require.Equal(t, 10*time.Second, options.StartToCloseTimeout.AsDuration())
+				require.Equal(t, 0*time.Second, options.HeartbeatTimeout.AsDuration())
 			},
 		},
 		{
@@ -353,11 +358,11 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 			},
 			runTimeout: durationpb.New(0),
 			isErr:      false,
-			validate: func(t *testing.T, modifiedAttr *ModifiedActivityRequestAttributes) {
-				require.Equal(t, 20*time.Second, modifiedAttr.ScheduleToCloseTimeout.AsDuration())
-				require.Equal(t, 20*time.Second, modifiedAttr.ScheduleToStartTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, modifiedAttr.StartToCloseTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, modifiedAttr.HeartbeatTimeout.AsDuration())
+			validate: func(t *testing.T, options *activitypb.ActivityOptions) {
+				require.Equal(t, 20*time.Second, options.ScheduleToCloseTimeout.AsDuration())
+				require.Equal(t, 20*time.Second, options.ScheduleToStartTimeout.AsDuration())
+				require.Equal(t, 10*time.Second, options.StartToCloseTimeout.AsDuration())
+				require.Equal(t, 10*time.Second, options.HeartbeatTimeout.AsDuration())
 			},
 		},
 		{
@@ -371,18 +376,18 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 			},
 			runTimeout: durationpb.New(10 * time.Second),
 			isErr:      false,
-			validate: func(t *testing.T, modifiedAttr *ModifiedActivityRequestAttributes) {
-				require.Equal(t, 10*time.Second, modifiedAttr.ScheduleToCloseTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, modifiedAttr.ScheduleToStartTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, modifiedAttr.StartToCloseTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, modifiedAttr.HeartbeatTimeout.AsDuration())
+			validate: func(t *testing.T, options *activitypb.ActivityOptions) {
+				require.Equal(t, 10*time.Second, options.ScheduleToCloseTimeout.AsDuration())
+				require.Equal(t, 10*time.Second, options.ScheduleToStartTimeout.AsDuration())
+				require.Equal(t, 10*time.Second, options.StartToCloseTimeout.AsDuration())
+				require.Equal(t, 10*time.Second, options.HeartbeatTimeout.AsDuration())
 			},
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			modifiedAttributes, err := ValidateActivityRequestAttributes(
+			err := ValidateAndNormalizeActivityAttributes(
 				defaultActivityID,
 				defaultActivityType,
 				getDefaultRetrySettings,
@@ -398,7 +403,7 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			tc.validate(t, modifiedAttributes)
+			tc.validate(t, tc.options)
 		})
 	}
 }

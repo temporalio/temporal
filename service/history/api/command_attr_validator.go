@@ -99,7 +99,7 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		attributes.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
-	modifiedAttributes, err := activity.ValidateActivityRequestAttributes(
+	err := activity.ValidateAndNormalizeActivityAttributes(
 		activityID,
 		activityType,
 		v.getDefaultActivityRetrySettings,
@@ -119,12 +119,6 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 	if err != nil {
 		return failedCause, err
 	}
-
-	// Update the command attributes with the adjusted timeouts
-	attributes.ScheduleToCloseTimeout = modifiedAttributes.ScheduleToCloseTimeout
-	attributes.ScheduleToStartTimeout = modifiedAttributes.ScheduleToStartTimeout
-	attributes.StartToCloseTimeout = modifiedAttributes.StartToCloseTimeout
-	attributes.HeartbeatTimeout = modifiedAttributes.HeartbeatTimeout
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }

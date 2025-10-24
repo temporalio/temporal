@@ -20,23 +20,10 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-type ModifiedActivityRequestAttributes struct {
-	ScheduleToStartTimeout *durationpb.Duration
-	StartToCloseTimeout    *durationpb.Duration
-	ScheduleToCloseTimeout *durationpb.Duration
-	HeartbeatTimeout       *durationpb.Duration
-}
-
-type ModifiedStandaloneActivityRequestAttributes struct {
-	requestID                 string
-	searchAttributesUnaliased *commonpb.SearchAttributes // Unaliased search attributes after validation
-}
-
-// ValidateActivityRequestAttributes validates the common activity request attributes. This validation is shared by
-// both standalone and embedded activities. It clones all timeout values from options before performing deductions to
-// avoid modifying the original options parameter. This ensures the input remains unchanged during validation
-// and all calculations are performed on local copies. Only after all deductions and validations
-// succeed are the final computed values assigned to modifiedAttributes.
+// ValidateAndNormalizeActivityAttributes validates and normalizes the common activity request attributes.
+// This validation is shared by both standalone and embedded activities.
+// IMPORTANT: this method mutates the input params; in cases where it's critical to maintain immutability
+// (i.e., when incoming request can potentially be retried), clone the params first before passing it in.
 //
 // The timeout normalization logic is as follows:
 // 1. If ScheduleToClose is set, fill in missing ScheduleToStart and StartToClose from ScheduleToClose
@@ -44,19 +31,7 @@ type ModifiedStandaloneActivityRequestAttributes struct {
 // 3. If neither ScheduleToClose nor StartToClose is set, return error
 // 4. Ensure all timeouts do not exceed runTimeout if runTimeout is set (>0)
 // 5. Ensure HeartbeatTimeout does not exceed StartToClose
-//
-// Parameters:
-//   - activityID: ID of the activity
-//   - activityType: Type of the activity
-//   - getDefaultActivityRetrySettings: Function to retrieve default retry settings for the namespace
-//   - maxIDLengthLimit: Maximum allowed length for activity IDs and types
-//   - namespaceID: ID of the namespace containing the activity
-//   - options: Activity options including timeouts, task queue, and retry policy
-//   - priority: Priority level for the activity task
-//   - runTimeout: Workflow run timeout. Set to durationpb.New(0) if not applicable
-//
-// Returns the modified/normalized timeout attributes or an error if validation fails.
-func ValidateActivityRequestAttributes(
+func ValidateAndNormalizeActivityAttributes(
 	activityID string,
 	activityType string,
 	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
@@ -65,65 +40,40 @@ func ValidateActivityRequestAttributes(
 	options *activitypb.ActivityOptions,
 	priority *commonpb.Priority,
 	runTimeout *durationpb.Duration,
-) (*ModifiedActivityRequestAttributes, error) {
+) error {
 	if err := tqid.NormalizeAndValidate(options.TaskQueue, "", maxIDLengthLimit); err != nil {
-		return nil, fmt.Errorf("invalid TaskQueue: %w. ActivityId=%s ActivityType=%s", err, activityID, activityType)
+		return fmt.Errorf("invalid TaskQueue: %w. ActivityId=%s ActivityType=%s", err, activityID, activityType)
 	}
 
 	if activityID == "" {
-		return nil, serviceerror.NewInvalidArgumentf("ActivityId is not set. ActivityType=%s", activityType)
+		return serviceerror.NewInvalidArgumentf("ActivityId is not set. ActivityType=%s", activityType)
 	}
 	if activityType == "" {
-		return nil, serviceerror.NewInvalidArgumentf("ActivityType is not set. ActivityID=%s", activityID)
+		return serviceerror.NewInvalidArgumentf("ActivityType is not set. ActivityID=%s", activityID)
 	}
 
 	if err := validateActivityRetryPolicy(namespaceID, options.RetryPolicy, getDefaultActivityRetrySettings); err != nil {
-		return nil, fmt.Errorf("invalid ActivityRetryPolicy: %w. ActivityId=%s ActivityType=%s", err, activityID, activityType)
+		return fmt.Errorf("invalid ActivityRetryPolicy: %w. ActivityId=%s ActivityType=%s", err, activityID, activityType)
 	}
 
 	if len(activityID) > maxIDLengthLimit {
-		return nil, serviceerror.NewInvalidArgumentf("ActivityId exceeds length limit. ActivityId=%s ActivityType=%s Length=%d Limit=%d",
+		return serviceerror.NewInvalidArgumentf("ActivityId exceeds length limit. ActivityId=%s ActivityType=%s Length=%d Limit=%d",
 			activityID, activityType, len(activityID), maxIDLengthLimit)
 	}
 	if len(activityType) > maxIDLengthLimit {
-		return nil, serviceerror.NewInvalidArgumentf("ActivityType exceeds length limit. ActivityId=%s ActivityType=%s Length=%d Limit=%d",
+		return serviceerror.NewInvalidArgumentf("ActivityType exceeds length limit. ActivityId=%s ActivityType=%s Length=%d Limit=%d",
 			activityID, activityType, len(activityType), maxIDLengthLimit)
 	}
 
-	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
-	if err := timestamp.ValidateAndCapProtoDuration(options.GetScheduleToCloseTimeout()); err != nil {
-		return nil, serviceerror.NewInvalidArgumentf("Invalid ScheduleToCloseTimeout: % ActivityId=%s ActivityType=%s",
-			err, activityID, activityType)
-	}
-	if err := timestamp.ValidateAndCapProtoDuration(options.GetScheduleToStartTimeout()); err != nil {
-		return nil, serviceerror.NewInvalidArgumentf("Invalid ScheduleToStartTimeout: % ActivityId=%s ActivityType=%s",
-			err, activityID, activityType)
-	}
-	if err := timestamp.ValidateAndCapProtoDuration(options.GetStartToCloseTimeout()); err != nil {
-		return nil, serviceerror.NewInvalidArgumentf("Invalid StartToCloseTimeout: % ActivityId=%s ActivityType=%s",
-			err, activityID, activityType)
-	}
-	if err := timestamp.ValidateAndCapProtoDuration(options.GetHeartbeatTimeout()); err != nil {
-		return nil, serviceerror.NewInvalidArgumentf("Invalid HeartbeatTimeout: % ActivityId=%s ActivityType=%s",
-			err, activityID, activityType)
-	}
-
 	if err := priorities.Validate(priority); err != nil {
-		return nil, serviceerror.NewInvalidArgumentf("Invalid Priorities: % ActivityId=%s ActivityType=%s",
+		return serviceerror.NewInvalidArgumentf("Invalid Priorities: %v ActivityId=%s ActivityType=%s",
 			err, activityID, activityType)
 	}
 
-	modifiedAttributes := &ModifiedActivityRequestAttributes{}
-
-	if err := normalizeAndValidateTimeouts(activityID,
+	return normalizeAndValidateTimeouts(activityID,
 		activityType,
 		runTimeout,
-		options,
-		modifiedAttributes); err != nil {
-		return nil, err
-	}
-
-	return modifiedAttributes, nil
+		options)
 }
 
 func validateActivityRetryPolicy(
@@ -145,35 +95,45 @@ func normalizeAndValidateTimeouts(
 	activityType string,
 	runTimeout *durationpb.Duration,
 	options *activitypb.ActivityOptions,
-	modifiedAttributes *ModifiedActivityRequestAttributes,
 ) error {
+	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
+	if err := timestamp.ValidateAndCapProtoDuration(options.GetScheduleToCloseTimeout()); err != nil {
+		return serviceerror.NewInvalidArgumentf("Invalid ScheduleToCloseTimeout: %v ActivityId=%s ActivityType=%s",
+			err, activityID, activityType)
+	}
+	if err := timestamp.ValidateAndCapProtoDuration(options.GetScheduleToStartTimeout()); err != nil {
+		return serviceerror.NewInvalidArgumentf("Invalid ScheduleToStartTimeout: %v ActivityId=%s ActivityType=%s",
+			err, activityID, activityType)
+	}
+	if err := timestamp.ValidateAndCapProtoDuration(options.GetStartToCloseTimeout()); err != nil {
+		return serviceerror.NewInvalidArgumentf("Invalid StartToCloseTimeout: %v ActivityId=%s ActivityType=%s",
+			err, activityID, activityType)
+	}
+	if err := timestamp.ValidateAndCapProtoDuration(options.GetHeartbeatTimeout()); err != nil {
+		return serviceerror.NewInvalidArgumentf("Invalid HeartbeatTimeout: %v ActivityId=%s ActivityType=%s",
+			err, activityID, activityType)
+	}
+
 	scheduleToCloseSet := options.GetScheduleToCloseTimeout().AsDuration() > 0
 	scheduleToStartSet := options.GetScheduleToStartTimeout().AsDuration() > 0
 	startToCloseSet := options.GetStartToCloseTimeout().AsDuration() > 0
 
-	// The logic to set the timeouts is "cumulative", so we must clone to local variables to avoid modifying the
-	// original options until all deductions are done.
-	currentScheduleToClose := common.CloneProto(options.GetScheduleToCloseTimeout())
-	currentStartToClose := common.CloneProto(options.GetStartToCloseTimeout())
-	currentScheduleToStart := common.CloneProto(options.GetScheduleToStartTimeout())
-	currentHeartbeat := common.CloneProto(options.GetHeartbeatTimeout())
-
 	if scheduleToCloseSet {
 		if scheduleToStartSet {
-			currentScheduleToStart = timestamp.MinDurationPtr(currentScheduleToStart, currentScheduleToClose)
+			options.ScheduleToStartTimeout = timestamp.MinDurationPtr(options.ScheduleToStartTimeout, options.ScheduleToCloseTimeout)
 		} else {
-			currentScheduleToStart = currentScheduleToClose
+			options.ScheduleToStartTimeout = options.ScheduleToCloseTimeout
 		}
 		if startToCloseSet {
-			currentStartToClose = timestamp.MinDurationPtr(currentStartToClose, currentScheduleToClose)
+			options.StartToCloseTimeout = timestamp.MinDurationPtr(options.StartToCloseTimeout, options.ScheduleToCloseTimeout)
 		} else {
-			currentStartToClose = currentScheduleToClose
+			options.StartToCloseTimeout = options.ScheduleToCloseTimeout
 		}
 	} else if startToCloseSet {
 		// We are in !validScheduleToClose due to the first if above
-		currentScheduleToClose = runTimeout
+		options.ScheduleToCloseTimeout = runTimeout
 		if !scheduleToStartSet {
-			currentScheduleToStart = runTimeout
+			options.ScheduleToStartTimeout = runTimeout
 		}
 	} else {
 		// Deduction failed as there's not enough information to fill in missing timeouts.
@@ -183,49 +143,28 @@ func normalizeAndValidateTimeouts(
 	// ensure activity timeout never larger than workflow timeout
 	if runTimeout.AsDuration() > 0 {
 		runTimeoutDur := runTimeout.AsDuration()
-		if currentScheduleToClose.AsDuration() > runTimeoutDur {
-			currentScheduleToClose = runTimeout
+		if options.ScheduleToCloseTimeout.AsDuration() > runTimeoutDur {
+			options.ScheduleToCloseTimeout = runTimeout
 		}
-		if currentScheduleToStart.AsDuration() > runTimeoutDur {
-			currentScheduleToStart = runTimeout
+		if options.ScheduleToStartTimeout.AsDuration() > runTimeoutDur {
+			options.ScheduleToStartTimeout = runTimeout
 		}
-		if currentStartToClose.AsDuration() > runTimeoutDur {
-			currentStartToClose = runTimeout
+		if options.StartToCloseTimeout.AsDuration() > runTimeoutDur {
+			options.StartToCloseTimeout = runTimeout
 		}
-		if currentHeartbeat.AsDuration() > runTimeoutDur {
-			currentHeartbeat = runTimeout
+		if options.HeartbeatTimeout.AsDuration() > runTimeoutDur {
+			options.HeartbeatTimeout = runTimeout
 		}
 	}
 
-	currentHeartbeat = timestamp.MinDurationPtr(currentHeartbeat, currentStartToClose)
-
-	modifiedAttributes.ScheduleToCloseTimeout = currentScheduleToClose
-	modifiedAttributes.ScheduleToStartTimeout = currentScheduleToStart
-	modifiedAttributes.StartToCloseTimeout = currentStartToClose
-	modifiedAttributes.HeartbeatTimeout = currentHeartbeat
+	options.HeartbeatTimeout = timestamp.MinDurationPtr(options.HeartbeatTimeout, options.StartToCloseTimeout)
 
 	return nil
 }
 
-// ValidateStandaloneActivity validates the standalone activity specific attributes. It will return the normalized/modified
-// attributes, letting the caller decide how to handle them.
-//
-// Parameters:
-//   - activityID: Unique identifier for the activity
-//   - activityType: Type/name of the activity being scheduled
-//   - blobSizeLimitError: Function to retrieve the error threshold for input size per namespace
-//   - blobSizeLimitWarn: Function to retrieve the warning threshold for input size per namespace
-//   - inputSizeBytes: Size of the activity input in bytes
-//   - logger: Logger instance for recording warnings and errors
-//   - maxIDLengthLimit: Maximum allowed length for activity IDs and request IDs
-//   - namespaceName: Name of the namespace containing the activity
-//   - requestID: Client-provided request ID for idempotency (auto-generated if empty)
-//   - searchAttributes: Search attributes to validate and unalias
-//   - saMapperProvider: Provider for mapping aliased search attribute names
-//   - saValidator: Validator for search attributes
-//
-// Returns the modified attributes (request ID and unaliased search attributes) if they have been sanitized or an error
-// if validation fails.
+// ValidateStandaloneActivity validates and normalizes the standalone activity specific attributes.
+// IMPORTANT: this method mutates the input params; in cases where it's critical to maintain immutability
+// (i.e., when incoming request can potentially be retried), clone the params first before passing it in.
 func ValidateStandaloneActivity(
 	activityID string,
 	activityType string,
@@ -235,15 +174,13 @@ func ValidateStandaloneActivity(
 	logger log.Logger,
 	maxIDLengthLimit int,
 	namespaceName string,
-	requestID string,
+	requestID *string,
 	searchAttributes *commonpb.SearchAttributes,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
-) (*ModifiedStandaloneActivityRequestAttributes, error) {
-	modifiedAttributes := &ModifiedStandaloneActivityRequestAttributes{}
-
-	if err := validateRequestID(requestID, maxIDLengthLimit, modifiedAttributes); err != nil {
-		return nil, err
+) error {
+	if err := validateRequestID(requestID, maxIDLengthLimit); err != nil {
+		return err
 	}
 
 	if err := validateInputSize(
@@ -254,30 +191,29 @@ func ValidateStandaloneActivity(
 		inputSizeBytes,
 		logger,
 		namespaceName); err != nil {
-		return nil, err
+		return err
 	}
 
 	if searchAttributes != nil {
 		if err := validateAndNormalizeSearchAttributes(
-			modifiedAttributes,
 			namespaceName,
 			searchAttributes,
 			saMapperProvider,
 			saValidator); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	return modifiedAttributes, nil
+	return nil
 }
 
-func validateRequestID(requestID string, maxIDLengthLimit int, modifiedAttributes *ModifiedStandaloneActivityRequestAttributes) error {
-	if requestID == "" {
+func validateRequestID(requestID *string, maxIDLengthLimit int) error {
+	if *requestID == "" {
 		// For easy direct API use, we default the request ID here but expect all SDKs and other auto-retrying clients to set it
-		modifiedAttributes.requestID = uuid.New().String()
+		*requestID = uuid.New().String()
 	}
 
-	if len(requestID) > maxIDLengthLimit || len(modifiedAttributes.requestID) > maxIDLengthLimit {
+	if len(*requestID) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
 	}
 
@@ -312,26 +248,21 @@ func validateInputSize(
 }
 
 func validateAndNormalizeSearchAttributes(
-	modifiedAttributes *ModifiedStandaloneActivityRequestAttributes,
 	namespaceName string,
 	searchAttributes *commonpb.SearchAttributes,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) error {
-	unaliasedSaa, err := searchattribute.UnaliasFields(saMapperProvider, searchAttributes, namespaceName)
+	unaliased, err := searchattribute.UnaliasFields(saMapperProvider, searchAttributes, namespaceName)
 	if err != nil {
 		return err
 	}
 
-	if err := saValidator.Validate(unaliasedSaa, namespaceName); err != nil {
+	searchAttributes.IndexedFields = unaliased.IndexedFields
+
+	if err := saValidator.Validate(searchAttributes, namespaceName); err != nil {
 		return err
 	}
 
-	if err := saValidator.ValidateSize(unaliasedSaa, namespaceName); err != nil {
-		return err
-	}
-
-	modifiedAttributes.searchAttributesUnaliased = unaliasedSaa
-
-	return nil
+	return saValidator.ValidateSize(searchAttributes, namespaceName)
 }
