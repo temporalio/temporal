@@ -5,6 +5,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 // CHASM Search Attribute User Guide:
@@ -167,23 +168,7 @@ func newSearchAttributeFieldKeywordList(index int) SearchAttributeFieldKeywordLi
 
 func resolveFieldName(valueType enumspb.IndexedValueType, index int) string {
 	// Columns are named like TemporalBool01, TemporalDatetime01, TemporalDouble01, TemporalInt01.
-	suffix := fmt.Sprintf("%02d", index)
-	switch valueType {
-	case enumspb.INDEXED_VALUE_TYPE_BOOL:
-		return "TemporalBool" + suffix
-	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
-		return "TemporalDatetime" + suffix
-	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
-		return "TemporalDouble" + suffix
-	case enumspb.INDEXED_VALUE_TYPE_INT:
-		return "TemporalInt" + suffix
-	case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
-		return "TemporalKeyword" + suffix
-	case enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
-		return "TemporalKeywordList" + suffix
-	default:
-		return ""
-	}
+	return fmt.Sprintf("%s%s%02d", searchattribute.ReservedPrefix, valueType.String(), index)
 }
 
 // GetAlias returns the search attribute alias.
