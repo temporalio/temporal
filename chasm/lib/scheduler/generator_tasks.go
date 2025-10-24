@@ -25,13 +25,19 @@ type (
 	}
 
 	GeneratorTaskExecutor struct {
-		GeneratorTaskExecutorOptions
+		config         *Config
+		metricsHandler metrics.Handler
+		baseLogger     log.Logger
+		SpecProcessor  SpecProcessor
 	}
 )
 
 func NewGeneratorTaskExecutor(opts GeneratorTaskExecutorOptions) *GeneratorTaskExecutor {
 	return &GeneratorTaskExecutor{
-		GeneratorTaskExecutorOptions: opts,
+		config:         opts.Config,
+		metricsHandler: opts.MetricsHandler,
+		baseLogger:     opts.BaseLogger,
+		SpecProcessor:  opts.SpecProcessor,
 	}
 }
 
@@ -47,7 +53,7 @@ func (g *GeneratorTaskExecutor) Execute(
 			serviceerror.NewInternal("scheduler tree missing node"),
 			err)
 	}
-	logger := newTaggedLogger(g.BaseLogger, scheduler)
+	logger := newTaggedLogger(g.baseLogger, scheduler)
 
 	invoker, err := scheduler.Invoker.Get(ctx)
 	if err != nil {
@@ -101,7 +107,7 @@ func (g *GeneratorTaskExecutor) Execute(
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
 
 	// Check if the schedule has gone idle.
-	idleTimeTotal := g.Config.Tweakables(scheduler.Namespace).IdleTime
+	idleTimeTotal := g.config.Tweakables(scheduler.Namespace).IdleTime
 	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, result.NextWakeupTime)
 	if isIdle {
 		// Schedule is complete, no need for another buffer task. We keep the schedule's

@@ -44,11 +44,19 @@ type (
 	}
 
 	InvokerExecuteTaskExecutor struct {
-		InvokerTaskExecutorOptions
+		config         *Config
+		metricsHandler metrics.Handler
+		baseLogger     log.Logger
+		historyClient  resource.HistoryClient
+		frontendClient workflowservice.WorkflowServiceClient
 	}
 
 	InvokerProcessBufferTaskExecutor struct {
-		InvokerTaskExecutorOptions
+		config         *Config
+		metricsHandler metrics.Handler
+		baseLogger     log.Logger
+		historyClient  resource.HistoryClient
+		frontendClient workflowservice.WorkflowServiceClient
 	}
 
 	// Per-task context.
@@ -84,13 +92,21 @@ var (
 
 func NewInvokerExecuteTaskExecutor(opts InvokerTaskExecutorOptions) *InvokerExecuteTaskExecutor {
 	return &InvokerExecuteTaskExecutor{
-		InvokerTaskExecutorOptions: opts,
+		config:         opts.Config,
+		metricsHandler: opts.MetricsHandler,
+		baseLogger:     opts.BaseLogger,
+		historyClient:  opts.HistoryClient,
+		frontendClient: opts.FrontendClient,
 	}
 }
 
 func NewInvokerProcessBufferTaskExecutor(opts InvokerTaskExecutorOptions) *InvokerProcessBufferTaskExecutor {
 	return &InvokerProcessBufferTaskExecutor{
-		InvokerTaskExecutorOptions: opts,
+		config:         opts.Config,
+		metricsHandler: opts.MetricsHandler,
+		baseLogger:     opts.BaseLogger,
+		historyClient:  opts.HistoryClient,
+		frontendClient: opts.FrontendClient,
 	}
 }
 
@@ -163,7 +179,7 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 		return fmt.Errorf("failed to read component: %w", err)
 	}
 
-	logger := newTaggedLogger(e.BaseLogger, scheduler)
+	logger := newTaggedLogger(e.baseLogger, scheduler)
 
 	// Terminate, cancel, and start workflows. The result struct contains the
 	// complete outcome of all requests executed in a single batch.
@@ -237,7 +253,7 @@ func (e *InvokerExecuteTaskExecutor) cancelWorkflows(
 
 			if err != nil {
 				logger.Error("failed to cancel workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
-				e.MetricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
+				e.metricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
 			}
 
 			// Cancels are only attempted once.
@@ -274,7 +290,7 @@ func (e *InvokerExecuteTaskExecutor) terminateWorkflows(
 
 			if err != nil {
 				logger.Error("failed to terminate workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
-				e.MetricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
+				e.metricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
 			}
 
 			// Terminates are only attempted once.
@@ -295,7 +311,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflows(
 	lastCompletionState *schedulerpb.LastCompletionResult,
 	callback *commonpb.Callback,
 ) (result executeResult, startResults []*schedulepb.ScheduleActionResult) {
-	metricsWithTag := e.MetricsHandler.WithTags(
+	metricsWithTag := e.metricsHandler.WithTags(
 		metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
 
 	var wg sync.WaitGroup
@@ -479,7 +495,7 @@ func (e *InvokerExecuteTaskExecutor) applyBackoff(start *schedulespb.BufferedSta
 	} else {
 		// Otherwise, use the backoff policy. Elapsed time is left at 0 because we bound
 		// on number of attempts.
-		delay = e.Config.RetryPolicy().ComputeNextDelay(0, int(start.Attempt), nil)
+		delay = e.config.RetryPolicy().ComputeNextDelay(0, int(start.Attempt), nil)
 	}
 
 	start.BackoffTime = timestamppb.New(time.Now().Add(delay))
@@ -488,7 +504,7 @@ func (e *InvokerExecuteTaskExecutor) applyBackoff(start *schedulespb.BufferedSta
 // startWorkflowDeadline returns the latest time at which a buffered workflow
 // should be started, instead of dropped. The deadline puts an upper bound on
 // the number of retry attempts per buffered start.
-func (e *InvokerTaskExecutorOptions) startWorkflowDeadline(
+func (e *InvokerProcessBufferTaskExecutor) startWorkflowDeadline(
 	scheduler *Scheduler,
 	start *schedulespb.BufferedStart,
 ) time.Time {
@@ -499,7 +515,7 @@ func (e *InvokerTaskExecutorOptions) startWorkflowDeadline(
 	} else {
 		// Set request deadline based on the schedule's catchup window, which is the
 		// latest time that it's acceptable to start this workflow.
-		tweakables := e.Config.Tweakables(scheduler.Namespace)
+		tweakables := e.config.Tweakables(scheduler.Namespace)
 		timeout = catchupWindow(scheduler, tweakables)
 	}
 
@@ -537,6 +553,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
+	// TODO - set last completion result/continued failure (watcher)
 	// TODO - set search attributes
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		CompletionCallbacks:      []*commonpb.Callback{callback},
@@ -568,7 +585,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 		}
 	}
 
-	result, err := e.FrontendClient.StartWorkflowExecution(ctx, request)
+	result, err := e.frontendClient.StartWorkflowExecution(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -576,7 +593,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 
 	// Record time taken from action eligible to workflow started.
 	if !start.Manual {
-		e.MetricsHandler.
+		e.metricsHandler.
 			Timer(metrics.ScheduleActionDelay.Name()).
 			Record(actualStartTime.Sub(start.DesiredTime.AsTime()))
 	}
@@ -607,7 +624,7 @@ func (e *InvokerExecuteTaskExecutor) terminateWorkflow(
 			FirstExecutionRunId: target.RunId,
 		},
 	}
-	_, err := e.HistoryClient.TerminateWorkflowExecution(ctx, request)
+	_, err := e.historyClient.TerminateWorkflowExecution(ctx, request)
 	return err
 }
 
@@ -626,7 +643,7 @@ func (e *InvokerExecuteTaskExecutor) cancelWorkflow(
 			FirstExecutionRunId: target.RunId,
 		},
 	}
-	_, err := e.HistoryClient.RequestCancelWorkflowExecution(ctx, request)
+	_, err := e.historyClient.RequestCancelWorkflowExecution(ctx, request)
 	return err
 }
 
@@ -671,7 +688,7 @@ func (e *InvokerExecuteTaskExecutor) newInvokerTaskExecutorContext(
 	ctx context.Context,
 	scheduler *Scheduler,
 ) invokerTaskExecutorContext {
-	tweakables := e.Config.Tweakables(scheduler.Namespace)
+	tweakables := e.config.Tweakables(scheduler.Namespace)
 	maxActions := tweakables.MaxActionsPerExecution
 
 	return invokerTaskExecutorContext{
