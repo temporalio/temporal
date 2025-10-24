@@ -33,7 +33,7 @@ type Activity struct {
 }
 
 // LifecycleState TODO: we need to add more lifecycle states to better categorize some activity states, particulary for terminated/canceled.
-func (a Activity) LifecycleState(context chasm.Context) chasm.LifecycleState {
+func (a Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch a.Status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
 		return chasm.LifecycleStateCompleted
