@@ -95,7 +95,6 @@ func setupSchedulerForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableCon
 			TransitionCount:          1,
 		}
 	}
-	nodeBackend.HandleIsWorkflow = func() bool { return false }
 
 	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger)
 	ctx := chasm.NewMutableContext(context.Background(), node)

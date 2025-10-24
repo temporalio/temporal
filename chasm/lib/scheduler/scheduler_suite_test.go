@@ -68,7 +68,7 @@ func (s *schedulerSuite) SetupTest() {
 		HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
 			return &persistencespb.VersionedTransition{
 				NamespaceFailoverVersion: 1,
-				TransitionCount:          2,
+				TransitionCount:          1,
 			}
 		},
 	}

@@ -1824,6 +1824,10 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	chasmCtx := NewMutableContext(context.Background(), node)
 	_, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
+	_, err = node.CloseTransaction()
+	s.NoError(err)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, s.nodeBackend.LastUpdateWorkflowState())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, s.nodeBackend.LastUpdateWorkflowStatus())
 
 	// Test force terminate case
 	_, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
@@ -1831,15 +1835,25 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	node.terminated = true
 	_, err = node.CloseTransaction()
 	s.NoError(err)
-	node.terminated = false
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, s.nodeBackend.LastUpdateWorkflowStatus())
 
+	node.terminated = false
 	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).Complete(chasmCtx)
+	_, err = node.CloseTransaction()
+	s.NoError(err)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, s.nodeBackend.LastUpdateWorkflowStatus())
 
 	tc, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).Fail(chasmCtx)
+	_, err = node.CloseTransaction()
+	s.NoError(err)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, s.nodeBackend.LastUpdateWorkflowStatus())
 }
 
 func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChanged() {
@@ -2367,8 +2381,8 @@ func (s *nodeSuite) TestTerminate() {
 	_, err := node.CloseTransaction()
 	s.NoError(err)
 
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, s.nodeBackend.UpdateCalls[0].State)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, s.nodeBackend.UpdateCalls[0].Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, s.nodeBackend.LastUpdateWorkflowState())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, s.nodeBackend.LastUpdateWorkflowStatus())
 
 	// Then terminate the node and verify only that node will be in the mutation.
 	err = node.Terminate(TerminateComponentRequest{})
@@ -2379,6 +2393,9 @@ func (s *nodeSuite) TestTerminate() {
 	s.NoError(err)
 	s.Len(mutations.UpdatedNodes, 1)
 	s.Empty(mutations.DeletedNodes)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, s.nodeBackend.LastUpdateWorkflowStatus())
+
 }
 
 func (s *nodeSuite) preorderAndAssertParent(
@@ -2477,7 +2494,6 @@ func (s *nodeSuite) testComponentTree() *Node {
 }
 
 func (s *nodeSuite) TestExecuteImmediatePureTask() {
-	// tv := testvars.New(s.T())
 	root := s.testComponentTree()
 
 	mutations, err := root.CloseTransaction()

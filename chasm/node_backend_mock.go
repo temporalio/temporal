@@ -13,8 +13,8 @@ import (
 )
 
 // MockNodeBackend is a lightweight manual mock for the NodeBackend interface.
-// Methods may be stubbed by assigning the corresponding Handle fields. Call history
-// is recorded in the struct fields (thread-safe).
+// Methods may be stubbed by assigning the corresponding Handle fields. Update call history is recorded in the struct
+// fields (thread-safe).
 type MockNodeBackend struct {
 	// Optional function overrides. If nil, methods return zero-values.
 	HandleGetExecutionState          func() *persistencespb.WorkflowExecutionState
@@ -115,6 +115,24 @@ func (m *MockNodeBackend) UpdateWorkflowStateStatus(
 	m.mu.Unlock()
 
 	return false, nil
+}
+
+func (m *MockNodeBackend) LastUpdateWorkflowState() enumsspb.WorkflowExecutionState {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.UpdateCalls) == 0 {
+		return enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED
+	}
+	return m.UpdateCalls[len(m.UpdateCalls)-1].State
+}
+
+func (m *MockNodeBackend) LastUpdateWorkflowStatus() enumspb.WorkflowExecutionStatus {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.UpdateCalls) == 0 {
+		return enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED
+	}
+	return m.UpdateCalls[len(m.UpdateCalls)-1].Status
 }
 
 func (m *MockNodeBackend) IsWorkflow() bool {
