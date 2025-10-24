@@ -424,11 +424,10 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	if err != nil {
 		return nil, false, err
 	}
-	nsName := namespaceEntry.Name()
 
-	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, nsName)
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, namespaceEntry.Name())
 	tqConfig.loadCause = loadCause
-	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(nsName, partition, tqConfig)
+	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(namespaceEntry, e.clusterMeta.GetCurrentClusterName(), partition, tqConfig)
 	onFatalErr := func(cause unloadCause) { newPM.unloadFromEngine(cause) }
 	onUserDataChanged := func() { newPM.userDataChanged() }
 	userDataManager := newUserDataManager(
@@ -471,26 +470,34 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 }
 
 func (e *matchingEngineImpl) loggerAndMetricsForPartition(
-	nsName namespace.Name,
+	nsEntry *namespace.Namespace,
+	clusterName string,
 	partition tqid.Partition,
 	tqConfig *taskQueueConfig,
 ) (log.Logger, log.Logger, metrics.Handler) {
+	nsName := nsEntry.Name().String()
+	var nsState string
+	if nsEntry.ActiveInCluster(clusterName) {
+		nsState = metrics.ActiveNamespaceStateTagValue
+	} else {
+		nsState = metrics.PassiveNamespaceStateTagValue
+	}
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
-		tag.WorkflowNamespace(nsName.String()))
+		tag.WorkflowNamespace(nsName))
 	throttledLogger := log.With(e.throttledLogger,
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
-		tag.WorkflowNamespace(nsName.String()))
+		tag.WorkflowNamespace(nsName))
 	metricsHandler := metrics.GetPerTaskQueuePartitionIDScope(
 		e.metricsHandler,
-		nsName.String(),
+		nsName,
 		partition,
 		tqConfig.BreakdownMetricsByTaskQueue(),
 		tqConfig.BreakdownMetricsByPartition(),
 		metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
-	)
+	).WithTags(metrics.NamespaceStateTag(nsState))
 	return logger, throttledLogger, metricsHandler
 }
 
