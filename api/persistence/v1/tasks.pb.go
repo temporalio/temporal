@@ -101,8 +101,10 @@ type TaskInfo struct {
 	// TaskVersionDirective, which is unversioned.)
 	VersionDirective *v11.TaskVersionDirective `protobuf:"bytes,8,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
 	// Stamp field allows to differentiate between different instances of the same task
-	Stamp         int32         `protobuf:"varint,9,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	Priority      *v12.Priority `protobuf:"bytes,10,opt,name=priority,proto3" json:"priority,omitempty"`
+	Stamp    int32         `protobuf:"varint,9,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	Priority *v12.Priority `protobuf:"bytes,10,opt,name=priority,proto3" json:"priority,omitempty"`
+	// Reference to any chasm component associated with this task
+	ComponentRef  *ChasmComponentRef `protobuf:"bytes,11,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -203,6 +205,13 @@ func (x *TaskInfo) GetStamp() int32 {
 func (x *TaskInfo) GetPriority() *v12.Priority {
 	if x != nil {
 		return x.Priority
+	}
+	return nil
+}
+
+func (x *TaskInfo) GetComponentRef() *ChasmComponentRef {
+	if x != nil {
+		return x.ComponentRef
 	}
 	return nil
 }
@@ -510,11 +519,11 @@ var File_temporal_server_api_persistence_v1_tasks_proto protoreflect.FileDescrip
 
 const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	".temporal/server/api/persistence/v1/tasks.proto\x12\"temporal.server.api.persistence.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a*temporal/server/api/clock/v1/message.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\"\x8b\x01\n" +
+	".temporal/server/api/persistence/v1/tasks.proto\x12\"temporal.server.api.persistence.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a*temporal/server/api/clock/v1/message.proto\x1a.temporal/server/api/persistence/v1/chasm.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\"\x8b\x01\n" +
 	"\x11AllocatedTaskInfo\x12@\n" +
 	"\x04data\x18\x01 \x01(\v2,.temporal.server.api.persistence.v1.TaskInfoR\x04data\x12\x1b\n" +
 	"\ttask_pass\x18\x03 \x01(\x03R\btaskPass\x12\x17\n" +
-	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\x87\x04\n" +
+	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\xe3\x04\n" +
 	"\bTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -529,7 +538,8 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\x11version_directive\x18\b \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12\x14\n" +
 	"\x05stamp\x18\t \x01(\x05R\x05stamp\x12<\n" +
 	"\bpriority\x18\n" +
-	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\"\xef\x03\n" +
+	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12Z\n" +
+	"\rcomponent_ref\x18\v \x01(\v25.temporal.server.api.persistence.v1.ChasmComponentRefR\fcomponentRef\"\xef\x03\n" +
 	"\rTaskQueueInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12A\n" +
@@ -577,9 +587,10 @@ var file_temporal_server_api_persistence_v1_tasks_proto_goTypes = []any{
 	(*v1.VectorClock)(nil),           // 7: temporal.server.api.clock.v1.VectorClock
 	(*v11.TaskVersionDirective)(nil), // 8: temporal.server.api.taskqueue.v1.TaskVersionDirective
 	(*v12.Priority)(nil),             // 9: temporal.api.common.v1.Priority
-	(v13.TaskQueueType)(0),           // 10: temporal.api.enums.v1.TaskQueueType
-	(v13.TaskQueueKind)(0),           // 11: temporal.api.enums.v1.TaskQueueKind
-	(*v11.FairLevel)(nil),            // 12: temporal.server.api.taskqueue.v1.FairLevel
+	(*ChasmComponentRef)(nil),        // 10: temporal.server.api.persistence.v1.ChasmComponentRef
+	(v13.TaskQueueType)(0),           // 11: temporal.api.enums.v1.TaskQueueType
+	(v13.TaskQueueKind)(0),           // 12: temporal.api.enums.v1.TaskQueueKind
+	(*v11.FairLevel)(nil),            // 13: temporal.server.api.taskqueue.v1.FairLevel
 }
 var file_temporal_server_api_persistence_v1_tasks_proto_depIdxs = []int32{
 	1,  // 0: temporal.server.api.persistence.v1.AllocatedTaskInfo.data:type_name -> temporal.server.api.persistence.v1.TaskInfo
@@ -588,20 +599,21 @@ var file_temporal_server_api_persistence_v1_tasks_proto_depIdxs = []int32{
 	7,  // 3: temporal.server.api.persistence.v1.TaskInfo.clock:type_name -> temporal.server.api.clock.v1.VectorClock
 	8,  // 4: temporal.server.api.persistence.v1.TaskInfo.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
 	9,  // 5: temporal.server.api.persistence.v1.TaskInfo.priority:type_name -> temporal.api.common.v1.Priority
-	10, // 6: temporal.server.api.persistence.v1.TaskQueueInfo.task_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	11, // 7: temporal.server.api.persistence.v1.TaskQueueInfo.kind:type_name -> temporal.api.enums.v1.TaskQueueKind
-	6,  // 8: temporal.server.api.persistence.v1.TaskQueueInfo.expiry_time:type_name -> google.protobuf.Timestamp
-	6,  // 9: temporal.server.api.persistence.v1.TaskQueueInfo.last_update_time:type_name -> google.protobuf.Timestamp
-	3,  // 10: temporal.server.api.persistence.v1.TaskQueueInfo.subqueues:type_name -> temporal.server.api.persistence.v1.SubqueueInfo
-	4,  // 11: temporal.server.api.persistence.v1.SubqueueInfo.key:type_name -> temporal.server.api.persistence.v1.SubqueueKey
-	12, // 12: temporal.server.api.persistence.v1.SubqueueInfo.fair_ack_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
-	12, // 13: temporal.server.api.persistence.v1.SubqueueInfo.fair_max_read_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
-	6,  // 14: temporal.server.api.persistence.v1.TaskKey.fire_time:type_name -> google.protobuf.Timestamp
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	10, // 6: temporal.server.api.persistence.v1.TaskInfo.component_ref:type_name -> temporal.server.api.persistence.v1.ChasmComponentRef
+	11, // 7: temporal.server.api.persistence.v1.TaskQueueInfo.task_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	12, // 8: temporal.server.api.persistence.v1.TaskQueueInfo.kind:type_name -> temporal.api.enums.v1.TaskQueueKind
+	6,  // 9: temporal.server.api.persistence.v1.TaskQueueInfo.expiry_time:type_name -> google.protobuf.Timestamp
+	6,  // 10: temporal.server.api.persistence.v1.TaskQueueInfo.last_update_time:type_name -> google.protobuf.Timestamp
+	3,  // 11: temporal.server.api.persistence.v1.TaskQueueInfo.subqueues:type_name -> temporal.server.api.persistence.v1.SubqueueInfo
+	4,  // 12: temporal.server.api.persistence.v1.SubqueueInfo.key:type_name -> temporal.server.api.persistence.v1.SubqueueKey
+	13, // 13: temporal.server.api.persistence.v1.SubqueueInfo.fair_ack_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
+	13, // 14: temporal.server.api.persistence.v1.SubqueueInfo.fair_max_read_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
+	6,  // 15: temporal.server.api.persistence.v1.TaskKey.fire_time:type_name -> google.protobuf.Timestamp
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_tasks_proto_init() }
@@ -609,6 +621,7 @@ func file_temporal_server_api_persistence_v1_tasks_proto_init() {
 	if File_temporal_server_api_persistence_v1_tasks_proto != nil {
 		return
 	}
+	file_temporal_server_api_persistence_v1_chasm_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

@@ -218,6 +218,36 @@ func (c *clientImpl) GetReplicationStatus(
 	return response, nil
 }
 
+func (c *clientImpl) RecordActivityTaskStarted(
+	ctx context.Context,
+	request *historyservice.RecordActivityTaskStartedRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.RecordActivityTaskStartedResponse, error) {
+	var shardID int32
+	componentRef := request.GetComponentRef()
+
+	// For Chasm components we need to route the shard based on business ID. Note that shardIDFromWorkflowID simply
+	// calculates the hash from the ID so it works for both workflowID and businessID.
+	if componentRef != nil {
+		shardID = c.shardIDFromWorkflowID(componentRef.GetNamespaceId(), componentRef.GetBusinessId())
+	} else {
+		shardID = c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
+	}
+
+	var response *historyservice.RecordActivityTaskStartedResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.RecordActivityTaskStarted(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) StreamWorkflowReplicationMessages(
 	ctx context.Context,
 	opts ...grpc.CallOption,

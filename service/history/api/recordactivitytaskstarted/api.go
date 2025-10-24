@@ -7,11 +7,14 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -42,6 +45,9 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 ) (resp *historyservice.RecordActivityTaskStartedResponse, retError error) {
+	if activityRefProto := request.GetComponentRef(); activityRefProto != nil {
+		return handleChasmActivityStarted(ctx, activityRefProto, request)
+	}
 
 	var err error
 	response := &historyservice.RecordActivityTaskStartedResponse{}
@@ -99,6 +105,61 @@ func Invoke(
 	}
 
 	return response, err
+}
+
+func handleChasmActivityStarted(
+	ctx context.Context,
+	activityRefProto *persistencespb.ChasmComponentRef,
+	request *historyservice.RecordActivityTaskStartedRequest,
+) (*historyservice.RecordActivityTaskStartedResponse, error) {
+	activityRef := chasm.ProtoRefToComponentRef(activityRefProto)
+
+	updatedActivity, err := activity.HandleRecordActivityTaskStarted(
+		ctx, activityRef, request.GetVersionDirective(), request.GetPollRequest().GetIdentity())
+	if err != nil {
+		return nil, err
+	}
+
+	requestData, err := activity.GetActivityRequestData(ctx, activityRef)
+	if err != nil {
+		return nil, err
+	}
+
+	attempt, err := activity.GetActivityAttempt(ctx, activityRef)
+	if err != nil {
+		return nil, err
+	}
+
+	lastHeartbeat, err := activity.GetActivityLastHeartbeat(ctx, activityRef)
+	if err != nil {
+		return nil, err
+	}
+
+	options := updatedActivity.GetActivityOptions()
+
+	return &historyservice.RecordActivityTaskStartedResponse{
+		StartedTime:      attempt.GetLastStartedTime(),
+		Attempt:          attempt.GetCount(),
+		HeartbeatDetails: lastHeartbeat.GetDetails(),
+		Priority:         updatedActivity.GetPriority(),
+		RetryPolicy:      options.GetRetryPolicy(),
+		ScheduledEvent: &history.HistoryEvent{
+			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
+			Attributes: &history.HistoryEvent_ActivityTaskScheduledEventAttributes{
+				ActivityTaskScheduledEventAttributes: &history.ActivityTaskScheduledEventAttributes{
+					ActivityId:             activityRef.BusinessID,
+					ActivityType:           updatedActivity.ActivityType,
+					Input:                  requestData.GetInput(),
+					Header:                 requestData.GetHeader(),
+					TaskQueue:              options.GetTaskQueue(),
+					ScheduleToCloseTimeout: options.GetScheduleToCloseTimeout(),
+					ScheduleToStartTimeout: options.GetScheduleToStartTimeout(),
+					StartToCloseTimeout:    options.GetStartToCloseTimeout(),
+					HeartbeatTimeout:       options.GetHeartbeatTimeout(),
+				},
+			},
+		},
+	}, nil
 }
 
 func recordActivityTaskStarted(

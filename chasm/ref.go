@@ -107,12 +107,23 @@ func (r *ComponentRef) Serialize(
 		return nil, nil
 	}
 
+	pRef, err := ComponentRefToProtoRef(*r, registry)
+	if err != nil {
+		return nil, err
+	}
+
+	return pRef.Marshal()
+}
+
+// ComponentRefToProtoRef converts a ComponentRef to a protobuf ChasmComponentRef. This is useful when the proto ref
+// needs to be serialized as part of an enclosing message.
+func ComponentRefToProtoRef(r ComponentRef, registry *Registry) (*persistencespb.ChasmComponentRef, error) {
 	archetype, err := r.Archetype(registry)
 	if err != nil {
 		return nil, err
 	}
 
-	pRef := persistencespb.ChasmComponentRef{
+	return &persistencespb.ChasmComponentRef{
 		NamespaceId:                         r.NamespaceID,
 		BusinessId:                          r.BusinessID,
 		EntityId:                            r.EntityID,
@@ -120,8 +131,7 @@ func (r *ComponentRef) Serialize(
 		EntityVersionedTransition:           r.entityLastUpdateVT,
 		ComponentPath:                       r.componentPath,
 		ComponentInitialVersionedTransition: r.componentInitialVT,
-	}
-	return pRef.Marshal()
+	}, nil
 }
 
 // DeserializeComponentRef deserializes a byte slice into a ComponentRef.
@@ -132,6 +142,13 @@ func DeserializeComponentRef(data []byte) (ComponentRef, error) {
 		return ComponentRef{}, err
 	}
 
+	return ProtoRefToComponentRef(&pRef), nil
+}
+
+// ProtoRefToComponentRef converts a persistence ChasmComponentRef reference to a
+// ComponentRef. This is useful for situations where the protobuf ComponentRef has
+// already been deserialized as part of an enclosing message.
+func ProtoRefToComponentRef(pRef *persistencespb.ChasmComponentRef) ComponentRef {
 	return ComponentRef{
 		EntityKey: EntityKey{
 			NamespaceID: pRef.NamespaceId,
@@ -142,5 +159,5 @@ func DeserializeComponentRef(data []byte) (ComponentRef, error) {
 		entityLastUpdateVT: pRef.EntityVersionedTransition,
 		componentPath:      pRef.ComponentPath,
 		componentInitialVT: pRef.ComponentInitialVersionedTransition,
-	}, nil
+	}
 }
