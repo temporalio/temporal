@@ -24,7 +24,7 @@ const (
 )
 
 var (
-	TestKeywordSearchAttribute = chasm.NewSearchAttributeKeywordByField(TestKeywordSAFieldName)
+	TestKeywordSearchAttribute = chasm.NewSearchAttributeKeyword(TestKeywordSAFieldName, chasm.SearchAttributeFieldKeyword01)
 
 	_ chasm.VisibilitySearchAttributesProvider = (*PayloadStore)(nil)
 	_ chasm.VisibilityMemoProvider             = (*PayloadStore)(nil)

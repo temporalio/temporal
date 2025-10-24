@@ -61,18 +61,15 @@ var (
 
 type (
 	SearchAttribute interface {
-		getAlias() string
-		getField() string
-		getValueType() enumspb.IndexedValueType
-		mustEmbedSearchAttributeDefinition()
+		definition() searchAttributeDefinition
 	}
 
 	searchAttributeDefinition struct {
 		// alias refers to the user defined name of the search attribute
-		alias string
+		Alias string
 		// field refers to a fully formed schema field, which is either a Predefined or CHASM search attribute
-		field     string
-		valueType enumspb.IndexedValueType
+		Field     string
+		ValueType enumspb.IndexedValueType
 	}
 
 	SearchAttributeKeyValue struct {
@@ -171,47 +168,34 @@ func resolveFieldName(valueType enumspb.IndexedValueType, index int) string {
 	return fmt.Sprintf("%s%s%02d", searchattribute.ReservedPrefix, valueType.String(), index)
 }
 
-// GetAlias returns the search attribute alias.
-func (s searchAttributeDefinition) getAlias() string {
-	return s.alias
+func (s searchAttributeDefinition) definition() searchAttributeDefinition {
+	return s
 }
-
-// GetField returns the search attribute field name.
-func (s searchAttributeDefinition) getField() string {
-	return s.field
-}
-
-// GetValueType returns the indexed value type.
-func (s searchAttributeDefinition) getValueType() enumspb.IndexedValueType {
-	return s.valueType
-}
-
-func (s searchAttributeDefinition) mustEmbedSearchAttributeDefinition() {}
 
 func NewSearchAttributeBool(alias string, boolField SearchAttributeFieldBool) SearchAttributeBool {
 	return SearchAttributeBool{
 		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     alias,
-			field:     boolField.field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_BOOL,
+			Alias:     alias,
+			Field:     boolField.field,
+			ValueType: enumspb.INDEXED_VALUE_TYPE_BOOL,
 		},
 	}
 }
 
-func NewSearchAttributeBoolByField(field string) SearchAttributeBool {
+func newSearchAttributeBoolByField(field string) SearchAttributeBool {
 	return SearchAttributeBool{
 		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     field,
-			field:     field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_BOOL,
+			Alias:     field,
+			Field:     field,
+			ValueType: enumspb.INDEXED_VALUE_TYPE_BOOL,
 		},
 	}
 }
 
 func (s SearchAttributeBool) Value(value bool) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
-		Alias: s.alias,
-		Field: s.field,
+		Alias: s.Alias,
+		Field: s.Field,
 		Value: VisibilityValueBool(value),
 	}
 }
@@ -219,27 +203,27 @@ func (s SearchAttributeBool) Value(value bool) SearchAttributeKeyValue {
 func NewSearchAttributeDateTime(alias string, datetimeField SearchAttributeFieldDateTime) SearchAttributeDateTime {
 	return SearchAttributeDateTime{
 		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     alias,
-			field:     datetimeField.field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			Alias:     alias,
+			Field:     datetimeField.field,
+			ValueType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
 		},
 	}
 }
 
-func NewSearchAttributeDateTimeByField(field string) SearchAttributeDateTime {
+func newSearchAttributeDateTimeByField(field string) SearchAttributeDateTime {
 	return SearchAttributeDateTime{
 		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     field,
-			field:     field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			Alias:     field,
+			Field:     field,
+			ValueType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
 		},
 	}
 }
 
 func (s SearchAttributeDateTime) Value(value time.Time) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
-		Alias: s.alias,
-		Field: s.field,
+		Alias: s.Alias,
+		Field: s.Field,
 		Value: VisibilityValueTime(value),
 	}
 }
@@ -247,27 +231,27 @@ func (s SearchAttributeDateTime) Value(value time.Time) SearchAttributeKeyValue 
 func NewSearchAttributeInt(alias string, intField SearchAttributeFieldInt) SearchAttributeInt {
 	return SearchAttributeInt{
 		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     alias,
-			field:     intField.field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_INT,
+			Alias:     alias,
+			Field:     intField.field,
+			ValueType: enumspb.INDEXED_VALUE_TYPE_INT,
 		},
 	}
 }
 
-func NewSearchAttributeIntByField(field string) SearchAttributeInt {
+func newSearchAttributeIntByField(field string) SearchAttributeInt {
 	return SearchAttributeInt{
 		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     field,
-			field:     field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_INT,
+			Alias:     field,
+			Field:     field,
+			ValueType: enumspb.INDEXED_VALUE_TYPE_INT,
 		},
 	}
 }
 
 func (s SearchAttributeInt) Value(value int64) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
-		Alias: s.alias,
-		Field: s.field,
+		Alias: s.Alias,
+		Field: s.Field,
 		Value: VisibilityValueInt64(value),
 	}
 }
@@ -275,27 +259,27 @@ func (s SearchAttributeInt) Value(value int64) SearchAttributeKeyValue {
 func NewSearchAttributeDouble(alias string, doubleField SearchAttributeFieldDouble) SearchAttributeDouble {
 	return SearchAttributeDouble{
 		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     alias,
-			field:     doubleField.field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			Alias:     alias,
+			Field:     doubleField.field,
+			ValueType: enumspb.INDEXED_VALUE_TYPE_DOUBLE,
 		},
 	}
 }
 
-func NewSearchAttributeDoubleByField(field string) SearchAttributeDouble {
+func newSearchAttributeDoubleByField(field string) SearchAttributeDouble {
 	return SearchAttributeDouble{
 		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     field,
-			field:     field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			Alias:     field,
+			Field:     field,
+			ValueType: enumspb.INDEXED_VALUE_TYPE_DOUBLE,
 		},
 	}
 }
 
 func (s SearchAttributeDouble) Value(value float64) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
-		Alias: s.alias,
-		Field: s.field,
+		Alias: s.Alias,
+		Field: s.Field,
 		Value: VisibilityValueFloat64(value),
 	}
 }
@@ -303,27 +287,27 @@ func (s SearchAttributeDouble) Value(value float64) SearchAttributeKeyValue {
 func NewSearchAttributeKeyword(alias string, keywordField SearchAttributeFieldKeyword) SearchAttributeKeyword {
 	return SearchAttributeKeyword{
 		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     alias,
-			field:     keywordField.field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			Alias:     alias,
+			Field:     keywordField.field,
+			ValueType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
 	}
 }
 
-func NewSearchAttributeKeywordByField(field string) SearchAttributeKeyword {
+func newSearchAttributeKeywordByField(field string) SearchAttributeKeyword {
 	return SearchAttributeKeyword{
 		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     field,
-			field:     field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			Alias:     field,
+			Field:     field,
+			ValueType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
 	}
 }
 
 func (s SearchAttributeKeyword) Value(value string) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
-		Alias: s.alias,
-		Field: s.field,
+		Alias: s.Alias,
+		Field: s.Field,
 		Value: VisibilityValueString(value),
 	}
 }
@@ -331,26 +315,26 @@ func (s SearchAttributeKeyword) Value(value string) SearchAttributeKeyValue {
 func NewSearchAttributeKeywordList(alias string, keywordListField SearchAttributeFieldKeywordList) SearchAttributeKeywordList {
 	return SearchAttributeKeywordList{
 		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     alias,
-			field:     keywordListField.field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+			Alias:     alias,
+			Field:     keywordListField.field,
+			ValueType: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		},
 	}
 }
 
-func NewSearchAttributeKeywordListByField(field string) SearchAttributeKeywordList {
+func newSearchAttributeKeywordListByField(field string) SearchAttributeKeywordList {
 	return SearchAttributeKeywordList{
 		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     field,
-			field:     field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+			Alias:     field,
+			Field:     field,
+			ValueType: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		},
 	}
 }
 func (s SearchAttributeKeywordList) Value(value []string) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
-		Alias: s.alias,
-		Field: s.field,
+		Alias: s.Alias,
+		Field: s.Field,
 		Value: VisibilityValueStringSlice(value),
 	}
 }

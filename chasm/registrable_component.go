@@ -79,9 +79,9 @@ func WithSearchAttributes(
 		rc.saTypeMap = make(map[string]enumspb.IndexedValueType, len(searchAttributes))
 
 		for _, sa := range searchAttributes {
-			alias := sa.getAlias()
-			field := sa.getField()
-			valueType := sa.getValueType()
+			alias := sa.definition().Alias
+			field := sa.definition().Field
+			valueType := sa.definition().ValueType
 
 			rc.aliasToField[alias] = field
 			rc.fieldToAlias[field] = alias

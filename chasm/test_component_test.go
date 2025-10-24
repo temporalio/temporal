@@ -70,9 +70,9 @@ const (
 )
 
 var (
-	TestKeywordSearchAttribute            = NewSearchAttributeKeywordByField(searchattribute.TemporalScheduledById)
+	TestKeywordSearchAttribute            = newSearchAttributeKeywordByField(searchattribute.TemporalScheduledById)
 	TestComponentStartTimeSearchAttribute = NewSearchAttributeDateTime(TestComponentStartTimeSAKey, SearchAttributeFieldDateTime01)
-	TestComponentRunIDPredefinedSA        = NewSearchAttributeKeywordByField(TestComponentRunIDSAKey)
+	TestComponentRunIDPredefinedSA        = newSearchAttributeKeywordByField(TestComponentRunIDSAKey)
 
 	_ VisibilitySearchAttributesProvider = (*TestComponent)(nil)
 	_ VisibilityMemoProvider             = (*TestComponent)(nil)
