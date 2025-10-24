@@ -116,7 +116,7 @@ func (rc RegistrableComponent) fqType() string {
 	return fullyQualifiedName(rc.library.Name(), rc.componentType)
 }
 
-// GetAlias returns the search attribute alias for the given field name.
+// SearchAttributeAlias returns the search attribute alias for the given field name.
 func (rc *RegistrableComponent) SearchAttributeAlias(field string) (string, error) {
 	alias, ok := rc.fieldToAlias[field]
 	if !ok {
@@ -127,7 +127,7 @@ func (rc *RegistrableComponent) SearchAttributeAlias(field string) (string, erro
 	return alias, nil
 }
 
-// GetField returns the search attribute field name for the given alias.
+// SearchAttributeField returns the search attribute field name for the given alias.
 func (rc *RegistrableComponent) SearchAttributeField(alias string) (string, error) {
 	field, ok := rc.aliasToField[alias]
 	if !ok {
