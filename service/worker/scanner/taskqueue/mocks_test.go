@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -28,16 +28,16 @@ type (
 
 func newMockTaskTable() *mockTaskTable {
 	return &mockTaskTable{
-		namespaceID: uuid.New(),
-		workflowID:  uuid.New(),
-		runID:       uuid.New(),
+		namespaceID: uuid.NewString(),
+		workflowID:  uuid.NewString(),
+		runID:       uuid.NewString(),
 	}
 }
 
 func (tbl *mockTaskQueueTable) generate(name string, idle bool) {
 	tq := p.PersistedTaskQueueInfo{
 		Data: &persistencespb.TaskQueueInfo{
-			NamespaceId:    uuid.New(),
+			NamespaceId:    uuid.NewString(),
 			Name:           name,
 			LastUpdateTime: timestamp.TimeNowPtrUtc(),
 		},

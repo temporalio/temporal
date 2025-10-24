@@ -5,14 +5,13 @@ import (
 	"net"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	versionpb "go.temporal.io/api/version/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives"
 )
 
 type (
@@ -62,8 +61,9 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipEmptyInitially() {
 
 // TestClusterMembershipUpsertCanReadAny verifies that we can UpsertClusterMembership and read our result
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanReadAny() {
+
 	req := &p.UpsertClusterMembershipRequest{
-		HostID:       []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+		HostID:       uuid.New(),
 		RPCAddress:   net.ParseIP("127.0.0.2"),
 		RPCPort:      123,
 		Role:         p.Frontend,
@@ -87,8 +87,10 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanReadAny() {
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 	expectedIds := make(map[string]int, 100)
 	for i := 0; i < 100; i++ {
-		hostID := primitives.NewUUID().Downcast()
-		expectedIds[primitives.UUIDString(hostID)]++
+		hostID := uuid.New()
+
+		expectedIds[hostID.String()]++
+
 		req := &p.UpsertClusterMembershipRequest{
 			HostID:       hostID,
 			RPCAddress:   net.ParseIP("127.0.0.2"),
@@ -109,7 +111,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 		s.NoError(err)
 		nextPageToken = resp.NextPageToken
 		for _, member := range resp.ActiveMembers {
-			expectedIds[primitives.UUIDString(member.HostID)]--
+			expectedIds[member.HostID.String()]--
 			hostCount++
 		}
 
@@ -144,7 +146,7 @@ func (s *ClusterMetadataManagerSuite) validateUpsert(req *p.UpsertClusterMembers
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly() {
 	now := time.Now().UTC()
 	req := &p.UpsertClusterMembershipRequest{
-		HostID:       []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+		HostID:       uuid.New(),
 		RPCAddress:   net.ParseIP("127.0.0.2"),
 		RPCPort:      123,
 		Role:         p.Frontend,
@@ -202,7 +204,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly(
 // TestClusterMembershipUpsertExpiresCorrectly verifies RecordExpiry functions properly for ClusterMembership records
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertExpiresCorrectly() {
 	req := &p.UpsertClusterMembershipRequest{
-		HostID:       uuid.NewUUID(),
+		HostID:       uuid.New(),
 		RPCAddress:   net.ParseIP("127.0.0.2"),
 		RPCPort:      123,
 		Role:         p.Frontend,
@@ -259,7 +261,7 @@ func (s *ClusterMetadataManagerSuite) waitForPrune(waitFor time.Duration) {
 // TestClusterMembershipUpsertInvalidExpiry verifies we cannot specify a non-positive RecordExpiry duration
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertInvalidExpiry() {
 	req := &p.UpsertClusterMembershipRequest{
-		HostID:       []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+		HostID:       uuid.New(),
 		RPCAddress:   net.ParseIP("127.0.0.2"),
 		RPCPort:      123,
 		Role:         p.Frontend,

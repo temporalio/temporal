@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -974,7 +974,7 @@ func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 	// TODO currently, this API is only going to be used by re-send history events
 	// to remote cluster if kafka is lossy again, in the future, this API can be used
 	// by CLI and client, then empty runID (meaning the current workflow) should be allowed
-	if execution.GetRunId() == "" || uuid.Parse(execution.GetRunId()) == nil {
+	if execution.GetRunId() == "" || uuid.Validate(execution.GetRunId()) != nil {
 		return errInvalidRunID
 	}
 
@@ -1130,11 +1130,15 @@ func (adh *AdminHandler) ListClusterMembers(
 	if startedTimeRef != nil {
 		startedTime = startedTimeRef.AsTime()
 	}
+	hostIDEqual, err := uuid.Parse(request.GetHostId())
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("host ID %q is not a valid UUID: %v", request.GetHostId(), err)
+	}
 
 	resp, err := metadataMgr.GetClusterMembers(ctx, &persistence.GetClusterMembersRequest{
 		LastHeartbeatWithin: heartbit,
 		RPCAddressEquals:    net.ParseIP(request.GetRpcAddress()),
-		HostIDEquals:        uuid.Parse(request.GetHostId()),
+		HostIDEquals:        hostIDEqual,
 		RoleEquals:          persistence.ServiceType(request.GetRole()),
 		SessionStartedAfter: startedTime,
 		PageSize:            int(request.GetPageSize()),

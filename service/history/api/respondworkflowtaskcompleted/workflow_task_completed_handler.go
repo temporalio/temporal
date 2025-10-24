@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -552,7 +552,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 	if _, err := handler.mutableState.AddActivityTaskStartedEvent(
 		ai,
 		ai.GetScheduledEventId(),
-		uuid.New(),
+		uuid.NewString(),
 		handler.identity,
 		stamp,
 		nil,
@@ -719,7 +719,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 	cronBackoff := handler.mutableState.GetCronBackoffDuration()
 	var newExecutionRunID string
 	if cronBackoff != backoff.NoBackoff {
-		newExecutionRunID = uuid.New()
+		newExecutionRunID = uuid.NewString()
 	}
 
 	// Always add workflow completed event to this one
@@ -781,7 +781,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 
 	var newExecutionRunID string
 	if retryBackoff != backoff.NoBackoff || cronBackoff != backoff.NoBackoff {
-		newExecutionRunID = uuid.New()
+		newExecutionRunID = uuid.NewString()
 	}
 
 	// Always add workflow failed event
@@ -893,7 +893,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelExternalW
 		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_REQUEST_CANCEL_LIMIT_EXCEEDED, err)
 	}
 
-	cancelRequestID := uuid.New()
+	cancelRequestID := uuid.NewString()
 	event, _, err := handler.mutableState.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
 		handler.workflowTaskCompletedID, cancelRequestID, attr, targetNamespaceID,
 	)
@@ -1178,7 +1178,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandSignalExternalWorkflow
 		return nil, handler.terminateWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, err)
 	}
 
-	signalRequestID := uuid.New() // for deduplicate
+	signalRequestID := uuid.NewString() // for deduplicate
 	event, _, err := handler.mutableState.AddSignalExternalWorkflowExecutionInitiatedEvent(
 		handler.workflowTaskCompletedID, signalRequestID, attr, targetNamespaceID,
 	)

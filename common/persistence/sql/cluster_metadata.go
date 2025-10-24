@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -43,9 +44,6 @@ func (s *sqlClusterMetadataManager) ListClusterMetadata(
 		resp := &p.InternalGetClusterMetadataResponse{
 			ClusterMetadata: p.NewDataBlob(row.Data, row.DataEncoding),
 			Version:         row.Version,
-		}
-		if err != nil {
-			return nil, err
 		}
 		clusterMetadata = append(clusterMetadata, resp)
 	}
@@ -138,9 +136,14 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(
 		return nil, serviceerror.NewInternal("page token is corrupted.")
 	}
 
+	hostIDEqualsBytes, err := request.HostIDEquals.MarshalBinary()
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("unable to marshal HostIDEquals: %v", err)
+	}
+
 	now := time.Now().UTC()
 	filter := &sqlplugin.ClusterMembershipFilter{
-		HostIDEquals:        request.HostIDEquals,
+		HostIDEquals:        hostIDEqualsBytes,
 		RoleEquals:          request.RoleEquals,
 		RecordExpiryAfter:   now,
 		SessionStartedAfter: request.SessionStartedAfter,
@@ -167,8 +170,13 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(
 
 	convertedRows := make([]*p.ClusterMember, 0, len(rows))
 	for _, row := range rows {
+		hostIDUuid, err := uuid.ParseBytes(row.HostID)
+		if err != nil {
+			return nil, serviceerror.NewInternalf("unable to parse HostID: %v", err)
+		}
+
 		convertedRows = append(convertedRows, &p.ClusterMember{
-			HostID:        row.HostID,
+			HostID:        hostIDUuid,
 			Role:          row.Role,
 			RPCAddress:    net.ParseIP(row.RPCAddress),
 			RPCPort:       row.RPCPort,
@@ -193,9 +201,14 @@ func (s *sqlClusterMetadataManager) UpsertClusterMembership(
 ) error {
 	now := time.Now().UTC()
 	recordExpiry := now.Add(request.RecordExpiry)
-	_, err := s.DB.UpsertClusterMembership(ctx, &sqlplugin.ClusterMembershipRow{
+	hostIDBytes, err := request.HostID.MarshalBinary()
+	if err != nil {
+		return serviceerror.NewInvalidArgumentf("unable to marshal HostID: %v", err)
+	}
+
+	_, err = s.DB.UpsertClusterMembership(ctx, &sqlplugin.ClusterMembershipRow{
 		Role:          request.Role,
-		HostID:        request.HostID,
+		HostID:        hostIDBytes,
 		RPCAddress:    request.RPCAddress.String(),
 		RPCPort:       request.RPCPort,
 		SessionStart:  request.SessionStart,

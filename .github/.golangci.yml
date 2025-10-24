@@ -10,6 +10,7 @@ linters:
   enable:
     - errcheck
     - importas
+    - depguard
     - revive
     - staticcheck
     - govet
@@ -35,6 +36,13 @@ linters:
           msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
         - pattern: panic
           msg: "Please avoid using panic in application code"
+    depguard:
+      rules:
+        main:
+          list-mode: lax
+          deny:
+            - pkg: github.com/pborman/uuid
+              desc: "Importing github.com/pborman/uuid is disallowed; use github.com/google/uuid instead"
     importas:
       # Enforce the aliases below.
       no-unaliased: true

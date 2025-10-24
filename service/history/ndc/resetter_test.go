@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -79,10 +79,10 @@ func (s *resetterSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.namespaceID = namespace.ID(uuid.New())
+	s.namespaceID = namespace.ID(uuid.NewString())
 	s.namespace = "some random namespace name"
 	s.workflowID = "some random workflow ID"
-	s.baseRunID = uuid.New()
+	s.baseRunID = uuid.NewString()
 	s.newContext = workflow.NewContext(
 		s.mockShard.GetConfig(),
 		definition.NewWorkflowKey(
@@ -94,7 +94,7 @@ func (s *resetterSuite) SetupTest() {
 		s.mockShard.GetThrottledLogger(),
 		s.mockShard.GetMetricsHandler(),
 	)
-	s.newRunID = uuid.New()
+	s.newRunID = uuid.NewString()
 
 	s.workflowResetter = NewResetter(
 		s.mockShard, s.mockTransactionMgr, s.namespaceID, s.workflowID, s.baseRunID, s.newContext, s.newRunID, s.logger,

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/temporalio/ringpop-go"
 	"github.com/temporalio/ringpop-go/discovery/statichosts"
 	"github.com/temporalio/ringpop-go/swim"
@@ -101,7 +101,7 @@ func newMonitor(
 		logger:                    logger,
 		metadataManager:           metadataManager,
 		broadcastHostPortResolver: broadcastHostPortResolver,
-		hostID:                    uuid.NewUUID(),
+		hostID:                    uuid.New(),
 		initialized:               future.NewFuture[struct{}](),
 		maxJoinDuration:           maxJoinDuration,
 		propagationTime:           propagationTime,
@@ -347,7 +347,6 @@ func (rpo *monitor) fetchCurrentBootstrapHostports() ([]string, error) {
 		for _, host := range resp.ActiveMembers {
 			set[net.JoinHostPort(host.RPCAddress.String(), convert.Uint16ToString(host.RPCPort))] = struct{}{}
 		}
-
 		nextPageToken = resp.NextPageToken
 
 		// Stop iterating once we have either 500 unique ip:port combos or there is no more results.

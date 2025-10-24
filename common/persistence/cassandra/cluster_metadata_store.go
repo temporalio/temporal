@@ -2,11 +2,12 @@ package cassandra
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strings"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -176,9 +177,13 @@ func (m *ClusterMetadataStore) GetClusterMembers(
 	queryString.WriteString(templateGetClusterMembership)
 	operands = append(operands, constMembershipPartition)
 
-	if request.HostIDEquals != nil {
+	if request.HostIDEquals != uuid.Nil {
 		queryString.WriteString(templateWithHostIDSuffix)
-		operands = append(operands, []byte(request.HostIDEquals))
+		hostIDEqualsBytes, err := request.HostIDEquals.MarshalBinary()
+		if err != nil {
+			return nil, gocql.ConvertError("GetClusterMembers", fmt.Errorf("failed to marshal HostIDEquals: %w", err))
+		}
+		operands = append(operands, hostIDEqualsBytes)
 	}
 
 	if request.RPCAddressEquals != nil {
@@ -248,10 +253,14 @@ func (m *ClusterMetadataStore) UpsertClusterMembership(
 	ctx context.Context,
 	request *p.UpsertClusterMembershipRequest,
 ) error {
+	hostIDBytes, err := request.HostID.MarshalBinary()
+	if err != nil {
+		return gocql.ConvertError("UpsertClusterMembership", fmt.Errorf("failed to marshal HostID: %w", err))
+	}
 	query := m.session.Query(
 		templateUpsertActiveClusterMembership,
 		constMembershipPartition,
-		[]byte(request.HostID),
+		hostIDBytes,
 		request.RPCAddress,
 		request.RPCPort,
 		request.Role,
@@ -259,7 +268,7 @@ func (m *ClusterMetadataStore) UpsertClusterMembership(
 		time.Now().UTC(),
 		int64(request.RecordExpiry.Seconds()),
 	).WithContext(ctx)
-	err := query.Exec()
+	err = query.Exec()
 
 	if err != nil {
 		return gocql.ConvertError("UpsertClusterMembership", err)
