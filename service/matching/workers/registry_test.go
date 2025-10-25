@@ -72,7 +72,7 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 			)
 			tt.setup(r)
 
-			r.RecordWorkerHeartbeats(tt.nsID, []*workerpb.WorkerHeartbeat{tt.workerHeartbeat})
+			r.RecordWorkerHeartbeats(tt.nsID, namespace.Name(tt.nsID+"_name"), []*workerpb.WorkerHeartbeat{tt.workerHeartbeat})
 
 			// Check if namespace exists
 			nsBuket := r.getBucket(tt.nsID)

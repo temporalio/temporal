@@ -395,7 +395,7 @@ func BenchmarkRandomUpdate(b *testing.B) {
 }
 
 // TestPluginMetricsExported verifies that plugin metrics are correctly recorded
-// with the expected dimensions (namespace_id and plugin_name).
+// with the expected dimensions (namespace_name and plugin_name).
 func TestPluginMetricsExported(t *testing.T) {
 	tv := testvars.New(t)
 
@@ -458,7 +458,8 @@ func TestPluginMetricsExported(t *testing.T) {
 	}
 
 	testNamespace := tv.NamespaceID()
-	m.upsertHeartbeats(testNamespace, []*workerpb.WorkerHeartbeat{worker1, worker2, worker3})
+	testNamespaceName := namespace.Name(testNamespace + "_name")
+	m.RecordWorkerHeartbeats(testNamespace, testNamespaceName, []*workerpb.WorkerHeartbeat{worker1, worker2, worker3})
 
 	// Verify plugin metrics - should have exactly 3 recordings despite plugin-a being in both workers
 	snapshot := capture.Snapshot()
@@ -466,9 +467,9 @@ func TestPluginMetricsExported(t *testing.T) {
 	assert.Len(t, pluginMetrics, 3, "plugin-a from both workers should be deduplicated")
 
 	// Helper function to find metric by namespace and plugin name
-	findMetric := func(namespaceId, pluginName string) *metricstest.CapturedRecording {
+	findMetric := func(namespaceName namespace.Name, pluginName string) *metricstest.CapturedRecording {
 		for _, metric := range pluginMetrics {
-			if metric.Tags["namespace_id"] == namespaceId && metric.Tags[metrics.WorkerPluginNameTagName] == pluginName {
+			if metric.Tags["namespace_id"] == namespaceName.String() && metric.Tags[metrics.WorkerPluginNameTagName] == pluginName {
 				return metric
 			}
 		}
@@ -479,8 +480,8 @@ func TestPluginMetricsExported(t *testing.T) {
 	expectedPlugins := []string{pluginA, pluginB, pluginC}
 
 	for _, expectedPlugin := range expectedPlugins {
-		metric := findMetric(testNamespace.String(), expectedPlugin)
-		assert.NotNil(t, metric, "should have metric for namespace '%s' and plugin: %s", testNamespace.String(), expectedPlugin)
+		metric := findMetric(testNamespaceName, expectedPlugin)
+		assert.NotNil(t, metric, "should have metric for namespace '%s' and plugin: %s", testNamespaceName.String(), expectedPlugin)
 		assert.InEpsilon(t, float64(1), metric.Value, 0.000001, "plugin metric value should be 1 for %s", expectedPlugin)
 	}
 }
@@ -517,9 +518,10 @@ func TestPluginMetricsDisabled(t *testing.T) {
 
 	// Upsert heartbeats for test namespace
 	testNamespace := tv.NamespaceID()
-	m.upsertHeartbeats(testNamespace, []*workerpb.WorkerHeartbeat{worker1})
+	testNamespaceName := namespace.Name(testNamespace + "_name")
+	m.RecordWorkerHeartbeats(testNamespace, testNamespaceName, []*workerpb.WorkerHeartbeat{worker1})
 
-	// Verify NO plugin metrics are recorded when disabled
+	// Verify no plugin metrics are recorded when disabled
 	snapshot := capture.Snapshot()
 	pluginMetrics := snapshot[metrics.WorkerPluginNameMetric.Name()]
 	assert.Empty(t, pluginMetrics, "should not record any plugin metrics when disabled")

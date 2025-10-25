@@ -239,7 +239,6 @@ func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerp
 	newEntries := b.upsertHeartbeats(nsID, heartbeats)
 	m.total.Add(newEntries)
 	m.recordUtilizationMetric()
-	m.recordPluginMetric(nsID, heartbeats)
 }
 
 // recordUtilizationMetric records the overall capacity utilization ratio.
@@ -261,7 +260,7 @@ func (m *registryImpl) recordEvictionMetric() {
 }
 
 // recordPluginMetric sets a value of 1 for each unique plugin name present in the heartbeats.
-func (m *registryImpl) recordPluginMetric(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) {
+func (m *registryImpl) recordPluginMetric(nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat) {
 	// Check if plugin metrics are enabled via dynamic config
 	if !m.enableWorkerPluginMetrics() {
 		return
@@ -278,7 +277,7 @@ func (m *registryImpl) recordPluginMetric(nsID namespace.ID, heartbeats []*worke
 					With(m.metricsHandler).
 					Record(
 						1,
-						metrics.NamespaceIDTag(nsID.String()),
+						metrics.NamespaceIDTag(nsName.String()),
 						metrics.WorkerPluginNameTag(pluginName),
 					)
 				recordedPlugins[pluginName] = true
@@ -366,8 +365,9 @@ func (m *registryImpl) Stop() {
 	close(m.quit)
 }
 
-func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, workerHeartbeat []*workerpb.WorkerHeartbeat) {
+func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespace.Name, workerHeartbeat []*workerpb.WorkerHeartbeat) {
 	m.upsertHeartbeats(nsID, workerHeartbeat)
+	m.recordPluginMetric(nsName, workerHeartbeat)
 }
 
 func (m *registryImpl) ListWorkers(nsID namespace.ID, query string, _ []byte) ([]*workerpb.WorkerHeartbeat, error) {
