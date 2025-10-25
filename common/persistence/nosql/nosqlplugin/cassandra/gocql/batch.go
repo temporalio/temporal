@@ -45,6 +45,17 @@ func (b *Batch) WithTimestamp(timestamp int64) *Batch {
 	return newBatch(b.session, b.gocqlBatch)
 }
 
+func (b *Batch) SpeculativeExecutionPolicy(sp SpeculativeExecutionPolicy) *Batch {
+	return newBatch(b.session, b.gocqlBatch.SpeculativeExecutionPolicy(sp))
+}
+
+func (b *Batch) SetIdempotent() *Batch {
+	for i := range b.gocqlBatch.Entries {
+		b.gocqlBatch.Entries[i].Idempotent = true
+	}
+	return newBatch(b.session, b.gocqlBatch)
+}
+
 func mustConvertBatchType(batchType BatchType) gocql.BatchType {
 	switch batchType {
 	case LoggedBatch:
