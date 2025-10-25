@@ -85,6 +85,23 @@ func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workf
 	return resp.GetFrontendResponse(), err
 }
 
+// PollActivityExecution handles PollActivityExecutionRequest. This method is used by clients to
+// poll for activity info and/or result, optionally as a long-poll.
+func (h *frontendHandler) PollActivityExecution(
+	ctx context.Context,
+	req *workflowservice.PollActivityExecutionRequest,
+) (*workflowservice.PollActivityExecutionResponse, error) {
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	resp, err := h.client.PollActivityExecution(ctx, &activitypb.PollActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	return resp.GetFrontendResponse(), err
+}
+
 func (h *frontendHandler) validateAndPopulateStartRequest(
 	req *workflowservice.StartActivityExecutionRequest,
 	namespaceID namespace.ID,

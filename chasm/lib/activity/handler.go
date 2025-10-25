@@ -3,6 +3,7 @@ package activity
 import (
 	"context"
 
+	"go.temporal.io/api/activity/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -49,5 +50,21 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 	return &activitypb.StartActivityExecutionResponse{
 		FrontendResponse: response,
+	}, nil
+}
+
+// PollActivityExecution handles PollActivityExecutionRequest from frontend. This method is used by
+// clients to poll for activity info and/or result, optionally as a long-poll.
+func (h *handler) PollActivityExecution(ctx context.Context, req *activitypb.PollActivityExecutionRequest) (*activitypb.PollActivityExecutionResponse, error) {
+	// TODO
+	request := req.GetFrontendRequest()
+	info := &activity.ActivityExecutionInfo{
+		ActivityId: request.GetActivityId(),
+		RunId:      request.GetRunId(),
+	}
+	return &activitypb.PollActivityExecutionResponse{
+		FrontendResponse: &workflowservice.PollActivityExecutionResponse{
+			Info: info,
+		},
 	}, nil
 }

@@ -90,3 +90,54 @@ func createDefaultInput() *commonpb.Payloads {
 		},
 	}
 }
+func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	s.OverrideDynamicConfig(
+		dynamicconfig.EnableChasm,
+		true,
+	)
+	activityID := testcore.RandomizeStr(t.Name())
+
+	startActivity := func(ctx context.Context, t *testing.T) (*workflowservice.StartActivityExecutionResponse, error) {
+		activityType := &commonpb.ActivityType{
+			Name: "test-activity-type",
+		}
+		input := &commonpb.Payloads{
+			Payloads: []*commonpb.Payload{
+				{
+					Metadata: map[string][]byte{
+						"encoding": []byte("json/plain"),
+					},
+					Data: []byte(`{"name":"test-user","count":11}`),
+				},
+			},
+		}
+		taskQueue := uuid.New().String()
+		return s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: activityType,
+			Input:        input,
+			Options: &activitypb.ActivityOptions{
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: taskQueue,
+				},
+				StartToCloseTimeout: durationpb.New(1 * time.Minute),
+			},
+			RequestId: "test-request-id",
+		})
+	}
+
+	startResp, err := startActivity(ctx, t)
+	require.NoError(t, err)
+
+	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.RunId,
+	})
+	require.NoError(t, err)
+	require.Equal(t, activityID, pollResp.Info.ActivityId)
+}
