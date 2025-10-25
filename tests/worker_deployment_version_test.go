@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -1399,26 +1399,26 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 
 	// start batch update-options operation
 	pinnedOverride := s.makePinnedOverride(tv)
-	batchJobId := uuid.New()
+	batchJobID := uuid.NewString()
 
 	// unpause the activities in both workflows with batch unpause
 	_, err := s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace: s.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
 			UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
-				Identity:                 uuid.New(),
+				Identity:                 uuid.NewString(),
 				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinnedOverride},
 				UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 			},
 		},
 		Executions: workflows,
-		JobId:      batchJobId,
+		JobId:      batchJobID,
 		Reason:     "test",
 	})
 	s.NoError(err)
 
 	// wait til batch completes
-	s.checkListAndWaitForBatchCompletion(ctx, batchJobId)
+	s.checkListAndWaitForBatchCompletion(ctx, batchJobID)
 
 	// check all the workflows
 	for _, wf := range workflows {
@@ -1426,15 +1426,15 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 	}
 
 	// unset with empty update opts with mutation mask
-	batchJobId = uuid.New()
+	batchJobID = uuid.NewString()
 	err = s.startBatchJobWithinConcurrentJobLimit(ctx, &workflowservice.StartBatchOperationRequest{
 		Namespace:  s.Namespace().String(),
-		JobId:      batchJobId,
+		JobId:      batchJobID,
 		Reason:     "test",
 		Executions: workflows,
 		Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
 			UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
-				Identity:                 uuid.New(),
+				Identity:                 uuid.NewString(),
 				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
 				UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 			},
@@ -1443,7 +1443,7 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 	s.NoError(err)
 
 	// wait til batch completes
-	s.checkListAndWaitForBatchCompletion(ctx, batchJobId)
+	s.checkListAndWaitForBatchCompletion(ctx, batchJobID)
 
 	// check all the workflows
 	for _, wf := range workflows {

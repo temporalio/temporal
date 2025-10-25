@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -141,7 +141,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 		Memo: &commonpb.Memo{
 			Fields: map[string]*commonpb.Payload{"schedmemo1": schMemo},
 		},
@@ -358,7 +358,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -404,7 +404,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 		SearchAttributes: &commonpb.SearchAttributes{
 			IndexedFields: map[string]*commonpb.Payload{
 				csaKeyword: schSAValue,       // same key, same value
@@ -447,7 +447,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 		ScheduleId:       sid,
 		Schedule:         schedule,
 		Identity:         "test",
-		RequestId:        uuid.New(),
+		RequestId:        uuid.NewString(),
 		SearchAttributes: &commonpb.SearchAttributes{},
 	})
 	s.NoError(err)
@@ -478,7 +478,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 			Pause: "because I said so",
 		},
 		Identity:  "test",
-		RequestId: uuid.New(),
+		RequestId: uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -571,7 +571,7 @@ func (s *ScheduleFunctionalSuite) TestInput() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 
 	var runs int32
@@ -619,7 +619,7 @@ func (s *ScheduleFunctionalSuite) TestLastCompletionAndError() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 
 	runs := make(map[string]struct{})
@@ -697,7 +697,7 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 
 	var runs int32
@@ -798,7 +798,7 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 
 	startTime := time.Now()
@@ -857,7 +857,7 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 			ScheduleId: fmt.Sprintf(sid, i),
 			Schedule:   schedule,
 			Identity:   "test",
-			RequestId:  uuid.New(),
+			RequestId:  uuid.NewString(),
 		})
 		s.NoError(err)
 		s.cleanup(fmt.Sprintf(sid, i))
@@ -913,7 +913,7 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 		ScheduleId:   sid,
 		Schedule:     schedule,
 		InitialPatch: patch,
-		RequestId:    uuid.New(),
+		RequestId:    uuid.NewString(),
 	}
 	_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
 	s.NoError(err)
@@ -1015,7 +1015,7 @@ func (s *ScheduleFunctionalSuite) TestLimitMemoSpecSize() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 	s.worker.RegisterWorkflowWithOptions(
 		func(ctx workflow.Context) error { return nil },
@@ -1060,7 +1060,7 @@ func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 
 	var runs atomic.Int32

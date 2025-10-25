@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -58,7 +58,7 @@ func (s *EagerWorkflowTestSuite) startEagerWorkflow(baseOptions *workflowservice
 		options.TaskQueue = s.defaultTaskQueue()
 	}
 	if options.RequestId == "" {
-		options.RequestId = uuid.New()
+		options.RequestId = uuid.NewString()
 	}
 
 	response, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), options)
@@ -150,7 +150,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartAfterTimeout()
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		// Should give enough grace time even in slow CI
 		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 	}
 	response := s.startEagerWorkflow(request)
 	task := response.GetEagerWorkflowTask()
@@ -170,7 +170,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartAfterTimeout()
 }
 
 func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartImmediately() {
-	request := &workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.New()}
+	request := &workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.NewString()}
 	response := s.startEagerWorkflow(request)
 	task := response.GetEagerWorkflowTask()
 	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")

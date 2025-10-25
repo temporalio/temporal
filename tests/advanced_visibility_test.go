@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -333,14 +333,14 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	we1, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
 
-	request.RequestId = uuid.New()
+	request.RequestId = uuid.NewString()
 	request.WorkflowId = id + "-2"
 	attrValBytes, _ = payload.Encode(2)
 	searchAttr.IndexedFields[key] = attrValBytes
 	we2, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
 
-	request.RequestId = uuid.New()
+	request.RequestId = uuid.NewString()
 	request.WorkflowId = id + "-3"
 	attrValBytes, _ = payload.Encode(3)
 	searchAttr.IndexedFields[key] = attrValBytes
@@ -582,7 +582,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 	startRequest := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	for i := 0; i < testcore.DefaultPageSize; i++ {
-		startRequest.RequestId = uuid.New()
+		startRequest.RequestId = uuid.NewString()
 		startRequest.WorkflowId = id + strconv.Itoa(i)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startRequest)
 		s.NoError(err)
@@ -633,7 +633,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 	initialTime := time.Now().UTC()
 	for i := 0; i < testcore.DefaultPageSize+1; i++ { // start 6
 		startRequest := s.createStartWorkflowExecutionRequest(id, wt, tl)
-		startRequest.RequestId = uuid.New()
+		startRequest.RequestId = uuid.NewString()
 		startRequest.WorkflowId = id + strconv.Itoa(i)
 
 		if i < testcore.DefaultPageSize-1 { // 4 workflows have search attributes.
@@ -784,7 +784,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(
 ) {
 	// start enough number of workflows
 	for i := 0; i < numOfWorkflows; i++ {
-		startRequest.RequestId = uuid.New()
+		startRequest.RequestId = uuid.NewString()
 		startRequest.WorkflowId = wid + strconv.Itoa(i)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startRequest)
 		s.NoError(err)
@@ -991,7 +991,7 @@ func (s *AdvancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1015,7 +1015,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1306,7 +1306,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1576,7 +1576,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -2225,7 +2225,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 
 	// Start a workflow on tq1 and verify it affects the reachability of v0.1
 	_, err = s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:    uuid.New(),
+		RequestId:    uuid.NewString(),
 		Namespace:    s.Namespace().String(),
 		WorkflowId:   testcore.RandomizeStr(s.T().Name()),
 		WorkflowType: &commonpb.WorkflowType{Name: "dont-care"},
@@ -2367,7 +2367,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 	tq := s.T().Name()
 
 	_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:    uuid.New(),
+		RequestId:    uuid.NewString(),
 		Namespace:    s.Namespace().String(),
 		WorkflowId:   testcore.RandomizeStr(s.T().Name()),
 		WorkflowType: &commonpb.WorkflowType{Name: "dont-care"},
@@ -2471,13 +2471,13 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	ctx := testcore.NewContext()
 
 	// Test 1: List schedule with "scheduleId" query
-	scheduleID := "test-schedule-" + uuid.New()
+	scheduleID := "test-schedule-" + uuid.NewString()
 	workflowType := "test-workflow-type"
-	workflowID := "test-schedule-" + uuid.New()
+	workflowID := "test-schedule-" + uuid.NewString()
 
 	schedule := &workflowservice.CreateScheduleRequest{
 		Namespace:  s.Namespace().String(),
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 		ScheduleId: scheduleID,
 		Schedule: &schedulepb.Schedule{
 			Action: &schedulepb.ScheduleAction{
@@ -2526,10 +2526,10 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	s.addCustomKeywordSearchAttribute(ctx, searchattribute.ScheduleID)
 
 	// Create the schedule with the new search attribute and verify it can be listed
-	customScheduleID := "test-schedule-" + uuid.New()
+	customScheduleID := "test-schedule-" + uuid.NewString()
 	customSearchAttrValue := "testScheduleId"
 
-	schedule.RequestId = uuid.New()
+	schedule.RequestId = uuid.NewString()
 	schedule.ScheduleId = customScheduleID
 	schedule.SearchAttributes = &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{

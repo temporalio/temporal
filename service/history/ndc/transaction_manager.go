@@ -5,7 +5,7 @@ package ndc
 import (
 	"context"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -297,7 +297,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		namespaceID := namespace.ID(baseMutableState.GetExecutionInfo().NamespaceId)
 		workflowID := baseMutableState.GetExecutionInfo().WorkflowId
 		baseRunID := baseMutableState.GetExecutionState().GetRunId()
-		resetRunID := uuid.New()
+		resetRunID := uuid.NewString()
 		baseRebuildLastEventID := baseMutableState.GetLastCompletedWorkflowTaskStartedEventId()
 		baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
 		baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
@@ -321,7 +321,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			baseRebuildLastEventVersion,
 			baseNextEventID,
 			resetRunID,
-			uuid.New(),
+			uuid.NewString(),
 			targetWorkflow,
 			targetWorkflow,
 			EventsReapplicationResetWorkflowReason,
