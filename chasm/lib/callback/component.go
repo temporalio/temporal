@@ -12,11 +12,17 @@ const (
 	Archetype chasm.Archetype = "Callback"
 )
 
+// Callback represents a callback component in CHASM.
+//
+// This is the CHASM port of HSM's nexusInvocation struct from nexus_invocation.go:25-32.
 type Callback struct {
 	chasm.UnimplementedComponent
 
 	// Persisted internal state
 	*callbackspb.CallbackState
+
+	// Interface to retrieve Nexus operation completion data
+	CanGetNexusCompletion chasm.Field[CanGetNexusCompletion]
 }
 
 func NewCallback(
@@ -30,6 +36,7 @@ func NewCallback(
 			RequestId:        requestID,
 			RegistrationTime: registrationTime,
 			Callback:         cb,
+			Status:           callbackspb.CALLBACK_STATUS_STANDBY,
 		},
 	}
 }
