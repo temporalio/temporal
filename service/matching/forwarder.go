@@ -252,7 +252,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 		if err != nil {
 			return nil, fwdr.handleErr(err)
 		}
-		return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: resp}), nil
+		return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: convertPollWorkflowTaskQueueResponse(resp)}), nil
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		resp, err := fwdr.client.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: fwdr.partition.TaskQueue().NamespaceId(),

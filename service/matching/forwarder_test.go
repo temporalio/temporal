@@ -276,7 +276,7 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	t.Equal("id1", request.GetPollRequest().GetIdentity())
 	t.Equal(mustParent(t.partition, 20).RpcName(), request.GetPollRequest().GetTaskQueue().GetName())
 	t.Equal(t.partition.Kind(), request.GetPollRequest().GetTaskQueue().GetKind())
-	t.Equal(resp, task.pollWorkflowTaskQueueResponse())
+	t.Equal(convertPollWorkflowTaskQueueResponse(resp), task.pollWorkflowTaskQueueResponse())
 	t.Nil(task.pollActivityTaskQueueResponse())
 }
 

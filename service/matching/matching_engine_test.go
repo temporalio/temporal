@@ -552,7 +552,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 	}, metrics.NoopMetricsHandler)
 	s.NoError(err)
 
-	expectedResp := &matchingservice.PollWorkflowTaskQueueResponse{
+	expectedResp := &matchingservice.PollWorkflowTaskQueueResponseWithRawHistory{
 		TaskToken:              resp.TaskToken,
 		WorkflowExecution:      execution,
 		WorkflowType:           workflowType,
