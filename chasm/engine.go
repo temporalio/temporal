@@ -55,9 +55,8 @@ type BusinessIDConflictPolicy int
 
 const (
 	BusinessIDConflictPolicyFail BusinessIDConflictPolicy = iota
-	BusinessIDConflictPolicyTermiateExisting
-	// TODO: Do we want to support UseExisting conflict policy?
-	// BusinessIDConflictPolicyUseExisting
+	BusinessIDConflictPolicyTerminateExisting
+	BusinessIDConflictPolicyUseExisting
 )
 
 type TransitionOptions struct {
@@ -82,7 +81,9 @@ func WithSpeculative() TransitionOption {
 	}
 }
 
-// this only applies to NewEntity and UpdateWithNewEntity
+// WithBusinessIDPolicy sets the businessID reuse and conflict policy
+// used in the transition when creating a new entity.
+// This option only applies to NewEntity() and UpdateWithNewEntity().
 func WithBusinessIDPolicy(
 	reusePolicy BusinessIDReusePolicy,
 	conflictPolicy BusinessIDConflictPolicy,
@@ -93,7 +94,8 @@ func WithBusinessIDPolicy(
 	}
 }
 
-// this only applies to NewEntity and UpdateWithNewEntity
+// WithRequestID sets the requestID used when creating a new entity.
+// This option only applies to NewEntity() and UpdateWithNewEntity().
 func WithRequestID(
 	requestID string,
 ) TransitionOption {
