@@ -124,7 +124,6 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelActivityExecution":        2,
 		"/temporal.api.workflowservice.v1.WorkflowService/TerminateActivityExecution":            2,
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteActivityExecution":               2,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetActivityExecutionResult":            2,
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":       3,
@@ -141,7 +140,6 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion": 3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":        3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":           3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":       3,
 
 		// P3: Progress APIs for reporting cancellations and failures.
 		// They are relatively low priority as the tasks need to be retried anyway.
@@ -155,6 +153,7 @@ var (
 		// P4: Poll APIs and other low priority APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":              4,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":                 4,
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":               4,

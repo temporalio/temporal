@@ -30,6 +30,7 @@ import (
 	worker "go.temporal.io/api/worker/v1"
 	workflow "go.temporal.io/api/workflow/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
+	descriptorpb "google.golang.org/protobuf/types/descriptorpb"
 	anypb "google.golang.org/protobuf/types/known/anypb"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
@@ -41,6 +42,7 @@ import (
 func init() {
 	importMap = make(map[string]protoreflect.FileDescriptor)
 	importMap["google/protobuf/any.proto"] = anypb.File_google_protobuf_any_proto
+	importMap["google/protobuf/descriptor.proto"] = descriptorpb.File_google_protobuf_descriptor_proto
 	importMap["google/protobuf/duration.proto"] = durationpb.File_google_protobuf_duration_proto
 	importMap["google/protobuf/empty.proto"] = emptypb.File_google_protobuf_empty_proto
 	importMap["google/protobuf/field_mask.proto"] = fieldmaskpb.File_google_protobuf_field_mask_proto
@@ -58,7 +60,6 @@ func init() {
 	importMap["temporal/api/enums/v1/deployment.proto"] = enums.File_temporal_api_enums_v1_deployment_proto
 	importMap["temporal/api/enums/v1/event_type.proto"] = enums.File_temporal_api_enums_v1_event_type_proto
 	importMap["temporal/api/enums/v1/failed_cause.proto"] = enums.File_temporal_api_enums_v1_failed_cause_proto
-	importMap["temporal/api/enums/v1/id.proto"] = enums.File_temporal_api_enums_v1_id_proto
 	importMap["temporal/api/enums/v1/namespace.proto"] = enums.File_temporal_api_enums_v1_namespace_proto
 	importMap["temporal/api/enums/v1/nexus.proto"] = enums.File_temporal_api_enums_v1_nexus_proto
 	importMap["temporal/api/enums/v1/query.proto"] = enums.File_temporal_api_enums_v1_query_proto
