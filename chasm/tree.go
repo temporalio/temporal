@@ -373,7 +373,8 @@ func (n *Node) Component(
 		return nil, errComponentNotFound
 	}
 
-	if err := node.prepareComponentValue(chasmContext); err != nil {
+	validationContext := NewContext(chasmContext.getContext(), node)
+	if err := node.prepareComponentValue(validationContext); err != nil {
 		return nil, err
 	}
 
@@ -388,18 +389,22 @@ func (n *Node) Component(
 	// Access check always begins on the target node's parent, and ignored for nodes
 	// without ancestors.
 	if node.parent != nil {
-		err := node.parent.validateAccess(chasmContext)
+		err := node.parent.validateAccess(validationContext)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	if ref.validationFn != nil {
-		if err := ref.validationFn(node.root().backend, chasmContext, componentValue); err != nil {
+		if err := ref.validationFn(node.root().backend, validationContext, componentValue); err != nil {
 			return nil, err
 		}
 	}
 
+	// prepare component value again using incoming context to mark node as dirty if needed.
+	if err := node.prepareComponentValue(chasmContext); err != nil {
+		return nil, err
+	}
 	return componentValue, nil
 }
 
@@ -2737,14 +2742,12 @@ func (n *Node) ExecutePureTask(
 		return false, fmt.Errorf("ExecutePureTask called on a SideEffect task '%s'", registrableTask.fqType())
 	}
 
-	ctx := NewMutableContext(
-		newContextWithOperationIntent(baseCtx, OperationIntentProgress),
-		n,
-	)
+	progressIntentCtx := newContextWithOperationIntent(baseCtx, OperationIntentProgress)
+	validationContext := NewContext(progressIntentCtx, n)
 
 	// Ensure this node's component value is hydrated before execution. Component
 	// will also check access rules.
-	component, err := n.Component(ctx, ComponentRef{})
+	component, err := n.Component(validationContext, ComponentRef{})
 	if err != nil {
 		// NotFound errors are expected here and we can safely skip the task execution.
 		if errors.As(err, new(*serviceerror.NotFound)) {
@@ -2754,7 +2757,7 @@ func (n *Node) ExecutePureTask(
 	}
 
 	// Run the task's registered value before execution.
-	valid, err := n.validateTask(ctx, taskAttributes, taskInstance)
+	valid, err := n.validateTask(validationContext, taskAttributes, taskInstance)
 	if err != nil {
 		return false, err
 	}
@@ -2762,8 +2765,14 @@ func (n *Node) ExecutePureTask(
 		return false, nil
 	}
 
+	executionContext := NewMutableContext(progressIntentCtx, n)
+	component, err = n.Component(executionContext, ComponentRef{})
+	if err != nil {
+		return false, err
+	}
+
 	result := registrableTask.executeFn.Call([]reflect.Value{
-		reflect.ValueOf(ctx),
+		reflect.ValueOf(executionContext),
 		reflect.ValueOf(component),
 		reflect.ValueOf(taskAttributes),
 		reflect.ValueOf(taskInstance),
