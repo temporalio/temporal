@@ -265,7 +265,7 @@ func newMatchingEngine(
 
 func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *Config) taskQueuePartitionManager {
 	tqConfig := newTaskQueueConfig(prtn.TaskQueue(), config, matchingTestNamespace)
-	logger, _, metricsHandler := s.matchingEngine.loggerAndMetricsForPartition(matchingTestNamespace, prtn, tqConfig)
+	logger, _, metricsHandler := s.matchingEngine.loggerAndMetricsForPartition(s.ns, prtn, tqConfig)
 	pm, err := newTaskQueuePartitionManager(s.matchingEngine, s.ns, prtn, tqConfig, logger, logger, metricsHandler, &mockUserDataManager{})
 	s.Require().NoError(err)
 	return pm
@@ -1141,7 +1141,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		assert.EqualValues(collect, 0, s.taskManager.getTaskCount(dbq))
 	}, 2*time.Second, 100*time.Millisecond)
 
-	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,partition=0,service_name=matching,task_type=Activity,taskqueue=makeToast,worker-build-id=__unversioned__"]
+	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",namespace_state=active,operation=TaskQueueMgr,partition=0,service_name=matching,task_type=Activity,taskqueue=makeToast,worker-build-id=__unversioned__"]
 	s.Equal(1, int(syncCtr.Value())) // Check times zero rps is set = throttle counter
 	expectedRange := int64((taskCount + 1) / 30)
 	// Due to conflicts some ids are skipped and more real ranges are used.
