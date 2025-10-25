@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	persistencesql "go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -44,6 +45,7 @@ func NewSQLVisibilityStore(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	serializer serialization.Serializer,
 ) (*VisibilityStore, error) {
 	refDbConn := persistencesql.NewRefCountedDBConn(sqlplugin.DbKindVisibility, &cfg, r, logger, metricsHandler)
 	db, err := refDbConn.Get()
@@ -51,7 +53,7 @@ func NewSQLVisibilityStore(
 		return nil, err
 	}
 	return &VisibilityStore{
-		sqlStore:                       persistencesql.NewSqlStore(db, logger),
+		sqlStore:                       persistencesql.NewSqlStore(db, logger, serializer),
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
 	}, nil

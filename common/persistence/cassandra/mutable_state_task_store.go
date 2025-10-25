@@ -162,13 +162,15 @@ const (
 
 type (
 	MutableStateTaskStore struct {
-		Session gocql.Session
+		Session    gocql.Session
+		serializer serialization.Serializer
 	}
 )
 
-func NewMutableStateTaskStore(session gocql.Session) *MutableStateTaskStore {
+func NewMutableStateTaskStore(session gocql.Session, serializer serialization.Serializer) *MutableStateTaskStore {
 	return &MutableStateTaskStore{
-		Session: session,
+		Session:    session,
+		serializer: serializer,
 	}
 }
 
@@ -507,7 +509,7 @@ func (d *MutableStateTaskStore) PutReplicationTaskToDLQ(
 	request *p.PutReplicationTaskToDLQRequest,
 ) error {
 	task := request.TaskInfo
-	datablob, err := serialization.ReplicationTaskInfoToBlob(task)
+	datablob, err := d.serializer.ReplicationTaskInfoToBlob(task)
 	if err != nil {
 		return gocql.ConvertError("PutReplicationTaskToDLQ", err)
 	}
