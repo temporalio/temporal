@@ -4,7 +4,7 @@ package temporal.server.chasm.lib.activity.proto.v1;
 
 option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
 
-message ActivityStartExecuteTask {
+message ActivityDispatchTask {
     // The current attempt number for this activity execution.
     int32 attempt = 1;
 }

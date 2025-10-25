@@ -10,12 +10,12 @@ type library struct {
 	chasm.UnimplementedLibrary
 
 	handler                   *handler
-	ActivityStartTaskExecutor *ActivityStartTaskExecutor
+	ActivityStartTaskExecutor *activityDispatchTaskExecutor
 }
 
 func newLibrary(
 	handler *handler,
-	ActivityStartTaskExecutor *ActivityStartTaskExecutor,
+	ActivityStartTaskExecutor *activityDispatchTaskExecutor,
 ) *library {
 	return &library{
 		handler:                   handler,

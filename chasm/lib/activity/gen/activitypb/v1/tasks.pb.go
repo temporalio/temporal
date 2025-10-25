@@ -22,7 +22,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type ActivityStartExecuteTask struct {
+type ActivityDispatchTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The current attempt number for this activity execution.
 	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
@@ -30,20 +30,20 @@ type ActivityStartExecuteTask struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ActivityStartExecuteTask) Reset() {
-	*x = ActivityStartExecuteTask{}
+func (x *ActivityDispatchTask) Reset() {
+	*x = ActivityDispatchTask{}
 	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ActivityStartExecuteTask) String() string {
+func (x *ActivityDispatchTask) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ActivityStartExecuteTask) ProtoMessage() {}
+func (*ActivityDispatchTask) ProtoMessage() {}
 
-func (x *ActivityStartExecuteTask) ProtoReflect() protoreflect.Message {
+func (x *ActivityDispatchTask) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -55,12 +55,12 @@ func (x *ActivityStartExecuteTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityStartExecuteTask.ProtoReflect.Descriptor instead.
-func (*ActivityStartExecuteTask) Descriptor() ([]byte, []int) {
+// Deprecated: Use ActivityDispatchTask.ProtoReflect.Descriptor instead.
+func (*ActivityDispatchTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ActivityStartExecuteTask) GetAttempt() int32 {
+func (x *ActivityDispatchTask) GetAttempt() int32 {
 	if x != nil {
 		return x.Attempt
 	}
@@ -71,8 +71,8 @@ var File_temporal_server_chasm_lib_activity_proto_v1_tasks_proto protoreflect.Fi
 
 const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/activity/proto/v1/tasks.proto\x12+temporal.server.chasm.lib.activity.proto.v1\"4\n" +
-	"\x18ActivityStartExecuteTask\x12\x18\n" +
+	"7temporal/server/chasm/lib/activity/proto/v1/tasks.proto\x12+temporal.server.chasm.lib.activity.proto.v1\"0\n" +
+	"\x14ActivityDispatchTask\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattemptBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
 
 var (
@@ -89,7 +89,7 @@ func file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP() 
 
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_goTypes = []any{
-	(*ActivityStartExecuteTask)(nil), // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityStartExecuteTask
+	(*ActivityDispatchTask)(nil), // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask
 }
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type

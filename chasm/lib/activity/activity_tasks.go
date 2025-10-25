@@ -10,27 +10,27 @@ import (
 	"go.uber.org/fx"
 )
 
-type ActivityStartTaskExecutorOptions struct {
+type activityDispatchTaskExecutorOptions struct {
 	fx.In
 
 	MatchingClient resource.MatchingClient
 }
 
-type ActivityStartTaskExecutor struct {
-	MatchingClient resource.MatchingClient
+type activityDispatchTaskExecutor struct {
+	opts activityDispatchTaskExecutorOptions
 }
 
-func newActivityStartTaskExecutor(opts ActivityStartTaskExecutorOptions) *ActivityStartTaskExecutor {
-	return &ActivityStartTaskExecutor{
-		MatchingClient: opts.MatchingClient,
+func newActivityDispatchTaskExecutor(opts activityDispatchTaskExecutorOptions) *activityDispatchTaskExecutor {
+	return &activityDispatchTaskExecutor{
+		opts,
 	}
 }
 
-func (e *ActivityStartTaskExecutor) Validate(
+func (e *activityDispatchTaskExecutor) Validate(
 	ctx chasm.Context,
 	activity *Activity,
 	_ chasm.TaskAttributes,
-	task *activitypb.ActivityStartExecuteTask,
+	task *activitypb.ActivityDispatchTask,
 ) (bool, error) {
 	attempt, err := activity.Attempt.Get(ctx)
 	if err != nil {
@@ -45,32 +45,38 @@ func (e *ActivityStartTaskExecutor) Validate(
 	return true, nil
 }
 
-func (e *ActivityStartTaskExecutor) Execute(
+func (e *activityDispatchTaskExecutor) Execute(
 	ctx context.Context,
 	activityRef chasm.ComponentRef,
 	_ chasm.TaskAttributes,
-	_ *activitypb.ActivityStartExecuteTask,
+	_ *activitypb.ActivityDispatchTask,
 ) error {
-	activityState, err := GetActivityState(ctx, activityRef)
+	request, err := chasm.ReadComponent(
+		ctx,
+		activityRef,
+		func(a *Activity, ctx chasm.Context, activityRef chasm.ComponentRef) (*matchingservice.AddActivityTaskRequest, error) {
+
+			protoRef, err := chasm.ComponentRefToProtoRef(activityRef, nil)
+			if err != nil {
+				return nil, err
+			}
+
+			// Note: No need to set the vector clock here, as the components track version conflicts for read/write
+			return &matchingservice.AddActivityTaskRequest{
+				NamespaceId:            activityRef.NamespaceID,
+				TaskQueue:              a.ActivityOptions.TaskQueue,
+				ScheduleToStartTimeout: a.ActivityOptions.ScheduleToStartTimeout,
+				Priority:               a.Priority,
+				ComponentRef:           protoRef,
+			}, nil
+		},
+		activityRef,
+	)
 	if err != nil {
 		return err
 	}
 
-	protoRef, err := chasm.ComponentRefToProtoRef(activityRef, nil)
-	if err != nil {
-		return err
-	}
-
-	// Note: No need to set the vector clock here, as the components track version conflicts for read/write
-	request := &matchingservice.AddActivityTaskRequest{
-		NamespaceId:            activityRef.NamespaceID,
-		TaskQueue:              activityState.ActivityOptions.TaskQueue,
-		ScheduleToStartTimeout: activityState.ActivityOptions.ScheduleToStartTimeout,
-		Priority:               activityState.Priority,
-		ComponentRef:           protoRef,
-	}
-
-	_, err = e.MatchingClient.AddActivityTask(ctx, request)
+	_, err = e.opts.MatchingClient.AddActivityTask(ctx, request)
 
 	return err
 }

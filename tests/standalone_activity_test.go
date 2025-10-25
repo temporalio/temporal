@@ -42,16 +42,7 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 	activityType := &commonpb.ActivityType{
 		Name: "test-activity-type",
 	}
-	input := &commonpb.Payloads{
-		Payloads: []*commonpb.Payload{
-			{
-				Metadata: map[string][]byte{
-					"encoding": []byte("json/plain"),
-				},
-				Data: []byte(`{"name":"test-user","count":11}`),
-			},
-		},
-	}
+	input := createDefaultInput()
 	taskQueue := uuid.New().String()
 
 	resp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
@@ -85,4 +76,17 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 	require.True(t, proto.Equal(activityType, pollResp.GetActivityType()))
 	require.EqualValues(t, 1, pollResp.Attempt)
 	require.True(t, proto.Equal(input, pollResp.GetInput()))
+}
+
+func createDefaultInput() *commonpb.Payloads {
+	return &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			{
+				Metadata: map[string][]byte{
+					"encoding": []byte("json/plain"),
+				},
+				Data: []byte(`{"name":"test-user","count":11}`),
+			},
+		},
+	}
 }

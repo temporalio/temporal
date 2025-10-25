@@ -5,35 +5,35 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Marshal an object of type ActivityStartExecuteTask to the protobuf v3 wire format
-func (val *ActivityStartExecuteTask) Marshal() ([]byte, error) {
+// Marshal an object of type ActivityDispatchTask to the protobuf v3 wire format
+func (val *ActivityDispatchTask) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type ActivityStartExecuteTask from the protobuf v3 wire format
-func (val *ActivityStartExecuteTask) Unmarshal(buf []byte) error {
+// Unmarshal an object of type ActivityDispatchTask from the protobuf v3 wire format
+func (val *ActivityDispatchTask) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *ActivityStartExecuteTask) Size() int {
+func (val *ActivityDispatchTask) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two ActivityStartExecuteTask values are equivalent by recursively
+// Equal returns whether two ActivityDispatchTask values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *ActivityStartExecuteTask) Equal(that interface{}) bool {
+func (this *ActivityDispatchTask) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *ActivityStartExecuteTask
+	var that1 *ActivityDispatchTask
 	switch t := that.(type) {
-	case *ActivityStartExecuteTask:
+	case *ActivityDispatchTask:
 		that1 = t
-	case ActivityStartExecuteTask:
+	case ActivityDispatchTask:
 		that1 = &t
 	default:
 		return false

@@ -31,8 +31,8 @@ type (
 		//    skip execution if so (e.g., checking if an activity already transitioned from scheduled to started state).
 		// 2. Task obsolescence: Tasks can become irrelevant when state changes invalidate them (e.g., when a scheduler
 		//    is updated to run at a different time, making the previously scheduled task invalid for the new state).
-		// 3. Optimization: For pure tasks that can run in a single transaction, Validate is called before execution
-		//    to avoid unnecessary work.
+		//    For pure tasks that can run in a single transaction, Validate is called before execution to avoid
+		//    unnecessary work.
 		//
 		// The framework automatically calls Validate at key points, such as after closing transactions, to check all
 		// generated tasks before they execute.
@@ -40,7 +40,7 @@ type (
 		// Returns:
 		// - (true, nil) if the task is valid and should be executed
 		// - (false, nil) if the task should be silently dropped (it's no longer relevant)
-		// - (false, error) if validation fails with an error
+		// - (anything, error) if validation fails with an error
 		Validate(Context, C, TaskAttributes, T) (bool, error)
 	}
 )

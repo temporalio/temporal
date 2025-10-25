@@ -3,8 +3,12 @@ package activity
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -14,7 +18,7 @@ import (
 )
 
 type ActivityStore interface {
-	PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, res *historyservice.RecordActivityTaskStartedResponse) error
+	PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, key chasm.EntityKey, response *historyservice.RecordActivityTaskStartedResponse) error
 	RecordCompletion(ctx chasm.MutableContext) error
 }
 
@@ -80,12 +84,8 @@ func NewStandaloneActivity(
 		Visibility: chasm.NewComponentField(ctx, visibility),
 	}
 
-	ctx.AddTask(
-		activity,
-		chasm.TaskAttributes{},
-		&activitypb.ActivityStartExecuteTask{
-			Attempt: 1,
-		})
+	// Standalone activities point to themselves as the store.
+	activity.Store = chasm.Field[ActivityStore](chasm.ComponentPointerTo(ctx, activity))
 
 	return activity, nil
 }
@@ -101,27 +101,6 @@ func NewEmbeddedActivity(
 func GetActivityState(ctx context.Context, ref chasm.ComponentRef) (*activitypb.ActivityState, error) {
 	return getActivityField(ctx, ref, func(a *Activity, _ chasm.Context) (*activitypb.ActivityState, error) {
 		return a.ActivityState, nil
-	})
-}
-
-// GetActivityRequestData reads an activity component's RequestData field by its component reference.
-func GetActivityRequestData(ctx context.Context, ref chasm.ComponentRef) (*activitypb.ActivityRequestData, error) {
-	return getActivityField(ctx, ref, func(a *Activity, ctx chasm.Context) (*activitypb.ActivityRequestData, error) {
-		return a.RequestData.Get(ctx)
-	})
-}
-
-// GetActivityAttempt reads an activity component's Attempt field by its component reference.
-func GetActivityAttempt(ctx context.Context, ref chasm.ComponentRef) (*activitypb.ActivityAttemptState, error) {
-	return getActivityField(ctx, ref, func(a *Activity, ctx chasm.Context) (*activitypb.ActivityAttemptState, error) {
-		return a.Attempt.Get(ctx)
-	})
-}
-
-// GetActivityLastHeartbeat reads an activity component's LastHeartbeat field by its component reference.
-func GetActivityLastHeartbeat(ctx context.Context, ref chasm.ComponentRef) (*activitypb.ActivityHeartbeatState, error) {
-	return getActivityField(ctx, ref, func(a *Activity, ctx chasm.Context) (*activitypb.ActivityHeartbeatState, error) {
-		return a.LastHeartbeat.Get(ctx)
 	})
 }
 
@@ -147,11 +126,11 @@ func HandleRecordActivityTaskStarted(
 	activityRef chasm.ComponentRef,
 	versionDirective *taskqueuespb.TaskVersionDirective,
 	workerIdentity string,
-) (*Activity, error) {
-	activity, _, err := chasm.UpdateComponent(
+) (*historyservice.RecordActivityTaskStartedResponse, error) {
+	response, _, err := chasm.UpdateComponent(
 		ctx,
 		activityRef,
-		func(a *Activity, ctx chasm.MutableContext, _ any) (*Activity, error) {
+		func(a *Activity, ctx chasm.MutableContext, _ any) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			if err := TransitionStarted.Apply(a, ctx, nil); err != nil {
 				return nil, err
 			}
@@ -171,7 +150,21 @@ func HandleRecordActivityTaskStarted(
 				}
 			}
 
-			return a, nil
+			store, err := a.Store.Get(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			if store == nil {
+				return nil, errors.New("activity store is nil")
+			}
+
+			response := &historyservice.RecordActivityTaskStartedResponse{}
+			if err := store.PopulateRecordActivityTaskStartedResponse(ctx, activityRef.EntityKey, response); err != nil {
+				return nil, err
+			}
+
+			return response, nil
 		},
 		nil,
 	)
@@ -179,19 +172,56 @@ func HandleRecordActivityTaskStarted(
 		return nil, err
 	}
 
-	return activity, nil
+	return response, nil
 }
 
-func (a *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, res *historyservice.RecordActivityTaskStartedResponse) error {
-	store, err := a.Store.Get(ctx)
+func (a *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, key chasm.EntityKey, response *historyservice.RecordActivityTaskStartedResponse) error {
+	attempt, err := a.Attempt.Get(ctx)
 	if err != nil {
 		return err
 	}
-	if err := store.PopulateRecordActivityTaskStartedResponse(ctx, res); err != nil {
+
+	lastHeartbeat, err := a.LastHeartbeat.Get(ctx)
+	if err != nil {
 		return err
 	}
-	// ...
+
+	requestData, err := a.RequestData.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	options := a.GetActivityOptions()
+
+	response.StartedTime = attempt.LastStartedTime
+	response.Attempt = attempt.GetCount()
+	if lastHeartbeat != nil {
+		response.HeartbeatDetails = lastHeartbeat.GetDetails()
+	}
+	response.Priority = a.GetPriority()
+	response.RetryPolicy = options.GetRetryPolicy()
+	response.ScheduledEvent = &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+			ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+				ActivityId:             key.BusinessID,
+				ActivityType:           a.GetActivityType(),
+				Input:                  requestData.GetInput(),
+				Header:                 requestData.GetHeader(),
+				TaskQueue:              options.GetTaskQueue(),
+				ScheduleToCloseTimeout: options.GetScheduleToCloseTimeout(),
+				ScheduleToStartTimeout: options.GetScheduleToStartTimeout(),
+				StartToCloseTimeout:    options.GetStartToCloseTimeout(),
+				HeartbeatTimeout:       options.GetHeartbeatTimeout(),
+			},
+		},
+	}
+
 	return nil
+}
+
+func (a Activity) RecordCompletion(ctx chasm.MutableContext) error {
+	return serviceerror.NewUnimplemented("RecordCompletion is not implemented")
 }
 
 func (a *Activity) RecordHeartbeat(ctx chasm.MutableContext, details *commonpb.Payloads) (chasm.NoValue, error) {
