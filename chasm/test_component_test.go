@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -63,8 +64,18 @@ type (
 )
 
 const (
-	testComponentStartTimeSAKey   = "StartTimeSAKey"
-	testComponentStartTimeMemoKey = "StartTimeMemoKey"
+	TestComponentStartTimeSAKey   = "StartTimeSAKey"
+	TestComponentRunIDSAKey       = "RunIdSAKey"
+	TestComponentStartTimeMemoKey = "StartTimeMemoKey"
+)
+
+var (
+	TestKeywordSearchAttribute            = newSearchAttributeKeywordByField(searchattribute.TemporalScheduledById)
+	TestComponentStartTimeSearchAttribute = NewSearchAttributeDateTime(TestComponentStartTimeSAKey, SearchAttributeFieldDateTime01)
+	TestComponentRunIDPredefinedSA        = newSearchAttributeKeywordByField(TestComponentRunIDSAKey)
+
+	_ VisibilitySearchAttributesProvider = (*TestComponent)(nil)
+	_ VisibilityMemoProvider             = (*TestComponent)(nil)
 )
 
 func (tc *TestComponent) LifecycleState(_ Context) LifecycleState {
@@ -95,16 +106,17 @@ func (tc *TestComponent) Fail(_ MutableContext) {
 }
 
 // SearchAttributes implements VisibilitySearchAttributesProvider interface.
-func (tc *TestComponent) SearchAttributes(_ Context) map[string]VisibilityValue {
-	return map[string]VisibilityValue{
-		testComponentStartTimeSAKey: VisibilityValueTime(tc.ComponentData.GetStartTime().AsTime()),
+func (tc *TestComponent) SearchAttributes(_ Context) []SearchAttributeKeyValue {
+	return []SearchAttributeKeyValue{
+		TestComponentStartTimeSearchAttribute.Value(tc.ComponentData.GetStartTime().AsTime()),
+		TestComponentRunIDPredefinedSA.Value(tc.ComponentData.GetRunId()),
 	}
 }
 
 // Memo implements VisibilityMemoProvider interface.
 func (tc *TestComponent) Memo(_ Context) map[string]VisibilityValue {
 	return map[string]VisibilityValue{
-		testComponentStartTimeMemoKey: VisibilityValueTime(tc.ComponentData.GetStartTime().AsTime()),
+		TestComponentStartTimeMemoKey: VisibilityValueTime(tc.ComponentData.GetStartTime().AsTime()),
 	}
 }
 

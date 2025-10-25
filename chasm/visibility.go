@@ -17,10 +17,8 @@ const (
 // allows the CHASM framework to automatically determine, at the end of
 // a transaction, if a visibility task needs to be generated to update the
 // visibility record with the returned search attributes.
-//
-// TODO: Improve this interface after support registering CHASM search attributes.
 type VisibilitySearchAttributesProvider interface {
-	SearchAttributes(Context) map[string]VisibilityValue
+	SearchAttributes(Context) []SearchAttributeKeyValue
 }
 
 // VisibilityMemoProvider if implemented by the root Component,
@@ -29,6 +27,11 @@ type VisibilitySearchAttributesProvider interface {
 // visibility record with the returned memo.
 type VisibilityMemoProvider interface {
 	Memo(Context) map[string]VisibilityValue
+}
+
+type VisibilitySearchAttributesMapper interface {
+	SearchAttributeAlias(field string) (string, error)
+	SearchAttributeField(alias string) (string, error)
 }
 
 type Visibility struct {

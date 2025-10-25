@@ -106,6 +106,9 @@ func (r *Registry) registerComponent(
 	if err := r.validateName(rc.componentType); err != nil {
 		return err
 	}
+	if err := rc.validate(); err != nil {
+		return err
+	}
 	fqn := fullyQualifiedName(lib.Name(), rc.componentType)
 	if _, ok := r.componentByType[fqn]; ok {
 		return fmt.Errorf("component %s is already registered", fqn)

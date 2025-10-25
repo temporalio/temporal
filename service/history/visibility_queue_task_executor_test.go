@@ -617,7 +617,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_RunningExecution
 			s.Equal("TestLibrary.test_component", actualArchetype)
 
 			var paused bool
-			err = payload.Decode(request.SearchAttributes.IndexedFields[testComponentPausedSAName], &paused)
+			// SearchAttribute now uses field name (TemporalBool01) instead of alias (PausedSA)
+			err = payload.Decode(request.SearchAttributes.IndexedFields["TemporalBool01"], &paused)
 			s.NoError(err)
 			s.True(paused)
 
