@@ -2,6 +2,7 @@ package activity
 
 import (
 	"context"
+	"fmt"
 
 	"go.temporal.io/api/activity/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -62,9 +63,47 @@ func (h *handler) PollActivityExecution(ctx context.Context, req *activitypb.Pol
 		ActivityId: request.GetActivityId(),
 		RunId:      request.GetRunId(),
 	}
+	key := chasm.EntityKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  request.GetActivityId(),
+		EntityID:    request.GetRunId(),
+	}
+	waitPolicy := request.GetWaitPolicy()
+	if waitPolicy != nil {
+		var waitPredicateFn func(*Activity, chasm.Context, any) (any, bool, error)
+		switch waitPolicy := request.GetWaitPolicy().(type) {
+		case *workflowservice.PollActivityExecutionRequest_WaitAnyStateChange:
+			waitPredicateFn = func(_ *Activity, ctx chasm.Context, _ any) (any, bool, error) {
+				// TODO
+				return nil, true, nil
+			}
+		case *workflowservice.PollActivityExecutionRequest_WaitCompletion:
+			waitPredicateFn = func(activity *Activity, _ chasm.Context, _ any) (any, bool, error) {
+				// TODO
+				completed := activity.State() == activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED
+				return nil, completed, nil
+			}
+		default:
+			return nil, fmt.Errorf("unexpected wait policy type: %T", waitPolicy)
+		}
+
+		var operationFn func(_ *Activity, _ chasm.MutableContext, _ any, _ any) (any, error)
+
+		_, _, err := chasm.PollComponent(
+			ctx,
+			chasm.NewComponentRef[*Activity](key),
+			waitPredicateFn,
+			operationFn,
+			nil,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &activitypb.PollActivityExecutionResponse{
 		FrontendResponse: &workflowservice.PollActivityExecutionResponse{
 			Info: info,
 		},
 	}, nil
+
 }
