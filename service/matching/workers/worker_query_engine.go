@@ -12,16 +12,18 @@ import (
 )
 
 const (
-	workerInstanceKeyColName    = "WorkerInstanceKey"
-	workerIdentityColName       = "WorkerIdentity"
-	workerHostNameColName       = "HostName"
-	workerTaskQueueColName      = "TaskQueue"
-	workerDeploymentNameColName = "DeploymentName"
-	workerSdkNameColName        = "SdkName"
-	workerSdkVersionColName     = "SdkVersion"
-	workerStartTimeColName      = "StartTime"
-	workerHeartbeatTimeColName  = "HeartbeatTime"
-	workerStatusColName         = "WorkerStatus"
+	workerInstanceKeyColName          = "WorkerInstanceKey"
+	workerIdentityColName             = "WorkerIdentity"
+	workerHostNameColName             = "HostName"
+	workerTaskQueueColName            = "TaskQueue"
+	workerDeploymentNameColName       = "DeploymentName"
+	workerSdkNameColName              = "SdkName"
+	workerSdkVersionColName           = "SdkVersion"
+	workerStartTimeColName            = "StartTime"
+	workerHeartbeatTimeColName        = "HeartbeatTime"
+	workerStatusColName               = "WorkerStatus"
+	workerCPUUsageColName             = "CPUUsage"
+	workerWorkflowTaskSlotUsedColName = "WorkflowTaskSlotUsed"
 )
 
 const (
@@ -47,7 +49,10 @@ The following worker status attributes are expected are supported as part of the
 * StartTime
 * LastHeartbeatTime
 * Status
-Currently metrics are not supported as a part of ListWorkers query.
+
+The following worker metrics are supported as part of the query:
+* CPUUsage
+* WorkflowTaskSlotUsed
 
 Field names are case-sensitive.
 
@@ -86,10 +91,12 @@ func newWorkerQueryEngine(nsID string, query string) (*workerQueryEngine, error)
 	return engine, nil
 }
 
-type WorkerHeartbeatPropertyFunc func(*workerpb.WorkerHeartbeat) string
+type workerHeartbeatPropertyFunc func(*workerpb.WorkerHeartbeat) string
+type workerIntMetricPropertyFunc func(*workerpb.WorkerHeartbeat) int
+type workerFloatMetricPropertyFunc func(*workerpb.WorkerHeartbeat) float64
 
 var (
-	propertyMapFuncs = map[string]WorkerHeartbeatPropertyFunc{
+	workerStringPropertyMap = map[string]workerHeartbeatPropertyFunc{
 		workerInstanceKeyColName: func(hb *workerpb.WorkerHeartbeat) string {
 			return hb.WorkerInstanceKey
 		},
@@ -119,6 +126,24 @@ var (
 		},
 		workerStatusColName: func(hb *workerpb.WorkerHeartbeat) string {
 			return hb.Status.String()
+		},
+	}
+
+	workerFloatMetricPropertyMap = map[string]workerFloatMetricPropertyFunc{
+		workerCPUUsageColName: func(hb *workerpb.WorkerHeartbeat) float64 {
+			if hb.HostInfo == nil {
+				return 0.0
+			}
+			return float64(hb.HostInfo.CurrentHostCpuUsage)
+		},
+	}
+
+	workerIntMetricPropertyMap = map[string]workerIntMetricPropertyFunc{
+		workerWorkflowTaskSlotUsedColName: func(hb *workerpb.WorkerHeartbeat) int {
+			if hb.WorkflowTaskSlotsInfo == nil {
+				return 0
+			}
+			return int(hb.WorkflowTaskSlotsInfo.CurrentUsedSlots)
 		},
 	}
 )
@@ -266,7 +291,7 @@ func (w *workerQueryEngine) evaluateComparison(expr *sqlparser.ComparisonExpr) (
 		workerSdkNameColName,
 		workerSdkVersionColName,
 		workerStatusColName:
-		propertyFunc, ok := propertyMapFuncs[colName]
+		propertyFunc, ok := workerStringPropertyMap[colName]
 		if !ok {
 			return false, serviceerror.NewInvalidArgumentf("unknown or unsupported worker heartbeat search field: %s", colName)
 		}
@@ -276,6 +301,28 @@ func (w *workerQueryEngine) evaluateComparison(expr *sqlparser.ComparisonExpr) (
 		}
 		existingVal := propertyFunc(w.currentWorker)
 		return compareQueryString(val, existingVal, expr.Operator, colName)
+	case workerCPUUsageColName:
+		propertyFunc, ok := workerFloatMetricPropertyMap[colName]
+		if !ok {
+			return false, serviceerror.NewInvalidArgumentf("unknown or unsupported worker heartbeat search field: %s", colName)
+		}
+		val, err := sqlquery.ExtractFloatValue(valStr)
+		if err != nil {
+			return false, serviceerror.NewInvalidArgumentf("invalid value for %s: %v", colName, err)
+		}
+		existingVal := propertyFunc(w.currentWorker)
+		return compareQueryNumeric(val, existingVal, expr.Operator, colName)
+	case workerWorkflowTaskSlotUsedColName:
+		propertyFunc, ok := workerIntMetricPropertyMap[colName]
+		if !ok {
+			return false, serviceerror.NewInvalidArgumentf("unknown or unsupported worker heartbeat search field: %s", colName)
+		}
+		val, err := sqlquery.ExtractIntValue(valStr)
+		if err != nil {
+			return false, serviceerror.NewInvalidArgumentf("invalid value for %s: %v", colName, err)
+		}
+		existingVal := propertyFunc(w.currentWorker)
+		return compareQueryNumeric(val, existingVal, expr.Operator, colName)
 	case workerStartTimeColName:
 		expectedTime, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
@@ -355,6 +402,25 @@ func compareQueryString(inStr string, expectedStr string, operation string, colN
 		return strings.HasPrefix(expectedStr, inStr), nil
 	case sqlparser.NotStartsWithStr:
 		return !strings.HasPrefix(expectedStr, inStr), nil
+	default:
+		return false, serviceerror.NewInvalidArgumentf("%s: operation %s is not supported for %s column", invalidExpressionErrMessage, operation, colName)
+	}
+}
+
+func compareQueryNumeric[T int | float64](val, extractedVal T, operation string, colName string) (bool, error) {
+	switch operation {
+	case sqlparser.EqualStr:
+		return extractedVal == val, nil
+	case sqlparser.NotEqualStr:
+		return extractedVal != val, nil
+	case sqlparser.GreaterThanStr:
+		return extractedVal > val, nil
+	case sqlparser.GreaterEqualStr:
+		return extractedVal >= val, nil
+	case sqlparser.LessThanStr:
+		return extractedVal < val, nil
+	case sqlparser.LessEqualStr:
+		return extractedVal <= val, nil
 	default:
 		return false, serviceerror.NewInvalidArgumentf("%s: operation %s is not supported for %s column", invalidExpressionErrMessage, operation, colName)
 	}
