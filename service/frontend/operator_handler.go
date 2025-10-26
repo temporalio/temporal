@@ -271,7 +271,6 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		return serviceerror.NewUnavailablef(errUnableToGetNamespaceInfoMessage, nsName, err)
 	}
 
-	dbCustomSearchAttributes := searchattribute.GetSqlDbIndexSearchAttributes().CustomSearchAttributes
 	cmCustomSearchAttributes := currentSearchAttributes.Custom()
 	upsertFieldToAliasMap := make(map[string]string)
 	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
@@ -289,12 +288,8 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		// find the first available field for the given type
 		targetFieldName := ""
 		cntUsed := 0
-		for fieldName, fieldType := range dbCustomSearchAttributes {
-			if fieldType != saType {
-				continue
-			}
-			// make sure the pre-allocated custom search attributes are created in cluster metadata
-			if _, ok := cmCustomSearchAttributes[fieldName]; !ok {
+		for fieldName, fieldType := range cmCustomSearchAttributes {
+			if fieldType != saType || !searchattribute.IsPreallocatedCSAFieldName(fieldName, fieldType) {
 				continue
 			}
 			if _, ok := fieldToAliasMap[fieldName]; ok {
@@ -307,9 +302,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 			}
 		}
 		if targetFieldName == "" {
-			return serviceerror.NewInvalidArgumentf(
-				errTooManySearchAttributesMessage, cntUsed, saType,
-			)
+			return serviceerror.NewInvalidArgumentf(errTooManySearchAttributesMessage, cntUsed, saType)
 		}
 		upsertFieldToAliasMap[targetFieldName] = saName
 	}

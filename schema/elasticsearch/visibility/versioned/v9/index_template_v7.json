@@ -96,6 +96,9 @@
       "TemporalPauseInfo": {
         "type": "keyword"
       },
+      "TemporalReportedProblems": {
+        "type": "keyword"
+      },
       "TemporalWorkerDeploymentVersion": {
         "type": "keyword"
       },

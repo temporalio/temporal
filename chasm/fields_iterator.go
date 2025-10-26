@@ -11,6 +11,7 @@ import (
 const (
 	chasmFieldTypePrefix = "chasm.Field["
 	chasmMapTypePrefix   = "chasm.Map["
+	chasmMSPointerType   = "chasm.MSPointer"
 
 	fieldNameTag = "name"
 )
@@ -22,6 +23,7 @@ const (
 	fieldKindData
 	fieldKindSubField
 	fieldKindSubMap
+	fieldKindMutableState
 )
 
 type fieldInfo struct {
@@ -60,7 +62,7 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 				prefix := genericTypePrefix(fieldT)
 				if strings.HasPrefix(prefix, "*") {
 					switch prefix[1:] {
-					case chasmFieldTypePrefix, chasmMapTypePrefix:
+					case chasmFieldTypePrefix, chasmMapTypePrefix, chasmMSPointerType:
 						fieldErr = serviceerror.NewInternalf("%s.%s: CHASM fields must not be pointers", valueT, fieldN)
 					default:
 						continue
@@ -71,6 +73,8 @@ func fieldsOf(valueV reflect.Value) iter.Seq[fieldInfo] {
 						fieldK = fieldKindSubField
 					case chasmMapTypePrefix:
 						fieldK = fieldKindSubMap
+					case chasmMSPointerType:
+						fieldK = fieldKindMutableState
 					default:
 						continue // Skip non-CHASM fields.
 					}
@@ -109,7 +113,7 @@ func unmanagedFieldsOf(valueT reflect.Type) iter.Seq[fieldInfo] {
 			fieldN := fieldName(valueT.Field(i))
 			prefix := genericTypePrefix(fieldT)
 			switch prefix {
-			case chasmFieldTypePrefix, chasmMapTypePrefix:
+			case chasmFieldTypePrefix, chasmMapTypePrefix, chasmMSPointerType:
 				continue // Skip CHASM fields.
 			default:
 				if !yield(fieldInfo{typ: fieldT, name: fieldN}) {
@@ -122,6 +126,9 @@ func unmanagedFieldsOf(valueT reflect.Type) iter.Seq[fieldInfo] {
 
 func genericTypePrefix(t reflect.Type) string {
 	tn := t.String()
+	if tn == chasmMSPointerType {
+		return chasmMSPointerType
+	}
 	bracketPos := strings.Index(tn, "[")
 	if bracketPos == -1 {
 		return ""

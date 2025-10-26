@@ -67,6 +67,7 @@ func NewResult(params initParams) fxResult {
 func (wc *replicationWorkerComponent) RegisterWorkflow(registry sdkworker.Registry) {
 	registry.RegisterWorkflowWithOptions(CatchupWorkflow, workflow.RegisterOptions{Name: catchupWorkflowName})
 	registry.RegisterWorkflowWithOptions(ForceReplicationWorkflow, workflow.RegisterOptions{Name: forceReplicationWorkflowName})
+	registry.RegisterWorkflowWithOptions(ForceReplicationWorkflowV2, workflow.RegisterOptions{Name: forceReplicationWorkflowV2Name})
 	registry.RegisterWorkflowWithOptions(NamespaceHandoverWorkflow, workflow.RegisterOptions{Name: namespaceHandoverWorkflowName})
 	registry.RegisterWorkflowWithOptions(NamespaceHandoverWorkflowV2, workflow.RegisterOptions{Name: namespaceHandoverWorkflowV2Name})
 	registry.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
@@ -121,6 +122,7 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		metricsHandler:                   wc.MetricsHandler,
 		forceReplicationMetricsHandler:   wc.MetricsHandler.WithTags(metrics.WorkflowTypeTag(forceReplicationWorkflowName)),
 		generateMigrationTaskViaFrontend: dynamicconfig.WorkerGenerateMigrationTaskViaFrontend.Get(wc.DynamicCollection),
+		enableHistoryRateLimiter:         dynamicconfig.WorkerEnableHistoryRateLimiter.Get(wc.DynamicCollection),
 		workflowVerifier:                 wc.WorkflowVerifier,
 	}
 }

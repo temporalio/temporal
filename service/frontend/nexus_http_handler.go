@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/routing"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -56,6 +57,7 @@ func NewNexusHTTPHandler(
 	endpointRegistry commonnexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceRateLimitInterceptor interceptor.NamespaceRateLimitInterceptor,
@@ -75,7 +77,7 @@ func NewNexusHTTPHandler(
 		rateLimitInterceptor:                 rateLimitInterceptor,
 		enabled:                              serviceConfig.EnableNexusAPIs,
 		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
-		nexusHandler: nexus.NewHTTPHandler(nexus.HandlerOptions{
+		nexusHandler: nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
 			Handler: &nexusHandler{
 				logger:                        logger,
 				metricsHandler:                metricsHandler,
@@ -84,6 +86,7 @@ func NewNexusHTTPHandler(
 				matchingClient:                matchingClient,
 				auth:                          authInterceptor,
 				telemetryInterceptor:          telemetryInterceptor,
+				requestErrorHandler:           requestErrorHandler,
 				redirectionInterceptor:        redirectionInterceptor,
 				forwardingEnabledForNamespace: serviceConfig.EnableNamespaceNotActiveAutoForwarding,
 				forwardingClients:             clientCache,

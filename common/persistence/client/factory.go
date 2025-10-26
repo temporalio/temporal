@@ -48,18 +48,19 @@ type (
 	}
 
 	factoryImpl struct {
-		dataStoreFactory      persistence.DataStoreFactory
-		config                *config.Persistence
-		serializer            serialization.Serializer
-		eventBlobCache        persistence.XDCCache
-		metricsHandler        metrics.Handler
-		logger                log.Logger
-		clusterName           string
-		systemRateLimiter     quotas.RequestRateLimiter
-		namespaceRateLimiter  quotas.RequestRateLimiter
-		shardRateLimiter      quotas.RequestRateLimiter
-		healthSignals         persistence.HealthSignalAggregator
-		enableDataLossMetrics dynamicconfig.BoolPropertyFn
+		dataStoreFactory                            persistence.DataStoreFactory
+		config                                      *config.Persistence
+		serializer                                  serialization.Serializer
+		eventBlobCache                              persistence.XDCCache
+		metricsHandler                              metrics.Handler
+		logger                                      log.Logger
+		clusterName                                 string
+		systemRateLimiter                           quotas.RequestRateLimiter
+		namespaceRateLimiter                        quotas.RequestRateLimiter
+		shardRateLimiter                            quotas.RequestRateLimiter
+		healthSignals                               persistence.HealthSignalAggregator
+		enableDataLossMetrics                       dynamicconfig.BoolPropertyFn
+		enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -83,6 +84,7 @@ func NewFactory(
 	logger log.Logger,
 	healthSignals persistence.HealthSignalAggregator,
 	enableDataLossMetrics EnableDataLossMetrics,
+	enableBestEffortDeleteTasksOnWorkflowUpdate EnableBestEffortDeleteTasksOnWorkflowUpdate,
 ) Factory {
 	factory := &factoryImpl{
 		dataStoreFactory:      dataStoreFactory,
@@ -97,6 +99,7 @@ func NewFactory(
 		shardRateLimiter:      shardRateLimiter,
 		healthSignals:         healthSignals,
 		enableDataLossMetrics: dynamicconfig.BoolPropertyFn(enableDataLossMetrics),
+		enableBestEffortDeleteTasksOnWorkflowUpdate: dynamicconfig.BoolPropertyFn(enableBestEffortDeleteTasksOnWorkflowUpdate),
 	}
 	factory.initDependencies()
 	return factory
@@ -197,7 +200,14 @@ func (f *factoryImpl) NewExecutionManager() (persistence.ExecutionManager, error
 		return nil, err
 	}
 
-	result := persistence.NewExecutionManager(store, f.serializer, f.eventBlobCache, f.logger, f.config.TransactionSizeLimit)
+	result := persistence.NewExecutionManager(
+		store,
+		f.serializer,
+		f.eventBlobCache,
+		f.logger,
+		f.config.TransactionSizeLimit,
+		f.enableBestEffortDeleteTasksOnWorkflowUpdate,
+	)
 	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
 		result = persistence.NewExecutionPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.shardRateLimiter, f.logger)
 	}

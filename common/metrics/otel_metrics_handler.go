@@ -230,12 +230,12 @@ func (omp *otelMetricsHandler) makeSet(tags []Tag) attribute.Set {
 }
 
 func (omp *otelMetricsHandler) convertTag(tag Tag) attribute.KeyValue {
-	if vals, ok := omp.excludeTags[tag.Key()]; ok {
-		if _, ok := vals[tag.Value()]; !ok {
-			return attribute.String(tag.Key(), tagExcludedValue)
+	if vals, ok := omp.excludeTags[tag.Key]; ok {
+		if _, ok := vals[tag.Value]; !ok {
+			return attribute.String(tag.Key, tagExcludedValue)
 		}
 	}
-	return attribute.String(tag.Key(), tag.Value())
+	return attribute.String(tag.Key, tag.Value)
 }
 
 func makeInitialSet(tags map[string]string) attribute.Set {

@@ -213,6 +213,9 @@ func (r *ReaderImpl) SplitSlices(splitter SliceSplitter) {
 		}
 
 		for _, newSlice := range newSlices {
+			if scope := newSlice.Scope(); scope.IsEmpty() {
+				continue
+			}
 			splitSlices.PushBack(newSlice)
 		}
 	}
@@ -290,6 +293,9 @@ func (r *ReaderImpl) AppendSlices(incomingSlices ...Slice) {
 	defer r.Unlock()
 
 	for _, incomingSlice := range incomingSlices {
+		if scope := incomingSlice.Scope(); scope.IsEmpty() {
+			continue
+		}
 		r.slices.PushBack(incomingSlice)
 	}
 
@@ -529,6 +535,10 @@ func mergeOrAppendSlice(
 	slices *list.List,
 	incomingSlice Slice,
 ) {
+	if scope := incomingSlice.Scope(); scope.IsEmpty() {
+		return
+	}
+
 	if slices.Len() == 0 {
 		slices.PushBack(incomingSlice)
 		return

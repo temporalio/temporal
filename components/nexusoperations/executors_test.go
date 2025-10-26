@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -24,6 +25,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/components/nexusoperations"
@@ -39,6 +41,13 @@ var endpointEntry = &persistencespb.NexusEndpointEntry{
 	Endpoint: &persistencespb.NexusEndpoint{
 		Spec: &persistencespb.NexusEndpointSpec{
 			Name: "endpoint",
+			Target: &persistencespb.NexusEndpointTarget{
+				Variant: &persistencespb.NexusEndpointTarget_External_{
+					External: &persistencespb.NexusEndpointTarget_External{
+						Url: "http://" + uuid.NewString(),
+					},
+				},
+			},
 		},
 	},
 }
@@ -112,9 +121,9 @@ func TestProcessInvocationTask(t *testing.T) {
 				input *nexus.LazyValue,
 				options nexus.StartOperationOptions,
 			) (nexus.HandlerStartOperationResult[any], error) {
+				nexus.AddHandlerLinks(ctx, handlerNexusLink)
 				return &nexus.HandlerStartOperationResultAsync{
 					OperationToken: "op-token",
-					Links:          []nexus.Link{handlerNexusLink},
 				}, nil
 			},
 			expectedMetricOutcome: "pending",
@@ -372,9 +381,9 @@ func TestProcessInvocationTask(t *testing.T) {
 				input *nexus.LazyValue,
 				options nexus.StartOperationOptions,
 			) (nexus.HandlerStartOperationResult[any], error) {
+				nexus.AddHandlerLinks(ctx, handlerNexusLink)
 				return &nexus.HandlerStartOperationResultAsync{
 					OperationToken: "op-token",
-					Links:          []nexus.Link{handlerNexusLink},
 				}, nil
 			},
 			expectedMetricOutcome: "pending",
@@ -496,6 +505,7 @@ func TestProcessInvocationTask(t *testing.T) {
 					MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
 					CallbackURLTemplate:     dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
+					UseSystemCallbackURL:    dynamicconfig.GetBoolPropertyFn(true),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
@@ -505,8 +515,8 @@ func TestProcessInvocationTask(t *testing.T) {
 				MetricsHandler:         metricsHandler,
 				Logger:                 log.NewNoopLogger(),
 				EndpointRegistry:       endpointReg,
-				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
-					return nexus.NewHTTPClient(nexus.HTTPClientOptions{
+				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
+					return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 						BaseURL:    "http://" + listenAddr,
 						Service:    service,
 						Serializer: commonnexus.PayloadSerializer,
@@ -819,8 +829,8 @@ func TestProcessCancelationTask(t *testing.T) {
 				MetricsHandler:    metricsHandler,
 				Logger:            log.NewNoopLogger(),
 				EndpointRegistry:  endpointReg,
-				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
-					return nexus.NewHTTPClient(nexus.HTTPClientOptions{
+				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
+					return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 						BaseURL:    "http://" + listenAddr,
 						Service:    service,
 						Serializer: commonnexus.PayloadSerializer,
@@ -894,7 +904,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 				return endpointEntry, nil
 			},
 		},
-		ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
+		ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
 			return nil, serviceerror.NewInternal("shouldn't get here")
 		},
 	}))

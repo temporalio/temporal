@@ -148,6 +148,20 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) GetCache(key any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCache", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GetCache), key)
 }
 
+// GetConfig mocks base method.
+func (m *MocktaskQueuePartitionManager) GetConfig() *taskQueueConfig {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetConfig")
+	ret0, _ := ret[0].(*taskQueueConfig)
+	return ret0
+}
+
+// GetConfig indicates an expected call of GetConfig.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) GetConfig() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConfig", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GetConfig))
+}
+
 // GetRateLimitManager mocks base method.
 func (m *MocktaskQueuePartitionManager) GetRateLimitManager() *rateLimitManager {
 	m.ctrl.T.Helper()

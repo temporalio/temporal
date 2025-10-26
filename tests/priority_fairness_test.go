@@ -9,11 +9,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -64,7 +68,7 @@ func (s *PrioritySuite) TestPriority_Activity_Basic() {
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Equal(3, len(task.History.Events))
+				s.Len(task.History.Events, 3)
 
 				var wfidx int
 				_, err := fmt.Sscanf(task.WorkflowExecution.WorkflowId, "wf%d", &wfidx)
@@ -73,8 +77,13 @@ func (s *PrioritySuite) TestPriority_Activity_Basic() {
 				var commands []*commandpb.Command
 
 				for i, pri := range rand.Perm(Levels) {
-					input, err := payloads.Encode(wfidx, pri+1)
+					pri += 1 // 1-based
+					input, err := payloads.Encode(wfidx, pri)
 					s.NoError(err)
+					priMsg := &commonpb.Priority{PriorityKey: int32(pri)}
+					if pri == (Levels+1)/2 {
+						priMsg = nil // nil should be treated as default (3)
+					}
 					commands = append(commands, &commandpb.Command{
 						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
@@ -83,10 +92,8 @@ func (s *PrioritySuite) TestPriority_Activity_Basic() {
 								ActivityType:           tv.ActivityType(),
 								TaskQueue:              tv.TaskQueue(),
 								ScheduleToCloseTimeout: durationpb.New(time.Minute),
-								Priority: &commonpb.Priority{
-									PriorityKey: int32(pri + 1),
-								},
-								Input: input,
+								Priority:               priMsg,
+								Input:                  input,
 							},
 						},
 					})
@@ -120,7 +127,7 @@ func (s *PrioritySuite) TestPriority_Activity_Basic() {
 
 	w := wrongorderness(runs)
 	s.T().Log("wrongorderness:", w)
-	s.Less(w, 0.15)
+	s.Less(w, 0.1)
 }
 
 func (s *PrioritySuite) TestSubqueue_Migration() {
@@ -148,7 +155,7 @@ func (s *PrioritySuite) TestSubqueue_Migration() {
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Equal(3, len(task.History.Events))
+				s.Len(task.History.Events, 3)
 
 				var commands []*commandpb.Command
 
@@ -228,6 +235,7 @@ func wrongorderness(vs []int) float64 {
 
 type FairnessSuite struct {
 	testcore.FunctionalTestBase
+	partitions int
 }
 
 func TestFairnessSuite(t *testing.T) {
@@ -236,14 +244,15 @@ func TestFairnessSuite(t *testing.T) {
 }
 
 func (s *FairnessSuite) SetupSuite() {
+	s.partitions = 1
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.MatchingEnableFairness.Key():         true,
 		dynamicconfig.MatchingGetTasksBatchSize.Key():      20,
 		dynamicconfig.MatchingGetTasksReloadAt.Key():       5,
 		dynamicconfig.NumPendingActivitiesLimitError.Key(): 1000,
-		// TODO: disable this later?
-		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  1,
-		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 1,
+		// TODO: disable this and use default later?
+		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  s.partitions,
+		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): s.partitions,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -275,7 +284,7 @@ func (s *FairnessSuite) TestFairness_Activity_Basic() {
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Equal(3, len(task.History.Events))
+				s.Len(task.History.Events, 3)
 
 				var wfidx int
 				_, err := fmt.Sscanf(task.WorkflowExecution.WorkflowId, "wf%d", &wfidx)
@@ -347,4 +356,196 @@ func unfairness(vs []int) float64 {
 		totalDelay += first
 	}
 	return float64(totalDelay) / float64(len(firsts)*len(firsts))
+}
+
+func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	s.OverrideDynamicConfig(dynamicconfig.MatchingEnableMigration, true)
+
+	setConfig := func(stage string, newNewMatcher, newFairness bool) {
+		newMatcher, fairness = newNewMatcher, newFairness
+		s.T().Log("setting config: "+stage, "newMatcher", newMatcher, "fairness", fairness)
+		s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, newMatcher)
+		s.OverrideDynamicConfig(dynamicconfig.MatchingEnableFairness, fairness)
+	}
+	waitForTasks := func(tp enumspb.TaskQueueType, onDraining, onActive int64) {
+		s.T().Helper()
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			tasksOnDraining, tasksOnActive, err := s.countTasksByDrainingActive(ctx, tv, tp)
+			require.NoError(c, err)
+			require.Equal(c, onDraining, tasksOnDraining)
+			require.Equal(c, onActive, tasksOnActive)
+		}, 15*time.Second, 250*time.Millisecond)
+	}
+
+	setConfig("initial", newMatcher, fairness)
+
+	// start 20 workflows. 20 tasks will be queued on wft queue.
+	s.T().Log("starting workflows")
+	for range 20 {
+		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			WorkflowId:   uuid.NewString(),
+			WorkflowType: tv.WorkflowType(),
+			TaskQueue:    tv.TaskQueue(),
+		})
+		s.NoError(err)
+	}
+	waitForTasks(enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0, 20)
+
+	processWft := func() {
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			_, err := s.TaskPoller().PollAndHandleWorkflowTask(
+				tv,
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					s.Len(task.History.Events, 3)
+
+					var commands []*commandpb.Command
+
+					for i := range 2 {
+						input, err := payloads.Encode(i)
+						s.NoError(err)
+						commands = append(commands, &commandpb.Command{
+							CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+							Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+								ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+									ActivityId:             fmt.Sprintf("act%d", i),
+									ActivityType:           tv.ActivityType(),
+									TaskQueue:              tv.TaskQueue(),
+									ScheduleToCloseTimeout: durationpb.New(time.Minute),
+									Input:                  input,
+								},
+							},
+						})
+					}
+
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
+				},
+				taskpoller.WithContext(ctx),
+			)
+			assert.NoError(c, err)
+		}, 5*time.Second, time.Millisecond)
+	}
+
+	// process half the workflow tasks and create two activities each.
+	// 10 tasks will be left on old workflow queue, 20 tasks will be queued on current activity queue.
+	s.T().Log("processing first half of wfts")
+	for range 10 {
+		processWft()
+	}
+	waitForTasks(enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0, 10)
+	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 0, 20)
+
+	// switch fairness. queues will be reloaded. wft queue should drain old queue.
+	setConfig("switching fairness", true, !fairness)
+
+	waitForTasks(enumspb.TASK_QUEUE_TYPE_WORKFLOW, 10, 0)
+	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 20, 0)
+
+	// process the other half of workflow tasks. these should come from the draining queue now.
+	// 20 tasks will be queued on new activity queue (still 20 on old).
+	s.T().Log("processing last half of wfts")
+	for range 5 {
+		processWft()
+	}
+	waitForTasks(enumspb.TASK_QUEUE_TYPE_WORKFLOW, 5, 0)
+	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 20, 10)
+	for range 5 {
+		processWft()
+	}
+	waitForTasks(enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0, 0)
+	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 20, 20)
+	s.T().Log("wfts done")
+
+	// process activities 1/3 at a time
+	processActivity := func() {
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			_, err := s.TaskPoller().PollAndHandleActivityTask(
+				tv,
+				func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+					nothing, err := payloads.Encode()
+					s.NoError(err)
+					return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
+				},
+				taskpoller.WithContext(ctx),
+			)
+			assert.NoError(c, err)
+		}, 5*time.Second, time.Millisecond)
+	}
+
+	s.T().Log("processing first 1/3 activities")
+	for range 13 {
+		processActivity()
+	}
+	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 7, 20)
+
+	setConfig("switching fairness again", true, !fairness)
+	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 20, 7)
+
+	s.T().Log("processing next 1/3 activities")
+	for range 14 {
+		processActivity()
+	}
+	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 6, 7)
+
+	setConfig("switching fairness last time", true, !fairness)
+	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 7, 6)
+
+	s.T().Log("processing last 1/3 activities")
+	for range 13 {
+		processActivity()
+	}
+	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 0, 0)
+}
+
+func (s *FairnessSuite) countTasksByDrainingActive(ctx context.Context, tv *testvars.TestVars, tp enumspb.TaskQueueType) (
+	tasksOnDraining, tasksOnActive int64, retErr error,
+) {
+	for i := range s.partitions {
+		res, err := s.AdminClient().DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     tv.TaskQueue().Name,
+				TaskQueueType: tp,
+				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
+			},
+			BuildIds: &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
+		})
+		if err != nil {
+			return 0, 0, err
+		}
+		for _, versionInfoInternal := range res.VersionsInfoInternal {
+			for _, st := range versionInfoInternal.PhysicalTaskQueueInfo.InternalTaskQueueStatus {
+				// ApproximateBacklogCount is sometimes wrong for draining because it fails to sync on unload, but
+				// LoadedTasks for fairness may not include the whole backlog because of matching.getTasksReloadAt.
+				// The max is a good count of tasks on the queue. This check is only for extra confidence anyway,
+				// the test is useful without it.
+				if st.Draining {
+					tasksOnDraining += max(st.ApproximateBacklogCount, st.LoadedTasks)
+				} else {
+					tasksOnActive += max(st.ApproximateBacklogCount, st.LoadedTasks)
+				}
+			}
+		}
+	}
+	return
+}
+
+func (s *FairnessSuite) TestFairness_Migration_FromClassic() {
+	// classic->fair, fair->pri. fair metadata will be created on transition.
+	s.testMigration(false, false)
+}
+
+func (s *FairnessSuite) TestFairness_Migration_FromPri() {
+	// pri->fair, fair->pri. fair metadata will be created before transition.
+	s.testMigration(true, false)
+}
+
+func (s *FairnessSuite) TestFairness_Migration_FromFair() {
+	// fair->pri, pri->fair. fair metadata will be created first.
+	s.testMigration(true, true)
 }

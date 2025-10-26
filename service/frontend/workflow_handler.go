@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -886,29 +885,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	pollerID := uuid.New()
 	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
 	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
-
-	if request.WorkerHeartbeat != nil {
-		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
-		request.WorkerHeartbeat = nil // clear the heartbeat from the request to avoid sending it to matching service
-
-		// route heartbeat to the matching service only if the request is valid (all validation checks passed)
-		go func() {
-			_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
-				NamespaceId: namespaceID.String(),
-				HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
-					Namespace:       request.Namespace,
-					Identity:        request.Identity,
-					WorkerHeartbeat: heartbeats,
-				},
-			})
-
-			if err != nil {
-				wh.logger.Error("Failed to record worker heartbeat.",
-					tag.WorkflowTaskQueueName(request.TaskQueue.GetName()),
-					tag.Error(err))
-			}
-		}()
-	}
 
 	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(childCtx, &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
@@ -3087,6 +3063,12 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
+	// Check if CHASM scheduler experiment is enabled
+	if headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
+		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName.String()) {
+		wh.logger.Debug("CHASM scheduler enabled for request", tag.ScheduleID(request.ScheduleId))
+	}
+
 	if request.Schedule == nil {
 		request.Schedule = &schedulepb.Schedule{}
 	}
@@ -5244,23 +5226,8 @@ func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string)
 	if len(rawURL) > wh.config.CallbackURLMaxLength(ns.String()) {
 		return status.Errorf(codes.InvalidArgument, "invalid url: url length longer than max length allowed of %d", wh.config.CallbackURLMaxLength(ns.String()))
 	}
-
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return err
-	}
-	if !(u.Scheme == "http" || u.Scheme == "https") {
-		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
-	}
-	for _, cfg := range wh.config.CallbackEndpointConfigs(ns.String()) {
-		if cfg.Regexp.MatchString(u.Host) {
-			if u.Scheme == "http" && !cfg.AllowInsecure {
-				return status.Errorf(codes.InvalidArgument, "invalid url: callback address does not allow insecure connections: %v", u)
-			}
-			return nil
-		}
-	}
-	return status.Errorf(codes.InvalidArgument, "invalid url: url does not match any configured callback address: %v", u)
+	rules := wh.config.CallbackEndpointConfigs(ns.String())
+	return rules.Validate(rawURL)
 }
 
 type buildIdAndFlag interface {
@@ -6038,23 +6005,35 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	if err != nil {
 		return nil, err
 	}
+
 	// Validation: prohibit setting rate limit on workflow task queues
 	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		return nil, serviceerror.NewInvalidArgument("Setting rate limit on workflow task queues is not allowed.")
 	}
-	queueRateLimit := request.GetUpdateQueueRateLimit()
-	fairnessKeyRateLimitDefault := request.GetUpdateFairnessKeyRateLimitDefault()
+
 	// Validate rate limits
+	queueRateLimit := request.GetUpdateQueueRateLimit()
 	if err := validateRateLimit(queueRateLimit, "UpdateQueueRateLimit"); err != nil {
 		return nil, err
 	}
+	fairnessKeyRateLimitDefault := request.GetUpdateFairnessKeyRateLimitDefault()
 	if err := validateRateLimit(fairnessKeyRateLimitDefault, "UpdateFairnessKeyRateLimitDefault"); err != nil {
 		return nil, err
 	}
+
 	// Validate identity field
 	if err := validateStringField("Identity", request.GetIdentity(), wh.config.MaxIDLengthLimit(), false); err != nil {
 		return nil, err
 	}
+
+	// Validate Fairness Weight Updates
+	setFairnessWeightOverrides := request.GetSetFairnessWeightOverrides()
+	unsetFairnessWeightOverrides := request.GetUnsetFairnessWeightOverrides()
+	limit := wh.config.MaxFairnessWeightOverrideConfigLimit(request.GetNamespace(), request.TaskQueue, request.TaskQueueType)
+	if err := validateFairnessWeightUpdate(setFairnessWeightOverrides, unsetFairnessWeightOverrides, limit); err != nil {
+		return nil, err
+	}
+
 	resp, err := wh.matchingClient.UpdateTaskQueueConfig(ctx, &matchingservice.UpdateTaskQueueConfigRequest{
 		NamespaceId:           namespaceID.String(),
 		UpdateTaskqueueConfig: request,

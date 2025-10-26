@@ -55,7 +55,7 @@ func (s *immediateQueueSuite) SetupTest() {
 		tasks.CategoryTransfer,
 		nil, // scheduler
 		nil, // rescheduler
-		testQueueOptions,
+		&testQueueOptions,
 		NewReaderPriorityRateLimiter(
 			func() float64 { return 10 },
 			1,

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/temporalio/tctl-kit/pkg/color"
+	"github.com/fatih/color"
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -90,6 +90,7 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	var errs []error
 	for idx, b := range histories {
 		totalSize += len(b.Data)
+		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintf(c.App.Writer, "======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
 		historyBatch, err := serializer.DeserializeEvents(b)
 		if err != nil {
@@ -103,6 +104,7 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 		data, err := encoder.EncodeHistoryEvents(historyBatch)
 		if err != nil {
 			err := fmt.Errorf("unable to encode History Events: %s", err)
+			// nolint:errcheck // assuming that write will succeed.
 			fmt.Fprintln(c.App.Writer, err)
 			text, terr := prototext.Marshal(&historypb.History{Events: historyBatch})
 			if terr == nil {
@@ -112,8 +114,10 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 			errs = append(errs, err)
 			continue
 		}
+		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintln(c.App.Writer, string(data))
 	}
+	// nolint:errcheck // assuming that write will succeed.
 	fmt.Fprintf(c.App.Writer, "======== total batches %v, total blob len: %v ======\n", len(histories), totalSize)
 
 	err = errors.Join(errs...)
@@ -243,30 +247,37 @@ func AdminDescribeWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	}
 
 	if resp != nil {
-		fmt.Fprintln(c.App.Writer, color.Green(c, "Cache mutable state:"))
+		// nolint:errcheck // assuming that write will succeed.
+		fmt.Fprintln(c.App.Writer, color.GreenString("Cache mutable state:"))
 		if resp.GetCacheMutableState() != nil {
 			prettyPrintJSONObject(c, resp.GetCacheMutableState())
 		}
-		fmt.Fprintln(c.App.Writer, color.Green(c, "Database mutable state:"))
+		// nolint:errcheck // assuming that write will succeed.
+		fmt.Fprintln(c.App.Writer, color.GreenString("Database mutable state:"))
 		prettyPrintJSONObject(c, resp.GetDatabaseMutableState())
 
-		fmt.Fprintln(c.App.Writer, color.Green(c, "Current branch token:"))
+		// nolint:errcheck // assuming that write will succeed.
+		fmt.Fprintln(c.App.Writer, color.GreenString("Current branch token:"))
 		versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
 		// if VersionHistories is set, then all branch infos are stored in VersionHistories
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 		if err != nil {
-			fmt.Fprintln(c.App.Writer, color.Red(c, "Unable to get current version history:"), err)
+			// nolint:errcheck // assuming that write will succeed.
+			fmt.Fprintln(c.App.Writer, color.RedString("Unable to get current version history:"), err)
 		} else {
 			currentBranchToken := persistencespb.HistoryBranch{}
 			err := currentBranchToken.Unmarshal(currentVersionHistory.BranchToken)
 			if err != nil {
-				fmt.Fprintln(c.App.Writer, color.Red(c, "Unable to unmarshal current branch token:"), err)
+				// nolint:errcheck // assuming that write will succeed.
+				fmt.Fprintln(c.App.Writer, color.RedString("Unable to unmarshal current branch token:"), err)
 			} else {
 				prettyPrintJSONObject(c, &currentBranchToken)
 			}
 		}
 
+		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintf(c.App.Writer, "History service address: %s\n", resp.GetHistoryAddr())
+		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintf(c.App.Writer, "Shard Id: %s\n", resp.GetShardId())
 	}
 	return nil
@@ -337,13 +348,16 @@ func AdminDeleteWorkflow(c *cli.Context, clientFactory ClientFactory, prompter *
 	}
 
 	if len(resp.Warnings) != 0 {
+		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintln(c.App.Writer, "Warnings:")
 		for _, warning := range resp.Warnings {
 			fmt.Fprintf(c.App.Writer, "- %s\n", warning)
 		}
+		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintln(c.App.Writer, "")
 	}
 
+	// nolint:errcheck // assuming that write will succeed.
 	fmt.Fprintln(c.App.Writer, "Workflow execution deleted.")
 
 	return nil
@@ -362,6 +376,7 @@ func AdminGetShardID(c *cli.Context) error {
 		return fmt.Errorf("missing required parameter number of Shards")
 	}
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, wid, numberOfShards)
+	// nolint:errcheck // assuming that write will succeed.
 	fmt.Fprintf(c.App.Writer, "ShardId for namespace, workflowId: %v, %v is %v \n", namespaceID, wid, shardID)
 	return nil
 }
@@ -650,6 +665,7 @@ func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) erro
 	if err != nil {
 		return fmt.Errorf("unable to refresh Workflow Task: %s", err)
 	} else {
+		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintln(c.App.Writer, "Refresh workflow task succeeded.")
 	}
 	return nil
@@ -682,6 +698,7 @@ func AdminRebuildMutableState(c *cli.Context, clientFactory ClientFactory) error
 	if err != nil {
 		return fmt.Errorf("rebuild mutable state failed: %s", err)
 	} else {
+		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintln(c.App.Writer, "rebuild mutable state succeeded.")
 	}
 	return nil
@@ -719,6 +736,7 @@ func AdminReplicateWorkflow(
 		return fmt.Errorf("unable to replicate workflow: %w", err)
 	}
 
+	// nolint:errcheck // assuming that write will succeed.
 	fmt.Fprintln(c.App.Writer, "Replication tasks generated successfully.")
 	return nil
 }

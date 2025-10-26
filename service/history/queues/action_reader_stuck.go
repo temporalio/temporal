@@ -29,11 +29,11 @@ func (a *actionReaderStuck) Name() string {
 	return "reader-stuck"
 }
 
-func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) {
+func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) bool {
 	reader, ok := readerGroup.ReaderByID(a.attributes.ReaderID)
 	if !ok {
 		a.logger.Info("Failed to get queue with readerID for reader stuck action", tag.QueueReaderID(a.attributes.ReaderID))
-		return
+		return false
 	}
 
 	stuckRange := NewRange(
@@ -77,9 +77,10 @@ func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) {
 	})
 
 	if len(splitSlices) == 0 {
-		return
+		return false
 	}
 
 	nextReader := readerGroup.GetOrCreateReader(a.attributes.ReaderID + 1)
 	nextReader.MergeSlices(splitSlices...)
+	return true
 }

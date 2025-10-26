@@ -108,15 +108,15 @@ type (
 		captureMetricsHandler            *metricstest.CaptureHandler
 		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
 
-		onGetClaims           func(*authorization.AuthInfo) (*authorization.Claims, error)
-		onAuthorize           func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
-		callbackLock          sync.RWMutex // Must be used for above callbacks
-		serviceFxOptions      map[primitives.ServiceName][]fx.Option
-		taskCategoryRegistry  tasks.TaskCategoryRegistry
-		chasmRegistry         *chasm.Registry
-		grpcClientInterceptor *grpcinject.Interceptor
-		spanExporters         map[telemetry.SpanExporterType]sdktrace.SpanExporter
-		dynamicConfigLogger   log.Logger
+		onGetClaims               func(*authorization.AuthInfo) (*authorization.Claims, error)
+		onAuthorize               func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
+		callbackLock              sync.RWMutex // Must be used for above callbacks
+		serviceFxOptions          map[primitives.ServiceName][]fx.Option
+		taskCategoryRegistry      tasks.TaskCategoryRegistry
+		chasmRegistry             *chasm.Registry
+		grpcClientInterceptor     *grpcinject.Interceptor
+		replicationStreamRecorder *ReplicationStreamRecorder
+		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -210,19 +210,20 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
 		// If this doesn't build, make sure you're building with tags 'test_dep':
-		testHooks: testhooks.NewTestHooksImpl(),
-		// We are overriding the dynamic config logger with a new one that uses the INFO level
-		// because there are some debug logs that are too verbose for testing.
-		// ex: "No such key in dynamic config, using default"
-		// this can be removed if logging from this package becomes less verbose
-		dynamicConfigLogger:      log.NewZapLogger(log.BuildZapLogger(log.Config{Level: "info"})),
-		serviceFxOptions:         params.ServiceFxOptions,
-		taskCategoryRegistry:     params.TaskCategoryRegistry,
-		chasmRegistry:            params.ChasmRegistry,
-		hostsByProtocolByService: params.HostsByProtocolByService,
-		grpcClientInterceptor:    grpcinject.NewInterceptor(),
-		spanExporters:            params.SpanExporters,
+		testHooks:                 testhooks.NewTestHooksImpl(),
+		serviceFxOptions:          params.ServiceFxOptions,
+		taskCategoryRegistry:      params.TaskCategoryRegistry,
+		chasmRegistry:             params.ChasmRegistry,
+		hostsByProtocolByService:  params.HostsByProtocolByService,
+		grpcClientInterceptor:     grpcinject.NewInterceptor(),
+		replicationStreamRecorder: NewReplicationStreamRecorder(),
+		spanExporters:             params.SpanExporters,
 	}
+
+	// Configure output file path for on-demand logging (call WriteToLog() to write)
+	clusterName := params.ClusterMetadataConfig.CurrentClusterName
+	outputFile := fmt.Sprintf("/tmp/replication_stream_messages_%s.txt", clusterName)
+	impl.replicationStreamRecorder.SetOutputFile(outputFile)
 
 	for k, v := range dynamicConfigOverrides {
 		impl.overrideDynamicConfig(t, k, v)
@@ -235,7 +236,6 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 }
 
 func (c *TemporalImpl) Start() error {
-
 	// create temporal-system namespace, this must be created before starting
 	// the services - so directly use the metadataManager to create this
 	if err := c.createSystemNamespace(); err != nil {
@@ -365,7 +365,22 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 			fx.Provide(sdkClientFactoryProvider),
 			fx.Provide(c.GetMetricsHandler),
-			fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
+			fx.Provide(func() []grpc.UnaryServerInterceptor {
+				if c.replicationStreamRecorder != nil {
+					return []grpc.UnaryServerInterceptor{
+						c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
+					}
+				}
+				return nil
+			}),
+			fx.Provide(func() []grpc.StreamServerInterceptor {
+				if c.replicationStreamRecorder != nil {
+					return []grpc.StreamServerInterceptor{
+						c.replicationStreamRecorder.StreamServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
+					}
+				}
+				return nil
+			}),
 			fx.Provide(func() authorization.Authorizer { return c }),
 			fx.Provide(func() authorization.ClaimMapper { return c }),
 			fx.Provide(func() authorization.JWTAudienceMapper { return nil }),
@@ -378,11 +393,6 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func(client dynamicconfig.Client, lc fx.Lifecycle) *dynamicconfig.Collection {
-				col := dynamicconfig.NewCollection(client, c.dynamicConfigLogger)
-				lc.Append(fx.StartStopHook(col.Start, col.Stop))
-				return col
-			}),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -444,6 +454,20 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
 			fx.Provide(c.GetGrpcClientInterceptor),
+			fx.Decorate(func(base []grpc.UnaryServerInterceptor) []grpc.UnaryServerInterceptor {
+				if c.replicationStreamRecorder != nil {
+					return append(base, c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
+				}
+				return base
+			}),
+			fx.Provide(func() []grpc.StreamServerInterceptor {
+				if c.replicationStreamRecorder != nil {
+					return []grpc.StreamServerInterceptor{
+						c.replicationStreamRecorder.StreamServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
+					}
+				}
+				return nil
+			}),
 			static.MembershipModule(c.makeHostMap(serviceName, host)),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -458,11 +482,6 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func(client dynamicconfig.Client, lc fx.Lifecycle) *dynamicconfig.Collection {
-				col := dynamicconfig.NewCollection(client, c.dynamicConfigLogger)
-				lc.Append(fx.StartStopHook(col.Start, col.Stop))
-				return col
-			}),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -524,11 +543,6 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func(client dynamicconfig.Client, lc fx.Lifecycle) *dynamicconfig.Collection {
-				col := dynamicconfig.NewCollection(client, c.dynamicConfigLogger)
-				lc.Append(fx.StartStopHook(col.Start, col.Stop))
-				return col
-			}),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
@@ -596,11 +610,6 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func(client dynamicconfig.Client, lc fx.Lifecycle) *dynamicconfig.Collection {
-				col := dynamicconfig.NewCollection(client, c.dynamicConfigLogger)
-				lc.Append(fx.StartStopHook(col.Start, col.Stop))
-				return col
-			}),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -748,6 +757,13 @@ func (c *TemporalImpl) newRPCFactory(
 			grpc.WithChainStreamInterceptor(grpcClientInterceptor.Stream()),
 		)
 	}
+	// Add replication stream recorder interceptor
+	if c.replicationStreamRecorder != nil {
+		options = append(options,
+			grpc.WithChainUnaryInterceptor(c.replicationStreamRecorder.UnaryInterceptor(c.clusterMetadataConfig.CurrentClusterName)),
+			grpc.WithChainStreamInterceptor(c.replicationStreamRecorder.StreamInterceptor(c.clusterMetadataConfig.CurrentClusterName)),
+		)
+	}
 	rpcConfig := config.RPC{BindOnIP: host, GRPCPort: port, HTTPPort: int(httpPort)}
 	cfg := &config.Config{
 		Services: map[string]config.Service{
@@ -767,6 +783,7 @@ func (c *TemporalImpl) newRPCFactory(
 		int(httpPort),
 		frontendTLSConfig,
 		options,
+		map[primitives.ServiceName][]grpc.DialOption{},
 		monitor,
 	), nil
 }

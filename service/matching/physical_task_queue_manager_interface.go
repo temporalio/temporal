@@ -17,6 +17,7 @@ type (
 		Start()
 		Stop(unloadCause)
 		WaitUntilInitialized(context.Context) error
+		SetupDraining()
 		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
@@ -54,5 +55,7 @@ type (
 		// MakePollerScalingDecision makes a decision on whether to scale pollers up or down based on the current state
 		// of the task queue and the task about to be returned.
 		MakePollerScalingDecision(pollStartTime time.Time) *taskqueuepb.PollerScalingDecision
+		// GetFairnessWeightOverrides returns current fairness weight overrides for this queue.
+		GetFairnessWeightOverrides() fairnessWeightOverrides
 	}
 )

@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -55,6 +56,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
@@ -213,7 +215,17 @@ type (
 
 		InsertTasks map[tasks.Category][]tasks.Task
 
+		// BestEffortDeleteTasks holds keys of history tasks to be deleted after a successful
+		// persistence update. This deletion is done on best effort basis. Persistence layer can ignore it without
+		// any errors.
+		BestEffortDeleteTasks map[tasks.Category][]tasks.Key
+
 		speculativeWorkflowTaskTimeoutTask *tasks.WorkflowTaskTimeoutTask
+
+		// In-memory storage for workflow task timeout tasks. These are set when timeout tasks are
+		// generated and used to delete them when the workflow task completes. Not persisted to storage.
+		wftScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
+		wftStartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
 
 		// Do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
@@ -299,6 +311,7 @@ func NewMutableState(
 		namespaceEntry:               namespaceEntry,
 		appliedEvents:                make(map[string]struct{}),
 		InsertTasks:                  make(map[tasks.Category][]tasks.Task),
+		BestEffortDeleteTasks:        make(map[tasks.Category][]tasks.Key),
 		transitionHistoryEnabled:     shard.GetConfig().EnableTransitionHistory(),
 		visibilityUpdated:            false,
 		executionStateUpdated:        false,
@@ -603,13 +616,22 @@ func (ms *MutableStateImpl) ChasmTree() historyi.ChasmTree {
 	return ms.chasmTree
 }
 
+// chasmEnabled returns true is the mutable state has a real chasm tree.
+// The chasmTree is initialized with a noopChasmTree which is then overwritten with an actual chasm tree if chasm is
+// enabled when the mutable state is created. Once the EnableChasm dynamic config is removed and the tree is always
+// initialized, this helper can be removed.
+func (ms *MutableStateImpl) chasmEnabled() bool {
+	_, isNoop := ms.chasmTree.(*noopChasmTree)
+	return !isNoop
+}
+
 // GetNexusCompletion converts a workflow completion event into a [nexus.OperationCompletion].
 // Completions may be sent to arbitrary third parties, we intentionally do not include any termination reasons, and
 // expose only failure messages.
 func (ms *MutableStateImpl) GetNexusCompletion(
 	ctx context.Context,
 	requestID string,
-) (nexus.OperationCompletion, error) {
+) (nexusrpc.OperationCompletion, error) {
 	ce, err := ms.GetCompletionEvent(ctx)
 	if err != nil {
 		return nil, err
@@ -653,9 +675,10 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			// Nexus does not support it.
 			p = payloads[0]
 		}
-		completion, err := nexus.NewOperationCompletionSuccessful(p, nexus.OperationCompletionSuccessfulOptions{
+		completion, err := nexusrpc.NewOperationCompletionSuccessful(p, nexusrpc.OperationCompletionSuccessfulOptions{
 			Serializer: commonnexus.PayloadSerializer,
 			StartTime:  ms.executionState.GetStartTime().AsTime(),
+			CloseTime:  ce.GetEventTime().AsTime(),
 			Links:      []nexus.Link{startLink},
 		})
 		if err != nil {
@@ -667,10 +690,11 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(
+		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{State: nexus.OperationStateFailed, Cause: &nexus.FailureError{Failure: f}},
-			nexus.OperationCompletionUnsuccessfulOptions{
+			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
+				CloseTime: ce.GetEventTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
@@ -685,13 +709,14 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(
+		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{
 				State: nexus.OperationStateCanceled,
 				Cause: &nexus.FailureError{Failure: f},
 			},
-			nexus.OperationCompletionUnsuccessfulOptions{
+			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
+				CloseTime: ce.GetEventTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
@@ -704,10 +729,11 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(
+		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{State: nexus.OperationStateFailed, Cause: &nexus.FailureError{Failure: f}},
-			nexus.OperationCompletionUnsuccessfulOptions{
+			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
+				CloseTime: ce.GetEventTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
@@ -723,13 +749,14 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(
+		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{
 				State: nexus.OperationStateFailed,
 				Cause: &nexus.FailureError{Failure: f},
 			},
-			nexus.OperationCompletionUnsuccessfulOptions{
+			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
+				CloseTime: ce.GetEventTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
 	}
@@ -1820,7 +1847,9 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 
 	if payloadSize := request.Details.Size(); payloadSize > 0 {
 		ms.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
-			int64(payloadSize), metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope))
+			int64(payloadSize),
+			metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope),
+			metrics.NamespaceTag(ms.namespaceEntry.Name().String()))
 	}
 }
 
@@ -2551,6 +2580,14 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	if ms.executionState.RunId != execution.GetRunId() {
 		return serviceerror.NewInternalf("applying conflicting run ID: %v != %v",
 			ms.executionState.RunId, execution.GetRunId())
+	}
+
+	if ms.chasmEnabled() {
+		// Initialize chasm tree once for new workflows.
+		// Using context.Background() because this is done outside an actual request context and the
+		// chasmworkflow.NewWorkflow does not actually use it currently.
+		mutableContext := chasm.NewMutableContext(context.Background(), ms.chasmTree.(*chasm.Node))
+		ms.chasmTree.(*chasm.Node).SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, ms))
 	}
 
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
@@ -3416,7 +3453,7 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 		return nil, nil, ms.createCallerError(opTag, "ActivityID: "+command.GetActivityId())
 	}
 
-	event := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
+	event := ms.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command, ms.namespaceEntry.Name())
 	ai, err := ms.ApplyActivityTaskScheduledEvent(workflowTaskCompletedEventID, event)
 	// TODO merge active & passive task generation
 	if !bypassTaskGeneration {
@@ -3701,6 +3738,7 @@ func (ms *MutableStateImpl) AddActivityTaskCompletedEvent(
 		startedEventID,
 		request.Identity,
 		request.Result,
+		ms.namespaceEntry.Name(),
 	)
 	if err := ms.ApplyActivityTaskCompletedEvent(event); err != nil {
 		return nil, err
@@ -3750,6 +3788,7 @@ func (ms *MutableStateImpl) AddActivityTaskFailedEvent(
 		failure,
 		retryState,
 		identity,
+		ms.namespaceEntry.Name(),
 	)
 	if err := ms.ApplyActivityTaskFailedEvent(event); err != nil {
 		return nil, err
@@ -3970,6 +4009,7 @@ func (ms *MutableStateImpl) AddCompletedWorkflowEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
+		false, // skipCloseTransferTask
 	); err != nil {
 		return nil, err
 	}
@@ -4013,6 +4053,7 @@ func (ms *MutableStateImpl) AddFailWorkflowEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
+		false, // skipCloseTransferTask
 	); err != nil {
 		return nil, err
 	}
@@ -4060,6 +4101,7 @@ func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
+		false, // skipCloseTransferTask
 	); err != nil {
 		return nil, err
 	}
@@ -4142,6 +4184,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionCanceledEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
+		false, // skipCloseTransferTask
 	); err != nil {
 		return nil, err
 	}
@@ -4674,6 +4717,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		deleteAfterTerminate,
+		false, // skipCloseTransferTask
 	); err != nil {
 		return nil, err
 	}
@@ -5220,6 +5264,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		continueAsNewEvent.GetEventTime().AsTime(),
 		false,
+		false, // skipCloseTransferTask
 	); err != nil {
 		return nil, nil, err
 	}
@@ -5882,6 +5927,130 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
+func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
+	var reportedProblems []string
+	switch wftFailure := ms.executionInfo.LastWorkflowTaskFailure.(type) {
+	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause:
+		reportedProblems = []string{
+			"category=WorkflowTaskFailed",
+			fmt.Sprintf("cause=WorkflowTaskFailedCause%s", wftFailure.LastWorkflowTaskFailureCause.String()),
+		}
+	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType:
+		reportedProblems = []string{
+			"category=WorkflowTaskTimedOut",
+			fmt.Sprintf("cause=WorkflowTaskTimedOutCause%s", wftFailure.LastWorkflowTaskTimedOutType.String()),
+		}
+	}
+
+	reportedProblemsPayload, err := searchattribute.EncodeValue(reportedProblems, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	if err != nil {
+		return err
+	}
+
+	exeInfo := ms.executionInfo
+	if exeInfo.SearchAttributes == nil {
+		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
+	}
+
+	decodedA, err := searchattribute.DecodeValue(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	if err != nil {
+		return err
+	}
+
+	existingProblems, ok := decodedA.([]string)
+	if !ok && decodedA != nil {
+		softassert.Fail(ms.logger, "TemporalReportedProblems payload decoded to unexpected type for logging")
+		return errors.New("TemporalReportedProblems payload decoded to unexpected type for logging")
+	}
+
+	if slices.Equal(existingProblems, reportedProblems) {
+		return nil
+	}
+
+	// Log the search attribute change
+	ms.logReportedProblemsChange(existingProblems, reportedProblems)
+
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: reportedProblemsPayload})
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+}
+
+func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
+	if ms.executionInfo.SearchAttributes == nil {
+		return nil
+	}
+
+	temporalReportedProblems := ms.executionInfo.SearchAttributes[searchattribute.TemporalReportedProblems]
+	if temporalReportedProblems == nil {
+		return nil
+	}
+
+	// Log the removal of the search attribute
+	ms.logReportedProblemsChange(ms.decodeReportedProblems(temporalReportedProblems), nil)
+
+	ms.executionInfo.LastWorkflowTaskFailure = nil
+
+	// Just remove the search attribute entirely for now
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: nil})
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+}
+
+// logReportedProblemsChange logs changes to the TemporalReportedProblems search attribute
+func (ms *MutableStateImpl) logReportedProblemsChange(oldPayload, newPayload []string) {
+	if oldPayload == nil && newPayload != nil {
+		// Adding search attribute
+		ms.logger.Info("TemporalReportedProblems search attribute added",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.NewStringsTag("reported-problems", newPayload))
+	} else if oldPayload != nil && newPayload == nil {
+		// Removing search attribute
+		ms.logger.Info("TemporalReportedProblems search attribute removed",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.NewStringsTag("previous-reported-problems", oldPayload))
+	} else if oldPayload != nil && newPayload != nil {
+		// Updating search attribute
+		ms.logger.Info("TemporalReportedProblems search attribute updated",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.NewStringsTag("previous-reported-problems", oldPayload),
+			tag.NewStringsTag("reported-problems", newPayload))
+	}
+}
+
+// decodeReportedProblems safely decodes a keyword list payload to []string
+func (ms *MutableStateImpl) decodeReportedProblems(p *commonpb.Payload) []string {
+	if p == nil {
+		return nil
+	}
+
+	decoded, err := searchattribute.DecodeValue(p, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	if err != nil {
+		ms.logger.Error("Failed to decode TemporalReportedProblems payload for logging",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.Error(err))
+		softassert.Fail(ms.logger, "Failed to decode TemporalReportedProblems payload for logging")
+		return []string{}
+	}
+
+	problems, ok := decoded.([]string)
+	if !ok {
+		ms.logger.Error("TemporalReportedProblems payload decoded to unexpected type for logging",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId))
+		softassert.Fail(ms.logger, "TemporalReportedProblems payload decoded to unexpected type for logging")
+		return []string{}
+	}
+
+	return problems
+}
+
 func (ms *MutableStateImpl) truncateRetryableActivityFailure(
 	activityFailure *failurepb.Failure,
 ) *failurepb.Failure {
@@ -6001,6 +6170,22 @@ func (ms *MutableStateImpl) RemoveSpeculativeWorkflowTaskTimeoutTask() {
 		ms.speculativeWorkflowTaskTimeoutTask.Cancel()
 		ms.speculativeWorkflowTaskTimeoutTask = nil
 	}
+}
+
+func (ms *MutableStateImpl) SetWorkflowTaskScheduleToStartTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) {
+	ms.wftScheduleToStartTimeoutTask = task
+}
+
+func (ms *MutableStateImpl) SetWorkflowTaskStartToCloseTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) {
+	ms.wftStartToCloseTimeoutTask = task
+}
+
+func (ms *MutableStateImpl) GetWorkflowTaskScheduleToStartTimeoutTask() *tasks.WorkflowTaskTimeoutTask {
+	return ms.wftScheduleToStartTimeoutTask
+}
+
+func (ms *MutableStateImpl) GetWorkflowTaskStartToCloseTimeoutTask() *tasks.WorkflowTaskTimeoutTask {
+	return ms.wftStartToCloseTimeoutTask
 }
 
 func (ms *MutableStateImpl) GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {
@@ -6128,7 +6313,8 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		NewBufferedEvents:         result.bufferEvents,
 		ClearBufferedEvents:       result.clearBuffer,
 
-		Tasks: ms.InsertTasks,
+		Tasks:                 ms.InsertTasks,
+		BestEffortDeleteTasks: ms.BestEffortDeleteTasks,
 
 		Condition:       ms.nextEventIDInDB,
 		DBRecordVersion: ms.dbRecordVersion,
@@ -6891,6 +7077,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	)
 
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
+	ms.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)
 
 	// Clear outputs for the next transaction.
 	ms.stateMachineNode.ClearTransactionState()

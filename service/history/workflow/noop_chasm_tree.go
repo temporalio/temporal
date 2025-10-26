@@ -54,7 +54,7 @@ func (*noopChasmTree) Archetype() chasm.Archetype {
 
 func (*noopChasmTree) EachPureTask(
 	deadline time.Time,
-	callback func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) error,
+	callback func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) (bool, error),
 ) error {
 	return nil
 }

@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
@@ -32,11 +33,11 @@ import (
 )
 
 type completionHandler struct {
-	requestCh         chan *nexus.CompletionRequest
+	requestCh         chan *nexusrpc.CompletionRequest
 	requestCompleteCh chan error
 }
 
-func (h *completionHandler) CompleteOperation(ctx context.Context, request *nexus.CompletionRequest) error {
+func (h *completionHandler) CompleteOperation(ctx context.Context, request *nexusrpc.CompletionRequest) error {
 	h.requestCh <- request
 	return <-h.requestCompleteCh
 }
@@ -51,7 +52,7 @@ func TestCallbacksSuite(t *testing.T) {
 }
 
 func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler) string {
-	hh := nexus.NewCompletionHTTPHandler(nexus.CompletionHandlerOptions{Handler: h})
+	hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: h})
 	srv := httptest.NewServer(hh)
 	t.Cleanup(func() {
 		srv.Close()
@@ -223,7 +224,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 			workflowID := tv.WorkflowID()
 
 			ch := &completionHandler{
-				requestCh:         make(chan *nexus.CompletionRequest, 2),
+				requestCh:         make(chan *nexusrpc.CompletionRequest, 2),
 				requestCompleteCh: make(chan error, 2),
 			}
 			defer func() {
@@ -432,7 +433,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	workflowID := tv.WorkflowID()
 
 	ch := &completionHandler{
-		requestCh:         make(chan *nexus.CompletionRequest, 2),
+		requestCh:         make(chan *nexusrpc.CompletionRequest, 2),
 		requestCompleteCh: make(chan error, 2),
 	}
 	defer func() {
@@ -629,7 +630,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun() 
 	workflowID := tv.WorkflowID()
 
 	ch := &completionHandler{
-		requestCh:         make(chan *nexus.CompletionRequest, 1),
+		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
 		requestCompleteCh: make(chan error, 1),
 	}
 	defer func() {

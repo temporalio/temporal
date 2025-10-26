@@ -60,7 +60,7 @@ const (
 )
 
 var (
-	whitelistedCQLPrefixes = [4]string{"CREATE", "ALTER", "INSERT", "DROP"}
+	whitelistedCQLPrefixes = [5]string{"CREATE", "ALTER", "INSERT", "DROP", "DO"}
 	versionDirectoryRegex  = regexp.MustCompile(`^v[\d.]+`)
 )
 

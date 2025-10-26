@@ -82,7 +82,7 @@ func (i *instrumentation) invalidStateTransition(updateID string, msg proto.Mess
 	softassert.Fail(
 		i.log,
 		"invalid state transition attempted",
-		tag.NewStringTag("component", "workflow-update"),
+		tag.ComponentWorkflowUpdate,
 		tag.NewStringTag("update-id", updateID),
 		tag.NewStringTag("message", fmt.Sprintf("%T", msg)),
 		tag.NewStringerTag("state", state),
@@ -101,7 +101,7 @@ func (i *instrumentation) stateChange(updateID string, from, to state) {
 	softassert.Sometimes(
 		i.log,
 		"update state change",
-		tag.NewStringTag("component", "workflow-update"),
+		tag.ComponentWorkflowUpdate,
 		tag.NewStringTag("update-id", updateID),
 		tag.NewStringerTag("from-state", from),
 		tag.NewStringerTag("to-state", to),

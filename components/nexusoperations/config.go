@@ -26,8 +26,8 @@ RPCs. If the remaining request timeout is less than this value, a non-retryable 
 var MinDispatchTaskTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"component.nexusoperations.limit.dispatch.task.timeout.min",
 	time.Second,
-	`MinDispatchTaskTimeout is the minimum time remaining for a request to be dispatched to the handler worker. 
-If the remaining request timeout is less than this value, a timeout error will be returned. Working in conjunction with 
+	`MinDispatchTaskTimeout is the minimum time remaining for a request to be dispatched to the handler worker.
+If the remaining request timeout is less than this value, a timeout error will be returned. Working in conjunction with
 MinRequestTimeout, both configs help ensure that the server has enough time to complete a Nexus request.`,
 )
 
@@ -38,14 +38,6 @@ var MaxConcurrentOperations = dynamicconfig.NewNamespaceIntSetting(
 	30,
 	`MaxConcurrentOperations limits the maximum allowed concurrent Nexus Operations for a given workflow execution.
 Once the limit is reached, ScheduleNexusOperation commands will be rejected.`,
-)
-
-var EndpointNotFoundAlwaysNonRetryable = dynamicconfig.NewNamespaceBoolSetting(
-	"component.nexusoperations.endpointNotFoundAlwaysNonRetryable",
-	false,
-	`When set to true, if an endpoint is not found when processing a ScheduleNexusOperation command, the command will be
-	accepted and the operation will fail on the first attempt. This defaults to false to prevent endpoint registry
-	propagation delay from failing operations.`,
 )
 
 var MaxServiceNameLength = dynamicconfig.NewNamespaceIntSetting(
@@ -79,6 +71,19 @@ var MaxOperationHeaderSize = dynamicconfig.NewNamespaceIntSetting(
 	`The maximum allowed header size for a Nexus Operation.
 ScheduleNexusOperation commands with a "nexus_header" field that exceeds this limit will be rejected.
 Uses Go's len() function on header keys and values to determine the total size.`,
+)
+
+var UseSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
+	"component.nexusoperations.useSystemCallbackURL",
+	false,
+	`UseSystemCallbackURL is a global feature toggle that controls how the executor generates
+	callback URLs for worker targets in Nexus Operations.When set to true,
+	the executor will use the fixed system callback URL ("temporal://system") for all worker targets,
+	instead of generating URLs from the callback URL template.
+	This simplifies configuration and improves reliability for worker callbacks.
+	- false (default): The executor uses the callback URL template to generate callback URLs for worker targets.
+	- true: The executor uses the fixed system callback URL ("temporal://system") for worker targets.
+	Note: The default will switch to true in future releases.`,
 )
 
 var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSettingWithConverter(
@@ -150,7 +155,7 @@ requirements and query complexity. Consider the cardinality impact when enabling
 var RecordCancelRequestCompletionEvents = dynamicconfig.NewGlobalBoolSetting(
 	"component.nexusoperations.recordCancelRequestCompletionEvents",
 	true,
-	`Boolean flag to control whether to record NexusOperationCancelRequestCompleted and 
+	`Boolean flag to control whether to record NexusOperationCancelRequestCompleted and
 NexusOperationCancelRequestFailed events. Default true.`,
 )
 
@@ -167,7 +172,7 @@ type Config struct {
 	MaxOperationScheduleToCloseTimeout  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
-	EndpointNotFoundAlwaysNonRetryable  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
 	RetryPolicy                         func() backoff.RetryPolicy
 }
@@ -186,7 +191,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		MaxOperationScheduleToCloseTimeout:  MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                    dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:                 CallbackURLTemplate.Get(dc),
-		EndpointNotFoundAlwaysNonRetryable:  EndpointNotFoundAlwaysNonRetryable.Get(dc),
+		UseSystemCallbackURL:                UseSystemCallbackURL.Get(dc),
 		RecordCancelRequestCompletionEvents: RecordCancelRequestCompletionEvents.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(

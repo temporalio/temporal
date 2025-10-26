@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -13,6 +14,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -21,6 +23,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
@@ -91,6 +94,7 @@ func GetRawHistory(
 		lastEvent = allEvents[len(allEvents)-1]
 	}
 	if err = VerifyHistoryIsComplete(
+		logger,
 		firstEvent,
 		lastEvent,
 		len(allEvents),
@@ -206,6 +210,7 @@ func GetHistory(
 		}
 	}
 	if err := VerifyHistoryIsComplete(
+		shardContext.GetLogger(),
 		firstEvent,
 		lastEvent,
 		len(historyEvents),
@@ -392,6 +397,7 @@ func validateTransientWorkflowTaskEvents(
 }
 
 func VerifyHistoryIsComplete(
+	logger log.Logger,
 	firstEvent *historyspb.StrippedHistoryEvent,
 	lastEvent *historyspb.StrippedHistoryEvent,
 	eventCount int,
@@ -409,13 +415,15 @@ func VerifyHistoryIsComplete(
 			// there are no more events to consume - bail out if this is the case here
 			return nil
 		}
-		return serviceerror.NewDataLoss("History contains zero events.")
+		return softassert.UnexpectedDataLoss(logger, "History contains zero events", nil)
 	}
 
 	if !isFirstPage { // at least one page of history has been read previously
 		if firstEvent.GetEventId() <= expectedFirstEventID {
 			// not first page and no events have been read in the previous pages - not possible
-			return serviceerror.NewDataLossf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEvent.GetEventId())
+			return softassert.UnexpectedDataLoss(logger,
+				"Invalid history: expected first eventID to be greater than last seen",
+				fmt.Errorf("expected > %v but got %v", expectedFirstEventID, firstEvent.GetEventId()))
 		}
 		expectedFirstEventID = firstEvent.GetEventId()
 	}
@@ -434,15 +442,17 @@ func VerifyHistoryIsComplete(
 		return nil
 	}
 
-	return serviceerror.NewDataLossf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
-		expectedFirstEventID,
-		expectedLastEventID,
-		firstEvent.GetEventId(),
-		lastEvent.GetEventId(),
-		eventCount,
-		isFirstPage,
-		isLastPage,
-		pageSize)
+	return softassert.UnexpectedDataLoss(logger,
+		"Incomplete history",
+		fmt.Errorf("expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
+			expectedFirstEventID,
+			expectedLastEventID,
+			firstEvent.GetEventId(),
+			lastEvent.GetEventId(),
+			eventCount,
+			isFirstPage,
+			isLastPage,
+			pageSize))
 }
 
 // ProcessInternalRawHistory processes history in the field response.History.

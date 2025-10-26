@@ -5,6 +5,6 @@ type (
 	// It is created and run by Mitigator upon receiving an Alert.
 	Action interface {
 		Name() string
-		Run(*ReaderGroup)
+		Run(*ReaderGroup) (actionTaken bool)
 	}
 )

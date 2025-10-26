@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -16,6 +15,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.uber.org/fx"
@@ -87,7 +87,11 @@ func ClientProviderFactory(
 	if err != nil {
 		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
 	}
+	var clusterID string
 
+	if clusterInfo, ok := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]; ok {
+		clusterID = clusterInfo.ClusterID
+	}
 	// TODO(bergundy): This should use an LRU or other form of cache that supports eviction.
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
 		transport := httpTransportProvider(key.namespaceID, key.endpointID)
@@ -95,9 +99,11 @@ func ClientProviderFactory(
 			Transport: ResponseSizeLimiter{transport},
 		}, nil
 	})
-	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
+
+	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
 		var url string
 		var httpClient *http.Client
+		httpCaller := httpClient.Do
 		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
 		case *persistencespb.NexusEndpointTarget_External_:
 			url = variant.External.GetUrl()
@@ -106,28 +112,33 @@ func ClientProviderFactory(
 			if err != nil {
 				return nil, err
 			}
+			if clusterID != "" {
+				httpCaller = func(r *http.Request) (*http.Response, error) {
+					resp, callErr := httpClient.Do(r)
+					commonnexus.SetFailureSourceOnContext(ctx, resp)
+					return resp, callErr
+				}
+			}
 		case *persistencespb.NexusEndpointTarget_Worker_:
 			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.Id)
 			httpClient = &cl.Client
+			if clusterID != "" {
+				httpCaller = func(r *http.Request) (*http.Response, error) {
+					r.Header.Set(NexusCallbackSourceHeader, clusterID)
+					resp, callErr := httpClient.Do(r)
+					commonnexus.SetFailureSourceOnContext(ctx, resp)
+					return resp, callErr
+				}
+			}
 		default:
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}
-		httpCaller := httpClient.Do
-		if clusterInfo, ok := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]; ok {
-			httpCaller = func(r *http.Request) (*http.Response, error) {
-				r.Header.Set(NexusCallbackSourceHeader, clusterInfo.ClusterID)
-				resp, callErr := httpClient.Do(r)
-				commonnexus.SetFailureSourceOnContext(ctx, resp)
-				return resp, callErr
-			}
-		}
-		return nexus.NewHTTPClient(nexus.HTTPClientOptions{
+		// still need to override the caller
+		return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 			BaseURL:    url,
 			Service:    service,
 			HTTPCaller: httpCaller,
 			Serializer: commonnexus.PayloadSerializer,
-			// TODO(bergundy): Remove this after the 1.27 release. It's here for compatibility with old server implementations.
-			UseOperationID: true,
 		})
 	}, nil
 }

@@ -3,12 +3,12 @@ package config
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestToString(t *testing.T) {
 	var cfg Config
 	err := Load("", "../../config", "", &cfg)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, cfg.String())
+	require.NoError(t, err)
+	require.NotEmpty(t, cfg.String())
 }
