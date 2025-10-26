@@ -5,20 +5,24 @@ import (
 	"errors"
 	"fmt"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -199,6 +203,10 @@ func (e *ChasmEngine) UpdateComponent(
 		return nil, err
 	}
 
+	if err := notifyChasmComponentUpdate(shardContext, ref); err != nil {
+		shardContext.GetLogger().Error("failed to send CHASM component update notification", tag.Error(err))
+	}
+
 	newSerializedRef, err := mutableContext.Ref(component)
 	if err != nil {
 		return nil, serviceerror.NewInternalf("componentRef: %+v: %s", ref, err)
@@ -372,6 +380,7 @@ func (e *ChasmEngine) persistAsBrandNew(
 		newEntityParams.events,
 	)
 	if err == nil {
+		// TODO(dan): send notification on creation?
 		return currentRunInfo{}, false, nil
 	}
 
@@ -524,6 +533,7 @@ func (e *ChasmEngine) handleReusePolicy(
 	if err != nil {
 		return chasm.EntityKey{}, nil, err
 	}
+	// TODO(dan): send notification on creation?
 
 	serializedRef, err := newEntityParams.entityRef.Serialize(e.registry)
 	if err != nil {
@@ -601,4 +611,36 @@ func (e *ChasmEngine) getExecutionLease(
 	}
 
 	return shardContext, entityLease, err
+}
+
+// notifyChasmComponentUpdate sends a notification when a CHASM component has been updated.
+func notifyChasmComponentUpdate(
+	shardContext historyi.ShardContext,
+	entityRef chasm.ComponentRef,
+) error {
+	engine, err := shardContext.GetEngine(context.Background())
+	if err != nil {
+		return err
+	}
+	// TODO
+	// For now we do not send any information with the notification; the subscriber must read the
+	// component data again.
+	engine.NotifyNewHistoryEvent(events.NewNotification(
+		entityRef.NamespaceID,
+		&commonpb.WorkflowExecution{
+			WorkflowId: entityRef.BusinessID,
+			RunId:      entityRef.EntityID,
+		},
+		-1,
+		-1,
+		-1,
+		-1,
+		enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
+		&historyspb.VersionHistories{
+			Histories: []*historyspb.VersionHistory{},
+		},
+		nil,
+	))
+	return nil
 }
