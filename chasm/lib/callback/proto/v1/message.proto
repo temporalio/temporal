@@ -33,9 +33,6 @@ message CallbackState {
 
     // Request ID that added the callback.
     string request_id = 9;
-
-    string workflow_id = 10;
-    string run_id = 11;
 }
 
 

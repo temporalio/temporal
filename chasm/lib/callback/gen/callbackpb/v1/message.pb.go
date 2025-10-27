@@ -127,8 +127,6 @@ type CallbackState struct {
 	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
 	// Request ID that added the callback.
 	RequestId     string `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	WorkflowId    string `protobuf:"bytes,10,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId         string `protobuf:"bytes,11,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -215,20 +213,6 @@ func (x *CallbackState) GetNextAttemptScheduleTime() *timestamppb.Timestamp {
 func (x *CallbackState) GetRequestId() string {
 	if x != nil {
 		return x.RequestId
-	}
-	return ""
-}
-
-func (x *CallbackState) GetWorkflowId() string {
-	if x != nil {
-		return x.WorkflowId
-	}
-	return ""
-}
-
-func (x *CallbackState) GetRunId() string {
-	if x != nil {
-		return x.RunId
 	}
 	return ""
 }
@@ -405,7 +389,7 @@ var File_temporal_server_chasm_lib_callback_proto_v1_message_proto protoreflect.
 
 const file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"9temporal/server/chasm/lib/callback/proto/v1/message.proto\x12,temporal.server.chasm.lib.callbacks.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\"\x8b\x05\n" +
+	"9temporal/server/chasm/lib/callback/proto/v1/message.proto\x12,temporal.server.chasm.lib.callbacks.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\"\xd3\x04\n" +
 	"\rCallbackState\x12R\n" +
 	"\bcallback\x18\x01 \x01(\v26.temporal.server.chasm.lib.callbacks.proto.v1.CallbackR\bcallback\x12G\n" +
 	"\x11registration_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x10registrationTime\x12T\n" +
@@ -415,11 +399,7 @@ const file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc = "
 	"\x14last_attempt_failure\x18\a \x01(\v2 .temporal.api.failure.v1.FailureR\x12lastAttemptFailure\x12W\n" +
 	"\x1anext_attempt_schedule_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x17nextAttemptScheduleTime\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\t \x01(\tR\trequestId\x12\x1f\n" +
-	"\vworkflow_id\x18\n" +
-	" \x01(\tR\n" +
-	"workflowId\x12\x15\n" +
-	"\x06run_id\x18\v \x01(\tR\x05runId\x1a\x10\n" +
+	"request_id\x18\t \x01(\tR\trequestId\x1a\x10\n" +
 	"\x0eWorkflowClosed\"\xde\x02\n" +
 	"\bCallback\x12T\n" +
 	"\x05nexus\x18\x02 \x01(\v2<.temporal.server.chasm.lib.callbacks.proto.v1.Callback.NexusH\x00R\x05nexus\x122\n" +

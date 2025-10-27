@@ -165,8 +165,9 @@ func (e InvocationTaskExecutor) loadInvocationArgs(
 		return nexusInvocation{
 			nexus:      variant.Nexus,
 			completion: completion,
-			workflowID: component.WorkflowId,
-			runID:      component.RunId,
+			// workflowID: component.WorkflowId,
+			workflowID: chasmCtx.ExecutionKey().BusinessID,
+			runID:      chasmCtx.ExecutionKey().EntityID,
 			attempt:    component.Attempt,
 		}, nil
 	default:

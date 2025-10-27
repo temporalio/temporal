@@ -156,13 +156,10 @@ func TestExecuteInvocationTask(t *testing.T) {
 							},
 						},
 					},
-					Status:     callbackspb.CALLBACK_STATUS_SCHEDULED,
-					Attempt:    1,
-					WorkflowId: "workflow-id",
-					RunId:      "run-id",
+					Status:  callbackspb.CALLBACK_STATUS_SCHEDULED,
+					Attempt: 1,
 				},
 			}
-			callback.Status = callbackspb.CALLBACK_STATUS_SCHEDULED
 
 			// Set up the CompletionSource field to return our mock
 			completionGetter := &mockNexusCompletionGetter{
