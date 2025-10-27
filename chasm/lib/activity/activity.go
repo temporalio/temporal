@@ -97,28 +97,6 @@ func NewEmbeddedActivity(
 ) {
 }
 
-// GetActivityState reads an activity component's persisted ActivityState by its component reference.
-func GetActivityState(ctx context.Context, ref chasm.ComponentRef) (*activitypb.ActivityState, error) {
-	return getActivityField(ctx, ref, func(a *Activity, _ chasm.Context) (*activitypb.ActivityState, error) {
-		return a.ActivityState, nil
-	})
-}
-
-func getActivityField[T any](
-	ctx context.Context,
-	ref chasm.ComponentRef,
-	getter func(*Activity, chasm.Context) (T, error),
-) (T, error) {
-	return chasm.ReadComponent(
-		ctx,
-		ref,
-		func(a *Activity, ctx chasm.Context, _ any) (T, error) {
-			return getter(a, ctx)
-		},
-		nil,
-	)
-}
-
 // HandleRecordActivityTaskStarted processes the start of an activity task execution. It transitions the activity to
 // started state, updates the component fields, and returns the updated activity component.
 func HandleRecordActivityTaskStarted(
