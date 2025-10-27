@@ -91,6 +91,8 @@ const (
 	EnvKeyAvailabilityZoneTypo = "TEMPORAL_AVAILABILTY_ZONE"
 	// EnvKeyAllowNoAuth is the environment variable key for setting no authorizer
 	EnvKeyAllowNoAuth = "TEMPORAL_ALLOW_NO_AUTH"
+	// EnvKeyConfigFile is the environment variable key for specifying a config file path
+	EnvKeyConfigFile = "TEMPORAL_CONFIG_FILE"
 )
 
 const (
@@ -259,6 +261,41 @@ func LoadConfig(env string, configDir string, zone string) (*Config, error) {
 		return nil, fmt.Errorf("config file corrupted: %w", err)
 	}
 	return &config, nil
+}
+
+// LoadConfigFile loads configuration from a single specified file path.
+// This function loads only the specified file without merging with base.yaml or other files.
+// Template rendering is enabled if the file contains "# enable-template" comment.
+func LoadConfigFile(filePath string) (*Config, error) {
+	getLogger().Info("Loading configuration from file",
+		zap.String("filePath", filePath),
+	)
+
+	// This is tagged nosec because the file name being read is for a config file that is not user supplied
+	// #nosec
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file %s: %w", filePath, err)
+	}
+
+	// Process the file (with optional template rendering)
+	processedData, err := processConfigFile(data, filepath.Base(filePath), getEnvMap())
+	if err != nil {
+		return nil, fmt.Errorf("failed to process config file %s: %w", filePath, err)
+	}
+
+	config := &Config{}
+	err = yaml.Unmarshal(processedData, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config file %s: %w", filePath, err)
+	}
+
+	validate := newValidator()
+	if err := validate.Validate(config); err != nil {
+		return nil, fmt.Errorf("config file validation failed for %s: %w", filePath, err)
+	}
+
+	return config, nil
 }
 
 func checkTemplatingEnabled(content []byte) (bool, error) {

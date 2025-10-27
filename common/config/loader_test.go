@@ -261,3 +261,103 @@ services:
 	require.Equal(t, int32(8), cfg.Persistence.NumHistoryShards)
 	require.Equal(t, 8233, cfg.Services["frontend"].RPC.GRPCPort)
 }
+
+// TestLoadConfigFile tests loading a single config file
+func TestLoadConfigFile(t *testing.T) {
+	t.Run("valid file without template", func(t *testing.T) {
+		tempDir := testutils.MkdirTemp(t, "", "load_config_file_test")
+		configPath := filepath.Join(tempDir, "config.yaml")
+
+		configContent := `log:
+  level: warn
+persistence:
+  numHistoryShards: 16
+  defaultStore: default
+  datastores:
+    default:
+      sql:
+        pluginName: "postgres12"
+        databaseName: "temporal"
+        connectAddr: "localhost:5432"
+        connectProtocol: "tcp"
+services:
+  frontend:
+    rpc:
+      grpcPort: 9233
+      bindOnIP: "0.0.0.0"
+`
+		err := os.WriteFile(configPath, []byte(configContent), fileMode)
+		require.NoError(t, err)
+
+		cfg, err := LoadConfigFile(configPath)
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		require.Equal(t, "warn", cfg.Log.Level)
+		require.Equal(t, int32(16), cfg.Persistence.NumHistoryShards)
+		require.Equal(t, 9233, cfg.Services["frontend"].RPC.GRPCPort)
+	})
+
+	t.Run("valid file with template enabled", func(t *testing.T) {
+		tempDir := testutils.MkdirTemp(t, "", "load_config_file_template_test")
+		configPath := filepath.Join(tempDir, "config.yaml")
+
+		configContent := `# enable-template
+log:
+  level: {{ default "info" (index .Env "LOG_LEVEL") }}
+persistence:
+  numHistoryShards: {{ default "4" (index .Env "NUM_HISTORY_SHARDS") }}
+  defaultStore: default
+  datastores:
+    default:
+      sql:
+        pluginName: "postgres12"
+        databaseName: "temporal"
+        connectAddr: "localhost:5432"
+        connectProtocol: "tcp"
+services:
+  frontend:
+    rpc:
+      grpcPort: {{ default "7233" (index .Env "FRONTEND_GRPC_PORT") }}
+      bindOnIP: "127.0.0.1"
+`
+		err := os.WriteFile(configPath, []byte(configContent), fileMode)
+		require.NoError(t, err)
+
+		// Set environment variables for the test
+		t.Setenv("LOG_LEVEL", "error")
+		t.Setenv("NUM_HISTORY_SHARDS", "32")
+		t.Setenv("FRONTEND_GRPC_PORT", "8888")
+
+		cfg, err := LoadConfigFile(configPath)
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		require.Equal(t, "error", cfg.Log.Level)
+		require.Equal(t, int32(32), cfg.Persistence.NumHistoryShards)
+		require.Equal(t, 8888, cfg.Services["frontend"].RPC.GRPCPort)
+	})
+
+	t.Run("non-existent file", func(t *testing.T) {
+		cfg, err := LoadConfigFile("/nonexistent/path/config.yaml")
+		require.Error(t, err)
+		require.Nil(t, cfg)
+		require.Contains(t, err.Error(), "failed to read config file")
+	})
+
+	t.Run("invalid yaml", func(t *testing.T) {
+		tempDir := testutils.MkdirTemp(t, "", "load_config_file_invalid_test")
+		configPath := filepath.Join(tempDir, "invalid.yaml")
+
+		invalidContent := `log:
+  level: warn
+  invalid indentation
+    bad: yaml
+`
+		err := os.WriteFile(configPath, []byte(invalidContent), fileMode)
+		require.NoError(t, err)
+
+		cfg, err := LoadConfigFile(configPath)
+		require.Error(t, err)
+		require.Nil(t, cfg)
+		require.Contains(t, err.Error(), "failed to unmarshal config file")
+	})
+}

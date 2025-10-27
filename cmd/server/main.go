@@ -5,6 +5,7 @@ import (
 	stdlog "log"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"text/template"
 	_ "time/tzdata" // embed tzdata as a fallback
@@ -49,21 +50,26 @@ func buildCLI() *cli.App {
 			Name:    "config",
 			Aliases: []string{"c"},
 			Value:   "config",
-			Usage:   "config dir path relative to root",
+			Usage:   "config dir path relative to root (deprecated)",
 			EnvVars: []string{config.EnvKeyConfigDir},
 		},
 		&cli.StringFlag{
 			Name:    "env",
 			Aliases: []string{"e"},
 			Value:   "development",
-			Usage:   "runtime environment",
+			Usage:   "runtime environment (deprecated)",
 			EnvVars: []string{config.EnvKeyEnvironment},
 		},
 		&cli.StringFlag{
 			Name:    "zone",
 			Aliases: []string{"az"},
-			Usage:   "availability zone",
+			Usage:   "availability zone (deprecated)",
 			EnvVars: []string{config.EnvKeyAvailabilityZone, config.EnvKeyAvailabilityZoneTypo},
+		},
+		&cli.StringFlag{
+			Name:    "config-file",
+			Usage:   "path to config file (absolute or relative to root)",
+			EnvVars: []string{config.EnvKeyConfigFile},
 		},
 		&cli.BoolFlag{
 			Name:    "allow-no-auth",
@@ -134,22 +140,23 @@ func buildCLI() *cli.App {
 					Value:   cli.NewStringSlice(temporal.DefaultServices...),
 					Usage:   "service(s) to start",
 				},
-				&cli.BoolFlag{
-					Name:  "config-from-env",
-					Usage: "load configuration from environment variables only (ignores config files)",
-				},
 			},
 			Before: func(c *cli.Context) error {
 				if c.Args().Len() > 0 {
 					return cli.Exit("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
 				}
 
-				// Validate that --config-from-env is not used with conflicting flags
-				if c.Bool("config-from-env") {
+				// Error if both TEMPORAL_CONFIG_FILE env var and --config-file flag are set
+				if c.IsSet("config-file") && os.Getenv(config.EnvKeyConfigFile) != "" {
+					return cli.Exit("ERROR: TEMPORAL_CONFIG_FILE env var and --config-file flag cannot both be set", 1)
+				}
+
+				// Validate that --config-file is not used with conflicting flags
+				if c.IsSet("config-file") {
 					conflictingFlags := []string{"config", "env", "zone"}
 					for _, flag := range conflictingFlags {
 						if c.IsSet(flag) {
-							return cli.Exit(fmt.Sprintf("ERROR: --config-from-env cannot be used with --%s flag", flag), 1)
+							return cli.Exit(fmt.Sprintf("ERROR: --config-file cannot be used with --%s flag", flag), 1)
 						}
 					}
 				}
@@ -159,7 +166,6 @@ func buildCLI() *cli.App {
 			Action: func(c *cli.Context) error {
 				services := c.StringSlice("service")
 				allowNoAuth := c.Bool("allow-no-auth")
-				configFromEnv := c.Bool("config-from-env")
 
 				// For backward compatibility to support old flag format (i.e. `--services=frontend,history,matching`).
 				if c.IsSet("services") {
@@ -172,19 +178,22 @@ func buildCLI() *cli.App {
 
 				// Load configuration based on flags
 				switch {
-				case configFromEnv:
-					// Explicitly requested env-based config
-					cfg = &config.Config{}
-					err = config.LoadFromEnv(cfg)
+				case c.IsSet("config-file"):
+					// Load specific config file
+					configFilePath := c.String("config-file")
+					if !filepath.IsAbs(configFilePath) {
+						configFilePath = filepath.Join(c.String("root"), configFilePath)
+					}
+					cfg, err = config.LoadConfigFile(configFilePath)
 				case c.IsSet("config") || c.IsSet("env") || c.IsSet("zone"):
-					// Explicitly requested file-based config
+					// File-based config from directory (deprecated)
 					cfg, err = config.LoadConfig(
 						c.String("env"),
 						path.Join(c.String("root"), c.String("config")),
 						c.String("zone"),
 					)
 				default:
-					// Default behavior: env-based config
+					// Default behavior: env-based config from embedded template
 					cfg = &config.Config{}
 					err = config.LoadFromEnv(cfg)
 				}
