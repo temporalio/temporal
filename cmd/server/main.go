@@ -146,7 +146,7 @@ func buildCLI() *cli.App {
 					return cli.Exit("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
 				}
 				if c.IsSet("config-file") && os.Getenv(config.EnvKeyConfigFile) != "" {
-					return cli.Exit("ERROR: TEMPORAL_CONFIG_FILE env var and --config-file flag cannot both be set", 1)
+					return cli.Exit("ERROR: TEMPORAL_SERVER_CONFIG_FILE_PATH env var and --config-file flag cannot both be set", 1)
 				}
 
 				if c.IsSet("config-file") {

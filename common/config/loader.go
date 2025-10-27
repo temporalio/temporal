@@ -41,7 +41,7 @@ const (
 	// EnvKeyAllowNoAuth is the environment variable key for setting no authorizer
 	EnvKeyAllowNoAuth = "TEMPORAL_ALLOW_NO_AUTH"
 	// EnvKeyConfigFile is the environment variable key for specifying a config file path
-	EnvKeyConfigFile = "TEMPORAL_CONFIG_FILE"
+	EnvKeyConfigFile = "TEMPORAL_SERVER_CONFIG_FILE_PATH"
 )
 
 const (
