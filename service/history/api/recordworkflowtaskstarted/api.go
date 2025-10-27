@@ -151,6 +151,7 @@ func Invoke(
 			if err != nil {
 				return nil, err
 			}
+			// Remove (Shivam): This is simply checking if the task's versionDirective matches the workflow's effective behavior and deployment.
 			err = worker_versioning.ValidateTaskVersionDirective(req.GetVersionDirective(), wfBehavior, wfDeployment, req.ScheduledDeployment)
 			if err != nil {
 				return nil, err

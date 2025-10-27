@@ -40,7 +40,7 @@ message TaskVersionDirective {
     temporal.server.api.deployment.v1.WorkerDeploymentVersion deployment_version = 5;
     // Counter copied from the workflow execution's WorkflowExecutionVersioningInfo
     // during enqueue time.
-    int32 scheduled_routing_config_counter = 6;
+    int64 revision_number = 6;
 }
 
 message FairLevel {

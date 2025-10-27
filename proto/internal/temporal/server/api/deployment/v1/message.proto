@@ -46,10 +46,6 @@ message DeploymentVersionData {
 
     // Status of the Worker Deployment Version.
     temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 6;
-
-    // Monotonically increasing counter that is incremented when the routing config is updated in the entity workflows. 
-    // Used to detect staleness between history and matching partitions when dispatching tasks.
-    int32 routing_config_counter = 7;
 }
 
 // Information that a TQ should know about a particular Deployment Version. This info is not part of

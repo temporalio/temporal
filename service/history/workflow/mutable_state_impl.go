@@ -4956,7 +4956,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 
 	// Increment the scheduled routing config counter only if the effective deployment changes.
 	if !proto.Equal(ms.GetEffectiveDeployment(), prevEffectiveDeployment) {
-		ms.IncrementScheduledRoutingConfigCounter()
+		ms.IncrementRevisionNumber()
 	}
 
 	return event, nil
@@ -8551,19 +8551,18 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 		),
 	).Record(1)
 
-	// Since a transition has completed, we increment the scheduled routing config counter.
-	ms.IncrementScheduledRoutingConfigCounter()
+	// Since a transition has completed, we increment the revision number.
+	ms.IncrementRevisionNumber()
 
 	return nil
 }
 
-func (ms *MutableStateImpl) GetScheduledRoutingConfigCounter() int32 {
-	return ms.GetExecutionInfo().GetVersioningInfo().GetRoutingVersionCounter()
+func (ms *MutableStateImpl) GetRevisionNumber() int64 {
+	return ms.GetExecutionInfo().GetVersioningInfo().GetRevisionNumber()
 }
 
-// TODO (Shivam): This may need to be moved.
-func (ms *MutableStateImpl) IncrementScheduledRoutingConfigCounter() {
-	ms.GetExecutionInfo().GetVersioningInfo().RoutingVersionCounter++
+func (ms *MutableStateImpl) IncrementRevisionNumber() {
+	ms.GetExecutionInfo().GetVersioningInfo().RevisionNumber++
 }
 
 // reschedulePendingActivities reschedules all the activities that are not started, so they are

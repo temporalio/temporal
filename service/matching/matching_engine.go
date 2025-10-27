@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -1880,7 +1881,8 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 	if err != nil {
 		return nil, err
 	}
-	if req.Deployment == nil && req.GetOperation() == nil {
+	// TODO (Shivam): Please fix this error message and condition check.
+	if (req.Deployment == nil && req.GetOperation() == nil) && (req.GetDeploymentName() == "" && req.GetUpdateRoutingConfig() == nil && req.GetUpsertVersionsData() == nil) {
 		return nil, errMissingDeploymentVersion
 	}
 
@@ -1923,6 +1925,13 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 
 			// set/append the new data
 			deploymentData := data.PerType[int32(t)].DeploymentData
+			if deploymentData.GetDeploymentsData() == nil {
+				deploymentData.DeploymentsData = make(map[string]*persistencespb.WorkerDeploymentData)
+			}
+			if deploymentData.GetDeploymentsData()[req.GetDeploymentName()] == nil {
+				deploymentData.GetDeploymentsData()[req.GetDeploymentName()] = &persistencespb.WorkerDeploymentData{}
+			}
+
 			if d := req.Deployment; d != nil {
 				// [cleanup-old-wv]
 				//nolint:staticcheck
@@ -1937,6 +1946,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				}
 				changed = true
 			} else if vd := req.GetUpdateVersionData(); vd != nil {
+				// [cleanup-public-preview-versioning]
 				if vd.GetVersion() == nil { // unversioned ramp
 					if deploymentData.GetUnversionedRampData().GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
 						continue
@@ -1964,6 +1974,33 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				if idx := worker_versioning.FindDeploymentVersion(deploymentData, v); idx >= 0 {
 					changed = true
 					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
+				}
+			} else {
+				rc := req.GetUpdateRoutingConfig()
+				tqWorkerDeploymentData := deploymentData.GetDeploymentsData()[req.GetDeploymentName()]
+
+				applyUpdatesToDeploymentData := rc == nil
+				if rc != nil {
+					if rc.GetRevisionNumber() >= tqWorkerDeploymentData.GetRoutingConfig().GetRevisionNumber() {
+						changed = true
+						// Update routing config when newer or equal revision is provided
+						tqWorkerDeploymentData.RoutingConfig = rc
+						applyUpdatesToDeploymentData = true
+					}
+				}
+
+				if applyUpdatesToDeploymentData {
+					if tqWorkerDeploymentData.Versions == nil {
+						tqWorkerDeploymentData.Versions = make(map[string]*deploymentspb.WorkerDeploymentVersionData)
+					}
+					for buildID, versionData := range req.GetUpsertVersionsData() {
+						tqWorkerDeploymentData.Versions[buildID] = versionData
+						changed = true
+					}
+					for _, buildID := range req.GetForgetVersions() {
+						delete(tqWorkerDeploymentData.Versions, buildID)
+						changed = true
+					}
 				}
 			}
 		}

@@ -579,7 +579,8 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 		}
 	}
 
-	// Find new current and ramping
+	// Find current and ramping
+	// [cleanup-pp-wv]
 	for _, v := range deployments.GetVersions() {
 		if v.RoutingUpdateTime != nil && v.GetCurrentSinceTime() != nil {
 			if t := v.RoutingUpdateTime.AsTime(); t.After(current.GetRoutingUpdateTime().AsTime()) {
@@ -589,6 +590,72 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 		if v.RoutingUpdateTime != nil && v.GetRampingSinceTime() != nil {
 			if t := v.RoutingUpdateTime.AsTime(); t.After(ramping.GetRoutingUpdateTime().AsTime()) {
 				ramping = v
+			}
+		}
+	}
+
+	// Find new current and ramping and pass information in DeploymentVersionData when returning to the caller to
+	// preserve backwards compatibility.
+	var routingConfigLatestCurrentVersion *deploymentpb.RoutingConfig
+	var routingConfigLatestRampingVersion *deploymentpb.RoutingConfig
+
+	if deployments.GetDeploymentsData() != nil {
+
+		for _, deploymentInfo := range deployments.GetDeploymentsData() {
+			routingConfig := deploymentInfo.GetRoutingConfig()
+			if routingConfig == nil {
+				continue
+			}
+
+			// fmt.Println("The revision number is ", routingConfig.GetRevisionNumber())
+			// fmt.Println("The current version is ", routingConfig.GetCurrentDeploymentVersion())
+			// fmt.Println("The ramping version is ", routingConfig.GetRampingDeploymentVersion())
+
+			// Choose current/ramping based on the deployment having the most recent routingConfig update time.
+			if t := routingConfig.GetCurrentVersionChangedTime().AsTime(); t.After(routingConfigLatestCurrentVersion.GetCurrentVersionChangedTime().AsTime()) {
+				routingConfigLatestCurrentVersion = routingConfig
+			}
+
+			if t := routingConfig.GetRampingVersionChangedTime().AsTime(); t.After(routingConfigLatestRampingVersion.GetRampingVersionChangedTime().AsTime()) {
+				routingConfigLatestRampingVersion = routingConfig
+			} else if t := routingConfig.GetRampingVersionPercentageChangedTime().AsTime(); t.After(routingConfigLatestRampingVersion.GetRampingVersionPercentageChangedTime().AsTime()) {
+				routingConfigLatestRampingVersion = routingConfig
+			}
+		}
+
+		if routingConfigLatestCurrentVersion != nil {
+			current = &deploymentspb.DeploymentVersionData{
+				Version: &deploymentspb.WorkerDeploymentVersion{
+					DeploymentName: routingConfigLatestCurrentVersion.GetCurrentDeploymentVersion().GetDeploymentName(),
+					BuildId:        routingConfigLatestCurrentVersion.GetCurrentDeploymentVersion().GetBuildId(),
+				},
+				RoutingUpdateTime: routingConfigLatestCurrentVersion.GetCurrentVersionChangedTime(),
+				CurrentSinceTime:  routingConfigLatestCurrentVersion.GetCurrentVersionChangedTime(), // TODO (Shivam): We may not need this field in our internal protos now.
+				Status:            enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,                 //  TODO (Shivam): We may not need this field in our internal protos now.
+			}
+		}
+
+		if routingConfigLatestRampingVersion != nil {
+			// Choosing the max of the two timestamp fields to get the most recent update time.
+			rampingUpdateTime := routingConfigLatestRampingVersion.GetRampingVersionChangedTime()
+			if routingConfigLatestRampingVersion.GetRampingVersionPercentageChangedTime().AsTime().After(rampingUpdateTime.AsTime()) {
+				rampingUpdateTime = routingConfigLatestRampingVersion.GetRampingVersionPercentageChangedTime()
+			}
+
+			var version *deploymentspb.WorkerDeploymentVersion
+			if routingConfigLatestRampingVersion.GetRampingDeploymentVersion() != nil {
+				version = &deploymentspb.WorkerDeploymentVersion{
+					DeploymentName: routingConfigLatestRampingVersion.GetRampingDeploymentVersion().GetDeploymentName(),
+					BuildId:        routingConfigLatestRampingVersion.GetRampingDeploymentVersion().GetBuildId(),
+				}
+			}
+
+			ramping = &deploymentspb.DeploymentVersionData{
+				Version:           version,
+				RoutingUpdateTime: rampingUpdateTime,
+				RampingSinceTime:  routingConfigLatestRampingVersion.GetRampingVersionChangedTime(), // TODO (Shivam): We may not need this field in our internal protos now.
+				RampPercentage:    routingConfigLatestRampingVersion.GetRampingVersionPercentage(),
+				Status:            enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, //  TODO (Shivam): We may not need this field in our internal protos now.
 			}
 		}
 	}

@@ -50,9 +50,9 @@ type TaskVersionDirective struct {
 	DeploymentVersion *v12.WorkerDeploymentVersion `protobuf:"bytes,5,opt,name=deployment_version,json=deploymentVersion,proto3" json:"deployment_version,omitempty"`
 	// Counter copied from the workflow execution's WorkflowExecutionVersioningInfo
 	// during enqueue time.
-	ScheduledRoutingConfigCounter int32 `protobuf:"varint,6,opt,name=scheduled_routing_config_counter,json=scheduledRoutingConfigCounter,proto3" json:"scheduled_routing_config_counter,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
+	RevisionNumber int64 `protobuf:"varint,6,opt,name=revision_number,json=revisionNumber,proto3" json:"revision_number,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *TaskVersionDirective) Reset() {
@@ -131,9 +131,9 @@ func (x *TaskVersionDirective) GetDeploymentVersion() *v12.WorkerDeploymentVersi
 	return nil
 }
 
-func (x *TaskVersionDirective) GetScheduledRoutingConfigCounter() int32 {
+func (x *TaskVersionDirective) GetRevisionNumber() int64 {
 	if x != nil {
-		return x.ScheduledRoutingConfigCounter
+		return x.RevisionNumber
 	}
 	return 0
 }
@@ -679,7 +679,7 @@ var File_temporal_server_api_taskqueue_v1_message_proto protoreflect.FileDescrip
 
 const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"\n" +
-	".temporal/server/api/taskqueue/v1/message.proto\x12 temporal.server.api.taskqueue.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a(temporal/api/deployment/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a'temporal/server/api/enums/v1/task.proto\x1a/temporal/server/api/deployment/v1/message.proto\"\xdf\x03\n" +
+	".temporal/server/api/taskqueue/v1/message.proto\x12 temporal.server.api.taskqueue.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a(temporal/api/deployment/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a'temporal/server/api/enums/v1/task.proto\x1a/temporal/server/api/deployment/v1/message.proto\"\xbf\x03\n" +
 	"\x14TaskVersionDirective\x12J\n" +
 	"\x14use_assignment_rules\x18\x01 \x01(\v2\x16.google.protobuf.EmptyH\x00R\x12useAssignmentRules\x12,\n" +
 	"\x11assigned_build_id\x18\x02 \x01(\tH\x00R\x0fassignedBuildId\x12E\n" +
@@ -687,8 +687,8 @@ const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"\n" +
 	"deployment\x18\x04 \x01(\v2&.temporal.api.deployment.v1.DeploymentR\n" +
 	"deployment\x12i\n" +
-	"\x12deployment_version\x18\x05 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\x11deploymentVersion\x12G\n" +
-	" scheduled_routing_config_counter\x18\x06 \x01(\x05R\x1dscheduledRoutingConfigCounterB\n" +
+	"\x12deployment_version\x18\x05 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\x11deploymentVersion\x12'\n" +
+	"\x0frevision_number\x18\x06 \x01(\x03R\x0erevisionNumberB\n" +
 	"\n" +
 	"\bbuild_id\"A\n" +
 	"\tFairLevel\x12\x1b\n" +

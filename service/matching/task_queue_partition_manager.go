@@ -3,6 +3,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -1002,6 +1003,26 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		return nil, nil, nil, err
 	}
 	deploymentData := perTypeUserData.GetDeploymentData()
+	deploymentsData := deploymentData.GetDeploymentsData()
+
+	// Fetching the RoutingConfig based on the deployment of the workflow task.
+	routingConfigRevisionNumber := int64(0)
+	if deploymentsData != nil && directive.GetDeploymentVersion() != nil {
+		workerDeploymentData := deploymentsData[directive.GetDeploymentVersion().GetDeploymentName()]
+		if workerDeploymentData != nil && workerDeploymentData.GetRoutingConfig() != nil {
+			routingConfigRevisionNumber = workerDeploymentData.GetRoutingConfig().GetRevisionNumber()
+		}
+
+		fmt.Println("workerDeploymentData", workerDeploymentData)
+		fmt.Println("workerDeploymentData.GetRoutingConfig()", workerDeploymentData.GetRoutingConfig())
+		fmt.Println("workerDeploymentData.GetRoutingConfig().GetRevisionNumber()", workerDeploymentData.GetRoutingConfig().GetRevisionNumber())
+	}
+	taskDirectiveRevisionNumber := directive.GetRevisionNumber()
+
+	// TODO(shivam): Debug code - remove when done
+	if routingConfigRevisionNumber > 0 {
+		fmt.Println("routingConfigRevisionNumber", routingConfigRevisionNumber)
+	}
 
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
@@ -1015,6 +1036,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		}
 
 		// Preventing Query tasks from being dispatched to a drained version with no workers
+		// TODO (Shivam): Please change this since the internal protos have changed over here.
 		if isQuery {
 			for _, versionData := range deploymentData.GetVersions() {
 				if versionData.GetVersion() != nil && worker_versioning.DeploymentVersionFromDeployment(deployment).Equal(versionData.GetVersion()) {
@@ -1066,7 +1088,14 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			return pm.defaultQueue, pm.defaultQueue, userDataChanged, nil
 		}
 
-		currentDeploymentQueue, err := pm.getVersionedQueue(ctx, "", "", currentDeployment, true)
+		var currentDeploymentQueue physicalTaskQueueManager
+		var err error
+		if routingConfigRevisionNumber >= taskDirectiveRevisionNumber {
+			currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", currentDeployment, true)
+		} else {
+			currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
+		}
+
 		if forwardInfo == nil {
 			// Task is not forwarded, so it can be spooled if sync match fails.
 			// Unpinned tasks are spooled in default queue
