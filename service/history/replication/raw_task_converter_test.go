@@ -1467,10 +1467,16 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil).Times(1)
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		VersionHistories:  versionHistories,
-		TransitionHistory: transitionHistory,
-	}).Times(3)
+		VersionHistories:    versionHistories,
+		TransitionHistory:   transitionHistory,
+		CloseTransferTaskId: 0,
+	}).Times(2)
 	s.mutableState.EXPECT().HasBufferedEvents().Return(false).Times(1)
+	s.mutableState.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
+	}).Times(1)
 
 	s.progressCache.EXPECT().Get(
 		s.runID,
@@ -1594,10 +1600,16 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_FirstTask
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil).Times(1)
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		VersionHistories:  versionHistories,
-		TransitionHistory: transitionHistory,
-	}).Times(3)
+		VersionHistories:    versionHistories,
+		TransitionHistory:   transitionHistory,
+		CloseTransferTaskId: 0,
+	}).Times(2)
 	s.mutableState.EXPECT().HasBufferedEvents().Return(false).Times(1)
+	s.mutableState.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
+	}).Times(1)
 
 	s.progressCache.EXPECT().Get(
 		s.runID,
@@ -1716,28 +1728,37 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_HasBuffer
 }
 
 func (s *rawTaskConverterSuite) TestIsCloseTransferTaskAcked_ZeroTaskId() {
-	mu := historyi.NewMockMutableState(s.controller)
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
-		CloseTransferTaskId: 0,
+	testCloseTaskID := int64(0)
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
 	}
-	mu.EXPECT().GetExecutionInfo().Return(executionInfo)
+	closeTransferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: workflowKey,
+		TaskID:      testCloseTaskID,
+	}
 
 	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
-	result := converter.isCloseTransferTaskAcked(mu)
+	result := converter.isCloseTransferTaskAcked(closeTransferTask)
 	s.False(result)
 }
 
 func (s *rawTaskConverterSuite) TestIsCloseTransferTaskAcked_QueueStateNotAvailable() {
-	mu := historyi.NewMockMutableState(s.controller)
 	testCloseTaskID := int64(12345)
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
-		CloseTransferTaskId: testCloseTaskID,
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
 	}
-	mu.EXPECT().GetExecutionInfo().Return(executionInfo)
+	closeTransferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: workflowKey,
+		TaskID:      testCloseTaskID,
+	}
 
 	// Queue state not set, so should return false
 	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
-	result := converter.isCloseTransferTaskAcked(mu)
+	result := converter.isCloseTransferTaskAcked(closeTransferTask)
 	s.False(result)
 }
 
@@ -1810,19 +1831,17 @@ func (s *rawTaskConverterSuite) TestIsCloseTransferTaskAcked_TaskAcked() {
 
 	converter := newSyncVersionedTransitionTaskConverter(mockShard, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
 
-	mu := historyi.NewMockMutableState(s.controller)
 	workflowKey := definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.workflowID,
 		RunID:       s.runID,
 	}
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
-		CloseTransferTaskId: testCloseTaskID,
+	closeTransferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: workflowKey,
+		TaskID:      testCloseTaskID,
 	}
-	mu.EXPECT().GetExecutionInfo().Return(executionInfo)
-	mu.EXPECT().GetWorkflowKey().Return(workflowKey)
 
-	result := converter.isCloseTransferTaskAcked(mu)
+	result := converter.isCloseTransferTaskAcked(closeTransferTask)
 	s.True(result)
 }
 
@@ -1854,19 +1873,17 @@ func (s *rawTaskConverterSuite) TestIsCloseTransferTaskAcked_TaskNotAcked() {
 
 	converter := newSyncVersionedTransitionTaskConverter(mockShard, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
 
-	mu := historyi.NewMockMutableState(s.controller)
 	workflowKey := definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.workflowID,
 		RunID:       s.runID,
 	}
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
-		CloseTransferTaskId: testCloseTaskID,
+	closeTransferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: workflowKey,
+		TaskID:      testCloseTaskID,
 	}
-	mu.EXPECT().GetExecutionInfo().Return(executionInfo)
-	mu.EXPECT().GetWorkflowKey().Return(workflowKey)
 
-	result := converter.isCloseTransferTaskAcked(mu)
+	result := converter.isCloseTransferTaskAcked(closeTransferTask)
 	s.False(result)
 }
 
@@ -1923,18 +1940,16 @@ func (s *rawTaskConverterSuite) TestIsCloseTransferTaskAcked_TaskNotAcked_Contai
 
 	converter := newSyncVersionedTransitionTaskConverter(mockShard, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
 
-	mu := historyi.NewMockMutableState(s.controller)
 	workflowKey := definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.workflowID,
 		RunID:       s.runID,
 	}
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
-		CloseTransferTaskId: testCloseTaskID,
+	closeTransferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: workflowKey,
+		TaskID:      testCloseTaskID,
 	}
-	mu.EXPECT().GetExecutionInfo().Return(executionInfo)
-	mu.EXPECT().GetWorkflowKey().Return(workflowKey)
 
-	result := converter.isCloseTransferTaskAcked(mu)
+	result := converter.isCloseTransferTaskAcked(closeTransferTask)
 	s.False(result)
 }
