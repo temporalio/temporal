@@ -2,8 +2,11 @@ package chasm
 
 import (
 	"context"
+	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/payload"
 )
@@ -29,9 +32,43 @@ type VisibilityMemoProvider interface {
 	Memo(Context) map[string]VisibilityValue
 }
 
-type VisibilitySearchAttributesMapper interface {
-	SearchAttributeAlias(field string) (string, error)
-	SearchAttributeField(alias string) (string, error)
+type VisibilitySearchAttributesMapper struct {
+	aliasToField map[string]string
+	fieldToAlias map[string]string
+	saTypeMap    map[string]enumspb.IndexedValueType
+}
+
+func (v *VisibilitySearchAttributesMapper) SearchAttributeAlias(field string) (string, error) {
+	if v == nil {
+		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper is not registered")
+	}
+	alias, ok := v.aliasToField[field]
+	if !ok {
+		return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered field %s", field))
+	}
+	return alias, nil
+}
+
+func (v *VisibilitySearchAttributesMapper) SearchAttributeField(alias string) (string, error) {
+	if v == nil {
+		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper is not registered")
+	}
+	field, ok := v.fieldToAlias[alias]
+	if !ok {
+		return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered alias %s", alias))
+	}
+	return field, nil
+}
+
+func (v *VisibilitySearchAttributesMapper) SearchAttributeValueType(field string) (enumspb.IndexedValueType, error) {
+	if v == nil {
+		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, serviceerror.NewInvalidArgument("visibility search attributes mapper is not registered")
+	}
+	saType, ok := v.saTypeMap[field]
+	if !ok {
+		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered field %s", field))
+	}
+	return saType, nil
 }
 
 type Visibility struct {
