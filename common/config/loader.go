@@ -23,17 +23,12 @@ import (
 var embeddedConfigTemplate []byte
 
 var (
-	// ErrConfigFilesNotFound is returned when no config files are found in the specified directory
 	ErrConfigFilesNotFound = errors.New("no config files found")
 
-	// logger is a structured logger used during config loading (bootstrap phase).
-	// Uses zap with console encoding to match Temporal's standard logging format.
-	// Initialized lazily using sync.Once for thread-safety.
 	logger     *zap.Logger
 	loggerOnce sync.Once
 )
 
-// getLogger returns the bootstrap logger, initializing it lazily for thread-safety.
 func getLogger() *zap.Logger {
 	loggerOnce.Do(func() {
 		logger = newBootstrapLogger()
@@ -41,9 +36,6 @@ func getLogger() *zap.Logger {
 	return logger
 }
 
-// newBootstrapLogger creates a zap logger for config loading with console encoding
-// that matches Temporal's standard log format.
-// Panics if the logger cannot be created, as logging is essential for bootstrap.
 func newBootstrapLogger() *zap.Logger {
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:        "ts",
@@ -123,13 +115,11 @@ func Load(env string, configDir string, zone string, config any) error {
 }
 
 // LoadFromEnv loads the configuration using only the embedded template and environment variables.
-// This ignores any config files on disk and relies entirely on environment variable substitution.
 func LoadFromEnv(config any) error {
 	return LoadWithEnvMap("", "", "", config, getEnvMap(), true)
 }
 
 // LoadWithEnvMap loads configuration with a specific environment variable map.
-// This is useful for testing with controlled environment variables.
 // If useEmbeddedOnly is true, it will skip config file loading and use only the embedded template.
 func LoadWithEnvMap(env string, configDir string, zone string, config any, envMap map[string]string, useEmbeddedOnly bool) error {
 	// If using embedded template only, skip file loading
@@ -183,7 +173,6 @@ func LoadWithEnvMap(env string, configDir string, zone string, config any, envMa
 			return err
 		}
 
-		// Process the file (with optional template rendering)
 		processedData, err := processConfigFile(data, filepath.Base(f), envMap)
 		if err != nil {
 			return err
@@ -264,21 +253,17 @@ func LoadConfig(env string, configDir string, zone string) (*Config, error) {
 }
 
 // LoadConfigFile loads configuration from a single specified file path.
-// This function loads only the specified file without merging with base.yaml or other files.
 // Template rendering is enabled if the file contains "# enable-template" comment.
 func LoadConfigFile(filePath string) (*Config, error) {
 	getLogger().Info("Loading configuration from file",
 		zap.String("filePath", filePath),
 	)
 
-	// This is tagged nosec because the file name being read is for a config file that is not user supplied
-	// #nosec
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file %s: %w", filePath, err)
 	}
 
-	// Process the file (with optional template rendering)
 	processedData, err := processConfigFile(data, filepath.Base(filePath), getEnvMap())
 	if err != nil {
 		return nil, fmt.Errorf("failed to process config file %s: %w", filePath, err)
@@ -339,14 +324,11 @@ func getConfigFiles(env string, configDir string, zone string) ([]string, error)
 			continue
 		}
 
-		// If the error is NOT "file not found", it could be a permission issue,
-		// I/O error, or other problem that we should report
 		if !os.IsNotExist(err) && firstNonNotExistError == nil {
 			firstNonNotExistError = fmt.Errorf("error accessing config file %s: %w", c, err)
 		}
 	}
 
-	// If we encountered a non-NotExist error (like permission denied), return it
 	if firstNonNotExistError != nil {
 		return nil, firstNonNotExistError
 	}
@@ -366,9 +348,6 @@ func file(name string, suffix string) string {
 	return name + "." + suffix
 }
 
-// getEnvMap returns all environment variables as a map for template access.
-// Environment variables are expected to be in KEY=value format.
-// Empty keys are skipped for safety.
 func getEnvMap() map[string]string {
 	environ := os.Environ()
 	envMap := make(map[string]string, len(environ))

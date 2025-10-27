@@ -145,13 +145,10 @@ func buildCLI() *cli.App {
 				if c.Args().Len() > 0 {
 					return cli.Exit("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
 				}
-
-				// Error if both TEMPORAL_CONFIG_FILE env var and --config-file flag are set
 				if c.IsSet("config-file") && os.Getenv(config.EnvKeyConfigFile) != "" {
 					return cli.Exit("ERROR: TEMPORAL_CONFIG_FILE env var and --config-file flag cannot both be set", 1)
 				}
 
-				// Validate that --config-file is not used with conflicting flags
 				if c.IsSet("config-file") {
 					conflictingFlags := []string{"config", "env", "zone"}
 					for _, flag := range conflictingFlags {
@@ -176,24 +173,20 @@ func buildCLI() *cli.App {
 				var cfg *config.Config
 				var err error
 
-				// Load configuration based on flags
 				switch {
 				case c.IsSet("config-file"):
-					// Load specific config file
 					configFilePath := c.String("config-file")
 					if !filepath.IsAbs(configFilePath) {
 						configFilePath = filepath.Join(c.String("root"), configFilePath)
 					}
 					cfg, err = config.LoadConfigFile(configFilePath)
 				case c.IsSet("config") || c.IsSet("env") || c.IsSet("zone"):
-					// File-based config from directory (deprecated)
 					cfg, err = config.LoadConfig(
 						c.String("env"),
 						path.Join(c.String("root"), c.String("config")),
 						c.String("zone"),
 					)
 				default:
-					// Default behavior: env-based config from embedded template
 					cfg = &config.Config{}
 					err = config.LoadFromEnv(cfg)
 				}

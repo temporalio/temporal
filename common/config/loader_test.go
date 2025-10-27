@@ -124,9 +124,7 @@ func buildConfig(template bool, env, zone string) string {
       item2: ` + item2
 }
 
-// TestRenderTemplateWithEnvVars tests that environment variable substitution works in templates
 func TestRenderTemplateWithEnvVars(t *testing.T) {
-	// Test with correct sprig default syntax: default <default_value> <given_value>
 	templateContent := []byte(`# enable-template
 log:
   level: {{ default "info" (index .Env "LOG_LEVEL") }}
@@ -176,7 +174,6 @@ persistence:
 	}
 }
 
-// TestProcessConfigFile tests the config file processing with and without templates
 func TestProcessConfigFile(t *testing.T) {
 	t.Run("without template enabled", func(t *testing.T) {
 		content := []byte(`log:
@@ -200,7 +197,6 @@ log:
 	})
 }
 
-// TestLoadWithEmbeddedTemplate tests that the embedded template can be loaded explicitly
 func TestLoadWithEmbeddedTemplate(t *testing.T) {
 	envMap := map[string]string{
 		"DB":             "postgres12",
@@ -208,7 +204,6 @@ func TestLoadWithEmbeddedTemplate(t *testing.T) {
 	}
 
 	var cfg Config
-	// Use the useEmbeddedOnly flag to load embedded template
 	err := LoadWithEnvMap("", "", "", &cfg, envMap, true)
 	require.NoError(t, err)
 
@@ -219,7 +214,6 @@ func TestLoadWithEmbeddedTemplate(t *testing.T) {
 	require.Equal(t, 7233, cfg.Services["frontend"].RPC.GRPCPort)
 }
 
-// TestLoadWithEnvVarSubstitution tests config loading with environment variable substitution
 func TestLoadWithEnvVarSubstitution(t *testing.T) {
 	tempDir := testutils.MkdirTemp(t, "", "env_var_substitution_test")
 

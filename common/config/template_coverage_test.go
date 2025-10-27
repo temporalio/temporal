@@ -9,48 +9,36 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestEmbeddedTemplateCoversAllConfigFields verifies that every field in the Config struct
-// has a corresponding entry in the embedded template YAML. This ensures all configuration
-// can be set via environment variables when using the embedded template.
 func TestEmbeddedTemplateCoversAllConfigFields(t *testing.T) {
-	// Parse the embedded template as YAML (after rendering with empty env)
 	envMap := make(map[string]string)
 
-	// Render template with empty env to get the structure with defaults
 	rendered, err := processConfigFile(embeddedConfigTemplate, "config_template_embedded.yaml", envMap)
 	require.NoError(t, err)
 
-	// Parse rendered template into a generic map to see what fields are present
 	var templateData map[string]any
 	err = yaml.Unmarshal(rendered, &templateData)
 	require.NoError(t, err)
 
-	// Check that all Config struct fields are present in the template
 	configType := reflect.TypeOf(Config{})
 
 	for i := 0; i < configType.NumField(); i++ {
 		field := configType.Field(i)
 		yamlTag := field.Tag.Get("yaml")
 
-		// Skip fields without yaml tags or with "-" (explicitly excluded)
 		if yamlTag == "" || yamlTag == "-" {
 			continue
 		}
 
-		// Extract just the field name from the tag (ignore options like omitempty)
 		yamlFieldName := strings.Split(yamlTag, ",")[0]
 
-		// Check if field is required (has validate:"nonzero" tag)
 		validateTag := field.Tag.Get("validate")
 		isRequired := strings.Contains(validateTag, "nonzero")
 
-		// Check if the field exists in the template
 		_, exists := templateData[yamlFieldName]
 
 		if isRequired && !exists {
 			t.Errorf("REQUIRED field '%s' (yaml:'%s') is missing from embedded template", field.Name, yamlFieldName)
 		} else if !exists {
-			// Optional field - log as info but don't fail
 			t.Logf("Optional field '%s' (yaml:'%s') not in embedded template (this is OK)", field.Name, yamlFieldName)
 		}
 	}
@@ -60,7 +48,6 @@ func TestEmbeddedTemplateCoversAllConfigFields(t *testing.T) {
 		persistenceData, ok := templateData["persistence"].(map[string]any)
 		require.True(t, ok, "persistence section must exist")
 
-		// Check required persistence fields
 		requiredFields := []string{"defaultStore", "numHistoryShards", "datastores"}
 		for _, field := range requiredFields {
 			_, exists := persistenceData[field]
@@ -72,7 +59,6 @@ func TestEmbeddedTemplateCoversAllConfigFields(t *testing.T) {
 		servicesData, ok := templateData["services"].(map[string]any)
 		require.True(t, ok, "services section must exist")
 
-		// Check that at least the core services are defined
 		requiredServices := []string{"frontend", "history", "matching", "worker"}
 		for _, service := range requiredServices {
 			_, exists := servicesData[service]
@@ -90,11 +76,8 @@ func TestEmbeddedTemplateCoversAllConfigFields(t *testing.T) {
 	})
 }
 
-// TestEmbeddedTemplateHasDefaults verifies that the embedded template produces valid config
-// when required environment variables are set. This test documents which env vars are required.
 func TestEmbeddedTemplateHasDefaults(t *testing.T) {
 	t.Run("cassandra_with_required_env", func(t *testing.T) {
-		// When using cassandra (the default DB) with CASSANDRA_SEEDS set, config should be valid
 		cassandraEnv := map[string]string{
 			"CASSANDRA_SEEDS": "localhost",
 		}
@@ -114,7 +97,6 @@ func TestEmbeddedTemplateHasDefaults(t *testing.T) {
 	})
 
 	t.Run("postgres_with_required_env", func(t *testing.T) {
-		// When using postgres with required env vars, config should be valid
 		postgresEnv := map[string]string{
 			"DB":             "postgres12",
 			"POSTGRES_SEEDS": "localhost",
@@ -160,8 +142,6 @@ func TestEmbeddedTemplateHasDefaults(t *testing.T) {
 	})
 }
 
-// TestEmbeddedTemplateMatchesDockerTemplate verifies that the embedded template
-// matches the docker template exactly (using dockerize-compatible template syntax).
 func TestEmbeddedTemplateMatchesDockerTemplate(t *testing.T) {
 	// This test is informational - it documents that the embedded template matches docker template
 	t.Log("Embedded template should match docker/config_template.yaml structure")
@@ -199,8 +179,6 @@ func TestEmbeddedTemplateMatchesDockerTemplate(t *testing.T) {
 	t.Log("Note: publicClient is conditionally included based on USE_INTERNAL_FRONTEND and auth settings")
 }
 
-// TestConfigToYAML verifies that a Config struct can be marshaled back to YAML.
-// This ensures the config can be serialized (e.g., for debugging or config export).
 func TestConfigToYAML(t *testing.T) {
 	// Load config from template
 	testEnv := map[string]string{
