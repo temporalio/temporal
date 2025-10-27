@@ -136,6 +136,7 @@ func (e InvocationTaskExecutor) Invoke(
 	return invokable.WrapError(result, saveErr)
 }
 
+//nolint:revive // context.Context is an input parameter for chasm.ReadComponent, not a function parameter
 func (e InvocationTaskExecutor) loadInvocationArgs(
 	component *Callback,
 	chasmCtx chasm.Context,
