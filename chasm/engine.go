@@ -4,6 +4,7 @@ package chasm
 
 import (
 	"context"
+	"fmt"
 )
 
 type Engine interface {
@@ -245,6 +246,8 @@ func PollComponent[C Component, R []byte | ComponentRef, I any, O any, T any](
 	opts ...TransitionOption,
 ) (O, []byte, error) {
 	var output O
+
+	fmt.Println("🔄 chasm.PollComponent")
 
 	ref, err := convertComponentRef(r)
 	if err != nil {

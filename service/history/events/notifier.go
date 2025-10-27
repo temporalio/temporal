@@ -1,6 +1,8 @@
 package events
 
 import (
+	"fmt"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -142,6 +144,8 @@ func (notifier *NotifierImpl) WatchHistoryEvent(
 			return serviceerror.NewUnavailable("Unable to watch on workflow execution.")
 		}
 		subscribers[subscriberID] = channel
+		fmt.Fprintf(os.Stderr, "👂 Subscriber %s registered for entity %s/%s (run: %s)\n",
+			subscriberID[:8], identifier.NamespaceID[:8], identifier.WorkflowID, identifier.RunID[:8])
 		return nil
 	})
 
@@ -187,9 +191,11 @@ func (notifier *NotifierImpl) dispatchHistoryEventNotification(event *Notificati
 	_, _, _ = notifier.eventsPubsubs.GetAndDo(identifier, func(key interface{}, value interface{}) error {
 		subscribers := value.(map[string]chan *Notification)
 
-		for _, channel := range subscribers {
+		for subscriberID, channel := range subscribers {
 			select {
 			case channel <- event:
+				fmt.Fprintf(os.Stderr, "🎯 Delivered to subscriber %s for entity %s/%s (run: %s)\n",
+					subscriberID[:8], event.ID.NamespaceID[:8], event.ID.WorkflowID, event.ID.RunID[:8])
 			default:
 				// in case the channel is already filled with message
 				// this should NOT happen, unless there is a bug or high load

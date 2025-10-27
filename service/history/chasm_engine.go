@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -299,6 +300,8 @@ func (e *ChasmEngine) PollComponent(
 		executionLease.GetReleaseFn()(nil)
 		return nil, err
 	}
+	fmt.Fprintf(os.Stderr, "📡 Subscribed (ID: %s) for %s/%s\n",
+		subscriberID[:8], workflowKey.NamespaceID[:8], workflowKey.WorkflowID)
 	defer func() {
 		_ = historyEngine.eventNotifier.UnwatchHistoryEvent(workflowKey, subscriberID)
 	}()
@@ -325,7 +328,9 @@ func (e *ChasmEngine) PollComponent(
 	for {
 		select {
 		// TODO: make use of data sent w/ notification
-		case <-channel:
+		case notification := <-channel:
+			fmt.Fprintf(os.Stderr, "⬇️ Received notification (subscriber: %s)\n", subscriberID[:8])
+			_ = notification // TODO: use notification data for staleness checks
 			// Received a notification. Re-acquire the lock and check the predicate.
 			newEntityRef, _, executionLease, err := e.getExecutionLeaseAndCheckPredicate(ctx, entityRef, predicateFn)
 
@@ -360,6 +365,9 @@ func (e *ChasmEngine) getExecutionLeaseAndCheckPredicate(
 	entityRef chasm.ComponentRef,
 	predicateFn func(chasm.Context, chasm.Component) (any, bool, error),
 ) ([]byte, historyi.ShardContext, api.WorkflowLease, error) {
+
+	fmt.Println("🔍 Evaluating predicate")
+
 	// Obtain chasm tree with lock
 	// cf. service/history/api/get_workflow_util.go:60-68 (GetMutableStateWithConsistencyCheck)
 	// cf. get_workflow_util.go:137-144 (state reloaded after notification)
@@ -370,6 +378,7 @@ func (e *ChasmEngine) getExecutionLeaseAndCheckPredicate(
 
 	chasmTree, ok := executionLease.GetMutableState().ChasmTree().(*chasm.Node)
 	if !ok {
+		fmt.Println("  🌈 error: invalid CHASM tree")
 		return nil, nil, nil, serviceerror.NewInternalf(
 			"invalid CHASM tree, encountered type: %T, expected type: %T",
 			executionLease.GetMutableState().ChasmTree(),
@@ -393,10 +402,12 @@ func (e *ChasmEngine) getExecutionLeaseAndCheckPredicate(
 		if err != nil {
 			return nil, nil, nil, serviceerror.NewInternalf("componentRef: %+v: %s", entityRef, err)
 		}
+		fmt.Fprintf(os.Stderr, "  ✅ Predicate satisfied - returning immediately\n")
 		return newEntityRef, shardContext, executionLease, nil
 	}
 
 	// wait condition not met
+	fmt.Fprintf(os.Stderr, "  🕰️ Predicate not satisfied - entering long-poll\n")
 	return nil, shardContext, executionLease, nil
 }
 
