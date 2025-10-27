@@ -350,8 +350,6 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 		return nil, h.convertError(err)
 	}
 
-	ctx = chasm.NewEngineContext(ctx, h.chasmEngine)
-
 	response, err := engine.RecordActivityTaskStarted(ctx, request)
 	if err != nil {
 		return nil, h.convertError(err)
