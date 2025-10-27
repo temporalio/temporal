@@ -16,7 +16,6 @@ message SchedulerState {
     // Scheduler request parameters and metadata. 
     temporal.api.schedule.v1.Schedule schedule = 2;
     temporal.api.schedule.v1.ScheduleInfo info = 3;
-    temporal.api.schedule.v1.SchedulePatch initial_patch = 4;
 
     // State common to all generators is stored in the top-level machine.
     string namespace = 5;

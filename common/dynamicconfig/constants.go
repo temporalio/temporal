@@ -1354,6 +1354,13 @@ second per poller by one physical queue manager`,
 		1000,
 		"Maximum number of fairness key weight overrides that can be configured for a task queue at a time.",
 	)
+	MatchingEnableWorkerPluginMetrics = NewGlobalBoolSetting(
+		"matching.enableWorkerPluginMetrics",
+		false,
+		`MatchingEnableWorkerPluginMetrics controls whether to export worker plugin metrics. 
+The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is 
+an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
+	)
 
 	// keys for history
 
@@ -2879,13 +2886,13 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 
 	WorkerHeartbeatsEnabled = NewNamespaceBoolSetting(
 		"frontend.WorkerHeartbeatsEnabled",
-		false,
+		true,
 		`WorkerHeartbeatsEnabled is a "feature enable" flag. It allows workers to send periodic heartbeats to the server.`,
 	)
 
 	ListWorkersEnabled = NewNamespaceBoolSetting(
 		"frontend.ListWorkersEnabled",
-		false,
+		true,
 		`ListWorkersEnabled is a "feature enable" flag. It allows clients to get workers heartbeat information.`,
 	)
 
