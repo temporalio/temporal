@@ -1,0 +1,90 @@
+name: Release Docker Images
+
+permissions: read-all
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Commit sha (first 7 chars, e.g., 'abc1234' from sha-abc1234)"
+        required: true
+      tag:
+        description: "Release version tag (e.g., 1.23.4)"
+        required: true
+      latest:
+        type: boolean
+        description: "Also update latest tag"
+        default: false
+      major:
+        type: boolean
+        description: "Also update major version tag"
+        default: false
+      source_registry:
+        description: "Source registry"
+        default: "ghcr.io/chaptersix"
+      dest_registry:
+        description: "Destination registry (e.g., temporalio for DockerHub, ghcr.io/temporalio for GHCR)"
+        default: "ghcr.io/chaptersix"
+
+jobs:
+  release-images:
+    name: "Promote images to release registry"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Promote server and admin-tools images
+        env:
+          COMMIT: ${{ github.event.inputs.commit }}
+          TAG: ${{ github.event.inputs.tag }}
+          LATEST: ${{ github.event.inputs.latest }}
+          MAJOR: ${{ github.event.inputs.major }}
+          SRC_REGISTRY: ${{ github.event.inputs.source_registry }}
+          DST_REGISTRY: ${{ github.event.inputs.dest_registry }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PAT }}
+        run: |
+          # Use skopeo to copy images
+          for image in server admin-tools; do
+            echo "Processing ${image}..."
+            src="${SRC_REGISTRY}/${image}:sha-${COMMIT}"
+            
+            # Parse version for tagging
+            IFS='.' read -ra VERSION <<< "$TAG"
+            
+            # Build tag list
+            tags="${TAG}"
+            
+            # Add major tag if requested
+            if [ "$MAJOR" = "true" ]; then
+              tags="${VERSION[0]} ${tags}"
+            fi
+            
+            # Add progressive version tags (1, 1.23, 1.23.4)
+            for i in $(seq 1 $((${#VERSION[@]}-1))); do
+              partial_version=$(IFS=.; echo "${VERSION[*]:0:$((i+1))}")
+              tags="${tags} ${partial_version}"
+            done
+            
+            echo "Tags to create: ${tags}"
+            
+            # Copy each tag
+            for tag in $tags; do
+              echo "Copying to ${DST_REGISTRY}/${image}:${tag}"
+              docker run --rm quay.io/skopeo/stable:latest copy --all \
+                docker://${src} \
+                docker://${DST_REGISTRY}/${image}:${tag}
+            done
+            
+            # Copy to latest if requested
+            if [ "$LATEST" = "true" ]; then
+              echo "Copying to ${DST_REGISTRY}/${image}:latest"
+              docker run --rm quay.io/skopeo/stable:latest copy --all \
+                docker://${src} \
+                docker://${DST_REGISTRY}/${image}:latest
+            fi
+          done
+          
+          echo "### ✅ Images Released" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Released images to \`${DST_REGISTRY}\`:" >> $GITHUB_STEP_SUMMARY
+          echo "- server:${TAG}" >> $GITHUB_STEP_SUMMARY
+          echo "- admin-tools:${TAG}" >> $GITHUB_STEP_SUMMARY

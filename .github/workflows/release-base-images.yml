@@ -1,0 +1,76 @@
+name: Release Base Docker Images
+
+permissions: read-all
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Target base image"
+        type: choice
+        options:
+          - base-server
+          - base-admin-tools
+        required: true
+      tag:
+        description: "New tag for the image"
+        required: true
+      arch:
+        description: "Platform architecture"
+        type: choice
+        options:
+          - linux/amd64,linux/arm64
+          - linux/amd64
+          - linux/arm64
+        default: linux/amd64,linux/arm64
+      registry:
+        description: "Target registry"
+        default: "ghcr.io/chaptersix"
+
+jobs:
+  build-push-base-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        if: startsWith(github.event.inputs.registry, 'ghcr.io')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to DockerHub
+        if: "!startsWith(github.event.inputs.registry, 'ghcr.io')"
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PAT }}
+
+      - name: Build and push base image
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          pull: true
+          file: .docker/base-images/${{ github.event.inputs.target }}.Dockerfile
+          platforms: ${{ github.event.inputs.arch }}
+          tags: ${{ github.event.inputs.registry }}/${{ github.event.inputs.target }}:${{ github.event.inputs.tag }}
+          labels: |
+            org.opencontainers.image.title=${{ github.event.inputs.target }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ github.event.inputs.tag }}
+
+      - name: Summary
+        run: |
+          echo "### ✅ Base Image Released" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Image: \`${{ github.event.inputs.registry }}/${{ github.event.inputs.target }}:${{ github.event.inputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "Platforms: \`${{ github.event.inputs.arch }}\`" >> $GITHUB_STEP_SUMMARY

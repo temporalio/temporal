@@ -1,0 +1,18 @@
+version: "3.5"
+
+services:
+  server:
+    image: ${IMAGE_REPO:-ghcr.io/chaptersix}/server:${IMAGE_SHA_TAG:-sha-test}
+    ports:
+      - "7233:7233"
+    environment:
+      - DB=sqlite
+    volumes:
+      - /tmp/temporal:/tmp/temporal
+
+  admin-tools:
+    image: ${IMAGE_REPO:-ghcr.io/chaptersix}/admin-tools:${IMAGE_SHA_TAG:-sha-test}
+    depends_on:
+      - server
+    environment:
+      - TEMPORAL_ADDRESS=server:7233

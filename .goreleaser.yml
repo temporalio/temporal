@@ -1,3 +1,5 @@
+version: 2
+
 before:
   hooks:
     - go mod download
@@ -83,7 +85,7 @@ checksum:
   algorithm: sha256
 
 changelog:
-  skip: true
+  disable: true
 
 announce:
-  skip: "true"
+  skip: true

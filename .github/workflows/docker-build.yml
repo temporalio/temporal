@@ -1,0 +1,184 @@
+name: Build Docker Images
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+on:
+  push:
+    branches:
+      - main
+      - test/*
+      - cloud/*
+      - feature/*
+      - release/*
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-push-images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set environment variables
+        run: |
+          echo "IMAGE_SHA_TAG=sha-${GITHUB_SHA:0:7}" >> $GITHUB_ENV
+          branch_name=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
+          echo "IMAGE_BRANCH_TAG=branch-${branch_name}" >> $GITHUB_ENV
+          echo "TEMPORAL_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
+          TAG_LATEST=${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'true' || 'false' }}
+          echo "TAG_LATEST=${TAG_LATEST}" >> $GITHUB_ENV
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Install goreleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          install-only: true
+          version: latest
+
+      - name: Build binaries with goreleaser
+        run: |
+          goreleaser build --snapshot --clean \
+            --id temporal-server \
+            --id temporal-cassandra-tool \
+            --id temporal-sql-tool \
+            --id temporal-elasticsearch-tool \
+            --id tdbg
+
+      - name: Show goreleaser output structure
+        run: |
+          echo "=== Goreleaser dist structure ==="
+          find dist -type f -name "temporal-server" -o -name "tdbg" -o -name "temporal-*-tool" | sort
+
+      - name: Download temporal CLI
+        working-directory: .docker
+        run: |
+          CLI_VERSION=$(cat .cli-version)
+          echo "Downloading temporal CLI ${CLI_VERSION}..."
+          mkdir -p dist/tmp
+          for arch in amd64 arm64; do
+            echo "Downloading for linux/${arch}..."
+            curl -fsSL "https://github.com/temporalio/cli/releases/download/${CLI_VERSION}/temporal_cli_${CLI_VERSION#v}_linux_${arch}.tar.gz" | \
+              tar -xzf - -C dist/tmp
+            mkdir -p dist/${arch}
+            mv dist/tmp/temporal dist/${arch}/temporal
+          done
+          rm -rf dist/tmp
+
+      - name: Organize binaries
+        run: |
+          echo "=== Organizing binaries ==="
+          mkdir -p .docker/dist/amd64 .docker/dist/arm64
+          
+          # Find and copy binaries (goreleaser path varies by version)
+          find dist -type f -name temporal-server -path "*/linux_amd64*" -exec cp {} .docker/dist/amd64/ \;
+          find dist -type f -name temporal-cassandra-tool -path "*/linux_amd64*" -exec cp {} .docker/dist/amd64/ \;
+          find dist -type f -name temporal-sql-tool -path "*/linux_amd64*" -exec cp {} .docker/dist/amd64/ \;
+          find dist -type f -name temporal-elasticsearch-tool -path "*/linux_amd64*" -exec cp {} .docker/dist/amd64/ \;
+          find dist -type f -name tdbg -path "*/linux_amd64*" -exec cp {} .docker/dist/amd64/ \;
+          
+          find dist -type f -name temporal-server -path "*/linux_arm64*" -exec cp {} .docker/dist/arm64/ \;
+          find dist -type f -name temporal-cassandra-tool -path "*/linux_arm64*" -exec cp {} .docker/dist/arm64/ \;
+          find dist -type f -name temporal-sql-tool -path "*/linux_arm64*" -exec cp {} .docker/dist/arm64/ \;
+          find dist -type f -name temporal-elasticsearch-tool -path "*/linux_arm64*" -exec cp {} .docker/dist/arm64/ \;
+          find dist -type f -name tdbg -path "*/linux_arm64*" -exec cp {} .docker/dist/arm64/ \;
+          
+          echo "=== Verifying binaries ==="
+          echo "AMD64 binaries:"
+          ls -lh .docker/dist/amd64/
+          echo "ARM64 binaries:"
+          ls -lh .docker/dist/arm64/
+
+      - name: Bake native images for testing
+        working-directory: .docker
+        run: |
+          IMAGE_REPO=ghcr.io/chaptersix \
+          IMAGE_SHA_TAG=${{ env.IMAGE_SHA_TAG }} \
+          IMAGE_BRANCH_TAG=${{ env.IMAGE_BRANCH_TAG }} \
+          TEMPORAL_SHA=${{ env.TEMPORAL_SHA }} \
+          docker buildx bake -f docker-bake.hcl \
+            --set "*.platform=linux/$(go env GOARCH)" \
+            --load
+
+      - name: Test images locally
+        working-directory: .docker
+        run: |
+          echo "Testing server image..."
+          docker run --rm ghcr.io/chaptersix/server:${{ env.IMAGE_SHA_TAG }} temporal-server --version
+          echo "Testing admin-tools image..."
+          docker run --rm ghcr.io/chaptersix/admin-tools:${{ env.IMAGE_SHA_TAG }} temporal --version
+
+      - name: Bake and push multiarch images
+        if: github.event_name == 'push'
+        working-directory: .docker
+        run: |
+          IMAGE_REPO=ghcr.io/chaptersix \
+          IMAGE_SHA_TAG=${{ env.IMAGE_SHA_TAG }} \
+          IMAGE_BRANCH_TAG=${{ env.IMAGE_BRANCH_TAG }} \
+          TEMPORAL_SHA=${{ env.TEMPORAL_SHA }} \
+          TAG_LATEST=${{ env.TAG_LATEST }} \
+          docker buildx bake -f docker-bake.hcl \
+            --set="*.output=type=registry"
+
+      - name: Run Trivy on Server image
+        if: github.event_name == 'push'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/chaptersix/server:${{ env.IMAGE_SHA_TAG }}
+          format: 'sarif'
+          output: 'trivy-server.sarif'
+
+      - name: Run Trivy on Admin Tools image
+        if: github.event_name == 'push'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/chaptersix/admin-tools:${{ env.IMAGE_SHA_TAG }}
+          format: 'sarif'
+          output: 'trivy-admin-tools.sarif'
+
+      - name: Upload Trivy results to GitHub Security
+        if: github.event_name == 'push'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: '.'
+
+      - name: Image summary
+        if: github.event_name == 'push'
+        run: |
+          echo "### 🐳 Published Images" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- \`ghcr.io/chaptersix/server:${{ env.IMAGE_SHA_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`ghcr.io/chaptersix/admin-tools:${{ env.IMAGE_SHA_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Pull with:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ghcr.io/chaptersix/server:${{ env.IMAGE_SHA_TAG }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ghcr.io/chaptersix/admin-tools:${{ env.IMAGE_SHA_TAG }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,5 @@
+# Build artifacts
+dist/
+
+# Docker compose logs
+docker-compose.log
