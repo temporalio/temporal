@@ -90,7 +90,7 @@ var (
 		"RespondActivityTaskCanceledById":       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"CountActivityExecutions":               {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"DeleteActivityExecution":               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"PollActivityExecution":                 {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
+		"PollActivityExecution":                 {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingCapable},
 		"ListActivityExecutions":                {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"PauseActivityExecution":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"RequestCancelActivityExecution":        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
