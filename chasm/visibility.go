@@ -38,7 +38,7 @@ type VisibilitySearchAttributesMapper struct {
 	saTypeMap    map[string]enumspb.IndexedValueType
 }
 
-func (v *VisibilitySearchAttributesMapper) SearchAttributeAlias(field string) (string, error) {
+func (v *VisibilitySearchAttributesMapper) GetAlias(field string) (string, error) {
 	if v == nil {
 		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper is not registered")
 	}
@@ -49,7 +49,7 @@ func (v *VisibilitySearchAttributesMapper) SearchAttributeAlias(field string) (s
 	return alias, nil
 }
 
-func (v *VisibilitySearchAttributesMapper) SearchAttributeField(alias string) (string, error) {
+func (v *VisibilitySearchAttributesMapper) GetField(alias string) (string, error) {
 	if v == nil {
 		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper is not registered")
 	}
@@ -60,7 +60,7 @@ func (v *VisibilitySearchAttributesMapper) SearchAttributeField(alias string) (s
 	return field, nil
 }
 
-func (v *VisibilitySearchAttributesMapper) SearchAttributeValueType(field string) (enumspb.IndexedValueType, error) {
+func (v *VisibilitySearchAttributesMapper) GetFieldValueType(field string) (enumspb.IndexedValueType, error) {
 	if v == nil {
 		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, serviceerror.NewInvalidArgument("visibility search attributes mapper is not registered")
 	}
