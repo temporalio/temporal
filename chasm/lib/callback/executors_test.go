@@ -516,8 +516,8 @@ func TestProcessBackoffTask(t *testing.T) {
 					},
 				},
 			},
-			Status:  callbackspb.CALLBACK_STATUS_BACKING_OFF,
-			Attempt: 1,
+			Status:                  callbackspb.CALLBACK_STATUS_BACKING_OFF,
+			Attempt:                 1,
 			NextAttemptScheduleTime: timestamppb.New(timeSource.Now().Add(time.Minute)),
 		},
 	}
