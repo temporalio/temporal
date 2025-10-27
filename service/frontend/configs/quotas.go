@@ -27,23 +27,25 @@ const (
 )
 
 var (
-	// ExecutionAPICountLimitOverride determines how many tokens each of these API calls consumes from their
-	// corresponding quota, which is determined by dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance. If
-	// the value is not set, then the method is not considered a long-running request and the number of concurrent
-	// requests will not be throttled. The Poll* methods here are long-running because they block until there is a task
-	// available. The GetWorkflowExecutionHistory method is blocking only if WaitNewEvent is true, otherwise it is not
-	// long-running. The QueryWorkflow and UpdateWorkflowExecution methods are long-running because they both block
-	// until a background WFT is complete.
+	// ExecutionAPICountLimitOverride determines how many tokens each of these API calls consumes
+	// from their corresponding quota, which is determined by
+	// dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance. If the value is not set,
+	// then the method is not considered a long-running request and the number of concurrent
+	// requests will not be throttled. PollActivityTaskQueue and PollWorkflowTaskQueue are
+	// long-running because they block until there is a task available. PollWorkflowExecutionUpdate
+	// is long-running because it waits for an update lifecycle stage. PollActivityExecution and
+	// GetWorkflowExecutionHistory method are long-running when the request is configured to perform
+	// a long-poll. The QueryWorkflow and UpdateWorkflowExecution methods are long-running because
+	// they both block until a background WFT is complete.
 	ExecutionAPICountLimitOverride = map[string]int{
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":               1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":     1,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
-		// TODO: Map to PollActivityResult if request is long-polling
-		"/temporal.api.workflowservice.v1.WorkflowService/GetActivityExecutionResult": 1,
 
 		// potentially long-running, depending on the operations
 		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation": 1,
