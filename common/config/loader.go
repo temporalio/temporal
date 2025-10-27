@@ -167,13 +167,45 @@ func (c *templateContext) Env() map[string]string {
 	return c.envMap
 }
 
+// defaultValue implements dockerize-compatible default handling.
+// This properly handles nil values from missing map keys when using .Env.VAR syntax.
+// Args order: value first, default second (e.g., {{ default .Env.VAR "fallback" }})
+func defaultValue(args ...interface{}) (string, error) {
+	if len(args) == 0 {
+		return "", fmt.Errorf("default called with no values!")
+	}
+
+	if len(args) > 0 {
+		if args[0] != nil {
+			return args[0].(string), nil
+		}
+	}
+
+	if len(args) > 1 {
+		if args[1] == nil {
+			return "", fmt.Errorf("default called with nil default value!")
+		}
+
+		if _, ok := args[1].(string); !ok {
+			return "", fmt.Errorf("default is not a string value. hint: surround it w/ double quotes.")
+		}
+
+		return args[1].(string), nil
+	}
+
+	return "", fmt.Errorf("default called with no default value")
+}
+
 // renderTemplate renders a config file as a Go template with environment variables.
-// It matches dockerize's template processing, supporting .Env.VAR_NAME syntax.
+// It uses dockerize-compatible template functions and supports .Env.VAR syntax.
 func renderTemplate(data []byte, filename string, envMap map[string]string) ([]byte, error) {
 	templateFuncs := sprig.FuncMap()
+	// Override sprig's default with dockerize's implementation that properly handles
+	// nil values from missing environment variables
+	templateFuncs["default"] = defaultValue
 
-	// Create a context matching dockerize's structure
-	// The Env() method allows .Env.VAR_NAME to work as: call .Env() -> get map -> access VAR_NAME key
+	// Create a context with Env() method that returns the environment map
+	// Templates access environment variables using .Env.VAR_NAME syntax
 	ctx := &templateContext{envMap: envMap}
 
 	tpl, err := template.New(filename).Funcs(templateFuncs).Parse(string(data))

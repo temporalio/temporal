@@ -127,9 +127,9 @@ func buildConfig(template bool, env, zone string) string {
 func TestRenderTemplateWithEnvVars(t *testing.T) {
 	templateContent := []byte(`# enable-template
 log:
-  level: {{ default "info" (index .Env "LOG_LEVEL") }}
+  level: {{ default .Env.LOG_LEVEL "info" }}
 persistence:
-  numHistoryShards: {{ default "4" (index .Env "NUM_HISTORY_SHARDS") }}`)
+  numHistoryShards: {{ default .Env.NUM_HISTORY_SHARDS "4" }}`)
 
 	testCases := []struct {
 		name              string
@@ -219,9 +219,9 @@ func TestLoadWithEnvVarSubstitution(t *testing.T) {
 
 	configWithEnvVars := `# enable-template
 log:
-  level: {{ default "info" (index .Env "LOG_LEVEL") }}
+  level: {{ default .Env.LOG_LEVEL "info" }}
 persistence:
-  numHistoryShards: {{ default "4" (index .Env "NUM_HISTORY_SHARDS") }}
+  numHistoryShards: {{ default .Env.NUM_HISTORY_SHARDS "4" }}
   defaultStore: default
   datastores:
     default:
@@ -233,7 +233,7 @@ persistence:
 services:
   frontend:
     rpc:
-      grpcPort: {{ default "7233" (index .Env "FRONTEND_GRPC_PORT") }}
+      grpcPort: {{ default .Env.FRONTEND_GRPC_PORT "7233" }}
       bindOnIP: "127.0.0.1"
 `
 
@@ -297,9 +297,9 @@ services:
 
 		configContent := `# enable-template
 log:
-  level: {{ default "info" (index .Env "LOG_LEVEL") }}
+  level: {{ default .Env.LOG_LEVEL "info" }}
 persistence:
-  numHistoryShards: {{ default "4" (index .Env "NUM_HISTORY_SHARDS") }}
+  numHistoryShards: {{ default .Env.NUM_HISTORY_SHARDS "4" }}
   defaultStore: default
   datastores:
     default:
@@ -311,7 +311,7 @@ persistence:
 services:
   frontend:
     rpc:
-      grpcPort: {{ default "7233" (index .Env "FRONTEND_GRPC_PORT") }}
+      grpcPort: {{ default .Env.FRONTEND_GRPC_PORT "7233" }}
       bindOnIP: "127.0.0.1"
 `
 		err := os.WriteFile(configPath, []byte(configContent), fileMode)
