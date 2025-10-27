@@ -33,10 +33,11 @@ var (
 	// then the method is not considered a long-running request and the number of concurrent
 	// requests will not be throttled. PollActivityTaskQueue and PollWorkflowTaskQueue are
 	// long-running because they block until there is a task available. PollWorkflowExecutionUpdate
-	// is long-running because it waits for an update lifecycle stage. PollActivityExecution and
-	// GetWorkflowExecutionHistory method are long-running when the request is configured to perform
-	// a long-poll. The QueryWorkflow and UpdateWorkflowExecution methods are long-running because
-	// they both block until a background WFT is complete.
+	// is long-running because it waits for an update lifecycle stage. GetWorkflowExecutionHistory
+	// is long-running when the request is configured to perform a long-poll (WaitNewEvent is true).
+	// PollActivityExecution is long-running when the request is configured to perform a long-poll
+	// (wait_policy present). The QueryWorkflow and UpdateWorkflowExecution methods are long-running
+	// because they both block until a background WFT is complete.
 	ExecutionAPICountLimitOverride = map[string]int{
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":       1,
