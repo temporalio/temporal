@@ -1090,6 +1090,11 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 
 		var currentDeploymentQueue physicalTaskQueueManager
 		var err error
+
+		// This works only if the deployment are the same. So check if the two deployments are equal.
+		if !(currentDeployment.Equal(deployment)) {
+			currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", currentDeployment, true)
+		}
 		if routingConfigRevisionNumber >= taskDirectiveRevisionNumber {
 			currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", currentDeployment, true)
 		} else {

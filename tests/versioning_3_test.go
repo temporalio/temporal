@@ -76,7 +76,7 @@ type Versioning3Suite struct {
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &Versioning3Suite{useV32: true})
-	// suite.Run(t, &Versioning3Suite{useV32: false})
+	// suite.Run(t, &Versioning3Suite{useV32: false}) // May not need this since these tests are for pre-release users.
 	// suite.Run(t, &Versioning3Suite{useV32: true, useNewDeploymentData: true})
 }
 
