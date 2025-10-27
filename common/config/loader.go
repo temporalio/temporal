@@ -7,15 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	stdlog "log"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v3"
 )
 
@@ -23,50 +21,9 @@ import (
 var embeddedConfigTemplate []byte
 
 var (
+	// ErrConfigFilesNotFound is returned when no config files are found in the specified directory
 	ErrConfigFilesNotFound = errors.New("no config files found")
-
-	logger     *zap.Logger
-	loggerOnce sync.Once
 )
-
-func getLogger() *zap.Logger {
-	loggerOnce.Do(func() {
-		logger = newBootstrapLogger()
-	})
-	return logger
-}
-
-func newBootstrapLogger() *zap.Logger {
-	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:        "ts",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		CallerKey:      "logging-call-at",
-		FunctionKey:    zapcore.OmitKey,
-		MessageKey:     "msg",
-		StacktraceKey:  "stacktrace",
-		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.LowercaseLevelEncoder,
-		EncodeTime:     zapcore.ISO8601TimeEncoder,
-		EncodeDuration: zapcore.SecondsDurationEncoder,
-		EncodeCaller:   zapcore.ShortCallerEncoder,
-	}
-
-	config := zap.Config{
-		Level:         zap.NewAtomicLevelAt(zap.InfoLevel),
-		Development:   false,
-		Encoding:      "console",
-		EncoderConfig: encoderConfig,
-		OutputPaths:   []string{"stderr"},
-	}
-
-	logger, err := config.Build()
-	if err != nil {
-		fmt.Println("ERROR: unable to create config logger. using no op logger instead")
-		return zap.NewNop()
-	}
-	return logger
-}
 
 const (
 	// EnvKeyRoot the environment variable key for runtime root dir
@@ -124,7 +81,7 @@ func LoadFromEnv(config any) error {
 func LoadWithEnvMap(env string, configDir string, zone string, config any, envMap map[string]string, useEmbeddedOnly bool) error {
 	// If using embedded template only, skip file loading
 	if useEmbeddedOnly {
-		getLogger().Info("Loading configuration from environment variables only")
+		stdlog.Println("Loading configuration from environment variables only")
 
 		// Process the embedded template
 		processedData, procErr := processConfigFile(embeddedConfigTemplate, "config_template_embedded.yaml", envMap)
@@ -148,11 +105,7 @@ func LoadWithEnvMap(env string, configDir string, zone string, config any, envMa
 		configDir = defaultConfigDir
 	}
 
-	getLogger().Info("Loading configuration",
-		zap.String("env", env),
-		zap.String("zone", zone),
-		zap.String("configDir", configDir),
-	)
+	stdlog.Printf("Loading config; env=%v,zone=%v,configDir=%v\n", env, zone, configDir)
 
 	files, err := getConfigFiles(env, configDir, zone)
 	if err != nil {
@@ -160,10 +113,7 @@ func LoadWithEnvMap(env string, configDir string, zone string, config any, envMa
 		return fmt.Errorf("failed to get config files: %w", err)
 	}
 
-	getLogger().Info("Config files found",
-		zap.Strings("files", files),
-		zap.Int("count", len(files)),
-	)
+	stdlog.Printf("Loading config files=%v\n", files)
 
 	for _, f := range files {
 		// This is tagged nosec because the file names being read are for config files that are not user supplied
@@ -201,9 +151,7 @@ func processConfigFile(data []byte, filename string, envMap map[string]string) (
 		return data, nil
 	}
 
-	getLogger().Debug("Processing config file as template",
-		zap.String("filename", filename),
-	)
+	stdlog.Printf("Processing config file as template; filename=%v\n", filename)
 	return renderTemplate(data, filename, envMap)
 }
 
@@ -255,9 +203,7 @@ func LoadConfig(env string, configDir string, zone string) (*Config, error) {
 // LoadConfigFile loads configuration from a single specified file path.
 // Template rendering is enabled if the file contains "# enable-template" comment.
 func LoadConfigFile(filePath string) (*Config, error) {
-	getLogger().Info("Loading configuration from file",
-		zap.String("filePath", filePath),
-	)
+	stdlog.Printf("Loading configuration from file; filePath=%v\n", filePath)
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
