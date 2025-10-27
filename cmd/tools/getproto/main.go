@@ -84,18 +84,9 @@ func genFileList(protoImports []string) {
 		} else if strings.HasPrefix(i, "google/") {
 			base := strings.TrimSuffix(filepath.Base(i), ".proto") + "pb"
 			base = strings.ReplaceAll(base, "field_mask", "fieldmask")
-
-			// Special case: descriptor.proto is not in the /known/ subdirectory
-			if base == "descriptorpb" {
-				goImport := "google.golang.org/protobuf/types/descriptorpb"
-				goImportsMap[goImport] = base
-				protoToPackage[i] = base
-			} else {
-				// All other Google protobuf types are in /known/
-				goImport := "google.golang.org/protobuf/types/known/" + base
-				goImportsMap[goImport] = base
-				protoToPackage[i] = base
-			}
+			goImport := "google.golang.org/protobuf/types/known/" + base
+			goImportsMap[goImport] = base
+			protoToPackage[i] = base
 		}
 	}
 	goImports := expmaps.Keys(goImportsMap)
