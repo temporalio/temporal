@@ -4,17 +4,12 @@ package temporal.server.chasm.lib.callbacks.proto.v1;
 
 option go_package = "go.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspb";
 
-import "google/protobuf/timestamp.proto";
-
 message InvocationTask {
-    // The destination for callbacks. Can be a URL for nexus callbacks or temporal:// for internal callbacks.
-    string destination = 1;
-
     // The attempt number for this invocation.
-    int32 attempt = 2;
+    int32 attempt = 1;
 }
 
 message BackoffTask {
-    // deadline is the time at which the backoff period ends.
-    google.protobuf.Timestamp deadline = 1;
+    // The attempt number for this invocation.
+    int32 attempt = 1;
 }

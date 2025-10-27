@@ -36,8 +36,6 @@ message CallbackState {
 
     string workflow_id = 10;
     string run_id = 11;
-
-    string namespace_id = 12;
 }
 
 

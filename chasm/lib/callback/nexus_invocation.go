@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -28,7 +29,7 @@ var retryable4xxErrorTypes = []int{
 	http.StatusTooManyRequests,
 }
 
-type CanGetNexusCompletion interface {
+type CompletionSource interface {
 	GetNexusCompletion(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error)
 }
 
@@ -65,12 +66,13 @@ func (n nexusInvocation) Invoke(
 	ns *namespace.Namespace,
 	e InvocationTaskExecutor,
 	task *callbackspb.InvocationTask,
+	taskAttr chasm.TaskAttributes,
 ) invocationResult {
 	if e.HTTPTraceProvider != nil {
 		traceLogger := log.With(e.Logger,
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.Operation("CompleteNexusOperation"),
-			tag.NewStringTag("destination", task.Destination),
+			tag.NewStringTag("destination", taskAttr.Destination),
 			tag.WorkflowID(n.workflowID),
 			tag.WorkflowRunID(n.runID),
 			tag.AttemptStart(time.Now().UTC()),
@@ -96,14 +98,14 @@ func (n nexusInvocation) Invoke(
 
 	caller := e.HTTPCallerProvider(queues.NamespaceIDAndDestination{
 		NamespaceID: ns.ID().String(),
-		Destination: task.Destination,
+		Destination: taskAttr.Destination,
 	})
 	// Make the call and record metrics.
 	startTime := time.Now()
 	response, err := caller(request)
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	destTag := metrics.DestinationTag(task.Destination)
+	destTag := metrics.DestinationTag(taskAttr.Destination)
 	statusCodeTag := metrics.OutcomeTag(outcomeTag(ctx, response, err))
 	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
 	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)

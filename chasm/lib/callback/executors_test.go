@@ -43,6 +43,7 @@ func (m *mockNexusCompletionGetter) GetNexusCompletion(ctx context.Context, requ
 //
 // In production, Fields are typically initialized through proper CHASM lifecycle methods or
 // by using NewComponentField/NewDataField with appropriate types.
+// TODO (seankane): Move this helper to the chasm/chasmtest package
 func setFieldValue[T any](field *chasm.Field[T], value T) {
 	// Get the Internal field (which is exported)
 	internalField := reflect.ValueOf(field).Elem().FieldByName("Internal")
@@ -61,7 +62,6 @@ func TestExecuteInvocationTask(t *testing.T) {
 		name                  string
 		caller                HTTPCaller
 		expectedMetricOutcome string
-		setupCallback         func(*Callback)
 		assertOutcome         func(*testing.T, *Callback)
 	}{
 		{
@@ -70,9 +70,6 @@ func TestExecuteInvocationTask(t *testing.T) {
 				return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
 			},
 			expectedMetricOutcome: "status:200",
-			setupCallback: func(cb *Callback) {
-				cb.Status = callbackspb.CALLBACK_STATUS_SCHEDULED
-			},
 			assertOutcome: func(t *testing.T, cb *Callback) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
 			},
@@ -83,9 +80,6 @@ func TestExecuteInvocationTask(t *testing.T) {
 				return nil, errors.New("fake failure")
 			},
 			expectedMetricOutcome: "unknown-error",
-			setupCallback: func(cb *Callback) {
-				cb.Status = callbackspb.CALLBACK_STATUS_SCHEDULED
-			},
 			assertOutcome: func(t *testing.T, cb *Callback) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
 			},
@@ -96,9 +90,6 @@ func TestExecuteInvocationTask(t *testing.T) {
 				return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
 			},
 			expectedMetricOutcome: "status:500",
-			setupCallback: func(cb *Callback) {
-				cb.Status = callbackspb.CALLBACK_STATUS_SCHEDULED
-			},
 			assertOutcome: func(t *testing.T, cb *Callback) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
 			},
@@ -109,9 +100,6 @@ func TestExecuteInvocationTask(t *testing.T) {
 				return &http.Response{StatusCode: 400, Body: http.NoBody}, nil
 			},
 			expectedMetricOutcome: "status:400",
-			setupCallback: func(cb *Callback) {
-				cb.Status = callbackspb.CALLBACK_STATUS_SCHEDULED
-			},
 			assertOutcome: func(t *testing.T, cb *Callback) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 			},
@@ -151,19 +139,10 @@ func TestExecuteInvocationTask(t *testing.T) {
 			completion, err := nexusrpc.NewOperationCompletionSuccessful(nil, nexusrpc.OperationCompletionSuccessfulOptions{})
 			require.NoError(t, err)
 
-			// Setup CHASM tree and callback component
+			// Setup logger and time source
 			logger := log.NewNoopLogger()
-			registry := chasm.NewRegistry(logger)
-
-			nodeBackend := chasm.NewMockNodeBackend(ctrl)
-			nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
-			nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
-			nodeBackend.EXPECT().IsWorkflow().Return(false).AnyTimes()
-			nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
-
 			timeSource := clock.NewEventTimeSource()
 			timeSource.Update(time.Now())
-			tree := chasm.NewEmptyTree(registry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger)
 
 			// Create callback with CanGetNexusCompletion field
 			callback := &Callback{
@@ -177,24 +156,22 @@ func TestExecuteInvocationTask(t *testing.T) {
 							},
 						},
 					},
-					Status:      callbackspb.CALLBACK_STATUS_SCHEDULED,
-					Attempt:     1,
-					WorkflowId:  "workflow-id",
-					RunId:       "run-id",
-					NamespaceId: "namespace-id",
+					Status:     callbackspb.CALLBACK_STATUS_SCHEDULED,
+					Attempt:    1,
+					WorkflowId: "workflow-id",
+					RunId:      "run-id",
 				},
 			}
-			tc.setupCallback(callback)
+			callback.Status = callbackspb.CALLBACK_STATUS_SCHEDULED
 
-			// Set up the CanGetNexusCompletion field to return our mock
-			tree.SetRootComponent(callback)
+			// Set up the CompletionSource field to return our mock
 			completionGetter := &mockNexusCompletionGetter{
 				completion: completion,
 			}
 			// Set the CanGetNexusCompletion field using reflection.
 			// This is necessary because CanGetNexusCompletion is a plain interface,
 			// not a chasm.Component, so we can't use NewComponentField.
-			setFieldValue(&callback.CanGetNexusCompletion, CanGetNexusCompletion(completionGetter))
+			setFieldValue(&callback.CompletionSource, CompletionSource(completionGetter))
 
 			// Create task executor with mock namespace registry
 			nsRegistry := namespace.NewMockRegistry(ctrl)
@@ -261,8 +238,8 @@ func TestExecuteInvocationTask(t *testing.T) {
 			ctx := chasm.NewEngineContext(context.Background(), mockEngine)
 
 			// Execute the invocation task
-			task := &callbackspb.InvocationTask{Destination: "http://localhost"}
-			err = executor.executeInvocationTask(
+			task := &callbackspb.InvocationTask{Attempt: 1}
+			err = executor.Invoke(
 				ctx,
 				ref,
 				chasm.TaskAttributes{Destination: "http://localhost"},
@@ -322,18 +299,10 @@ func TestLoadInvocationArgs(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			// Setup CHASM tree
+			// Setup logger and time source
 			logger := log.NewNoopLogger()
-			registry := chasm.NewRegistry(logger)
-
-			nodeBackend := chasm.NewMockNodeBackend(ctrl)
-			nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
-			nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
-			nodeBackend.EXPECT().IsWorkflow().Return(false).AnyTimes()
-
 			timeSource := clock.NewEventTimeSource()
 			timeSource.Update(time.Now())
-			tree := chasm.NewEmptyTree(registry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger)
 
 			// Create callback
 			callback := &Callback{
@@ -350,7 +319,6 @@ func TestLoadInvocationArgs(t *testing.T) {
 				},
 			}
 			tc.setupCallback(callback)
-			tree.SetRootComponent(callback)
 
 			// Setup completion getter
 			completion, err := nexusrpc.NewOperationCompletionSuccessful(nil, nexusrpc.OperationCompletionSuccessfulOptions{})
@@ -359,7 +327,7 @@ func TestLoadInvocationArgs(t *testing.T) {
 				completion: completion,
 			}
 			// Set the CanGetNexusCompletion field using reflection
-			setFieldValue(&callback.CanGetNexusCompletion, CanGetNexusCompletion(completionGetter))
+			setFieldValue(&callback.CompletionSource, CompletionSource(completionGetter))
 
 			// Create mock engine and setup expectations
 			mockEngine := chasm.NewMockEngine(ctrl)
@@ -394,8 +362,13 @@ func TestLoadInvocationArgs(t *testing.T) {
 			// Create context with engine
 			ctx := chasm.NewEngineContext(context.Background(), mockEngine)
 
-			// Test loadInvocationArgs
-			invokable, err := executor.loadInvocationArgs(ctx, ref)
+			// Test loadInvocationArgs via ReadComponent
+			invokable, err := chasm.ReadComponent(
+				ctx,
+				ref,
+				executor.loadInvocationArgs,
+				ctx,
+			)
 
 			// Verify the invokable was created successfully
 			require.NoError(t, err)
@@ -485,35 +458,17 @@ func TestSaveResult(t *testing.T) {
 			// Create context with engine
 			ctx := chasm.NewEngineContext(context.Background(), mockEngine)
 
-			// Test saveResult
-			err := executor.saveResult(ctx, ref, tc.result)
+			// Test saveResult via UpdateComponent
+			_, _, err := chasm.UpdateComponent(
+				ctx,
+				ref,
+				executor.saveResult,
+				tc.result,
+			)
 
 			// Verify no error and correct status was set
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedStatus, callback.Status)
 		})
 	}
-}
-
-// Test the invocation result types
-func TestInvocationResultTypes(t *testing.T) {
-	t.Run("invocationResultOK", func(t *testing.T) {
-		result := invocationResultOK{}
-		require.NoError(t, result.error())
-		result.mustImplementInvocationResult() // Should not panic
-	})
-
-	t.Run("invocationResultRetry", func(t *testing.T) {
-		testErr := errors.New("retry error")
-		result := invocationResultRetry{err: testErr}
-		require.Equal(t, testErr, result.error())
-		result.mustImplementInvocationResult() // Should not panic
-	})
-
-	t.Run("invocationResultFail", func(t *testing.T) {
-		testErr := errors.New("fail error")
-		result := invocationResultFail{err: testErr}
-		require.Equal(t, testErr, result.error())
-		result.mustImplementInvocationResult() // Should not panic
-	})
 }

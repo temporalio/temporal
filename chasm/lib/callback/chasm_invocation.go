@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -48,7 +49,13 @@ func logInternalError(logger log.Logger, internalMsg string, internalErr error) 
 	return fmt.Errorf("internal error, reference-id: %v", referenceID)
 }
 
-func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e InvocationTaskExecutor, task *callbackspb.InvocationTask) invocationResult {
+func (c chasmInvocation) Invoke(
+	ctx context.Context,
+	ns *namespace.Namespace,
+	e InvocationTaskExecutor,
+	task *callbackspb.InvocationTask,
+	taskAttr chasm.TaskAttributes,
+) invocationResult {
 	// Get back the base64-encoded ComponentRef from the header.
 	encodedRef, ok := c.nexus.GetHeader()[commonnexus.CallbackTokenHeader]
 	if !ok {

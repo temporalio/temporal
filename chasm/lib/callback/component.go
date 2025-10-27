@@ -22,7 +22,7 @@ type Callback struct {
 	*callbackspb.CallbackState
 
 	// Interface to retrieve Nexus operation completion data
-	CanGetNexusCompletion chasm.Field[CanGetNexusCompletion]
+	CompletionSource chasm.Field[CompletionSource]
 }
 
 func NewCallback(

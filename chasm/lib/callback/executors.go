@@ -45,7 +45,7 @@ type InvocationTaskExecutor struct {
 }
 
 func (e InvocationTaskExecutor) Execute(ctx context.Context, ref chasm.ComponentRef, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) error {
-	return e.executeInvocationTask(ctx, ref, attrs, task)
+	return e.Invoke(ctx, ref, attrs, task)
 }
 
 func (e InvocationTaskExecutor) Validate(ctx chasm.Context, cb Callback, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) (bool, error) {
@@ -93,16 +93,16 @@ func (r invocationResultRetry) error() error {
 
 type callbackInvokable interface {
 	// Invoke executes the callback logic and returns the invocation result.
-	Invoke(ctx context.Context, ns *namespace.Namespace, e InvocationTaskExecutor, task *callbackspb.InvocationTask) invocationResult
+	Invoke(ctx context.Context, ns *namespace.Namespace, e InvocationTaskExecutor, task *callbackspb.InvocationTask, taskAttr chasm.TaskAttributes) invocationResult
 	// WrapError provides each variant the opportunity to wrap the error returned by the task executor for, e.g. to
 	// trigger the circuit breaker.
 	WrapError(result invocationResult, err error) error
 }
 
-func (e InvocationTaskExecutor) executeInvocationTask(
+func (e InvocationTaskExecutor) Invoke(
 	ctx context.Context,
 	ref chasm.ComponentRef,
-	_ chasm.TaskAttributes,
+	taskAttr chasm.TaskAttributes,
 	task *callbackspb.InvocationTask,
 ) error {
 	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.NamespaceID))
@@ -110,99 +110,95 @@ func (e InvocationTaskExecutor) executeInvocationTask(
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
 
-	invokable, err := e.loadInvocationArgs(ctx, ref)
+	invokable, err := chasm.ReadComponent(
+		ctx,
+		ref,
+		e.loadInvocationArgs,
+		ctx,
+	)
 	if err != nil {
 		return err
 	}
 
 	callCtx, cancel := context.WithTimeout(
 		ctx,
-		e.Config.RequestTimeout(ns.Name().String(), task.Destination),
+		e.Config.RequestTimeout(ns.Name().String(), taskAttr.Destination),
 	)
 	defer cancel()
 
-	result := invokable.Invoke(callCtx, ns, e, task)
-	saveErr := e.saveResult(ctx, ref, result)
+	result := invokable.Invoke(callCtx, ns, e, task, taskAttr)
+	_, _, saveErr := chasm.UpdateComponent(
+		ctx,
+		ref,
+		e.saveResult,
+		result,
+	)
 	return invokable.WrapError(result, saveErr)
 }
 
 func (e InvocationTaskExecutor) loadInvocationArgs(
+	component *Callback,
+	chasmCtx chasm.Context,
 	ctx context.Context,
-	ref chasm.ComponentRef,
-) (invokable callbackInvokable, err error) {
-	return chasm.ReadComponent(
-		ctx,
-		ref,
-		func(component *Callback, chasmCtx chasm.Context, _ any) (callbackInvokable, error) {
-			target, err := component.CanGetNexusCompletion.Get(chasmCtx)
-			if err != nil {
-				return nil, err
-			}
+) (callbackInvokable, error) {
+	target, err := component.CompletionSource.Get(chasmCtx)
+	if err != nil {
+		return nil, err
+	}
 
-			completion, err := target.GetNexusCompletion(ctx, component.RequestId)
-			if err != nil {
-				return nil, err
-			}
+	completion, err := target.GetNexusCompletion(ctx, component.RequestId)
+	if err != nil {
+		return nil, err
+	}
 
-			switch variant := component.GetCallback().GetVariant().(type) {
-			case *callbackspb.Callback_Nexus_:
-				if variant.Nexus.Url == chasm.NexusCompletionHandlerURL {
-					return chasmInvocation{
-						nexus:      variant.Nexus,
-						attempt:    component.Attempt,
-						completion: completion,
-						requestID:  component.RequestId,
-					}, nil
-				}
-				return nexusInvocation{
-					nexus:      variant.Nexus,
-					completion: completion,
-					workflowID: component.WorkflowId,
-					runID:      component.RunId,
-					attempt:    component.Attempt,
-				}, nil
-			default:
-				return nil, queues.NewUnprocessableTaskError(
-					fmt.Sprintf("unprocessable callback variant: %v", variant),
-				)
-			}
-		},
-		nil,
-	)
+	switch variant := component.GetCallback().GetVariant().(type) {
+	case *callbackspb.Callback_Nexus_:
+		if variant.Nexus.Url == chasm.NexusCompletionHandlerURL {
+			return chasmInvocation{
+				nexus:      variant.Nexus,
+				attempt:    component.Attempt,
+				completion: completion,
+				requestID:  component.RequestId,
+			}, nil
+		}
+		return nexusInvocation{
+			nexus:      variant.Nexus,
+			completion: completion,
+			workflowID: component.WorkflowId,
+			runID:      component.RunId,
+			attempt:    component.Attempt,
+		}, nil
+	default:
+		return nil, queues.NewUnprocessableTaskError(
+			fmt.Sprintf("unprocessable callback variant: %v", variant),
+		)
+	}
 }
 
 func (e InvocationTaskExecutor) saveResult(
-	ctx context.Context,
-	ref chasm.ComponentRef,
+	component *Callback,
+	ctx chasm.MutableContext,
 	result invocationResult,
-) error {
-	_, _, err := chasm.UpdateComponent(
-		ctx,
-		ref,
-		func(component *Callback, ctx chasm.MutableContext, _ any) (struct{}, error) {
-			switch result.(type) {
-			case invocationResultOK:
-				component.Status = callbackspb.CALLBACK_STATUS_SUCCEEDED
-				component.LastAttemptCompleteTime = timestamppb.New(ctx.Now(component))
-			case invocationResultRetry:
-				component.Status = callbackspb.CALLBACK_STATUS_BACKING_OFF
-				component.LastAttemptCompleteTime = timestamppb.New(ctx.Now(component))
-				// TODO (seankane): Calculate backoff and set NextAttemptScheduleTime
-				// TODO (seankane): Add backoff task
-			case invocationResultFail:
-				component.Status = callbackspb.CALLBACK_STATUS_FAILED
-				component.LastAttemptCompleteTime = timestamppb.New(ctx.Now(component))
-			default:
-				return struct{}{}, queues.NewUnprocessableTaskError(
-					fmt.Sprintf("unrecognized callback result %v", result),
-				)
-			}
+) (struct{}, error) {
+	switch result.(type) {
+	case invocationResultOK:
+		component.Status = callbackspb.CALLBACK_STATUS_SUCCEEDED
+		component.LastAttemptCompleteTime = timestamppb.New(ctx.Now(component))
+	case invocationResultRetry:
+		component.Status = callbackspb.CALLBACK_STATUS_BACKING_OFF
+		component.LastAttemptCompleteTime = timestamppb.New(ctx.Now(component))
+		// TODO (seankane): Calculate backoff and set NextAttemptScheduleTime
+		// TODO (seankane): Add backoff task
+	case invocationResultFail:
+		component.Status = callbackspb.CALLBACK_STATUS_FAILED
+		component.LastAttemptCompleteTime = timestamppb.New(ctx.Now(component))
+	default:
+		return struct{}{}, queues.NewUnprocessableTaskError(
+			fmt.Sprintf("unrecognized callback result %v", result),
+		)
+	}
 
-			return struct{}{}, nil
-		},
-		nil,
-	)
-	return err
+	return struct{}{}, nil
 }
 
 type BackoffTaskExecutor struct {
@@ -243,7 +239,7 @@ func (e *BackoffTaskExecutor) Execute(
 	// Convert the CHASM task to the internal BackoffTask type
 	// Note: BackoffTask proto is empty, deadline comes from NextAttemptScheduleTime in callback
 	backoffTask := &callbackspb.BackoffTask{
-		Deadline: timestamppb.New(callback.NextAttemptScheduleTime.AsTime()),
+		Attempt: callback.Attempt,
 	}
 
 	// Delegate to the taskExecutor implementation
@@ -253,23 +249,23 @@ func (e *BackoffTaskExecutor) Execute(
 func (e *BackoffTaskExecutor) Validate(
 	ctx chasm.Context,
 	callback *Callback,
-	_ chasm.TaskAttributes,
-	_ *callbackspb.BackoffTask,
+	taskAttr chasm.TaskAttributes,
+	task *callbackspb.BackoffTask,
 ) (bool, error) {
 	// Validate that the callback is in BACKING_OFF state
-	return callback.Status == callbackspb.CALLBACK_STATUS_BACKING_OFF, nil
+	return callback.Status == callbackspb.CALLBACK_STATUS_BACKING_OFF && callback.Attempt == task.Attempt, nil
 }
 
 func (e InvocationTaskExecutor) executeBackoffTask(
 	ctx chasm.MutableContext,
 	callback *Callback,
 	attrs chasm.TaskAttributes,
-	task *callbackspb.BackoffTask,
+	_ *callbackspb.BackoffTask,
 ) error {
 	callback.Status = callbackspb.CALLBACK_STATUS_SCHEDULED
 	callback.NextAttemptScheduleTime = nil
 
-	invocationTask := &callbackspb.InvocationTask{Destination: attrs.Destination}
+	invocationTask := &callbackspb.InvocationTask{Attempt: callback.Attempt}
 	chasmAttrs := chasm.TaskAttributes{
 		ScheduledTime: chasm.TaskScheduledTimeImmediate,
 		Destination:   attrs.Destination,
