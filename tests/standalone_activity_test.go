@@ -104,20 +104,33 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 	startResp, err := s.startActivity(ctx, activityID, taskQueue)
 	require.NoError(t, err)
 
+	// First poll responds immediately
+	// TODO: it should return a long poll token
+	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.RunId,
+		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{},
+		},
+	})
+	require.NoError(t, err)
+
 	workerPollError := make(chan error, 1)
 	activityPollDone := make(chan struct{})
-	var pollResp *workflowservice.PollActivityExecutionResponse
 	var pollErr error
 
 	go func() {
 		defer close(activityPollDone)
-		// Wait for activity to transition to STARTED
+		// Second poll waits for activity to transition to STARTED
 		pollResp, pollErr = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      startResp.RunId,
 			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
-				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{},
+				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+					// TODO: support long poll token
+				},
 			},
 		})
 	}()
