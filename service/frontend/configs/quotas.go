@@ -42,6 +42,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate": 1,
+		// TODO: categorize appropriately as long-poll if wait_policy is present, similar to what is
+		// done with PollWorkflowHistoryAPIName below.
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":               1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":     1,
