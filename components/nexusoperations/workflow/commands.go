@@ -109,9 +109,12 @@ func (ch *commandHandler) HandleScheduleCommand(
 	}
 
 	headerLength := 0
+	lowerCaseHeader := make(map[string]string, len(attrs.NexusHeader))
 	for k, v := range attrs.NexusHeader {
-		headerLength += len(k) + len(v)
-		if slices.Contains(ch.config.DisallowedOperationHeaders(), strings.ToLower(k)) {
+		lowerK := strings.ToLower(k)
+		lowerCaseHeader[lowerK] = v
+		headerLength += len(lowerK) + len(v)
+		if slices.Contains(ch.config.DisallowedOperationHeaders(), lowerK) {
 			return workflow.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 				Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader contains a disallowed header key: %q", k),
@@ -158,7 +161,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 				Operation:                    attrs.Operation,
 				Input:                        attrs.Input,
 				ScheduleToCloseTimeout:       attrs.ScheduleToCloseTimeout,
-				NexusHeader:                  attrs.NexusHeader,
+				NexusHeader:                  lowerCaseHeader,
 				RequestId:                    uuid.NewString(),
 				WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 			},
