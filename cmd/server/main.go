@@ -5,7 +5,6 @@ import (
 	stdlog "log"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"text/template"
 	_ "time/tzdata" // embed tzdata as a fallback
@@ -43,7 +42,7 @@ func buildCLI() *cli.App {
 			Name:    "root",
 			Aliases: []string{"r"},
 			Value:   ".",
-			Usage:   "root directory of execution environment",
+			Usage:   "root directory of execution environment (deprecated)",
 			EnvVars: []string{config.EnvKeyRoot},
 		},
 		&cli.StringFlag{
@@ -145,6 +144,10 @@ func buildCLI() *cli.App {
 				if c.Args().Len() > 0 {
 					return cli.Exit("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
 				}
+
+				if c.IsSet("config-file") && (c.IsSet("config") || c.IsSet("env") || c.IsSet("zone")) {
+					return cli.Exit("ERROR: can not use --config, --env, or --zone with --config-file", 1)
+				}
 				return nil
 			},
 			Action: func(c *cli.Context) error {
@@ -162,11 +165,7 @@ func buildCLI() *cli.App {
 
 				switch {
 				case c.IsSet("config-file"):
-					configFilePath := c.String("config-file")
-					if !filepath.IsAbs(configFilePath) {
-						configFilePath = filepath.Join(c.String("root"), configFilePath)
-					}
-					cfg, err = config.Load(config.WithConfigFile(configFilePath))
+					cfg, err = config.Load(config.WithConfigFile(c.String("config-file")))
 				case c.IsSet("config") || c.IsSet("env") || c.IsSet("zone"):
 					cfg, err = config.Load(
 						config.WithEnv(c.String("env")),

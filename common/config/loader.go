@@ -142,12 +142,27 @@ func load(opts *loadOptions, config any) error {
 	}
 
 	if opts.configFilePath != "" {
-		content, err := os.ReadFile(opts.configFilePath)
+		content, err := readConfigFile(opts.configFilePath)
 		if err != nil {
-			return fmt.Errorf("failed to read config file %s: %w", opts.configFilePath, err)
+			return err
 		}
 		return loadAndUnmarshalContent(content, filepath.Base(opts.configFilePath), opts.envMap, config)
 	}
+	// loa the configuration from a set of
+	// yaml config files found in the config directory
+	//
+	// The loader first fetches the set of files matching
+	// a pre-determined naming convention, then sorts
+	// them by hierarchy order and after that, simply
+	// loads the files one after another with the
+	// key/values in the later files overriding the key/values
+	// in the earlier files
+	//
+	// The hierarchy is as follows from lowest to highest
+	//
+	//	base.yaml
+	//	    env.yaml   -- environment is one of the input params ex-development
+	//	      env_az.yaml -- zone is another input param
 
 	if opts.env == "" {
 		opts.env = envDevelopment
@@ -186,28 +201,12 @@ func load(opts *loadOptions, config any) error {
 	return validate.Validate(config)
 }
 
-const maxConfigFileSize = 2 << 20 // 1 MB
-
 func readConfigFile(path string) ([]byte, error) {
-	f, err := os.Open(path)
-	if errors.Is(err, os.ErrNotExist) {
+	data, err := os.ReadFile(path)
+	if err != nil {
 		return nil, fmt.Errorf("could not read config file: %s. error: %w", path, err)
 
 	}
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = f.Close() }()
-
-	data, err := io.ReadAll(io.LimitReader(f, maxConfigFileSize+1))
-	if err != nil {
-		return nil, err
-	}
-
-	if int64(len(data)) > maxConfigFileSize {
-		return nil, errors.New("file too large (max 2 MB)")
-	}
-
 	return data, nil
 }
 
@@ -335,6 +334,8 @@ func checkTemplatingEnabled(content []byte) (bool, error) {
 	return false, scanner.Err()
 }
 
+// getConfigFiles returns the list of config files to
+// process in the hierarchy order
 func getConfigFiles(env string, configDir string, zone string) ([]string, error) {
 	candidates := make([]string, 2, 3)
 	candidates[0] = filepath.Join(configDir, baseFile)

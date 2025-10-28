@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -267,3 +268,272 @@ services:
 		})
 	}
 }
+
+func createFile(t *testing.T, dir string, file string, uid, uid2 string) {
+	err := os.WriteFile(path(dir, file), []byte(buildConfig(uid, uid2)), fileMode)
+	require.NoError(t, err)
+}
+
+func path(dir string, file string) string {
+	return dir + "/" + file
+}
+
+func buildConfig(uid, uid2 string) string {
+	base := configBase
+	if uid != "" {
+
+		base += strings.ReplaceAll(appendItem1, "REP", uid)
+	}
+
+	if uid2 != "" {
+		base += strings.ReplaceAll(appendItem2, "REP", uid2)
+	}
+	return base
+}
+
+func TestPathResolution(t *testing.T) {
+	// this does not test that the fact that env+zone overrides base and retains non-overridden configs
+	t.Parallel()
+	testCases := []struct {
+		name   string
+		env    string
+		zone   string
+		before func(t *testing.T) string
+		level  string
+		level2 string
+	}{
+		{
+			name: "just base.yaml",
+			env:  "",
+			zone: "",
+			before: func(t *testing.T) string {
+				dir := testutils.MkdirTemp(t, "", "loader.testHierarchy")
+				createFile(t, dir, "base.yaml", "base", "")
+				return dir
+			},
+			level: "base",
+		},
+		{
+			name: "just base.yaml env and zone defined",
+			env:  "prod",
+			zone: "east",
+			before: func(t *testing.T) string {
+				dir := testutils.MkdirTemp(t, "", "loader.testHierarchy")
+				createFile(t, dir, "base.yaml", "base", "")
+				return dir
+			},
+			level: "base",
+		},
+		{
+			name: "base.yaml and prod_east.yaml env and zone defined",
+			env:  "prod",
+			zone: "east",
+			before: func(t *testing.T) string {
+				dir := testutils.MkdirTemp(t, "", "loader.testHierarchy")
+				createFile(t, dir, "base.yaml", "base", "")
+				createFile(t, dir, "prod_east.yaml", "prod_east", "")
+				return dir
+			},
+			level: "prod_east",
+		},
+		{
+			name: "prod_east.yaml env and zone defined",
+			env:  "prod",
+			zone: "east",
+			before: func(t *testing.T) string {
+				dir := testutils.MkdirTemp(t, "", "loader.testHierarchy")
+				createFile(t, dir, "prod_east.yaml", "prod_east", "")
+				return dir
+			},
+			level: "prod_east",
+		},
+		{
+			name: "base.yaml and development.yaml",
+			env:  "",
+			zone: "",
+			before: func(t *testing.T) string {
+				dir := testutils.MkdirTemp(t, "", "loader.testHierarchy")
+				createFile(t, dir, "base.yaml", "base", "")
+				createFile(t, dir, "development.yaml", "development", "")
+				return dir
+			},
+			level: "development",
+		},
+		{
+			name: "base.yaml and development.yaml and development_zone.yaml",
+			env:  "",
+			zone: "zone",
+			before: func(t *testing.T) string {
+				dir := testutils.MkdirTemp(t, "", "loader.testHierarchy")
+				createFile(t, dir, "base.yaml", "base", "")
+				createFile(t, dir, "development.yaml", "development", "")
+				createFile(t, dir, "development_zone.yaml", "development_zone", "")
+				return dir
+			},
+			level: "development_zone",
+		},
+		{
+			name: "base.yaml and development.yaml and development_zone.yaml",
+			env:  "prod",
+			zone: "zone",
+			before: func(t *testing.T) string {
+				dir := testutils.MkdirTemp(t, "", "loader.testHierarchy")
+				createFile(t, dir, "base.yaml", "base", "")
+				createFile(t, dir, "development.yaml", "development", "")
+				createFile(t, dir, "development_zone.yaml", "development_zone", "")
+				createFile(t, dir, "prod_zone.yaml", "prod_zone", "")
+				return dir
+			},
+			level: "prod_zone",
+		},
+		{
+			name: "env->env+zone combined",
+			env:  "production",
+			zone: "east",
+			before: func(t *testing.T) string {
+				dir := testutils.MkdirTemp(t, "", "loader.testHierarchy")
+				createFile(t, dir, "production.yaml", "base", "SHOULD NOT")
+				createFile(t, dir, "production_east.yaml", "", "development")
+				return dir
+			},
+			level:  "base",
+			level2: "development",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := tc.before(t)
+			cfg, err := Load(
+				WithEnv(tc.env),
+				WithConfigDir(dir),
+				WithZone(tc.zone),
+			)
+			require.NoError(t, err)
+			require.Equal(t, tc.level, cfg.NamespaceDefaults.Archival.History.State)
+			if tc.level2 != "" {
+				require.Equal(t, tc.level2, cfg.DCRedirectionPolicy.Policy)
+			}
+		})
+	}
+}
+
+const appendItem2 = `
+dcRedirectionPolicy:
+  policy: REP
+
+`
+const appendItem1 = `
+namespaceDefaults:
+  archival:
+    history:
+      state: REP
+      URI: "file:///tmp/temporal_archival/development"
+
+`
+const configBase = `
+log:
+  stdout: true
+  level: info 
+
+persistence:
+  defaultStore:  mysql-default
+  visibilityStore: mysql-visibility
+  numHistoryShards: 4
+  datastores:
+    mysql-default:
+      sql:
+        pluginName: "mysql8"
+        databaseName: "temporal"
+        connectAddr: "127.0.0.1:3306"
+        connectProtocol: "tcp"
+        user: "temporal"
+        password: "temporal"
+        maxConns: 20
+        maxIdleConns: 20
+        maxConnLifetime: "1h"
+    mysql-visibility:
+      sql:
+        pluginName: "mysql8"
+        databaseName: "temporal_visibility"
+        connectAddr: "127.0.0.1:3306"
+        connectProtocol: "tcp"
+        user: "temporal"
+        password: "temporal"
+        maxConns: 2
+        maxIdleConns: 2
+        maxConnLifetime: "1h"
+
+global:
+  membership:
+    maxJoinDuration: 30s
+    broadcastAddress: "127.0.0.1"
+  pprof:
+    port: 7936
+  metrics:
+    prometheus:
+      framework: "tally"
+      timerType: "histogram"
+      listenAddress: "127.0.0.1:8000"
+
+services:
+  frontend:
+    rpc:
+      grpcPort: 7233
+      membershipPort: 6933
+      bindOnLocalHost: true
+      httpPort: 7243
+
+  matching:
+    rpc:
+      grpcPort: 7235
+      membershipPort: 6935
+      bindOnLocalHost: true
+
+  history:
+    rpc:
+      grpcPort: 7234
+      membershipPort: 6934
+      bindOnLocalHost: true
+
+  worker:
+    rpc:
+      grpcPort: 7239
+      membershipPort: 6939
+      bindOnLocalHost: true
+
+clusterMetadata:
+  enableGlobalNamespace: false
+  failoverVersionIncrement: 10
+  masterClusterName: "active"
+  currentClusterName: "active"
+  clusterInformation:
+    active:
+      enabled: true
+      initialFailoverVersion: 1
+      rpcName: "frontend"
+      rpcAddress: "localhost:7233"
+
+archival:
+  history:
+    state: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+      gstorage:
+        credentialsPath: "/tmp/gcloud/keyfile.json"
+  visibility:
+    state: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+
+
+
+dynamicConfigClient:
+  filepath: "config/dynamicconfig/development-sql.yaml"
+  pollInterval: "10s"`
