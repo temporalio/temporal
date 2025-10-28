@@ -11,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -729,10 +730,10 @@ func (db *taskQueueDB) emitBacklogGaugesLocked() {
 		return
 	}
 
-	var approximateBacklogCount, totalLag int64
+	var totalLag int64
 	var oldestTime time.Time
 	for _, s := range db.subqueues {
-		approximateBacklogCount += s.ApproximateBacklogCount
+		metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(float64(s.ApproximateBacklogCount), metrics.PriorityTag(locks.Priority(s.Key.Priority)))
 		oldestTime = minNonZeroTime(oldestTime, s.oldestTime)
 		// note: this metric is only an estimation for the lag.
 		// taskID in DB may not be continuous, especially when task list ownership changes.
@@ -745,7 +746,6 @@ func (db *taskQueueDB) emitBacklogGaugesLocked() {
 		}
 	}
 
-	metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(float64(approximateBacklogCount))
 	if oldestTime.IsZero() {
 		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
 	} else {
