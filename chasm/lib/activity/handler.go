@@ -60,127 +60,138 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 // clients to poll for activity info and/or result, optionally as a long-poll.
 func (h *handler) PollActivityExecution(ctx context.Context, req *activitypb.PollActivityExecutionRequest) (*activitypb.PollActivityExecutionResponse, error) {
 	request := req.GetFrontendRequest()
-	info := &activity.ActivityExecutionInfo{
-		ActivityId: request.GetActivityId(),
-		RunId:      request.GetRunId(),
-	}
-	key := chasm.EntityKey{
-		NamespaceID: req.GetNamespaceId(),
-		BusinessID:  request.GetActivityId(),
-		EntityID:    request.GetRunId(),
-	}
 
-	var stateChangeToken []byte
+	// Returned token representing state of component seen by caller.
+	var newStateChangeToken []byte
+	// Returned info for the activity
+	var activityInfo *activity.ActivityExecutionInfo
 
 	waitPolicy := request.GetWaitPolicy()
 	if waitPolicy != nil {
+		// Long-poll
+
+		var predicateFn func(*Activity, chasm.Context, any) (any, bool, error)
+
 		switch waitPolicy := request.GetWaitPolicy().(type) {
 		case *workflowservice.PollActivityExecutionRequest_WaitAnyStateChange:
-			options := waitPolicy.WaitAnyStateChange
+			// Two cases:
+			//
+			// 1. Request does not have a token
+			//    Last state seen by caller is unknown, so return immediately.
+
+			// 2. Request has a token
+			//    Extract caller's last-seen component state transition count from token and compare
+			//    to current component state. If the component has already evolved beyond the
+			//    caller's last-seen count then return immediately. Otherwise, use PollComponent to
+			//    wait for the component transition count to exceed last-seen.
+
+			token := waitPolicy.WaitAnyStateChange.GetLongPollToken()
 			var prevTransitionCount int64 = -1
-			if options.GetLongPollToken() != nil {
-				parsed, err := strconv.ParseInt(string(options.GetLongPollToken()), 10, 64)
+			if token != nil {
+				parsed, err := strconv.ParseInt(string(token), 10, 64)
 				if err != nil {
 					return nil, serviceerror.NewInvalidArgument("invalid long poll token")
 				}
 				prevTransitionCount = parsed
 			}
 
-			if prevTransitionCount == -1 {
-				currentCount, err := h.getCurrentTransitionCount(ctx, key)
+			predicateFn = func(a *Activity, ctx chasm.Context, _ any) (any, bool, error) {
+				refBytes, err := ctx.Ref(a)
 				if err != nil {
-					return nil, err
+					return nil, false, err
 				}
-				stateChangeToken = []byte(strconv.FormatInt(currentCount, 10))
-			} else {
-				predicateFn := func(activity *Activity, ctx chasm.Context, _ any) (any, bool, error) {
-					refBytes, err := ctx.Ref(activity)
-					if err != nil {
-						return nil, false, err
-					}
 
-					ref, err := chasm.DeserializeComponentRef(refBytes)
-					if err != nil {
-						return nil, false, err
-					}
+				ref, err := chasm.DeserializeComponentRef(refBytes)
+				if err != nil {
+					return nil, false, err
+				}
 
-					currentCount := ref.GetEntityLastUpdateVersionedTransition().GetTransitionCount()
+				newTransitionCount := ref.GetEntityLastUpdateVersionedTransition().GetTransitionCount()
 
-					if currentCount < prevTransitionCount {
-						return nil, false, serviceerror.NewFailedPrecondition("stale activity state")
-					}
+				if prevTransitionCount == -1 {
+					// Last seen count unknown - capture new state and return without waiting
+					newStateChangeToken = []byte(strconv.FormatInt(newTransitionCount, 10))
 
-					hasChanged := currentCount > prevTransitionCount
-					if hasChanged {
-						return []byte(strconv.FormatInt(currentCount, 10)), true, nil
+					if !request.ExcludeInfo {
+						// TODO: construct full ActivityExecutionInfo
+						activityInfo = &activity.ActivityExecutionInfo{
+							ActivityId: request.GetActivityId(),
+							RunId:      request.GetRunId(),
+						}
 					}
+					return nil, true, nil
+				} else if newTransitionCount < prevTransitionCount {
+					// TODO: error code?
+					return nil, false, serviceerror.NewFailedPrecondition(
+						fmt.Sprintf("invalid activity state: last seen transition count (%d) exceeds current (%d)", prevTransitionCount, newTransitionCount))
+				} else if newTransitionCount == prevTransitionCount {
+					// No change yet - keep waiting
 					return nil, false, nil
-				}
+				} else {
+					// State has changed - capture new state and stop waiting
+					newStateChangeToken = []byte(strconv.FormatInt(newTransitionCount, 10))
 
-				var operationFn func(_ *Activity, _ chasm.MutableContext, _ any, _ any) (any, error)
-
-				_, _, err := chasm.PollComponent(
-					ctx,
-					chasm.NewComponentRef[*Activity](key),
-					predicateFn,
-					operationFn,
-					nil,
-				)
-				if err != nil {
-					return nil, err
+					if !request.ExcludeInfo {
+						// TODO: construct full ActivityExecutionInfo
+						activityInfo = &activity.ActivityExecutionInfo{
+							ActivityId: request.GetActivityId(),
+							RunId:      request.GetRunId(),
+						}
+					}
+					return nil, true, nil
 				}
 			}
 
 		case *workflowservice.PollActivityExecutionRequest_WaitCompletion:
-			predicateFn := func(activity *Activity, _ chasm.Context, _ any) (any, bool, error) {
-				completed := activity.State() == activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED
+			predicateFn = func(a *Activity, ctx chasm.Context, _ any) (any, bool, error) {
+				completed := a.State() == activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED
+
+				if completed {
+					refBytes, err := ctx.Ref(a)
+					if err != nil {
+						return nil, false, err
+					}
+					ref, err := chasm.DeserializeComponentRef(refBytes)
+					if err != nil {
+						return nil, false, err
+					}
+					currentCount := ref.GetEntityLastUpdateVersionedTransition().GetTransitionCount()
+					newStateChangeToken = []byte(strconv.FormatInt(currentCount, 10))
+					if !request.ExcludeInfo {
+						// TODO: construct full ActivityExecutionInfo
+						activityInfo = &activity.ActivityExecutionInfo{
+							ActivityId: request.GetActivityId(),
+							RunId:      request.GetRunId(),
+						}
+					}
+				}
 				return nil, completed, nil
-			}
-
-			var operationFn func(_ *Activity, _ chasm.MutableContext, _ any, _ any) (any, error)
-
-			_, _, err := chasm.PollComponent(
-				ctx,
-				chasm.NewComponentRef[*Activity](key),
-				predicateFn,
-				operationFn,
-				nil,
-			)
-			if err != nil {
-				return nil, err
 			}
 
 		default:
 			return nil, fmt.Errorf("unexpected wait policy type: %T", waitPolicy)
 		}
+
+		_, _, err := chasm.PollComponent[*Activity, chasm.ComponentRef, any, any, any](
+			ctx,
+			chasm.NewComponentRef[*Activity](chasm.EntityKey{
+				NamespaceID: req.GetNamespaceId(),
+				BusinessID:  request.GetActivityId(),
+				EntityID:    request.GetRunId(),
+			}),
+			predicateFn,
+			nil,
+			nil,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &activitypb.PollActivityExecutionResponse{
 		FrontendResponse: &workflowservice.PollActivityExecutionResponse{
-			Info:                     info,
-			StateChangeLongPollToken: stateChangeToken,
+			Info:                     activityInfo,
+			StateChangeLongPollToken: newStateChangeToken,
 		},
 	}, nil
-}
-
-func (h *handler) getCurrentTransitionCount(ctx context.Context, key chasm.EntityKey) (int64, error) {
-	count, err := chasm.ReadComponent(
-		ctx,
-		chasm.NewComponentRef[*Activity](key),
-		func(activity *Activity, ctx chasm.Context, _ any) (int64, error) {
-			refBytes, err := ctx.Ref(activity)
-			if err != nil {
-				return 0, err
-			}
-
-			ref, err := chasm.DeserializeComponentRef(refBytes)
-			if err != nil {
-				return 0, err
-			}
-
-			return ref.GetEntityLastUpdateVersionedTransition().GetTransitionCount(), nil
-		},
-		nil,
-	)
-	return count, err
 }
