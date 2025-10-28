@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.workersession.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/workersession/gen/workersessionpb;workersessionpb";
+
+import "google/protobuf/timestamp.proto";
+
+// Minimal WorkerSession state - just a placeholder for now
+message WorkerSessionState {
+    // Reserved for future use
+}

@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.workersession.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/workersession/gen/workersessionpb;workersessionpb";
+
+import "google/protobuf/duration.proto";
+
+// Task that fires when a worker session heartbeat timeout expires
+message HeartbeatTimeoutTask {
+    // The timeout duration that was configured when this task was scheduled
+    google.protobuf.Duration timeout_duration = 1;
+    
+    // The last heartbeat time when this timer was started (for validation)
+    int64 last_heartbeat_timestamp_nanos = 2;
+}
+
+// Task for periodic cleanup of expired sessions
+message SessionCleanupTask {
+    // Maximum age for completed/expired sessions to keep
+    google.protobuf.Duration max_age = 1;
+}
